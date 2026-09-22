@@ -3,7 +3,8 @@
 A proof-of-concept gift wishlist. Build a list of gifts you'd like to receive, adding each
 one either by hand or by pasting an Amazon product link.
 
-Built with [Vite](https://vite.dev) + React 19. No backend, no database.
+Built with [Vite](https://vite.dev) + React 19, with optional email/password sign-in via
+[Supabase Auth](https://supabase.com/docs/guides/auth).
 
 ## Getting started
 
@@ -14,6 +15,32 @@ npm run dev
 
 The dev server runs at http://localhost:5173.
 
+## Sign-in (Supabase)
+
+There is no custom login API: the browser talks to Supabase Auth directly through
+`src/lib/supabase.js`, using the project URL and the public anon key. Sign-in is optional;
+without the env vars the app still runs and the header says sign-in is off.
+
+1. **Env vars.** The Vercel Supabase integration already sets `NEXT_PUBLIC_SUPABASE_URL`
+   and `NEXT_PUBLIC_SUPABASE_ANON_KEY` for deployments; `vite.config.js` exposes the
+   `NEXT_PUBLIC_` prefix to the client. For local dev, pull them into `.env.local`
+   (gitignored):
+
+   ```bash
+   npx vercel link
+   npx vercel env pull .env.local
+   ```
+
+   Or create `.env.local` by hand from Supabase → Project Settings → API.
+2. **Supabase → Authentication → URL Configuration:** set the Site URL to the Vercel
+   production URL and add `http://localhost:5173` to Redirect URLs, so confirmation emails
+   link back to the app.
+3. **Confirm email** (Authentication → Providers → Email) is on by default: new accounts must
+   click the emailed link before signing in. Turn it off while testing if you prefer.
+
+Never put the service-role key in a `NEXT_PUBLIC_` or `VITE_` variable — anything with those
+prefixes ships to the browser.
+
 ## What it does
 
 - **Add a gift manually** — name, price, and an optional image URL.
@@ -21,7 +48,7 @@ The dev server runs at http://localhost:5173.
   *Autofill*) to prefill the form, then confirm.
 - **Remove gifts**, with a running item count and an exact list total.
 
-The list lives in React state for the current session only. Nothing is persisted, so a
+The list lives in React state for the current session only (signing in doesn't save it yet). Nothing is persisted, so a
 reload clears it — that is deliberate for this POC.
 
 ## About the Amazon autofill
@@ -68,6 +95,7 @@ you see it and can clear the field first.
 index.html                       Entry HTML document
 src/main.jsx                     React entry point
 src/App.jsx                      Root component; owns the gift list
+src/components/AuthPanel.jsx     Sign in / create account / sign out
 src/components/AddGiftPanel.jsx  URL autofill + manual fields + validation
 src/components/LookupStatus.jsx  Lookup outcome messaging
 src/components/GiftList.jsx      Card grid and empty state
@@ -76,6 +104,8 @@ src/components/GiftSummary.jsx   Item count and list total
 src/lib/amazon.js                URL parsing and product lookup (the swap point)
 src/lib/fixtures.js              Demo ASIN catalog
 src/lib/format.js                Price parsing and currency formatting
+src/lib/supabase.js              Supabase client (null when not configured)
+src/lib/useSession.js            Current auth session hook
 src/index.css                    Design tokens, reset, light/dark themes
 src/App.css                      Layout and component styles
 ```

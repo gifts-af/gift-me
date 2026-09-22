@@ -1,7 +1,9 @@
 import { useRef, useState } from 'react'
 import AddGiftPanel from './components/AddGiftPanel.jsx'
+import AuthPanel from './components/AuthPanel.jsx'
 import GiftList from './components/GiftList.jsx'
 import GiftSummary from './components/GiftSummary.jsx'
+import { useSession } from './lib/useSession.js'
 import './App.css'
 
 // crypto.randomUUID is undefined outside a secure context -- which includes
@@ -13,6 +15,7 @@ function newId() {
 export default function App() {
   const [gifts, setGifts] = useState([])
   const headingRef = useRef(null)
+  const session = useSession()
 
   function addGift(draft) {
     // The id is made here rather than inside the updater: StrictMode
@@ -35,6 +38,7 @@ export default function App() {
           GiftMe<span className="app-header__tld">.com</span>
         </h1>
         <p className="tagline">A list of the gifts you’d actually like to receive.</p>
+        <AuthPanel session={session} />
       </header>
 
       <AddGiftPanel onAdd={addGift} />

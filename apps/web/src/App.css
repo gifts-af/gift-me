@@ -29,6 +29,34 @@
   margin: 0;
 }
 
+/* ── Auth ───────────────────────────────────────────────────────────────── */
+
+.auth {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 1.25rem auto 0;
+  max-width: 40rem;
+}
+
+.auth--form input {
+  flex: 1 1 10rem;
+  width: auto;
+}
+
+.auth__who,
+.auth__note {
+  color: var(--fg-muted);
+  font-size: 0.9rem;
+}
+
+.auth__message {
+  flex-basis: 100%;
+  text-align: center;
+}
+
 /* ── Add panel ──────────────────────────────────────────────────────────── */
 
 .add-panel {
