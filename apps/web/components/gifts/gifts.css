@@ -1,0 +1,470 @@
+/* GiftMe styles, scoped under .giftme so they never leak into the template's
+   Tailwind/shadcn pages. Tokens are --gm-* because shadcn already owns names
+   like --accent, --border and --radius. Dark mode follows next-themes' .dark
+   class, so the footer theme switcher applies here too. */
+
+.giftme {
+  --gm-bg: #f6f7f9;
+  --gm-surface: #ffffff;
+  --gm-surface-raised: #f3f4f6;
+  --gm-fg: #1a1a1a;
+  --gm-fg-muted: #6b7280;
+  --gm-border: #e5e7eb;
+  --gm-accent: #4f46e5;
+  --gm-accent-fg: #ffffff;
+  --gm-danger: #b91c1c;
+  --gm-ok: #047857;
+  --gm-warn: #b45309;
+  --gm-focus: #4f46e5;
+
+  --gm-radius: 0.75rem;
+  --gm-radius-sm: 0.5rem;
+  --gm-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
+
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  line-height: 1.5;
+  color: var(--gm-fg);
+}
+
+.dark .giftme {
+  --gm-bg: #131313;
+  --gm-surface: #1c1c1c;
+  --gm-surface-raised: #262626;
+  --gm-fg: #e5e7eb;
+  --gm-fg-muted: #9ca3af;
+  --gm-border: #333333;
+  --gm-accent: #818cf8;
+  --gm-accent-fg: #131313;
+  --gm-danger: #f87171;
+  --gm-ok: #34d399;
+  --gm-warn: #fbbf24;
+  --gm-focus: #818cf8;
+  --gm-shadow: 0 1px 3px rgb(0 0 0 / 0.5);
+}
+
+.giftme code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: var(--gm-surface-raised);
+  padding: 0.1em 0.35em;
+  border-radius: 0.25rem;
+}
+
+.giftme :focus-visible {
+  outline: 2px solid var(--gm-focus);
+  outline-offset: 2px;
+}
+
+.giftme .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.giftme {
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 4rem;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────────── */
+
+.giftme .app-header {
+  text-align: center;
+  margin-bottom: 2.5rem;
+}
+
+.giftme .app-header h1 {
+  font-size: clamp(2rem, 6vw, 2.75rem);
+  letter-spacing: -0.02em;
+  margin: 0 0 0.35rem;
+}
+
+.giftme .app-header__tld {
+  color: var(--gm-accent);
+}
+
+.giftme .tagline {
+  color: var(--gm-fg-muted);
+  margin: 0;
+}
+
+/* ── Add panel ──────────────────────────────────────────────────────────── */
+
+.giftme .add-panel {
+  background: var(--gm-surface);
+  border: 1px solid var(--gm-border);
+  border-radius: var(--gm-radius);
+  box-shadow: var(--gm-shadow);
+  padding: 1.5rem;
+  margin-bottom: 2.5rem;
+}
+
+.giftme .add-panel h2 {
+  font-size: 1.1rem;
+  margin: 0 0 1.25rem;
+}
+
+.giftme .field {
+  display: grid;
+  gap: 0.4rem;
+  margin-bottom: 1.1rem;
+}
+
+.giftme .field label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.giftme .field__hint {
+  font-weight: 400;
+  color: var(--gm-fg-muted);
+}
+
+.giftme .field__req {
+  color: var(--gm-danger);
+}
+
+.giftme .field-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.giftme .field-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.giftme input {
+  font: inherit;
+  color: var(--gm-fg);
+  background: var(--gm-surface);
+  border: 1px solid var(--gm-border);
+  border-radius: var(--gm-radius-sm);
+  padding: 0.55rem 0.7rem;
+  width: 100%;
+}
+
+.giftme input::placeholder {
+  color: var(--gm-fg-muted);
+  opacity: 0.8;
+}
+
+.giftme input[aria-invalid='true'] {
+  border-color: var(--gm-danger);
+}
+
+.giftme .field__error {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--gm-danger);
+}
+
+.giftme .price-input {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid var(--gm-border);
+  border-radius: var(--gm-radius-sm);
+  padding-left: 0.7rem;
+  background: var(--gm-surface);
+}
+
+.giftme .price-input--invalid {
+  border-color: var(--gm-danger);
+}
+
+.giftme .price-input__symbol {
+  color: var(--gm-fg-muted);
+}
+
+.giftme .price-input input {
+  border: none;
+  padding-left: 0;
+  background: transparent;
+}
+
+.giftme .price-input input:focus-visible {
+  outline: none;
+}
+
+.giftme .price-input:focus-within {
+  outline: 2px solid var(--gm-focus);
+  outline-offset: 2px;
+}
+
+.giftme .thumb {
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: none;
+  object-fit: contain;
+  background: #ffffff;
+  border: 1px solid var(--gm-border);
+  border-radius: var(--gm-radius-sm);
+}
+
+.giftme .thumb--empty {
+  display: grid;
+  place-items: center;
+  font-size: 0.7rem;
+  color: var(--gm-fg-muted);
+  background: var(--gm-surface-raised);
+}
+
+.giftme .divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 1.5rem 0;
+  color: var(--gm-fg-muted);
+  font-size: 0.8rem;
+}
+
+.giftme .divider::before,
+.giftme .divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--gm-border);
+}
+
+.giftme .form-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 1.5rem;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+
+.giftme .btn {
+  font: inherit;
+  font-weight: 600;
+  padding: 0.55rem 1.1rem;
+  border: 1px solid transparent;
+  border-radius: var(--gm-radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.giftme .btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.giftme .btn--primary {
+  background: var(--gm-accent);
+  color: var(--gm-accent-fg);
+}
+
+.giftme .btn--secondary {
+  background: var(--gm-surface-raised);
+  color: var(--gm-fg);
+  border-color: var(--gm-border);
+}
+
+.giftme .btn--primary:hover:not(:disabled),
+.giftme .btn--secondary:hover:not(:disabled) {
+  border-color: var(--gm-accent);
+}
+
+/* ── Lookup status ──────────────────────────────────────────────────────── */
+
+.giftme .status {
+  margin: 0.15rem 0 0;
+  font-size: 0.85rem;
+  padding: 0.5rem 0.7rem;
+  border-left: 3px solid var(--gm-fg-muted);
+  border-radius: 0 var(--gm-radius-sm) var(--gm-radius-sm) 0;
+  background: var(--gm-surface-raised);
+  color: var(--gm-fg);
+}
+
+.giftme .status--ok {
+  border-left-color: var(--gm-ok);
+}
+
+.giftme .status--warn {
+  border-left-color: var(--gm-warn);
+}
+
+.giftme .status--error {
+  border-left-color: var(--gm-danger);
+}
+
+/* ── List ───────────────────────────────────────────────────────────────── */
+
+.giftme .list-section__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.giftme .list-section__head h2 {
+  font-size: 1.1rem;
+  margin: 0;
+}
+
+.giftme .list-section__head h2:focus {
+  outline: none;
+}
+
+.giftme .summary {
+  margin: 0;
+  color: var(--gm-fg-muted);
+  font-size: 0.9rem;
+  display: flex;
+  gap: 0.45rem;
+  align-items: baseline;
+}
+
+.giftme .summary strong {
+  color: var(--gm-fg);
+}
+
+.giftme .empty {
+  margin: 0;
+  padding: 2.5rem 1.5rem;
+  text-align: center;
+  color: var(--gm-fg-muted);
+  background: var(--gm-surface);
+  border: 1px dashed var(--gm-border);
+  border-radius: var(--gm-radius);
+}
+
+.giftme .gift-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+}
+
+.giftme .gift-card {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--gm-surface);
+  border: 1px solid var(--gm-border);
+  border-radius: var(--gm-radius);
+  box-shadow: var(--gm-shadow);
+  overflow: hidden;
+}
+
+/* Kept white in both themes on purpose: Amazon's product JPEGs have a baked-in
+   white background and look broken floating on a dark surface. */
+.giftme .gift-card__media {
+  aspect-ratio: 1;
+  flex: none; /* without this, flex stretches the box and the square is lost */
+  background: #ffffff;
+  display: grid;
+  place-items: center;
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--gm-border);
+}
+
+.giftme .gift-card__media img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* The white plate above is for Amazon's JPEGs; with no image to show, follow
+   the theme instead of punching a white hole in a dark page. */
+.giftme .gift-card__media--empty {
+  background: var(--gm-surface-raised);
+}
+
+.giftme .gift-card__placeholder {
+  font-size: 0.8rem;
+  color: var(--gm-fg-muted);
+}
+
+.giftme .gift-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.85rem;
+  flex: 1;
+}
+
+.giftme .gift-card__name {
+  font-size: 0.92rem;
+  font-weight: 600;
+  margin: 0;
+  line-height: 1.35;
+}
+
+.giftme .gift-card__price {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.giftme .gift-card__link {
+  margin-top: auto;
+  padding-top: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--gm-accent);
+}
+
+.giftme .gift-card__remove {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  width: 1.75rem;
+  height: 1.75rem;
+  display: grid;
+  place-items: center;
+  font: inherit;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: var(--gm-fg);
+  background: var(--gm-surface);
+  border: 1px solid var(--gm-border);
+  border-radius: 50%;
+  cursor: pointer;
+  opacity: 0.85;
+}
+
+.giftme .gift-card__remove:hover {
+  color: var(--gm-accent-fg);
+  background: var(--gm-danger);
+  border-color: var(--gm-danger);
+  opacity: 1;
+}
+
+@media (max-width: 30rem) {
+  .giftme {
+    padding: 2rem 1rem 3rem;
+  }
+
+  .giftme .field-row {
+    flex-wrap: wrap;
+  }
+
+  .giftme .field-row .btn {
+    width: 100%;
+  }
+
+  .giftme .form-actions .btn {
+    width: 100%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .giftme * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
