@@ -7,7 +7,7 @@ export function formatCents(cents) {
   return CURRENCY.format(cents / 100)
 }
 
-const MAX_PRICE_CENTS = 100_000_000 // $1,000,000
+export const MAX_PRICE_CENTS = 100_000_000 // $1,000,000
 
 export function parsePriceToCents(raw) {
   if (typeof raw !== 'string') return null

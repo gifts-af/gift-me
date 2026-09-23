@@ -468,3 +468,59 @@
     animation: none !important;
   }
 }
+
+/* ── Save ───────────────────────────────────────────────────────────────── */
+
+.giftme .list-section__actions {
+  display: flex;
+  gap: 0.75rem 1rem;
+  align-items: center;
+}
+
+.giftme .list-section__notice {
+  margin: -0.25rem 0 1rem;
+}
+
+/* Guests: looks unavailable, but stays hoverable and focusable so the
+   tooltip explaining why can show. */
+.giftme .btn--muted {
+  background: transparent;
+  color: var(--gm-fg-muted);
+  border-color: var(--gm-border);
+  border-style: dashed;
+  cursor: not-allowed;
+}
+
+.giftme .btn:disabled:not([aria-busy='true']) {
+  cursor: default;
+}
+
+.giftme .tooltip-anchor {
+  position: relative;
+  display: inline-flex;
+}
+
+.giftme .tooltip {
+  position: absolute;
+  bottom: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 10;
+  padding: 0.4rem 0.65rem;
+  border-radius: var(--gm-radius-sm);
+  background: var(--gm-fg);
+  color: var(--gm-bg);
+  font-size: 0.8rem;
+  font-weight: 500;
+  white-space: nowrap;
+  box-shadow: var(--gm-shadow);
+  pointer-events: none;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 120ms ease;
+}
+
+.giftme .tooltip-anchor:hover .tooltip,
+.giftme .tooltip-anchor:focus-within .tooltip {
+  opacity: 1;
+  visibility: visible;
+}
