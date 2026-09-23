@@ -1,6 +1,6 @@
 # GiftMe.com
 
-A proof-of-concept gift wishlist. Build a list of gifts you'd like to receive, adding each
+A proof-of-concept gift wishlist. Build a list of gifts you'd actually like to receive, adding each
 one either by hand or by pasting an Amazon product link.
 
 Built with [Next.js](https://nextjs.org) (App Router) + React 19, TypeScript and Tailwind,
