@@ -35,14 +35,17 @@ export default function GiftCard({ gift, onRemove }) {
         )}
       </div>
 
-      <button
-        type="button"
-        className="gift-card__remove"
-        onClick={() => onRemove(gift.id)}
-        aria-label={`Remove ${gift.name} from your list`}
-      >
-        <span aria-hidden="true">×</span>
-      </button>
+      {/* Absent on a shared list, which is read-only. */}
+      {onRemove && (
+        <button
+          type="button"
+          className="gift-card__remove"
+          onClick={() => onRemove(gift.id)}
+          aria-label={`Remove ${gift.name} from your list`}
+        >
+          <span aria-hidden="true">×</span>
+        </button>
+      )}
     </article>
   )
 }

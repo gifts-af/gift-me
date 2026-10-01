@@ -9,7 +9,7 @@ const MAX_NAME_LENGTH = 300;
 const MAX_URL_LENGTH = 2048;
 
 export type SaveListResult =
-  | { ok: true; listId: string; items: Gift[] }
+  | { ok: true; listId: string; shareToken: string | null; items: Gift[] }
   | { ok: false; error: string };
 
 type GiftInput = Partial<Omit<Gift, "id">>;
@@ -110,5 +110,18 @@ export async function saveList(input: {
     return { ok: false, error: "Your list was saved, but couldn't be reloaded. Refresh the page." };
   }
 
-  return { ok: true, listId: savedId, items: (saved ?? []).map(rowToGift) };
+  // Only for the share button; a failure here shouldn't fail a good save.
+  const { data: list, error: tokenError } = await supabase
+    .from("lists")
+    .select("share_token")
+    .eq("id", savedId)
+    .maybeSingle();
+  if (tokenError) console.error("reading share token failed", tokenError);
+
+  return {
+    ok: true,
+    listId: savedId,
+    shareToken: list?.share_token ?? null,
+    items: (saved ?? []).map(rowToGift),
+  };
 }

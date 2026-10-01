@@ -55,10 +55,11 @@ template, which provides cookie-based auth via [`@supabase/ssr`](https://supabas
 | `/auth/confirm` | Handles the link in confirmation / reset emails |
 | `/auth/forgot-password`, `/auth/update-password` | Password reset |
 | `/protected` | Example signed-in-only page; shows the user's claims |
+| `/share/{token}` | Read-only view of a shared list, open to anyone with the link |
 
 `proxy.ts` refreshes the session cookie on every request and redirects signed-out visitors
-to `/auth/login` for any route other than `/` and `/auth/*`. The gift list on `/` works
-signed in or out.
+to `/auth/login` for any route other than `/`, `/auth/*` and `/share/*`. The gift list on `/`
+works signed in or out.
 
 In Supabase → Authentication → URL Configuration, set the Site URL to the Vercel production
 URL and add `http://localhost:3000/**` to Redirect URLs so email links return to the app.
@@ -72,6 +73,8 @@ components use `lib/supabase/client.ts`.
 - **Add a gift from an Amazon link** — paste a product URL and press Enter (or click
   *Autofill*) to prefill the form, then confirm.
 - **Remove gifts**, with a running item count and an exact list total.
+- **Share a saved list** — *Share* copies a `/share/{token}` link. Anyone with it sees the
+  list read-only; the owner is asked to confirm first, so they don't spoil their own gifts.
 
 The list lives in React state for the current session only. Nothing is persisted yet, so a
 reload clears it.
