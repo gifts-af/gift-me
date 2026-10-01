@@ -11,7 +11,7 @@ export default function OwnerGate({ proceedHref }) {
       <section className="gate" aria-labelledby="gate-heading">
         <h2 id="gate-heading">This is your list</h2>
         <p>
-          Are you sure you want to view this list as a guest? {'\n'}Proceeding may reveal gifts claimed
+          Are you sure you want to view this list as a guest? Proceeding may reveal gifts claimed
           by others and could spoil your surprise.
         </p>
         <div className="gate__actions">
