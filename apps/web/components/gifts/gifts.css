@@ -524,3 +524,40 @@
   opacity: 1;
   visibility: visible;
 }
+
+/* ── Shared list ────────────────────────────────────────────────────────── */
+
+.giftme .shared-note {
+  margin: -0.25rem 0 1rem;
+  color: var(--gm-fg-muted);
+  font-size: 0.9rem;
+}
+
+.giftme .gate {
+  background: var(--gm-surface);
+  border: 1px solid var(--gm-border);
+  border-radius: var(--gm-radius);
+  box-shadow: var(--gm-shadow);
+  padding: 1.5rem;
+}
+
+.giftme .gate h2 {
+  font-size: 1.1rem;
+  margin: 0 0 0.75rem;
+}
+
+.giftme .gate p {
+  margin: 0 0 1.25rem;
+}
+
+.giftme .gate__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: flex-end;
+}
+
+.giftme a.btn {
+  display: inline-block;
+  text-decoration: none;
+}

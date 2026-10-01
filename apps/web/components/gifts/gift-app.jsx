@@ -6,6 +6,7 @@ import AddGiftPanel from './add-gift-panel.jsx'
 import GiftList from './gift-list.jsx'
 import GiftSummary from './gift-summary.jsx'
 import SaveButton from './save-button.jsx'
+import ShareButton from './share-button.jsx'
 import './gifts.css'
 
 // A guest's list is carried across the trip to /auth/* in localStorage, so
@@ -59,7 +60,7 @@ export function GiftAppSkeleton() {
   )
 }
 
-function AppHeader() {
+export function AppHeader() {
   return (
     <header className="app-header">
       <h1>
@@ -81,6 +82,10 @@ export default function GiftApp({ initial }) {
       : null
   const [gifts, setGifts] = useState(() => initial?.items ?? [])
   const [listId, setListId] = useState(() => initial?.list?.id ?? null)
+  const [shareToken, setShareToken] = useState(() => initial?.list?.shareToken ?? null)
+  // Kept apart from `notice` so copying a link never hides the carried-gifts
+  // message. `url` is set when the clipboard can't be written, to copy by hand.
+  const [shareNotice, setShareNotice] = useState(null)
   const [savedKey, setSavedKey] = useState(() => serialize(initial?.items ?? []))
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState('')
@@ -90,6 +95,11 @@ export default function GiftApp({ initial }) {
   const giftsRef = useRef(gifts)
 
   const dirty = serialize(gifts) !== savedKey
+  const shareBlockedReason = isGuest
+    ? 'Sign in to share your list'
+    : !shareToken
+      ? 'Save your list to share it'
+      : null
   // Guests lose everything on leaving; members lose only what isn't saved.
   const atRisk = isGuest ? gifts.length > 0 : dirty
 
@@ -166,12 +176,31 @@ export default function GiftApp({ initial }) {
     }
 
     setListId(result.listId)
+    if (result.shareToken) setShareToken(result.shareToken)
     setSavedKey(serialize(sent))
     // Adopt the server's rows only if nothing was edited mid-save; otherwise
     // keep the newer local edits, which then still show as unsaved.
     setGifts((current) => (current === sent ? result.items : current))
     setNotice('')
     setAnnouncement('List saved.')
+  }
+
+  // Resolves true once the link is on the clipboard.
+  async function handleShare() {
+    if (!shareToken) return false
+    const url = `${window.location.origin}/share/${shareToken}`
+    const unsavedNote = dirty ? " Unsaved changes won't appear until you save." : ''
+    setAnnouncement('')
+    try {
+      // Undefined outside a secure context, e.g. a phone on plain HTTP.
+      await navigator.clipboard.writeText(url)
+    } catch {
+      setShareNotice({ text: `Copy this link to share your list.${unsavedNote}`, url })
+      return false
+    }
+    setShareNotice(unsavedNote ? { text: `Link copied.${unsavedNote}`, url: null } : null)
+    setAnnouncement('Share link copied.')
+    return true
   }
 
   return (
@@ -187,6 +216,7 @@ export default function GiftApp({ initial }) {
           </h2>
           <div className="list-section__actions">
             <GiftSummary gifts={gifts} />
+            <ShareButton blockedReason={shareBlockedReason} onShare={handleShare} />
             <SaveButton blockedReason={saveBlockedReason} dirty={dirty} saving={saving} onSave={handleSave} />
           </div>
         </div>
@@ -199,6 +229,28 @@ export default function GiftApp({ initial }) {
           <p className="status status--info list-section__notice" role="status">
             {notice}
           </p>
+        )}
+        {shareNotice && (
+          <div className="field list-section__notice">
+            <p className="status status--info" role="status">
+              {shareNotice.text}
+            </p>
+            {shareNotice.url && (
+              <>
+                <label htmlFor="share-url" className="visually-hidden">
+                  Share link
+                </label>
+                <input
+                  id="share-url"
+                  type="text"
+                  readOnly
+                  value={shareNotice.url}
+                  autoFocus
+                  onFocus={(event) => event.target.select()}
+                />
+              </>
+            )}
+          </div>
         )}
         {saveError && (
           <p className="status status--error list-section__notice" role="alert">

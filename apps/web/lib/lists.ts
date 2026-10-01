@@ -14,7 +14,7 @@ export type Gift = {
 
 export type MyList = {
   user: { email: string | null };
-  list: { id: string; title: string } | null;
+  list: { id: string; title: string; shareToken: string } | null;
   items: Gift[];
   // Set when the saved list couldn't be read. The app still renders, but
   // saving is blocked: a save now would start a second, near-empty list.
@@ -66,7 +66,7 @@ export async function getMyList(): Promise<MyList | null> {
 
   const { data: list, error: listError } = await supabase
     .from("lists")
-    .select("id, title")
+    .select("id, title, share_token")
     .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
@@ -88,5 +88,44 @@ export async function getMyList(): Promise<MyList | null> {
     return { user, list: null, items: [], loadError: LOAD_ERROR };
   }
 
-  return { user, list, items: (rows ?? []).map(rowToGift), loadError: null };
+  return {
+    user,
+    list: { id: list.id, title: list.title, shareToken: list.share_token },
+    items: (rows ?? []).map(rowToGift),
+    loadError: null,
+  };
+}
+
+export type SharedList = {
+  title: string;
+  // True when the viewer owns the list; the share page asks before showing it.
+  isOwner: boolean;
+  items: Gift[];
+};
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * The list behind a share link, or null if there isn't one. Readable by
+ * anyone holding the token, signed in or not, through get_shared_list; RLS
+ * still keeps the tables themselves owner-only.
+ */
+export async function getSharedList(token: string): Promise<SharedList | null> {
+  // A malformed token would fail Postgres's uuid cast; it's just a bad link.
+  if (!UUID_PATTERN.test(token)) return null;
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("get_shared_list", { p_token: token });
+  if (error) {
+    console.error("get_shared_list failed", error);
+    throw new Error("Couldn't load that list.");
+  }
+  if (!data) return null;
+
+  const shared = data as { title: string; is_owner: boolean; items: ListItemRow[] };
+  return {
+    title: shared.title,
+    isOwner: shared.is_owner === true,
+    items: (shared.items ?? []).map(rowToGift),
+  };
 }
