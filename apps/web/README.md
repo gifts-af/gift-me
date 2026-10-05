@@ -38,7 +38,10 @@ template, which provides cookie-based auth via [`@supabase/ssr`](https://supabas
    See `.env.example`. Both keys are public, limited by Row Level Security. Never give the
    service-role key a `NEXT_PUBLIC_` prefix.
 
-3. **Run it:**
+3. **Apply the database migrations** in `supabase/migrations/`, oldest first, with
+   `supabase db push` or by pasting each file into the Supabase SQL editor.
+
+4. **Run it:**
 
    ```bash
    npm install
@@ -55,7 +58,7 @@ template, which provides cookie-based auth via [`@supabase/ssr`](https://supabas
 | `/auth/confirm` | Handles the link in confirmation / reset emails |
 | `/auth/forgot-password`, `/auth/update-password` | Password reset |
 | `/protected` | Example signed-in-only page; shows the user's claims |
-| `/share/{token}` | Read-only view of a shared list, open to anyone with the link |
+| `/share/{token}` | Shared list, open to anyone with the link; visitors can claim gifts |
 
 `proxy.ts` refreshes the session cookie on every request and redirects signed-out visitors
 to `/auth/login` for any route other than `/`, `/auth/*` and `/share/*`. The gift list on `/`
@@ -75,6 +78,10 @@ components use `lib/supabase/client.ts`.
 - **Remove gifts**, with a running item count and an exact list total.
 - **Share a saved list** — *Share* copies a `/share/{token}` link. Anyone with it sees the
   list read-only; the owner is asked to confirm first, so they don't spoil their own gifts.
+- **Claim a gift** — visitors to a shared list claim what they'll buy, so nobody buys it
+  twice. Everyone with the link sees "Claimed by <name>". Signed-in visitors claim under
+  their email and can unclaim; guests type a name and can't undo it. Opening an unclaimed
+  gift's link first asks "Are you going to buy?". The owner can see claims but not claim.
 
 The list lives in React state for the current session only. Nothing is persisted yet, so a
 reload clears it.

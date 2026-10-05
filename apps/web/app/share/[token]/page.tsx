@@ -23,7 +23,7 @@ async function SharedListLoader({
     return <OwnerGate proceedHref={`/share/${encodeURIComponent(token)}?as=guest`} />;
   }
 
-  return <SharedList list={list} />;
+  return <SharedList list={list} token={token} />;
 }
 
 export default function SharePage(props: PageProps<"/share/[token]">) {

@@ -96,14 +96,24 @@ export async function getMyList(): Promise<MyList | null> {
   };
 }
 
+export type GiftClaim = {
+  // Shown to everyone with the link: a guest's own name, or a user's email.
+  name: string;
+  // The viewer made this claim while signed in, so they may take it back.
+  mine: boolean;
+};
+
+export type SharedGift = Gift & { claim: GiftClaim | null };
+
 export type SharedList = {
   title: string;
   // True when the viewer owns the list; the share page asks before showing it.
   isOwner: boolean;
-  items: Gift[];
+  viewer: { signedIn: boolean; email: string | null };
+  items: SharedGift[];
 };
 
-const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * The list behind a share link, or null if there isn't one. Readable by
@@ -122,10 +132,22 @@ export async function getSharedList(token: string): Promise<SharedList | null> {
   }
   if (!data) return null;
 
-  const shared = data as { title: string; is_owner: boolean; items: ListItemRow[] };
+  const shared = data as {
+    title: string;
+    is_owner: boolean;
+    viewer?: { signed_in?: boolean; email?: string | null };
+    items: (ListItemRow & { claim?: GiftClaim | null })[];
+  };
   return {
     title: shared.title,
     isOwner: shared.is_owner === true,
-    items: (shared.items ?? []).map(rowToGift),
+    viewer: {
+      signedIn: shared.viewer?.signed_in === true,
+      email: shared.viewer?.email ?? null,
+    },
+    items: (shared.items ?? []).map((row) => ({
+      ...rowToGift(row),
+      claim: row.claim ? { name: row.claim.name, mine: row.claim.mine === true } : null,
+    })),
   };
 }

@@ -1,7 +1,12 @@
 import { useState } from 'react'
 import { formatCents } from '@/lib/format.js'
 
-export default function GiftCard({ gift, onRemove }) {
+/**
+ * `onView`, when given, intercepts the product link (the shared list asks
+ * "are you going to buy?" first). `actions` renders under the details, e.g.
+ * a gift's claim status.
+ */
+export default function GiftCard({ gift, onRemove, onView, actions }) {
   // Never reassign img.src inside onError: if the fallback also fails the
   // handler re-fires on the new src and loops. Track a flag instead.
   const [imageFailed, setImageFailed] = useState(false)
@@ -28,11 +33,19 @@ export default function GiftCard({ gift, onRemove }) {
             href={gift.productUrl}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={
+              onView &&
+              ((event) => {
+                event.preventDefault()
+                onView(gift)
+              })
+            }
           >
             View on Amazon
             <span className="visually-hidden"> (opens in a new tab)</span>
           </a>
         )}
+        {actions && <div className="gift-card__actions">{actions}</div>}
       </div>
 
       {/* Absent on a shared list, which is read-only. */}

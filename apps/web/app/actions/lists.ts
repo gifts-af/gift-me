@@ -1,7 +1,7 @@
 "use server";
 
 import { MAX_PRICE_CENTS } from "@/lib/format.js";
-import { LIST_ITEM_COLUMNS, rowToGift, type Gift } from "@/lib/lists";
+import { LIST_ITEM_COLUMNS, rowToGift, UUID_PATTERN, type Gift } from "@/lib/lists";
 import { createClient } from "@/lib/supabase/server";
 
 const MAX_ITEMS = 500;
@@ -12,7 +12,7 @@ export type SaveListResult =
   | { ok: true; listId: string; shareToken: string | null; items: Gift[] }
   | { ok: false; error: string };
 
-type GiftInput = Partial<Omit<Gift, "id">>;
+type GiftInput = Partial<Gift>;
 
 // Only http(s) links may be stored: anything else (javascript:, data:) would
 // be rendered straight into an href or src for the owner later.
@@ -54,6 +54,9 @@ function toRow(input: GiftInput) {
       : null;
 
   return {
+    // Sent back so save_list can keep the row (and any claim on it) instead
+    // of replacing it. A new gift keeps its client uuid when it is free.
+    id: typeof input.id === "string" && UUID_PATTERN.test(input.id) ? input.id : null,
     name,
     price_cents: priceCents,
     image_url: cleanUrl(input.imageUrl),

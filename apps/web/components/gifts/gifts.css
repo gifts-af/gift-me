@@ -561,3 +561,104 @@
   display: inline-block;
   text-decoration: none;
 }
+
+/* Claiming on a shared list. */
+.giftme .btn--small {
+  padding: 0.35rem 0.8rem;
+  font-size: 0.85rem;
+}
+.giftme .btn--ghost {
+  background: transparent;
+  color: var(--gm-fg-muted);
+}
+.giftme .btn--ghost:hover {
+  color: var(--gm-fg);
+}
+.giftme .gift-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: auto;
+  padding-top: 0.5rem;
+}
+.giftme .claim-badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  background: var(--gm-surface-raised);
+  border: 1px solid var(--gm-border);
+  color: var(--gm-ok);
+  font-size: 0.8rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+/* The default tooltip hangs off the right edge; a card's left-aligned
+   button needs it anchored left instead. */
+.giftme .tooltip--start {
+  right: auto;
+  left: 0;
+  white-space: normal;
+  width: max-content;
+  max-width: 14rem;
+}
+
+.giftme .modal {
+  width: min(28rem, calc(100vw - 2rem));
+  /* Padding lives on .modal__body so a click on the dialog itself can only
+     be the backdrop (see modal.jsx). */
+  padding: 0;
+  border: 1px solid var(--gm-border);
+  border-radius: var(--gm-radius);
+  background: var(--gm-surface);
+  color: var(--gm-fg);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.25);
+}
+.giftme .modal::backdrop {
+  background: rgb(0 0 0 / 0.5);
+}
+.giftme .modal__body {
+  padding: 1.5rem;
+}
+.giftme .modal h2 {
+  font-size: 1.15rem;
+  margin: 0 0 0.5rem;
+}
+.giftme .modal p {
+  margin: 0 0 1rem;
+}
+.giftme .modal .modal__gift {
+  font-weight: 600;
+  color: var(--gm-fg-muted);
+  overflow-wrap: anywhere;
+}
+.giftme .modal .modal__meta {
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+.giftme .modal .status a {
+  color: var(--gm-accent);
+  font-weight: 600;
+}
+.giftme .modal__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  margin-top: 1.25rem;
+}
+/* Long sentences as button labels: full width, wrapping, one per row. */
+.giftme .modal__actions--stacked {
+  flex-direction: column;
+  align-items: stretch;
+}
+.giftme .modal__actions--stacked .btn {
+  white-space: normal;
+  text-align: center;
+}
+@media (max-width: 30rem) {
+  .giftme .modal__actions .btn {
+    width: 100%;
+    white-space: normal;
+  }
+}
