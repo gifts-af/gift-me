@@ -20,6 +20,7 @@ export function SignUpForm({
   className,
   ...props
 }: React.ComponentPropsWithoutRef<"div">) {
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [repeatPassword, setRepeatPassword] = useState("");
@@ -39,12 +40,16 @@ export function SignUpForm({
       return;
     }
 
+    // Optional; claim_gift falls back to the email when it's missing.
+    const displayName = name.trim();
+
     try {
       const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           emailRedirectTo: `${window.location.origin}/`,
+          data: displayName ? { display_name: displayName } : undefined,
         },
       });
       if (error) throw error;
@@ -66,6 +71,27 @@ export function SignUpForm({
         <CardContent>
           <form onSubmit={handleSignUp}>
             <div className="flex flex-col gap-6">
+              <div className="grid gap-2">
+                <Label htmlFor="name">
+                  Name{" "}
+                  <span className="font-normal text-muted-foreground">
+                    (optional)
+                  </span>
+                </Label>
+                <Input
+                  id="name"
+                  type="text"
+                  autoComplete="name"
+                  maxLength={80}
+                  aria-describedby="name-hint"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                />
+                <p id="name-hint" className="text-sm text-muted-foreground">
+                  Shown to others when you claim a gift. If you leave it blank,
+                  your email is shown instead.
+                </p>
+              </div>
               <div className="grid gap-2">
                 <Label htmlFor="email">Email</Label>
                 <Input

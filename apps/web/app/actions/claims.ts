@@ -17,9 +17,10 @@ function isUuid(value: unknown): value is string {
 
 /**
  * Claims one gift on a shared list. A signed-in visitor is named by their
- * email (the database ignores `name` for them); a guest must give a name and
- * can't take the claim back. claim_gift re-checks all of this, including
- * that the owner isn't claiming their own gift.
+ * display name, or email if they have none (the database ignores `name` for
+ * them); a guest must give a name and can't take the claim back.
+ * claim_gift re-checks all of this, including that the owner isn't claiming
+ * their own gift.
  */
 export async function claimGift(input: {
   token: string;

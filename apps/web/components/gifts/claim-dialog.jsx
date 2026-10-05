@@ -72,7 +72,7 @@ export default function ClaimDialog({ gift, viewer, loginHref, onConfirm, onClos
 
         {viewer.signedIn ? (
           <p className="modal__meta">
-            Claiming as <strong>{viewer.email ?? 'your account'}</strong>. Everyone with the link
+            Claiming as <strong>{viewer.name ?? viewer.email ?? 'your account'}</strong>. Everyone with the list
             will see this.
           </p>
         ) : (
