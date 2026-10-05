@@ -12,13 +12,26 @@ export default function GiftCard({ gift, onRemove, onView, actions }) {
   const [imageFailed, setImageFailed] = useState(false)
   const showImage = gift.imageUrl && !imageFailed
 
+  // Amazon's P/{ASIN}.01._SCLZZZZZZZ_.jpg CDN returns a 1x1 GIF for ASINs
+  // it doesn't have a product photo for -- HTTP 200, so onError never fires.
+  // Treat any tiny image as absent, so the placeholder shows instead of an
+  // empty box.
+  function handleLoad(event) {
+    if (event.currentTarget.naturalWidth <= 1) setImageFailed(true)
+  }
+
   return (
     <article className="gift-card">
       <div className={`gift-card__media${showImage ? '' : ' gift-card__media--empty'}`}>
         {showImage ? (
           // Decorative: the name is visible text directly below, and alt={name}
           // would make a screen reader announce it twice.
-          <img src={gift.imageUrl} alt="" onError={() => setImageFailed(true)} />
+          <img
+            src={gift.imageUrl}
+            alt=""
+            onLoad={handleLoad}
+            onError={() => setImageFailed(true)}
+          />
         ) : (
           <span className="gift-card__placeholder">No image</span>
         )}

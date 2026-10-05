@@ -15,6 +15,11 @@ function ImagePreview({ src }) {
       className="thumb"
       src={src}
       alt="Preview of the gift image"
+      // Amazon returns a 1x1 GIF placeholder (HTTP 200) for ASINs it lacks a
+      // photo for, so onError never fires -- catch it via naturalWidth.
+      onLoad={(event) => {
+        if (event.currentTarget.naturalWidth <= 1) setFailed(true)
+      }}
       onError={() => setFailed(true)}
     />
   )
