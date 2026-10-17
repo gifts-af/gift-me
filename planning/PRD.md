@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | Draft v0.2: builder-check questions answered, pending owner review |
+| **Status** | **Approved** v1.0 (2026-10-17) |
 | **Date** | 2026-10-17 |
 | **Owner** | Product owner (Aaron) |
 | **Working name** | Gift Concierge (placeholder) |

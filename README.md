@@ -6,6 +6,6 @@ An app that keeps track of friends and family, what they like, and the dates tha
 
 | Folder | Purpose | Status |
 |---|---|---|
-| `planning/` | Product discovery: market research, feasibility research, PRD | Active |
-| `design/` | Technical design: platform and service selection, architecture | Later |
+| `planning/` | Product discovery: [PRD](planning/PRD.md) (approved 2026-10-17), [decisions log](planning/decisions.md), [research](planning/research/) | Complete |
+| `design/` | Technical design: platform and service selection, architecture | Next |
 | Technical folders (app, extension, mobile, etc.) | Implementation | Later |
