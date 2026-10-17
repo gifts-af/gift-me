@@ -300,19 +300,20 @@ stateDiagram-v2
 
 Each wave can start once the waves before it have the dependencies it lists. Within a wave, tickets run in parallel. The ticket IDs here are draft IDs, and Linear will assign real ones.
 
-### Wave 1: Foundations and spikes (5 tickets in parallel)
+### Wave 1: Foundations and spikes (6 tickets in parallel)
 | ID | Ticket | Depends on |
 |---|---|---|
-| W1-1 | Monorepo scaffold (pnpm, Turborepo, Next.js app, CI), Vercel and Supabase projects, environments. Verify Hobby limits. | — |
+| W1-1 | Monorepo scaffold and CI (pnpm, Turborepo, Next.js shell, packages, lint, typecheck, tests, GitHub Actions) | — |
+| W1-6 | Platform provisioning and environments: Vercel project and previews, Supabase dev and prod, Anthropic API, AI Gateway and cap, domain and DNS, env and secrets conventions, Hobby limits check, Jim's access to every service | — |
 | W1-2 | Checkout spike (Zinc) | — |
 | W1-3 | AI spike (extraction, ideas, cost) | — |
 | W1-4 | Email spike (send and inbound) | — |
-| W1-5 | Database schema v1: migrations, RLS, generated types, plus `packages/core` holiday, deadline, and budget math with tests. Order, payment, and inbound fields are left as placeholders and finalized after W1-2 and W1-4. | — (can start in a branch immediately and merges once W1-1's scaffold lands, about a day in) |
+| W1-5 | Database schema v1: migrations, RLS, generated types, plus `packages/core` holiday, deadline, and budget math with tests. Order, payment, and inbound fields are left as placeholders and finalized after W1-2 and W1-4. | W1-6 for applying to hosted `dev` (it can start immediately in a branch against local Supabase) |
 
 ### Wave 2: Core app and capture plumbing
 | ID | Ticket | Depends on |
 |---|---|---|
-| W2-1 | Auth (Google sign-in), app shell, mobile layout, PWA manifest | W1-1, W1-5 |
+| W2-1 | Auth (Google sign-in), app shell, mobile layout, PWA manifest | W1-1, W1-5, W1-6 |
 | W2-2 | People, occasions, and budgets: screens and API (P-1, P-3, P-4, B-1, B-2) | W1-5, W2-1 |
 | W2-3 | Google Contacts import with checklist (P-2) | W2-1, W2-2 |
 | W2-4 | Chrome extension MVP: sign-in handoff, person picker, capture and upload, **including the capture-upload API route** (C-1, C-2) | W1-5, W2-1 |
