@@ -7,8 +7,8 @@ An app that keeps track of friends and family, what they like, and the dates tha
 | Folder | Purpose | Status |
 |---|---|---|
 | `planning/` | Product discovery: [PRD](planning/PRD.md) (approved 2026-10-17), [decisions log](planning/decisions.md), [research](planning/research/) | Complete |
-| `design/` | Technical design: platform and service selection, architecture | Next |
-| Technical folders (app, extension, mobile, etc.) | Implementation | Later |
+| `design/` | [Technical design](design/technical-design.md) (approved 2026-10-17), [decisions log](design/decisions.md) | Complete |
+| `apps/`, `packages/` | Implementation, tracked in Linear by wave | Next |
 
 ## Shared material
 

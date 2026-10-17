@@ -1,0 +1,354 @@
+# Gift Concierge: Technical Design (MVP)
+
+| | |
+|---|---|
+| **Status** | **Approved** v1.0 (2026-10-17) |
+| **Date** | 2026-10-17 |
+| **Implements** | `../planning/PRD.md` (approved v1.0). Requirement IDs (B-3, A-9, etc.) refer to it. |
+| **Decisions** | `decisions.md` (T#), `../planning/decisions.md` (D#) |
+| **Next stage** | Split into Linear tickets, labeled by wave (§13) |
+
+Items marked **[Claude's call]** are proposals the owner hasn't confirmed yet. **[Verify]** marks a fact to confirm during the named ticket before building on it.
+
+---
+
+## 1. Principles
+
+1. **Keep it simple.** Build only what the PRD marks **M**. Pick the boring option unless it costs real effort later (D21).
+2. **The database is the source of truth.** Every gift round's status lives in Postgres. Background jobs read and write that status, so any job can be retried or replaced.
+3. **Budget is enforced at three layers:** when ideas are generated, at approval, and at checkout through the order's `max_price`. A bug in one layer can't cause overspending (B-3, B-5).
+4. **Nothing is bought without a recorded approval** (A-1).
+5. **Spend under $100 a month** (T4). Stay on free tiers until something forces an upgrade.
+6. **One language and one repo.** TypeScript in a single monorepo, so two people working with Claude can work anywhere in it.
+
+## 2. Architecture
+
+```mermaid
+flowchart LR
+  subgraph Client
+    EXT[Chrome extension<br/>MV3]
+    WEB[Web app / PWA<br/>phone + desktop]
+    MAIL[User's email inbox]
+  end
+  subgraph Vercel
+    APP[Next.js app<br/>UI + API routes]
+    WF[Vercel Workflow<br/>gift-round runs]
+    CRON[Vercel Cron<br/>daily]
+    GW[AI Gateway]
+  end
+  subgraph Supabase
+    AUTH[Auth<br/>Google sign-in]
+    DB[(Postgres + RLS)]
+    ST[Storage<br/>capture screenshots]
+  end
+  CLAUDE[Claude API]
+  ZINC[Checkout service<br/>Zinc]
+  EMAIL[Email service<br/>send + inbound]
+  GOOG[Google People API]
+
+  EXT -->|capture| APP
+  WEB --> APP
+  APP --> AUTH
+  APP --> DB
+  APP --> ST
+  CRON -->|start due rounds| WF
+  WF --> DB
+  WF --> GW --> CLAUDE
+  WF -->|orders| ZINC
+  ZINC -->|webhooks: placed, failed, tracking, delivered| APP
+  WF -->|heads-up, reminders, reactions| EMAIL --> MAIL
+  MAIL -->|replies + quick notes| EMAIL -->|inbound webhook| APP
+  APP -->|contacts import| GOOG
+```
+
+### 2.1 Components
+
+| Component | Choice | Notes |
+|---|---|---|
+| Web app and API | **Next.js (App Router) on Vercel**, Node.js runtime | One app for UI, API routes, webhooks, and the phone page. A PWA manifest makes it installable to the home screen. |
+| Database | **Supabase Postgres** with Row Level Security | Every user-owned table has `user_id` plus RLS policies. Background jobs use the service role. |
+| Auth | **Supabase Auth, Google provider** | Google Contacts read access is requested separately, at import time (§6.1). The extension authenticates with the user's Supabase session (§6.2). |
+| File storage | **Supabase Storage** (private bucket) | Capture screenshots. Deleting a person deletes their files. |
+| Background jobs | **Vercel Workflow** for gift rounds, plus a **daily Vercel Cron** to start due rounds | Workflow handles durable steps, sleeping until reminder times, and waiting on approval or order events. **[Verify]** Workflow limits and pricing on the Hobby plan (W1-1). Fallback: a Postgres status machine driven by Supabase `pg_cron` every 15 minutes. |
+| AI | **Claude Opus 5.5** (`anthropic/claude-opus-5-5`) through **Vercel AI Gateway** with the AI SDK | The gateway gives spend tracking and a hard budget. **[Claude's call]** Calling the Anthropic SDK directly is an equally valid alternative if the gateway adds friction. Billed to a pay-as-you-go API account (T4). |
+| Checkout | **Zinc** (lead candidate) | `max_price` on every order, tracking webhooks, delivery estimates. **The payment model is spiked in W1-2.** |
+| Email | Resend or Postmark **[decided in W1-4]** | Needs sending and inbound-to-webhook. **[Verify]** inbound support and free-tier limits. |
+| Push notifications | Standard Web Push (VAPID) using the `web-push` package | Works on Android, and on iOS once the PWA is added to the home screen. |
+| Extension | Chrome Manifest V3, TypeScript, built with Vite | Popup plus a "Capture for…" action. Lives in the same repo. |
+| Contacts | Google People API, `contacts.readonly` scope | An unverified Google app allows up to 100 test users, which is plenty for the MVP. |
+
+### 2.2 Repository layout
+
+The repo is the existing `gift-concierge` repo, with code added alongside `planning/` and `design/` **[Claude's call]**:
+
+```
+gift-concierge/
+├── apps/
+│   ├── web/            Next.js app (UI, API routes, webhooks, workflows)
+│   └── extension/      Chrome extension
+├── packages/
+│   ├── core/           Pure domain logic: budget math, schedule/deadline math, status machine (no I/O, heavily tested)
+│   ├── db/             SQL migrations, generated types, query helpers
+│   └── ai/             Prompts, schemas, AI calls, eval fixtures
+├── spikes/             Throwaway wave-1 experiments (not production code)
+├── planning/  design/
+└── pnpm-workspace.yaml, turbo.json
+```
+
+Tooling: pnpm workspaces with Turborepo, Vitest for tests, ESLint and Prettier, and GitHub Actions running lint, typecheck, and tests on every pull request. Vercel preview deployments are created per pull request.
+
+## 3. Data model
+
+All tables have `id uuid`, `created_at`, and `updated_at`. User-owned tables have `user_id` with RLS: `user_id = auth.uid()`.
+
+| Table | Key fields | Notes |
+|---|---|---|
+| `profiles` | user_id, display_name, email, timezone, notification prefs, over_budget_pct (default 15), push subscription(s) | One row per user. |
+| `people` | user_id, name, relationship, birthday (nullable), address (structured, nullable), notes, google_contact_id | P-1, P-5 |
+| `budget_defaults` | user_id, relationship, base_amount_cents | B-2 (S) |
+| `occasions` | user_id, person_id (nullable for shared holidays), kind (birthday, anniversary, christmas, mothers_day, …), date rule (fixed date or holiday rule), enabled | P-3. Holidays are computed from rules in `core`. |
+| `budgets` | user_id, person_id, occasion_kind, amount_cents | B-1. Overrides the default for that person and occasion. |
+| `captures` | user_id, person_id, source_url, page_title, text_excerpt, screenshot_path, status (pending, extracted, failed) | C-1, C-2 |
+| `profile_facts` | user_id, person_id, category (interest, dislike, size, brand, owns, style, avoid), value, source (capture, question, note, reaction, rejection), source_id, confirmed (bool), active | C-3, C-7. A person's profile is the set of their active facts. |
+| `questions` | user_id, person_id, prompt, answer, status | C-4 |
+| `gift_rounds` | user_id, person_id, occasion_id, occasion_date, ship_by_deadline, budget_cents, status (§5), workflow_run_id, approved_at | One per person per occasion per year. |
+| `gift_ideas` | round_id, title, retailer, product_url, retailer_product_id, price_cents, est_shipping_cents, est_tax_cents, est_total_cents, arrive_by, reason, over_budget (bool), rank, status (proposed, selected, rejected) | G-1, G-2 |
+| `rejections` | round_id, reason_code, reason_text | G-3. Also written to `profile_facts`. |
+| `orders` | round_id, idea_id, provider (zinc), provider_request_id, max_price_cents, final_total_cents, status (placing, placed, failed, shipped, delivered, cancelled, refunded), tracking (jsonb), est_delivery_date | A-3, D-1 |
+| `reactions` | round_id, rating (loved, liked, meh, returned), note, source (email, web) | D-2 |
+| `notifications` | user_id, round_id, kind, channel, sent_at, action_token_hash | Audit trail plus reminder escalation state. |
+| `inbound_messages` | user_id, from, subject, body, attachments, matched_person_id, status | N-2, C-5 |
+
+Gift history (D-3) is a view over `gift_rounds`, `gift_ideas`, `orders`, and `reactions`.
+
+**Deletion (C-7):** deleting a person cascades to that person's rows, and a storage cleanup removes their screenshots.
+
+## 4. Key calculations (in `packages/core`, unit-tested)
+
+### 4.1 Ship-by deadline and schedule
+- `ship_by_deadline = occasion_date − worst_case_delivery_days − safety_buffer` **[Claude's call: buffer of 2 days]**.
+  - `worst_case_delivery_days` comes from the delivery estimate for the chosen idea at checkout.
+  - Before any idea exists, use a planning default of 7 days.
+- Rounds start on the schedule from D23, measured back from the planning deadline:
+
+| Event | When |
+|---|---|
+| Round created and ideas generated | 28 days before the deadline |
+| Heads-up sent | Once ideas are ready, around 25 days before |
+| Reminder 1 | 5 days after the heads-up |
+| Reminder 2 (email and push) | 7 days before the deadline |
+| Final notice | 48 hours before the deadline |
+| Marked skipped | At the deadline |
+
+- If a round has to start late, for example a person added close to their birthday, it compresses the schedule, filters ideas to those that can still arrive in time, and says so in the heads-up.
+
+### 4.2 Budget
+- `est_total = price + shipping + tax + fees` (D10). Tax is estimated from the recipient's state until checkout gives the real figure.
+- An idea is **within budget** if `est_total ≤ budget`. It **counts as over-budget** if `budget < est_total ≤ budget × (1 + over_budget_pct)` (D11). Anything above that is dropped.
+- If several ideas are selected, the sum of their `est_total` values must fit the round's budget, unless the over-budget idea was deliberately approved (PRD §6.2.3).
+- At checkout: `max_price = approved ceiling − already committed spend in this round`.
+  - The approved ceiling is the budget, or the over-budget idea's approved total if that was chosen.
+  - If checkout comes in higher than `est_total` but still within `max_price`, the purchase goes ahead and the user is told (D28).
+  - **[Verify in W1-2]** whether Zinc's `max_price` covers shipping and tax. If it doesn't, compute the item-only cap conservatively.
+- Refunded orders release their committed spend (D29).
+
+## 5. Gift round status machine
+
+```mermaid
+stateDiagram-v2
+  [*] --> scheduled
+  scheduled --> needs_address: start date reached, address missing
+  needs_address --> generating: address added
+  needs_address --> skipped: deadline passed
+  scheduled --> generating: start date reached
+  generating --> awaiting_approval: ideas ready, heads-up sent
+  awaiting_approval --> generating: rejected with reason
+  awaiting_approval --> purchasing: user approved
+  awaiting_approval --> skipped: deadline passed, no reply
+  purchasing --> ordered: order placed
+  purchasing --> needs_attention: order failed or over max_price
+  ordered --> delivered: delivered webhook
+  ordered --> needs_attention: failed or late-risk
+  needs_attention --> awaiting_approval: re-approve at new price, or next-best idea offered (D29)
+  delivered --> reaction_pending
+  reaction_pending --> complete: reaction logged or 7 days pass
+  skipped --> [*]
+  complete --> [*]
+```
+
+- Each gift round runs as one **Vercel Workflow run**. Waiting for approval is a hook that resumes when the user acts. Reminders are timed sleeps. Order events from Zinc webhooks resume the run.
+- Every transition writes `gift_rounds.status` first, so the UI and recovery logic only need to read the database.
+- **Idempotency:** each Zinc order request uses `idempotency_key = order.id`, and incoming webhooks are de-duplicated by provider event ID.
+
+## 6. Key flows
+
+### 6.1 Setup and contacts import
+1. Sign in with Google through Supabase Auth.
+2. **Import contacts** (optional). This is a separate Google authorization for `contacts.readonly` only. The app calls the People API, shows the "Who do you buy gifts for?" checklist, and creates `people` rows with any names, birthdays, and addresses it finds. The Google token is used once and not stored **[Claude's call]**.
+3. Occasions are added automatically by relationship (P-4). Budgets come from relationship defaults (B-2).
+4. **Missing address (P-5):** the add-person form asks for the address but doesn't require it. When a round starts and the address is still missing, the round goes to `needs_address`. The heads-up then asks for the address (one-tap link to a form) and that request follows the same reminder schedule. No ideas are generated until there's an address, because delivery estimates and tax need it. If the deadline passes, the round is skipped **[Claude's call]**.
+
+### 6.2 Capture (extension)
+1. The extension is signed in by opening the web app once. The app passes a session token to the extension through `externally_connectable` messaging, and the extension refreshes it from there **[Claude's call; Verify in W2-4]**.
+2. The user picks a person and clicks **Capture**. The extension collects:
+   - the page URL and title,
+   - the visible text (`document.body.innerText`, trimmed to about 20k characters),
+   - a screenshot of the visible area (`chrome.tabs.captureVisibleTab`).
+
+   It never scrolls or crawls on its own (C-2). Permissions are `activeTab`, `scripting`, and `storage`, with no broad host permissions.
+3. The app stores the capture (screenshot to Storage) and queues extraction.
+4. **Extraction:** Claude gets the text and screenshot and returns structured candidate facts (category, value, confidence). The prompt tells it not to infer sensitive traits, and a post-filter blocks those categories (C-8).
+5. The user reviews **"Here's what I learned"** in the web app or extension popup, then confirms or removes items. Confirmed items become active `profile_facts`.
+
+### 6.3 Gift idea generation (G-1 to G-5)
+1. **Input:** the person's active facts, past gifts, past rejections, the occasion, the budget, the ship-by deadline, and the recipient's state.
+2. **Brainstorm:** Claude (with web search) proposes about 10 candidate gift concepts, each with a specific product and retailer URL. Only retailers Zinc supports are allowed.
+3. **Resolve:** each candidate is checked with Zinc's product and offer lookup for live price, availability, shipping cost, and delivery estimate. Anything unavailable, too late, over the over-budget limit, or already given or rejected is dropped.
+4. **Rank:** Claude ranks the survivors and writes the one-line reasons. The top 3–5 within budget are kept, plus at most one over-budget idea.
+5. If fewer than 3 survive, the app repeats steps 2–4 up to 2 more times. After that it sends what it has and notes it.
+6. Results are saved as `gift_ideas`, and the heads-up is sent.
+
+### 6.4 Notifications and one-tap actions
+- Emails carry **signed one-time action links**, for example `/a/{token}`. Each token is random, stored hashed, tied to one user, round, and action, and expires at the deadline. Opening one goes to a confirmation page on the phone web app, and that page performs the action with one tap. A link never approves anything on a plain GET, because email security scanners open links automatically **[Claude's call]**.
+- **Push:** the same messages go out as Web Push notifications to subscribed devices, linking to the same pages.
+- **Escalation** follows the §4.1 schedule. Each send is logged in `notifications`.
+
+### 6.5 Approval and purchase
+1. The user selects one or more ideas, or rejects them with a reason code and optional text.
+2. **Approval** re-checks the budget (§4.2), records `approved_at`, and resumes the workflow.
+3. **Purchase:** one Zinc order per selected idea, with `max_price`, shipped to the person's address. The account and payment details come from the W1-2 spike outcome (A-9).
+4. If the order fails, the round moves to `needs_attention` and the user is offered the next-best idea to approve in one tap (D29).
+5. **Price went over the approved amount (A-4):** the round moves to `needs_attention`. The user can either **re-approve the same gift at the new price**, which goes through the same budget and over-budget rules as §4.2 (one tap, with the new total shown), or pick the next-best idea **[Claude's call]**.
+
+### 6.5a Zinc wallet funding (T6)
+- Each user connects their own Zinc account in Settings. The API key is stored encrypted in the database with Supabase Vault, and only workflows can read it.
+- **Preferred:** automatic top-up. If Zinc supports auto-recharge from a saved card, the user turns it on once in Zinc. If Zinc has an API for adding funds, the app tops up to cover approved orders before placing them.
+- **Fallback:** the app checks the balance before each order and when a round enters `awaiting_approval`. If the balance won't cover the approved total, the heads-up or approval email includes a "Top up your Zinc balance" link. The order waits, on the same reminder schedule, rather than failing.
+- Whichever way it works out, W1-2 confirms it. Wave 4 gets ticket **W4-4 Zinc account connection and funding**.
+
+### 6.6 Tracking, late risk, reactions
+- Zinc webhooks update `orders`. A late-risk check runs whenever an update arrives and once a day: if `est_delivery_date > occasion_date`, the round goes to `needs_attention` and the user is alerted (D-1, D-4).
+- One day after the occasion, the reaction prompt goes out (D-2). Notes are **text only in the MVP**. The phone keyboard's built-in dictation covers voice input, and recording and storing audio waits for later **[Claude's call]**. The answer is written to `reactions` and turned into `profile_facts` (for example, "loved: X").
+
+### 6.7 Guided questions by email (C-4)
+- Open questions for a person are included in heads-up and reminder emails as a signed link to a short form on the phone web page. That counts as "answerable by email" for the MVP. Replying in the body of the email is not parsed **[Claude's call]**.
+
+### 6.8 Inbound email quick capture (N-2, C-5)
+- Each user gets an address such as `notes+{user-token}@<domain>`, or the app matches on the sender's address **[decided in W1-4]**.
+- The inbound webhook stores the message. Claude then matches it to a person, using names in the text and the user's list of people, and extracts facts. If it isn't confident, it emails back asking "Who is this about?"
+
+## 7. AI design
+
+| Task | Model and settings | Output | Estimated cost |
+|---|---|---|---|
+| Capture extraction | Opus 5.5, effort `low`, vision | Structured facts (schema-validated) | ~$0.02 each |
+| Inbound note matching and extraction | Opus 5.5, effort `low` | Person match plus facts | ~$0.01 each |
+| Idea brainstorm | Opus 5.5, effort `medium`, web search | 10 candidates (schema) | ~$0.10 |
+| Idea ranking and reasons | Opus 5.5, effort `low` | Ranked list (schema) | ~$0.03 |
+
+- All outputs use structured outputs or schemas. Inputs and outputs are logged, and inputs are kept so prompts can be improved later.
+- **Cost control:** the AI Gateway budget is capped at **$60 a month**, with an alert email to the owner at 50% and 80% of the cap **[Claude's call]**. App-side limits cap the number of retries per round. If the cap is hit, rounds already waiting on ideas move to `needs_attention` and the owner is alerted. They never fail quietly, because a stalled round risks a late gift.
+- **Evals (light):** W1-3 builds a small fixture set (about 10 captures and 5 profiles) that later prompt changes are re-checked against.
+
+## 8. Security and privacy
+- RLS on every user table. The service role is only used inside workflows and webhooks.
+- Webhooks verify signatures where the provider supports them. Otherwise they use a secret path token plus an IP allowlist if one is available.
+- No retailer passwords are ever stored (A-5). Card handling follows the W1-2 spike outcome, and the app **never touches raw card numbers**.
+- Secrets live in Vercel environment variables. Supabase keys are split into anon and service role.
+- The sensitive-trait filter runs on AI output (C-8). Captures store only what the user captured.
+- Deletion cascades (C-7). Users can export their data later.
+
+## 9. Environments and operations
+- **Supabase:** two projects on the free tier, `dev` and `prod`, plus the local Supabase CLI for development. Upgrade `prod` to Pro ($25 a month) if the 7-day inactivity pause becomes a problem.
+- **Vercel:** Hobby to start. Production comes from `main`, and pull requests get preview deployments.
+  - **[Verify]** whether Hobby's limits on cron, Workflow, and non-commercial use are acceptable for 3 users.
+  - Upgrade to Pro ($20 a month) if they aren't.
+- **Monitoring:** Vercel logs and observability, AI Gateway dashboards, and a daily "health" email to the owner listing rounds in `needs_attention` **[Claude's call]**.
+- **Test mode:** Zinc sandbox or test orders, plus a `DRY_RUN` flag that does everything except place the real order.
+
+## 10. Cost estimate (monthly, 3 users)
+
+| Item | Estimate |
+|---|---|
+| Vercel Hobby, or Pro if needed | $0 / $20 |
+| Supabase free, or Pro if needed | $0 / $25 |
+| Claude API through AI Gateway | ~$10–15 (capped at $60) |
+| Email service | $0 (free tier) |
+| Zinc | ~$1 per order, plus any platform minimum **[Verify in W1-2]** |
+| Domain | ~$1–2 |
+| **Total** | **~$15–85** worst case, under the $100 budget |
+
+## 11. Spikes (wave 1)
+
+| Spike | Questions it must answer | Done when |
+|---|---|---|
+| **W1-2 Checkout (Zinc)** | How does each user pay with their own card (A-9)? Options: a Zinc account per user, a user-funded wallet, or a payment method passed per order. What is Zinc's pricing and minimum? Does `max_price` include shipping and tax? How reliable are its delivery estimates? Which webhook events does it send? Does product and offer lookup work for idea resolution? **Can the wallet be funded automatically:** an API to add funds, auto-recharge from a saved card, or a balance check the app can poll? | A written recommendation in `design/spikes/checkout.md`, plus one real test order placed, tracked, and delivered (or returned). If Zinc doesn't work, Rye is evaluated as the fallback. |
+| **W1-3 AI** | Can it pull useful facts from real captures (Instagram, Pinterest, a product page)? Can it produce 3–5 good, purchasable ideas from a profile? What is the real cost per call? | `design/spikes/ai.md` with sample inputs and outputs, prompt v1, and measured cost. The fixture set is committed. |
+| **W1-4 Email** | Which provider (Resend or Postmark) supports inbound email on the free tier? Which domain? Which address scheme? | `design/spikes/email.md`, plus a working send and receive using the chosen provider. |
+
+## 12. Risks
+
+| Risk | Mitigation |
+|---|---|
+| Zinc can't support "user pays with own card" | The W1-2 spike runs first, and Rye is the fallback. **Accepted for the MVP:** each user has their own Zinc account and wallet (T6). |
+| AI ideas are poor or can't be bought | The resolve step requires a live offer. The spike measures quality early. The rejection loop teaches the app. |
+| Retailers block agent or API vendors | Avoid account automation. Support more than one retailer through Zinc. Add a gift card fallback later. |
+| Vercel Hobby limits | Verify in W1-1, upgrade to Pro within budget if needed. |
+| Delivery estimates are wrong | 2-day buffer, the late-risk check, and a replacement offer. |
+
+## 13. Work breakdown by wave (draft for Linear)
+
+Each wave can start once the waves before it have the dependencies it lists. Within a wave, tickets run in parallel. The ticket IDs here are draft IDs, and Linear will assign real ones.
+
+### Wave 1: Foundations and spikes (5 tickets in parallel)
+| ID | Ticket | Depends on |
+|---|---|---|
+| W1-1 | Monorepo scaffold (pnpm, Turborepo, Next.js app, CI), Vercel and Supabase projects, environments. Verify Hobby limits. | — |
+| W1-2 | Checkout spike (Zinc) | — |
+| W1-3 | AI spike (extraction, ideas, cost) | — |
+| W1-4 | Email spike (send and inbound) | — |
+| W1-5 | Database schema v1: migrations, RLS, generated types, plus `packages/core` holiday, deadline, and budget math with tests. Order, payment, and inbound fields are left as placeholders and finalized after W1-2 and W1-4. | — (can start in a branch immediately and merges once W1-1's scaffold lands, about a day in) |
+
+### Wave 2: Core app and capture plumbing
+| ID | Ticket | Depends on |
+|---|---|---|
+| W2-1 | Auth (Google sign-in), app shell, mobile layout, PWA manifest | W1-1, W1-5 |
+| W2-2 | People, occasions, and budgets: screens and API (P-1, P-3, P-4, B-1, B-2) | W1-5, W2-1 |
+| W2-3 | Google Contacts import with checklist (P-2) | W2-1, W2-2 |
+| W2-4 | Chrome extension MVP: sign-in handoff, person picker, capture and upload, **including the capture-upload API route** (C-1, C-2) | W1-5, W2-1 |
+| W2-5 | Notification service: email sending, templates, signed action links, Web Push (N-1, N-3) | W1-4, W1-5, W2-1 |
+
+### Wave 3: Intelligence and the round engine
+| ID | Ticket | Depends on |
+|---|---|---|
+| W3-1 | Capture extraction plus the "Here's what I learned" review (C-3, C-8) | W1-3, W2-4 |
+| W3-2 | Profile view and editing, guided questions, readiness meter (C-4, C-6, C-7) | W2-2 |
+| W3-3 | Gift idea engine: brainstorm, resolve via checkout lookup, rank (G-1, G-2, G-4, G-5) | W1-2, W1-3, W2-2 |
+| W3-4 | Round scheduler and workflow skeleton: daily cron, round creation, status machine, reminder sleeps, skip (A-2) | W1-5, W2-2, W2-5 |
+
+### Wave 4: Approve and buy
+| ID | Ticket | Depends on |
+|---|---|---|
+| W4-1 | Approval UI: idea cards, multi-select, over-budget handling, reject with reason, re-generate (A-1, B-4, G-3) | W3-3, W3-4 |
+| W4-2 | Purchase integration: Zinc orders, `max_price`, the A-8 price rule, idempotency, `DRY_RUN` (A-3, A-4, A-8, A-9, B-3, B-5) | W1-2, W3-4 |
+| W4-3 | Inbound email quick capture: match person, file note (N-2, C-5) | W1-4, W3-1 |
+| W4-4 | Zinc account connection (encrypted key), balance check, automatic or prompted top-up (§6.5a) | W1-2, W2-1 |
+
+### Wave 5: After the purchase
+| ID | Ticket | Depends on |
+|---|---|---|
+| W5-1 | Order tracking webhooks, late-risk check, failure and replacement flow (D-1, D-4) | W4-1, W4-2 |
+| W5-2 | Reaction prompts and gift history (D-2, D-3) | W4-2 |
+| W5-3 | Owner health email and monitoring | W3-4 |
+
+### Wave 6: Ready for real use
+| ID | Ticket | Depends on |
+|---|---|---|
+| W6-1 | End-to-end dry run with real profiles in `DRY_RUN`, then 1–2 real orders | All above |
+| W6-2 | Privacy pass: deletion cascade check, sensitive-trait filter test, secrets review | All above |
+| W6-3 | Onboard Jim and 1–2 friends | W6-1, W6-2 |
+
+**Within wave 2, W2-1 goes first.** W2-2 and W2-4 can start right after it, and W2-3 and W2-5 follow. So wave 2 is really two steps, though still more tickets than builders at each step. With two builders, nobody is blocked. Wave 1's spikes are the critical path: they decide W3-3 and W4-2.
+
+## 14. Accounts
+All services (Google, Vercel, Supabase, Zinc, Anthropic API, Linear) are under the owner's **allensforever711@gmail.com** account, and the code is in the **aarontallen** GitHub account. Jim is added to each one (T7). **Domain:** if none is already set up, W1-1 buys a cheap placeholder domain under that account **[Claude's call]**.
