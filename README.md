@@ -12,4 +12,5 @@ An app that keeps track of friends and family, what they like, and the dates tha
 
 ## Shared material
 
+- [Linear project: Gift Concierge MVP](https://linear.app/allens-forever/project/gift-concierge-mvp-d065ee52b117) (tickets labeled Wave 1–6)
 - [Pitch deck](https://claude.ai/artifact/9aUauzPty1VKRSKgrZhmHT) (Claude artifact; ask the owner for access)
