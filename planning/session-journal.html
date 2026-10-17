@@ -1,0 +1,226 @@
+﻿<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gift Concierge Planning Journal</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: a single reading column styled like a project logbook. A dated timeline runs down the left rail and summary panels sit between entries. */
+:root {
+  --bg: #f5f7f5;
+  --surface: #ffffff;
+  --fg: #1b2420;
+  --muted: #5b6b63;
+  --line: #d6dfd9;
+  --accent: #1f5c4a;
+  --accent-soft: #e2eee8;
+  --ribbon: #8a3b5c;
+  --ribbon-soft: #f6e8ee;
+  --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --font-body: "Literata", Georgia, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121815; --surface: #1a221e; --fg: #e3ebe6; --muted: #9aaba2; --line: #2c3833;
+    --accent: #7cc4a8; --accent-soft: #1e3029; --ribbon: #e09ab8; --ribbon-soft: #33212a;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121815; --surface: #1a221e; --fg: #e3ebe6; --muted: #9aaba2; --line: #2c3833;
+  --accent: #7cc4a8; --accent-soft: #1e3029; --ribbon: #e09ab8; --ribbon-soft: #33212a;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 17px; line-height: 1.65; }
+.wrap { max-width: 760px; margin: 0 auto; padding-block: 48px 72px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; gap: 56px; }
+h1, h2, h3 { font-family: var(--font-display); text-wrap: balance; line-height: 1.15; margin: 0; }
+h1 { font-size: clamp(2.1rem, 6vw, 3.1rem); font-weight: 700; letter-spacing: -0.02em; }
+h2 { font-size: 1.6rem; font-weight: 700; }
+h3 { font-size: 1.15rem; font-weight: 500; }
+p { margin: 0; }
+.eyebrow { font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--accent); }
+section { display: flex; flex-direction: column; gap: 20px; }
+header { display: flex; flex-direction: column; gap: 16px; }
+header .lede { font-size: 1.15rem; color: var(--muted); max-width: 60ch; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 20px; font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); }
+
+.prompt { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 24px; display: flex; flex-direction: column; gap: 14px; }
+.prompt p { font-style: italic; }
+.prompt .who { font-family: var(--font-mono); font-size: 0.75rem; color: var(--muted); font-style: normal; }
+
+.timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.step { display: grid; grid-template-columns: 44px 1fr; gap: 0 18px; }
+.step .rail { display: flex; flex-direction: column; align-items: center; }
+.step .num { width: 34px; height: 34px; border-radius: 50%; background: var(--accent); color: var(--bg); font-family: var(--font-mono); font-size: 0.85rem; display: grid; place-items: center; flex: none; }
+.step .rail::after { content: ""; flex: 1; width: 2px; background: var(--line); margin-top: 6px; }
+.step:last-child .rail::after { display: none; }
+.step .body { min-width: 0; padding-bottom: 36px; display: flex; flex-direction: column; gap: 10px; padding-top: 4px; }
+.step .why { font-size: 0.95rem; color: var(--muted); border-left: 2px solid var(--accent-soft); padding-left: 12px; }
+
+.qa { display: flex; flex-direction: column; gap: 14px; margin-top: 4px; }
+.qa div { display: flex; flex-direction: column; gap: 4px; }
+.qa .q { font-family: var(--font-display); font-weight: 500; font-size: 1rem; }
+.qa .a { font-style: italic; color: var(--muted); }
+.qa .a::before { content: "Answer: "; font-style: normal; font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ribbon); }
+
+.tag { display: inline-block; font-family: var(--font-mono); font-size: 0.72rem; padding: 2px 8px; border-radius: 3px; background: var(--accent-soft); color: var(--accent); }
+.tag.pending { background: var(--ribbon-soft); color: var(--ribbon); }
+
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 620px) { .grid { grid-template-columns: 1fr; } }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 20px; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.card p, .card li { font-size: 0.95rem; }
+ul { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 4px; }
+code, .path { font-family: var(--font-mono); font-size: 0.82em; background: var(--accent-soft); color: var(--accent); padding: 1px 5px; border-radius: 3px; overflow-wrap: anywhere; }
+
+.tree { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 18px 20px; font-family: var(--font-mono); font-size: 0.82rem; line-height: 1.8; overflow-x: auto; white-space: pre; margin: 0; color: var(--fg); }
+
+.lessons { counter-reset: lesson; list-style: none; padding: 0; gap: 16px; }
+.lessons li { display: flex; flex-direction: column; gap: 4px; padding-bottom: 16px; border-bottom: 1px solid var(--line); }
+.lessons li:last-child { border-bottom: 0; }
+.lessons strong { font-family: var(--font-display); font-weight: 500; font-size: 1.05rem; }
+
+.next { display: flex; flex-direction: column; gap: 10px; }
+.next li { list-style: none; display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: baseline; }
+.next { padding: 0; }
+footer { font-size: 0.85rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: 20px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">Product planning journal &middot; Session 1</span>
+    <h1>Gift Concierge: from idea to requirements with Claude</h1>
+    <p class="lede">A walkthrough of how we're using Claude Code as a product partner to turn a rough app idea into a full product requirements document (PRD), and how that is going so far.</p>
+    <div class="meta"><span>Started Oct 17, 2026</span><span>Tool: Claude Code</span><span>Stage: discovery &amp; research</span></div>
+  </header>
+
+  <section>
+    <span class="eyebrow">Where it started</span>
+    <h2>The opening prompt</h2>
+    <p>Everything began with one long message describing the idea and the role Claude should play. It doesn't have to be polished. It mostly needs to cover the goal, the rough shape of the idea, and what you want back.</p>
+    <div class="prompt">
+      <p>"You are my product expert and are going to help me write requirements for a new application. My idea for the application is to maintain a list of friends and family and their preferences. It will maintain a list of important dates and whether I want to send gifts to them for those days. The application will decide on and purchase gifts based on their preferences. I want it to support multiple levels of automation, to where it prompts with already chosen gifts that you can select from to ultimately just automatically purchasing on your behalf. We'll want the right safeguards in place to make sure the user has time to agree/approve. Over time it will maintain history of gifts, reaction to gifts and whatever else we can think of to get better at making purchases.</p>
+      <p>The way preferences will be built is initially reading in social media profiles provided by the user. It could also then ask some guided questions of the user to further fill out the preferences/knowledgebase of the person to get better at gifting. Ideally this will be a hosted application, probably with some helper plugins to help. Things like a browser extension for the user to guide selection of social media profiles or really any content on the web that will help build out a family members profile. Probably an easy mobile app (or mobile ready web app) for capturing quick thoughts or details on how a gift was received.</p>
+      <p>I'll need your help to flesh out further. Ideally you do some market analysis to see what's out there already as competitors. Also verifying and looking into what is possible and what third party services might enable a solution. Once we have a solid PRD together we'll feed that through a technical design process for platform and service selection. But we'll handle that later. Build out a directory structure to handle this process&hellip; It will grow into a full workspace."</p>
+      <span class="who">Original prompt, lightly trimmed</span>
+    </div>
+  </section>
+
+  <section>
+    <span class="eyebrow">What happened next</span>
+    <h2>The session, step by step</h2>
+    <ol class="timeline">
+      <li class="step">
+        <div class="rail"><span class="num">1</span></div>
+        <div class="body">
+          <h3>Claude asked questions before building anything</h3>
+          <p>Claude didn't start writing a requirements doc right away. It used a "brainstorming" process: understand what you actually want and <em>why</em>, then write it down. It offered to skip the questions if we wanted to go straight to work.</p>
+          <p class="why">Why it matters: AI assistants are very good at producing confident output. Without this step, the PRD would be built on Claude's guesses rather than your intent.</p>
+        </div>
+      </li>
+      <li class="step">
+        <div class="rail"><span class="num">2</span></div>
+        <div class="body">
+          <h3>It set up a workspace folder</h3>
+          <p>The prompt asked for a folder structure, so Claude created the main product folder with a <span class="path">planning</span> subfolder and a short README describing the plan. Later stages, such as technical design and the actual code, will get their own folders.</p>
+          <pre class="tree">gift-concierge/
+├── README.md            what this is + folder map
+└── planning/
+    └── research/        market &amp; feasibility reports</pre>
+        </div>
+      </li>
+      <li class="step">
+        <div class="rail"><span class="num">3</span></div>
+        <div class="body">
+          <h3>One question at a time, anchored in real moments</h3>
+          <p>Claude asked about concrete experiences instead of abstract feature lists. It asked one question per message.</p>
+          <div class="qa">
+            <div><span class="q">"Think of the last time you missed a gift or scrambled to find one. What happened?"</span><span class="a">Family gifts right before Christmas, and some were ordered too late to arrive in time.</span></div>
+            <div><span class="q">"Which was harder: knowing what to get, or finding time to order?"</span><span class="a">Both. Automate as much as possible: suggest ideas, I pick, the app buys and ships. If I reject the ideas, I say why and it tries again.</span></div>
+            <div><span class="q">"Does it order from your own store accounts, or anywhere with you paying the app?"</span><span class="a">Eventually both: use my accounts where I have them, and buy directly from other stores.</span></div>
+            <div><span class="q">"Is this just for you, or a product other people will pay for?"</span><span class="a">Me and a couple of friends first, then open it to the public with a subscription or per-transaction model.</span></div>
+          </div>
+          <p class="why">Notice how one small story (late Christmas gifts) became a hard requirement: the app must account for shipping time when it picks a gift, not just remember the date.</p>
+        </div>
+      </li>
+      <li class="step">
+        <div class="rail"><span class="num">4</span></div>
+        <div class="body">
+          <h3>Claude played it back to check its understanding</h3>
+          <p>After a few answers, Claude summarized the core idea and clearly marked which parts were its own guesses. That made corrections easy: "pick one" became "pick one <em>or more</em>," and it led to a new requirement: budgets per person and per occasion.</p>
+        </div>
+      </li>
+      <li class="step">
+        <div class="rail"><span class="num">5</span></div>
+        <div class="body">
+          <h3>Research runs in parallel</h3>
+          <p>With enough context gathered, Claude proposed three research areas and started them only after approval. It launched three separate research agents that search the web at the same time. Each writes a cited report into the workspace.</p>
+          <div class="grid">
+            <div class="card"><span class="tag">Done</span><h3>Competitors</h3><p>Gift reminder apps, AI gift finders, corporate gifting platforms, and new AI shopping agents.</p></div>
+            <div class="card"><span class="tag">Done</span><h3>Profile data</h3><p>What can legally and technically be read from social media, what a browser extension adds, and the privacy questions.</p></div>
+            <div class="card"><span class="tag">Done</span><h3>Purchasing</h3><p>Retailer APIs, automated checkout services, payment safeguards like single-use virtual cards, and delivery estimates.</p></div>
+            <div class="card"><span class="tag">Meanwhile</span><h3>Conversation continues</h3><p>While the research runs, the requirements conversation keeps going, starting with "What would make you wince if the app got it wrong?"</p></div>
+          </div>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section>
+    <span class="eyebrow">Current understanding</span>
+    <h2>What we know so far</h2>
+    <div class="grid">
+      <div class="card">
+        <h3>The core loop</h3>
+        <ul>
+          <li>Early heads-up before each occasion, with enough lead time for approval and shipping</li>
+          <li>A short list of ideas, already priced and checked to arrive on time</li>
+          <li>Pick one or more and the app buys and ships them</li>
+          <li>Reject with a reason and it searches again (and learns)</li>
+          <li>Logs how each gift was received</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Automation as earned trust</h3>
+        <p>Suggestions first, then one-tap approval, then optional full auto-purchase per person, always with a window to cancel.</p>
+      </div>
+      <div class="card">
+        <h3>Budgets</h3>
+        <p>Set per person and per occasion. Mom at Christmas gets a different budget than a friend on Valentine's Day.</p>
+      </div>
+      <div class="card">
+        <h3>Purchasing &amp; audience</h3>
+        <p>Hybrid buying (your accounts or direct). Used personally first, then a public paid product later.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <span class="eyebrow">For learning</span>
+    <h2>Takeaways about working this way</h2>
+    <ul class="lessons">
+      <li><strong>Give Claude a role and the end goal.</strong><span>"You are my product expert&hellip; we'll feed the PRD into technical design later" told Claude what kind of help to give and where the work is going.</span></li>
+      <li><strong>Let it interview you.</strong><span>The most useful requirements came out of answering questions, not from the first prompt.</span></li>
+      <li><strong>Correct the playback.</strong><span>Summaries are cheap to fix. A finished document built on a wrong assumption is not.</span></li>
+      <li><strong>Hand off the legwork.</strong><span>Market and feasibility research runs in the background while you keep thinking about the product.</span></li>
+      <li><strong>Keep everything in files.</strong><span>Reports and decisions go into the workspace folder, so later stages, and later sessions, can build on them.</span></li>
+    </ul>
+  </section>
+
+  <section>
+    <span class="eyebrow">Up next</span>
+    <h2>The road ahead</h2>
+    <ul class="next">
+      <li><span class="tag pending">Now</span><span>Finish the requirements conversation and review the research findings</span></li>
+      <li><span class="tag">Then</span><span>Write the PRD and have an independent reviewer read it for gaps</span></li>
+      <li><span class="tag">Later</span><span>Technical design: choosing platforms and services</span></li>
+      <li><span class="tag">Later</span><span>Build: hosted app, browser extension, mobile-friendly app</span></li>
+    </ul>
+  </section>
+
+  <footer>Written by Claude from the planning session so far. "Gift Concierge" is a working name.</footer>
+</div>
+
+</html>
