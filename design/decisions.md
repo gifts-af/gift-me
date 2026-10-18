@@ -12,7 +12,7 @@ Running record of technical design decisions. Product decisions are in `../plann
 | T4 | **Running budget: up to about $100 a month** for the MVP (hosting, AI, email, checkout fees; gift purchases excluded). Claude Max plans cover development. App runtime AI calls use a separate pay-as-you-go Claude API account. | Owner |
 | T5 | After approval, the design is split into Linear tickets in a Linear project, labeled in **waves of parallel work**. Each wave unblocks the next. | Owner |
 | T6 | A Zinc account and wallet per user is **acceptable for the MVP**. Funding should be automated where Zinc allows it (auto-recharge or an API top-up). Otherwise the app prompts for a top-up before the order and holds the order rather than failing. The checkout spike (W1-2) confirms which. | Owner |
-| T7 | All services run under the owner's **allensforever711@gmail.com** account, which is already set up across them, and the code is in the **allensforever711** GitHub account. The repo was first created under aarontallen by mistake and transferred on 2026-10-18. Jim is added to each one. | Owner |
+| T7 | All services run under the owner's **allensforever711@gmail.com** account, which is already set up across them, and the code is in the free **gifts-af** GitHub organization, with allensforever711, aarontallen, JimtheBurger and brb3 as owners. The repo was first created under aarontallen by mistake, and on 2026-10-18 it moved to allensforever711 and then to gifts-af so all builders have full control. Jim is added to each service. | Owner |
 
 ## 2026-10-18
 
