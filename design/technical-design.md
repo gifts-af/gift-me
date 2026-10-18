@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | **Approved** v1.0 (2026-10-17). Revised v1.1 (2026-10-18) after the owner's review: Supabase `pg_cron` runs gift rounds once a day (T8, T9), a lean repo layout (T10), a replaceable AI backend billed through Vercel (T11), push deferred (T12), email capture kept (T13). Tunable values (buffers, timings, retries) are sensible defaults to adjust once real usage shows what's needed. |
+| **Status** | **Approved** v1.0 (2026-10-17). Revised v1.1 (2026-10-18) after the owner's review: Supabase `pg_cron` runs gift rounds once a day (T8, T9), a lean repo layout (T10), a replaceable AI backend billed through Vercel (T11), push deferred (T12), email capture kept (T13), round statuses cut from 11 to 9 (T14), and a new §3.1 on how the app learns about a person. Tunable values (buffers, timings, retries) are sensible defaults to adjust once real usage shows what's needed. |
 | **Date** | 2026-10-18 |
 | **Implements** | `../planning/PRD.md` (approved v1.0). Requirement IDs (B-3, A-9, etc.) refer to it. |
 | **Decisions** | `decisions.md` (T#), `../planning/decisions.md` (D#) |
