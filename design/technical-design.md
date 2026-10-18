@@ -372,7 +372,7 @@ Cheaper models are worth trying per task once the fixtures exist. Extraction and
 
 Each wave can start once the waves before it have the dependencies it lists. Within a wave, tickets run in parallel. The ticket IDs here are draft IDs, and Linear will assign real ones.
 
-### Wave 1: Foundations and spikes (6 tickets in parallel)
+### Wave 1: Foundations and spikes (7 tickets in parallel)
 | ID | Ticket | Depends on |
 |---|---|---|
 | W1-1 | Monorepo scaffold and CI (pnpm workspaces, Next.js shell, `packages/core`, `supabase/` folder, lint, typecheck, tests, GitHub Actions, branch protection) | — |
@@ -381,28 +381,29 @@ Each wave can start once the waves before it have the dependencies it lists. Wit
 | W1-3 | AI spike (extraction, ideas, cost) | — |
 | W1-4 | Email spike (send and inbound) | — |
 | W1-5 | Database schema v1: migrations in `supabase/`, RLS, generated types in `core`, plus `packages/core` holiday, deadline, and budget math with tests. Order, payment, and inbound fields are left as placeholders and finalized after W1-2 and W1-4. | W1-6 for applying to hosted `dev` (it can start immediately in a branch against local Supabase) |
+| W1-7 | Look and feel: UI kit (Tailwind plus shadcn/ui, shared with the extension), a style guide as tokens, and clickable phone-first mock-ups of the approval, profile, home, extension popup and approval email screens, signed off by the owner and Jim. Written up in `design/ui.md` (T15). | — |
 
 ### Wave 2: Core app and capture plumbing
 | ID | Ticket | Depends on |
 |---|---|---|
-| W2-1 | Auth (Google sign-in), app shell, mobile layout, PWA manifest | W1-1, W1-5, W1-6 |
-| W2-2 | People, occasions, and budgets: screens and API (P-1, P-3, P-4, B-1, B-2) | W1-5, W2-1 |
+| W2-1 | Auth (Google sign-in), app shell, mobile layout, PWA manifest | W1-1, W1-5, W1-6, W1-7 |
+| W2-2 | People, occasions, and budgets: screens and API (P-1, P-3, P-4, B-1, B-2) | W1-5, W1-7, W2-1 |
 | W2-3 | Google Contacts import with checklist (P-2) | W2-1, W2-2 |
-| W2-4 | Chrome extension MVP: sign-in handoff, person picker, capture and upload, **including the capture-upload API route** (C-1, C-2) | W1-5, W2-1 |
-| W2-5 | Notification service: email sending, templates, signed action links, a channel list ready for push (N-1, N-3) | W1-4, W1-5, W2-1 |
+| W2-4 | Chrome extension MVP: sign-in handoff, person picker, capture and upload, **including the capture-upload API route** (C-1, C-2) | W1-5, W1-7, W2-1 |
+| W2-5 | Notification service: email sending, templates, signed action links, a channel list ready for push (N-1, N-3) | W1-4, W1-5, W1-7, W2-1 |
 
 ### Wave 3: Intelligence and the round engine
 | ID | Ticket | Depends on |
 |---|---|---|
 | W3-1 | Capture extraction plus the "Here's what I learned" review (C-3, C-8) | W1-3, W2-4 |
-| W3-2 | Profile view and editing, guided questions, readiness meter (C-4, C-6, C-7) | W2-2 |
+| W3-2 | Profile view and editing, guided questions, readiness meter (C-4, C-6, C-7) | W1-7, W2-2 |
 | W3-3 | Gift idea engine: brainstorm, resolve via checkout lookup, rank (G-1, G-2, G-4, G-5) | W1-2, W1-3, W2-2 |
 | W3-4 | Round engine: `pg_cron` tick, round creation, claiming and locking, round statuses, reminders as due times, skip (A-2) (§5.1) | W1-5, W1-6, W2-2, W2-5 |
 
 ### Wave 4: Approve and buy
 | ID | Ticket | Depends on |
 |---|---|---|
-| W4-1 | Approval UI: idea cards, multi-select, over-budget handling, reject with reason, re-generate (A-1, B-4, G-3) | W3-3, W3-4 |
+| W4-1 | Approval UI: idea cards, multi-select, over-budget handling, reject with reason, re-generate (A-1, B-4, G-3) | W1-7, W3-3, W3-4 |
 | W4-2 | Purchase integration: Zinc orders, `max_price`, the A-8 price rule, idempotency, `DRY_RUN` (A-3, A-4, A-8, A-9, B-3, B-5) | W1-2, W3-4 |
 | W4-3 | Inbound email quick capture: match person, file note (N-2, C-5) | W1-4, W3-1 |
 | W4-4 | Zinc account connection (encrypted key), balance check, automatic or prompted top-up (§6.5a) | W1-2, W2-1 |
