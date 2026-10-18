@@ -75,7 +75,7 @@ flowchart LR
 | AI | Any model through **Vercel AI Gateway** with the **AI SDK**. Default today: **Claude Opus 5.5** (`anthropic/claude-opus-5-5`) | The gateway gives one key, one bill and one spending cap across providers, plus fallbacks. Usage is **billed through the Vercel account**, so there's no separate AI provider account (T11). The model for each task is set in one config file (§7). **[Verify in W1-3]** that the provider's web search tool works through the gateway. Fallback: connect a provider API key to the gateway. |
 | Checkout | **Zinc** (lead candidate) | `max_price` on every order, tracking webhooks, delivery estimates. **The payment model is spiked in W1-2.** |
 | Email | Resend or Postmark **[decided in W1-4]** | Needs sending and inbound-to-webhook. **[Verify]** inbound support and free-tier limits. |
-| Push notifications | Standard Web Push (VAPID) using the `web-push` package | Works on Android, and on iOS once the PWA is added to the home screen. |
+| Push notifications | **Decision deferred (T12).** If added: standard Web Push (VAPID) using the `web-push` package | Works on Android, and on iOS once the PWA is added to the home screen. Email covers every message without it. The notification service sends through a channel list, so push plugs in later without changing callers. Estimated 1–2 days of work, in its own ticket (W5-4). |
 | Extension | Chrome Manifest V3, TypeScript, built with Vite | Popup plus a "Capture for…" action. Lives in the same repo. |
 | Contacts | Google People API, `contacts.readonly` scope | An unverified Google app allows up to 100 test users, which is plenty for the MVP. |
 
@@ -110,7 +110,7 @@ All tables have `id uuid`, `created_at`, and `updated_at`. User-owned tables hav
 
 | Table | Key fields | Notes |
 |---|---|---|
-| `profiles` | user_id, display_name, email, timezone, notification prefs, over_budget_pct (default 15), push subscription(s) | One row per user. |
+| `profiles` | user_id, display_name, email, timezone, notification prefs, over_budget_pct (default 15) | One row per user. Push subscriptions are added with W5-4 if push goes ahead. |
 | `people` | user_id, name, relationship, birthday (nullable), address (structured, nullable), notes, google_contact_id | P-1, P-5 |
 | `budget_defaults` | user_id, relationship, base_amount_cents | B-2 (S) |
 | `occasions` | user_id, person_id (nullable for shared holidays), kind (birthday, anniversary, christmas, mothers_day, …), date rule (fixed date or holiday rule), enabled | P-3. Holidays are computed from rules in `core`. |
@@ -143,7 +143,7 @@ Gift history (D-3) is a view over `gift_rounds`, `gift_ideas`, `orders`, and `re
 | Round created and ideas generated | 28 days before the deadline |
 | Heads-up sent | Once ideas are ready, around 25 days before |
 | Reminder 1 | 5 days after the heads-up |
-| Reminder 2 (email and push) | 7 days before the deadline |
+| Reminder 2 (email, plus push if W5-4 ships) | 7 days before the deadline |
 | Final notice | 48 hours before the deadline |
 | Marked skipped | At the deadline |
 
@@ -228,7 +228,7 @@ stateDiagram-v2
 
 ### 6.4 Notifications and one-tap actions
 - Emails carry **signed one-time action links**, for example `/a/{token}`. Each token is random, stored hashed, tied to one user, round, and action, and expires at the deadline. Opening one goes to a confirmation page on the phone web app, and that page performs the action with one tap. A link never approves anything on a plain GET, because email security scanners open links automatically **[Claude's call]**.
-- **Push:** the same messages go out as Web Push notifications to subscribed devices, linking to the same pages.
+- **Channels:** every message is sent through a list of channels. The MVP starts with email only. If push is added (W5-4, decision deferred, T12), the same messages also go out as Web Push notifications linking to the same pages.
 - **Escalation** follows the §4.1 schedule. Each send is logged in `notifications`.
 
 ### 6.5 Approval and purchase
@@ -346,7 +346,7 @@ Each wave can start once the waves before it have the dependencies it lists. Wit
 | W2-2 | People, occasions, and budgets: screens and API (P-1, P-3, P-4, B-1, B-2) | W1-5, W2-1 |
 | W2-3 | Google Contacts import with checklist (P-2) | W2-1, W2-2 |
 | W2-4 | Chrome extension MVP: sign-in handoff, person picker, capture and upload, **including the capture-upload API route** (C-1, C-2) | W1-5, W2-1 |
-| W2-5 | Notification service: email sending, templates, signed action links, Web Push (N-1, N-3) | W1-4, W1-5, W2-1 |
+| W2-5 | Notification service: email sending, templates, signed action links, a channel list ready for push (N-1, N-3) | W1-4, W1-5, W2-1 |
 
 ### Wave 3: Intelligence and the round engine
 | ID | Ticket | Depends on |
@@ -370,6 +370,7 @@ Each wave can start once the waves before it have the dependencies it lists. Wit
 | W5-1 | Order tracking webhooks, late-risk check, failure and replacement flow (D-1, D-4) | W4-1, W4-2 |
 | W5-2 | Reaction prompts and gift history (D-2, D-3) | W4-2 |
 | W5-3 | Owner health email and monitoring | W3-4 |
+| W5-4 | **Optional, decide before starting:** Web Push notifications. Service worker, VAPID keys, subscribe from the PWA, push channel in the notification service (T12) | W2-1, W2-5 |
 
 ### Wave 6: Ready for real use
 | ID | Ticket | Depends on |
