@@ -130,6 +130,48 @@ Gift history (D-3) is a view over `gift_rounds`, `gift_ideas`, `orders`, and `re
 
 **Deletion (C-7):** deleting a person cascades to that person's rows, and a storage cleanup removes their screenshots.
 
+### 3.1 How the app learns about a person
+
+Learning is stored in two layers: **raw inputs**, kept as received, and **learned facts** distilled from them.
+
+```mermaid
+flowchart LR
+  subgraph Raw["Layer 1: raw inputs (kept as received)"]
+    CAP[captures<br/>+ screenshots in Storage]
+    IN[inbound_messages]
+    Q[questions]
+    REJ[rejections]
+    REA[reactions]
+  end
+  PF[(profile_facts<br/>Layer 2: what the app knows)]
+  CAP -->|AI extraction + user confirms| PF
+  IN -->|AI extraction + user confirms| PF
+  Q -->|answer becomes a fact| PF
+  REJ -->|"e.g. avoid: X, already owns: X"| PF
+  REA -->|"e.g. loved: X"| PF
+  PF --> GEN[Idea generation<br/>synthesizes fresh each round]
+  HIST[Gift history] --> GEN
+  REJ --> GEN
+```
+
+**Layer 1: raw inputs**
+
+| Input | Where it lives |
+|---|---|
+| Social media and web captures (extension) | `captures` (URL, title, visible text) plus the screenshot in Supabase Storage |
+| Emailed or forwarded notes | `inbound_messages` |
+| Answers to guided questions | `questions` |
+| Rejected ideas and the reason | `rejections` |
+| How the recipient liked a gift | `reactions` |
+
+**Layer 2: learned facts.** `profile_facts` is where the learning lives. Each fact is small and specific ("interest: fly fishing", "size: medium shirt", "avoid: clutter") and records its category, its source, a link back to the input it came from, whether the user confirmed it, and whether it's still active. **A person's profile is the set of their active facts**, and the user can see, edit or remove any of them (C-7).
+
+**Synthesis happens at idea time.** Nothing stores a written summary of a person. Each round, the AI model reads the person's active facts, gift history and rejections and builds its picture from scratch, so the facts stay the single source of truth and nothing goes stale.
+
+**Raw inputs are kept so the learning can be rebuilt.** When a better model or prompt comes along (T11), extraction can be re-run over past captures and notes to rebuild a person's facts.
+
+**Later, if useful:** a stored summary per person ("outdoorsy, practical, prefers experiences"), refreshed when facts change. It's one extra field and isn't needed for the MVP.
+
 ## 4. Key calculations (in `packages/core`, unit-tested)
 
 ### 4.1 Ship-by deadline and schedule
