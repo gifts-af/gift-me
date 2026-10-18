@@ -40,7 +40,7 @@ flowchart LR
     AUTH[Auth<br/>Google sign-in]
     DB[(Postgres + RLS)]
     ST[Storage<br/>capture screenshots]
-    CRON[pg_cron<br/>every 15 min]
+    CRON[pg_cron<br/>daily, 8 a.m. ET]
   end
   CLAUDE[Claude API]
   ZINC[Checkout service<br/>Zinc]
@@ -70,7 +70,7 @@ flowchart LR
 | Database | **Supabase Postgres** with Row Level Security | Every user-owned table has `user_id` plus RLS policies. Background jobs use the service role. |
 | Auth | **Supabase Auth, Google provider** | Google Contacts read access is requested separately, at import time (§6.1). The extension authenticates with the user's Supabase session (§6.2). |
 | File storage | **Supabase Storage** (private bucket) | Capture screenshots. Deleting a person deletes their files. |
-| Background jobs | **Supabase `pg_cron`** calls the app's **round engine** (a protected API route) every 15 minutes, using `pg_net` | The schedule lives next to the data. Vercel Hobby cron only runs once a day, so it isn't used. All the work runs in the Next.js app, so there's one runtime and one deploy, with no Supabase Edge Functions (T8). See §5.1. |
+| Background jobs | **Supabase `pg_cron`** calls the app's **round engine** (a protected API route) **once a day at 8 a.m. Eastern**, using `pg_net` | The schedule lives next to the data it checks. Vercel Cron and Workflow aren't used. All the work runs in the Next.js app, so there's one runtime and one deploy, with no Supabase Edge Functions (T8). See §5.1. |
 | AI | **Claude Opus 5.5** (`anthropic/claude-opus-5-5`) through **Vercel AI Gateway** with the AI SDK | The gateway gives spend tracking and a hard budget. **[Claude's call]** Calling the Anthropic SDK directly is an equally valid alternative if the gateway adds friction. Billed to a pay-as-you-go API account (T4). |
 | Checkout | **Zinc** (lead candidate) | `max_price` on every order, tracking webhooks, delivery estimates. **The payment model is spiked in W1-2.** |
 | Email | Resend or Postmark **[decided in W1-4]** | Needs sending and inbound-to-webhook. **[Verify]** inbound support and free-tier limits. |
@@ -181,14 +181,14 @@ stateDiagram-v2
 - **Idempotency:** each Zinc order request uses `idempotency_key = order.id`, and incoming webhooks are de-duplicated by provider event ID.
 
 ### 5.1 Round engine (T8)
-- **The tick:** a `pg_cron` job runs every 15 minutes and uses `pg_net` to POST to `/api/rounds/tick` on the production app. A shared secret, kept in Supabase Vault and in Vercel environment variables, authenticates the call.
+- **The tick:** a `pg_cron` job runs **once a day at 12:00 UTC** (8 a.m. Eastern in summer, 7 a.m. in winter) and uses `pg_net` to POST to `/api/rounds/tick` on the production app. Every step in a round is measured in days, so daily is enough, and it means reminders and heads-ups always arrive in the morning (T9). A shared secret, kept in Supabase Vault and in Vercel environment variables, authenticates the call.
 - **Each tick:**
   1. Creates `gift_rounds` for occasions whose start date (§4.1) has arrived. A unique key on person, occasion and year means a repeated tick never creates duplicates.
-  2. Claims due rounds: `next_action_at <= now()` and not locked. It sets `locked_until = now() + 10 minutes` using `FOR UPDATE SKIP LOCKED`, so two overlapping ticks never work on the same round.
+  2. Claims due rounds: `next_action_at <= now()` and not locked. It sets `locked_until = now() + 10 minutes` using `FOR UPDATE SKIP LOCKED`, so the tick and a user action or webhook never work on the same round at once.
   3. Advances each claimed round one step (generate ideas, send a reminder, skip at the deadline, run the daily late-risk check), then writes the new status, sets the next `next_action_at`, and clears the lock.
-- **Reminders are just due times:** the next reminder's time is stored in `next_action_at`. No process sleeps or waits.
+- **Reminders are just due dates:** the next reminder's date is stored in `next_action_at`, and that morning's tick sends it. No process sleeps or waits.
 - **User actions and webhooks don't wait for a tick.** Approving, rejecting, adding an address, or a Zinc webhook updates the round and advances it right away, using the same step function. The tick is the safety net.
-- **Crash recovery:** if a step dies, its lock expires and the next tick retries it. `attempts` counts retries. After 3, the round moves to `needs_attention` and the owner is alerted.
+- **Crash recovery:** if a step dies, its lock expires and the next day's tick retries it. `attempts` counts retries. After 3 failed days, the round moves to `needs_attention` and the owner is alerted. The 28-day runway leaves plenty of room for this.
 - **Long steps:** idea generation can take a minute or two. The tick hands each round to its own function call, so one slow round doesn't hold up the others, and each stays within Vercel's function time limit **[Verify in W1-6]**.
 - **Testing:** outside production, the tick takes a "now" override for a test clock, and the dev project's schedule is off by default. It's run by hand or from tests.
 
@@ -308,7 +308,7 @@ stateDiagram-v2
 | AI ideas are poor or can't be bought | The resolve step requires a live offer. The spike measures quality early. The rejection loop teaches the app. |
 | Retailers block agent or API vendors | Avoid account automation. Support more than one retailer through Zinc. Add a gift card fallback later. |
 | Vercel Hobby limits | Verify in W1-6, upgrade to Pro within budget if needed. |
-| Supabase `prod` pauses and the round engine stops | Verify in W1-6. Upgrade to Pro or schedule a keep-alive. The owner health email (W5-3) also flags it if ticks stop arriving. |
+| Supabase `prod` pauses and the round engine stops | Verify in W1-6. Upgrade to Pro or schedule a keep-alive. The owner health email (W5-3) also flags it if no tick has arrived in 26 hours. |
 | Delivery estimates are wrong | 2-day buffer, the late-risk check, and a replacement offer. |
 
 ## 13. Work breakdown by wave (draft for Linear)

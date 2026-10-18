@@ -18,4 +18,5 @@ Running record of technical design decisions. Product decisions are in `../plann
 
 | # | Decision | Source |
 |---|---|---|
-| T8 | **Supabase is the data and timing layer, and Vercel runs all the code.** Supabase `pg_cron` calls the app's round engine every 15 minutes, replacing Vercel Workflow and Vercel Cron, since Hobby cron only runs once a day. The work stays in the Next.js app rather than Supabase Edge Functions, so there's one runtime and one deploy. The owner handles Supabase's inactivity pause by upgrading or scheduling a keep-alive if needed. | Owner, refining Claude's proposal |
+| T8 | **Supabase is the data and timing layer, and Vercel runs all the code.** Supabase `pg_cron` calls the app's round engine on a schedule (see T9), replacing Vercel Workflow and Vercel Cron. The work stays in the Next.js app rather than Supabase Edge Functions, so there's one runtime and one deploy. The owner handles Supabase's inactivity pause by upgrading or scheduling a keep-alive if needed. | Owner, refining Claude's proposal |
+| T9 | The round engine runs **once a day at 8 a.m. Eastern** (12:00 UTC), not every 15 minutes. Every step in a round is measured in days, user actions and webhooks act right away, and a morning run means messages always arrive at a sensible hour. Failed steps retry the next day. | Owner |
