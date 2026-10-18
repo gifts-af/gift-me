@@ -21,6 +21,7 @@ Items marked **[Claude's call]** are proposals the owner hasn't confirmed yet. *
 5. **Nothing is bought without a recorded approval** (A-1).
 6. **Spend under $100 a month** (T4). Stay on free tiers until something forces an upgrade.
 7. **One language and one repo.** TypeScript in a single monorepo, so two people working with Claude can work anywhere in it.
+8. **The AI model is replaceable.** The app depends on "an AI model", not a specific vendor. Each AI task names its model in one config file, and calls go through the AI SDK and AI Gateway, so moving a task to a cheaper model or another provider (for example OpenAI) is a config change. Claude is today's default, not a dependency (T11, §7).
 
 ## 2. Architecture
 
@@ -42,7 +43,7 @@ flowchart LR
     ST[Storage<br/>capture screenshots]
     CRON[pg_cron<br/>daily, 8 a.m. ET]
   end
-  CLAUDE[Claude API]
+  CLAUDE[AI model provider<br/>Anthropic today, swappable]
   ZINC[Checkout service<br/>Zinc]
   EMAIL[Email service<br/>send + inbound]
   GOOG[Google People API]
@@ -71,7 +72,7 @@ flowchart LR
 | Auth | **Supabase Auth, Google provider** | Google Contacts read access is requested separately, at import time (§6.1). The extension authenticates with the user's Supabase session (§6.2). |
 | File storage | **Supabase Storage** (private bucket) | Capture screenshots. Deleting a person deletes their files. |
 | Background jobs | **Supabase `pg_cron`** calls the app's **round engine** (a protected API route) **once a day at 8 a.m. Eastern**, using `pg_net` | The schedule lives next to the data it checks. Vercel Cron and Workflow aren't used. All the work runs in the Next.js app, so there's one runtime and one deploy, with no Supabase Edge Functions (T8). See §5.1. |
-| AI | **Claude Opus 5.5** (`anthropic/claude-opus-5-5`) through **Vercel AI Gateway** with the AI SDK | The gateway gives spend tracking and a hard budget. **[Claude's call]** Calling the Anthropic SDK directly is an equally valid alternative if the gateway adds friction. Billed to a pay-as-you-go API account (T4). |
+| AI | Any model through **Vercel AI Gateway** with the **AI SDK**. Default today: **Claude Opus 5.5** (`anthropic/claude-opus-5-5`) | The gateway gives one key, one bill and one spending cap across providers, plus fallbacks. Usage is **billed through the Vercel account**, so there's no separate AI provider account (T11). The model for each task is set in one config file (§7). **[Verify in W1-3]** that the provider's web search tool works through the gateway. Fallback: connect a provider API key to the gateway. |
 | Checkout | **Zinc** (lead candidate) | `max_price` on every order, tracking webhooks, delivery estimates. **The payment model is spiked in W1-2.** |
 | Email | Resend or Postmark **[decided in W1-4]** | Needs sending and inbound-to-webhook. **[Verify]** inbound support and free-tier limits. |
 | Push notifications | Standard Web Push (VAPID) using the `web-push` package | Works on Android, and on iOS once the PWA is added to the home screen. |
@@ -99,7 +100,7 @@ gift-concierge/
 
 - **Why a workspace at all:** the web app and the extension build separately but share `core`.
 - **No Turborepo:** `pnpm -r build` and `pnpm -r test` are enough at this size. Add it later if builds get slow.
-- **AI code lives in the web app** because nothing else calls Claude. It moves into its own package only if a second app needs it.
+- **AI code lives in the web app** because nothing else calls the AI model. It moves into its own package only if a second app needs it.
 
 Tooling: pnpm workspaces, Vitest for tests, ESLint and Prettier, and GitHub Actions running lint, typecheck, and tests on every pull request. Vercel preview deployments are created per pull request.
 
@@ -214,14 +215,14 @@ stateDiagram-v2
 
    It never scrolls or crawls on its own (C-2). Permissions are `activeTab`, `scripting`, and `storage`, with no broad host permissions.
 3. The app stores the capture (screenshot to Storage) and queues extraction.
-4. **Extraction:** Claude gets the text and screenshot and returns structured candidate facts (category, value, confidence). The prompt tells it not to infer sensitive traits, and a post-filter blocks those categories (C-8).
+4. **Extraction:** the AI model gets the text and screenshot and returns structured candidate facts (category, value, confidence). The prompt tells it not to infer sensitive traits, and a post-filter blocks those categories (C-8).
 5. The user reviews **"Here's what I learned"** in the web app or extension popup, then confirms or removes items. Confirmed items become active `profile_facts`.
 
 ### 6.3 Gift idea generation (G-1 to G-5)
 1. **Input:** the person's active facts, past gifts, past rejections, the occasion, the budget, the ship-by deadline, and the recipient's state.
-2. **Brainstorm:** Claude (with web search) proposes about 10 candidate gift concepts, each with a specific product and retailer URL. Only retailers Zinc supports are allowed.
+2. **Brainstorm:** the AI model (with web search) proposes about 10 candidate gift concepts, each with a specific product and retailer URL. Only retailers Zinc supports are allowed.
 3. **Resolve:** each candidate is checked with Zinc's product and offer lookup for live price, availability, shipping cost, and delivery estimate. Anything unavailable, too late, over the over-budget limit, or already given or rejected is dropped.
-4. **Rank:** Claude ranks the survivors and writes the one-line reasons. The top 3–5 within budget are kept, plus at most one over-budget idea.
+4. **Rank:** the AI model ranks the survivors and writes the one-line reasons. The top 3–5 within budget are kept, plus at most one over-budget idea.
 5. If fewer than 3 survive, the app repeats steps 2–4 up to 2 more times. After that it sends what it has and notes it.
 6. Results are saved as `gift_ideas`, and the heads-up is sent.
 
@@ -252,16 +253,24 @@ stateDiagram-v2
 
 ### 6.8 Inbound email quick capture (N-2, C-5)
 - Each user gets an address such as `notes+{user-token}@<domain>`, or the app matches on the sender's address **[decided in W1-4]**.
-- The inbound webhook stores the message. Claude then matches it to a person, using names in the text and the user's list of people, and extracts facts. If it isn't confident, it emails back asking "Who is this about?"
+- The inbound webhook stores the message. The AI model then matches it to a person, using names in the text and the user's list of people, and extracts facts. If it isn't confident, it emails back asking "Who is this about?"
 
 ## 7. AI design
 
-| Task | Model and settings | Output | Estimated cost |
+**Keeping the provider replaceable (T11):**
+- All AI calls go through `apps/web/lib/ai`, using the AI SDK's provider-neutral functions (`generateObject`, `generateText`) and the AI Gateway. No other code calls a model directly.
+- Each task's model and settings live in one config map, for example `{ extraction: "anthropic/claude-opus-5-5", ... }`. Changing a model is a one-line config change, re-checked against the eval fixtures.
+- Prompts are plain instructions plus a schema, with no vendor-specific prompt tricks.
+- **The one vendor-specific feature is web search** during brainstorming. It sits behind a small `searchWeb` step, so a different provider's search tool, or a search API, can replace it.
+
+| Task | Default model and settings (today) | Output | Estimated cost |
 |---|---|---|---|
-| Capture extraction | Opus 5.5, effort `low`, vision | Structured facts (schema-validated) | ~$0.02 each |
-| Inbound note matching and extraction | Opus 5.5, effort `low` | Person match plus facts | ~$0.01 each |
-| Idea brainstorm | Opus 5.5, effort `medium`, web search | 10 candidates (schema) | ~$0.10 |
-| Idea ranking and reasons | Opus 5.5, effort `low` | Ranked list (schema) | ~$0.03 |
+| Capture extraction | Claude Opus 5.5, effort `low`, vision | Structured facts (schema-validated) | ~$0.02 each |
+| Inbound note matching and extraction | Claude Opus 5.5, effort `low` | Person match plus facts | ~$0.01 each |
+| Idea brainstorm | Claude Opus 5.5, effort `medium`, web search | 10 candidates (schema) | ~$0.10 |
+| Idea ranking and reasons | Claude Opus 5.5, effort `low` | Ranked list (schema) | ~$0.03 |
+
+Cheaper models are worth trying per task once the fixtures exist. Extraction and ranking are the likely candidates.
 
 - All outputs use structured outputs or schemas. Inputs and outputs are logged, and inputs are kept so prompts can be improved later.
 - **Cost control:** the AI Gateway budget is capped at **$60 a month**, with an alert email to the owner at 50% and 80% of the cap **[Claude's call]**. App-side limits cap the number of retries per round. If the cap is hit, rounds already waiting on ideas move to `needs_attention` and the owner is alerted. They never fail quietly, because a stalled round risks a late gift.
@@ -291,7 +300,7 @@ stateDiagram-v2
 |---|---|
 | Vercel Hobby, or Pro if needed | $0 / $20 |
 | Supabase free, or Pro if needed | $0 / $25 |
-| Claude API through AI Gateway | ~$10–15 (capped at $60) |
+| AI model usage through AI Gateway, billed by Vercel | ~$10–15 (capped at $60) |
 | Email service | $0 (free tier) |
 | Zinc | ~$1 per order, plus any platform minimum **[Verify in W1-2]** |
 | Domain | ~$1–2 |
@@ -324,7 +333,7 @@ Each wave can start once the waves before it have the dependencies it lists. Wit
 | ID | Ticket | Depends on |
 |---|---|---|
 | W1-1 | Monorepo scaffold and CI (pnpm workspaces, Next.js shell, `packages/core`, `supabase/` folder, lint, typecheck, tests, GitHub Actions, branch protection) | — |
-| W1-6 | Platform provisioning and environments: Vercel project and previews, Supabase dev and prod with `pg_cron` and `pg_net`, the inactivity-pause check, Anthropic API, AI Gateway and cap, domain and DNS, env and secrets conventions, Hobby limits check, Jim's access to every service | — |
+| W1-6 | Platform provisioning and environments: Vercel project and previews, Supabase dev and prod with `pg_cron` and `pg_net`, the inactivity-pause check, AI Gateway with Vercel billing and cap, domain and DNS, env and secrets conventions, Hobby limits check, Jim's access to every service | — |
 | W1-2 | Checkout spike (Zinc) | — |
 | W1-3 | AI spike (extraction, ideas, cost) | — |
 | W1-4 | Email spike (send and inbound) | — |
@@ -372,4 +381,4 @@ Each wave can start once the waves before it have the dependencies it lists. Wit
 **Within wave 2, W2-1 goes first.** W2-2 and W2-4 can start right after it, and W2-3 and W2-5 follow. So wave 2 is really two steps, though still more tickets than builders at each step. With two builders, nobody is blocked. Wave 1's spikes are the critical path: they decide W3-3 and W4-2.
 
 ## 14. Accounts
-All services (Google, Vercel, Supabase, Zinc, Anthropic API, Linear) are under the owner's **allensforever711@gmail.com** account, and the code is in the free **gifts-af** GitHub organization (github.com/gifts-af/gift-concierge), where allensforever711, aarontallen, JimtheBurger and brb3 are all owners. Jim is added to each service (T7). **Domain:** if none is already set up, W1-6 buys a cheap placeholder domain under that account **[Claude's call]**.
+All services (Google, Vercel including AI Gateway billing, Supabase, Zinc, Linear) are under the owner's **allensforever711@gmail.com** account, and the code is in the free **gifts-af** GitHub organization (github.com/gifts-af/gift-concierge), where allensforever711, aarontallen, JimtheBurger and brb3 are all owners. Jim is added to each service (T7). **Domain:** if none is already set up, W1-6 buys a cheap placeholder domain under that account **[Claude's call]**.
