@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Status** | **Approved** v1.0 (2026-10-17) |
-| **Date** | 2026-10-17 |
+| **Status** | **Approved** v1.0 (2026-10-17). Revised v1.1 (2026-10-18): Supabase `pg_cron` drives gift rounds instead of Vercel Workflow and Cron (T8). |
+| **Date** | 2026-10-18 |
 | **Implements** | `../planning/PRD.md` (approved v1.0). Requirement IDs (B-3, A-9, etc.) refer to it. |
 | **Decisions** | `decisions.md` (T#), `../planning/decisions.md` (D#) |
 | **Next stage** | Split into Linear tickets, labeled by wave (§13) |
@@ -15,11 +15,12 @@ Items marked **[Claude's call]** are proposals the owner hasn't confirmed yet. *
 ## 1. Principles
 
 1. **Keep it simple.** Build only what the PRD marks **M**. Pick the boring option unless it costs real effort later (D21).
-2. **The database is the source of truth.** Every gift round's status lives in Postgres. Background jobs read and write that status, so any job can be retried or replaced.
-3. **Budget is enforced at three layers:** when ideas are generated, at approval, and at checkout through the order's `max_price`. A bug in one layer can't cause overspending (B-3, B-5).
-4. **Nothing is bought without a recorded approval** (A-1).
-5. **Spend under $100 a month** (T4). Stay on free tiers until something forces an upgrade.
-6. **One language and one repo.** TypeScript in a single monorepo, so two people working with Claude can work anywhere in it.
+2. **The database is the source of truth.** Every gift round's status and its next due time live in Postgres. Background work reads and writes that status, so any step can be retried.
+3. **Supabase is the data and timing layer, Vercel runs all the code.** Supabase holds the database, sign-in, files, and the schedule. Every line of app code, including what the schedule triggers, runs in the one Next.js app on Vercel (T8).
+4. **Budget is enforced at three layers:** when ideas are generated, at approval, and at checkout through the order's `max_price`. A bug in one layer can't cause overspending (B-3, B-5).
+5. **Nothing is bought without a recorded approval** (A-1).
+6. **Spend under $100 a month** (T4). Stay on free tiers until something forces an upgrade.
+7. **One language and one repo.** TypeScript in a single monorepo, so two people working with Claude can work anywhere in it.
 
 ## 2. Architecture
 
@@ -30,16 +31,16 @@ flowchart LR
     WEB[Web app / PWA<br/>phone + desktop]
     MAIL[User's email inbox]
   end
-  subgraph Vercel
-    APP[Next.js app<br/>UI + API routes]
-    WF[Vercel Workflow<br/>gift-round runs]
-    CRON[Vercel Cron<br/>daily]
+  subgraph Vercel["Vercel: all code"]
+    APP[Next.js app<br/>UI + API routes + webhooks]
+    WF[Round engine<br/>tick API route]
     GW[AI Gateway]
   end
-  subgraph Supabase
+  subgraph Supabase["Supabase: data and timing"]
     AUTH[Auth<br/>Google sign-in]
     DB[(Postgres + RLS)]
     ST[Storage<br/>capture screenshots]
+    CRON[pg_cron<br/>every 15 min]
   end
   CLAUDE[Claude API]
   ZINC[Checkout service<br/>Zinc]
@@ -51,7 +52,7 @@ flowchart LR
   APP --> AUTH
   APP --> DB
   APP --> ST
-  CRON -->|start due rounds| WF
+  CRON -->|pg_net HTTPS call| WF
   WF --> DB
   WF --> GW --> CLAUDE
   WF -->|orders| ZINC
@@ -69,7 +70,7 @@ flowchart LR
 | Database | **Supabase Postgres** with Row Level Security | Every user-owned table has `user_id` plus RLS policies. Background jobs use the service role. |
 | Auth | **Supabase Auth, Google provider** | Google Contacts read access is requested separately, at import time (§6.1). The extension authenticates with the user's Supabase session (§6.2). |
 | File storage | **Supabase Storage** (private bucket) | Capture screenshots. Deleting a person deletes their files. |
-| Background jobs | **Vercel Workflow** for gift rounds, plus a **daily Vercel Cron** to start due rounds | Workflow handles durable steps, sleeping until reminder times, and waiting on approval or order events. **[Verify]** Workflow limits and pricing on the Hobby plan (W1-1). Fallback: a Postgres status machine driven by Supabase `pg_cron` every 15 minutes. |
+| Background jobs | **Supabase `pg_cron`** calls the app's **round engine** (a protected API route) every 15 minutes, using `pg_net` | The schedule lives next to the data. Vercel Hobby cron only runs once a day, so it isn't used. All the work runs in the Next.js app, so there's one runtime and one deploy, with no Supabase Edge Functions (T8). See §5.1. |
 | AI | **Claude Opus 5.5** (`anthropic/claude-opus-5-5`) through **Vercel AI Gateway** with the AI SDK | The gateway gives spend tracking and a hard budget. **[Claude's call]** Calling the Anthropic SDK directly is an equally valid alternative if the gateway adds friction. Billed to a pay-as-you-go API account (T4). |
 | Checkout | **Zinc** (lead candidate) | `max_price` on every order, tracking webhooks, delivery estimates. **The payment model is spiked in W1-2.** |
 | Email | Resend or Postmark **[decided in W1-4]** | Needs sending and inbound-to-webhook. **[Verify]** inbound support and free-tier limits. |
@@ -84,11 +85,11 @@ The repo is the existing `gift-concierge` repo, with code added alongside `plann
 ```
 gift-concierge/
 ├── apps/
-│   ├── web/            Next.js app (UI, API routes, webhooks, workflows)
+│   ├── web/            Next.js app (UI, API routes, webhooks, round engine)
 │   └── extension/      Chrome extension
 ├── packages/
 │   ├── core/           Pure domain logic: budget math, schedule/deadline math, status machine (no I/O, heavily tested)
-│   ├── db/             SQL migrations, generated types, query helpers
+│   ├── db/             SQL migrations (including the pg_cron schedule), generated types, query helpers
 │   └── ai/             Prompts, schemas, AI calls, eval fixtures
 ├── spikes/             Throwaway wave-1 experiments (not production code)
 ├── planning/  design/
@@ -111,7 +112,7 @@ All tables have `id uuid`, `created_at`, and `updated_at`. User-owned tables hav
 | `captures` | user_id, person_id, source_url, page_title, text_excerpt, screenshot_path, status (pending, extracted, failed) | C-1, C-2 |
 | `profile_facts` | user_id, person_id, category (interest, dislike, size, brand, owns, style, avoid), value, source (capture, question, note, reaction, rejection), source_id, confirmed (bool), active | C-3, C-7. A person's profile is the set of their active facts. |
 | `questions` | user_id, person_id, prompt, answer, status | C-4 |
-| `gift_rounds` | user_id, person_id, occasion_id, occasion_date, ship_by_deadline, budget_cents, status (§5), workflow_run_id, approved_at | One per person per occasion per year. |
+| `gift_rounds` | user_id, person_id, occasion_id, occasion_date, ship_by_deadline, budget_cents, status (§5), next_action_at, locked_until, attempts, approved_at | One per person per occasion per year. `next_action_at` is when the round engine should look at it next (§5.1). |
 | `gift_ideas` | round_id, title, retailer, product_url, retailer_product_id, price_cents, est_shipping_cents, est_tax_cents, est_total_cents, arrive_by, reason, over_budget (bool), rank, status (proposed, selected, rejected) | G-1, G-2 |
 | `rejections` | round_id, reason_code, reason_text | G-3. Also written to `profile_facts`. |
 | `orders` | round_id, idea_id, provider (zinc), provider_request_id, max_price_cents, final_total_cents, status (placing, placed, failed, shipped, delivered, cancelled, refunded), tracking (jsonb), est_delivery_date | A-3, D-1 |
@@ -176,9 +177,20 @@ stateDiagram-v2
   complete --> [*]
 ```
 
-- Each gift round runs as one **Vercel Workflow run**. Waiting for approval is a hook that resumes when the user acts. Reminders are timed sleeps. Order events from Zinc webhooks resume the run.
-- Every transition writes `gift_rounds.status` first, so the UI and recovery logic only need to read the database.
+- Every transition writes `gift_rounds.status` and `next_action_at` together, so the UI and recovery logic only need to read the database.
 - **Idempotency:** each Zinc order request uses `idempotency_key = order.id`, and incoming webhooks are de-duplicated by provider event ID.
+
+### 5.1 Round engine (T8)
+- **The tick:** a `pg_cron` job runs every 15 minutes and uses `pg_net` to POST to `/api/rounds/tick` on the production app. A shared secret, kept in Supabase Vault and in Vercel environment variables, authenticates the call.
+- **Each tick:**
+  1. Creates `gift_rounds` for occasions whose start date (§4.1) has arrived. A unique key on person, occasion and year means a repeated tick never creates duplicates.
+  2. Claims due rounds: `next_action_at <= now()` and not locked. It sets `locked_until = now() + 10 minutes` using `FOR UPDATE SKIP LOCKED`, so two overlapping ticks never work on the same round.
+  3. Advances each claimed round one step (generate ideas, send a reminder, skip at the deadline, run the daily late-risk check), then writes the new status, sets the next `next_action_at`, and clears the lock.
+- **Reminders are just due times:** the next reminder's time is stored in `next_action_at`. No process sleeps or waits.
+- **User actions and webhooks don't wait for a tick.** Approving, rejecting, adding an address, or a Zinc webhook updates the round and advances it right away, using the same step function. The tick is the safety net.
+- **Crash recovery:** if a step dies, its lock expires and the next tick retries it. `attempts` counts retries. After 3, the round moves to `needs_attention` and the owner is alerted.
+- **Long steps:** idea generation can take a minute or two. The tick hands each round to its own function call, so one slow round doesn't hold up the others, and each stays within Vercel's function time limit **[Verify in W1-6]**.
+- **Testing:** outside production, the tick takes a "now" override for a test clock, and the dev project's schedule is off by default. It's run by hand or from tests.
 
 ## 6. Key flows
 
@@ -215,19 +227,19 @@ stateDiagram-v2
 
 ### 6.5 Approval and purchase
 1. The user selects one or more ideas, or rejects them with a reason code and optional text.
-2. **Approval** re-checks the budget (§4.2), records `approved_at`, and resumes the workflow.
+2. **Approval** re-checks the budget (§4.2), records `approved_at`, and advances the round to purchasing right away (§5.1).
 3. **Purchase:** one Zinc order per selected idea, with `max_price`, shipped to the person's address. The account and payment details come from the W1-2 spike outcome (A-9).
 4. If the order fails, the round moves to `needs_attention` and the user is offered the next-best idea to approve in one tap (D29).
 5. **Price went over the approved amount (A-4):** the round moves to `needs_attention`. The user can either **re-approve the same gift at the new price**, which goes through the same budget and over-budget rules as §4.2 (one tap, with the new total shown), or pick the next-best idea **[Claude's call]**.
 
 ### 6.5a Zinc wallet funding (T6)
-- Each user connects their own Zinc account in Settings. The API key is stored encrypted in the database with Supabase Vault, and only workflows can read it.
+- Each user connects their own Zinc account in Settings. The API key is stored encrypted in the database with Supabase Vault, and only the server-side round engine can read it.
 - **Preferred:** automatic top-up. If Zinc supports auto-recharge from a saved card, the user turns it on once in Zinc. If Zinc has an API for adding funds, the app tops up to cover approved orders before placing them.
 - **Fallback:** the app checks the balance before each order and when a round enters `awaiting_approval`. If the balance won't cover the approved total, the heads-up or approval email includes a "Top up your Zinc balance" link. The order waits, on the same reminder schedule, rather than failing.
 - Whichever way it works out, W1-2 confirms it. Wave 4 gets ticket **W4-4 Zinc account connection and funding**.
 
 ### 6.6 Tracking, late risk, reactions
-- Zinc webhooks update `orders`. A late-risk check runs whenever an update arrives and once a day: if `est_delivery_date > occasion_date`, the round goes to `needs_attention` and the user is alerted (D-1, D-4).
+- Zinc webhooks update `orders`. A late-risk check runs whenever an update arrives and once a day from the round engine: if `est_delivery_date > occasion_date`, the round goes to `needs_attention` and the user is alerted (D-1, D-4).
 - One day after the occasion, the reaction prompt goes out (D-2). Notes are **text only in the MVP**. The phone keyboard's built-in dictation covers voice input, and recording and storing audio waits for later **[Claude's call]**. The answer is written to `reactions` and turned into `profile_facts` (for example, "loved: X").
 
 ### 6.7 Guided questions by email (C-4)
@@ -251,7 +263,8 @@ stateDiagram-v2
 - **Evals (light):** W1-3 builds a small fixture set (about 10 captures and 5 profiles) that later prompt changes are re-checked against.
 
 ## 8. Security and privacy
-- RLS on every user table. The service role is only used inside workflows and webhooks.
+- RLS on every user table. The service role is only used inside the round engine and webhooks.
+- The tick endpoint rejects any call without the shared secret.
 - Webhooks verify signatures where the provider supports them. Otherwise they use a secret path token plus an IP allowlist if one is available.
 - No retailer passwords are ever stored (A-5). Card handling follows the W1-2 spike outcome, and the app **never touches raw card numbers**.
 - Secrets live in Vercel environment variables. Supabase keys are split into anon and service role.
@@ -259,9 +272,10 @@ stateDiagram-v2
 - Deletion cascades (C-7). Users can export their data later.
 
 ## 9. Environments and operations
-- **Supabase:** two projects on the free tier, `dev` and `prod`, plus the local Supabase CLI for development. Upgrade `prod` to Pro ($25 a month) if the 7-day inactivity pause becomes a problem.
+- **Supabase:** two projects on the free tier, `dev` and `prod`, plus the local Supabase CLI for development. `pg_cron` and `pg_net` are enabled on both.
+  - **Inactivity pause:** free projects pause after 7 days without activity, which would stop the round engine. W1-6 checks whether the tick counts as activity. If it doesn't, the owner either upgrades `prod` to Pro ($25 a month) or schedules a keep-alive call.
 - **Vercel:** Hobby to start. Production comes from `main`, and pull requests get preview deployments.
-  - **[Verify]** whether Hobby's limits on cron, Workflow, and non-commercial use are acceptable for 3 users.
+  - **[Verify in W1-6]** function time limits for idea generation, and whether Hobby's non-commercial terms are acceptable for 3 users.
   - Upgrade to Pro ($20 a month) if they aren't.
 - **Monitoring:** Vercel logs and observability, AI Gateway dashboards, and a daily "health" email to the owner listing rounds in `needs_attention` **[Claude's call]**.
 - **Test mode:** Zinc sandbox or test orders, plus a `DRY_RUN` flag that does everything except place the real order.
@@ -293,7 +307,8 @@ stateDiagram-v2
 | Zinc can't support "user pays with own card" | The W1-2 spike runs first, and Rye is the fallback. **Accepted for the MVP:** each user has their own Zinc account and wallet (T6). |
 | AI ideas are poor or can't be bought | The resolve step requires a live offer. The spike measures quality early. The rejection loop teaches the app. |
 | Retailers block agent or API vendors | Avoid account automation. Support more than one retailer through Zinc. Add a gift card fallback later. |
-| Vercel Hobby limits | Verify in W1-1, upgrade to Pro within budget if needed. |
+| Vercel Hobby limits | Verify in W1-6, upgrade to Pro within budget if needed. |
+| Supabase `prod` pauses and the round engine stops | Verify in W1-6. Upgrade to Pro or schedule a keep-alive. The owner health email (W5-3) also flags it if ticks stop arriving. |
 | Delivery estimates are wrong | 2-day buffer, the late-risk check, and a replacement offer. |
 
 ## 13. Work breakdown by wave (draft for Linear)
@@ -304,7 +319,7 @@ Each wave can start once the waves before it have the dependencies it lists. Wit
 | ID | Ticket | Depends on |
 |---|---|---|
 | W1-1 | Monorepo scaffold and CI (pnpm, Turborepo, Next.js shell, packages, lint, typecheck, tests, GitHub Actions) | — |
-| W1-6 | Platform provisioning and environments: Vercel project and previews, Supabase dev and prod, Anthropic API, AI Gateway and cap, domain and DNS, env and secrets conventions, Hobby limits check, Jim's access to every service | — |
+| W1-6 | Platform provisioning and environments: Vercel project and previews, Supabase dev and prod with `pg_cron` and `pg_net`, the inactivity-pause check, Anthropic API, AI Gateway and cap, domain and DNS, env and secrets conventions, Hobby limits check, Jim's access to every service | — |
 | W1-2 | Checkout spike (Zinc) | — |
 | W1-3 | AI spike (extraction, ideas, cost) | — |
 | W1-4 | Email spike (send and inbound) | — |
@@ -325,7 +340,7 @@ Each wave can start once the waves before it have the dependencies it lists. Wit
 | W3-1 | Capture extraction plus the "Here's what I learned" review (C-3, C-8) | W1-3, W2-4 |
 | W3-2 | Profile view and editing, guided questions, readiness meter (C-4, C-6, C-7) | W2-2 |
 | W3-3 | Gift idea engine: brainstorm, resolve via checkout lookup, rank (G-1, G-2, G-4, G-5) | W1-2, W1-3, W2-2 |
-| W3-4 | Round scheduler and workflow skeleton: daily cron, round creation, status machine, reminder sleeps, skip (A-2) | W1-5, W2-2, W2-5 |
+| W3-4 | Round engine: `pg_cron` tick, round creation, claiming and locking, status machine, reminders as due times, skip (A-2) (§5.1) | W1-5, W1-6, W2-2, W2-5 |
 
 ### Wave 4: Approve and buy
 | ID | Ticket | Depends on |
@@ -352,4 +367,4 @@ Each wave can start once the waves before it have the dependencies it lists. Wit
 **Within wave 2, W2-1 goes first.** W2-2 and W2-4 can start right after it, and W2-3 and W2-5 follow. So wave 2 is really two steps, though still more tickets than builders at each step. With two builders, nobody is blocked. Wave 1's spikes are the critical path: they decide W3-3 and W4-2.
 
 ## 14. Accounts
-All services (Google, Vercel, Supabase, Zinc, Anthropic API, Linear) are under the owner's **allensforever711@gmail.com** account, and the code is in the **aarontallen** GitHub account. Jim is added to each one (T7). **Domain:** if none is already set up, W1-1 buys a cheap placeholder domain under that account **[Claude's call]**.
+All services (Google, Vercel, Supabase, Zinc, Anthropic API, Linear) are under the owner's **allensforever711@gmail.com** account, and the code is in the **allensforever711** GitHub account (github.com/allensforever711/gift-concierge). Jim is added to each one (T7). **Domain:** if none is already set up, W1-6 buys a cheap placeholder domain under that account **[Claude's call]**.

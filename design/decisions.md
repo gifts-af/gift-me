@@ -12,4 +12,10 @@ Running record of technical design decisions. Product decisions are in `../plann
 | T4 | **Running budget: up to about $100 a month** for the MVP (hosting, AI, email, checkout fees; gift purchases excluded). Claude Max plans cover development. App runtime AI calls use a separate pay-as-you-go Claude API account. | Owner |
 | T5 | After approval, the design is split into Linear tickets in a Linear project, labeled in **waves of parallel work**. Each wave unblocks the next. | Owner |
 | T6 | A Zinc account and wallet per user is **acceptable for the MVP**. Funding should be automated where Zinc allows it (auto-recharge or an API top-up). Otherwise the app prompts for a top-up before the order and holds the order rather than failing. The checkout spike (W1-2) confirms which. | Owner |
-| T7 | All services run under the owner's **allensforever711@gmail.com** account, which is already set up across them, and the code is in the **aarontallen** GitHub account. Jim is added to each one. | Owner |
+| T7 | All services run under the owner's **allensforever711@gmail.com** account, which is already set up across them, and the code is in the **allensforever711** GitHub account. The repo was first created under aarontallen by mistake and transferred on 2026-10-18. Jim is added to each one. | Owner |
+
+## 2026-10-18
+
+| # | Decision | Source |
+|---|---|---|
+| T8 | **Supabase is the data and timing layer, and Vercel runs all the code.** Supabase `pg_cron` calls the app's round engine every 15 minutes, replacing Vercel Workflow and Vercel Cron, since Hobby cron only runs once a day. The work stays in the Next.js app rather than Supabase Edge Functions, so there's one runtime and one deploy. The owner handles Supabase's inactivity pause by upgrading or scheduling a keep-alive if needed. | Owner, refining Claude's proposal |
