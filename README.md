@@ -8,7 +8,7 @@ An app that keeps track of friends and family, what they like, and the dates tha
 |---|---|---|
 | `planning/` | Product discovery: [PRD](planning/PRD.md) (approved 2026-10-17), [decisions log](planning/decisions.md), [research](planning/research/) | Complete |
 | `design/` | [Technical design](design/technical-design.md) (approved 2026-10-17), [decisions log](design/decisions.md) | Complete |
-| `apps/`, `packages/` | Implementation, tracked in Linear by wave | Next |
+| `apps/`, `packages/`, `supabase/` | Implementation, tracked in Linear by wave ([layout](design/technical-design.md#22-repository-layout)) | Next |
 
 ## Shared material
 

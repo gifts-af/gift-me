@@ -80,23 +80,28 @@ flowchart LR
 
 ### 2.2 Repository layout
 
-The repo is the existing `gift-concierge` repo, with code added alongside `planning/` and `design/` **[Claude's call]**:
+The repo is the existing `gift-concierge` repo, with code added alongside `planning/` and `design/`. It has one shared package, kept as small as the two apps allow (T10):
 
 ```
 gift-concierge/
 ├── apps/
-│   ├── web/            Next.js app (UI, API routes, webhooks, round engine)
+│   ├── web/            Next.js app: UI, API routes, webhooks, round engine
+│   │   └── lib/ai/     Prompts, schemas, AI calls, eval fixtures
 │   └── extension/      Chrome extension
 ├── packages/
-│   ├── core/           Pure domain logic: budget math, schedule/deadline math, status machine (no I/O, heavily tested)
-│   ├── db/             SQL migrations (including the pg_cron schedule), generated types, query helpers
-│   └── ai/             Prompts, schemas, AI calls, eval fixtures
+│   └── core/           Pure domain logic (budget math, schedule/deadline math, status machine) plus types
+│                       shared by both apps, including generated database types (no I/O, heavily tested)
+├── supabase/           Supabase CLI folder: SQL migrations (including the pg_cron schedule), local config
 ├── spikes/             Throwaway wave-1 experiments (not production code)
 ├── planning/  design/
-└── pnpm-workspace.yaml, turbo.json
+└── pnpm-workspace.yaml
 ```
 
-Tooling: pnpm workspaces with Turborepo, Vitest for tests, ESLint and Prettier, and GitHub Actions running lint, typecheck, and tests on every pull request. Vercel preview deployments are created per pull request.
+- **Why a workspace at all:** the web app and the extension build separately but share `core`.
+- **No Turborepo:** `pnpm -r build` and `pnpm -r test` are enough at this size. Add it later if builds get slow.
+- **AI code lives in the web app** because nothing else calls Claude. It moves into its own package only if a second app needs it.
+
+Tooling: pnpm workspaces, Vitest for tests, ESLint and Prettier, and GitHub Actions running lint, typecheck, and tests on every pull request. Vercel preview deployments are created per pull request.
 
 ## 3. Data model
 
@@ -318,12 +323,12 @@ Each wave can start once the waves before it have the dependencies it lists. Wit
 ### Wave 1: Foundations and spikes (6 tickets in parallel)
 | ID | Ticket | Depends on |
 |---|---|---|
-| W1-1 | Monorepo scaffold and CI (pnpm, Turborepo, Next.js shell, packages, lint, typecheck, tests, GitHub Actions) | — |
+| W1-1 | Monorepo scaffold and CI (pnpm workspaces, Next.js shell, `packages/core`, `supabase/` folder, lint, typecheck, tests, GitHub Actions, branch protection) | — |
 | W1-6 | Platform provisioning and environments: Vercel project and previews, Supabase dev and prod with `pg_cron` and `pg_net`, the inactivity-pause check, Anthropic API, AI Gateway and cap, domain and DNS, env and secrets conventions, Hobby limits check, Jim's access to every service | — |
 | W1-2 | Checkout spike (Zinc) | — |
 | W1-3 | AI spike (extraction, ideas, cost) | — |
 | W1-4 | Email spike (send and inbound) | — |
-| W1-5 | Database schema v1: migrations, RLS, generated types, plus `packages/core` holiday, deadline, and budget math with tests. Order, payment, and inbound fields are left as placeholders and finalized after W1-2 and W1-4. | W1-6 for applying to hosted `dev` (it can start immediately in a branch against local Supabase) |
+| W1-5 | Database schema v1: migrations in `supabase/`, RLS, generated types in `core`, plus `packages/core` holiday, deadline, and budget math with tests. Order, payment, and inbound fields are left as placeholders and finalized after W1-2 and W1-4. | W1-6 for applying to hosted `dev` (it can start immediately in a branch against local Supabase) |
 
 ### Wave 2: Core app and capture plumbing
 | ID | Ticket | Depends on |
