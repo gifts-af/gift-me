@@ -90,7 +90,7 @@ gift-concierge/
 │   │   └── lib/ai/     Prompts, schemas, AI calls, eval fixtures
 │   └── extension/      Chrome extension
 ├── packages/
-│   └── core/           Pure domain logic (budget math, schedule/deadline math, status machine) plus types
+│   └── core/           Pure domain logic (budget math, schedule/deadline math, round statuses) plus types
 │                       shared by both apps, including generated database types (no I/O, heavily tested)
 ├── supabase/           Supabase CLI folder: SQL migrations (including the pg_cron schedule), local config
 ├── spikes/             Throwaway wave-1 experiments (not production code)
@@ -201,29 +201,30 @@ flowchart LR
   - **[Verify in W1-2]** whether Zinc's `max_price` covers shipping and tax. If it doesn't, compute the item-only cap conservatively.
 - Refunded orders release their committed spend (D29).
 
-## 5. Gift round status machine
+## 5. Gift round statuses
+
+A round has **nine statuses**: a straight main path plus three side statuses.
 
 ```mermaid
-stateDiagram-v2
-  [*] --> scheduled
-  scheduled --> needs_address: start date reached, address missing
-  needs_address --> generating: address added
-  needs_address --> skipped: deadline passed
-  scheduled --> generating: start date reached
-  generating --> awaiting_approval: ideas ready, heads-up sent
-  awaiting_approval --> generating: rejected with reason
-  awaiting_approval --> purchasing: user approved
-  awaiting_approval --> skipped: deadline passed, no reply
-  purchasing --> ordered: order placed
-  purchasing --> needs_attention: order failed or over max_price
-  ordered --> delivered: delivered webhook
-  ordered --> needs_attention: failed or late-risk
-  needs_attention --> awaiting_approval: re-approve at new price, or next-best idea offered (D29)
-  delivered --> reaction_pending
-  reaction_pending --> complete: reaction logged or 7 days pass
-  skipped --> [*]
-  complete --> [*]
+flowchart LR
+  S[scheduled] --> G[generating] --> A[awaiting_approval] --> O[ordered] --> D[delivered] --> C[complete]
+  A -. rejected with reason .-> G
 ```
+
+| Main path | Meaning | Moves on when |
+|---|---|---|
+| `scheduled` | The round exists; its start date hasn't arrived | Start date reached (→ `generating`, or `needs_address` if there's no address) |
+| `generating` | The AI model is preparing ideas | Ideas are ready and the heads-up is sent |
+| `awaiting_approval` | Waiting for the user to pick or reject | Approved (→ `ordered`), or rejected with a reason (→ `generating`) |
+| `ordered` | Approved and bought. Each order's own progress (placing, placed, shipped, …) lives in `orders` | The delivered webhook arrives |
+| `delivered` | Arrived; the reaction prompt goes out the day after the occasion | A reaction is logged, or 7 days pass |
+| `complete` | Done | — |
+
+| Side status | Meaning | Way out |
+|---|---|---|
+| `needs_address` | No address yet, so no ideas can be checked (P-5) | Address added (→ `generating`), or the deadline passes (→ `skipped`) |
+| `needs_attention` | Something went wrong: order failed, price over the approved amount, likely late, or the AI budget was hit | The user re-approves at the new price or picks the next-best idea (→ `ordered`, D29), or the deadline passes (→ `skipped`) |
+| `skipped` | No reply by the deadline. Nothing is bought (D23) | — |
 
 - Every transition writes `gift_rounds.status` and `next_action_at` together, so the UI and recovery logic only need to read the database.
 - **Idempotency:** each Zinc order request uses `idempotency_key = order.id`, and incoming webhooks are de-duplicated by provider event ID.
@@ -275,7 +276,7 @@ stateDiagram-v2
 
 ### 6.5 Approval and purchase
 1. The user selects one or more ideas, or rejects them with a reason code and optional text.
-2. **Approval** re-checks the budget (§4.2), records `approved_at`, and advances the round to purchasing right away (§5.1).
+2. **Approval** re-checks the budget (§4.2), records `approved_at`, moves the round to `ordered`, and places the orders right away (§5.1).
 3. **Purchase:** one Zinc order per selected idea, with `max_price`, shipped to the person's address. The account and payment details come from the W1-2 spike outcome (A-9).
 4. If the order fails, the round moves to `needs_attention` and the user is offered the next-best idea to approve in one tap (D29).
 5. **Price went over the approved amount (A-4):** the round moves to `needs_attention`. The user can either **re-approve the same gift at the new price**, which goes through the same budget and over-budget rules as §4.2 (one tap, with the new total shown), or pick the next-best idea **[Claude's call]**.
@@ -396,7 +397,7 @@ Each wave can start once the waves before it have the dependencies it lists. Wit
 | W3-1 | Capture extraction plus the "Here's what I learned" review (C-3, C-8) | W1-3, W2-4 |
 | W3-2 | Profile view and editing, guided questions, readiness meter (C-4, C-6, C-7) | W2-2 |
 | W3-3 | Gift idea engine: brainstorm, resolve via checkout lookup, rank (G-1, G-2, G-4, G-5) | W1-2, W1-3, W2-2 |
-| W3-4 | Round engine: `pg_cron` tick, round creation, claiming and locking, status machine, reminders as due times, skip (A-2) (§5.1) | W1-5, W1-6, W2-2, W2-5 |
+| W3-4 | Round engine: `pg_cron` tick, round creation, claiming and locking, round statuses, reminders as due times, skip (A-2) (§5.1) | W1-5, W1-6, W2-2, W2-5 |
 
 ### Wave 4: Approve and buy
 | ID | Ticket | Depends on |
