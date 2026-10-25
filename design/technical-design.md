@@ -214,6 +214,8 @@ flowchart LR
 | Marked skipped | At the deadline |
 
 - If a round has to start late, for example a person added close to their birthday, it compresses the schedule, filters ideas to those that can still arrive in time, and says so in the heads-up.
+  - **How it compresses** (agreed 2026-10-25, ALL-19): the round starts today, never in the past. Any reminder that would land on or before the heads-up is dropped, and so is reminder 1 if it would land on or after reminder 2. The skip at the deadline always stays.
+- **Dates are calendar days** in US dates (Mother's Day is the 2nd Sunday of May, Father's Day the 3rd Sunday of June). A Feb 29 birthday or anniversary falls on Feb 28 in other years, since early beats late. Delivery and handling days count calendar days, with the slowest case plus the buffer covering weekends **[Claude's call]**. The code is in `packages/core` (`occasions.ts`, `schedule.ts`).
 
 ### 4.2 Budget
 - `est_total = price + shipping + tax + fees` (D10). Tax is estimated from the recipient's state until checkout gives the real figure.
@@ -224,6 +226,7 @@ flowchart LR
   - If checkout comes in higher than `est_total` but still within `max_price`, the purchase goes ahead and the user is told (D28).
   - **[Verify in W1-2]** whether Zinc's `max_price` covers shipping and tax. If it doesn't, compute the item-only cap conservatively.
 - Refunded orders release their committed spend (D29).
+- **How it's computed** (ALL-19, `packages/core/src/budget.ts`): money is whole cents, and anything that has to round rounds down, so a rounding error only ever spends less. The over-budget limit itself counts as over budget, not dropped. A pick of several ideas is judged by its sum, the same way as one idea, and when the sum is over budget and approved, the approved ceiling is that sum. An order holds its full cap plus fee as committed spend until its real total is known. **[Claude's call]** When several ideas are picked, each order's `max_price` also holds back the estimated totals of the picks not yet ordered, so the first order can't use up the whole budget. A `max_price` of $0 or less is treated as a bug, never as an order.
 
 ## 5. Gift round statuses
 
