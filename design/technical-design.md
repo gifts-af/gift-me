@@ -153,7 +153,7 @@ All tables have `id uuid`, `created_at`, and `updated_at`. Accounts (`profiles`)
 
 Gift history (D-3) is a view over `gift_rounds`, `gift_ideas`, `orders`, and `reactions`.
 
-**Deletion (C-7):** deleting a person cascades to that person's rows, and a storage cleanup removes their screenshots.
+**Deletion (C-7, T26):** deleting a person or occasion is a **soft delete**: the row is marked `deleted_at` and hidden from the user, their open rounds are skipped, and gift and order history are kept. Removing data for real (for example a GDPR request) is an admin action, `admin.hard_delete_person` or `admin.hard_delete_account`, which cascades to every row, is logged in `admin.deletion_log`, and is followed by a storage cleanup of their screenshots.
 
 **As built in schema v1** (ALL-19, T25; migrations in `supabase/migrations/`):
 - The money fields shown on `profiles` above (over-budget %, notification prefs, funding mode, Zinc connection) live in **`concierge.accounts`**, one row per user. `public.profiles` keeps display name, email, phone and timezone, and is created at sign-up.

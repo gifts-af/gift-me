@@ -415,6 +415,7 @@ export type Database = {
         Row: {
           created_at: string;
           day: number | null;
+          deleted_at: string | null;
           enabled: boolean;
           id: string;
           kind: string;
@@ -427,6 +428,7 @@ export type Database = {
         Insert: {
           created_at?: string;
           day?: number | null;
+          deleted_at?: string | null;
           enabled?: boolean;
           id?: string;
           kind: string;
@@ -438,6 +440,7 @@ export type Database = {
         Update: {
           created_at?: string;
           day?: number | null;
+          deleted_at?: string | null;
           enabled?: boolean;
           id?: string;
           kind?: string;
@@ -715,8 +718,13 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      delete_occasion: { Args: { p_occasion_id: string }; Returns: undefined };
       enable_owner_rls: { Args: { p_table: unknown }; Returns: undefined };
       setting_int: { Args: { p_key: string }; Returns: number };
+      skip_open_rounds: {
+        Args: { p_occasion_id: string; p_person_id: string };
+        Returns: undefined;
+      };
     };
     Enums: {
       round_status:
@@ -851,6 +859,7 @@ export type Database = {
           city: string | null;
           country: string;
           created_at: string;
+          deleted_at: string | null;
           google_contact_id: string | null;
           id: string;
           linked_user_id: string | null;
@@ -874,6 +883,7 @@ export type Database = {
           city?: string | null;
           country?: string;
           created_at?: string;
+          deleted_at?: string | null;
           google_contact_id?: string | null;
           id?: string;
           linked_user_id?: string | null;
@@ -896,6 +906,7 @@ export type Database = {
           city?: string | null;
           country?: string;
           created_at?: string;
+          deleted_at?: string | null;
           google_contact_id?: string | null;
           id?: string;
           linked_user_id?: string | null;
@@ -956,6 +967,7 @@ export type Database = {
         Args: { p_item_id: string; p_name: string; p_token: string };
         Returns: Json;
       };
+      delete_person: { Args: { p_person_id: string }; Returns: undefined };
       get_shared_list: { Args: { p_token: string }; Returns: Json };
       save_list: {
         Args: { p_items: Json; p_list_id: string; p_title: string };

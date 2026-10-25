@@ -1,7 +1,7 @@
 -- Shared tables in `public`: profiles and people (design §3, T19, T25).
 begin;
 \ir _helpers.psql
-select plan(19);
+select plan(20);
 
 select tests.create_user('a@example.com', 'Aaron') as a \gset
 select tests.create_user('b@example.com') as b \gset
@@ -67,11 +67,12 @@ select tests.act_as(:'b');
 insert into public.people (name, relationship) values ('Jim', 'child');
 select is((select count(*)::int from public.people where name = 'Mom'), 0, 'B cannot see A''s people');
 
--- Updates and deletes of someone else's row do nothing.
+-- Updates of someone else's row do nothing, and nobody hard-deletes people
+-- (deleting is soft, through delete_person; T26).
 update public.people set name = 'Hacked' where name = 'Mom';
-delete from public.people where name = 'Mom';
+select throws_ok($q$delete from public.people where name = 'Mom'$q$, '42501', null, 'people cannot be hard-deleted by users');
 select tests.act_as(:'a');
-select is((select name from public.people), 'Mom', 'B cannot change or delete A''s person');
+select is((select name from public.people), 'Mom', 'B cannot change A''s person');
 
 -- Rows can't be created for someone else.
 select throws_ok(

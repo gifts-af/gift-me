@@ -89,9 +89,11 @@ create function concierge.probe() returns int language sql as 'select 1';
 select ok(not has_function_privilege('authenticated', 'concierge.probe()', 'execute'), 'new concierge functions are not executable by users by default');
 select ok(not has_function_privilege('authenticated', 'concierge.enable_owner_rls(regclass)', 'execute'), 'users cannot run the RLS helper');
 
--- Deleting Mom removes everything about her, and Dad keeps his occasion.
+-- Hard-deleting Mom (the admin path, T26) removes everything about her, and
+-- Dad keeps his occasion.
+set local role service_role;
+select admin.hard_delete_person(:'mom', 'test', 'cascade check');
 select tests.act_as(:'a');
-delete from public.people where id = :'mom';
 select is(
   (select count(*)::int from concierge.occasions) + (select count(*)::int from concierge.budgets)
     + (select count(*)::int from concierge.captures) + (select count(*)::int from concierge.profile_facts)
