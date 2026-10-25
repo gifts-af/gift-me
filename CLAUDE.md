@@ -58,7 +58,7 @@ Use this layout. It overrides any plugin or skill default (for example, Superpow
 
 ## Git
 
-- **Code:** a branch named after the Linear ticket, then a PR. CI must pass. Merge with **squash**, so each PR lands on `main` as one commit whose message is the PR title.
+- **Code:** a branch named after the Linear ticket, then a PR. CI must pass. Merge with **squash**, so each PR lands on `main` as one commit whose message is the PR title. Squash is the only merge button GitHub offers, and merged branches are deleted automatically. For a rare import that must keep its history (like ALL-15), an admin turns merge commits back on for that one PR.
 - **Planning and design docs** (`planning/`, `design/`, `README.md`, this file): commit and push straight to `main`.
 - **Commit messages and PR titles** follow [Conventional Commits](https://www.conventionalcommits.org): `<type>: <what changed, in plain words>`, and PR titles end with the ticket, e.g. `feat: budget math for multi-select picks (ALL-19)`. CI fails a PR whose title doesn't match (`check` job). Types:
 
