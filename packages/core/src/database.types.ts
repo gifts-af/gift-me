@@ -527,11 +527,11 @@ export type Database = {
         };
         Relationships: [
           {
-            foreignKeyName: "orders_idea_id_user_id_fkey";
-            columns: ["idea_id", "user_id"];
+            foreignKeyName: "orders_idea_id_round_id_user_id_fkey";
+            columns: ["idea_id", "round_id", "user_id"];
             isOneToOne: false;
             referencedRelation: "gift_ideas";
-            referencedColumns: ["id", "user_id"];
+            referencedColumns: ["id", "round_id", "user_id"];
           },
           {
             foreignKeyName: "orders_round_id_user_id_fkey";
@@ -695,11 +695,11 @@ export type Database = {
         };
         Relationships: [
           {
-            foreignKeyName: "rejections_idea_id_user_id_fkey";
-            columns: ["idea_id", "user_id"];
+            foreignKeyName: "rejections_idea_id_round_id_user_id_fkey";
+            columns: ["idea_id", "round_id", "user_id"];
             isOneToOne: false;
             referencedRelation: "gift_ideas";
-            referencedColumns: ["id", "user_id"];
+            referencedColumns: ["id", "round_id", "user_id"];
           },
           {
             foreignKeyName: "rejections_round_id_user_id_fkey";
@@ -716,6 +716,7 @@ export type Database = {
     };
     Functions: {
       enable_owner_rls: { Args: { p_table: unknown }; Returns: undefined };
+      setting_int: { Args: { p_key: string }; Returns: number };
     };
     Enums: {
       round_status:
@@ -918,7 +919,7 @@ export type Database = {
           email: string | null;
           id: string;
           phone: string | null;
-          timezone: string;
+          timezone: string | null;
           updated_at: string;
         };
         ComputedFields: never;
@@ -928,7 +929,7 @@ export type Database = {
           email?: string | null;
           id: string;
           phone?: string | null;
-          timezone?: string;
+          timezone?: string | null;
           updated_at?: string;
         };
         Update: {
@@ -937,7 +938,7 @@ export type Database = {
           email?: string | null;
           id?: string;
           phone?: string | null;
-          timezone?: string;
+          timezone?: string | null;
           updated_at?: string;
         };
         Relationships: [];

@@ -11,6 +11,64 @@ alter default privileges in schema concierge
   grant select, insert, update, delete on tables to authenticated;
 alter default privileges in schema concierge
   grant all on tables to service_role;
+-- Postgres lets everyone run a new function by default. Here a function must
+-- be granted on purpose, so a server-only one (like the round engine's) is
+-- never reachable through the API by accident. Postgres can only take this
+-- default away for all schemas at once; `public` keeps working because
+-- Supabase grants its functions to anon and authenticated separately, and
+-- the list app's functions grant themselves explicitly.
+alter default privileges for role postgres
+  revoke execute on functions from public;
+
+-- ─── app_settings ───────────────────────────────────────────────────────────
+-- App-wide settings that change without a deploy (T23): fees, limits,
+-- defaults and the round schedule timings (design §4.1, §4.2). Only the
+-- server (service role) reads them and passes them into packages/core.
+
+create table concierge.app_settings (
+  key text primary key,
+  value jsonb not null,
+  description text,
+  updated_at timestamptz not null default now()
+);
+
+create trigger set_updated_at before update on concierge.app_settings
+  for each row execute function public.set_updated_at();
+
+-- RLS on with no policies, and no grants beyond the service role: signed-in
+-- users and visitors can't read or change these.
+alter table concierge.app_settings enable row level security;
+revoke all on concierge.app_settings from public, anon, authenticated;
+grant all on concierge.app_settings to service_role;
+
+-- Starting values. `do nothing` on conflict, so re-running a migration never
+-- overwrites a value someone has since changed.
+insert into concierge.app_settings (key, value, description) values
+  ('zinc_order_fee_cents', '100', 'Zinc''s fee per order, in cents. Not included in an order''s max_price.'),
+  ('zinc_gift_message_max_chars', '240', 'Longest gift message Zinc accepts.'),
+  ('default_over_budget_pct', '15', 'Over-budget percent a new account starts with.'),
+  ('planning_delivery_days', '7', 'Days to arrive assumed before any idea exists.'),
+  ('safety_buffer_days', '2', 'Days of margin between the slowest arrival and the occasion.'),
+  ('round_lead_days', '28', 'How many days before the planning deadline a round starts.'),
+  ('reminder_1_after_heads_up_days', '5', 'Days after the heads-up that reminder 1 goes out.'),
+  ('reminder_2_before_deadline_days', '7', 'Days before the deadline that reminder 2 goes out.'),
+  ('final_notice_before_deadline_days', '2', 'Days before the deadline that the final notice goes out.'),
+  ('fastest_days_to_arrive', '1', 'The fastest shipping a late round still hopes to find.')
+on conflict (key) do nothing;
+
+-- A whole-number setting, for column defaults. Runs as its owner so a user's
+-- insert can take a default without reading the settings table themselves.
+create function concierge.setting_int(p_key text)
+returns integer
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select (value #>> '{}')::integer from concierge.app_settings where key = p_key;
+$$;
+
+grant execute on function concierge.setting_int(text) to authenticated, service_role;
 
 -- Every user-owned table gets the same four policies: a user sees and changes
 -- only rows whose user_id is theirs.
@@ -38,7 +96,8 @@ revoke execute on function concierge.enable_owner_rls(regclass) from public, aut
 
 create table concierge.accounts (
   user_id uuid primary key default auth.uid() references auth.users (id) on delete cascade,
-  over_budget_pct integer not null default 15 check (over_budget_pct between 0 and 100),
+  over_budget_pct integer not null default concierge.setting_int('default_over_budget_pct')
+    check (over_budget_pct between 0 and 100),
   notification_prefs jsonb not null default '{}'::jsonb,
   funding_mode text not null default 'zinc_wallet' check (funding_mode in ('zinc_wallet', 'connect')),
   zinc_api_key_secret_id uuid,
@@ -49,6 +108,12 @@ create table concierge.accounts (
   updated_at timestamptz not null default now()
 );
 select concierge.enable_owner_rls('concierge.accounts');
+-- Users create their account and change their own preferences. The funding
+-- mode and Zinc connection are set only by the server, so nobody can point
+-- their account at a key stored for someone else.
+revoke insert, update on concierge.accounts from authenticated;
+grant insert (user_id, over_budget_pct, notification_prefs) on concierge.accounts to authenticated;
+grant update (over_budget_pct, notification_prefs) on concierge.accounts to authenticated;
 
 -- ─── budgets ────────────────────────────────────────────────────────────────
 

@@ -2,6 +2,10 @@
 -- notifications, plus inbound email (design §3, §5, §6). Order fields follow
 -- the W1-2 checkout spike. Every child row points at its round and owner
 -- together, so it can never attach to another user's round.
+--
+-- All of these are written by the server (service role): the round engine,
+-- approval, checkout and webhooks, which check budgets and status moves in
+-- packages/core first. Signed-in users only read them (T24).
 
 -- ─── gift_rounds ────────────────────────────────────────────────────────────
 
@@ -78,6 +82,8 @@ create table concierge.gift_ideas (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (id, user_id),
+  -- Lets orders and rejections name the idea and its round together.
+  unique (id, round_id, user_id),
   foreign key (round_id, user_id) references concierge.gift_rounds (id, user_id) on delete cascade
 );
 create index gift_ideas_round_id_idx on concierge.gift_ideas (round_id);
@@ -94,7 +100,7 @@ create table concierge.rejections (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   foreign key (round_id, user_id) references concierge.gift_rounds (id, user_id) on delete cascade,
-  foreign key (idea_id, user_id) references concierge.gift_ideas (id, user_id) on delete cascade
+  foreign key (idea_id, round_id, user_id) references concierge.gift_ideas (id, round_id, user_id) on delete cascade
 );
 select concierge.enable_owner_rls('concierge.rejections');
 
@@ -114,7 +120,8 @@ create table concierge.orders (
   funding_mode text not null check (funding_mode in ('zinc_wallet', 'connect')),
   max_price_cents integer not null check (max_price_cents >= 0),
   is_gift boolean not null default true,
-  gift_message text check (char_length(gift_message) <= 240),
+  -- Length limit is the zinc_gift_message_max_chars setting, checked by the server (T23).
+  gift_message text,
   subtotal_cents integer check (subtotal_cents >= 0),
   shipping_cents integer check (shipping_cents >= 0),
   tax_cents integer check (tax_cents >= 0),
@@ -132,9 +139,14 @@ create table concierge.orders (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   foreign key (round_id, user_id) references concierge.gift_rounds (id, user_id) on delete cascade,
-  foreign key (idea_id, user_id) references concierge.gift_ideas (id, user_id) on delete cascade
+  foreign key (idea_id, round_id, user_id) references concierge.gift_ideas (id, round_id, user_id) on delete cascade
 );
 create index orders_round_id_idx on concierge.orders (round_id);
+-- One live order per idea, so a retry or a double approval can't buy twice.
+-- Once an order has failed, been cancelled or refunded, the idea can be
+-- ordered again.
+create unique index orders_one_live_per_idea on concierge.orders (idea_id)
+  where status not in ('failed', 'cancelled', 'refunded');
 select concierge.enable_owner_rls('concierge.orders');
 
 -- How the recipient liked the gift (D-2).
@@ -185,3 +197,10 @@ create table concierge.inbound_messages (
     on delete set null (matched_person_id)
 );
 select concierge.enable_owner_rls('concierge.inbound_messages');
+
+-- ─── who writes ─────────────────────────────────────────────────────────────
+-- Signed-in users read their rounds and everything on them; the server writes.
+revoke insert, update, delete on
+  concierge.gift_rounds, concierge.gift_ideas, concierge.rejections, concierge.orders,
+  concierge.reactions, concierge.notifications, concierge.inbound_messages
+  from authenticated;

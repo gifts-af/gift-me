@@ -24,7 +24,9 @@ create table public.profiles (
   display_name text check (char_length(display_name) <= 80),
   email text,
   phone text,
-  timezone text not null default 'America/New_York',
+  -- Unknown until the app learns it (from the browser or Settings); no
+  -- region is assumed (T23).
+  timezone text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -41,7 +43,10 @@ create policy "Users can update their profile" on public.profiles
   using (id = (select auth.uid()))
   with check (id = (select auth.uid()));
 -- No insert or delete policy: the trigger creates profiles, and deleting the
--- account deletes the profile.
+-- account deletes the profile. Users edit their name, phone and timezone; the
+-- email always mirrors the account's, since messages are sent to it.
+revoke insert, update on public.profiles from authenticated;
+grant update (display_name, phone, timezone) on public.profiles to authenticated;
 
 create function public.handle_new_user()
 returns trigger
@@ -63,6 +68,25 @@ $$;
 
 create trigger on_auth_user_created after insert on auth.users
   for each row execute function public.handle_new_user();
+
+-- Keeps the profile's email in step when the account's email changes.
+create function public.handle_user_email_change()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  update public.profiles set email = new.email where id = new.id;
+  return new;
+end;
+$$;
+
+create trigger on_auth_user_email_changed after update of email on auth.users
+  for each row when (old.email is distinct from new.email)
+  execute function public.handle_user_email_change();
+
+revoke execute on function public.handle_user_email_change() from public, anon, authenticated;
 
 -- Gives every existing account a profile. Safe to run more than once.
 create function public.backfill_profiles()
@@ -130,6 +154,16 @@ create policy "Users can update their people" on public.people
   with check (user_id = (select auth.uid()));
 create policy "Users can delete their people" on public.people
   for delete to authenticated using (user_id = (select auth.uid()));
+
+-- Only the server links a person to someone's account (linked_user_id), so
+-- users write every column except that one.
+revoke insert, update on public.people from authenticated;
+grant insert (name, relationship, birthday, recipient_first_name, recipient_last_name, address_line1,
+              address_line2, city, state, zip, country, phone, address_checked_at, notes, google_contact_id)
+  on public.people to authenticated;
+grant update (name, relationship, birthday, recipient_first_name, recipient_last_name, address_line1,
+              address_line2, city, state, zip, country, phone, address_checked_at, notes, google_contact_id)
+  on public.people to authenticated;
 
 -- Signed-out visitors get nothing from either table.
 revoke all on public.profiles, public.people from anon;

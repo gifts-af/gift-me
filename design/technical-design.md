@@ -159,6 +159,7 @@ Gift history (D-3) is a view over `gift_rounds`, `gift_ideas`, `orders`, and `re
 - The money fields shown on `profiles` above (over-budget %, notification prefs, funding mode, Zinc connection) live in **`concierge.accounts`**, one row per user. `public.profiles` keeps display name, email, phone and timezone, and is created at sign-up.
 - Every table in `concierge` has `user_id` and the same privacy rule, including rows that belong to a round. Children reference their parent and owner together, so nothing can point at another user's data.
 - `app_settings` is the one table with no `user_id`: only the server reads it (T23).
+- **Users write their setup, the server writes the rest** (T24): people, occasions, budgets, facts, answers and captures are user-writable; rounds, ideas, orders, reactions, notifications, inbound mail and the Zinc connection are written only by server code, so `packages/core`'s budget and status checks can't be bypassed. One live order per idea.
 - `packages/core/src/database.types.ts` is generated from the database (`pnpm db:types`). CI fails if it's out of date.
 
 ### 3.1 How the app learns about a person
