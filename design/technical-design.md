@@ -363,8 +363,8 @@ flowchart LR
 ## 9. Environments and operations
 - **Supabase:** two projects on the free tier, `dev` and `prod`, plus the local Supabase CLI for development. `pg_cron` and `pg_net` are enabled on both.
   - **Inactivity pause:** free projects pause after 7 days without activity, which would stop the round engine. W1-6 checks whether the tick counts as activity. If it doesn't, the owner either upgrades `prod` to Pro ($25 a month) or schedules a keep-alive call.
-- **Vercel:** Hobby to start. Production comes from `main`, and pull requests get preview deployments.
-  - **[Verify in W1-6]** function time limits for idea generation, and whether Hobby's non-commercial terms are acceptable for 3 users.
+- **Vercel:** Hobby while developing and testing (T24). Production comes from `main`, and pull requests get preview deployments against Supabase `dev`.
+  - Move to Pro before a commercial launch. **[Verify in W3]** that idea generation fits Hobby's function time limit.
   - Upgrade to Pro ($20 a month) if they aren't.
 - **Monitoring:** Vercel logs and observability, AI Gateway dashboards, and a daily "health" email to the owner listing rounds in `needs_attention` **[Claude's call]**.
 - **Test mode:** Zinc sandbox or test orders, plus a `DRY_RUN` flag that does everything except place the real order.
