@@ -10,6 +10,8 @@
 
 **Spec:** `design/technical-design.md` §4 and §5, including the W1-2 spike's §4.2 changes on branch `aarontallen/all-16-zinc-checkout-spike` (Zinc's `max_price` covers item, shipping and tax, and doesn't include Zinc's $1 fee). The choices agreed in chat on 2026-10-25 are listed under Global constraints.
 
+> **Changed after the plan (T23, 2026-10-25):** the fee isn't a constant. `ZINC_ORDER_FEE_CENTS` was removed, and `estimatedTotalCents`, `maxPriceCents` and `walletRequiredCents` take a required `feeCents`, read from `concierge.app_settings`. The schedule constants were removed the same way. Every schedule function takes a required `ScheduleSettings` object, and the values listed under Global constraints are now the seeded settings, not code.
+
 ## Global constraints
 
 - `packages/core` has no runtime dependencies and does no I/O. Only dev dependencies are added.
