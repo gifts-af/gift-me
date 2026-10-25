@@ -155,11 +155,11 @@ Gift history (D-3) is a view over `gift_rounds`, `gift_ideas`, `orders`, and `re
 
 **Deletion (C-7):** deleting a person cascades to that person's rows, and a storage cleanup removes their screenshots.
 
-**As built in schema v1** (ALL-19, T24; migrations in `supabase/migrations/`):
+**As built in schema v1** (ALL-19, T25; migrations in `supabase/migrations/`):
 - The money fields shown on `profiles` above (over-budget %, notification prefs, funding mode, Zinc connection) live in **`concierge.accounts`**, one row per user. `public.profiles` keeps display name, email, phone and timezone, and is created at sign-up.
 - Every table in `concierge` has `user_id` and the same privacy rule, including rows that belong to a round. Children reference their parent and owner together, so nothing can point at another user's data.
 - `app_settings` is the one table with no `user_id`: only the server reads it (T23).
-- **Users write their setup, the server writes the rest** (T24): people, occasions, budgets, facts, answers and captures are user-writable; rounds, ideas, orders, reactions, notifications, inbound mail and the Zinc connection are written only by server code, so `packages/core`'s budget and status checks can't be bypassed. One live order per idea.
+- **Users write their setup, the server writes the rest** (T25): people, occasions, budgets, facts, answers and captures are user-writable; rounds, ideas, orders, reactions, notifications, inbound mail and the Zinc connection are written only by server code, so `packages/core`'s budget and status checks can't be bypassed. One live order per idea.
 - `packages/core/src/database.types.ts` is generated from the database (`pnpm db:types`). CI fails if it's out of date.
 
 ### 3.1 How the app learns about a person
@@ -370,8 +370,8 @@ flowchart LR
 ## 9. Environments and operations
 - **Supabase:** two projects on the free tier, `dev` and `prod`, plus the local Supabase CLI for development. `pg_cron` and `pg_net` are enabled on both.
   - **Inactivity pause:** free projects pause after 7 days without activity, which would stop the round engine. W1-6 checks whether the tick counts as activity. If it doesn't, the owner either upgrades `prod` to Pro ($25 a month) or schedules a keep-alive call.
-- **Vercel:** Hobby to start. Production comes from `main`, and pull requests get preview deployments.
-  - **[Verify in W1-6]** function time limits for idea generation, and whether Hobby's non-commercial terms are acceptable for 3 users.
+- **Vercel:** Hobby while developing and testing (T24). Production comes from `main`, and pull requests get preview deployments against Supabase `dev`.
+  - Move to Pro before a commercial launch. **[Verify in W3]** that idea generation fits Hobby's function time limit.
   - Upgrade to Pro ($20 a month) if they aren't.
 - **Monitoring:** Vercel logs and observability, AI Gateway dashboards, and a daily "health" email to the owner listing rounds in `needs_attention` **[Claude's call]**.
 - **Test mode:** Zinc sandbox or test orders, plus a `DRY_RUN` flag that does everything except place the real order.

@@ -1,4 +1,4 @@
--- Shared tables in `public`: profiles and people (design §3, T19, T24).
+-- Shared tables in `public`: profiles and people (design §3, T19, T25).
 begin;
 \ir _helpers.psql
 select plan(19);

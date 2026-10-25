@@ -1,4 +1,4 @@
--- Concierge tables about the people a user buys for (design §3, T19, T24, D31).
+-- Concierge tables about the people a user buys for (design §3, T19, T25, D31).
 begin;
 \ir _helpers.psql
 select plan(25);
