@@ -96,7 +96,7 @@ Gift Concierge is one of three products: scan-to-gift, gift lists and the concie
 | Web addresses | Each product under its own path (`/concierge`, `/lists`, `/scan`, short links at `/s`). If a product later needs its own deploy, Vercel can serve separately deployed apps under the same domain without users noticing. |
 | Money and sensitive data | Zinc keys, funding, addresses and social media content stay inside the concierge module and schema (D31). |
 
-**The MVP builds only the concierge.** The shared account and people records, the `concierge` module and schema, and the boundary rule are set up now; `lists` and `scan` are added when their work starts. Jim's list app ([gifts-af/GiftsAF](https://github.com/gifts-af/GiftsAF), moved into the organization 2026-10-25) moves into this repo after its soft launch, keeping its git history. It uses the same stack (Next.js App Router, Supabase, Vercel, shadcn/ui, Vitest), so it may become the starting point of `apps/web` **[to decide with Jim]**.
+**The MVP builds only the concierge.** The shared account and people records, the `concierge` module and schema, and the boundary rule are set up now; `lists` and `scan` are added when their work starts. **GiftsAF is the starting point (T20).** Jim's list app ([gifts-af/GiftsAF](https://github.com/gifts-af/GiftsAF)) uses the same stack (Next.js App Router, Supabase email-and-password sign-in, Vercel, shadcn/ui, Vitest). After its 2026-11-01 soft launch it's imported with its history as `apps/web`. Its list code becomes `modules/lists`, its tables (`lists`, `list_items`, `gift_claims`) move into the `lists` schema, and its Vercel and Supabase projects become the platform's production ones. The concierge is built alongside it as `modules/concierge`.
 
 ### 2.3 Repository layout
 
@@ -108,7 +108,7 @@ gift-concierge/
 │   ├── web/            Next.js app for the whole platform: UI, API routes, webhooks, round engine
 │   │   ├── modules/
 │   │   │   ├── concierge/   The MVP: rounds, ideas, orders, Zinc (public API in index.ts)
-│   │   │   ├── lists/       Added when the list app moves in
+│   │   │   ├── lists/       From GiftsAF (T20): lists, items, sharing, claiming
 │   │   │   └── scan/        Added when scan-to-gift starts
 │   │   └── lib/ai/     Prompts, schemas, AI calls, eval fixtures
 │   └── extension/      Chrome extension
