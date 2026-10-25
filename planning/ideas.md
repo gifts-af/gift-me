@@ -41,7 +41,7 @@ A QR code on something the person wears. Anyone can scan it and buy the wearer a
   - Moving money between strangers: a payments provider that handles payouts would carry most of the payment rules **[Verify]**
   - Safety: the wearer controls whether to meet the sender, and can block or report
   - The scan-to-pay flow: as few steps as possible, ideally no sign-up before paying
-  - Drinking age: many college students are under 21, so this needs an age check where alcohol is involved, or a gift that isn't alcohol-specific (any drink, coffee, a cash "drink")
+  - Drinking age: the gift is **any drink**, not just alcohol (owner). Different versions (for example coffee, or 21+ only) can be planned later.
 - **Source:** owner, with additions from Jim. The owner thinks it's very doable and wants to brainstorm it further.
 
 ### 3. Thank-you card reminders
