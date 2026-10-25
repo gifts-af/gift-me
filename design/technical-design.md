@@ -148,6 +148,7 @@ All tables have `id uuid`, `created_at`, and `updated_at`. Accounts (`profiles`)
 | `reactions` | round_id, rating (loved, liked, meh, returned), note, source (email, web) | D-2 |
 | `notifications` | user_id, round_id, kind, channel, sent_at, action_token_hash | Audit trail plus reminder escalation state. |
 | `inbound_messages` | user_id, from, subject, body, attachments, matched_person_id, status | N-2, C-5 |
+| `app_settings` | key, value (jsonb), updated_at | App-wide settings that change without a deploy, such as `zinc_order_fee_cents` (T23). Not user-owned: only the server can read it, and the owner edits it. |
 
 Gift history (D-3) is a view over `gift_rounds`, `gift_ideas`, `orders`, and `reactions`.
 
@@ -226,6 +227,7 @@ flowchart LR
   - If checkout comes in higher than `est_total` but still within `max_price`, the purchase goes ahead and the user is told (D28).
   - **[Verify in W1-2]** whether Zinc's `max_price` covers shipping and tax. If it doesn't, compute the item-only cap conservatively.
 - Refunded orders release their committed spend (D29).
+- **The order fee is a setting** (T23). It comes from `app_settings`, never from code, and is passed into every budget calculation.
 - **How it's computed** (ALL-19, `packages/core/src/budget.ts`): money is whole cents, and anything that has to round rounds down, so a rounding error only ever spends less. The over-budget limit itself counts as over budget, not dropped. A pick of several ideas is judged by its sum, the same way as one idea, and when the sum is over budget and approved, the approved ceiling is that sum. An order holds its full cap plus fee as committed spend until its real total is known. **[Claude's call]** When several ideas are picked, each order's `max_price` also holds back the estimated totals of the picks not yet ordered, so the first order can't use up the whole budget. A `max_price` of $0 or less is treated as a bug, never as an order.
 
 ## 5. Gift round statuses

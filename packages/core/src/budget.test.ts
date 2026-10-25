@@ -11,12 +11,13 @@ import {
 } from "./budget";
 
 describe("estimated total", () => {
-  it("adds price, shipping, tax and Zinc's $1 fee", () => {
-    expect(estimatedTotalCents({ priceCents: 4000, shippingCents: 500, taxCents: 300 })).toBe(4900);
+  it("adds price, shipping, tax and the order fee", () => {
+    expect(estimatedTotalCents({ priceCents: 4000, shippingCents: 500, taxCents: 300, feeCents: 100 })).toBe(4900);
   });
 
-  it("takes an explicit fee", () => {
+  it("uses whatever fee it's given, since the fee is a setting", () => {
     expect(estimatedTotalCents({ priceCents: 4000, shippingCents: 0, taxCents: 0, feeCents: 0 })).toBe(4000);
+    expect(estimatedTotalCents({ priceCents: 4000, shippingCents: 0, taxCents: 0, feeCents: 250 })).toBe(4250);
   });
 });
 
@@ -102,22 +103,29 @@ describe("committed spend", () => {
 });
 
 describe("max_price for an order", () => {
-  it("leaves room for the other picks and Zinc's fee", () => {
-    expect(maxPriceCents({ ceilingCents: 10000, committedCents: 0, reservedCents: 4000 })).toBe(5900);
+  const fee = { feeCents: 100 };
+
+  it("leaves room for the other picks and the order fee", () => {
+    expect(maxPriceCents({ ceilingCents: 10000, committedCents: 0, reservedCents: 4000, ...fee })).toBe(5900);
   });
 
   it("subtracts what earlier orders in the round committed", () => {
-    expect(maxPriceCents({ ceilingCents: 10000, committedCents: 4100, reservedCents: 0 })).toBe(5800);
+    expect(maxPriceCents({ ceilingCents: 10000, committedCents: 4100, reservedCents: 0, ...fee })).toBe(5800);
+  });
+
+  it("subtracts whatever fee is configured", () => {
+    expect(maxPriceCents({ ceilingCents: 10000, committedCents: 0, reservedCents: 0, feeCents: 250 })).toBe(9750);
   });
 
   it("refuses when nothing is left, rather than placing a $0 order", () => {
-    expect(() => maxPriceCents({ ceilingCents: 10000, committedCents: 9900, reservedCents: 0 })).toThrow(RangeError);
+    expect(() => maxPriceCents({ ceilingCents: 10000, committedCents: 9900, reservedCents: 0, ...fee })).toThrow(RangeError);
   });
 });
 
 describe("wallet", () => {
   it("must hold the full cap plus the fee", () => {
-    expect(walletRequiredCents(5900)).toBe(6000);
+    expect(walletRequiredCents(5900, 100)).toBe(6000);
+    expect(walletRequiredCents(5900, 250)).toBe(6150);
   });
 });
 
@@ -126,7 +134,9 @@ describe("bad input", () => {
     expect(() => classifyTotal(-1, 10000, 15)).toThrow(RangeError);
     expect(() => classifyTotal(100.5, 10000, 15)).toThrow(RangeError);
     expect(() => overBudgetLimitCents(10000, -5)).toThrow(RangeError);
-    expect(() => estimatedTotalCents({ priceCents: 1, shippingCents: -1, taxCents: 0 })).toThrow(RangeError);
-    expect(() => walletRequiredCents(0.5)).toThrow(RangeError);
+    expect(() => estimatedTotalCents({ priceCents: 1, shippingCents: -1, taxCents: 0, feeCents: 100 })).toThrow(RangeError);
+    expect(() => walletRequiredCents(0.5, 100)).toThrow(RangeError);
+    expect(() => walletRequiredCents(5900, -1)).toThrow(RangeError);
+    expect(() => maxPriceCents({ ceilingCents: 10000, committedCents: 0, reservedCents: 0, feeCents: -1 })).toThrow(RangeError);
   });
 });

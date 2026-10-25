@@ -1,9 +1,9 @@
 // Budget math (design §4.2, PRD D10, D11, D28, D29). All money is whole
 // cents; anything that has to round, rounds down, so a rounding error can
 // only ever spend less.
-
-/** Zinc's per-order fee. It isn't included in an order's `max_price`. */
-export const ZINC_ORDER_FEE_CENTS = 100;
+//
+// The checkout service's per-order fee is a setting, not a constant (T23):
+// callers read it from `concierge.app_settings` and pass it in as `feeCents`.
 
 export type BudgetFit = "within" | "over" | "dropped";
 
@@ -17,13 +17,12 @@ export function estimatedTotalCents(p: {
   priceCents: number;
   shippingCents: number;
   taxCents: number;
-  feeCents?: number;
+  feeCents: number;
 }): number {
-  const fee = p.feeCents ?? ZINC_ORDER_FEE_CENTS;
-  for (const [what, v] of [["Price", p.priceCents], ["Shipping", p.shippingCents], ["Tax", p.taxCents], ["Fee", fee]] as const) {
+  for (const [what, v] of [["Price", p.priceCents], ["Shipping", p.shippingCents], ["Tax", p.taxCents], ["Fee", p.feeCents]] as const) {
     checkCents(v, what);
   }
-  return p.priceCents + p.shippingCents + p.taxCents + fee;
+  return p.priceCents + p.shippingCents + p.taxCents + p.feeCents;
 }
 
 /** The most an over-budget idea may cost: budget × (1 + pct / 100), rounded down. */
@@ -89,15 +88,21 @@ export function committedSpendCents(orders: CommittedOrder[]): number {
 
 /**
  * The `max_price` to send Zinc for one order. It covers item, shipping and
- * tax, but not Zinc's fee. `reservedCents` holds back room for the round's
+ * tax, but not the order fee. `reservedCents` holds back room for the round's
  * other picks that haven't been ordered yet, so the first order can't use
  * up the whole budget.
  */
-export function maxPriceCents(p: { ceilingCents: number; committedCents: number; reservedCents: number }): number {
+export function maxPriceCents(p: {
+  ceilingCents: number;
+  committedCents: number;
+  reservedCents: number;
+  feeCents: number;
+}): number {
   checkCents(p.ceilingCents, "Ceiling");
   checkCents(p.committedCents, "Committed spend");
   checkCents(p.reservedCents, "Reserved spend");
-  const max = p.ceilingCents - p.committedCents - p.reservedCents - ZINC_ORDER_FEE_CENTS;
+  checkCents(p.feeCents, "Fee");
+  const max = p.ceilingCents - p.committedCents - p.reservedCents - p.feeCents;
   if (max <= 0) {
     // A budget bug, never an order: there's no room left in this round.
     throw new RangeError(`No budget left for this order (max_price would be ${max} cents)`);
@@ -106,7 +111,8 @@ export function maxPriceCents(p: { ceilingCents: number; committedCents: number;
 }
 
 /** In wallet mode, Zinc sets aside the full cap plus the fee when it places an order. */
-export function walletRequiredCents(maxPrice: number): number {
+export function walletRequiredCents(maxPrice: number, feeCents: number): number {
   checkCents(maxPrice, "max_price");
-  return maxPrice + ZINC_ORDER_FEE_CENTS;
+  checkCents(feeCents, "Fee");
+  return maxPrice + feeCents;
 }
