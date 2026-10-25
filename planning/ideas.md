@@ -6,12 +6,12 @@ Each idea notes where it came from and how it relates to what's already decided.
 
 ## The bigger picture: a gifting platform
 
-Three products that share one platform, each usable on its own or together:
+Three products that share one platform, each usable on its own or together. The [roadmap](https://claude.ai/artifact/6D9ycNqhN2yGwvHwsWAaiW) puts them in order.
 
 | Product | For | What it does |
 |---|---|---|
 | **Gift Concierge** (what we're building) | The giver | Never forget a loved one: remembers dates, learns what people like, picks and buys gifts. |
-| **Gift lists** ("gift-me") | The receiver | Keep a list of what you'd like, so others know what to get you. Jim's idea. |
+| **Gift lists** (was "GiftMe"; needs a new name) | The receiver | Keep a list of what you'd like, so others know what to get you. Jim's app, already in progress: sharing and guest claiming are done, and a soft launch is targeted for 2026-11-01 (Linear projects "Gift List Sharing" and "Soft Launch"). |
 | **Custom digital gifts** | Both | Gifts delivered in creative, secure ways (cards, clothing, food; see below). |
 
 - **Shape:** Gift Concierge stays an isolated service that works alongside the list site or on its own (Jim). This fits the current design: it's a separate app with its own API.
