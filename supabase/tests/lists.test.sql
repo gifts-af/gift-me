@@ -2,7 +2,7 @@
 -- share links anyone can open, and claims (design §2.2).
 begin;
 \ir _helpers.psql
-select plan(18);
+select plan(22);
 
 select tests.create_user('a@example.com', 'Aaron') as a \gset
 select tests.create_user('b@example.com', 'Bee') as b \gset
@@ -84,6 +84,22 @@ select is(
   (select count(*)::int from jsonb_array_elements(lists.get_shared_list(:'token') -> 'items') i where i -> 'claim' is not null and i -> 'claim' <> 'null'::jsonb),
   2,
   'saving a list keeps its claims'
+);
+
+-- Who may call what. A later drop-and-recreate in `lists` would lose these
+-- grants silently (new functions aren't executable by default), so pin them.
+select ok(has_function_privilege('anon', 'lists.get_shared_list(uuid)', 'execute'), 'anon can open share links');
+select ok(has_function_privilege('anon', 'lists.claim_gift(uuid, uuid, text)', 'execute'), 'anon can claim as a guest');
+select ok(
+  not has_function_privilege('anon', 'lists.save_list(uuid, text, jsonb)', 'execute')
+  and not has_function_privilege('anon', 'lists.unclaim_gift(uuid, uuid)', 'execute')
+  and not has_function_privilege('anon', 'lists.viewer_display_name()', 'execute'),
+  'anon cannot save, unclaim or look up display names'
+);
+select ok(
+  has_function_privilege('authenticated', 'lists.save_list(uuid, text, jsonb)', 'execute')
+  and has_function_privilege('authenticated', 'lists.unclaim_gift(uuid, uuid)', 'execute'),
+  'signed-in users can save and unclaim'
 );
 
 -- Signed-out visitors can't save lists.
