@@ -1,0 +1,112 @@
+// Budget math (design §4.2, PRD D10, D11, D28, D29). All money is whole
+// cents; anything that has to round, rounds down, so a rounding error can
+// only ever spend less.
+
+/** Zinc's per-order fee. It isn't included in an order's `max_price`. */
+export const ZINC_ORDER_FEE_CENTS = 100;
+
+export type BudgetFit = "within" | "over" | "dropped";
+
+function checkCents(value: number, what: string): void {
+  if (!Number.isInteger(value) || value < 0) {
+    throw new RangeError(`${what} must be whole cents, 0 or more; got ${value}`);
+  }
+}
+
+export function estimatedTotalCents(p: {
+  priceCents: number;
+  shippingCents: number;
+  taxCents: number;
+  feeCents?: number;
+}): number {
+  const fee = p.feeCents ?? ZINC_ORDER_FEE_CENTS;
+  for (const [what, v] of [["Price", p.priceCents], ["Shipping", p.shippingCents], ["Tax", p.taxCents], ["Fee", fee]] as const) {
+    checkCents(v, what);
+  }
+  return p.priceCents + p.shippingCents + p.taxCents + fee;
+}
+
+/** The most an over-budget idea may cost: budget × (1 + pct / 100), rounded down. */
+export function overBudgetLimitCents(budgetCents: number, overBudgetPct: number): number {
+  checkCents(budgetCents, "Budget");
+  if (!Number.isFinite(overBudgetPct) || overBudgetPct < 0) {
+    throw new RangeError(`Over-budget percent must be 0 or more; got ${overBudgetPct}`);
+  }
+  return Math.floor((budgetCents * (100 + overBudgetPct)) / 100);
+}
+
+/**
+ * Within budget, over budget (up to and including the limit), or dropped.
+ * Used for a single idea and for the sum of several picks alike.
+ */
+export function classifyTotal(totalCents: number, budgetCents: number, overBudgetPct: number): BudgetFit {
+  checkCents(totalCents, "Total");
+  if (totalCents <= budgetCents) return "within";
+  return totalCents <= overBudgetLimitCents(budgetCents, overBudgetPct) ? "over" : "dropped";
+}
+
+/**
+ * The most the round may spend once the user approves these picks: the
+ * budget when they fit, or their sum when the user deliberately approved
+ * going over. `null` means the approval is refused.
+ */
+export function approvalCeilingCents(
+  selectedTotalsCents: number[],
+  budgetCents: number,
+  overBudgetPct: number,
+  overBudgetConfirmed: boolean,
+): number | null {
+  if (selectedTotalsCents.length === 0) return null;
+  const sum = selectedTotalsCents.reduce((a, b) => a + b, 0);
+  switch (classifyTotal(sum, budgetCents, overBudgetPct)) {
+    case "within":
+      return budgetCents;
+    case "over":
+      return overBudgetConfirmed ? sum : null;
+    case "dropped":
+      return null;
+  }
+}
+
+export type CommittedOrder = {
+  status: "placing" | "placed" | "failed" | "shipped" | "delivered" | "cancelled" | "refunded";
+  maxPriceCents: number;
+  finalTotalCents: number | null;
+  feeCents: number;
+};
+
+const RELEASED: ReadonlySet<CommittedOrder["status"]> = new Set(["failed", "cancelled", "refunded"]);
+
+/**
+ * Spend already used up in a round. An order holds its full cap until its
+ * real total is known; failed, cancelled and refunded orders release theirs.
+ */
+export function committedSpendCents(orders: CommittedOrder[]): number {
+  return orders
+    .filter((o) => !RELEASED.has(o.status))
+    .reduce((sum, o) => sum + (o.finalTotalCents ?? o.maxPriceCents) + o.feeCents, 0);
+}
+
+/**
+ * The `max_price` to send Zinc for one order. It covers item, shipping and
+ * tax, but not Zinc's fee. `reservedCents` holds back room for the round's
+ * other picks that haven't been ordered yet, so the first order can't use
+ * up the whole budget.
+ */
+export function maxPriceCents(p: { ceilingCents: number; committedCents: number; reservedCents: number }): number {
+  checkCents(p.ceilingCents, "Ceiling");
+  checkCents(p.committedCents, "Committed spend");
+  checkCents(p.reservedCents, "Reserved spend");
+  const max = p.ceilingCents - p.committedCents - p.reservedCents - ZINC_ORDER_FEE_CENTS;
+  if (max <= 0) {
+    // A budget bug, never an order: there's no room left in this round.
+    throw new RangeError(`No budget left for this order (max_price would be ${max} cents)`);
+  }
+  return max;
+}
+
+/** In wallet mode, Zinc sets aside the full cap plus the fee when it places an order. */
+export function walletRequiredCents(maxPrice: number): number {
+  checkCents(maxPrice, "max_price");
+  return maxPrice + ZINC_ORDER_FEE_CENTS;
+}
