@@ -46,3 +46,4 @@ next-env.d.ts
 !.vscode/extensions.json
 .idea
 .env*
+!.env.example
