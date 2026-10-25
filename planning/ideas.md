@@ -31,7 +31,8 @@ A physical greeting card with a QR code that takes the recipient straight to a g
 
 ### 2. "Buy me a drink" QR code on clothing and party gear
 A QR code on something the person wears. Anyone can scan it and buy the wearer a drink.
-- **Not just T-shirts:** sashes, tiaras and other party gear. **Bachelorette and bachelor parties are the big one:** who doesn't want to buy the bride or groom a drink? Also clothing and other wearables.
+- **Main audience: college students.** Cool shirts and clothing that students buy for the chance of a stranger buying them a drink, and an easy way to connect without walking up to someone first.
+- **Also party gear:** sashes, tiaras and the like for bachelorette and bachelor parties. Who doesn't want to buy the bride or groom a drink?
 - **Anonymous by design:** everything goes through our platform with payment links, so neither side sees the other's personal details. The sender can choose to be found, either through a profile or by taking a selfie when they send, so the wearer can spot them.
 - **Why it matters:** this is a **user acquisition engine**. If scanning and paying is close to friction-free, every scan brings in a new user. Give gear away to friends, people scan and join, then start buying the gear for others. Free marketing that keeps spreading, and a playful front door to the rest of the platform.
 - **Variations:** a bartender puts a QR code above the bar so people can order drinks for someone without flagging him down (Jim).
