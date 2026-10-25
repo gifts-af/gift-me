@@ -36,7 +36,7 @@ describe("round start", () => {
   });
 
   it("is on time on the normal start day itself", () => {
-    expect(planRoundStart("2026-12-25", "2026-11-18").late).toBe(false);
+    expect(planRoundStart("2026-12-25", "2026-11-18")?.late).toBe(false);
   });
 
   it("starts today and is marked late after the normal start", () => {
@@ -45,6 +45,29 @@ describe("round start", () => {
       deadline: "2026-12-16",
       late: true,
     });
+  });
+
+  it("moves the deadline to next-day shipping once the planning deadline has passed", () => {
+    // Added 5 days before a birthday: next-day delivery plus the buffer still makes it.
+    expect(planRoundStart("2026-10-30", "2026-10-25")).toEqual({
+      startDate: "2026-10-25",
+      deadline: "2026-10-27",
+      late: true,
+    });
+  });
+
+  it("moves the deadline when the planning deadline is today", () => {
+    expect(planRoundStart("2026-12-25", "2026-12-16")).toEqual({
+      startDate: "2026-12-16",
+      deadline: "2026-12-22",
+      late: true,
+    });
+  });
+
+  it("gives no round when even next-day shipping can't make it", () => {
+    // 3 days out: the next-day deadline would be today, leaving no day to answer.
+    expect(planRoundStart("2026-10-28", "2026-10-25")).toBeNull();
+    expect(planRoundStart("2026-10-28", "2026-10-28")).toBeNull();
   });
 });
 
@@ -78,6 +101,11 @@ describe("reminder schedule", () => {
   it("only skips when the heads-up goes out the day before the deadline", () => {
     expect(reminderSchedule(deadline, "2026-12-15")).toEqual([{ kind: "skip", date: "2026-12-16" }]);
   });
+
+  it("refuses a heads-up on or after the deadline instead of scheduling a skip in the past", () => {
+    expect(() => reminderSchedule(deadline, "2026-12-16")).toThrow(RangeError);
+    expect(() => reminderSchedule(deadline, "2026-12-20")).toThrow(RangeError);
+  });
 });
 
 describe("arrival", () => {
@@ -90,8 +118,11 @@ describe("arrival", () => {
     expect(() => arriveBy("2026-12-01", 1, -5)).toThrow(RangeError);
   });
 
-  it("is in time on the occasion day and late the day after", () => {
-    expect(canArriveInTime("2026-12-25", "2026-12-25")).toBe(true);
-    expect(canArriveInTime("2026-12-26", "2026-12-25")).toBe(false);
+  it("keeps the 2-day buffer when filtering ideas", () => {
+    const idea = { occasionDate: "2026-12-25", orderDate: "2026-12-16", handlingDaysMax: 2 };
+    // Arrives 12-23, two days early: in time.
+    expect(canArriveInTime({ ...idea, deliveryDaysMax: 5 })).toBe(true);
+    // Arrives 12-24, only one day early: too close.
+    expect(canArriveInTime({ ...idea, deliveryDaysMax: 6 })).toBe(false);
   });
 });

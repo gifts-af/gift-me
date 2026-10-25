@@ -19,13 +19,20 @@ function checkDays(days: number, what: string): void {
   }
 }
 
-/** The last day an order can be placed and still arrive, with the buffer. */
+/** The fastest shipping a late round still hopes to find (next-day delivery). */
+export const FASTEST_DAYS_TO_ARRIVE = 1;
+
+/**
+ * The last day an order can be placed and still arrive, with the buffer.
+ * `worstCaseDaysToArrive` is the slowest handling plus delivery, not
+ * delivery alone.
+ */
 export function shipByDeadline(
   occasionDate: CalendarDate,
-  worstCaseDeliveryDays: number = PLANNING_DELIVERY_DAYS,
+  worstCaseDaysToArrive: number = PLANNING_DELIVERY_DAYS,
 ): CalendarDate {
-  checkDays(worstCaseDeliveryDays, "Delivery days");
-  return addDays(occasionDate, -(worstCaseDeliveryDays + SAFETY_BUFFER_DAYS));
+  checkDays(worstCaseDaysToArrive, "Days to arrive");
+  return addDays(occasionDate, -(worstCaseDaysToArrive + SAFETY_BUFFER_DAYS));
 }
 
 /** When a round normally starts: 28 days before the planning deadline. */
@@ -37,15 +44,28 @@ export function roundStartDate(occasionDate: CalendarDate): CalendarDate {
  * A round never starts in the past. If today is already after the normal
  * start (a person added close to their birthday), it starts today and is
  * marked late so the heads-up can say so.
+ *
+ * If the planning deadline has already arrived, the deadline moves to the
+ * last day next-day shipping could still make it, and the idea filter keeps
+ * only ideas fast enough for that. Once ideas exist, the chosen idea's real
+ * deadline replaces it. The deadline always leaves at least one day to
+ * answer, because the round is skipped on the morning of its deadline.
+ * `null` means even next-day shipping can't make it this year.
  */
 export function planRoundStart(
   occasionDate: CalendarDate,
   today: CalendarDate,
-): { startDate: CalendarDate; deadline: CalendarDate; late: boolean } {
+): { startDate: CalendarDate; deadline: CalendarDate; late: boolean } | null {
   const normalStart = roundStartDate(occasionDate);
+  const planningDeadline = shipByDeadline(occasionDate);
+  const deadline =
+    compareDates(planningDeadline, today) > 0
+      ? planningDeadline
+      : shipByDeadline(occasionDate, FASTEST_DAYS_TO_ARRIVE);
+  if (compareDates(deadline, today) <= 0) return null;
   return {
     startDate: maxDate(today, normalStart),
-    deadline: shipByDeadline(occasionDate),
+    deadline,
     late: compareDates(today, normalStart) > 0,
   };
 }
@@ -60,6 +80,10 @@ export function reminderSchedule(
   deadline: CalendarDate,
   headsUpDate: CalendarDate,
 ): { kind: ReminderKind; date: CalendarDate }[] {
+  if (compareDates(headsUpDate, deadline) >= 0) {
+    // planRoundStart never gives a deadline this close; a skip in the past would end the round unseen.
+    throw new RangeError(`Heads-up ${headsUpDate} must come before the deadline ${deadline}`);
+  }
   const reminder2 = addDays(deadline, -REMINDER_2_BEFORE_DEADLINE_DAYS);
   const candidates: { kind: ReminderKind; date: CalendarDate }[] = [
     { kind: "reminder_1", date: addDays(headsUpDate, REMINDER_1_AFTER_HEADS_UP_DAYS) },
@@ -89,7 +113,18 @@ export function arriveBy(
   return addDays(orderDate, handlingDaysMax + deliveryDaysMax);
 }
 
-/** An idea is still worth offering if its slowest case arrives by the occasion. */
-export function canArriveInTime(arriveByDate: CalendarDate, occasionDate: CalendarDate): boolean {
-  return compareDates(arriveByDate, occasionDate) <= 0;
+/**
+ * An idea is still worth offering if, ordered on `orderDate`, its slowest
+ * case arrives with the full safety buffer to spare. Pass the latest date
+ * the user might order (the round's deadline), not the day ideas are made,
+ * so a user who approves late still gets the gift in time.
+ */
+export function canArriveInTime(p: {
+  occasionDate: CalendarDate;
+  orderDate: CalendarDate;
+  handlingDaysMax: number;
+  deliveryDaysMax: number;
+}): boolean {
+  const arrives = arriveBy(p.orderDate, p.handlingDaysMax, p.deliveryDaysMax);
+  return compareDates(arrives, addDays(p.occasionDate, -SAFETY_BUFFER_DAYS)) <= 0;
 }
