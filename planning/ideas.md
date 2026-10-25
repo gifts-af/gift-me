@@ -29,12 +29,18 @@ A physical greeting card with a QR code that takes the recipient straight to a g
 - **Related:** D24 already lists a digital gift card as a later fallback for missed deadlines. Research covers digital gift card APIs (Tango Card, Giftbit in `research/purchasing-feasibility.md`) and recipient-chosen gifts (Goody-style links). Printing and mailing cards would need a card-printing service **[Verify]**.
 - **Source:** the owner's mom.
 
-### 2. Clothing with a "buy me a drink" QR code
-A T-shirt (or a sash or tiara for bachelorette parties) with a QR code anyone can scan to buy the wearer a drink.
-- **Why:** built-in marketing. Give shirts away to friends, people scan and join, then start gifting the shirts themselves. A playful front door to the rest of the platform.
+### 2. "Buy me a drink" QR code on clothing and party gear
+A QR code on something the person wears. Anyone can scan it and buy the wearer a drink.
+- **Not just T-shirts:** sashes, tiaras and other party gear. **Bachelorette and bachelor parties are the big one:** who doesn't want to buy the bride or groom a drink? Also clothing and other wearables.
+- **Anonymous by design:** everything goes through our platform with payment links, so neither side sees the other's personal details. The sender can choose to be found, either through a profile or by taking a selfie when they send, so the wearer can spot them.
+- **Why it matters:** this is a **user acquisition engine**. If scanning and paying is close to friction-free, every scan brings in a new user. Give gear away to friends, people scan and join, then start buying the gear for others. Free marketing that keeps spreading, and a playful front door to the rest of the platform.
 - **Variations:** a bartender puts a QR code above the bar so people can order drinks for someone without flagging him down (Jim).
-- **Hard parts:** strangers sending money to each other, and bars redeeming a drink. Either it needs bar partners, or it's really a money transfer, which brings payment and money-transmission rules and safety concerns (harassment, unwanted contact). **[Verify]** before going further.
-- **Source:** owner, with additions from Jim.
+- **To work out when brainstormed:**
+  - How the drink is redeemed: a cash payout to the wearer, or bar partners who honor the code
+  - Moving money between strangers: a payments provider that handles payouts would carry most of the payment rules **[Verify]**
+  - Safety: the wearer controls whether to meet the sender, and can block or report
+  - The scan-to-pay flow: as few steps as possible, ideally no sign-up before paying
+- **Source:** owner, with additions from Jim. The owner thinks it's very doable and wants to brainstorm it further.
 
 ### 3. Thank-you card reminders
 For people using a gift list: once a gift arrives, remind them to send a thank-you, maybe with a ready-to-send card.
