@@ -163,6 +163,7 @@ flowchart LR
 | Answers to guided questions | `questions` |
 | Rejected ideas and the reason | `rejections` |
 | How the recipient liked a gift | `reactions` |
+| *Post-MVP:* a loved one's own gift list, once the list app connects (D31) | to be designed; list items would become `profile_facts` with their own source |
 
 **Layer 2: learned facts.** `profile_facts` is where the learning lives. Each fact is small and specific ("interest: fly fishing", "size: medium shirt", "avoid: clutter") and records its category, its source, a link back to the input it came from, whether the user confirmed it, and whether it's still active. **A person's profile is the set of their active facts**, and the user can see, edit or remove any of them (C-7).
 
@@ -423,7 +424,7 @@ Each wave can start once the waves before it have the dependencies it lists. Wit
 | W6-2 | Privacy pass: deletion cascade check, sensitive-trait filter test, secrets review | All above |
 | W6-3 | Onboard Jim and 1–2 friends | W6-1, W6-2 |
 
-**Within wave 2, W2-1 goes first.** W2-2 and W2-4 can start right after it, and W2-3 and W2-5 follow. So wave 2 is really two steps, though still more tickets than builders at each step. With two builders, nobody is blocked. Wave 1's spikes are the critical path: they decide W3-3 and W4-2.
+**Within wave 2, W2-1 goes first.** W2-2 and W2-4 can start right after it, and W2-3 and W2-5 follow. So wave 2 is really two steps, though still more tickets than builders at each step. With two builders, nobody is blocked. Wave 1's spikes are the critical path: they decide W3-3 and W4-2. **Start Wave 1 with the spikes and look and feel (W1-7), not the scaffold.** Start the Zinc signup on day one, because account approval may take days. W1-1 is small and low-risk, so it can fill gaps or run in parallel.
 
 ## 14. Accounts
 All services (Google, Vercel including AI Gateway billing, Supabase, Zinc, Linear) are under the owner's **allensforever711@gmail.com** account, and the code is in the free **gifts-af** GitHub organization (github.com/gifts-af/gift-concierge), where allensforever711, aarontallen, JimtheBurger and brb3 are all owners. Jim is added to each service (T7). **Domain:** if none is already set up, W1-6 buys a cheap placeholder domain under that account **[Claude's call]**.

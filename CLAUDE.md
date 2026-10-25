@@ -27,6 +27,8 @@ Use this layout. It overrides any plugin or skill default (for example, Superpow
 | What | Where |
 |---|---|
 | Product: PRD, research, product decisions | `planning/` (`PRD.md`, `research/`, `decisions.md`) |
+| Platform roadmap and go-to-market | `planning/strategy.md` (the shareable roadmap and go-to-market pages are built from it) |
+| Raw product ideas not yet planned | `planning/ideas.md` |
 | Technical design | `design/technical-design.md` |
 | Technical decisions | `design/decisions.md`, next number in sequence (T16, T17, …) |
 | Spike write-ups | `design/spikes/<topic>.md` (e.g. `zinc.md`, `ai.md`, `email.md`) |

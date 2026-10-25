@@ -36,3 +36,15 @@ Running record of product decisions made during discovery. Each entry notes whet
 | 28 | **After approval:** if checkout comes in at a different price but the full cost is still within budget, buy it and notify the user. Over budget means stop and ask. | Owner, on Claude's recommendation |
 | 29 | **Failed or late orders:** ask the user to approve a replacement (next-best idea ready in one tap). Never buy a replacement automatically. The replacement must fit the original budget, and a refunded order doesn't count against it. | Owner, on Claude's recommendation |
 | 30 | **Rounds skipped for no reply don't count as MVP failures.** The success measure covers approved gifts only, and skipped rounds are tracked separately. | Owner, on Claude's recommendation |
+
+## 2026-10-25
+
+Platform direction from the owner and Jim. Details in [`strategy.md`](strategy.md). These set direction and don't change MVP scope.
+
+| # | Decision | Source |
+|---|---|---|
+| 31 | **Gift Concierge is one of three products on one platform:** scan-to-gift, gift lists (Jim's app, already in progress) and Gift Concierge. Each works on its own and connects to the others. The concierge stays an isolated service. | Owner and Jim |
+| 32 | **Scan-to-gift is the front door for go-to-market. Its primary use case is "buy me a drink"** for college students: clothing with a QR code that lets a stranger buy the wearer **any drink**, anonymously through our payment links, with the sender able to choose to be found (a profile or a selfie). Party gear for bachelor and bachelorette parties is a second audience. Other scan-to-gift ideas (QR cards, pay-it-forward plushie and cookie) are in `ideas.md`. | Owner |
+| 33 | **Gift Concierge is the final stage of the funnel.** Loyal customers fill in their loved ones' profiles, including a guided tour of each person's social media to show the concierge their vibe, and the concierge automates their recurring gift giving. | Owner |
+| 34 | **Money model direction (not decided):** free gift lists, premium automation (the concierge), and a per-gift fee on scan-to-gift and custom gifts. Zinc's $1 per order can be passed to the buyer. Billing stays out of MVP scope (revisits D6). | Owner and Jim |
+| 35 | **Where the roadmap lives:** Linear projects hold live status (Gift Concierge MVP, Gift Concierge Public Launch, Scan-to-gift, plus Jim's list projects). `strategy.md` is the written source, and two shareable pages present it (roadmap and go-to-market plan). | Owner, on Claude's recommendation |

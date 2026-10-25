@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | **Approved** v1.0 (2026-10-17) |
+| **Status** | **Approved** v1.0 (2026-10-17). v1.1 (2026-10-25): §11 links to the platform strategy and adds gift list connection to Later. |
 | **Date** | 2026-10-17 |
 | **Owner** | Product owner (Aaron) |
 | **Working name** | Gift Concierge (placeholder) |
@@ -211,7 +211,9 @@ Also tracked **[Claude's call]:**
 |---|---|
 | **MVP (personal use)** | **No target date; it ships when it's ready (D26).** Everything marked **M**, plus **S** if time allows. Chrome extension, web app that works on phones, email. US only. **[Claude's call]** |
 | **Public launch** | Form a business entity (enables capped single-use virtual cards and paying for users). Billing (subscription plus per-gift fee to test, about $8–15/mo plus a small per-gift fee per research), text messages, privacy compliance, recipient opt-in and recipient-entered addresses, more import sources, a second browser. |
-| **Later** | Auto-buy without a reply, gift card fallback, household sharing, gift notes and wrapping, native apps, season budgets. |
+| **Later** | Auto-buy without a reply, gift card fallback, household sharing, gift notes and wrapping, native apps, season budgets, connecting to gift lists (a loved one's list feeds their profile and ideas). |
+
+The concierge is one of three products on a wider platform (D31–D35). The platform roadmap and go-to-market plan are in [`strategy.md`](strategy.md).
 
 ## 12. Open questions for technical design
 1. Which checkout service(s) and which stores in the MVP. Should own-account assisted checkout (A-6) be in the MVP at all?

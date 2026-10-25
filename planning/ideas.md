@@ -4,22 +4,11 @@ Ideas for after the MVP. **Nothing here is in MVP scope.** The PRD's roadmap ("P
 
 Each idea notes where it came from and how it relates to what's already decided.
 
-## The bigger picture: a gifting platform
+## The bigger picture
 
-Three products that share one platform, each usable on its own or together. The [roadmap](https://claude.ai/artifact/6D9ycNqhN2yGwvHwsWAaiW) puts them in order.
+These ideas sit inside a wider platform plan: scan-to-gift brings people in, gift lists keep them, and Gift Concierge earns. The platform, roadmap and go-to-market plan are in [`strategy.md`](strategy.md) (decisions D31–D35).
 
-| Product | For | What it does |
-|---|---|---|
-| **Gift Concierge** (what we're building) | The giver | Never forget a loved one: remembers dates, learns what people like, picks and buys gifts. |
-| **Gift lists** (was "GiftMe"; needs a new name) | The receiver | Keep a list of what you'd like, so others know what to get you. Jim's app, already in progress: sharing and guest claiming are done, and a soft launch is targeted for 2026-11-01 (Linear projects "Gift List Sharing" and "Soft Launch"). |
-| **Custom digital gifts** | Both | Gifts delivered in creative, secure ways (cards, clothing, food; see below). |
-
-- **Shape:** Gift Concierge stays an isolated service that works alongside the list site or on its own (Jim). This fits the current design: it's a separate app with its own API.
-- **Possible money model:** lists are free (freemium), automation of giving and receiving is premium, and custom digital gifts earn a one-off profit on each sale.
-- **Related decisions:** D6 (monetization to be decided), PRD "Billing" out of scope for the MVP. Zinc's $1 per order could be passed on to the buyer as part of a per-gift fee.
-- **Note:** the competitive research (`research/competitive-analysis.md`) shows wishlist apps are a crowded space (GoWish, Elfster, Giftster), mostly earning from affiliate links. A list on its own isn't the edge; tying it into the concierge could be. A list someone shares is also the best possible input for the concierge's gift ideas.
-
-Source: owner and Jim, Discord, 2026-10-24.
+Source: owner and Jim, Discord, 2026-10-24, and follow-ups on 2026-10-25.
 
 ## Ideas
 
