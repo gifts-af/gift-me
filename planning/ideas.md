@@ -29,7 +29,7 @@ A physical greeting card with a QR code that takes the recipient straight to a g
 - **Related:** D24 already lists a digital gift card as a later fallback for missed deadlines. Research covers digital gift card APIs (Tango Card, Giftbit in `research/purchasing-feasibility.md`) and recipient-chosen gifts (Goody-style links). Printing and mailing cards would need a card-printing service **[Verify]**.
 - **Source:** the owner's mom.
 
-### 2. "Buy me a drink" QR code on clothing and party gear
+### 2. "Buy me a drink" QR code on clothing and party gear (primary use case)
 A QR code on something the person wears. Anyone can scan it and buy the wearer a drink.
 - **Main audience: college students.** Cool shirts and clothing that students buy for the chance of a stranger buying them a drink, and an easy way to connect without walking up to someone first.
 - **Also party gear:** sashes, tiaras and the like for bachelorette and bachelor parties. Who doesn't want to buy the bride or groom a drink?
