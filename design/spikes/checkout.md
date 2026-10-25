@@ -1,6 +1,6 @@
 # Spike: checkout and payment with Zinc (W1-2, ALL-16)
 
-Date: 2026-10-25. Status: **desk research and sandbox done; real order placed and in progress** (see [Real order](#real-order)).
+Date: 2026-10-25. Status: **done except delivery.** Desk research, sandbox and a real order (placed for $3.42) are complete. Tracking to delivery is still open (see [Real order](#real-order)).
 
 ## Recommendation
 
@@ -63,8 +63,13 @@ Note: order `status` stops at `order_placed`. Shipping progress is on `tracking_
 
 - **Sign-in and Allow worked** (`spikes/checkout/go-live.mjs`). The owner approved in the browser, and the script received a live key plus Zinc's **$5 starter credit**. The practice orders moved into the new account (allensforever711@gmail.com). This is the same flow W4-4 uses.
 - **First try failed with `insufficient_funds`:** two 1¢ product lookups had left $4.98, and the order needed `max_price` + $1 = $5.00. That's the reason for T17.
-- **Second try:** Lipton tea bags, $3.42 at Walmart, `max_price` $3.98, marked as a gift with a gift message, shipped to the owner. Zinc accepted it (`pending`). Result: _to be filled in_.
-- [ ] Record the price breakdown, the gift option outcome, and the delivery estimate against the actual delivery date (answer 5).
+- **Second try:** Lipton tea bags, $3.42 at Walmart, `max_price` $3.98, marked as a gift with a gift message, shipped to the owner. Zinc accepted it (`pending`), and **about 4 minutes later it was placed** with Walmart (Walmart order 200015359811878).
+  - **Price:** subtotal $3.42, shipping $0, tax $0, total **$3.42**, comfortably under the $3.98 cap.
+  - **Tax was $0** because Florida doesn't tax grocery food. So the tax estimate by state (§4.2) will often be high, which is the safe direction.
+  - **Gift option:** Walmart's business checkout has none. Because we sent `fulfillment.gift: "best_effort"`, Zinc placed a normal order and reported it in `fulfillment.concessions` (`gift_option_unavailable`). Without best effort, the order would have failed. **Lesson:** a gift message isn't guaranteed, so the app should say "if the store supports it".
+  - **Estimated delivery:** `job_result.estimated_delivery` said 2026-10-25, the same day the order was placed, which looks like a placeholder. **Don't trust the placement-time estimate.** Use the offer's delivery range until the carrier's estimate arrives with tracking.
+  - The price breakdown is in `job_result.price_components` (not `result`).
+- [ ] Record tracking and the actual delivery date against the carrier's estimate (answer 5).
 
 Watch-outs from doing it for real:
 - The live key is returned once, in `key`. Persist it immediately and never log it (the first script version printed it; the owner should delete that key in Zinc after the spike).
