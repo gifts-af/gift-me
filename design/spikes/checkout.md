@@ -1,16 +1,20 @@
 # Spike: checkout and payment with Zinc (W1-2, ALL-16)
 
-Date: 2026-10-25. Status: **desk research and sandbox done; one real order still to place** (needs the owner's Zinc sign-in, see [Still to do](#still-to-do)).
+Date: 2026-10-25. Status: **desk research and sandbox done; real order placed and in progress** (see [Real order](#real-order)).
 
 ## Recommendation
 
 **Use Zinc. It passes every must-have, so Rye isn't needed.**
 
-1. **Each user gets their own Zinc account and wallet, connected with Zinc's "Allow" sign-in** (no API keys to copy and paste). This confirms T6.
-2. **Each user turns on Zinc auto top-up once.** If an order is short of funds, Zinc charges the user's saved card and goes ahead with the order, so it doesn't fail. The app still checks the balance first and listens for top-up failures.
-3. **Set `max_price` to the full approved total.** It caps item, shipping and tax together.
+1. **Funding in two stages (T16).**
+   - **MVP:** each user has their own Zinc account and wallet, connected with Zinc's "Allow" sign-in (no keys to copy and paste), and turns on auto top-up once. If an order is short of funds, Zinc charges the user's saved card and goes ahead. The app shows the balance and warns ahead.
+   - **Later:** the user adds a card in our app, and Zinc Connect charges it per order through our Stripe account, with no wallet. The margin can be $0. It needs our own Stripe account, so it waits.
+2. **Product lookups go through one app-owned Zinc account (T17),** so brainstorming never draws on a user's balance. (The real order showed why: two 1¢ lookups made it fail.)
+3. **Set `max_price` to the approved ceiling minus the $1 fee.** It caps item, shipping and tax together.
 4. **Send every gift order with `is_gift: true`**, plus `fulfillment.gift: "best_effort"` and an optional `gift_message`. This keeps prices off the packing slip and still places the order if a store has no gift option.
-5. **Keep Stripe Connect in mind for later (D34).** It charges the user's own card per order, takes Zinc's $1 fee, and adds our margin. There's no wallet involved, but it needs our own Stripe business account, so it isn't for the MVP.
+5. **Approval means buy now (T18).** A placed order can't be cancelled, only returned.
+
+What this means for the rest of the design (data model, budget, purchase, funding, tracking) is written into `technical-design.md` v1.2.
 
 ## Answers
 
@@ -55,7 +59,13 @@ Note: order `status` stops at `order_placed`. Shipping progress is on `tracking_
 - **Real-world success rate and placement time are unmeasured.** Zinc says placement takes anywhere from about 10 seconds to a couple of hours. The research suggested a trial of about 20 orders; for the MVP, one order now and watching the first real rounds is enough.
 - Zinc is changing fast: the v2 API, weekly changelog entries, and Connect wallet funding added 2026-10-23. Pin the API version in Wave 4.
 
-## Still to do
+## Real order
 
-- [ ] **One real low-cost order** (owner). Zinc's "go live" gives a **$5 starter credit**. With the $1 fee, the item plus tax and shipping must come in under $4. Steps: the script asks for a code, you click Allow at `app.zinc.com/activate`, then we place one real order and track it to delivery. That also tests the sign-in flow for ALL-32.
-- [ ] Record its real delivery estimate against the actual delivery date (answer 5).
+- **Sign-in and Allow worked** (`spikes/checkout/go-live.mjs`). The owner approved in the browser, and the script received a live key plus Zinc's **$5 starter credit**. The practice orders moved into the new account (allensforever711@gmail.com). This is the same flow W4-4 uses.
+- **First try failed with `insufficient_funds`:** two 1¢ product lookups had left $4.98, and the order needed `max_price` + $1 = $5.00. That's the reason for T17.
+- **Second try:** Lipton tea bags, $3.42 at Walmart, `max_price` $3.98, marked as a gift with a gift message, shipped to the owner. Zinc accepted it (`pending`). Result: _to be filled in_.
+- [ ] Record the price breakdown, the gift option outcome, and the delivery estimate against the actual delivery date (answer 5).
+
+Watch-outs from doing it for real:
+- The live key is returned once, in `key`. Persist it immediately and never log it (the first script version printed it; the owner should delete that key in Zinc after the spike).
+- The device-code "still waiting" reply is nested (`{"error": {"code": "authorization_pending"}}`).
