@@ -36,6 +36,7 @@ Use this layout. It overrides any plugin or skill default (for example, Superpow
 | Build plan for a ticket | `design/plans/ALL-<n>-<short-name>.md` when a plan is worth keeping; otherwise in the Linear ticket |
 
 - Don't create a new top-level folder or a second copy of a doc. Update the existing one.
+- **Nothing discussed gets lost.** When a conversation, chat or artifact produces a product or design direction, record it in the docs above (and the decisions log) before moving on. Shareable pages and Linear are views; the repo is the written source.
 - When a decision changes the design, update both `design/technical-design.md` and `design/decisions.md`, plus any affected Linear tickets.
 - Add new docs to the table in `README.md` so people can find them.
 
