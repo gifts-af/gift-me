@@ -52,7 +52,7 @@ Use this layout. It overrides any plugin or skill default (for example, Superpow
 
 - **Code:** a branch named after the Linear ticket, then a PR. CI must pass.
 - **Planning and design docs** (`planning/`, `design/`, `README.md`, this file): commit and push straight to `main`.
-- The repo is `gifts-af/gift-concierge`. Linear project: Gift Concierge MVP (team key `ALL`).
+- The repo is `gifts-af/gifts-af`. Linear project: Gift Concierge MVP (team key `ALL`).
 
 ## Accounts: contribution vs admin
 
