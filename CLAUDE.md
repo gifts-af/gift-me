@@ -58,6 +58,7 @@ Use this layout. It overrides any plugin or skill default (for example, Superpow
 
 - **Code:** a branch named after the Linear ticket, then a PR. CI must pass.
 - **Planning and design docs** (`planning/`, `design/`, `README.md`, this file): commit and push straight to `main`.
+- **How `main` is protected** (GitHub rulesets): nobody can force-push or delete it. Changes need a PR with the CI `check` job passing. Repo admins (all of us today) can bypass that rule, which is what makes direct docs pushes work, so the code-via-PR rule above is a habit, not something GitHub enforces for us.
 - The repo is `gifts-af/gift-me`. Linear project: Gift Concierge MVP (team key `ALL`).
 
 ## Accounts: contribution vs admin
