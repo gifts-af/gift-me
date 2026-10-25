@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| **Status** | **Approved** v1.0 (2026-10-17). Revised v1.1 (2026-10-18) after the owner's review: Supabase `pg_cron` runs gift rounds once a day (T8, T9), a lean repo layout (T10), a replaceable AI backend billed through Vercel (T11), push deferred (T12), email capture kept (T13), round statuses cut from 11 to 9 (T14), and a new §3.1 on how the app learns about a person. Tunable values (buffers, timings, retries) are sensible defaults to adjust once real usage shows what's needed. |
-| **Date** | 2026-10-18 |
+| **Status** | **Approved** v1.0 (2026-10-17). Revised v1.1 (2026-10-18) after the owner's review: Supabase `pg_cron` runs gift rounds once a day (T8, T9), a lean repo layout (T10), a replaceable AI backend billed through Vercel (T11), push deferred (T12), email capture kept (T13), round statuses cut from 11 to 9 (T14), and a new §3.1 on how the app learns about a person. Revised 2026-10-25: the platform is one app, account and repo, built to split later (§2.2, T19). Tunable values (buffers, timings, retries) are sensible defaults to adjust once real usage shows what's needed. |
+| **Date** | 2026-10-25 |
 | **Implements** | `../planning/PRD.md` (approved v1.0). Requirement IDs (B-3, A-9, etc.) refer to it. |
 | **Decisions** | `decisions.md` (T#), `../planning/decisions.md` (D#) |
 | **Next stage** | Split into Linear tickets, labeled by wave (§13) |
@@ -79,14 +79,37 @@ flowchart LR
 | Extension | Chrome Manifest V3, TypeScript, built with Vite | Popup plus a "Capture for…" action. Lives in the same repo. |
 | Contacts | Google People API, `contacts.readonly` scope | An unverified Google app allows up to 100 test users, which is plenty for the MVP. |
 
-### 2.2 Repository layout
+### 2.2 One app for the whole platform (T19)
 
-The repo is the existing `gift-concierge` repo, with code added alongside `planning/` and `design/`. It has one shared package, kept as small as the two apps allow (T10):
+Gift Concierge is one of three products: scan-to-gift, gift lists and the concierge (`../planning/strategy.md`). To users they are **always one app**, a ladder from quick one-off use to the deep concierge. So the platform is built as **one app, one account and one repo now, laid out so a product can be split out later.**
+
+| Hard to undo, so decided now | Rule |
+|---|---|
+| Printed QR codes (shirts, sashes, plushies) | Every printed code points to **our own short link** (e.g. `<domain>/s/<code>`) that redirects. It never points straight at a page. Nothing is printed until the platform name and domain are settled (ALL-14). |
+| Accounts | **One sign-in and one user record** shared by every product, from day one. |
+| People across products | One shared `people` record per loved one, which can later link to that person's own user account (for example, Mom's gift list). Products don't keep their own copies. |
+
+| Kept reversible, with guardrails | Rule |
+|---|---|
+| Data | One Postgres schema per product (`concierge`, `lists`, `scan`) plus a small shared schema (`public`) for accounts and people. Products never read or write another product's schema. They call that product's functions instead. Splitting a product out means moving its schema. |
+| Code | One folder per product under `apps/web/modules/`, each exposing a small public `index.ts`. A lint rule (ESLint boundaries) blocks importing another product's internals. |
+| Web addresses | Each product under its own path (`/concierge`, `/lists`, `/scan`, short links at `/s`). If a product later needs its own deploy, Vercel can serve separately deployed apps under the same domain without users noticing. |
+| Money and sensitive data | Zinc keys, funding, addresses and social media content stay inside the concierge module and schema (D31). |
+
+**The MVP builds only the concierge.** The shared account and people records, the `concierge` module and schema, and the boundary rule are set up now; `lists` and `scan` are added when their work starts. Jim's list app moves into this repo when he and the owner are ready, keeping its git history.
+
+### 2.3 Repository layout
+
+**One repo for the whole platform** (T19). The repo is the existing `gift-concierge` repo under the gifts-af organization, with code added alongside `planning/` and `design/`. It is renamed to the platform name once that's chosen (ALL-14); GitHub redirects old links. It has one shared package, kept as small as the two apps allow (T10):
 
 ```
 gift-concierge/
 ├── apps/
-│   ├── web/            Next.js app: UI, API routes, webhooks, round engine
+│   ├── web/            Next.js app for the whole platform: UI, API routes, webhooks, round engine
+│   │   ├── modules/
+│   │   │   ├── concierge/   The MVP: rounds, ideas, orders, Zinc (public API in index.ts)
+│   │   │   ├── lists/       Added when the list app moves in
+│   │   │   └── scan/        Added when scan-to-gift starts
 │   │   └── lib/ai/     Prompts, schemas, AI calls, eval fixtures
 │   └── extension/      Chrome extension
 ├── packages/
@@ -106,7 +129,7 @@ Tooling: pnpm workspaces, Vitest for tests, ESLint and Prettier, and GitHub Acti
 
 ## 3. Data model
 
-All tables have `id uuid`, `created_at`, and `updated_at`. User-owned tables have `user_id` with RLS: `user_id = auth.uid()`.
+All tables have `id uuid`, `created_at`, and `updated_at`. Accounts (`profiles`) and `people` are shared by every product and live in `public`. The rest belong to the concierge and live in the `concierge` schema (§2.2, T19). User-owned tables have `user_id` with RLS: `user_id = auth.uid()`.
 
 | Table | Key fields | Notes |
 |---|---|---|
@@ -376,12 +399,12 @@ Each wave can start once the waves before it have the dependencies it lists. Wit
 ### Wave 1: Foundations and spikes (7 tickets in parallel)
 | ID | Ticket | Depends on |
 |---|---|---|
-| W1-1 | Monorepo scaffold and CI (pnpm workspaces, Next.js shell, `packages/core`, `supabase/` folder, lint, typecheck, tests, GitHub Actions, branch protection) | — |
+| W1-1 | Monorepo scaffold and CI (pnpm workspaces, Next.js shell, `packages/core`, `supabase/` folder, lint, typecheck, tests, GitHub Actions, branch protection), plus the platform guardrails (§2.2, T19): `apps/web/modules/concierge` with a public `index.ts`, the ESLint boundary rule, and `/concierge` as the product path | — |
 | W1-6 | Platform provisioning and environments: Vercel project and previews, Supabase dev and prod with `pg_cron` and `pg_net`, the inactivity-pause check, AI Gateway with Vercel billing and cap, domain and DNS, env and secrets conventions, Hobby limits check, Jim's access to every service | — |
 | W1-2 | Checkout spike (Zinc) | — |
 | W1-3 | AI spike (extraction, ideas, cost) | — |
 | W1-4 | Email spike (send and inbound) | — |
-| W1-5 | Database schema v1: migrations in `supabase/`, RLS, generated types in `core`, plus `packages/core` holiday, deadline, and budget math with tests. Order, payment, and inbound fields are left as placeholders and finalized after W1-2 and W1-4. | W1-6 for applying to hosted `dev` (it can start immediately in a branch against local Supabase) |
+| W1-5 | Database schema v1: migrations in `supabase/`, a `concierge` schema for the product's tables plus shared accounts and `people` in `public` (§2.2, T19), RLS, generated types in `core`, plus `packages/core` holiday, deadline, and budget math with tests. Order, payment, and inbound fields are left as placeholders and finalized after W1-2 and W1-4. | W1-6 for applying to hosted `dev` (it can start immediately in a branch against local Supabase) |
 | W1-7 | Look and feel: UI kit (Tailwind plus shadcn/ui, shared with the extension), a style guide as tokens, and clickable phone-first mock-ups of the approval, profile, home, extension popup and approval email screens, signed off by the owner and Jim. Written up in `design/ui.md` (T15). | — |
 
 ### Wave 2: Core app and capture plumbing

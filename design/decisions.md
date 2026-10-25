@@ -26,3 +26,9 @@ Running record of technical design decisions. Product decisions are in `../plann
 | T13 | **Inbound email quick capture stays in the MVP** (W4-3), including the "Who is this about?" reply. | Owner |
 | T14 | **Simpler round statuses: 9 instead of 11.** `purchasing` is dropped, because the `orders` table already tracks each order's progress and approval goes straight to `ordered`. `reaction_pending` is merged into `delivered`. §5 shows one main path plus three side statuses. | Owner, on Claude's recommendation |
 | T15 | **Look and feel is settled before screens are built.** A new Wave 1 ticket (W1-7, ALL-41) picks the UI kit (Tailwind plus shadcn/ui by default, shared with the extension), defines a style guide as tokens, and produces clickable mock-ups of the key screens for the owner and Jim to sign off. W2-1 and the other screen tickets depend on it. | Owner, on Claude's recommendation |
+
+## 2026-10-25
+
+| # | Decision | Source |
+|---|---|---|
+| T19 | **One app, one account, one repo for the whole platform, built to split later.** Scan-to-gift, gift lists and the concierge always feel like one app to users: a progression from quick one-off use to the deep concierge. One Next.js app, one sign-in and user record, one shared `people` record that can later link to a user's own account, and one repo (gifts-af, renamed to the platform name once chosen). **Guardrails against one-way doors:** a Postgres schema and a code module per product, with no reaching into another product's tables or internals (checked by lint); a path per product; the concierge's money and sensitive data stay inside it (D31); every printed QR code goes through our own short link, and nothing is printed until the name and domain are settled. Jim's list app moves into the repo when ready. Design §2.2. | Owner, on Claude's recommendation |

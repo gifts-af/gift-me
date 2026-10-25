@@ -111,7 +111,7 @@ One number per handoff: scans per item; scans that become a paid gift; scanners 
 
 ## 9. Open questions for the owner and Jim
 1. **One name** for the platform, or one per product? (GiftMe is taken, ALL-14.)
-2. **One app or two:** shared sign-in and account from the start, or join later?
-3. **Where the list app's code lives:** move it into the gifts-af GitHub organization?
+2. ~~**One app or two?**~~ **Decided 2026-10-25 (T19):** one app, one account, one repo from the start, built so a product can be split out later. See `design/technical-design.md` §2.2.
+3. ~~**Where the list app's code lives?**~~ **Decided 2026-10-25 (T19):** it moves into the gifts-af platform repo when Jim and the owner are ready, keeping its history. Nothing changes before its soft launch.
 4. **After the concierge MVP, what's first:** its public launch, or connecting it to lists?
 5. **Scan-to-gift timing:** it's the front door for go-to-market but last on the product roadmap. Should a small first version come right after the concierge MVP?
