@@ -1,6 +1,6 @@
 # Spike: AI capture extraction and gift ideas (W1-3, ALL-17)
 
-Date started: 2026-10-25. Status: **prompt v1–v3 tested on made-up fixtures.** Still open: screenshots (vision), a cheaper model, and resolving through Zinc (see [Still to do](#still-to-do)).
+Date started: 2026-10-25. Status: **done (core question answered).** Prompt v1–v3 tested on made-up fixtures. Follow-ups (screenshots, a cheaper model, resolving through Zinc, key rotation) are in **ALL-42**.
 
 ## Summary
 
@@ -75,10 +75,10 @@ Search results make up most of the brainstorm cost. Ways to lower it: allow 2 se
 4. **Captured facts must reach idea generation.** This is obvious from the design (§3.1), but the spike showed how much quality depends on it.
 5. **Cost (§7, §10):** brainstorm about $0.30, extraction about $0.01, rank about $0.03. Update the estimates.
 
-## Still to do
+## Still to do (moved to ALL-42)
 
 - [ ] **Screenshots (vision):** the fixtures are text only. Test extraction from a real screenshot, which is what the extension sends (§6.2).
 - [ ] **Cheaper model:** run v3 on Sonnet 5.5 and compare quality and cost (`node spikes/ai/run.mjs ideas anthropic/claude-sonnet-5.5`).
 - [ ] **Resolve through Zinc:** feed `product_search` into Zinc's search on the app account (T17). Needs a funded app Zinc account or a sandbox key. Sandbox search returns sample data only.
-- [ ] Update design §7 with real costs and the corrected model ID
+- [x] Update design §7 with real costs and the corrected model ID
 - [ ] Rotate the gateway key (it was pasted into a Claude session)
