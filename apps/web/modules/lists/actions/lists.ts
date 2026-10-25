@@ -1,7 +1,7 @@
 "use server";
 
-import { MAX_PRICE_CENTS } from "@/lib/format.js";
-import { LIST_ITEM_COLUMNS, rowToGift, UUID_PATTERN, type Gift } from "@/lib/lists";
+import { MAX_PRICE_CENTS } from "@/modules/lists/lib/format.js";
+import { LIST_ITEM_COLUMNS, rowToGift, UUID_PATTERN, type Gift } from "@/modules/lists/lib/lists";
 import { createClient } from "@/lib/supabase/server";
 
 const MAX_ITEMS = 500;

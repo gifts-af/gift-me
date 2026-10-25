@@ -1,10 +1,7 @@
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { GiftAppSkeleton } from "@/components/gifts/gift-app";
-import OwnerGate from "@/components/gifts/owner-gate";
-import SharedList from "@/components/gifts/shared-list";
+import { GiftAppSkeleton, OwnerGate, SharedList, getSharedList } from "@/modules/lists";
 import { SiteShell } from "@/components/site-shell";
-import { getSharedList } from "@/lib/lists";
 
 // Params, search params and the session cookie are all runtime data, so the
 // loader has to render inside <Suspense> under cacheComponents.

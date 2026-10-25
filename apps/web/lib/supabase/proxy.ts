@@ -50,6 +50,7 @@ export async function updateSession(request: NextRequest) {
 
   if (
     request.nextUrl.pathname !== "/" &&
+    request.nextUrl.pathname !== "/lists" &&
     !user &&
     !request.nextUrl.pathname.startsWith("/login") &&
     !request.nextUrl.pathname.startsWith("/share/") &&

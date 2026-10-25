@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { saveList } from '@/app/actions/lists'
+import { saveList } from '@/modules/lists/actions/lists'
 import AddGiftPanel from './add-gift-panel.jsx'
 import GiftList from './gift-list.jsx'
 import GiftSummary from './gift-summary.jsx'
@@ -71,7 +71,7 @@ export function AppHeader() {
   )
 }
 
-/** @param {{ initial: import('@/lib/lists').MyList | null }} props -- null for a guest */
+/** @param {{ initial: import('@/modules/lists/lib/lists').MyList | null }} props -- null for a guest */
 export default function GiftApp({ initial }) {
   const isGuest = initial === null
   const loadError = initial?.loadError ?? null

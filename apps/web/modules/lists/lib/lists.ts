@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 
-// The shape the gift components already work with (see components/gifts).
+// The shape the gift components already work with (see modules/lists/components).
 export type Gift = {
   id: string;
   name: string;

@@ -1,6 +1,6 @@
 "use server";
 
-import { UUID_PATTERN, type GiftClaim } from "@/lib/lists";
+import { UUID_PATTERN, type GiftClaim } from "@/modules/lists/lib/lists";
 import { createClient } from "@/lib/supabase/server";
 
 const MAX_NAME_LENGTH = 80;

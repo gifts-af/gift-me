@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { formatCents } from '@/lib/format.js'
+import { formatCents } from '@/modules/lists/lib/format.js'
 
 /**
  * `onView`, when given, intercepts the product link (the shared list asks

@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
-import { lookupAmazonProduct } from '@/lib/amazon.js'
-import { centsToInputValue, parsePriceToCents } from '@/lib/format.js'
+import { lookupAmazonProduct } from '@/modules/lists/lib/amazon.js'
+import { centsToInputValue, parsePriceToCents } from '@/modules/lists/lib/format.js'
 import LookupStatus from './lookup-status.jsx'
 
 const EMPTY_DRAFT = { name: '', price: '', imageUrl: '' }

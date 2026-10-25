@@ -2,7 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
-import { claimGift, unclaimGift } from '@/app/actions/claims'
+import { claimGift, unclaimGift } from '@/modules/lists/actions/claims'
 import ClaimDialog from './claim-dialog.jsx'
 import { AppHeader } from './gift-app.jsx'
 import GiftList from './gift-list.jsx'
@@ -13,7 +13,7 @@ import './gifts.css'
 const OWNER_REASON = 'You can’t claim gifts on your own list.'
 
 /**
- * @param {{ list: import('@/lib/lists').SharedList, token: string }} props
+ * @param {{ list: import('@/modules/lists/lib/lists').SharedList, token: string }} props
  */
 export default function SharedList({ list, token }) {
   const router = useRouter()

@@ -1,4 +1,4 @@
-import { formatCents } from '@/lib/format.js'
+import { formatCents } from '@/modules/lists/lib/format.js'
 
 export default function GiftSummary({ gifts }) {
   // Derived at render. Summing integer cents keeps the total exact.

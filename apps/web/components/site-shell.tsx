@@ -5,7 +5,7 @@ import { hasEnvVars } from "@/lib/utils";
 import Link from "next/link";
 import { Suspense } from "react";
 
-// Nav + footer shared by the home page and the /protected area.
+// Nav + footer shared by every page.
 export function SiteShell({ children }: { children: React.ReactNode }) {
   return (
     <main className="min-h-screen flex flex-col items-center">
