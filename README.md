@@ -6,7 +6,7 @@ An app that keeps track of friends and family, what they like, and the dates tha
 
 | Folder | Purpose | Status |
 |---|---|---|
-| `planning/` | Product discovery: [PRD](planning/PRD.md) (approved 2026-10-17), [decisions log](planning/decisions.md), [research](planning/research/) | Complete |
+| `planning/` | Product discovery: [PRD](planning/PRD.md) (approved 2026-10-17), [decisions log](planning/decisions.md), [research](planning/research/), [longer-term ideas](planning/ideas.md) | Complete |
 | `design/` | [Technical design](design/technical-design.md) (approved 2026-10-17), [decisions log](design/decisions.md). Spike write-ups go in `design/spikes/`, look and feel in `design/ui.md`, and ticket build plans in `design/plans/`. | Complete |
 | `.claude/` | Shared Claude Code settings (turns on the Superpowers plugin) | Done |
 | `apps/`, `packages/`, `supabase/` | Implementation, tracked in Linear by wave ([layout](design/technical-design.md#22-repository-layout)) | Next |
