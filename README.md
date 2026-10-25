@@ -49,6 +49,18 @@ Write new migrations with `pnpm supabase migration new <name>` and test them loc
 
 **Deploys:** Vercel project `gift-me` (team GiftMe) builds `apps/web` from this repo. Every push to `main` deploys to production; every other branch gets a preview URL.
 
+## Environments
+
+| Environment | Database | Used by |
+|---|---|---|
+| Local | Supabase in Docker (`pnpm supabase start`) | Your machine, when you point `apps/web` at it |
+| `dev` | Supabase project `gift-me-dev` (ref `bcemtqvdbrrgiipzggyw`) | `pnpm dev` with pulled Vercel variables, and every PR preview |
+| `prod` | Supabase project `gift-me` (ref `pegtrucfuaaufqvsavpb`), GiftsAF's original project with real users | Production (`main`) only |
+
+- **How Vercel picks the database:** the Supabase integration provides `NEXT_PUBLIC_GIFT_SUPABASE_*` (prod) to every environment. Development and Preview also have `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` set to `dev`, and `apps/web/lib/supabase/env.ts` reads those first. **[Verify]** In Vercel → Storage → gift-me, the store should be connected to Production only, so prod's server-side keys stay off developer machines (an admin step in the dashboard).
+- **Migrations go local → `dev` → `prod`.** Sign in once with `pnpm supabase login` (in a real terminal; it opens a browser, sign in as allensforever711). Then `pnpm supabase link --project-ref <ref>` and `pnpm supabase db push --linked`. Check what's linked with `pnpm supabase migration list --linked` before pushing. No database password is needed.
+- `pg_cron` and `pg_net` are turned on in `dev` but not yet in `prod`. The round engine (ALL-28) should turn them on everywhere with a migration (`create extension if not exists …`).
+
 Where new docs go, how to write them, and when to push straight to `main` versus open a PR are in [CLAUDE.md](CLAUDE.md). Claude reads it automatically, and it's written for people too.
 
 ## Shared material
