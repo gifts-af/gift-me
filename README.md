@@ -8,7 +8,13 @@ An app that keeps track of friends and family, what they like, and the dates tha
 |---|---|---|
 | `planning/` | Product discovery: [PRD](planning/PRD.md) (approved 2026-10-17), [decisions log](planning/decisions.md), [research](planning/research/) | Complete |
 | `design/` | [Technical design](design/technical-design.md) (approved 2026-10-17), [decisions log](design/decisions.md). Spike write-ups go in `design/spikes/`, look and feel in `design/ui.md`, and ticket build plans in `design/plans/`. | Complete |
+| `.claude/` | Shared Claude Code settings (turns on the Superpowers plugin) | Done |
 | `apps/`, `packages/`, `supabase/` | Implementation, tracked in Linear by wave ([layout](design/technical-design.md#22-repository-layout)) | Next |
+
+## Getting started
+
+1. Install [Claude Code](https://claude.com/claude-code), clone this repo, and open Claude Code in it.
+2. Trust the folder when asked, and accept the prompt to install the **Superpowers** plugin. It's required for all development here (`.claude/settings.json` turns it on). If no prompt appears, run `/plugin install superpowers@claude-plugins-official` and restart Claude Code.
 
 Where new docs go, how to write them, and when to push straight to `main` versus open a PR are in [CLAUDE.md](CLAUDE.md). Claude reads it automatically, and it's written for people too.
 

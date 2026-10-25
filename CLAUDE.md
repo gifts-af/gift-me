@@ -2,6 +2,24 @@
 
 Two people (the owner and Jim) build this with Claude. Everything written here should be easy for a person to pick up cold: they should be able to find a doc in one place, read it top to bottom, and understand what was decided and why.
 
+## Superpowers is required
+
+All development in this repo uses the **Superpowers** plugin. `.claude/settings.json` turns it on for everyone, and Claude Code offers to install it the first time the repo is opened and trusted.
+
+- **Before any work:** if Superpowers skills (`superpowers:*`) aren't available in the session, stop and ask the person to run `/plugin install superpowers@claude-plugins-official`, then restart Claude Code. Don't start building without it.
+- **Which skill when:**
+
+| Situation | Skill |
+|---|---|
+| New feature, screen or change in behavior | `brainstorming` first, then `writing-plans` |
+| Writing code | `test-driven-development` |
+| A bug or failing test | `systematic-debugging` |
+| Before saying something is done | `verification-before-completion` |
+| Before merging a PR | `requesting-code-review` |
+| Wrapping up a ticket branch | `finishing-a-development-branch` |
+
+- Superpowers' own folder defaults don't apply here. Plans and specs follow the layout below.
+
 ## Where docs go
 
 Use this layout. It overrides any plugin or skill default (for example, Superpowers saves to `docs/superpowers/specs/` and `docs/superpowers/plans/`; don't use those folders here).
