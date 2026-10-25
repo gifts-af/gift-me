@@ -72,7 +72,7 @@ flowchart LR
 | Auth | **Supabase Auth, Google provider** | Google Contacts read access is requested separately, at import time (§6.1). The extension authenticates with the user's Supabase session (§6.2). |
 | File storage | **Supabase Storage** (private bucket) | Capture screenshots. Deleting a person deletes their files. |
 | Background jobs | **Supabase `pg_cron`** calls the app's **round engine** (a protected API route) **once a day at 8 a.m. Eastern**, using `pg_net` | The schedule lives next to the data it checks. Vercel Cron and Workflow aren't used. All the work runs in the Next.js app, so there's one runtime and one deploy, with no Supabase Edge Functions (T8). See §5.1. |
-| AI | Any model through **Vercel AI Gateway** with the **AI SDK**. Default today: **Claude Opus 5.5** (`anthropic/claude-opus-5-5`) | The gateway gives one key, one bill and one spending cap across providers, plus fallbacks. Usage is **billed through the Vercel account**, so there's no separate AI provider account (T11). The model for each task is set in one config file (§7). **[Verify in W1-3]** that the provider's web search tool works through the gateway. Fallback: connect a provider API key to the gateway. |
+| AI | Any model through **Vercel AI Gateway** with the **AI SDK**. Default today: **Claude Opus 5.5** (`anthropic/claude-opus-5.5`; take IDs from the gateway's `/v1/models`) | The gateway gives one key, one bill and one spending cap across providers, plus fallbacks. Usage is **billed through the Vercel account**, so there's no separate AI provider account (T11). The model for each task is set in one config file (§7). Web search through the gateway is **confirmed in W1-3** (Anthropic's native tool; the gateway's Perplexity search is a provider-neutral alternative). Hobby plan works; Claude models need **paid** gateway credit (the free credit excludes them). |
 | Checkout | **Zinc** (lead candidate) | `max_price` on every order, tracking webhooks, delivery estimates. **The payment model is spiked in W1-2.** |
 | Email | Resend or Postmark **[decided in W1-4]** | Needs sending and inbound-to-webhook. **[Verify]** inbound support and free-tier limits. |
 | Push notifications | **Decision deferred (T12).** If added: standard Web Push (VAPID) using the `web-push` package | Works on Android, and on iOS once the PWA is added to the home screen. Email covers every message without it. The notification service sends through a channel list, so push plugs in later without changing callers. Estimated 1–2 days of work, in its own ticket (W5-4). |
@@ -326,18 +326,20 @@ flowchart LR
 
 **Keeping the provider replaceable (T11):**
 - All AI calls go through `apps/web/lib/ai`, using the AI SDK's provider-neutral functions (`generateObject`, `generateText`) and the AI Gateway. No other code calls a model directly.
-- Each task's model and settings live in one config map, for example `{ extraction: "anthropic/claude-opus-5-5", ... }`. Changing a model is a one-line config change, re-checked against the eval fixtures.
+- Each task's model and settings live in one config map, for example `{ extraction: "anthropic/claude-opus-5.5", ... }`. Changing a model is a one-line config change, re-checked against the eval fixtures.
 - Prompts are plain instructions plus a schema, with no vendor-specific prompt tricks.
 - **The one vendor-specific feature is web search** during brainstorming. It sits behind a small `searchWeb` step, so a different provider's search tool, or a search API, can replace it.
 
-| Task | Default model and settings (today) | Output | Estimated cost |
+| Task | Default model and settings (today) | Output | Cost (measured in W1-3 unless marked) |
 |---|---|---|---|
-| Capture extraction | Claude Opus 5.5, effort `low`, vision | Structured facts (schema-validated) | ~$0.02 each |
-| Inbound note matching and extraction | Claude Opus 5.5, effort `low` | Person match plus facts | ~$0.01 each |
-| Idea brainstorm | Claude Opus 5.5, effort `medium`, web search | 10 candidates (schema) | ~$0.10 |
-| Idea ranking and reasons | Claude Opus 5.5, effort `low` | Ranked list (schema) | ~$0.03 |
+| Capture extraction | Claude Opus 5.5, effort `low`, vision | Structured facts (schema-validated) | ~$0.01 each (text; screenshots not yet measured) |
+| Inbound note matching and extraction | Claude Opus 5.5, effort `low` | Person match plus facts | ~$0.01 each (estimate) |
+| Idea brainstorm | Claude Opus 5.5, web search (up to 3 searches) | 8 candidates with `product_search` terms, no URLs (schema) | ~$0.25–0.45 (mostly search results read) |
+| Idea ranking and reasons | Claude Opus 5.5, effort `low` | Ranked list (schema) | ~$0.02–0.04 |
 
-Cheaper models are worth trying per task once the fixtures exist. Extraction and ranking are the likely candidates.
+**A full round costs about $0.30–0.45** (W1-3, `spikes/ai.md`). Cheaper models are worth trying per task now that fixtures exist: Sonnet 5.5 is half the price, and brainstorm is the expensive step.
+
+**Prompt rules learned in W1-3** (prompt v3): stated wants come first (use the over-budget slot if needed); a worn-out owned item is a replacement need; check every idea against owned items; stock items only, no personalization; prefer Amazon, Walmart, Target and Best Buy; ship-to isn't where hobbies happen. Captured facts must reach idea generation: without them, ideas are generic.
 
 - All outputs use structured outputs or schemas. Inputs and outputs are logged, and inputs are kept so prompts can be improved later.
 - **Cost control:** the AI Gateway budget is capped at **$60 a month**, with an alert email to the owner at 50% and 80% of the cap **[Claude's call]**. App-side limits cap the number of retries per round. If the cap is hit, rounds already waiting on ideas move to `needs_attention` and the owner is alerted. They never fail quietly, because a stalled round risks a late gift.
@@ -367,7 +369,7 @@ Cheaper models are worth trying per task once the fixtures exist. Extraction and
 |---|---|
 | Vercel Hobby, or Pro if needed | $0 / $20 |
 | Supabase free, or Pro if needed | $0 / $25 |
-| AI model usage through AI Gateway, billed by Vercel | ~$10–15 (capped at $60) |
+| AI model usage through AI Gateway, billed by Vercel (prepaid credit) | ~$5–15 (about a dozen rounds a month at ~$0.40, plus captures at ~$0.01; capped at $60) |
 | Email service | $0 (free tier) |
 | Zinc | ~$1 per order, plus any platform minimum **[Verify in W1-2]** |
 | Domain | ~$1–2 |

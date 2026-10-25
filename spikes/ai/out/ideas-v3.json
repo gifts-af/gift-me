@@ -1,0 +1,313 @@
+{
+  "model": "anthropic/claude-opus-5.5",
+  "results": [
+    {
+      "person": "dad",
+      "brainstorm": {
+        "ideas": [
+          {
+            "title": "Kingfisher Blackfoot true rotary fly-tying vise (in-budget replacement for his worn-out vise)",
+            "product_search": "Kingfisher Fly Fishing Blackfoot True Rotary Fly Tying Vise",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 65,
+            "fits_facts": [
+              "wants: needs a new rotary fly-tying vise",
+              "constraint: jaws must hold size 18 and smaller hooks",
+              "owns: old fly-tying vise (about 20 years old, worn out)",
+              "interest: fly tying"
+            ],
+            "why": "This replaces the 20-year-old vise he has worn out. It's a true 360° rotary vise with an adjustable tension knob. The hardened steel jaws are rated for hooks from size 28 to 2/0, so a size 18–22 Adams is no problem. Buy the vise on its own, not the kit, because he already has tools. Check the price before you order. It should come in under $75."
+          },
+          {
+            "title": "Kingfisher Clarkfork true rotary vise (the one over-budget pick, an upgrade)",
+            "product_search": "Kingfisher Fly Fishing Clarkfork True Rotary Fly Tying Vise, Gold",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 86,
+            "fits_facts": [
+              "wants: needs a new rotary fly-tying vise",
+              "constraint: jaws must hold size 18 and smaller hooks",
+              "owns: old fly-tying vise, worn out",
+              "interest: ties Adams dry flies"
+            ],
+            "why": "This uses the one allowed over-budget slot. It's a smoother rotary vise with two ball bearings, hardened tool-steel jaws rated for size 26 to 4/0, and a weighted non-slip base. Only buy it if the US Amazon price is $86 or less with shipping. Prices I found were higher, around $110 CAD on Amazon.ca. If it costs more, get the Blackfoot instead."
+          },
+          {
+            "title": "Brightech LightView Pro LED magnifying desk lamp",
+            "product_search": "Brightech LightView Pro LED Magnifying Desk Lamp clamp",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 50,
+            "fits_facts": [
+              "constraint: ties on size 18 and smaller hooks",
+              "interest: ties Adams dry flies",
+              "age: 68",
+              "dislike: clutter"
+            ],
+            "why": "Wrapping hackle on a size 20 hook is hard on 68-year-old eyes. A clamp-on magnifier with bright LED light makes small Adams flies much easier to tie, and it clamps to the bench so it doesn't take up desk space."
+          },
+          {
+            "title": "Whiting Farms grizzly dry-fly hackle (100s pack, sized for small flies)",
+            "product_search": "Whiting Farms 100s Dry Fly Hackle Grizzly size 18",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 30,
+            "fits_facts": [
+              "interest: ties Adams dry flies",
+              "interest: fly tying",
+              "interest: dry fly fishing for trout"
+            ],
+            "why": "The Adams calls for grizzly and brown hackle mixed together. Whiting's pre-sized packs give him top-quality feathers in the small sizes he ties. It's one good material he'll actually use, not a bin of random stuff."
+          },
+          {
+            "title": "Tacky Original fly box",
+            "product_search": "Tacky Original Fly Box",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 32,
+            "fits_facts": [
+              "interest: fishing trips to the Upper Delaware River",
+              "interest: dry fly fishing for trout",
+              "dislike: clutter"
+            ],
+            "why": "It's a slim, sturdy box with silicone slots that hold small dry flies without crushing their hackle. That makes it a good way to carry the Adams he ties on Delaware trips while keeping his vest uncluttered."
+          },
+          {
+            "title": "Simms SolarFlex sun hoodie, men's L",
+            "product_search": "Simms SolarFlex Hoody men's Large",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 70,
+            "fits_facts": [
+              "size: shirt L",
+              "interest: fly fishing",
+              "interest: fishing trips to the Upper Delaware River"
+            ],
+            "why": "A light UPF sun hoodie is useful on long days wading the Upper Delaware for trout. It comes in his size, L. Check the color price first, since some colors cost more than $75."
+          },
+          {
+            "title": "Wall Control metal pegboard tool organizer kit",
+            "product_search": "Wall Control 30-WRK-400 Metal Pegboard Tool Organizer Kit",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 60,
+            "fits_facts": [
+              "interest: workshop wall storage and organization",
+              "owns: nearly every hand tool",
+              "dislike: clutter",
+              "interest: woodworking / home workshop"
+            ],
+            "why": "He already has the tools, so give him a better way to store them. Steel pegboard panels with hooks get his big hand-tool collection off the bench and onto the wall, which suits his interest in wall storage and his dislike of clutter."
+          },
+          {
+            "title": "Akro-Mils wall-mounted bin rack",
+            "product_search": "Akro-Mils 30230 Wall Mounted Storage Rack with Bins",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 45,
+            "fits_facts": [
+              "interest: workshop wall storage and organization",
+              "dislike: clutter",
+              "interest: woodworking / home workshop"
+            ],
+            "why": "Wall-mounted bins with open fronts keep screws, hardware and small shop supplies sorted and off the bench. They pair with the pegboard to finish organizing his workshop wall."
+          }
+        ],
+        "input": 70022,
+        "output": 4122,
+        "searches": 3,
+        "cost": 0.392528,
+        "secs": 48.545
+      },
+      "rank": {
+        "ranked": [
+          {
+            "title": "Kingfisher Blackfoot true rotary fly-tying vise",
+            "reason": "His 20-year-old vise is worn out, and this rotary replacement grips the size 18 and smaller hooks he ties his Adams on. Buy the vise alone, not the kit.",
+            "score_0_10": 9.5
+          },
+          {
+            "title": "Brightech LightView Pro LED magnifying desk lamp",
+            "reason": "He ties tiny Adams dry flies, and a bright magnifier makes size 18–20 hooks much easier on 68-year-old eyes.",
+            "score_0_10": 8
+          },
+          {
+            "title": "Wall Control metal pegboard tool organizer kit",
+            "reason": "He already owns nearly every hand tool and likes wall storage, so this moves his collection off the bench and cuts clutter.",
+            "score_0_10": 7.5
+          },
+          {
+            "title": "Tacky Original fly box",
+            "reason": "He fishes dry flies on the Upper Delaware, and this slim box holds his small Adams without crushing the hackle.",
+            "score_0_10": 7
+          }
+        ],
+        "dropped": [
+          {
+            "title": "Kingfisher Clarkfork true rotary vise",
+            "why": "At about $86 it is over the $75 budget, which includes shipping, and US pricing is unconfirmed. The Blackfoot already meets his needs."
+          },
+          {
+            "title": "Whiting Farms grizzly dry-fly hackle",
+            "why": "A longtime tier likely has his own preferred materials. Grizzly alone covers only part of an Adams, and he may already own the sizes he uses."
+          },
+          {
+            "title": "Simms SolarFlex sun hoodie, men's L",
+            "why": "It's a fairly generic apparel pick, and the price with shipping risks going over the budget depending on color."
+          },
+          {
+            "title": "Akro-Mils wall-mounted bin rack",
+            "why": "It overlaps with the pegboard pick, and plastic bins are a weaker, more generic gift."
+          }
+        ],
+        "tokens": 3523,
+        "cost": 0.02902,
+        "secs": 10.533
+      }
+    },
+    {
+      "person": "priya",
+      "brainstorm": {
+        "ideas": [
+          {
+            "title": "Onyx Coffee Lab Tropical Weather whole-bean coffee (10 oz)",
+            "product_search": "Onyx Coffee Lab Tropical Weather Whole Bean Coffee Blend 10 Ounce",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 24,
+            "fits_facts": [
+              "brand: Onyx Coffee Lab (captured)",
+              "interest: coffee: Ethiopian single-origin beans (captured)",
+              "interest: pour-over coffee (captured)",
+              "owns: coffee grinder (captured)",
+              "style: minimalist kitchen, keeps only items used weekly (captured)"
+            ],
+            "why": "This is from the roaster she already likes, and it's sold on Amazon. It's made from Ethiopian coffees and has berry, plum and honey notes, so it matches her taste. Beans get used up, so this replaces her current Onyx bag instead of duplicating anything. Strictly speaking it's a blend of two Ethiopian lots, not a single origin. Buy whole bean, since she grinds her own."
+          },
+          {
+            "title": "Maurten Gel 100 CAF 100 (box of 12)",
+            "product_search": "Maurten Gel 100 CAF 100 12-Pack",
+            "retailer_hint": "Amazon (or maurten.com at $52 if Amazon has no seller)",
+            "est_price_usd": 52,
+            "fits_facts": [
+              "interest: training for the Chicago Marathon (captured)",
+              "style: coffee-loving identity (handle 'runs on coffee') (captured)",
+              "diet: vegan"
+            ],
+            "why": "Fits her 'runs on coffee' handle: each gel has about as much caffeine as a cup of brewed coffee. Maurten says it's suitable for vegans. Gels get used up during long runs and races, so they won't add clutter."
+          },
+          {
+            "title": "Hario V60 02 paper filters (100 count)",
+            "product_search": "Hario V60 Paper Coffee Filters Size 02 White 100 count VCF-02-100W",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 9,
+            "fits_facts": [
+              "owns: Hario V60 pour-over dripper (captured)",
+              "interest: pour-over coffee (captured)",
+              "avoid: kitchen gadgets or extra mugs that add clutter (captured)"
+            ],
+            "why": "She uses filters every week with the V60 she already has, and they run out. It's a refill, not another gadget, so it fits her minimalist kitchen. Small enough to add to another gift."
+          },
+          {
+            "title": "Ciele GOCap Classic Athletics running cap",
+            "product_search": "Ciele GOCap Classic Athletics",
+            "retailer_hint": "cieleathletics.com (brand store; Amazon stock is patchy)",
+            "est_price_usd": 53,
+            "fits_facts": [
+              "interest: marathon running (captured)",
+              "style: minimalist",
+              "diet: vegan"
+            ],
+            "why": "A classic soft-brim running cap that's light, breathable and sun-protective. It's simple and well made, which suits her minimalist style. The brand store lists it at $40–45; with shipping to Illinois it should stay under $60. It's synthetic, so no animal materials."
+          },
+          {
+            "title": "Balega Hidden Comfort no-show running socks (3-pack)",
+            "product_search": "Balega Hidden Comfort No-Show Running Socks 3 Pair",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 40,
+            "fits_facts": [
+              "interest: running, training for a marathon (captured)",
+              "diet: vegan"
+            ],
+            "why": "Marathon training wears out socks fast, so these get used weekly. Good blister-resistant socks are something runners like having fresh pairs of. They're made from synthetic fibers, not wool."
+          },
+          {
+            "title": "FlipBelt Classic running belt",
+            "product_search": "FlipBelt Classic Running Belt",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 40,
+            "fits_facts": [
+              "interest: marathon running (captured)",
+              "style: minimalist"
+            ],
+            "why": "A slim tube belt with no buckle for carrying gels, keys and a phone on long runs and race day. It pairs naturally with the Maurten idea and is about as minimal as running gear gets."
+          },
+          {
+            "title": "goodr OG running sunglasses",
+            "product_search": "goodr OG Sunglasses polarized running",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 35,
+            "fits_facts": [
+              "interest: running, training for a marathon (captured)",
+              "style: minimalist"
+            ],
+            "why": "Light, non-slip, polarized sunglasses made for running, and cheap enough that she won't worry about losing them on long runs. Pick a plain black or neutral pair to suit her style."
+          },
+          {
+            "title": "TriggerPoint GRID foam roller (13 in)",
+            "product_search": "TriggerPoint GRID Foam Roller 13 inch Original",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 37,
+            "fits_facts": [
+              "interest: training for the Chicago Marathon (captured)",
+              "style: minimalist"
+            ],
+            "why": "Useful several times a week during heavy training and recovery. It's a compact recovery tool, not a kitchen gadget. Note: the capture said she was about 4 weeks from the race, but the Chicago Marathon is usually mid-October and may have just happened. If so, this suits her recovery and next training block, while the gels and belt are for her next race."
+          }
+        ],
+        "input": 52338,
+        "output": 4005,
+        "searches": 3,
+        "cost": 0.31945199999999996,
+        "secs": 43.612
+      },
+      "rank": {
+        "ranked": [
+          {
+            "title": "Onyx Coffee Lab Tropical Weather whole-bean coffee (10 oz)",
+            "reason": "She already drinks Onyx's Ethiopian beans, and this fruity Ethiopian blend from the same roaster gets used up instead of cluttering her kitchen.",
+            "score_0_10": 9
+          },
+          {
+            "title": "Ciele GOCap Classic Athletics running cap",
+            "reason": "She's training for the Chicago Marathon, and this light, plain, synthetic cap suits her minimalist style on long runs. Confirm the total with shipping stays under $60.",
+            "score_0_10": 7
+          },
+          {
+            "title": "Hario V60 02 paper filters (100 count)",
+            "reason": "She brews with a V60 every week and filters run out. Pair them with the Onyx beans (about $33 total) for a no-clutter coffee gift.",
+            "score_0_10": 6
+          },
+          {
+            "title": "Balega Hidden Comfort no-show running socks (3-pack)",
+            "reason": "Her marathon miles wear socks out fast, and fresh blister-resistant synthetic pairs get used every week.",
+            "score_0_10": 5
+          }
+        ],
+        "dropped": [
+          {
+            "title": "Maurten Gel 100 CAF 100 (box of 12)",
+            "why": "Race fuel is personal, and runners avoid trying new gels weeks before a marathon. The race may also have already happened."
+          },
+          {
+            "title": "FlipBelt Classic running belt",
+            "why": "It needs her waist size, and she may already have a carry setup she trusts."
+          },
+          {
+            "title": "goodr OG running sunglasses",
+            "why": "Style depends on personal taste, and she may already own running sunglasses."
+          },
+          {
+            "title": "TriggerPoint GRID foam roller (13 in)",
+            "why": "It's bulky for a minimalist, many runners already own one, and the gift feels generic."
+          }
+        ],
+        "tokens": 3591,
+        "cost": 0.029788,
+        "secs": 11.005
+      }
+    }
+  ]
+}

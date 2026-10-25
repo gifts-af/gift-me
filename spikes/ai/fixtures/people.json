@@ -1,0 +1,12 @@
+[
+  {"id": "dad", "name": "Dad", "relationship": "parent", "occasion": "birthday", "budget_cents": 7500, "recipient_state": "FL",
+   "facts": ["interest: fly fishing", "interest: woodworking", "dislike: clutter", "owns: has nearly every hand tool", "size: shirt L", "age: 68"]},
+  {"id": "maya", "name": "Maya", "relationship": "sibling", "occasion": "christmas", "budget_cents": 4000, "recipient_state": "GA",
+   "facts": ["interest: film photography (35mm)", "interest: houseplants", "style: cozy, vintage", "constraint: small college dorm room", "age: 21"]},
+  {"id": "june", "name": "Grandma June", "relationship": "grandparent", "occasion": "mothers_day", "budget_cents": 5000, "recipient_state": "OH",
+   "facts": ["interest: gardening", "interest: backyard birds", "lives in: assisted living apartment with a small patio", "avoid: anything that needs setup or an app", "age: 84"]},
+  {"id": "sam", "name": "Sam", "relationship": "in-law", "occasion": "birthday", "budget_cents": 10000, "recipient_state": "CO",
+   "facts": ["note: hard to shop for, buys what he wants himself", "interest: craft beer", "interest: golf (occasional)", "life: new dad, 4-month-old", "age: 35"]},
+  {"id": "priya", "name": "Priya", "relationship": "friend", "occasion": "birthday", "budget_cents": 6000, "recipient_state": "IL",
+   "facts": ["interest: specialty coffee, pour-over", "interest: running, training for a marathon", "style: minimalist", "diet: vegan", "age: 30"]}
+]
