@@ -96,7 +96,7 @@ Gift Concierge is one of three products: scan-to-gift, gift lists and the concie
 | Web addresses | Each product under its own path (`/concierge`, `/lists`, `/scan`, short links at `/s`). If a product later needs its own deploy, Vercel can serve separately deployed apps under the same domain without users noticing. |
 | Money and sensitive data | Zinc keys, funding, addresses and social media content stay inside the concierge module and schema (D31). |
 
-**The MVP builds only the concierge.** The shared account and people records, the `concierge` module and schema, and the boundary rule are set up now; `lists` and `scan` are added when their work starts. Jim's list app moves into this repo when he and the owner are ready, keeping its git history.
+**The MVP builds only the concierge.** The shared account and people records, the `concierge` module and schema, and the boundary rule are set up now; `lists` and `scan` are added when their work starts. Jim's list app ([gifts-af/GiftsAF](https://github.com/gifts-af/GiftsAF), moved into the organization 2026-10-25) moves into this repo after its soft launch, keeping its git history. It uses the same stack (Next.js App Router, Supabase, Vercel, shadcn/ui, Vitest), so it may become the starting point of `apps/web` **[to decide with Jim]**.
 
 ### 2.3 Repository layout
 
