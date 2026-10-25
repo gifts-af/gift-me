@@ -1,6 +1,6 @@
-# Gift Concierge (working name)
+# Gifts AF platform (working name)
 
-An app that keeps track of friends and family, what they like, and the dates that matter. It picks gifts for those dates and buys them, with as much or as little automation as the user wants and safeguards so nothing gets purchased without time to approve.
+One app for three products (T19): **gift lists** (live, formerly the GiftsAF repo), **Gift Concierge** (being built) and **scan-to-gift** (later). Gift Concierge is an app that keeps track of friends and family, what they like, and the dates that matter. It picks gifts for those dates and buys them, with as much or as little automation as the user wants and safeguards so nothing gets purchased without time to approve.
 
 ## Workspace layout
 
@@ -9,12 +9,18 @@ An app that keeps track of friends and family, what they like, and the dates tha
 | `planning/` | Product discovery: [PRD](planning/PRD.md) (approved 2026-10-17), [decisions log](planning/decisions.md), [research](planning/research/), [platform strategy](planning/strategy.md) (roadmap and go-to-market), [longer-term ideas](planning/ideas.md) | Complete |
 | `design/` | [Technical design](design/technical-design.md) (approved 2026-10-17), [decisions log](design/decisions.md). Spike write-ups go in `design/spikes/`, look and feel in `design/ui.md`, and ticket build plans in `design/plans/`. | Complete |
 | `.claude/` | Shared Claude Code settings (turns on the Superpowers plugin) | Done |
-| `apps/`, `packages/`, `supabase/` | Implementation, tracked in Linear by wave ([layout](design/technical-design.md#22-repository-layout)) | Next |
+| `apps/web/` | The one web app (Next.js). Products live in `modules/lists` and `modules/concierge`; see its [README](apps/web/README.md) | Lists live; concierge from Wave 2 |
+| `apps/extension/` | Chrome capture extension | W2-4 |
+| `packages/core/` | Pure shared logic (dates, deadlines, budgets) and database types | W1-5 |
+| `supabase/` | Database migrations | Lists tables today |
+| `spikes/` | Throwaway Wave 1 experiments (Zinc, AI) | Reference only |
 
 ## Getting started
 
 1. Install [Claude Code](https://claude.com/claude-code), clone this repo, and open Claude Code in it.
 2. Trust the folder when asked, and accept the prompt to install the **Superpowers** plugin. It's required for all development here (`.claude/settings.json` turns it on). If no prompt appears, run `/plugin install superpowers@claude-plugins-official` and restart Claude Code.
+
+**Running the code:** Node 22+ and pnpm (`npm install -g pnpm`). From the repo root: `pnpm install`, then follow [apps/web/README.md](apps/web/README.md) to link Vercel and pull the environment variables, then `pnpm dev`. Before a PR, `pnpm lint && pnpm typecheck && pnpm test && pnpm build` (CI runs the same).
 
 Where new docs go, how to write them, and when to push straight to `main` versus open a PR are in [CLAUDE.md](CLAUDE.md). Claude reads it automatically, and it's written for people too.
 

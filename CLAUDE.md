@@ -48,6 +48,12 @@ Use this layout. It overrides any plugin or skill default (for example, Superpow
 - Mark open items so they're easy to scan: **[Verify]** for facts to check, **[Claude's call]** for choices the owner hasn't confirmed.
 - Link to the source (ticket, doc section, vendor page) instead of repeating it.
 
+## Code
+
+- **One app, products as modules (T19, T20):** `apps/web/modules/<product>/` with a public `index.ts`. Import another product only through its `index.ts`; lint fails otherwise. Shared code lives in `apps/web/components`, `apps/web/lib` and `packages/core`.
+- **Next.js 16 has breaking changes:** read `apps/web/AGENTS.md`, and check `apps/web/node_modules/next/dist/docs/` before writing Next-specific code.
+- **Before a PR:** `pnpm lint && pnpm typecheck && pnpm test && pnpm build` from the repo root. CI runs the same.
+
 ## Git
 
 - **Code:** a branch named after the Linear ticket, then a PR. CI must pass.
