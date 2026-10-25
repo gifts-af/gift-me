@@ -1,13 +1,16 @@
-# GiftMe.com
+# Web app (`apps/web`)
 
-A proof-of-concept gift wishlist. Build a list of gifts you'd actually like to receive, adding each
-one either by hand or by pasting an Amazon product link.
+The one web app for the whole platform (T19, T20): gift lists today (`modules/lists`, formerly the
+GiftsAF repo), Gift Concierge next (`modules/concierge`). Build a list of gifts you'd actually like
+to receive, adding each one either by hand or by pasting an Amazon product link.
 
 Built with [Next.js](https://nextjs.org) (App Router) + React 19, TypeScript and Tailwind,
 from Supabase's [`with-supabase`](https://github.com/vercel/next.js/tree/canary/examples/with-supabase)
 template, which provides cookie-based auth via [`@supabase/ssr`](https://supabase.com/docs/guides/auth/server-side/nextjs).
 
 ## Getting started
+
+Run these from `apps/web` unless noted. Install dependencies once from the repo root with `pnpm install`.
 
 1. **Link the Vercel project** (once; `.vercel/` is gitignored):
 
@@ -38,14 +41,13 @@ template, which provides cookie-based auth via [`@supabase/ssr`](https://supabas
    See `.env.example`. Both keys are public, limited by Row Level Security. Never give the
    service-role key a `NEXT_PUBLIC_` prefix.
 
-3. **Apply the database migrations** in `supabase/migrations/`, oldest first, with
+3. **Apply the database migrations** in the repo root's `supabase/migrations/`, oldest first, with
    `supabase db push` or by pasting each file into the Supabase SQL editor.
 
 4. **Run it:**
 
    ```bash
-   npm install
-   npm run dev
+   pnpm dev        # from the repo root, or `pnpm dev` here
    ```
 
    The dev server runs at http://localhost:3000.
@@ -57,11 +59,11 @@ template, which provides cookie-based auth via [`@supabase/ssr`](https://supabas
 | `/auth/sign-up`, `/auth/login` | Email + password forms |
 | `/auth/confirm` | Handles the link in confirmation / reset emails |
 | `/auth/forgot-password`, `/auth/update-password` | Password reset |
-| `/protected` | Example signed-in-only page; shows the user's claims |
+| `/lists` | The gift list (`/` redirects here) |
 | `/share/{token}` | Shared list, open to anyone with the link; visitors can claim gifts |
 
 `proxy.ts` refreshes the session cookie on every request and redirects signed-out visitors
-to `/auth/login` for any route other than `/`, `/auth/*` and `/share/*`. The gift list on `/`
+to `/auth/login` for any route other than `/`, `/lists`, `/auth/*` and `/share/*`. The gift list on `/lists`
 works signed in or out.
 
 In Supabase → Authentication → URL Configuration, set the Site URL to the Vercel production
@@ -128,20 +130,28 @@ you see it and can clear the field first.
 
 ```
 app/layout.tsx                   Root layout, fonts, theme provider
-app/page.tsx                     Home: the gift list
+app/page.tsx                     Redirects to /lists (no platform home page yet)
+app/lists/page.tsx               The gift list
+app/share/[token]/page.tsx       Public share link (unchanged URL)
 app/auth/*                       Sign up, login, confirm, password reset
-app/protected/*                  Example signed-in-only page
 proxy.ts                         Session refresh + auth redirects
 components/site-shell.tsx        Nav (auth state) and footer (theme switcher)
-components/gifts/gift-app.jsx    Client root of the gift list
-components/gifts/*.jsx           Add panel, lookup status, list, card, summary
-components/gifts/gifts.css       Gift list styles, scoped under .giftme
-components/ui/*                  shadcn/ui primitives used by the auth forms
-lib/supabase/*                   Browser, server and proxy Supabase clients + env names
-lib/amazon.js                    URL parsing and product lookup (the swap point)
-lib/fixtures.js                  Demo ASIN catalog
-lib/format.js                    Price parsing and currency formatting
+components/ui/*                  shadcn/ui primitives (shared)
+lib/supabase/*                   Browser, server and proxy Supabase clients + env names (shared)
+modules/lists/index.ts           The lists product's public API: import only this from outside
+modules/lists/components/*.jsx   Gift app, add panel, list, card, summary, share, claim
+modules/lists/components/gifts.css  Gift list styles, scoped under .giftme
+modules/lists/actions/*          Server actions: save list, claim and unclaim
+modules/lists/lib/amazon.js      URL parsing and product lookup (the swap point)
+modules/lists/lib/fixtures.js    Demo ASIN catalog
+modules/lists/lib/format.js      Price parsing and currency formatting
+modules/lists/lib/lists.ts       List queries and types
+modules/concierge/index.ts       Gift Concierge (empty until Wave 2)
 ```
+
+**Product boundaries:** code outside `modules/<product>/` imports that product only through its
+`index.ts`. ESLint (`boundaries/entry-point`) fails on anything else, and `test/boundaries.test.ts`
+checks the rule itself.
 
 Prices are held as integer cents throughout, so the list total is exact. The gift list
 components are still plain JSX from the Vite prototype; TypeScript allows them via `allowJs`.
@@ -150,7 +160,9 @@ components are still plain JSX from the Vite prototype; TypeScript allows them v
 
 | Command | Description |
 | --- | --- |
-| `npm run dev` | Start the dev server |
-| `npm run build` | Build for production |
-| `npm start` | Serve the production build |
-| `npm run lint` | Lint with ESLint |
+| `pnpm dev` | Start the dev server |
+| `pnpm build` | Build for production |
+| `pnpm start` | Serve the production build |
+| `pnpm lint` | Lint with ESLint, including the product boundary rule |
+| `pnpm typecheck` | Generate Next's route types, then run `tsc` |
+| `pnpm test` | Run the Vitest tests once (`pnpm test:watch` to watch) |
