@@ -41,8 +41,9 @@ Run these from `apps/web` unless noted. Install dependencies once from the repo 
    See `.env.example`. Both keys are public, limited by Row Level Security. Never give the
    service-role key a `NEXT_PUBLIC_` prefix.
 
-3. **Apply the database migrations** in the repo root's `supabase/migrations/`, oldest first, with
-   `supabase db push` or by pasting each file into the Supabase SQL editor.
+3. **Apply the database migrations** in the repo root's `supabase/migrations/`. Locally,
+   `pnpm supabase start` applies them (see the root README, Local development). For a hosted
+   project, use `pnpm supabase db push`.
 
 4. **Run it:**
 
