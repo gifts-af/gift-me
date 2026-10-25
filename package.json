@@ -6,10 +6,14 @@
     "node": ">=22"
   },
   "scripts": {
+    "dev:check": "node scripts/dev-check.mjs",
     "dev": "pnpm --filter @gifts-af/web dev",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test"
+  },
+  "devDependencies": {
+    "supabase": "^2.122.0"
   }
 }
