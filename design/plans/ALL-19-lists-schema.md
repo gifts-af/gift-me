@@ -65,6 +65,10 @@
 
 ### Task 4: Rollout (with the owner)
 
-- [ ] The owner runs `! pnpm supabase login` as allensforever711.
-- [ ] **`dev`:** expose `concierge` and `lists` in Data API settings, then `supabase link --project-ref bcemtqvdbrrgiipzggyw`, check `migration list`, and `db push`. Make test lists in a PR preview (sign up, add gifts, share, claim) before and after the push, and check they survive.
-- [ ] **`prod`:** with the owner's go, at a quiet time: expose `concierge` and `lists`, merge the PR (Vercel deploys), then link `pegtrucfuaaufqvsavpb`, check `migration list`, and `db push` right away. Check the 3 users' lists still load and the share links work.
+> **Order matters:** expose a schema in Data API settings only **after** `migration list` shows the migration that creates it as applied. Exposing a schema that doesn't exist yet makes the whole Data API return 503 (tested locally on 2026-10-25).
+
+- [ ] The owner runs `pnpm supabase login` as allensforever711, in a real terminal (the CLI can't log in from Claude Code's `!` prompt).
+- [ ] **`dev`:** make test lists in the current `main` preview (sign up, add gifts, share, claim). Then `supabase link --project-ref bcemtqvdbrrgiipzggyw`, check `migration list`, run `db push`, confirm `20261025140000` is applied, and expose `concierge` and `lists`. Open this PR's preview and check that the test lists, share links and claims survived.
+- [ ] **`prod`, before merging:** `supabase link --project-ref pegtrucfuaaufqvsavpb`, `migration list` (only the five ALL-19 migrations pending), `db push --dry-run`. Run a read-only check that no function made outside the migrations names the old tables: `select proname from pg_proc where prosrc ilike '%public.list%' or prosrc ilike '%public.gift_claims%'` should return only the five list functions.
+- [ ] **`prod`, with the owner's go:** merge the PR and wait for Vercel's production deploy to be Ready. Then `db push`, confirm `20261025140000` is applied, and expose `concierge` and `lists`. If the API still errors after a minute, run `notify pgrst, 'reload config'; notify pgrst, 'reload schema';` in the SQL editor. Check one share link while signed out and one owner's list while signed in. The list app is down from the deploy until the exposure, which is fine because production isn't live yet (owner, 2026-10-25).
+- [ ] **If something goes wrong on `prod`:** if the push fails before `20261025140000` is applied, use Vercel's instant rollback to the previous deploy; the old code still works against `public`. Don't expose `lists` while it doesn't exist. If it fails after, fix forward with a new migration. Moving the three tables and five functions back to `public` is the last resort.

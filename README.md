@@ -47,7 +47,7 @@ pnpm db:types          # regenerate packages/core/src/database.types.ts after ch
 
 Write new migrations with `pnpm supabase migration new <name>` and test them locally before they go to `dev` or `prod`. Local settings live in `supabase/config.toml`. Every new user-owned table needs `user_id`, its privacy rule and a test in `supabase/tests/` (see `design/decisions.md` T26). CI runs `pnpm db:test` and fails if the generated types are stale.
 
-**Before the first migration push to a hosted project (`dev` or `prod`):** `config.toml` only exposes the `concierge` schema locally. On each hosted project, add `concierge` under Project Settings > Data API > Exposed schemas (admin, as allensforever711), or the app's concierge queries fail with `PGRST106`. That project also needs Postgres 15 or later; the migrations use `on delete set null (column)`.
+**Before the first migration push to a hosted project (`dev` or `prod`):** `config.toml` only exposes the `concierge` and `lists` schemas locally. On each hosted project, add both under Project Settings > Data API > Exposed schemas (admin, as allensforever711), or the app's queries fail with `PGRST106`. Do it **right after** pushing the migration that creates the schema, never before. Exposing a schema that doesn't exist yet takes the whole Data API down (every request gets a 503; tested locally on 2026-10-25). That project also needs Postgres 15 or later; the migrations use `on delete set null (column)`.
 
 **Running the web app:** follow [apps/web/README.md](apps/web/README.md) to link Vercel and pull the environment variables, then `pnpm dev`. Before a PR, `pnpm lint && pnpm typecheck && pnpm test && pnpm build` (CI runs the same).
 

@@ -65,6 +65,7 @@ export async function getMyList(): Promise<MyList | null> {
   const user = { email: typeof claims.email === "string" ? claims.email : null };
 
   const { data: list, error: listError } = await supabase
+    .schema("lists")
     .from("lists")
     .select("id, title, share_token")
     .order("created_at", { ascending: true })
@@ -78,6 +79,7 @@ export async function getMyList(): Promise<MyList | null> {
   if (!list) return { user, list: null, items: [], loadError: null };
 
   const { data: rows, error: itemsError } = await supabase
+    .schema("lists")
     .from("list_items")
     .select(LIST_ITEM_COLUMNS)
     .eq("list_id", list.id)
@@ -127,7 +129,7 @@ export async function getSharedList(token: string): Promise<SharedList | null> {
   if (!UUID_PATTERN.test(token)) return null;
 
   const supabase = await createClient();
-  const { data, error } = await supabase.rpc("get_shared_list", { p_token: token });
+  const { data, error } = await supabase.schema("lists").rpc("get_shared_list", { p_token: token });
   if (error) {
     console.error("get_shared_list failed", error);
     throw new Error("Couldn't load that list.");
