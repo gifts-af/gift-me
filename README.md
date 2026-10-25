@@ -22,6 +22,8 @@ One app for three products (T19): **gift lists** (live, formerly the GiftsAF rep
 
 **Running the code:** Node 22+ and pnpm (`npm install -g pnpm`). From the repo root: `pnpm install`, then follow [apps/web/README.md](apps/web/README.md) to link Vercel and pull the environment variables, then `pnpm dev`. Before a PR, `pnpm lint && pnpm typecheck && pnpm test && pnpm build` (CI runs the same).
 
+**Deploys:** Vercel project `gift-me` (team GiftMe) builds `apps/web` from this repo. Every push to `main` deploys to production; every other branch gets a preview URL.
+
 Where new docs go, how to write them, and when to push straight to `main` versus open a PR are in [CLAUDE.md](CLAUDE.md). Claude reads it automatically, and it's written for people too.
 
 ## Shared material
