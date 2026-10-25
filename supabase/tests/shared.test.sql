@@ -1,4 +1,4 @@
--- Shared tables in `public`: profiles and people (design §3, T19, T25).
+-- Shared tables in `public`: profiles and people (design §3, T19, T26).
 begin;
 \ir _helpers.psql
 select plan(20);
@@ -68,7 +68,7 @@ insert into public.people (name, relationship) values ('Jim', 'child');
 select is((select count(*)::int from public.people where name = 'Mom'), 0, 'B cannot see A''s people');
 
 -- Updates of someone else's row do nothing, and nobody hard-deletes people
--- (deleting is soft, through delete_person; T26).
+-- (deleting is soft, through delete_person; T27).
 update public.people set name = 'Hacked' where name = 'Mom';
 select throws_ok($q$delete from public.people where name = 'Mom'$q$, '42501', null, 'people cannot be hard-deleted by users');
 select tests.act_as(:'a');

@@ -5,7 +5,7 @@
 --
 -- All of these are written by the server (service role): the round engine,
 -- approval, checkout and webhooks, which check budgets and status moves in
--- packages/core first. Signed-in users only read them (T25).
+-- packages/core first. Signed-in users only read them (T26).
 
 -- ─── gift_rounds ────────────────────────────────────────────────────────────
 

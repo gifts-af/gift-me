@@ -1,4 +1,4 @@
--- Gift rounds and everything that hangs off them (design §3, §5, T25).
+-- Gift rounds and everything that hangs off them (design §3, §5, T26).
 -- Rounds, ideas, orders and messages are written by the server (service
 -- role); users only read them.
 begin;

@@ -12,7 +12,7 @@ template, which provides cookie-based auth via [`@supabase/ssr`](https://supabas
 
 Run these from `apps/web` unless noted. Install dependencies once from the repo root with `pnpm install`.
 
-1. **Link the Vercel project** (once; `.vercel/` is gitignored):
+1. **Link the Vercel project** (once; `.vercel/` is gitignored). Sign in to the Vercel CLI as **allensforever711** (`npx vercel login`), since the GiftMe team is on Hobby and has no other members (T25). Pick team **GiftMe** and project **gift-me**:
 
    ```bash
    npx vercel link

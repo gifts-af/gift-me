@@ -53,7 +53,7 @@ Use this layout. It overrides any plugin or skill default (for example, Superpow
 - **One app, products as modules (T19, T20):** `apps/web/modules/<product>/` with a public `index.ts`. Import another product only through its `index.ts`; lint fails otherwise. Shared code lives in `apps/web/components`, `apps/web/lib` and `packages/core`.
 - **Next.js 16 has breaking changes:** read `apps/web/AGENTS.md`, and check `apps/web/node_modules/next/dist/docs/` before writing Next-specific code.
 - **Local setup:** if the session-start check reports missing tools, walk the person through `README.md` > Local development before other work. When a new tool becomes required, add a check to `scripts/dev-check.mjs` and a row to that README table.
-- **No hard-coded values (T23).** Fees, prices, rates, limits, timings and thresholds live outside the code: app-wide settings in `concierge.app_settings`, per-user ones in `concierge.accounts` (T25), and secrets or per-environment values in env vars. Code takes them as inputs and never falls back to a silent default constant. Only true constants (7 days in a week) stay in code.
+- **No hard-coded values (T23).** Fees, prices, rates, limits, timings and thresholds live outside the code: app-wide settings in `concierge.app_settings`, per-user ones in `concierge.accounts` (T26), and secrets or per-environment values in env vars. Code takes them as inputs and never falls back to a silent default constant. Only true constants (7 days in a week) stay in code.
 - **Before a PR:** `pnpm lint && pnpm typecheck && pnpm test && pnpm build` from the repo root. CI runs the same.
 
 ## Git
@@ -83,4 +83,5 @@ Use this layout. It overrides any plugin or skill default (for example, Superpow
 
 - **Contribution** (commits, branches, PRs, Linear tickets): each person uses their own account. The owner is `aarontallen` / aaron.aallen@gmail.com; Jim is `JimtheBurger`. Branches are named `<github-login>/all-<n>-<short-name>`.
 - **Admin** goes through the shared **allensforever711** account (allensforever711@gmail.com). This covers repo transfers, org and repo settings, branch protection, secrets, members, connecting Vercel, Supabase and other services, billing, and vendor accounts such as Zinc. Others may also have admin rights, but admin work is done as allensforever711 (T7).
+- **Vercel and Supabase while on Hobby (T25):** the GiftMe Vercel team can't have other members, and Supabase access goes through it. So everyone signs in to the Vercel and Supabase CLIs and dashboards as allensforever711, for daily work too (`vercel env pull`, `supabase db push`). GitHub, Linear and Google Cloud use personal accounts.
 - If Claude's GitHub login isn't allensforever711, it gives the person the admin steps instead of doing them as someone else.

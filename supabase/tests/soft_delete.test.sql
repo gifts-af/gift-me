@@ -1,5 +1,5 @@
 -- Soft deletes for people and occasions, and the admin hard delete for
--- requests such as GDPR erasure (T26).
+-- requests such as GDPR erasure (T27).
 begin;
 \ir _helpers.psql
 select plan(19);

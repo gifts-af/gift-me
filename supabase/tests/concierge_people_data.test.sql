@@ -1,4 +1,4 @@
--- Concierge tables about the people a user buys for (design §3, T19, T25, D31).
+-- Concierge tables about the people a user buys for (design §3, T19, T26, D31).
 begin;
 \ir _helpers.psql
 select plan(25);
@@ -89,7 +89,7 @@ create function concierge.probe() returns int language sql as 'select 1';
 select ok(not has_function_privilege('authenticated', 'concierge.probe()', 'execute'), 'new concierge functions are not executable by users by default');
 select ok(not has_function_privilege('authenticated', 'concierge.enable_owner_rls(regclass)', 'execute'), 'users cannot run the RLS helper');
 
--- Hard-deleting Mom (the admin path, T26) removes everything about her, and
+-- Hard-deleting Mom (the admin path, T27) removes everything about her, and
 -- Dad keeps his occasion.
 set local role service_role;
 select admin.hard_delete_person(:'mom', 'test', 'cascade check');

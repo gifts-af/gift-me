@@ -135,7 +135,7 @@
 
 **Files:**
 - Create: `packages/core/src/database.types.ts` (generated)
-- Modify: root `package.json` (`"db:types": "supabase gen types typescript --local --schema public --schema concierge > packages/core/src/database.types.ts"`); `packages/core/src/index.ts` (`export type { Database } from "./database.types"`); `packages/core/vitest.config.ts` (exclude `database.types.ts` from coverage); `.github/workflows/ci.yml` (a `db` job: checkout, pnpm install, `pnpm supabase db start`, `pnpm db:test`); `README.md` (Local development: `pnpm db:test`, `pnpm db:types`); `design/technical-design.md` §3 (`accounts`, `user_id` on child tables, composite keys); `design/decisions.md` (T25, renumbered from T24 at merge: money settings in `concierge.accounts`, and owner-checked parent links)
+- Modify: root `package.json` (`"db:types": "supabase gen types typescript --local --schema public --schema concierge > packages/core/src/database.types.ts"`); `packages/core/src/index.ts` (`export type { Database } from "./database.types"`); `packages/core/vitest.config.ts` (exclude `database.types.ts` from coverage); `.github/workflows/ci.yml` (a `db` job: checkout, pnpm install, `pnpm supabase db start`, `pnpm db:test`); `README.md` (Local development: `pnpm db:test`, `pnpm db:types`); `design/technical-design.md` §3 (`accounts`, `user_id` on child tables, composite keys); `design/decisions.md` (T26, renumbered from T24 at merge: money settings in `concierge.accounts`, and owner-checked parent links)
 
 - [ ] **Step 1:** Run `pnpm db:types`, then `pnpm typecheck`. Both pass, and the file contains `concierge` and `round_status`.
 - [ ] **Step 2:** Add the CI job, then the docs and decision.

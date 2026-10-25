@@ -1,4 +1,4 @@
--- Soft deletes for people and occasions, and an admin hard delete (T26).
+-- Soft deletes for people and occasions, and an admin hard delete (T27).
 --
 -- Deleting a person or occasion in the app marks it deleted instead of
 -- removing it, so gift and order history survive. Open rounds for it are
