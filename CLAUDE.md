@@ -53,3 +53,9 @@ Use this layout. It overrides any plugin or skill default (for example, Superpow
 - **Code:** a branch named after the Linear ticket, then a PR. CI must pass.
 - **Planning and design docs** (`planning/`, `design/`, `README.md`, this file): commit and push straight to `main`.
 - The repo is `gifts-af/gift-concierge`. Linear project: Gift Concierge MVP (team key `ALL`).
+
+## Accounts: contribution vs admin
+
+- **Contribution** (commits, branches, PRs, Linear tickets): each person uses their own account. The owner is `aarontallen` / aaron.aallen@gmail.com; Jim is `JimtheBurger`. Branches are named `<github-login>/all-<n>-<short-name>`.
+- **Admin** goes through the shared **allensforever711** account (allensforever711@gmail.com). This covers repo transfers, org and repo settings, branch protection, secrets, members, connecting Vercel, Supabase and other services, billing, and vendor accounts such as Zinc. Others may also have admin rights, but admin work is done as allensforever711 (T7).
+- If Claude's GitHub login isn't allensforever711, it gives the person the admin steps instead of doing them as someone else.
