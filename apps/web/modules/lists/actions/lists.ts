@@ -93,7 +93,7 @@ export async function saveList(input: {
 
   const listId = typeof input.listId === "string" ? input.listId : null;
 
-  const { data: savedId, error } = await supabase.rpc("save_list", {
+  const { data: savedId, error } = await supabase.schema("lists").rpc("save_list", {
     p_list_id: listId,
     p_title: null,
     p_items: rows,
@@ -104,6 +104,7 @@ export async function saveList(input: {
   }
 
   const { data: saved, error: readError } = await supabase
+    .schema("lists")
     .from("list_items")
     .select(LIST_ITEM_COLUMNS)
     .eq("list_id", savedId)
@@ -115,6 +116,7 @@ export async function saveList(input: {
 
   // Only for the share button; a failure here shouldn't fail a good save.
   const { data: list, error: tokenError } = await supabase
+    .schema("lists")
     .from("lists")
     .select("share_token")
     .eq("id", savedId)

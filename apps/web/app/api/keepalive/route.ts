@@ -9,7 +9,7 @@ export async function GET(request: Request) {
     ping: async () => {
       const supabase = createClient(supabaseUrl!, supabaseKey!);
       // Row Level Security may return no rows; the query still reaches Postgres, which is what counts.
-      const { error } = await supabase.from("lists").select("id").limit(1);
+      const { error } = await supabase.schema("lists").from("lists").select("id").limit(1);
       if (error) throw error;
     },
   });

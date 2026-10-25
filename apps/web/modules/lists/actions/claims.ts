@@ -41,7 +41,7 @@ export async function claimGift(input: {
     return { ok: false, error: `Keep your name under ${MAX_NAME_LENGTH} characters.` };
   }
 
-  const { data, error } = await supabase.rpc("claim_gift", {
+  const { data, error } = await supabase.schema("lists").rpc("claim_gift", {
     p_token: input.token,
     p_item_id: input.itemId,
     p_name: signedIn ? null : name,
@@ -83,7 +83,7 @@ export async function unclaimGift(input: {
   const { data: auth } = await supabase.auth.getClaims();
   if (!auth?.claims) return { ok: false, error: "Log in to unclaim a gift." };
 
-  const { data: removed, error } = await supabase.rpc("unclaim_gift", {
+  const { data: removed, error } = await supabase.schema("lists").rpc("unclaim_gift", {
     p_token: input.token,
     p_item_id: input.itemId,
   });

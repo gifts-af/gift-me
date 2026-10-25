@@ -742,7 +742,7 @@ export type Database = {
       [_ in never]: never;
     };
   };
-  public: {
+  lists: {
     Tables: {
       gift_claims: {
         Row: {
@@ -850,6 +850,38 @@ export type Database = {
         };
         Relationships: [];
       };
+    };
+    Views: {
+      [_ in never]: never;
+    };
+    Functions: {
+      claim_gift: {
+        Args: { p_item_id: string; p_name: string; p_token: string };
+        Returns: Json;
+      };
+      get_shared_list: { Args: { p_token: string }; Returns: Json };
+      save_list: {
+        Args: { p_items: Json; p_list_id: string; p_title: string };
+        Returns: string;
+      };
+      unclaim_gift: {
+        Args: { p_item_id: string; p_token: string };
+        Returns: boolean;
+      };
+      viewer_display_name: {
+        Args: Record<PropertyKey, never>;
+        Returns: string;
+      };
+    };
+    Enums: {
+      [_ in never]: never;
+    };
+    CompositeTypes: {
+      [_ in never]: never;
+    };
+  };
+  public: {
+    Tables: {
       people: {
         Row: {
           address_checked_at: string | null;
@@ -963,24 +995,7 @@ export type Database = {
         Args: Record<PropertyKey, never>;
         Returns: undefined;
       };
-      claim_gift: {
-        Args: { p_item_id: string; p_name: string; p_token: string };
-        Returns: Json;
-      };
       delete_person: { Args: { p_person_id: string }; Returns: undefined };
-      get_shared_list: { Args: { p_token: string }; Returns: Json };
-      save_list: {
-        Args: { p_items: Json; p_list_id: string; p_title: string };
-        Returns: string;
-      };
-      unclaim_gift: {
-        Args: { p_item_id: string; p_token: string };
-        Returns: boolean;
-      };
-      viewer_display_name: {
-        Args: Record<PropertyKey, never>;
-        Returns: string;
-      };
     };
     Enums: {
       [_ in never]: never;
@@ -1123,6 +1138,9 @@ export const Constants = {
         "skipped",
       ],
     },
+  },
+  lists: {
+    Enums: {},
   },
   public: {
     Enums: {},
