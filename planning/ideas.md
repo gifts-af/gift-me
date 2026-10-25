@@ -55,6 +55,13 @@ A gift cookie with a barcode. The recipient scans it and pays a cookie forward t
 - **Related:** same "scan to gift" mechanics as ideas 1 and 2.
 - **Source:** owner.
 
+### 5. Pay-it-forward collectible plushie
+A cheap, lovable, collectible plushie sent with a code. The recipient scans and pays a plushie forward to someone else.
+- **Why:** taps the Jellycat-style collecting craze. College students love them, and young parents (moms especially) would send them to each other and their kids. Collecting gives a reason to come back: new characters, seasons, limited runs.
+- **Related:** the same pay-it-forward mechanic as the cookie (idea 4), with a bigger, longer-lasting gift.
+- **To work out:** our own characters (not lookalikes of an existing brand), unit cost and shipping cheap enough to send, a manufacturer, and safety rules for toys given to children **[Verify]**.
+- **Source:** owner.
+
 ## A common thread
 
-Ideas 1, 2 and 4 all use the same building block: **a scannable code tied to a gift that someone claims securely.** If any of these move forward, that's the piece to design once and reuse.
+Ideas 1, 2, 4 and 5 all use the same building block: **a scannable code tied to a gift that someone claims securely.** If any of these move forward, that's the piece to design once and reuse.
