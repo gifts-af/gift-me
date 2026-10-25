@@ -148,7 +148,7 @@ All tables have `id uuid`, `created_at`, and `updated_at`. Accounts (`profiles`)
 | `reactions` | round_id, rating (loved, liked, meh, returned), note, source (email, web) | D-2 |
 | `notifications` | user_id, round_id, kind, channel, sent_at, action_token_hash | Audit trail plus reminder escalation state. |
 | `inbound_messages` | user_id, from, subject, body, attachments, matched_person_id, status | N-2, C-5 |
-| `app_settings` | key, value (jsonb), updated_at | App-wide settings that change without a deploy, such as `zinc_order_fee_cents` (T23). Not user-owned: only the server can read it, and the owner edits it. |
+| `app_settings` | key, value (jsonb), updated_at | App-wide settings that change without a deploy (T23): `zinc_order_fee_cents` and the §4.1 schedule timings (`planning_delivery_days`, `safety_buffer_days`, `round_lead_days`, `reminder_1_after_heads_up_days`, `reminder_2_before_deadline_days`, `final_notice_before_deadline_days`, `fastest_days_to_arrive`). Not user-owned: only the server can read it, and the owner edits it. |
 
 Gift history (D-3) is a view over `gift_rounds`, `gift_ideas`, `orders`, and `reactions`.
 

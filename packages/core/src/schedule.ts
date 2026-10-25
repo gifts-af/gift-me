@@ -1,15 +1,22 @@
-// Ship-by deadline and reminder schedule (design §4.1, PRD D23). Tunable
-// values are sensible defaults to adjust once real usage shows what's needed.
+// Ship-by deadline and reminder schedule (design §4.1, PRD D23). The timings
+// are settings, not constants (T23): callers read them from
+// `concierge.app_settings` and pass them in.
 
 import { addDays, compareDates, maxDate, type CalendarDate } from "./dates";
 
-/** Delivery days assumed before any idea (and its real estimate) exists. */
-export const PLANNING_DELIVERY_DAYS = 7;
-export const SAFETY_BUFFER_DAYS = 2;
-export const ROUND_LEAD_DAYS = 28;
-export const REMINDER_1_AFTER_HEADS_UP_DAYS = 5;
-export const REMINDER_2_BEFORE_DEADLINE_DAYS = 7;
-export const FINAL_NOTICE_BEFORE_DEADLINE_DAYS = 2;
+export type ScheduleSettings = {
+  /** Days to arrive assumed before any idea (and its real estimate) exists. */
+  planningDeliveryDays: number;
+  /** Days of margin kept between the slowest arrival and the occasion. */
+  safetyBufferDays: number;
+  /** How long before the planning deadline a round starts. */
+  roundLeadDays: number;
+  reminder1AfterHeadsUpDays: number;
+  reminder2BeforeDeadlineDays: number;
+  finalNoticeBeforeDeadlineDays: number;
+  /** The fastest shipping a late round still hopes to find. */
+  fastestDaysToArrive: number;
+};
 
 export type ReminderKind = "reminder_1" | "reminder_2" | "final_notice" | "skip";
 
@@ -19,25 +26,28 @@ function checkDays(days: number, what: string): void {
   }
 }
 
-/** The fastest shipping a late round still hopes to find (next-day delivery). */
-export const FASTEST_DAYS_TO_ARRIVE = 1;
+function checkSettings(s: ScheduleSettings): void {
+  for (const [what, days] of Object.entries(s)) checkDays(days, what);
+}
 
 /**
  * The last day an order can be placed and still arrive, with the buffer.
  * `worstCaseDaysToArrive` is the slowest handling plus delivery, not
- * delivery alone.
+ * delivery alone; it defaults to the planning value.
  */
 export function shipByDeadline(
   occasionDate: CalendarDate,
-  worstCaseDaysToArrive: number = PLANNING_DELIVERY_DAYS,
+  s: ScheduleSettings,
+  worstCaseDaysToArrive: number = s.planningDeliveryDays,
 ): CalendarDate {
+  checkSettings(s);
   checkDays(worstCaseDaysToArrive, "Days to arrive");
-  return addDays(occasionDate, -(worstCaseDaysToArrive + SAFETY_BUFFER_DAYS));
+  return addDays(occasionDate, -(worstCaseDaysToArrive + s.safetyBufferDays));
 }
 
-/** When a round normally starts: 28 days before the planning deadline. */
-export function roundStartDate(occasionDate: CalendarDate): CalendarDate {
-  return addDays(shipByDeadline(occasionDate), -ROUND_LEAD_DAYS);
+/** When a round normally starts: the lead time before the planning deadline. */
+export function roundStartDate(occasionDate: CalendarDate, s: ScheduleSettings): CalendarDate {
+  return addDays(shipByDeadline(occasionDate, s), -s.roundLeadDays);
 }
 
 /**
@@ -46,22 +56,23 @@ export function roundStartDate(occasionDate: CalendarDate): CalendarDate {
  * marked late so the heads-up can say so.
  *
  * If the planning deadline has already arrived, the deadline moves to the
- * last day next-day shipping could still make it, and the idea filter keeps
- * only ideas fast enough for that. Once ideas exist, the chosen idea's real
- * deadline replaces it. The deadline always leaves at least one day to
+ * last day the fastest shipping could still make it, and the idea filter
+ * keeps only ideas fast enough for that. Once ideas exist, the chosen idea's
+ * real deadline replaces it. The deadline always leaves at least one day to
  * answer, because the round is skipped on the morning of its deadline.
- * `null` means even next-day shipping can't make it this year.
+ * `null` means even the fastest shipping can't make it this year.
  */
 export function planRoundStart(
   occasionDate: CalendarDate,
   today: CalendarDate,
+  s: ScheduleSettings,
 ): { startDate: CalendarDate; deadline: CalendarDate; late: boolean } | null {
-  const normalStart = roundStartDate(occasionDate);
-  const planningDeadline = shipByDeadline(occasionDate);
+  const normalStart = roundStartDate(occasionDate, s);
+  const planningDeadline = shipByDeadline(occasionDate, s);
   const deadline =
     compareDates(planningDeadline, today) > 0
       ? planningDeadline
-      : shipByDeadline(occasionDate, FASTEST_DAYS_TO_ARRIVE);
+      : shipByDeadline(occasionDate, s, s.fastestDaysToArrive);
   if (compareDates(deadline, today) <= 0) return null;
   return {
     startDate: maxDate(today, normalStart),
@@ -79,16 +90,18 @@ export function planRoundStart(
 export function reminderSchedule(
   deadline: CalendarDate,
   headsUpDate: CalendarDate,
+  s: ScheduleSettings,
 ): { kind: ReminderKind; date: CalendarDate }[] {
+  checkSettings(s);
   if (compareDates(headsUpDate, deadline) >= 0) {
     // planRoundStart never gives a deadline this close; a skip in the past would end the round unseen.
     throw new RangeError(`Heads-up ${headsUpDate} must come before the deadline ${deadline}`);
   }
-  const reminder2 = addDays(deadline, -REMINDER_2_BEFORE_DEADLINE_DAYS);
+  const reminder2 = addDays(deadline, -s.reminder2BeforeDeadlineDays);
   const candidates: { kind: ReminderKind; date: CalendarDate }[] = [
-    { kind: "reminder_1", date: addDays(headsUpDate, REMINDER_1_AFTER_HEADS_UP_DAYS) },
+    { kind: "reminder_1", date: addDays(headsUpDate, s.reminder1AfterHeadsUpDays) },
     { kind: "reminder_2", date: reminder2 },
-    { kind: "final_notice", date: addDays(deadline, -FINAL_NOTICE_BEFORE_DEADLINE_DAYS) },
+    { kind: "final_notice", date: addDays(deadline, -s.finalNoticeBeforeDeadlineDays) },
   ];
   const kept = candidates.filter(
     (r) =>
@@ -119,12 +132,11 @@ export function arriveBy(
  * the user might order (the round's deadline), not the day ideas are made,
  * so a user who approves late still gets the gift in time.
  */
-export function canArriveInTime(p: {
-  occasionDate: CalendarDate;
-  orderDate: CalendarDate;
-  handlingDaysMax: number;
-  deliveryDaysMax: number;
-}): boolean {
+export function canArriveInTime(
+  p: { occasionDate: CalendarDate; orderDate: CalendarDate; handlingDaysMax: number; deliveryDaysMax: number },
+  s: ScheduleSettings,
+): boolean {
+  checkSettings(s);
   const arrives = arriveBy(p.orderDate, p.handlingDaysMax, p.deliveryDaysMax);
-  return compareDates(arrives, addDays(p.occasionDate, -SAFETY_BUFFER_DAYS)) <= 0;
+  return compareDates(arrives, addDays(p.occasionDate, -s.safetyBufferDays)) <= 0;
 }
