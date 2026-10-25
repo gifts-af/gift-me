@@ -3,6 +3,18 @@ import { NextResponse, type NextRequest } from "next/server";
 import { hasEnvVars } from "../utils";
 import { supabaseKey, supabaseUrl } from "./env";
 
+// Paths signed-out visitors may open. /api/keepalive checks its own secret (ALL-43).
+export function isPublicPath(pathname: string) {
+  return (
+    pathname === "/" ||
+    pathname === "/lists" ||
+    pathname === "/api/keepalive" ||
+    pathname.startsWith("/login") ||
+    pathname.startsWith("/share/") ||
+    pathname.startsWith("/auth")
+  );
+}
+
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
@@ -48,14 +60,7 @@ export async function updateSession(request: NextRequest) {
   const { data } = await supabase.auth.getClaims();
   const user = data?.claims;
 
-  if (
-    request.nextUrl.pathname !== "/" &&
-    request.nextUrl.pathname !== "/lists" &&
-    !user &&
-    !request.nextUrl.pathname.startsWith("/login") &&
-    !request.nextUrl.pathname.startsWith("/share/") &&
-    !request.nextUrl.pathname.startsWith("/auth")
-  ) {
+  if (!user && !isPublicPath(request.nextUrl.pathname)) {
     // no user, potentially respond by redirecting the user to the login page
     const url = request.nextUrl.clone();
     url.pathname = "/auth/login";
