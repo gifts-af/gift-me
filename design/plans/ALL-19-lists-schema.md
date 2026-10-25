@@ -66,5 +66,7 @@
 ### Task 4: Rollout (with the owner)
 
 - [ ] The owner runs `! pnpm supabase login` as allensforever711.
-- [ ] **`dev`:** expose `concierge` and `lists` in Data API settings, then `supabase link --project-ref bcemtqvdbrrgiipzggyw`, check `migration list`, and `db push`. Make test lists in a PR preview (sign up, add gifts, share, claim) before and after the push, and check they survive.
-- [ ] **`prod`:** with the owner's go, at a quiet time: expose `concierge` and `lists`, merge the PR (Vercel deploys), then link `pegtrucfuaaufqvsavpb`, check `migration list`, and `db push` right away. Check the 3 users' lists still load and the share links work.
+> **Order matters:** expose a schema in Data API settings only **after** the migration that creates it is pushed. Exposing a schema that doesn't exist yet makes the whole Data API return 503 (tested locally on 2026-10-25).
+
+- [ ] **`dev`:** make test lists in the current `main` preview (sign up, add gifts, share, claim). Then `supabase link --project-ref bcemtqvdbrrgiipzggyw`, check `migration list`, `db push`, and right away expose `concierge` and `lists`. Open this PR's preview and check that the test lists, share links and claims survived.
+- [ ] **`prod`:** with the owner's go, at a quiet time: merge the PR and wait for Vercel's production deploy to be Ready. Then link `pegtrucfuaaufqvsavpb`, check `migration list`, `db push`, and right away expose `concierge` and `lists`. The list app is down from the deploy until the exposure, about a minute. Check that the 3 users' lists still load and the share links work.
