@@ -155,6 +155,12 @@ Gift history (D-3) is a view over `gift_rounds`, `gift_ideas`, `orders`, and `re
 
 **Deletion (C-7):** deleting a person cascades to that person's rows, and a storage cleanup removes their screenshots.
 
+**As built in schema v1** (ALL-19, T24; migrations in `supabase/migrations/`):
+- The money fields shown on `profiles` above (over-budget %, notification prefs, funding mode, Zinc connection) live in **`concierge.accounts`**, one row per user. `public.profiles` keeps display name, email, phone and timezone, and is created at sign-up.
+- Every table in `concierge` has `user_id` and the same privacy rule, including rows that belong to a round. Children reference their parent and owner together, so nothing can point at another user's data.
+- `app_settings` is the one table with no `user_id`: only the server reads it (T23).
+- `packages/core/src/database.types.ts` is generated from the database (`pnpm db:types`). CI fails if it's out of date.
+
 ### 3.1 How the app learns about a person
 
 Learning is stored in two layers: **raw inputs**, kept as received, and **learned facts** distilled from them.

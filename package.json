@@ -13,9 +13,10 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "db:test": "supabase test db",
-    "db:types": "supabase gen types typescript --local --schema public --schema concierge > packages/core/src/database.types.ts"
+    "db:types": "supabase gen types typescript --local --schema public --schema concierge > packages/core/src/database.types.ts && prettier --write --log-level warn packages/core/src/database.types.ts"
   },
   "devDependencies": {
+    "prettier": "^3.9.10",
     "supabase": "^2.122.0"
   }
 }

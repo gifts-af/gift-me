@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { Constants } from "./database.types";
 import { canTransition, ROUND_STATUSES, type RoundStatus } from "./rounds";
 
 const allowed: [RoundStatus, RoundStatus][] = [
@@ -48,6 +49,10 @@ describe("round statuses", () => {
       expect(canTransition("complete", to)).toBe(false);
       expect(canTransition("skipped", to)).toBe(false);
     }
+  });
+
+  it("matches the database's round_status enum", () => {
+    expect([...Constants.concierge.Enums.round_status]).toEqual([...ROUND_STATUSES]);
   });
 
   it("can't regenerate ideas after buying", () => {
