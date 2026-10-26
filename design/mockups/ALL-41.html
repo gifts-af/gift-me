@@ -51,6 +51,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 body {
   background: var(--stage);
   color: var(--foreground);
@@ -472,6 +473,86 @@ textarea.input { min-height: 88px; resize: vertical; }
     </div>
   </div></div>
 </section>
+
+<section class="screen" data-screen="extension" data-title="Extension popup" data-group="Elsewhere" hidden>
+  <p class="screen-note">The Chrome extension, opened on any page. One pick, one tap. The app reads the page later and shows what it learned.</p>
+  <div class="popup"><div class="app">
+    <div class="topbar" style="min-height:48px"><span class="brand" style="font-size:15px">Capture for…</span><button class="iconbtn" type="button" aria-label="Close"><span data-icon="x" data-size="18"></span></button></div>
+    <div class="body" id="ext-form" style="gap:16px">
+      <input class="input" id="ext-search" placeholder="Search people" aria-label="Search people">
+      <div class="list" style="gap:8px" id="ext-people">
+        <button class="card selected" type="button" aria-pressed="true"><span class="grow card-title">Mom</span><span class="check"><span data-icon="check" data-size="16"></span></span></button>
+        <button class="card" type="button" aria-pressed="false"><span class="grow card-title">Dad</span><span class="check"><span data-icon="check" data-size="16"></span></span></button>
+        <button class="card" type="button" aria-pressed="false"><span class="grow card-title">Sam</span><span class="check"><span data-icon="check" data-size="16"></span></span></button>
+      </div>
+      <label class="field" for="ext-note">Note <span class="meta" style="font-weight:400">Optional</span><input class="input" id="ext-note" placeholder="She loved this in the store"></label>
+      <button class="btn-primary block" type="button" id="ext-save">Save to Mom</button>
+    </div>
+    <div class="body" id="ext-done" hidden style="align-items:center;text-align:center;gap:12px;padding-block:32px">
+      <span class="pill pill-ok" style="font-size:13px;padding:4px 10px">Saved</span>
+      <p style="margin:0">Saved to Mom. We'll show you what we learned.</p>
+      <button class="btn-link" type="button" id="ext-again">Capture another</button>
+    </div>
+  </div></div>
+</section>
+
+<section class="screen" data-screen="email" data-title="Heads-up email" data-group="Elsewhere" hidden>
+  <p class="screen-note">Ideas arrive by email. Nothing is approved from the email itself; the button opens the approval screen.</p>
+  <div class="mail">
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);font-size:14px;display:grid;gap:2px">
+      <div><strong>GiftMe</strong> <span class="muted">· ideas@giftme.example</span></div>
+      <div>3 gift ideas for Mom's birthday</div>
+    </div>
+    <div style="padding:24px 20px;display:grid;gap:20px">
+      <p style="margin:0">Mom's birthday is Saturday, March 14. Here are 3 ideas within your $60 budget. Pick one by March 5 and it arrives in time.</p>
+      <div style="display:grid;gap:12px">
+        <div class="row"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Stoneware mug set · <span class="num">$42</span></p><p class="card-sub">She said her favourite mug chipped. Arrives by Mar 10.</p></div></div>
+        <div class="row"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Garden kneeler · <span class="num">$35</span></p><p class="card-sub">New raised beds this spring. Arrives by Mar 9.</p></div></div>
+        <div class="row"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Audiobook credits · <span class="num">$45</span></p><p class="card-sub">Listens on her morning walks. Arrives instantly.</p></div></div>
+      </div>
+      <a class="btn-primary" href="#approval" data-go="approval" style="justify-self:start">Choose a gift</a>
+      <p class="meta">Do nothing and we'll remind you on March 1. Prices include shipping and tax.</p>
+    </div>
+  </div>
+</section>
+
+<section class="screen" data-screen="home-wide" data-title="Home" data-group="Computer width" hidden>
+  <p class="screen-note">Home on a computer: the same parts, with people in a grid and room for links in the top bar.</p>
+  <div class="wide"><div class="app">
+    <div class="topbar" style="padding-inline:32px"><div class="row" style="gap:32px"><span class="brand">GiftMe</span><nav class="links"><a href="#list-wide" data-go="list-wide">My list</a><a href="#home-wide" aria-current="page">People</a></nav></div><button class="iconbtn" type="button" aria-label="Account"><span data-icon="user"></span></button></div>
+    <div class="body">
+      <a class="card" href="#list-wide" data-go="list-wide" style="max-width:480px"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">My list</p><p class="card-sub">3 gifts · shared</p></div><span class="muted" data-icon="next"></span></a>
+      <div class="section">
+        <div class="row" style="justify-content:space-between"><h2 class="h2">People</h2><button class="btn-secondary btn-sm" type="button"><span data-icon="plus" data-size="16"></span>Add someone</button></div>
+        <div class="grid">
+          <a class="card" href="#approval" data-go="approval"><div class="grow"><p class="card-title">Mom</p><p class="card-sub">Birthday · Sat, Mar 14</p></div><span class="pill">Pick a gift</span></a>
+          <a class="card" href="#person" data-go="person"><div class="grow"><p class="card-title">Dad</p><p class="card-sub">Father's Day · Sun, Jun 21</p></div><span class="pill pill-muted">Ideas Jun 1</span></a>
+          <div class="card"><div class="grow"><p class="card-title">Sam</p><p class="card-sub">Christmas · Fri, Dec 25</p></div><span class="pill pill-ok">Arrives Dec 20</span></div>
+          <div class="card"><div class="grow"><p class="card-title">Grandma Margaret-Ann</p><p class="card-sub">80th birthday · Thu, Apr 2</p></div><span class="pill pill-warn">Needs address</span></div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+</section>
+
+<section class="screen" data-screen="list-wide" data-title="My list" data-group="Computer width" hidden>
+  <p class="screen-note">The list on a computer: the add row stays narrow, and gifts spread into three columns.</p>
+  <div class="wide"><div class="app">
+    <div class="topbar" style="padding-inline:32px"><div class="row" style="gap:32px"><span class="brand">GiftMe</span><nav class="links"><a href="#list-wide" aria-current="page">My list</a><a href="#home-wide" data-go="home-wide">People</a></nav></div><button class="btn-secondary btn-sm" type="button"><span data-icon="share" data-size="16"></span>Share</button></div>
+    <div class="body">
+      <h1 class="title">My list</h1>
+      <form class="row" onsubmit="event.preventDefault()" style="align-items:end;max-width:560px">
+        <label class="field grow" for="link-w">Paste an Amazon link<input class="input" id="link-w" placeholder="amazon.com/dp/…"></label>
+        <button class="btn-secondary" type="button">Add</button>
+      </form>
+      <div class="grid">
+        <div class="gcard"><div class="img lg"><span data-icon="gift" data-size="28"></span></div><p class="card-title">Pour-over coffee kettle</p><p class="price">$39.00</p></div>
+        <div class="gcard"><div class="img lg"><span data-icon="gift" data-size="28"></span></div><p class="card-title">Paperback: a mystery novel</p><p class="price">$14.50</p></div>
+        <div class="gcard"><div class="img lg"><span data-icon="gift" data-size="28"></span></div><p class="card-title">Rain jacket, size M</p><p class="price">$80.00</p></div>
+      </div>
+    </div>
+  </div></div>
+</section>
 <!-- screens:end -->
   </main>
 </div>
@@ -646,6 +727,25 @@ document.addEventListener('click', (e) => {
   });
   document.getElementById('save').addEventListener('click', () => { savebar.hidden = true; });
   document.getElementById('share-btn').addEventListener('click', () => { document.getElementById('share-note').hidden = false; });
+})();
+
+// Extension popup: pick one person, save, then a short confirmation.
+(function extension() {
+  const people = document.getElementById('ext-people');
+  const save = document.getElementById('ext-save');
+  people.addEventListener('click', (e) => {
+    const card = e.target.closest('.card');
+    if (!card) return;
+    people.querySelectorAll('.card').forEach((c) => { c.classList.toggle('selected', c === card); c.setAttribute('aria-pressed', String(c === card)); });
+    save.textContent = 'Save to ' + card.textContent.trim();
+  });
+  const form = document.getElementById('ext-form');
+  const done = document.getElementById('ext-done');
+  save.addEventListener('click', () => {
+    done.querySelector('p').textContent = save.textContent.replace('Save to', 'Saved to') + ". We'll show you what we learned.";
+    form.hidden = true; done.hidden = false;
+  });
+  document.getElementById('ext-again').addEventListener('click', () => { form.hidden = false; done.hidden = true; });
 })();
 // screens-js:end
 
