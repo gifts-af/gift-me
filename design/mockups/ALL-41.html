@@ -70,7 +70,7 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .review-head h1 { font-size: 22px; line-height: 1.2; margin: 0; text-wrap: balance; }
 .review-head p { margin: 4px 0 0; color: var(--muted-foreground); font-size: 15px; max-width: 60ch; }
 .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; padding: 2px; background: var(--background); }
-.seg button { border: 0; background: none; padding: 6px 12px; border-radius: 999px; font-size: 13px; cursor: pointer; min-height: 32px; }
+.seg button { border: 0; background: none; padding: 6px 14px; border-radius: 999px; font-size: 14px; cursor: pointer; min-height: 44px; }
 .seg button[aria-pressed="true"] { background: var(--secondary); font-weight: 600; }
 .signoff { border: 1px solid var(--border); border-radius: var(--radius); background: var(--background); padding: 12px 16px; font-size: 14px; display: grid; gap: 6px; }
 .signoff strong { font-variant-numeric: tabular-nums; }
@@ -78,8 +78,8 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .picker { display: grid; gap: 10px; }
 .picker-group { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .picker-group > span { font-size: 12px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted-foreground); min-width: 96px; }
-.chip { border: 1px solid var(--border); background: var(--background); border-radius: 999px; padding: 6px 12px; font-size: 13px; cursor: pointer; min-height: 36px; display: inline-flex; align-items: center; gap: 6px; }
-.chip[aria-current="true"] { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); font-weight: 600; }
+.chip { border: 1px solid var(--border); background: var(--background); border-radius: 999px; padding: 6px 14px; font-size: 14px; cursor: pointer; min-height: 44px; display: inline-flex; align-items: center; gap: 6px; }
+.chip[aria-pressed="true"], .chip[aria-current="true"] { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); font-weight: 600; }
 .chip .dot { width: 8px; height: 8px; border-radius: 99px; background: var(--border); }
 .chip .dot.half { background: var(--warning); }
 .chip .dot.done { background: var(--success); }
@@ -100,7 +100,8 @@ button, input, textarea, select { font: inherit; color: inherit; }
 }
 .phone { max-width: 375px; border-radius: 32px; min-height: 700px; display: flex; flex-direction: column; box-shadow: 0 10px 30px rgb(0 0 0 / .08); }
 .popup { max-width: 360px; border-radius: 12px; box-shadow: 0 10px 30px rgb(0 0 0 / .12); }
-.mail { max-width: 600px; border-radius: 8px; }
+/* Email is always white, whatever the reader's theme (ui.md > UI kit). */
+.mail { max-width: 600px; border-radius: 8px; --background: #ffffff; --foreground: #18181b; --card: #ffffff; --muted: #f4f4f5; --muted-foreground: #71717a; --border: #e4e4e7; --primary: #0f766e; --primary-foreground: #ffffff; color: var(--foreground); }
 .wide { max-width: 1024px; border-radius: 12px; container-type: inline-size; }
 
 /* ── App parts (what the real app will use) ────────────────────── */
@@ -144,7 +145,7 @@ button.card:hover, a.card:hover { border-color: color-mix(in srgb, var(--primary
 .btn-primary { background: var(--primary); color: var(--primary-foreground); }
 .btn-primary:disabled { opacity: .45; cursor: not-allowed; }
 .btn-secondary { background: var(--secondary); color: var(--secondary-foreground); }
-.btn-sm { min-height: 40px; padding: 0 14px; font-size: 15px; }
+.btn-sm { min-height: 44px; padding: 0 14px; font-size: 15px; }
 .btn-link { border: 0; background: none; color: var(--muted-foreground); font-size: 15px; min-height: 44px; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; padding: 0 4px; }
 .btn-link.danger { color: var(--destructive); }
 .block { width: 100%; }
@@ -166,7 +167,7 @@ textarea.input { min-height: 88px; resize: vertical; }
 .kv .k { font-size: 13px; color: var(--muted-foreground); width: 72px; flex: none; }
 .kv .v { flex: 1; min-width: 0; font-size: 15px; }
 .toggle { display: inline-flex; border: 1px solid var(--border); border-radius: 999px; padding: 2px; flex: none; }
-.toggle button { border: 0; background: none; min-height: 36px; padding: 0 12px; border-radius: 999px; font-size: 13px; cursor: pointer; }
+.toggle button { border: 0; background: none; min-height: 44px; padding: 0 12px; border-radius: 999px; font-size: 13px; cursor: pointer; }
 .toggle button[aria-pressed="true"] { background: var(--accent); color: var(--accent-foreground); font-weight: 600; }
 .toggle button.drop[aria-pressed="true"] { background: var(--muted); color: var(--foreground); }
 .banner { border-radius: var(--radius); padding: 12px; font-size: 14px; background: var(--muted); }
@@ -179,18 +180,23 @@ textarea.input { min-height: 88px; resize: vertical; }
 .sheet::before { content: ""; justify-self: center; width: 40px; height: 4px; border-radius: 99px; background: var(--border); }
 .dialog { background: var(--card); border-radius: var(--radius); padding: 20px; display: grid; gap: 16px; width: 100%; box-shadow: 0 8px 24px rgb(0 0 0 / .15); }
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-.chips button { border: 1px solid var(--border); background: var(--background); border-radius: 999px; min-height: 40px; padding: 0 14px; font-size: 14px; cursor: pointer; }
+.chips button { border: 1px solid var(--border); background: var(--background); border-radius: 999px; min-height: 44px; padding: 0 14px; font-size: 14px; cursor: pointer; }
 .chips button[aria-pressed="true"] { border-color: var(--primary); background: var(--accent); color: var(--accent-foreground); font-weight: 600; }
 
 .giftgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .gcard { position: relative; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); padding: 8px 8px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .gcard .img.lg { margin-bottom: 4px; }
-.gcard .gremove { position: absolute; top: 4px; right: 4px; background: var(--background); border-radius: 999px; width: 36px; height: 36px; }
+.gcard .gremove { position: absolute; top: 4px; right: 4px; background: var(--background); border-radius: 999px; width: 44px; height: 44px; }
 .gcard .btn-sm { margin-top: 4px; }
 
 /* Variants toggled from the review bar. */
 .screen:not([data-guest]) .if-guest, .screen[data-guest] .if-member { display: none; }
 .screen:not([data-owner]) .if-owner, .screen[data-owner] .if-friend { display: none; }
+.screen:not([data-new]) .if-new, .screen[data-new] .if-existing { display: none; }
+.screen:not([data-taken]) .if-taken, .screen[data-taken] .if-free { display: none; }
+.screen:not([data-looking]) .if-looking, .screen:not([data-lookfail]) .if-lookfail,
+.screen:not([data-carried]) .if-carried, .screen:not([data-savefail]) .if-savefail,
+.screen:not([data-clipfail]) .if-clipfail, .screen:not([data-leave]) .if-leave { display: none; }
 
 /* Computer-width grids: 2 columns from 768 px, 3 from 1024 px of frame width. */
 @container (min-width: 768px) { .wide .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .wide .body { padding: 24px 32px; } }
@@ -234,18 +240,25 @@ textarea.input { min-height: 88px; resize: vertical; }
   <main class="stage" id="stage">
 <!-- screens:start -->
 <section class="screen" data-screen="home" data-title="Home" data-group="Concierge" hidden>
-  <p class="screen-note">The front door after sign-in. Your list first, then the people you buy for. Tap Mom to approve a gift, or Dad to see his profile.</p>
+  <p class="screen-note">The front door after sign-in. Your list first, then the people you buy for. Tap Mom to approve a gift, or Dad to see his profile. "New user" shows what someone sees before using either product.</p>
+  <div class="variants"><button class="chip" type="button" data-variant="home:new" aria-pressed="false">New user</button></div>
   <div class="phone"><div class="app">
     <div class="topbar"><span class="brand">GiftMe</span><button class="iconbtn" type="button" aria-label="Account"><span data-icon="user"></span></button></div>
     <div class="body">
-      <a class="card" href="#list" data-go="list">
+      <a class="card if-existing" href="#list" data-go="list">
         <div class="img"><span data-icon="gift"></span></div>
         <div class="grow"><p class="card-title">My list</p><p class="card-sub">3 gifts · shared</p></div>
         <span class="muted" data-icon="next"></span>
       </a>
+      <a class="card if-new" href="#list" data-go="list">
+        <div class="img"><span data-icon="gift"></span></div>
+        <div class="grow"><p class="card-title">Start your wish list</p><p class="card-sub">Add gifts you'd like and share the link</p></div>
+        <span class="muted" data-icon="next"></span>
+      </a>
       <div class="section">
         <h2 class="h2">People</h2>
-        <div class="list">
+        <p class="meta if-new" style="font-size:15px">Add the people you buy for, and we'll suggest gifts before each birthday and holiday.</p>
+        <div class="list if-existing">
           <a class="card" href="#approval" data-go="approval">
             <div class="grow"><p class="card-title">Mom</p><p class="card-sub">Birthday · Sat, Mar 14</p></div>
             <span class="pill">Pick a gift</span>
@@ -258,8 +271,8 @@ textarea.input { min-height: 88px; resize: vertical; }
             <div class="grow"><p class="card-title">Sam</p><p class="card-sub">Christmas · Fri, Dec 25</p></div>
             <span class="pill pill-ok">Arrives Dec 20</span>
           </div>
-          <button class="btn-link" type="button" style="justify-self:start;text-decoration:none;color:var(--foreground);display:inline-flex;align-items:center;gap:8px"><span data-icon="plus"></span>Add someone you buy for</button>
         </div>
+        <button class="btn-link" type="button" style="justify-self:start;text-decoration:none;color:var(--foreground);display:inline-flex;align-items:center;gap:8px"><span data-icon="plus"></span>Add someone you buy for</button>
       </div>
     </div>
   </div></div>
@@ -326,7 +339,7 @@ textarea.input { min-height: 88px; resize: vertical; }
         <button class="card" type="button" data-price="42"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Stoneware mug set</p><p class="card-sub">She said her favourite mug chipped</p><p class="card-sub num">Arrives by Mar 10</p></div><span class="price">$42</span><span class="check"><span data-icon="check" data-size="16"></span></span></button>
         <button class="card" type="button" data-price="35"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Garden kneeler</p><p class="card-sub">New raised beds this spring</p><p class="card-sub num">Arrives by Mar 9</p></div><span class="price">$35</span><span class="check"><span data-icon="check" data-size="16"></span></span></button>
         <button class="card" type="button" data-price="45"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Audiobook credits</p><p class="card-sub">Listens on her morning walks</p><p class="card-sub num">Arrives instantly</p></div><span class="price">$45</span><span class="check"><span data-icon="check" data-size="16"></span></span></button>
-        <button class="card" type="button" data-price="68" data-over="8"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Cast-iron herb planter</p><p class="card-sub">Saved a photo of one in October</p><p class="card-sub num">Arrives by Mar 11 · <span class="pill pill-warn">$8 over budget</span></p></div><span class="price">$68</span><span class="check"><span data-icon="check" data-size="16"></span></span></button>
+        <button class="card" type="button" data-price="68" data-over="8"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Cast-iron herb planter</p><p class="card-sub">Saved a photo of one in October</p><p class="card-sub num">Arrives by Mar 11</p><p class="card-sub"><span class="pill pill-warn">$8 over budget</span></p></div><span class="price">$68</span><span class="check"><span data-icon="check" data-size="16"></span></span></button>
       </div>
       <p class="meta">Prices include shipping and tax.</p>
     </div>
@@ -401,22 +414,36 @@ textarea.input { min-height: 88px; resize: vertical; }
 
 <section class="screen" data-screen="list" data-title="My list" data-group="Gift lists" hidden>
   <p class="screen-note">Today's list app in the new look, with every feature kept. Paste a link and tap Add, try "Add by hand", or remove a gift to see the save bar.</p>
-  <div class="variants"><button class="chip" type="button" data-variant="list:guest" aria-pressed="false">View as a guest</button></div>
+  <div class="variants">
+    <button class="chip" type="button" data-variant="list:guest" aria-pressed="false">View as a guest</button>
+    <button class="chip" type="button" data-variant="list:looking" aria-pressed="false">Looking up a link</button>
+    <button class="chip" type="button" data-variant="list:lookfail" aria-pressed="false">Link not found</button>
+    <button class="chip" type="button" data-variant="list:carried" aria-pressed="false">Brought over after sign-in</button>
+    <button class="chip" type="button" data-variant="list:savefail" aria-pressed="false">Save failed</button>
+    <button class="chip" type="button" data-variant="list:clipfail" aria-pressed="false">Clipboard blocked</button>
+    <button class="chip" type="button" data-variant="list:leave" aria-pressed="false">Leaving unsaved</button>
+  </div>
   <div class="phone"><div class="app">
     <div class="topbar"><button class="back" type="button" data-go="home"><span data-icon="back"></span>Home</button><button class="btn-secondary btn-sm if-member" type="button" id="share-btn"><span data-icon="share" data-size="16"></span>Share</button></div>
     <div class="body">
       <div class="banner if-guest">You're not signed in. <button class="btn-link" type="button" style="color:inherit;min-height:0;padding:0" data-go="signin">Sign in</button> to save and share your list.</div>
       <p class="banner accent if-member" id="share-note" hidden>Link copied. Anyone with it can see your list and claim a gift.</p>
+      <p class="banner accent if-carried">We brought over 2 gifts from before you signed in. Save to keep them.</p>
+      <p class="banner if-savefail" style="color:var(--destructive)">Your list couldn't be saved. Check your connection and try again.</p>
+      <div class="banner if-clipfail" style="display:grid;gap:8px"><span>Copy this link to share your list.</span><input class="input num" id="clip-link" readonly value="giftme.example/share/7Kq2xP"></div>
+      <p class="banner if-leave">Leaving now? Your browser asks first, because 2 changes aren't saved yet.</p>
       <h1 class="title">My list</h1>
       <div class="section">
         <form class="row" onsubmit="event.preventDefault()" style="align-items:end">
           <label class="field grow" for="link">Paste an Amazon link<input class="input" id="link" value="amazon.com/dp/B0EXAMPLE1"></label>
           <button class="btn-secondary" type="button" id="lookup">Add</button>
         </form>
+        <p class="meta if-looking" role="status">Looking up that link…</p>
+        <p class="field-error if-lookfail">We couldn't read that link. Check it's an Amazon product page, or add the gift by hand.</p>
         <div class="card" id="found" hidden>
           <div class="img"><span data-icon="gift"></span></div>
           <div class="grow"><p class="card-title">Wool hiking socks, 3 pairs</p><p class="card-sub num">$24.99 · found on Amazon</p></div>
-          <button class="btn-primary btn-sm" type="button" id="found-add">Add to list</button>
+          <button class="btn-secondary btn-sm" type="button" id="found-add">Add to list</button>
         </div>
         <button class="btn-link" type="button" id="manual-toggle" style="justify-self:start">Add by hand</button>
         <form class="section" id="manual" hidden onsubmit="event.preventDefault()">
@@ -438,7 +465,10 @@ textarea.input { min-height: 88px; resize: vertical; }
 
 <section class="screen" data-screen="shared" data-title="Shared list" data-group="Gift lists" hidden>
   <p class="screen-note">What a friend sees from a share link, signed in or not. Claiming hides the gift from others so nobody doubles up.</p>
-  <div class="variants"><button class="chip" type="button" data-variant="shared:owner" aria-pressed="false">View as the list's owner</button></div>
+  <div class="variants">
+    <button class="chip" type="button" data-variant="shared:owner" aria-pressed="false">View as the list's owner</button>
+    <button class="chip" type="button" data-variant="shared:taken" aria-pressed="false">Someone claimed it first</button>
+  </div>
   <div class="phone"><div class="app">
     <div class="topbar"><span class="brand">GiftMe</span></div>
     <div class="body">
@@ -452,9 +482,10 @@ textarea.input { min-height: 88px; resize: vertical; }
     </div>
     <div class="scrim center" id="claim-dialog"><div class="dialog" role="dialog" aria-label="Claim gift">
       <h2 class="h2">Claim this gift</h2>
-      <label class="field" for="claim-name">Your name<input class="input" id="claim-name" value="Jordan"></label>
-      <p class="meta">Other friends will see it's claimed. Sam won't.</p>
-      <button class="btn-primary block" type="button" data-close>Claim gift</button>
+      <p class="banner if-taken" style="color:var(--warning);background:var(--warning-soft)">Someone else just claimed this. Pick another gift.</p>
+      <label class="field if-free" for="claim-name">Your name<input class="input" id="claim-name" value="Jordan"></label>
+      <p class="meta if-free">Other friends will see it's claimed. Sam won't.</p>
+      <button class="btn-primary block if-free" type="button" data-close>Claim gift</button>
       <button class="btn-link" type="button" data-close>Cancel</button>
     </div></div>
   </div></div>
@@ -562,7 +593,7 @@ textarea.input { min-height: 88px; resize: vertical; }
       <div class="fb-row">
         <span class="meta" style="font-size:14px">Commenting as</span>
         <div class="seg" role="group" aria-label="Commenting as">
-          <button type="button" data-who="aaron" aria-pressed="true">Aaron</button>
+          <button type="button" data-who="aaron" aria-pressed="false">Aaron</button>
           <button type="button" data-who="jim" aria-pressed="false">Jim</button>
         </div>
       </div>
@@ -775,7 +806,7 @@ document.addEventListener('click', (e) => {
 //   feedback/<auto id>         {screen, who: "aaron"|"jim", text, at}
 //   approvals/<screen>__<who>  {screen, who, approved, at}
 const PEOPLE = { aaron: 'Aaron', jim: 'Jim' };
-let who = PEOPLE[store('mock-who')] ? store('mock-who') : 'aaron';
+let who = PEOPLE[store('mock-who')] ? store('mock-who') : null;
 let db = null;
 let comments = [];
 const approvals = new Map();
@@ -809,9 +840,10 @@ function renderFeedback() {
   const mine = approved(current, who);
   const btn = document.getElementById('fb-approve');
   btn.setAttribute('aria-pressed', String(mine));
-  btn.textContent = mine ? `Approved as ${PEOPLE[who]} · undo` : `I approve this screen (${PEOPLE[who]})`;
-  btn.disabled = !db;
-  document.getElementById('fb-post').disabled = !db;
+  btn.textContent = !who ? 'I approve this screen' : mine ? `Approved as ${PEOPLE[who]} · undo` : `I approve this screen (${PEOPLE[who]})`;
+  btn.disabled = !db || !who;
+  document.getElementById('fb-post').disabled = !db || !who;
+  if (db && !who) setMsg('Pick your name above to comment or approve.');
   const list = document.getElementById('fb-list');
   list.innerHTML = '';
   comments.filter((c) => c.screen === current).forEach((c) => {
@@ -850,14 +882,14 @@ function renderSignoff() {
   document.getElementById('signoff-waiting').textContent = waiting.length ? 'Still waiting: ' + waiting.join(', ') : 'Every screen is approved by both. Tell Claude to wrap up ALL-41.';
 }
 
-document.querySelectorAll('[data-who]').forEach((b) => b.addEventListener('click', () => { who = b.dataset.who; store('mock-who', who); renderFeedback(); }));
+document.querySelectorAll('[data-who]').forEach((b) => b.addEventListener('click', () => { who = b.dataset.who; store('mock-who', who); setMsg(''); renderFeedback(); }));
 document.addEventListener('screenchange', () => { setMsg(''); renderFeedback(); });
 
 document.getElementById('fb-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const field = document.getElementById('fb-text');
   const text = field.value.trim();
-  if (!db || !text) return;
+  if (!db || !who || !text) return;
   setMsg('Posting…');
   try {
     await db.collection('feedback').add({ screen: current, who, text: text.slice(0, 4000), at: Date.now() });
@@ -867,7 +899,7 @@ document.getElementById('fb-form').addEventListener('submit', async (e) => {
 });
 
 document.getElementById('fb-approve').addEventListener('click', async () => {
-  if (!db) return;
+  if (!db || !who) return;
   const screen = current;
   try {
     await db.doc(`approvals/${screen}__${who}`).set({ screen, who, approved: !approved(screen, who), at: Date.now() });
