@@ -219,6 +219,171 @@ textarea.input { min-height: 88px; resize: vertical; }
 
   <main class="stage" id="stage">
 <!-- screens:start -->
+<section class="screen" data-screen="home" data-title="Home" data-group="Concierge" hidden>
+  <p class="screen-note">The front door after sign-in. Your list first, then the people you buy for. Tap Mom to approve a gift, or Dad to see his profile.</p>
+  <div class="phone"><div class="app">
+    <div class="topbar"><span class="brand">GiftMe</span><button class="iconbtn" type="button" aria-label="Account"><span data-icon="user"></span></button></div>
+    <div class="body">
+      <a class="card" href="#list" data-go="list">
+        <div class="img"><span data-icon="gift"></span></div>
+        <div class="grow"><p class="card-title">My list</p><p class="card-sub">3 gifts · shared</p></div>
+        <span class="muted" data-icon="next"></span>
+      </a>
+      <div class="section">
+        <h2 class="h2">People</h2>
+        <div class="list">
+          <a class="card" href="#approval" data-go="approval">
+            <div class="grow"><p class="card-title">Mom</p><p class="card-sub">Birthday · Sat, Mar 14</p></div>
+            <span class="pill">Pick a gift</span>
+          </a>
+          <a class="card" href="#person" data-go="person">
+            <div class="grow"><p class="card-title">Dad</p><p class="card-sub">Father's Day · Sun, Jun 21</p></div>
+            <span class="pill pill-muted">Ideas Jun 1</span>
+          </a>
+          <div class="card">
+            <div class="grow"><p class="card-title">Sam</p><p class="card-sub">Christmas · Fri, Dec 25</p></div>
+            <span class="pill pill-ok">Arrives Dec 20</span>
+          </div>
+          <button class="btn-link" type="button" style="justify-self:start;text-decoration:none;color:var(--foreground);display:inline-flex;align-items:center;gap:8px"><span data-icon="plus"></span>Add someone you buy for</button>
+        </div>
+      </div>
+    </div>
+  </div></div>
+</section>
+
+<section class="screen" data-screen="person" data-title="Person" data-group="Concierge" hidden>
+  <p class="screen-note">Everything the app knows about one person, editable, with one line on how ready their ideas are. Delete sits at the very bottom.</p>
+  <div class="phone"><div class="app">
+    <div class="topbar"><button class="back" type="button" data-go="home"><span data-icon="back"></span>People</button><button class="iconbtn" type="button" aria-label="Edit Dad"><span data-icon="pencil"></span></button></div>
+    <div class="body">
+      <div class="section" style="gap:4px">
+        <h1 class="title">Dad</h1>
+        <p class="meta">Father · Father's Day, Sun, Jun 21 · Budget $50</p>
+      </div>
+      <div class="banner accent">Good to go. <button class="btn-link" type="button" style="color:inherit;min-height:0;padding:0" aria-label="Answer 1 question about Dad">Answer 1 question</button> to sharpen his ideas.</div>
+      <div class="section">
+        <h2 class="h2">What we know</h2>
+        <div class="kv">
+          <div><span class="k">Likes</span><span class="v">Woodworking, crime podcasts, strong coffee</span><button class="iconbtn" type="button" aria-label="Edit likes"><span data-icon="pencil" data-size="16"></span></button></div>
+          <div><span class="k">Sizes</span><span class="v">Shirt L · Shoe 10.5</span><button class="iconbtn" type="button" aria-label="Edit sizes"><span data-icon="pencil" data-size="16"></span></button></div>
+          <div><span class="k">Avoid</span><span class="v">Gadgets that need an app</span><button class="iconbtn" type="button" aria-label="Edit avoid"><span data-icon="pencil" data-size="16"></span></button></div>
+          <div><span class="k">Address</span><span class="v">12 Oak St, Dayton, OH</span><button class="iconbtn" type="button" aria-label="Edit address"><span data-icon="pencil" data-size="16"></span></button></div>
+        </div>
+      </div>
+      <div class="section">
+        <h2 class="h2">Past gifts</h2>
+        <div class="card"><div class="grow"><p class="card-title">Bench vise</p><p class="card-sub">Christmas last year · he loved it</p></div></div>
+      </div>
+      <button class="btn-link danger" type="button" style="justify-self:center">Delete Dad</button>
+    </div>
+    <div class="dock"><button class="btn-primary block" type="button">Add a note</button></div>
+  </div></div>
+</section>
+
+<section class="screen" data-screen="learned" data-title="Here's what I learned" data-group="Concierge" hidden>
+  <p class="screen-note">After a capture, the app shows what it picked up. Each fact is kept unless you drop it. Try dropping one.</p>
+  <div class="phone"><div class="app">
+    <div class="topbar"><button class="back" type="button" data-go="person"><span data-icon="back"></span>Dad</button></div>
+    <div class="body">
+      <div class="section" style="gap:4px">
+        <h1 class="title">Here's what I learned</h1>
+        <p class="meta">From a page you saved for Dad: an Instagram post</p>
+      </div>
+      <div class="list" id="facts">
+        <div class="card"><div class="grow"><p class="card-title">Restoring an old hand plane</p><p class="card-sub">Likes</p></div><div class="toggle"><button type="button" aria-pressed="true">Keep</button><button type="button" class="drop" aria-pressed="false">Drop</button></div></div>
+        <div class="card"><div class="grow"><p class="card-title">Wants a better sharpening stone</p><p class="card-sub">Wish</p></div><div class="toggle"><button type="button" aria-pressed="true">Keep</button><button type="button" class="drop" aria-pressed="false">Drop</button></div></div>
+        <div class="card"><div class="grow"><p class="card-title">Shop is in an unheated garage</p><p class="card-sub">Context</p></div><div class="toggle"><button type="button" aria-pressed="true">Keep</button><button type="button" class="drop" aria-pressed="false">Drop</button></div></div>
+      </div>
+    </div>
+    <div class="dock"><button class="btn-primary block" type="button" id="facts-save" data-go="person">Save 3 facts</button></div>
+  </div></div>
+</section>
+
+<section class="screen" data-screen="approval" data-title="Approval" data-group="Concierge" hidden>
+  <p class="screen-note">The heart of the app. Pick one or more ideas; the button shows the total. The $68 idea is over budget and asks first. "None of these" asks why.</p>
+  <div class="phone"><div class="app" id="approval-app">
+    <div class="topbar"><button class="back" type="button" data-go="home"><span data-icon="back"></span>People</button></div>
+    <div class="body">
+      <div class="section" style="gap:6px">
+        <h1 class="title">Mom's birthday</h1>
+        <p class="meta num">Sat, Mar 14 · Budget $60 · <span class="pill">Pick by Mar 5</span></p>
+      </div>
+      <div class="list" id="ideas">
+        <button class="card" type="button" data-price="42"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Stoneware mug set</p><p class="card-sub">She said her favourite mug chipped</p><p class="card-sub num">Arrives by Mar 10</p></div><span class="price">$42</span><span class="check"><span data-icon="check" data-size="16"></span></span></button>
+        <button class="card" type="button" data-price="35"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Garden kneeler</p><p class="card-sub">New raised beds this spring</p><p class="card-sub num">Arrives by Mar 9</p></div><span class="price">$35</span><span class="check"><span data-icon="check" data-size="16"></span></span></button>
+        <button class="card" type="button" data-price="45"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Audiobook credits</p><p class="card-sub">Listens on her morning walks</p><p class="card-sub num">Arrives instantly</p></div><span class="price">$45</span><span class="check"><span data-icon="check" data-size="16"></span></span></button>
+        <button class="card" type="button" data-price="68" data-over="8"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Cast-iron herb planter</p><p class="card-sub">Saved a photo of one in October</p><p class="card-sub num">Arrives by Mar 11 · <span class="pill pill-warn">$8 over budget</span></p></div><span class="price">$68</span><span class="check"><span data-icon="check" data-size="16"></span></span></button>
+      </div>
+      <p class="meta">Prices include shipping and tax.</p>
+    </div>
+    <div class="dock">
+      <button class="btn-primary block num" type="button" id="send" disabled>Pick a gift</button>
+      <button class="btn-link" type="button" data-open-sheet="reject-sheet">None of these</button>
+    </div>
+
+    <div class="scrim" id="over-sheet"><div class="sheet" role="dialog" aria-label="Over budget">
+      <h2 class="h2">This is $8 over your $60 budget</h2>
+      <p class="meta" style="font-size:15px">The cast-iron herb planter costs $68 with shipping and tax. Send it anyway?</p>
+      <button class="btn-primary block" type="button" id="over-yes">Yes, pick it</button>
+      <button class="btn-secondary block" type="button" data-close>Keep within budget</button>
+    </div></div>
+
+    <div class="scrim" id="reject-sheet"><div class="sheet" role="dialog" aria-label="None of these">
+      <h2 class="h2">What's off about these?</h2>
+      <div class="chips" id="reasons">
+        <button type="button" aria-pressed="false">She has one</button>
+        <button type="button" aria-pressed="false">Not her style</button>
+        <button type="button" aria-pressed="false">Too pricey</button>
+        <button type="button" aria-pressed="false">Too generic</button>
+      </div>
+      <label class="field">Anything else? <span class="meta" style="font-weight:400">Optional. We'll remember it for next time.</span><textarea class="input" id="reject-text" placeholder="She's trying to own less stuff"></textarea></label>
+      <button class="btn-primary block" type="button" data-close>Find new ideas</button>
+    </div></div>
+  </div></div>
+</section>
+
+<section class="screen" data-screen="needs-address" data-title="Needs an address" data-group="Concierge" hidden>
+  <p class="screen-note">A round can't look for ideas until it knows where the gift goes, because delivery dates and tax depend on it.</p>
+  <div class="phone"><div class="app">
+    <div class="topbar"><button class="back" type="button" data-go="home"><span data-icon="back"></span>People</button></div>
+    <div class="body">
+      <div class="section" style="gap:6px">
+        <h1 class="title">Mom's birthday</h1>
+        <p class="meta num">Sat, Mar 14 · Budget $60</p>
+      </div>
+      <div class="banner">We need Mom's address to find ideas that arrive in time.</div>
+      <form class="section" onsubmit="event.preventDefault()">
+        <label class="field" for="addr1">Street address<input class="input" id="addr1" autocomplete="off" value=""></label>
+        <label class="field" for="addr2">Apartment, suite <span class="meta" style="font-weight:400">Optional</span><input class="input" id="addr2"></label>
+        <div class="row" style="align-items:start">
+          <label class="field grow" for="city">City<input class="input" id="city"></label>
+          <label class="field" for="state" style="width:84px">State<input class="input" id="state"></label>
+        </div>
+        <label class="field" for="zip" style="max-width:160px">ZIP code<input class="input num" id="zip" inputmode="numeric"></label>
+      </form>
+    </div>
+    <div class="dock"><button class="btn-primary block" type="button">Save address</button></div>
+  </div></div>
+</section>
+
+<section class="screen" data-screen="needs-attention" data-title="Price went up" data-group="Concierge" hidden>
+  <p class="screen-note">When the price rises above what was approved, nothing is bought. One tap re-approves at the new total, or picks the next-best idea.</p>
+  <div class="phone"><div class="app">
+    <div class="topbar"><button class="back" type="button" data-go="home"><span data-icon="back"></span>People</button></div>
+    <div class="body">
+      <div class="section" style="gap:6px">
+        <h1 class="title">Mom's birthday</h1>
+        <p class="meta num">Sat, Mar 14 · Budget $60 · <span class="pill pill-warn">Needs you</span></p>
+      </div>
+      <div class="card"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Stoneware mug set</p><p class="card-sub num">Now $49 · you approved $42</p></div></div>
+      <p style="margin:0">The price went up by $7 before we could order. It's still within Mom's $60 budget.</p>
+    </div>
+    <div class="dock">
+      <button class="btn-primary block num" type="button">Send at $49</button>
+      <button class="btn-secondary block num" type="button">Pick the next idea: garden kneeler · $35</button>
+    </div>
+  </div></div>
+</section>
 <!-- screens:end -->
   </main>
 </div>
@@ -320,6 +485,51 @@ document.addEventListener('click', (e) => {
 });
 
 // screens-js:start
+// Approval: pick one or more; the over-budget idea asks first; the button shows count and total.
+(function approval() {
+  const ideas = document.getElementById('ideas');
+  const send = document.getElementById('send');
+  const over = document.getElementById('over-sheet');
+  let pending = null;
+  function update() {
+    const picked = [...ideas.querySelectorAll('.card.selected')];
+    const total = picked.reduce((sum, c) => sum + Number(c.dataset.price), 0);
+    send.disabled = picked.length === 0;
+    send.textContent = picked.length === 0 ? 'Pick a gift' : `Send ${picked.length} gift${picked.length > 1 ? 's' : ''} · $${total}`;
+  }
+  ideas.addEventListener('click', (e) => {
+    const card = e.target.closest('.card');
+    if (!card) return;
+    if (card.dataset.over && !card.classList.contains('selected')) { pending = card; over.setAttribute('data-open', ''); return; }
+    card.classList.toggle('selected');
+    card.setAttribute('aria-pressed', String(card.classList.contains('selected')));
+    update();
+  });
+  document.getElementById('over-yes').addEventListener('click', () => {
+    pending?.classList.add('selected');
+    pending?.setAttribute('aria-pressed', 'true');
+    over.removeAttribute('data-open');
+    update();
+  });
+  ideas.querySelectorAll('.card').forEach((c) => c.setAttribute('aria-pressed', 'false'));
+  document.getElementById('reasons').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (b) b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true'));
+  });
+})();
+
+// Here's what I learned: keep or drop each fact; the button counts what's kept.
+(function learned() {
+  const facts = document.getElementById('facts');
+  const save = document.getElementById('facts-save');
+  facts.addEventListener('click', (e) => {
+    const b = e.target.closest('.toggle button');
+    if (!b) return;
+    b.parentElement.querySelectorAll('button').forEach((x) => x.setAttribute('aria-pressed', String(x === b)));
+    const kept = facts.querySelectorAll('.toggle button:not(.drop)[aria-pressed="true"]').length;
+    save.textContent = kept === 0 ? 'Done' : `Save ${kept} fact${kept > 1 ? 's' : ''}`;
+  });
+})();
 // screens-js:end
 
 paintIcons();
