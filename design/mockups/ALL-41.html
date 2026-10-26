@@ -83,7 +83,10 @@ button, input, textarea, select { font: inherit; color: inherit; }
 .chip .dot { width: 8px; height: 8px; border-radius: 99px; background: var(--border); }
 .chip .dot.half { background: var(--warning); }
 .chip .dot.done { background: var(--success); }
-.stage { display: grid; gap: 16px; justify-items: center; }
+.review { grid-template-columns: minmax(0, 1fr); }
+.review > * { min-width: 0; }
+.stage { display: grid; gap: 16px; justify-items: center; grid-template-columns: minmax(0, 1fr); }
+.screen { width: 100%; display: grid; gap: 16px; justify-items: center; }
 .screen-note { font-size: 14px; color: var(--muted-foreground); max-width: 60ch; text-align: center; margin: 0; }
 .variants { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
 
@@ -554,6 +557,25 @@ textarea.input { min-height: 88px; resize: vertical; }
   </div></div>
 </section>
 <!-- screens:end -->
+    <section class="feedback" id="feedback" aria-labelledby="fb-title">
+      <h2 id="fb-title">Feedback on this screen</h2>
+      <div class="fb-row">
+        <span class="meta" style="font-size:14px">Commenting as</span>
+        <div class="seg" role="group" aria-label="Commenting as">
+          <button type="button" data-who="owner" aria-pressed="true">Owner</button>
+          <button type="button" data-who="jim" aria-pressed="false">Jim</button>
+        </div>
+      </div>
+      <div class="fb-row">
+        <div class="fb-approvals" id="fb-approvals"></div>
+        <button class="btn-secondary btn-sm" type="button" id="fb-approve" aria-pressed="false">I approve this screen</button>
+      </div>
+      <form class="section" id="fb-form" style="gap:8px">
+        <label class="field" for="fb-text">Comment<textarea class="input" id="fb-text" placeholder="What would you change on this screen?"></textarea></label>
+        <div class="row"><button class="btn-primary btn-sm" type="submit" id="fb-post">Post</button><p class="fb-msg grow" id="fb-msg" aria-live="polite"></p></div>
+      </form>
+      <ul class="fb-list" id="fb-list"></ul>
+    </section>
   </main>
 </div>
 
@@ -748,6 +770,131 @@ document.addEventListener('click', (e) => {
   document.getElementById('ext-again').addEventListener('click', () => { form.hidden = false; done.hidden = true; });
 })();
 // screens-js:end
+
+// Feedback and sign-off, stored in the artifact's db:
+//   feedback/<auto id>         {screen, who: "owner"|"jim", text, at}
+//   approvals/<screen>__<who>  {screen, who, approved, at}
+const PEOPLE = { owner: 'Owner', jim: 'Jim' };
+let who = PEOPLE[store('mock-who')] ? store('mock-who') : 'owner';
+let db = null;
+let comments = [];
+const approvals = new Map();
+
+function screenLabel(s) { return s.dataset.title + (s.dataset.group === 'Computer width' ? ' (computer)' : ''); }
+function approved(screen, person) { return approvals.get(`${screen}__${person}`)?.approved === true; }
+function setMsg(text, isError = false) {
+  const m = document.getElementById('fb-msg');
+  m.textContent = text;
+  m.classList.toggle('err', isError);
+}
+function errorText(e) {
+  if (e?.code === 'quota_exceeded') return 'The comment store is full. Tell Claude so it can make room.';
+  if (e?.code === 'permission_denied' || e?.code === 'not_granted') return "You can't post here. Ask the owner for edit access.";
+  return "That didn't save. Check your connection and try again.";
+}
+
+function renderFeedback() {
+  document.querySelectorAll('[data-who]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.who === who)));
+  const s = screens().find((x) => x.dataset.screen === current);
+  document.getElementById('fb-title').textContent = 'Feedback on ' + (s ? screenLabel(s) : 'this screen');
+  const box = document.getElementById('fb-approvals');
+  box.innerHTML = '';
+  Object.entries(PEOPLE).forEach(([key, name]) => {
+    const span = document.createElement('span');
+    const yes = approved(current, key);
+    span.className = yes ? 'yes' : 'muted';
+    span.textContent = `${name} ${yes ? '✓ approved' : '· not yet'}`;
+    box.append(span);
+  });
+  const mine = approved(current, who);
+  const btn = document.getElementById('fb-approve');
+  btn.setAttribute('aria-pressed', String(mine));
+  btn.textContent = mine ? `Approved as ${PEOPLE[who]} · undo` : `I approve this screen (${PEOPLE[who]})`;
+  btn.disabled = !db;
+  document.getElementById('fb-post').disabled = !db;
+  const list = document.getElementById('fb-list');
+  list.innerHTML = '';
+  comments.filter((c) => c.screen === current).forEach((c) => {
+    const li = document.createElement('li');
+    const head = document.createElement('div');
+    head.className = 'who';
+    head.textContent = PEOPLE[c.who] || 'Someone';
+    const when = document.createElement('span');
+    when.className = 'when';
+    when.textContent = ' · ' + new Date(c.at).toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    head.append(when);
+    const text = document.createElement('div');
+    text.className = 'text';
+    text.textContent = String(c.text || '');
+    li.append(head, text);
+    list.append(li);
+  });
+}
+
+function renderSignoff() {
+  const all = screens();
+  if (!db) {
+    document.getElementById('signoff-count').textContent = 'comments and sign-off work when this page is opened in Claude';
+    return;
+  }
+  let both = 0;
+  const waiting = [];
+  all.forEach((s) => {
+    const id = s.dataset.screen;
+    const n = Number(approved(id, 'owner')) + Number(approved(id, 'jim'));
+    if (n === 2) both++; else waiting.push(screenLabel(s));
+    const dot = document.querySelector(`.chip[data-pick="${id}"] .dot`);
+    if (dot) dot.className = 'dot' + (n === 2 ? ' done' : n === 1 ? ' half' : '');
+  });
+  document.getElementById('signoff-count').textContent = `approved by both on ${both} of ${all.length} screens`;
+  document.getElementById('signoff-waiting').textContent = waiting.length ? 'Still waiting: ' + waiting.join(', ') : 'Every screen is approved by both. Tell Claude to wrap up ALL-41.';
+}
+
+document.querySelectorAll('[data-who]').forEach((b) => b.addEventListener('click', () => { who = b.dataset.who; store('mock-who', who); renderFeedback(); }));
+document.addEventListener('screenchange', () => { setMsg(''); renderFeedback(); });
+
+document.getElementById('fb-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const field = document.getElementById('fb-text');
+  const text = field.value.trim();
+  if (!db || !text) return;
+  setMsg('Posting…');
+  try {
+    await db.collection('feedback').add({ screen: current, who, text: text.slice(0, 4000), at: Date.now() });
+    field.value = '';
+    setMsg('Posted.');
+  } catch (err) { setMsg(errorText(err), true); }
+});
+
+document.getElementById('fb-approve').addEventListener('click', async () => {
+  if (!db) return;
+  const screen = current;
+  try {
+    await db.doc(`approvals/${screen}__${who}`).set({ screen, who, approved: !approved(screen, who), at: Date.now() });
+  } catch (err) { setMsg(errorText(err), true); }
+});
+
+(async function connect() {
+  try { db = (await window.claude?.use?.('db')) ?? null; } catch { db = null; }
+  if (!db) {
+    setMsg('Comments and sign-off work when this page is opened in Claude.');
+    renderSignoff();
+    renderFeedback();
+    return;
+  }
+  db.collection('feedback').orderBy('at', 'desc').onSnapshot((snap) => {
+    comments = snap.docs.map((d) => d.data());
+    renderFeedback();
+  }, (err) => setMsg(errorText(err), true));
+  db.collection('approvals').onSnapshot((snap) => {
+    approvals.clear();
+    snap.docs.forEach((d) => approvals.set(d.id, d.data()));
+    renderFeedback();
+    renderSignoff();
+  }, (err) => setMsg(errorText(err), true));
+  renderSignoff();
+  renderFeedback();
+})();
 
 paintIcons();
 buildPicker();
