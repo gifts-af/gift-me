@@ -1,6 +1,6 @@
 # Spike: checkout and payment with Zinc (W1-2, ALL-16)
 
-Date: 2026-10-25. Status: **done except delivery.** Desk research, sandbox and a real order (placed for $3.42) are complete. Tracking to delivery is still open (see [Real order](#real-order)).
+Date: 2026-10-25. Status: **done.** Desk research, sandbox and a real order ($3.42, delivered 2026-10-26) are complete (see [Real order](#real-order)).
 
 ## Recommendation
 
@@ -69,7 +69,11 @@ Note: order `status` stops at `order_placed`. Shipping progress is on `tracking_
   - **Gift option:** Walmart's business checkout has none. Because we sent `fulfillment.gift: "best_effort"`, Zinc placed a normal order and reported it in `fulfillment.concessions` (`gift_option_unavailable`). Without best effort, the order would have failed. **Lesson:** a gift message isn't guaranteed, so the app should say "if the store supports it".
   - **Estimated delivery:** `job_result.estimated_delivery` said 2026-10-25, the same day the order was placed, which looks like a placeholder. **Don't trust the placement-time estimate.** Use the offer's delivery range until the carrier's estimate arrives with tracking.
   - The price breakdown is in `job_result.price_components` (not `result`).
-- [ ] Record tracking and the actual delivery date against the carrier's estimate (answer 5).
+- **Delivery: ordered Sunday 2026-10-25 at about 10:35 a.m. Eastern, received Monday 2026-10-26** (the owner confirmed it), so about a day.
+  - **Zinc's tracking lagged the real delivery.** A Walmart tracking number arrived at 7:03 p.m. Eastern on the order day. On the 26th, once the owner had the package, Zinc still said `in_transit`, its only checkpoint was "Shipped" (2:37 p.m. Eastern), and `estimated_delivery_date` was `null`. No `order.delivered` had come yet.
+  - **The carrier gave no estimate,** so for Walmart orders there was nothing better than the offer's delivery range. The placement-time estimate (the 25th) was a day early.
+  - **Lesson for W5-1 (tracking and late risk):** treat "delivered" from Zinc as late and sometimes missing. The late-risk check should run on the offer's range and the order date, use the carrier's estimate when one exists, and let the giver mark a gift "arrived". One order is one data point; check again on Amazon orders, where Zinc's docs say estimates come through.
+- **Wallet settled** at $0.56: the $5 credit, minus two 1¢ lookups, minus the $3.42 order and the $1 fee. The unused part of the $3.98 cap was refunded.
 
 Watch-outs from doing it for real:
 - The live key is returned once, in `key`. Persist it immediately and never log it (the first script version printed it; the owner should delete that key in Zinc after the spike).
