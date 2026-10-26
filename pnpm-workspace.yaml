@@ -1,0 +1,8 @@
+packages:
+  - apps/*
+  - packages/*
+
+# pnpm 10 blocks install scripts by default. The Supabase CLI needs its
+# install script to download the binary.
+onlyBuiltDependencies:
+  - supabase

@@ -1,0 +1,758 @@
+{
+  "model": "anthropic/claude-opus-5.5",
+  "results": [
+    {
+      "person": "dad",
+      "brainstorm": {
+        "ideas": [
+          {
+            "title": "Simms SolarFlex UPF 50+ sun hoody, men's size L",
+            "product_search": "Simms SolarFlex Hoody Men's Large",
+            "retailer_hint": "simms.com or Amazon",
+            "est_price_usd": 80,
+            "fits_facts": [
+              "interest: fly fishing",
+              "size: shirt L",
+              "ships to FL",
+              "age: 68",
+              "dislike: clutter"
+            ],
+            "why": "This is a UPF 50+ hoody that fly anglers really wear, and it protects the back of the hands from sun on Florida water. A good choice for a 68-year-old who spends long days outdoors. It's a clothing upgrade he'll use, not another object to store. It lists at $79.95 at several shops, about 7% over budget. This is the one idea that goes over."
+          },
+          {
+            "title": "Rubio Monocoat Oil Plus 2C one-coat hardwax finish (Pure, 350 ml)",
+            "product_search": "Rubio Monocoat Oil Plus 2C Pure 350ml",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 63,
+            "fits_facts": [
+              "interest: woodworking",
+              "owns: has nearly every hand tool",
+              "dislike: clutter"
+            ],
+            "why": "He already has the tools, so this is a premium finish that gets used up and leaves no clutter. One coat of this hardwax oil gives a durable, natural-looking finish on furniture and boards. The 350 ml Pure kit, with the accelerator included, costs about $63 on Amazon. Many woodworkers want it but don't buy it for themselves."
+          },
+          {
+            "title": "Microjig GRR-RIPPER+ 3D push block with SafeRip kit",
+            "product_search": "Microjig GRR-RIPPER+ GR-100+",
+            "retailer_hint": "Amazon or microjig.com",
+            "est_price_usd": 45,
+            "fits_facts": [
+              "interest: woodworking",
+              "owns: has nearly every hand tool",
+              "age: 68"
+            ],
+            "why": "This is a safety accessory for the table saw, router table and jointer, not a hand tool he probably already owns. It holds narrow pieces and keeps fingers away from the blade, which gives a longtime woodworker extra peace of mind. Prices run from about $37 on sale to $49 list."
+          },
+          {
+            "title": "FastCap Kaizen Foam tool-drawer organizer sheets",
+            "product_search": "FastCap Kaizen Foam 2 ft x 4 ft",
+            "retailer_hint": "Amazon or fastcap.com",
+            "est_price_usd": 40,
+            "fits_facts": [
+              "dislike: clutter",
+              "owns: has nearly every hand tool",
+              "interest: woodworking"
+            ],
+            "why": "He has a big hand-tool collection and dislikes clutter. You cut a custom pocket for each tool in a drawer, so everything has a spot and it's obvious when something is missing. It's a satisfying shop project, not more stuff."
+          },
+          {
+            "title": "Polarized fishing sunglasses for flats sight-fishing",
+            "product_search": "Flying Fisherman polarized sunglasses amber",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 35,
+            "fits_facts": [
+              "interest: fly fishing",
+              "ships to FL",
+              "age: 68"
+            ],
+            "why": "Fly fishing in Florida's shallow saltwater flats means spotting fish before you cast. Amber or copper polarized lenses cut glare and make fish easier to see, which helps aging eyes in particular. They're affordable, so a spare pair is fine to keep in the truck or boat."
+          },
+          {
+            "title": "RIO Fluoroflex Saltwater tippet spool",
+            "product_search": "RIO Fluoroflex Saltwater Tippet 20 lb",
+            "retailer_hint": "Amazon or rioproducts.com",
+            "est_price_usd": 25,
+            "fits_facts": [
+              "interest: fly fishing",
+              "ships to FL",
+              "dislike: clutter"
+            ],
+            "why": "Fluorocarbon tippet gets used up and needs replacing, so he'll use every bit of it. Good saltwater tippet stands up to the abrasion of redfish, snook and other Florida species, and a spool takes up almost no room. Choose 16 or 20 lb as an all-around strength."
+          },
+          {
+            "title": "Lefty Kreh's 'Fly Fishing in Salt Waters' (book)",
+            "product_search": "Fly Fishing in Salt Waters Lefty Kreh",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 25,
+            "fits_facts": [
+              "interest: fly fishing",
+              "ships to FL",
+              "dislike: clutter"
+            ],
+            "why": "A classic book by one of fly fishing's best-known teachers, written about the kind of saltwater fishing a Florida angler does. It's one well-chosen book, not a gadget, so it adds nothing to the clutter he dislikes."
+          },
+          {
+            "title": "'The Anarchist's Design Book' by Christopher Schwarz",
+            "product_search": "The Anarchist's Design Book Christopher Schwarz Lost Art Press",
+            "retailer_hint": "lostartpress.com",
+            "est_price_usd": 50,
+            "fits_facts": [
+              "interest: woodworking",
+              "owns: has nearly every hand tool",
+              "dislike: clutter"
+            ],
+            "why": "He already has the tools, so this gives him projects to build with them: simple, sturdy furniture that's more about function than ornament. That suits someone who dislikes clutter. Lost Art Press makes well-bound books that last."
+          }
+        ],
+        "input": 39353,
+        "output": 4461,
+        "searches": 3,
+        "cost": 0.276632,
+        "secs": 51.154
+      },
+      "rank": {
+        "ranked": [
+          {
+            "title": "FastCap Kaizen Foam tool-drawer organizer sheets",
+            "reason": "He owns nearly every hand tool and hates clutter. This foam gives each tool its own cut-out spot in a drawer, so it's tidy and he can see when something's missing.",
+            "score_0_10": 8.5
+          },
+          {
+            "title": "Rubio Monocoat Oil Plus 2C one-coat hardwax finish (Pure, 350 ml)",
+            "reason": "He already has the tools, so give him a premium one-coat wood finish he'll use up on his projects and probably wouldn't buy for himself.",
+            "score_0_10": 8
+          },
+          {
+            "title": "'The Anarchist's Design Book' by Christopher Schwarz",
+            "reason": "His hand-tool collection is complete, and this book gives him simple, sturdy furniture projects to build with it. Check the total with shipping from Lost Art Press stays under $75.",
+            "score_0_10": 7
+          }
+        ],
+        "dropped": [
+          {
+            "title": "Simms SolarFlex UPF 50+ sun hoody, men's size L",
+            "why": "About $80 before shipping, which is over the $75 budget."
+          },
+          {
+            "title": "Microjig GRR-RIPPER+ 3D push block with SafeRip kit",
+            "why": "Assumes he has a table saw, router table or jointer. The facts only say hand tools."
+          },
+          {
+            "title": "Polarized fishing sunglasses for flats sight-fishing",
+            "why": "Generic, and a fly fisherman almost certainly already owns polarized glasses. It also assumes he fishes saltwater flats."
+          },
+          {
+            "title": "RIO Fluoroflex Saltwater tippet spool",
+            "why": "Assumes saltwater fishing and guesses his tippet strength. If either is wrong, it's wasted."
+          },
+          {
+            "title": "Lefty Kreh's 'Fly Fishing in Salt Waters' (book)",
+            "why": "Assumes he fishes saltwater, and a longtime angler may already own this well-known classic."
+          }
+        ],
+        "tokens": 3573,
+        "cost": 0.034772,
+        "secs": 12.679
+      }
+    },
+    {
+      "person": "maya",
+      "brainstorm": {
+        "ideas": [
+          {
+            "title": "Kodak Gold 200 35mm film, 3-pack (36 exposures)",
+            "product_search": "Kodak Gold 200 Color Negative Film 35mm 36 Exposure 3-Pack",
+            "retailer_hint": "Walmart (or B&H)",
+            "est_price_usd": 32,
+            "fits_facts": [
+              "interest: film photography (35mm)",
+              "style: cozy, vintage"
+            ],
+            "why": "Film keeps getting more expensive, so 108 fresh frames is a gift she'll actually use up. <cite index=\"1-11\">Walmart currently lists it at $31.99</cite>, and <cite index=\"3-3\">B&H sells the same 36-exposure 3-pack for $25.99</cite>. Its warm look suits her vintage taste: one shop calls it <cite index=\"8-4\">beloved by many professionals for its warm colour rendition</cite>. Only buy from the main listing, because <cite index=\"1-12\">other sellers charge $43.06</cite>."
+          },
+          {
+            "title": "Kodak Ektar M35 reusable film camera",
+            "product_search": "Kodak M35 35mm Reusable Film Camera",
+            "retailer_hint": "Amazon or Kodak's own store",
+            "est_price_usd": 30,
+            "fits_facts": [
+              "interest: film photography (35mm)",
+              "style: vintage",
+              "constraint: small college dorm room",
+              "age: 21"
+            ],
+            "why": "A simple, retro-colored point-and-shoot she can carry to parties and around campus when she doesn't want to risk her main camera. It's small, so it fits a dorm, and it uses the 35mm film she already buys. I couldn't check the price on this one; it has usually sold for about $30, so confirm before ordering."
+          },
+          {
+            "title": "Warm white photo string lights with wooden clips",
+            "product_search": "LED photo clip string lights warm white 40 wooden clips",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 15,
+            "fits_facts": [
+              "interest: film photography (35mm)",
+              "style: cozy",
+              "constraint: small college dorm room"
+            ],
+            "why": "A way to show off her developed prints that takes up no floor or desk space. It hangs on a dorm wall with removable hooks and adds the soft, cozy light she likes. I didn't verify this price; these usually run $12–18."
+          },
+          {
+            "title": "Pioneer cloth-cover photo album for 4x6 prints",
+            "product_search": "Pioneer Photo Albums BTV-204 Bi-Directional Woven Cloth Album 200 4x6",
+            "retailer_hint": "Amazon or Walmart",
+            "est_price_usd": 18,
+            "fits_facts": [
+              "interest: film photography (35mm)",
+              "style: vintage, cozy"
+            ],
+            "why": "Film shooters end up with stacks of prints, and an old-fashioned fabric-cover album fits her vintage style. It also stores neatly on a dorm shelf. I didn't verify this price; it usually runs $15–20."
+          },
+          {
+            "title": "The Film Photography Handbook (2nd edition)",
+            "product_search": "The Film Photography Handbook 2nd Edition Chris Marquardt Monika Andrae",
+            "retailer_hint": "Amazon or Target",
+            "est_price_usd": 32,
+            "fits_facts": [
+              "interest: film photography (35mm)",
+              "age: 21"
+            ],
+            "why": "A well-regarded guide to film stocks, exposure and developing that will help her get better at a hobby she already loves, and it's a slim book that fits a dorm shelf. I didn't verify this price; it's usually around $30–35 in paperback."
+          },
+          {
+            "title": "Haws V200 brass plant mister",
+            "product_search": "Haws V200 10-Ounce Plant Mister Brass",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 25,
+            "fits_facts": [
+              "interest: houseplants",
+              "style: vintage",
+              "constraint: small college dorm room"
+            ],
+            "why": "A useful plant tool that also looks good on display. It's <cite index=\"12-3\">made of brass throughout</cite> and is a <cite index=\"12-3\">perfect size for indoor use</cite>, so it's small enough for a dorm windowsill. Gardenista listed it at <cite index=\"12-3\">$22.99 USD at time of publication</cite> on Amazon. Some shops charge $55 or more, so stick to the V200 model on Amazon."
+          },
+          {
+            "title": "Tabletop wooden test-tube propagation station",
+            "product_search": "YIBOT Plant Propagation Station Wooden Stand 5 Glass Test Tubes",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 18,
+            "fits_facts": [
+              "interest: houseplants",
+              "style: vintage",
+              "constraint: small college dorm room"
+            ],
+            "why": "She can grow new plants from cuttings of the ones she has, with no soil mess in a small room. On Amazon, the <cite index=\"30-4\">YIBOT Plant Propagation Station</cite> with 5 glass test tubes shows <cite index=\"30-4\">300+ bought in past month</cite>. Similar stations sell for about <cite index=\"24-1\">$16.14 with coupon</cite>. A tabletop model is better than a wall-hanging one for a dorm."
+          },
+          {
+            "title": "Clip-on desk LED grow light",
+            "product_search": "GooingTop LED Grow Light clip desk full spectrum",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 25,
+            "fits_facts": [
+              "interest: houseplants",
+              "constraint: small college dorm room"
+            ],
+            "why": "Dorm windows often don't get enough light for houseplants. A grow light that clips onto her desk or shelf keeps her plants healthy without using any floor space. I didn't verify this price; clip-on models usually run $20–30."
+          }
+        ],
+        "input": 78177,
+        "output": 4093,
+        "searches": 3,
+        "cost": 0.42456799999999995,
+        "secs": 44.774
+      },
+      "rank": {
+        "ranked": [
+          {
+            "title": "Kodak Gold 200 35mm film, 3-pack (36 exposures)",
+            "reason": "She shoots 35mm and film keeps getting pricier, so 108 warm, vintage-looking frames will get used. About $26 at B&H.",
+            "score_0_10": 9
+          },
+          {
+            "title": "Haws V200 brass plant mister",
+            "reason": "Her houseplants get a solid brass mister that looks vintage on a dorm windowsill. About $23 on Amazon; buy only the V200 model.",
+            "score_0_10": 8
+          },
+          {
+            "title": "Pioneer cloth-cover photo album for 4x6 prints",
+            "reason": "Her film prints will pile up, and a fabric-cover album suits her vintage style and fits on a dorm shelf. Price not checked, usually $15–20.",
+            "score_0_10": 7.5
+          },
+          {
+            "title": "Tabletop wooden test-tube propagation station",
+            "reason": "She can grow new plants from cuttings of the ones she has, with no soil mess and little desk space. About $16–18 on Amazon.",
+            "score_0_10": 7
+          },
+          {
+            "title": "Warm white photo string lights with wooden clips",
+            "reason": "She can hang her film prints on the dorm wall with soft, cozy light, using no desk space. Price not checked, usually $12–18.",
+            "score_0_10": 6.5
+          }
+        ],
+        "dropped": [
+          {
+            "title": "Kodak Ektar M35 reusable film camera",
+            "why": "The name mixes two Kodak models (the M35 and the Ektar H35), and the price wasn't checked. It's a basic camera that may duplicate gear she already owns."
+          },
+          {
+            "title": "The Film Photography Handbook (2nd edition)",
+            "why": "The price wasn't checked and is near the budget. She may already know the basics, so it's a weaker fit than gear she'll use."
+          },
+          {
+            "title": "Clip-on desk LED grow light",
+            "why": "Generic and unverified. We don't know her dorm light is a problem, and some dorms limit plug-in devices."
+          }
+        ],
+        "tokens": 3591,
+        "cost": 0.033532,
+        "secs": 13.39
+      }
+    },
+    {
+      "person": "june",
+      "brainstorm": {
+        "ideas": [
+          {
+            "title": "Clear suction-cup window bird feeder",
+            "product_search": "Nature's Hangout Window Bird Feeder No Assembly Strong Suction Cups",
+            "retailer_hint": "Amazon (or natureshangout.com)",
+            "est_price_usd": 25,
+            "fits_facts": [
+              "interest: backyard birds",
+              "lives in: assisted living apartment with a small patio",
+              "avoid: anything that needs setup or an app",
+              "age: 84"
+            ],
+            "why": "She can watch birds a few inches away from her chair without going out to the patio. There's nothing to assemble: you just press the suction cups onto the glass and add seed. The tray slides out so she can refill it easily. It's sold as a gift for elders and has a lifetime guarantee. Amazon lists it around $20, and the brand's own store sells versions for about $33."
+          },
+          {
+            "title": "Birds of Ohio Field Guide (3rd edition)",
+            "product_search": "Birds of Ohio Field Guide Stan Tekiela 3rd edition",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 15,
+            "fits_facts": [
+              "interest: backyard birds",
+              "ships to: OH",
+              "avoid: anything that needs setup or an app"
+            ],
+            "why": "This is a paper bird guide, so she doesn't need an app to identify birds. It covers only Ohio birds (124 species) and is sorted by color, so if she sees a yellow bird she turns to the yellow section. It's small enough to keep on the windowsill next to the feeder. List price is $14.95."
+          },
+          {
+            "title": "Easy-clean hanging hummingbird feeder",
+            "product_search": "Aspects HummZinger HighView 12 oz Hummingbird Feeder 429",
+            "retailer_hint": "Walmart or Amazon",
+            "est_price_usd": 30,
+            "fits_facts": [
+              "interest: backyard birds",
+              "lives in: assisted living apartment with a small patio",
+              "avoid: anything that needs setup or an app"
+            ],
+            "why": "It's one piece that hangs from a patio hook, so there's nothing to put together. The red lid twists off for cleaning, and it's made not to drip or leak. It also has a built-in moat that keeps ants out, which matters on a small patio. Ohio gets ruby-throated hummingbirds every spring, so it's good timing for Mother's Day. Prices run about $20 to $32."
+          },
+          {
+            "title": "Self-watering patio planter",
+            "product_search": "Bloem Ariana Self-Watering Planter 12 inch",
+            "retailer_hint": "Amazon, Walmart, or Target",
+            "est_price_usd": 20,
+            "fits_facts": [
+              "interest: gardening",
+              "lives in: assisted living apartment with a small patio",
+              "age: 84"
+            ],
+            "why": "A small patio means container gardening, and this pot has a water reservoir built in, so she has to water less often. It's lightweight plastic, so it's easy for her to move."
+          },
+          {
+            "title": "Ergonomic garden trowel",
+            "product_search": "Radius Garden 102 PRO Ergonomic Aluminum Hand Trowel",
+            "retailer_hint": "Amazon or radiusgarden.com",
+            "est_price_usd": 18,
+            "fits_facts": [
+              "interest: gardening",
+              "age: 84",
+              "lives in: assisted living apartment with a small patio"
+            ],
+            "why": "The round grip is designed to put less strain on hands and wrists, which helps at 84. One good tool suits patio pots better than a big tool set she has no room to store."
+          },
+          {
+            "title": "Breathable gardening gloves",
+            "product_search": "Foxgloves Original Gardening Gloves women",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 25,
+            "fits_facts": [
+              "interest: gardening",
+              "age: 84"
+            ],
+            "why": "These are thin, snug gloves, so she can still handle small seedlings while protecting skin that tears more easily with age. They just pull on and wash easily."
+          },
+          {
+            "title": "Hand cream made for gardeners",
+            "product_search": "Crabtree & Evelyn Gardeners Ultra-Moisturising Hand Therapy",
+            "retailer_hint": "Amazon or crabtree-evelyn.com",
+            "est_price_usd": 30,
+            "fits_facts": [
+              "interest: gardening",
+              "occasion: mothers_day"
+            ],
+            "why": "A small treat tied to the hobby she loves, made for hands that have been in the soil. It's a classic Mother's Day present that she can use right away."
+          },
+          {
+            "title": "Large-piece backyard birds jigsaw puzzle",
+            "product_search": "Cobble Hill Easy Handling 275 piece puzzle birds",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 20,
+            "fits_facts": [
+              "interest: backyard birds",
+              "age: 84",
+              "avoid: anything that needs setup or an app"
+            ],
+            "why": "Cobble Hill's Easy Handling puzzles have big pieces that are easier for older hands and eyes. A bird design gives her something to enjoy on days when it's too cold or wet to garden. Choose whichever songbird design is in stock."
+          }
+        ],
+        "input": 43562,
+        "output": 3536,
+        "searches": 3,
+        "cost": 0.274968,
+        "secs": 38.203
+      },
+      "rank": {
+        "ranked": [
+          {
+            "title": "Clear suction-cup window bird feeder",
+            "reason": "She loves backyard birds, and this sticks right on her window so she can watch them up close from her chair, with nothing to assemble.",
+            "score_0_10": 9.5
+          },
+          {
+            "title": "Birds of Ohio Field Guide (3rd edition)",
+            "reason": "She loves her backyard birds, and this small Ohio-only paper guide is sorted by color so she can name what she sees without an app.",
+            "score_0_10": 8.5
+          },
+          {
+            "title": "Easy-clean hanging hummingbird feeder",
+            "reason": "Her small patio can hang this one-piece feeder just as Ohio's hummingbirds arrive in May, and it has no assembly and keeps ants out.",
+            "score_0_10": 8
+          },
+          {
+            "title": "Self-watering patio planter",
+            "reason": "She gardens in pots on her small patio, and this light planter holds its own water so she doesn't have to water as often.",
+            "score_0_10": 7
+          }
+        ],
+        "dropped": [
+          {
+            "title": "Ergonomic garden trowel",
+            "why": "Useful, but she likely already has a trowel, and it's a weaker gift than the bird picks."
+          },
+          {
+            "title": "Breathable gardening gloves",
+            "why": "Fits are risky without knowing her size, and gloves are a common filler gift."
+          },
+          {
+            "title": "Hand cream made for gardeners",
+            "why": "Generic toiletry with only a loose tie to gardening, and scent and skin preferences are unknown."
+          },
+          {
+            "title": "Large-piece backyard birds jigsaw puzzle",
+            "why": "Puzzling isn't one of her stated interests, and the design is whatever's in stock, so it's weakly grounded."
+          }
+        ],
+        "tokens": 2687,
+        "cost": 0.01942,
+        "secs": 6.146
+      }
+    },
+    {
+      "person": "sam",
+      "brainstorm": {
+        "ideas": [
+          {
+            "title": "GrowlerWerks uKeg Go 64 oz carbonated growler",
+            "product_search": "GrowlerWerks uKeg Go 64",
+            "retailer_hint": "growlerwerks.com (brand store). It's $99.99 in Tungsten, Midnight or Chili, and orders over $99 ship free. Home Depot charges about $126.",
+            "est_price_usd": 99.99,
+            "fits_facts": [
+              "interest: craft beer",
+              "life: new dad, 4-month-old",
+              "ships to: CO, USA"
+            ],
+            "why": "Going out to the brewery is hard with a 4-month-old. This growler gets filled with fresh beer from his local Colorado taproom, and its small CO2 cartridge keeps the beer carbonated for weeks, so he can drink it slowly at home after bedtime. It's well made and kind of a splurge, which makes it a good pick for someone who already buys his own basics. Note: it needs 8 g food-grade CO2 cartridges, which aren't included. Pick up a pack if you can fit it in the budget."
+          },
+          {
+            "title": "Spiegelau Craft Beer Tasting Kit (set of 4 glasses)",
+            "product_search": "Spiegelau Craft Beer Tasting Kit Glasses, Set of 4",
+            "retailer_hint": "Walmart (seen at about $25–$29) or Amazon. Other stores charge about $40.",
+            "est_price_usd": 30,
+            "fits_facts": [
+              "interest: craft beer",
+              "note: hard to shop for, buys what he wants himself"
+            ],
+            "why": "Master brewers helped design these four German crystal glasses: IPA, Tulip, Lager and Hefeweizen. Beer fans want proper style-specific glasses but rarely buy a full set for themselves. They'd also pair well with the uKeg if you're splitting gifts."
+          },
+          {
+            "title": "PuttOUT Medium Putting Mat",
+            "product_search": "PuttOUT Medium Putting Mat",
+            "retailer_hint": "puttout.golf (brand store, $79.99, free shipping to the lower 48). Also sold at Scheels, which has CO stores, and Amazon.",
+            "est_price_usd": 79.99,
+            "fits_facts": [
+              "interest: golf (occasional)",
+              "life: new dad, 4-month-old"
+            ],
+            "why": "With a newborn, real rounds are rare. This well-reviewed mat rolls the same speed as a medium-to-fast green and has distance and alignment markings, so he can practice putting in the living room during naps. It rolls up into its carry bag when he's done."
+          },
+          {
+            "title": "Personalized Titleist Pro V1 golf balls (1 dozen)",
+            "product_search": "Titleist Pro V1 Personalized Golf Balls",
+            "retailer_hint": "titleist.com (custom personalization). I couldn't confirm the current price, but it's usually about $55–$60 per dozen.",
+            "est_price_usd": 60,
+            "fits_facts": [
+              "interest: golf (occasional)",
+              "life: new dad, 4-month-old",
+              "note: hard to shop for"
+            ],
+            "why": "He can't have bought these himself, because they're custom. Print something like \"Dad Est. 2026\" or the baby's name on premium balls. It's a sentimental golf gift that marks his first birthday as a father."
+          },
+          {
+            "title": "Manta Sleep Mask",
+            "product_search": "Manta Sleep Mask",
+            "retailer_hint": "mantasleep.com or Amazon. Price not confirmed, roughly $35–$45.",
+            "est_price_usd": 40,
+            "fits_facts": [
+              "life: new dad, 4-month-old",
+              "age: 35"
+            ],
+            "why": "Parents of a 4-month-old nap whenever they can, often in daylight. This mask has adjustable eye cups that block all light without pressing on the eyes. It's a practical gift most guys wouldn't think to buy themselves."
+          },
+          {
+            "title": "Tasting Beer, 2nd Edition by Randy Mosher",
+            "product_search": "Tasting Beer 2nd Edition Randy Mosher",
+            "retailer_hint": "Amazon or Target. Price not confirmed, roughly $18–$22.",
+            "est_price_usd": 20,
+            "fits_facts": [
+              "interest: craft beer"
+            ],
+            "why": "This is the standard guide to beer styles, tasting and food pairing, and it's used to study for the Cicerone beer certification. It's easy to read in short bits between feedings, and it pairs well with the Spiegelau glasses."
+          },
+          {
+            "title": "BrüMate Hopsulator Trio insulated can cooler",
+            "product_search": "BruMate Hopsulator Trio 3-in-1",
+            "retailer_hint": "brumate.com or Amazon. Price not confirmed, roughly $28–$35.",
+            "est_price_usd": 32,
+            "fits_facts": [
+              "interest: craft beer",
+              "interest: golf (occasional)",
+              "life: new dad, 4-month-old"
+            ],
+            "why": "It fits standard and 16 oz tallboy cans, which is how most craft beer is sold, and doubles as a tumbler. It keeps a beer cold on the golf course or when a quick backyard drink turns into a 30-minute diaper break."
+          },
+          {
+            "title": "Craft A Brew 1-gallon beer making kit",
+            "product_search": "Craft A Brew Hazy IPA Beer Making Kit 1 Gallon",
+            "retailer_hint": "craftabrew.com or Amazon. Price not confirmed, roughly $45–$60.",
+            "est_price_usd": 55,
+            "fits_facts": [
+              "interest: craft beer",
+              "note: buys what he wants himself",
+              "life: new dad, 4-month-old"
+            ],
+            "why": "It's an experience he probably hasn't given himself yet. The 1-gallon size fits on a stovetop and takes about one afternoon of brewing, which is manageable for a new dad. Skip this if you know he already homebrews."
+          }
+        ],
+        "input": 39316,
+        "output": 4854,
+        "searches": 3,
+        "cost": 0.28434400000000004,
+        "secs": 55.538
+      },
+      "rank": {
+        "ranked": [
+          {
+            "title": "Personalized Titleist Pro V1 golf balls (1 dozen)",
+            "reason": "His first birthday as a dad: premium balls printed with the baby's name are something he can't buy for himself. About $55–60, so check the price.",
+            "score_0_10": 8
+          },
+          {
+            "title": "Spiegelau Craft Beer Tasting Kit (set of 4 glasses)",
+            "reason": "He loves craft beer, and a proper set of style glasses is a treat beer fans rarely buy themselves. About $30 at Walmart.",
+            "score_0_10": 7.5
+          },
+          {
+            "title": "PuttOUT Medium Putting Mat",
+            "reason": "He golfs only now and then, and with a baby even less, so he can practice putts in the living room during naps. $79.99 with free shipping.",
+            "score_0_10": 7
+          },
+          {
+            "title": "Tasting Beer, 2nd Edition by Randy Mosher",
+            "reason": "He's into craft beer, and this classic, easy-to-read style guide can be read in short bits. About $20, and it pairs nicely with the glasses.",
+            "score_0_10": 6
+          }
+        ],
+        "dropped": [
+          {
+            "title": "GrowlerWerks uKeg Go 64 oz carbonated growler",
+            "why": "It costs $99.99 before the CO2 cartridges it needs to work, which puts it over the $100 budget. It's also a big, gear-type buy that he might already own or prefer to choose himself."
+          },
+          {
+            "title": "Manta Sleep Mask",
+            "why": "It's tied only to being a tired new dad and not to anything he enjoys. Coming from an in-law, it could feel like a comment on his sleep. The price isn't confirmed."
+          },
+          {
+            "title": "BrüMate Hopsulator Trio insulated can cooler",
+            "why": "It's a generic, easy-to-find item that a beer and golf guy who buys his own stuff likely already has."
+          },
+          {
+            "title": "Craft A Brew 1-gallon beer making kit",
+            "why": "Brewing is a time-heavy project for the parent of a 4-month-old. It's also a miss if he already homebrews, and the price isn't confirmed."
+          }
+        ],
+        "tokens": 3699,
+        "cost": 0.035372,
+        "secs": 15.098
+      }
+    },
+    {
+      "person": "priya",
+      "brainstorm": {
+        "ideas": [
+          {
+            "title": "Timemore Black Mirror Basic 2 coffee scale",
+            "product_search": "TIMEMORE Black Mirror Basic 2 Coffee Scale",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 55,
+            "fits_facts": [
+              "interest: specialty coffee, pour-over",
+              "style: minimalist"
+            ],
+            "why": "A pour-over upgrade made for V60 and Chemex brewing. It measures to 0.1 g, has an auto-start timer, shows flow rate and charges over USB-C. The flat black acrylic design suits her minimalist style. I found it for about $55–59 on Amazon (Prime shipping). Skip this one if she already has a good coffee scale."
+          },
+          {
+            "title": "Origami Dripper S (porcelain) in a matte color",
+            "product_search": "Origami Dripper Ceramic S",
+            "retailer_hint": "Onyx Coffee Lab (brand/roaster store) or Amazon",
+            "est_price_usd": 47,
+            "fits_facts": [
+              "interest: specialty coffee, pour-over",
+              "style: minimalist"
+            ],
+            "why": "A competition-favorite dripper made from Japanese Mino porcelain. Its 20 ridges help control the bloom and brew speed, and it brews 1–2 cups. It takes V60 or Kalita Wave filters, so it works with what she already has. Matte beige, grey or white fits a minimalist kitchen. About $38–39 plus shipping."
+          },
+          {
+            "title": "FlipBelt Classic running belt",
+            "product_search": "FlipBelt Classic Running Belt",
+            "retailer_hint": "FlipBelt.com or Amazon",
+            "est_price_usd": 44,
+            "fits_facts": [
+              "interest: running, training for a marathon",
+              "style: minimalist",
+              "diet: vegan"
+            ],
+            "why": "For long training runs she can carry her phone, keys and gels in a belt that lies flat and doesn't bounce, with no buckles to chafe. The fabric is synthetic (micropoly and Lycra), so there's no leather. Solid black or carbon looks clean and simple. It's $44 at FlipBelt and $39 at some running stores. You'll need to pick her waist size."
+          },
+          {
+            "title": "Maurten Gel 100 box for marathon fueling",
+            "product_search": "Maurten Gel 100 12 pack",
+            "retailer_hint": "Amazon or Maurten.com",
+            "est_price_usd": 45,
+            "fits_facts": [
+              "interest: running, training for a marathon",
+              "diet: vegan"
+            ],
+            "why": "Many marathoners use these gels for long runs and race day because they're easy on the stomach. Maurten markets them as vegan, but check the label on the listing. I couldn't confirm the current price for a 12-pack, so treat about $40–45 as an estimate. It's a practical gift that fits her training right now."
+          },
+          {
+            "title": "Fellow Atmos vacuum coffee canister (0.7L)",
+            "product_search": "Fellow Atmos Vacuum Coffee Canister 0.7L Ceramic",
+            "retailer_hint": "Fellow (brand store) or Amazon",
+            "est_price_usd": 40,
+            "fits_facts": [
+              "interest: specialty coffee, pour-over",
+              "style: minimalist"
+            ],
+            "why": "Specialty beans go stale fast. You twist the lid to pull the air out, which helps her beans keep their flavor longer. Fellow's matte, plain-looking design suits a minimalist counter. I estimated about $35–40 from memory, so check the current price."
+          },
+          {
+            "title": "TriggerPoint GRID foam roller",
+            "product_search": "TriggerPoint GRID 1.0 Foam Roller 13 inch",
+            "retailer_hint": "Amazon, Target or Walmart",
+            "est_price_usd": 38,
+            "fits_facts": [
+              "interest: running, training for a marathon",
+              "style: minimalist"
+            ],
+            "why": "Rolling out calves, IT bands and quads helps with recovery during heavy marathon mileage. This is a well-known, sturdy roller in solid colors, not a gimmick. The price is an estimate (about $35–40), so check it before buying. Skip it if she already has a roller."
+          },
+          {
+            "title": "Ciele GOCap running cap",
+            "product_search": "Ciele GOCap Standard",
+            "retailer_hint": "Ciele (brand store) or Amazon",
+            "est_price_usd": 50,
+            "fits_facts": [
+              "interest: running, training for a marathon",
+              "style: minimalist",
+              "diet: vegan"
+            ],
+            "why": "A light, quick-drying cap that runners love for sun and rain on long runs and race day. It's all synthetic with no animal materials, and many colorways are simple and understated. The price is an estimate (about $45–50 shipped), so check it before buying."
+          },
+          {
+            "title": "Fellow Carter Move travel mug (12 oz)",
+            "product_search": "Fellow Carter Move Mug 12 oz",
+            "retailer_hint": "Fellow (brand store), Amazon or Target",
+            "est_price_usd": 32,
+            "fits_facts": [
+              "interest: specialty coffee, pour-over",
+              "style: minimalist",
+              "interest: running, training for a marathon"
+            ],
+            "why": "This brings her two interests together: carry a carefully made pour-over to early race-morning starts or post-run coffee. The ceramic lining keeps the flavor clean, and the wide mouth lets her smell the coffee as she drinks. The design is plain and matte. The price is an estimate (about $30–35), so check it before buying."
+          }
+        ],
+        "input": 43893,
+        "output": 3592,
+        "searches": 3,
+        "cost": 0.277412,
+        "secs": 41.139
+      },
+      "rank": {
+        "ranked": [
+          {
+            "title": "Fellow Atmos vacuum coffee canister (0.7L)",
+            "reason": "Her specialty beans go stale fast, and this twist-lid vacuum canister keeps them fresh in a clean matte look. About $35–40, so check the current price.",
+            "score_0_10": 8
+          },
+          {
+            "title": "Fellow Carter Move travel mug (12 oz)",
+            "reason": "She can take her pour-over to early long runs and race mornings. The ceramic lining keeps the taste clean and the design is simple. About $30–35, so check the price.",
+            "score_0_10": 8
+          },
+          {
+            "title": "Ciele GOCap running cap",
+            "reason": "Her long marathon training runs need sun and rain cover. This light, all-synthetic cap is a runner favorite and comes in plain colors. About $45–50 shipped, so check the price.",
+            "score_0_10": 7
+          },
+          {
+            "title": "Timemore Black Mirror Basic 2 coffee scale",
+            "reason": "Her pour-over habit gets more precise with this sleek scale, which measures to 0.1 g and has a built-in timer. Skip it if she already owns a good scale. About $55–59 with Prime, close to the budget.",
+            "score_0_10": 7
+          }
+        ],
+        "dropped": [
+          {
+            "title": "Origami Dripper S (porcelain) in a matte color",
+            "why": "A pour-over fan almost certainly owns a dripper already, so this would likely duplicate one. Shipping also makes the final cost uncertain."
+          },
+          {
+            "title": "FlipBelt Classic running belt",
+            "why": "You have to guess her waist size, and the wrong fit makes it useless."
+          },
+          {
+            "title": "Maurten Gel 100 box for marathon fueling",
+            "why": "Runners are picky about fueling because of stomach issues, the price is unconfirmed, and gels are a consumable that doesn't feel like a birthday gift."
+          },
+          {
+            "title": "TriggerPoint GRID foam roller",
+            "why": "Most marathon trainees already own a foam roller, and it's a fairly generic pick."
+          }
+        ],
+        "tokens": 3484,
+        "cost": 0.033376,
+        "secs": 12.302
+      }
+    }
+  ]
+}

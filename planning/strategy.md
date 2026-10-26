@@ -9,7 +9,7 @@ The written source for where the platform is headed and how it reaches people. T
 | Product | For | Job in the funnel | Status | Lead |
 |---|---|---|---|---|
 | **Scan-to-gift** | Both | **Get people in.** Fun, public, instant. | Exploring. Linear: "Scan-to-gift" | — |
-| **Gift lists** (was "GiftMe"; needs a new name) | The receiver | **Keep them.** A reason to come back for every occasion. | In progress: sharing and guest claiming done, soft launch target 2026-11-01. Linear: "Gift List Sharing", "Soft Launch" | Jim |
+| **Gift lists** (was "GiftMe"; needs a new name) | The receiver | **Keep them.** A reason to come back for every occasion. | In progress: sharing and guest claiming done, soft launch planned (no fixed date; we're building without an external deadline). Linear: "Gift List Sharing", "Soft Launch" | Jim |
 | **Gift Concierge** | The giver | **Earn.** Loyal customers automate recurring gifts. | MVP planned, Wave 1 next. Linear: "Gift Concierge MVP" | Owner |
 
 - Each product works on its own and gets better with the others. Gift Concierge stays an isolated service that can be used alongside the list app or without it (D31).
@@ -112,6 +112,6 @@ One number per handoff: scans per item; scans that become a paid gift; scanners 
 ## 9. Open questions for the owner and Jim
 1. **One name** for the platform, or one per product? (GiftMe is taken, ALL-14.)
 2. ~~**One app or two?**~~ **Decided 2026-10-25 (T19):** one app, one account, one repo from the start, built so a product can be split out later. See `design/technical-design.md` §2.2.
-3. ~~**Where the list app's code lives?**~~ **Decided 2026-10-25 (T19):** it moves into the gifts-af platform repo when Jim and the owner are ready, keeping its history. Nothing changes before its soft launch.
+3. ~~**Where the list app's code lives?**~~ **Decided 2026-10-25 (T19):** it moves into the gifts-af platform repo when Jim and the owner are ready, keeping its history. **Step 1 done 2026-10-25:** the list app's repo moved to [gifts-af/GiftsAF](https://github.com/gifts-af/GiftsAF). It's built with the same stack, so **step 2 makes it the base of the one platform app (T20)** (ALL-15).
 4. **After the concierge MVP, what's first:** its public launch, or connecting it to lists?
 5. **Scan-to-gift timing:** it's the front door for go-to-market but last on the product roadmap. Should a small first version come right after the concierge MVP?

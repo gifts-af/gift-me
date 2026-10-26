@@ -72,7 +72,7 @@ flowchart LR
 | Auth | **Supabase Auth, Google provider** | Google Contacts read access is requested separately, at import time (§6.1). The extension authenticates with the user's Supabase session (§6.2). |
 | File storage | **Supabase Storage** (private bucket) | Capture screenshots. Deleting a person deletes their files. |
 | Background jobs | **Supabase `pg_cron`** calls the app's **round engine** (a protected API route) **once a day at 8 a.m. Eastern**, using `pg_net` | The schedule lives next to the data it checks. Vercel Cron and Workflow aren't used. All the work runs in the Next.js app, so there's one runtime and one deploy, with no Supabase Edge Functions (T8). See §5.1. |
-| AI | Any model through **Vercel AI Gateway** with the **AI SDK**. Default today: **Claude Opus 5.5** (`anthropic/claude-opus-5-5`) | The gateway gives one key, one bill and one spending cap across providers, plus fallbacks. Usage is **billed through the Vercel account**, so there's no separate AI provider account (T11). The model for each task is set in one config file (§7). **[Verify in W1-3]** that the provider's web search tool works through the gateway. Fallback: connect a provider API key to the gateway. |
+| AI | Any model through **Vercel AI Gateway** with the **AI SDK**. Default today: **Claude Opus 5.5** (`anthropic/claude-opus-5.5`; take IDs from the gateway's `/v1/models`) | The gateway gives one key, one bill and one spending cap across providers, plus fallbacks. Usage is **billed through the Vercel account**, so there's no separate AI provider account (T11). The model for each task is set in one config file (§7). Web search through the gateway is **confirmed in W1-3** (Anthropic's native tool; the gateway's Perplexity search is a provider-neutral alternative). Hobby plan works; Claude models need **paid** gateway credit (the free credit excludes them). |
 | Checkout | **Zinc** (API v2), confirmed by the W1-2 spike | `max_price` caps the whole order (item, shipping and tax), gift orders, signed webhooks, per-package tracking. **MVP:** each user's own Zinc wallet. **Later:** the user's card through Zinc Connect (T16, §6.5a). Product lookups go through one app-owned Zinc account (T17). |
 | Email | Resend or Postmark **[decided in W1-4]** | Needs sending and inbound-to-webhook. **[Verify]** inbound support and free-tier limits. |
 | Push notifications | **Decision deferred (T12).** If added: standard Web Push (VAPID) using the `web-push` package | Works on Android, and on iOS once the PWA is added to the home screen. Email covers every message without it. The notification service sends through a channel list, so push plugs in later without changing callers. Estimated 1–2 days of work, in its own ticket (W5-4). |
@@ -96,19 +96,19 @@ Gift Concierge is one of three products: scan-to-gift, gift lists and the concie
 | Web addresses | Each product under its own path (`/concierge`, `/lists`, `/scan`, short links at `/s`). If a product later needs its own deploy, Vercel can serve separately deployed apps under the same domain without users noticing. |
 | Money and sensitive data | Zinc keys, funding, addresses and social media content stay inside the concierge module and schema (D31). |
 
-**The MVP builds only the concierge.** The shared account and people records, the `concierge` module and schema, and the boundary rule are set up now; `lists` and `scan` are added when their work starts. Jim's list app moves into this repo when he and the owner are ready, keeping its git history.
+**The MVP builds only the concierge.** The shared account and people records, the `concierge` module and schema, and the boundary rule are set up now; `lists` and `scan` are added when their work starts. **GiftsAF is the starting point (T20).** Jim's list app ([gifts-af/GiftsAF](https://github.com/gifts-af/GiftsAF)) uses the same stack (Next.js App Router, Supabase email-and-password sign-in, Vercel, shadcn/ui, Vitest). It's imported with its history as `apps/web` (ALL-15). Its list code becomes `modules/lists`, its tables (`lists`, `list_items`, `gift_claims`) and their functions move into the `lists` schema (done in ALL-19; display names now come from `public.profiles`), and its Vercel and Supabase projects become the platform's production ones. The concierge is built alongside it as `modules/concierge`.
 
 ### 2.3 Repository layout
 
-**One repo for the whole platform** (T19). The repo is the existing `gift-concierge` repo under the gifts-af organization, with code added alongside `planning/` and `design/`. It is renamed to the platform name once that's chosen (ALL-14); GitHub redirects old links. It has one shared package, kept as small as the two apps allow (T10):
+**One repo for the whole platform** (T19). The repo is **`gifts-af/gift-me`** (renamed from `gift-concierge` on 2026-10-25, T21), with code added alongside `planning/` and `design/`. If ALL-14 picks a different platform name, it's renamed again; GitHub redirects old links. It has one shared package, kept as small as the two apps allow (T10):
 
 ```
-gift-concierge/
+gift-me/
 ├── apps/
 │   ├── web/            Next.js app for the whole platform: UI, API routes, webhooks, round engine
 │   │   ├── modules/
 │   │   │   ├── concierge/   The MVP: rounds, ideas, orders, Zinc (public API in index.ts)
-│   │   │   ├── lists/       Added when the list app moves in
+│   │   │   ├── lists/       From GiftsAF (T20): lists, items, sharing, claiming
 │   │   │   └── scan/        Added when scan-to-gift starts
 │   │   └── lib/ai/     Prompts, schemas, AI calls, eval fixtures
 │   └── extension/      Chrome extension
@@ -126,6 +126,7 @@ gift-concierge/
 - **AI code lives in the web app** because nothing else calls the AI model. It moves into its own package only if a second app needs it.
 
 Tooling: pnpm workspaces, Vitest for tests, ESLint and Prettier, and GitHub Actions running lint, typecheck, and tests on every pull request. Vercel preview deployments are created per pull request.
+- **Browser tests (Playwright)** are added with the first real screens (W2-1, ALL-20): a smoke test that signs in, checks the app shell at phone width and signs out, run in CI. Later screen tickets add their own flows, and the end-to-end dry run (W6-1, ALL-36) uses it. Until then, the only UI tests are Vitest with jsdom, a simulated page that needs no real browser.
 
 ## 3. Data model
 
@@ -148,10 +149,18 @@ All tables have `id uuid`, `created_at`, and `updated_at`. Accounts (`profiles`)
 | `reactions` | round_id, rating (loved, liked, meh, returned), note, source (email, web) | D-2 |
 | `notifications` | user_id, round_id, kind, channel, sent_at, action_token_hash | Audit trail plus reminder escalation state. |
 | `inbound_messages` | user_id, from, subject, body, attachments, matched_person_id, status | N-2, C-5 |
+| `app_settings` | key, value (jsonb), updated_at | App-wide settings that change without a deploy (T23): `zinc_order_fee_cents` and the §4.1 schedule timings (`planning_delivery_days`, `safety_buffer_days`, `round_lead_days`, `reminder_1_after_heads_up_days`, `reminder_2_before_deadline_days`, `final_notice_before_deadline_days`, `fastest_days_to_arrive`). Not user-owned: only the server can read it, and the owner edits it. |
 
 Gift history (D-3) is a view over `gift_rounds`, `gift_ideas`, `orders`, and `reactions`.
 
-**Deletion (C-7):** deleting a person cascades to that person's rows, and a storage cleanup removes their screenshots.
+**Deletion (C-7, T27):** deleting a person or occasion is a **soft delete**: the row is marked `deleted_at` and hidden from the user, their open rounds are skipped, and gift and order history are kept. Removing data for real (for example a GDPR request) is an admin action, `admin.hard_delete_person` or `admin.hard_delete_account`, which cascades to every row, is logged in `admin.deletion_log`, and is followed by a storage cleanup of their screenshots.
+
+**As built in schema v1** (ALL-19, T26; migrations in `supabase/migrations/`):
+- The money fields shown on `profiles` above (over-budget %, notification prefs, funding mode, Zinc connection) live in **`concierge.accounts`**, one row per user. `public.profiles` keeps display name, email, phone and timezone, and is created at sign-up.
+- Every table in `concierge` has `user_id` and the same privacy rule, including rows that belong to a round. Children reference their parent and owner together, so nothing can point at another user's data.
+- `app_settings` is the one table with no `user_id`: only the server reads it (T23).
+- **Users write their setup, the server writes the rest** (T26): people, occasions, budgets, facts, answers and captures are user-writable; rounds, ideas, orders, reactions, notifications, inbound mail and the Zinc connection are written only by server code, so `packages/core`'s budget and status checks can't be bypassed. One live order per idea.
+- `packages/core/src/database.types.ts` is generated from the database (`pnpm db:types`). CI fails if it's out of date.
 
 ### 3.1 How the app learns about a person
 
@@ -214,6 +223,8 @@ flowchart LR
 | Marked skipped | At the deadline |
 
 - If a round has to start late, for example a person added close to their birthday, it compresses the schedule, filters ideas to those that can still arrive in time, and says so in the heads-up.
+  - **How it compresses** (agreed 2026-10-25, ALL-19): the round starts today, never in the past. Any reminder that would land on or before the heads-up is dropped, and so is reminder 1 if it would land on or after reminder 2. The skip at the deadline always stays. If the 7-day planning deadline has already arrived, the deadline moves to the last day next-day shipping could still make it (occasion − 3 days), ideas are kept only if they can arrive by then with the 2-day buffer, and the chosen idea's own deadline replaces it once ideas exist. A round always leaves at least one day to answer; if it can't, no round is created that year **[Claude's call]**.
+- **Dates are calendar days** in US dates (Mother's Day is the 2nd Sunday of May, Father's Day the 3rd Sunday of June). A Feb 29 birthday or anniversary falls on Feb 28 in other years, since early beats late. Delivery and handling days count calendar days, with the slowest case plus the buffer covering weekends **[Claude's call]**. The code is in `packages/core` (`occasions.ts`, `schedule.ts`).
 
 ### 4.2 Budget
 - `est_total = price + shipping + tax + fees` (D10). Tax is estimated from the recipient's state until checkout gives the real figure.
@@ -225,6 +236,8 @@ flowchart LR
   - Zinc's `max_price` covers item, shipping and tax together, and is never exceeded (confirmed in W1-2). It doesn't include Zinc's $1 order fee, so `max_price = approved ceiling − committed spend − order fee`.
   - **Wallet mode (MVP):** Zinc sets aside `max_price + fee` when the order is placed and refunds what isn't used, so the balance must cover the full cap, not the expected total.
 - Refunded orders release their committed spend (D29).
+- **The order fee is a setting** (T23). It comes from `app_settings`, never from code, and is passed into every budget calculation.
+- **How it's computed** (ALL-19, `packages/core/src/budget.ts`): money is whole cents, and anything that has to round rounds down, so a rounding error only ever spends less. The over-budget limit itself counts as over budget, not dropped. A pick of several ideas is judged by its sum, the same way as one idea, and when the sum is over budget and approved, the approved ceiling is that sum. An order holds its full cap plus fee as committed spend until its real total is known. **[Claude's call]** When several ideas are picked, each order's `max_price` also holds back the estimated totals of the picks not yet ordered, so the first order can't use up the whole budget. A `max_price` of $0 or less is treated as a bug, never as an order.
 
 ## 5. Gift round statuses
 
@@ -341,18 +354,20 @@ Funding comes in two stages. Ordering, tracking and the data model are the same 
 
 **Keeping the provider replaceable (T11):**
 - All AI calls go through `apps/web/lib/ai`, using the AI SDK's provider-neutral functions (`generateObject`, `generateText`) and the AI Gateway. No other code calls a model directly.
-- Each task's model and settings live in one config map, for example `{ extraction: "anthropic/claude-opus-5-5", ... }`. Changing a model is a one-line config change, re-checked against the eval fixtures.
+- Each task's model and settings live in one config map, for example `{ extraction: "anthropic/claude-opus-5.5", ... }`. Changing a model is a one-line config change, re-checked against the eval fixtures.
 - Prompts are plain instructions plus a schema, with no vendor-specific prompt tricks.
 - **The one vendor-specific feature is web search** during brainstorming. It sits behind a small `searchWeb` step, so a different provider's search tool, or a search API, can replace it.
 
-| Task | Default model and settings (today) | Output | Estimated cost |
+| Task | Default model and settings (today) | Output | Cost (measured in W1-3 unless marked) |
 |---|---|---|---|
-| Capture extraction | Claude Opus 5.5, effort `low`, vision | Structured facts (schema-validated) | ~$0.02 each |
-| Inbound note matching and extraction | Claude Opus 5.5, effort `low` | Person match plus facts | ~$0.01 each |
-| Idea brainstorm | Claude Opus 5.5, effort `medium`, web search | 10 candidates (schema) | ~$0.10 |
-| Idea ranking and reasons | Claude Opus 5.5, effort `low` | Ranked list (schema) | ~$0.03 |
+| Capture extraction | Claude Opus 5.5, effort `low`, vision | Structured facts (schema-validated) | ~$0.01 each (text; screenshots not yet measured) |
+| Inbound note matching and extraction | Claude Opus 5.5, effort `low` | Person match plus facts | ~$0.01 each (estimate) |
+| Idea brainstorm | Claude Opus 5.5, web search (up to 3 searches) | 8 candidates with `product_search` terms, no URLs (schema) | ~$0.25–0.45 (mostly search results read) |
+| Idea ranking and reasons | Claude Opus 5.5, effort `low` | Ranked list (schema) | ~$0.02–0.04 |
 
-Cheaper models are worth trying per task once the fixtures exist. Extraction and ranking are the likely candidates.
+**A full round costs about $0.30–0.45** (W1-3, `spikes/ai.md`). Cheaper models are worth trying per task now that fixtures exist: Sonnet 5.5 is half the price, and brainstorm is the expensive step.
+
+**Prompt rules learned in W1-3** (prompt v3): stated wants come first (use the over-budget slot if needed); a worn-out owned item is a replacement need; check every idea against owned items; stock items only, no personalization; prefer Amazon, Walmart, Target and Best Buy; ship-to isn't where hobbies happen. Captured facts must reach idea generation: without them, ideas are generic.
 
 - All outputs use structured outputs or schemas. Inputs and outputs are logged, and inputs are kept so prompts can be improved later.
 - **Cost control:** the AI Gateway budget is capped at **$60 a month**, with an alert email to the owner at 50% and 80% of the cap **[Claude's call]**. App-side limits cap the number of retries per round. If the cap is hit, rounds already waiting on ideas move to `needs_attention` and the owner is alerted. They never fail quietly, because a stalled round risks a late gift.
@@ -370,8 +385,8 @@ Cheaper models are worth trying per task once the fixtures exist. Extraction and
 ## 9. Environments and operations
 - **Supabase:** two projects on the free tier, `dev` and `prod`, plus the local Supabase CLI for development. `pg_cron` and `pg_net` are enabled on both.
   - **Inactivity pause:** free projects pause after 7 days without activity, which would stop the round engine. W1-6 checks whether the tick counts as activity. If it doesn't, the owner either upgrades `prod` to Pro ($25 a month) or schedules a keep-alive call.
-- **Vercel:** Hobby to start. Production comes from `main`, and pull requests get preview deployments.
-  - **[Verify in W1-6]** function time limits for idea generation, and whether Hobby's non-commercial terms are acceptable for 3 users.
+- **Vercel:** Hobby while developing and testing (T24). Production comes from `main`, and pull requests get preview deployments against Supabase `dev`.
+  - Move to Pro before a commercial launch. **[Verify in W3]** that idea generation fits Hobby's function time limit.
   - Upgrade to Pro ($20 a month) if they aren't.
 - **Monitoring:** Vercel logs and observability, AI Gateway dashboards, and a daily "health" email to the owner listing rounds in `needs_attention` **[Claude's call]**.
 - **Test mode:** Zinc's sandbox (a `zn_test_` key: test product URLs for success, price exceeded, out of stock, bad address and more, delivering in seconds, with its own webhook settings and no cost), plus a `DRY_RUN` flag that does everything except place the real order.
@@ -382,7 +397,7 @@ Cheaper models are worth trying per task once the fixtures exist. Extraction and
 |---|---|
 | Vercel Hobby, or Pro if needed | $0 / $20 |
 | Supabase free, or Pro if needed | $0 / $25 |
-| AI model usage through AI Gateway, billed by Vercel | ~$10–15 (capped at $60) |
+| AI model usage through AI Gateway, billed by Vercel (prepaid credit) | ~$5–15 (about a dozen rounds a month at ~$0.40, plus captures at ~$0.01; capped at $60) |
 | Email service | $0 (free tier) |
 | Zinc | $1 per successful order (paid from each user's wallet), plus $0.01 per product lookup on the app account (~$1–3). No minimum or monthly fee. |
 | Domain | ~$1–2 |
@@ -466,4 +481,4 @@ Each wave can start once the waves before it have the dependencies it lists. Wit
 **Within wave 2, W2-1 goes first.** W2-2 and W2-4 can start right after it, and W2-3 and W2-5 follow. So wave 2 is really two steps, though still more tickets than builders at each step. With two builders, nobody is blocked. Wave 1's spikes are the critical path: they decide W3-3 and W4-2. **Start Wave 1 with the spikes and look and feel (W1-7), not the scaffold.** Start the Zinc signup on day one, because account approval may take days. W1-1 is small and low-risk, so it can fill gaps or run in parallel.
 
 ## 14. Accounts
-All services (Google, Vercel including AI Gateway billing, Supabase, Zinc, Linear) are under the owner's **allensforever711@gmail.com** account, and the code is in the free **gifts-af** GitHub organization (github.com/gifts-af/gift-concierge), where allensforever711, aarontallen, JimtheBurger and brb3 are all owners. Jim is added to each service (T7). **Zinc:** the app-owned account (product lookups, sandbox, T17) exists under allensforever711@gmail.com, created in W1-2; each user also has their own Zinc account for buying (§6.5a). **Domain:** if none is already set up, W1-6 buys a cheap placeholder domain under that account **[Claude's call]**.
+All services (Google, Vercel including AI Gateway billing, Supabase, Zinc, Linear) are under the owner's **allensforever711@gmail.com** account, and the code is in the free **gifts-af** GitHub organization (github.com/gifts-af/gift-me), where allensforever711, aarontallen, JimtheBurger and brb3 are all owners. Jim is added to each service (T7). **Zinc:** the app-owned account (product lookups, sandbox, T17) exists under allensforever711@gmail.com, created in W1-2; each user also has their own Zinc account for buying (§6.5a). **Domain:** if none is already set up, W1-6 buys a cheap placeholder domain under that account **[Claude's call]**.
