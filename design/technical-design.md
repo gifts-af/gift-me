@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | **Approved** v1.0 (2026-10-17). Revised v1.1 (2026-10-18) after the owner's review: Supabase `pg_cron` runs gift rounds once a day (T8, T9), a lean repo layout (T10), a replaceable AI backend billed through Vercel (T11), push deferred (T12), email capture kept (T13), round statuses cut from 11 to 9 (T14), and a new §3.1 on how the app learns about a person. Revised 2026-10-25: the platform is one app, account and repo, built to split later (§2.2, T19). Tunable values (buffers, timings, retries) are sensible defaults to adjust once real usage shows what's needed. |
+| **Status** | **Approved** v1.0 (2026-10-17). Revised v1.1 (2026-10-18) after the owner's review: Supabase `pg_cron` runs gift rounds once a day (T8, T9), a lean repo layout (T10), a replaceable AI backend billed through Vercel (T11), push deferred (T12), email capture kept (T13), round statuses cut from 11 to 9 (T14), and a new §3.1 on how the app learns about a person. Revised v1.2 (2026-10-25) with the checkout spike's findings (W1-2, `spikes/checkout.md`): funding in stages (T16), one app-owned Zinc account for product lookups (T17), and approval means buy now (T18). Also 2026-10-25: the platform is one app, account and repo, built to split later (§2.2, T19). Tunable values (buffers, timings, retries) are sensible defaults to adjust once real usage shows what's needed. |
 | **Date** | 2026-10-25 |
 | **Implements** | `../planning/PRD.md` (approved v1.0). Requirement IDs (B-3, A-9, etc.) refer to it. |
 | **Decisions** | `decisions.md` (T#), `../planning/decisions.md` (D#) |
@@ -73,7 +73,7 @@ flowchart LR
 | File storage | **Supabase Storage** (private bucket) | Capture screenshots. Deleting a person deletes their files. |
 | Background jobs | **Supabase `pg_cron`** calls the app's **round engine** (a protected API route) **once a day at 8 a.m. Eastern**, using `pg_net` | The schedule lives next to the data it checks. Vercel Cron and Workflow aren't used. All the work runs in the Next.js app, so there's one runtime and one deploy, with no Supabase Edge Functions (T8). See §5.1. |
 | AI | Any model through **Vercel AI Gateway** with the **AI SDK**. Default today: **Claude Opus 5.5** (`anthropic/claude-opus-5.5`; take IDs from the gateway's `/v1/models`) | The gateway gives one key, one bill and one spending cap across providers, plus fallbacks. Usage is **billed through the Vercel account**, so there's no separate AI provider account (T11). The model for each task is set in one config file (§7). Web search through the gateway is **confirmed in W1-3** (Anthropic's native tool; the gateway's Perplexity search is a provider-neutral alternative). Hobby plan works; Claude models need **paid** gateway credit (the free credit excludes them). |
-| Checkout | **Zinc** (lead candidate) | `max_price` on every order, tracking webhooks, delivery estimates. **The payment model is spiked in W1-2.** |
+| Checkout | **Zinc** (API v2), confirmed by the W1-2 spike | `max_price` caps the whole order (item, shipping and tax), gift orders, signed webhooks, per-package tracking. **MVP:** each user's own Zinc wallet. **Later:** the user's card through Zinc Connect (T16, §6.5a). Product lookups go through one app-owned Zinc account (T17). |
 | Email | Resend or Postmark **[decided in W1-4]** | Needs sending and inbound-to-webhook. **[Verify]** inbound support and free-tier limits. |
 | Push notifications | **Decision deferred (T12).** If added: standard Web Push (VAPID) using the `web-push` package | Works on Android, and on iOS once the PWA is added to the home screen. Email covers every message without it. The notification service sends through a channel list, so push plugs in later without changing callers. Estimated 1–2 days of work, in its own ticket (W5-4). |
 | Extension | Chrome Manifest V3, TypeScript, built with Vite | Popup plus a "Capture for…" action. Lives in the same repo. |
@@ -135,8 +135,8 @@ All tables have `id uuid`, `created_at`, and `updated_at`. Accounts (`profiles`)
 
 | Table | Key fields | Notes |
 |---|---|---|
-| `profiles` | user_id, display_name, email, timezone, notification prefs, over_budget_pct (default 15) | One row per user. Push subscriptions are added with W5-4 if push goes ahead. |
-| `people` | user_id, name, relationship, birthday (nullable), address (structured, nullable), notes, google_contact_id | P-1, P-5 |
+| `profiles` | user_id, display_name, email, phone, timezone, notification prefs, over_budget_pct (default 15), **funding_mode** (`zinc_wallet`; `connect` later), zinc_api_key (in Vault), zinc_webhook_secret (in Vault), zinc_connected_at, auto_topup_on (bool, last known) | One row per user. Push subscriptions are added with W5-4 if push goes ahead. Funding fields: §6.5a (T16). |
+| `people` | user_id, name, relationship, birthday (nullable), address (structured, nullable: recipient first and last name, line 1, line 2, city, state, ZIP, country), phone (nullable; the user's own phone is used when empty), address_checked_at, notes, google_contact_id | P-1, P-5. Zinc requires a phone on every order, and the carrier is the only one who uses it. The address is checked when it's entered, not at purchase time (§6.1). |
 | `budget_defaults` | user_id, relationship, base_amount_cents | B-2 (S) |
 | `occasions` | user_id, person_id (nullable for shared holidays), kind (birthday, anniversary, christmas, mothers_day, …), date rule (fixed date or holiday rule), enabled | P-3. Holidays are computed from rules in `core`. |
 | `budgets` | user_id, person_id, occasion_kind, amount_cents | B-1. Overrides the default for that person and occasion. |
@@ -144,9 +144,9 @@ All tables have `id uuid`, `created_at`, and `updated_at`. Accounts (`profiles`)
 | `profile_facts` | user_id, person_id, category (interest, dislike, size, brand, owns, style, avoid), value, source (capture, question, note, reaction, rejection), source_id, confirmed (bool), active | C-3, C-7. A person's profile is the set of their active facts. |
 | `questions` | user_id, person_id, prompt, answer, status | C-4 |
 | `gift_rounds` | user_id, person_id, occasion_id, occasion_date, ship_by_deadline, budget_cents, status (§5), next_action_at, locked_until, attempts, approved_at | One per person per occasion per year. `next_action_at` is when the round engine should look at it next (§5.1). |
-| `gift_ideas` | round_id, title, retailer, product_url, retailer_product_id, price_cents, est_shipping_cents, est_tax_cents, est_total_cents, arrive_by, reason, over_budget (bool), rank, status (proposed, selected, rejected) | G-1, G-2 |
+| `gift_ideas` | round_id, title, retailer, product_url (the exact size or color variant), retailer_product_id, offer_id, seller_name, first_party (bool), price_cents, est_shipping_cents, est_tax_cents, est_total_cents, handling_days_max, delivery_days_min, delivery_days_max, arrive_by (worst case), reason, over_budget (bool), rank, status (proposed, selected, rejected) | G-1, G-2. Delivery is a range before purchase; `arrive_by` uses the slowest case. |
 | `rejections` | round_id, reason_code, reason_text | G-3. Also written to `profile_facts`. |
-| `orders` | round_id, idea_id, provider (zinc), provider_request_id, max_price_cents, final_total_cents, status (placing, placed, failed, shipped, delivered, cancelled, refunded), tracking (jsonb), est_delivery_date | A-3, D-1 |
+| `orders` | round_id, idea_id, provider (zinc), provider_order_id, idempotency_key, funding_mode, max_price_cents, is_gift, gift_message (≤240 characters), price breakdown (subtotal, shipping, tax, total cents), fee_cents, status (placing, placed, failed, shipped, delivered, cancelled, refunded), failure_type, merchant_order_id, packages (jsonb: carrier, tracking number, status, estimated delivery date, proof-of-delivery photo), est_delivery_date (latest across packages) | A-3, D-1. Zinc's own status stops at "placed"; shipping progress is per package, and one order can ship as several packages. |
 | `reactions` | round_id, rating (loved, liked, meh, returned), note, source (email, web) | D-2 |
 | `notifications` | user_id, round_id, kind, channel, sent_at, action_token_hash | Audit trail plus reminder escalation state. |
 | `inbound_messages` | user_id, from, subject, body, attachments, matched_person_id, status | N-2, C-5 |
@@ -234,7 +234,8 @@ flowchart LR
 - At checkout: `max_price = approved ceiling − already committed spend in this round`.
   - The approved ceiling is the budget, or the over-budget idea's approved total if that was chosen.
   - If checkout comes in higher than `est_total` but still within `max_price`, the purchase goes ahead and the user is told (D28).
-  - **[Verify in W1-2]** whether Zinc's `max_price` covers shipping and tax. If it doesn't, compute the item-only cap conservatively.
+  - Zinc's `max_price` covers item, shipping and tax together, and is never exceeded (confirmed in W1-2). It doesn't include Zinc's $1 order fee, so `max_price = approved ceiling − committed spend − order fee`.
+  - **Wallet mode (MVP):** Zinc sets aside `max_price + fee` when the order is placed and refunds what isn't used, so the balance must cover the full cap, not the expected total.
 - Refunded orders release their committed spend (D29).
 - **The order fee is a setting** (T23). It comes from `app_settings`, never from code, and is passed into every budget calculation.
 - **How it's computed** (ALL-19, `packages/core/src/budget.ts`): money is whole cents, and anything that has to round rounds down, so a rounding error only ever spends less. The over-budget limit itself counts as over budget, not dropped. A pick of several ideas is judged by its sum, the same way as one idea, and when the sum is over budget and approved, the approved ceiling is that sum. An order holds its full cap plus fee as committed spend until its real total is known. **[Claude's call]** When several ideas are picked, each order's `max_price` also holds back the estimated totals of the picks not yet ordered, so the first order can't use up the whole budget. A `max_price` of $0 or less is treated as a bug, never as an order.
@@ -265,7 +266,7 @@ flowchart LR
 | `skipped` | No reply by the deadline. Nothing is bought (D23) | — |
 
 - Every transition writes `gift_rounds.status` and `next_action_at` together, so the UI and recovery logic only need to read the database.
-- **Idempotency:** each Zinc order request uses `idempotency_key = order.id`, and incoming webhooks are de-duplicated by provider event ID.
+- **Idempotency:** each Zinc order request uses `idempotency_key = order.id`, so a retry can never buy twice. Zinc webhooks have no event ID, so they're de-duplicated on event type plus order ID (Zinc's own guidance).
 
 ### 5.1 Round engine (T8)
 - **The tick:** a `pg_cron` job runs **once a day at 12:00 UTC** (8 a.m. Eastern in summer, 7 a.m. in winter) and uses `pg_net` to POST to `/api/rounds/tick` on the production app. Every step in a round is measured in days, so daily is enough, and it means reminders and heads-ups always arrive in the morning (T9). A shared secret, kept in Supabase Vault and in Vercel environment variables, authenticates the call.
@@ -286,6 +287,8 @@ flowchart LR
 2. **Import contacts** (optional). This is a separate Google authorization for `contacts.readonly` only. The app calls the People API, shows the "Who do you buy gifts for?" checklist, and creates `people` rows with any names, birthdays, and addresses it finds. The Google token is used once and not stored **[Claude's call]**.
 3. Occasions are added automatically by relationship (P-4). Budgets come from relationship defaults (B-2).
 4. **Missing address (P-5):** the add-person form asks for the address but doesn't require it. When a round starts and the address is still missing, the round goes to `needs_address`. The heads-up then asks for the address (one-tap link to a form) and that request follows the same reminder schedule. No ideas are generated until there's an address, because delivery estimates and tax need it. If the deadline passes, the round is skipped **[Claude's call]**.
+5. **Address check on entry:** Zinc rejects incomplete addresses at order time (for example, a missing apartment number), which would surface on the day of purchase. The form requires the fields Zinc requires and checks the address when it's saved **[Verify in W2-2: which address check to use, since Zinc has no standalone one]**.
+6. **Checkout setup:** connect Zinc and turn on auto top-up (§6.5a).
 
 ### 6.2 Capture (extension)
 1. The extension is signed in by opening the web app once. The app passes a session token to the extension through `externally_connectable` messaging, and the extension refreshes it from there **[Claude's call; Verify in W2-4]**.
@@ -302,7 +305,7 @@ flowchart LR
 ### 6.3 Gift idea generation (G-1 to G-5)
 1. **Input:** the person's active facts, past gifts, past rejections, the occasion, the budget, the ship-by deadline, and the recipient's state.
 2. **Brainstorm:** the AI model (with web search) proposes about 10 candidate gift concepts, each with a specific product and retailer URL. Only retailers Zinc supports are allowed.
-3. **Resolve:** each candidate is checked with Zinc's product and offer lookup for live price, availability, shipping cost, and delivery estimate. Anything unavailable, too late, over the over-budget limit, or already given or rejected is dropped.
+3. **Resolve:** each candidate is checked with Zinc's product and offer lookup for live price, availability, the seller, shipping cost, and handling plus delivery days. Lookups use the **app-owned Zinc account** at $0.01 each, never the user's wallet (T17). Offers sold by the retailer itself are preferred. Offers don't include tax, so tax stays estimated (§4.2). Anything unavailable, too late in the slowest case, over the over-budget limit, or already given or rejected is dropped.
 4. **Rank:** the AI model ranks the survivors and writes the one-line reasons. The top 3–5 within budget are kept, plus at most one over-budget idea.
 5. If fewer than 3 survive, the app repeats steps 2–4 up to 2 more times. After that it sends what it has and notes it.
 6. Results are saved as `gift_ideas`, and the heads-up is sent.
@@ -315,18 +318,30 @@ flowchart LR
 ### 6.5 Approval and purchase
 1. The user selects one or more ideas, or rejects them with a reason code and optional text.
 2. **Approval** re-checks the budget (§4.2), records `approved_at`, moves the round to `ordered`, and places the orders right away (§5.1).
-3. **Purchase:** one Zinc order per selected idea, with `max_price`, shipped to the person's address. The account and payment details come from the W1-2 spike outcome (A-9).
-4. If the order fails, the round moves to `needs_attention` and the user is offered the next-best idea to approve in one tap (D29).
+3. **Purchase:** one Zinc order per selected idea, placed on the user's own Zinc account (§6.5a), with `max_price`, `is_gift: true`, `fulfillment.gift: "best_effort"` (prices hidden on the packing slip, and the order still goes ahead if a store has no gift option), and an optional gift message the user can edit. It ships to the person's address.
+   - **Approval means buy now (T18).** Once Zinc has placed an order with the store, it can't be cancelled; a return is the only way out. The approval screen says so.
+4. If the order fails, the round moves to `needs_attention` and the user is offered the next-best idea to approve in one tap (D29). The message depends on Zinc's failure type: `max_price_exceeded` means the price went up (step 5), `out_of_stock` or `product_variant_unavailable` means pick another idea, `invalid_shipping_address` means fix the address, and `insufficient_funds` means top up (§6.5a).
 5. **Price went over the approved amount (A-4):** the round moves to `needs_attention`. The user can either **re-approve the same gift at the new price**, which goes through the same budget and over-budget rules as §4.2 (one tap, with the new total shown), or pick the next-best idea **[Claude's call]**.
 
-### 6.5a Zinc wallet funding (T6)
-- Each user connects their own Zinc account in Settings. The API key is stored encrypted in the database with Supabase Vault, and only the server-side round engine can read it.
-- **Preferred:** automatic top-up. If Zinc supports auto-recharge from a saved card, the user turns it on once in Zinc. If Zinc has an API for adding funds, the app tops up to cover approved orders before placing them.
-- **Fallback:** the app checks the balance before each order and when a round enters `awaiting_approval`. If the balance won't cover the approved total, the heads-up or approval email includes a "Top up your Zinc balance" link. The order waits, on the same reminder schedule, rather than failing.
-- Whichever way it works out, W1-2 confirms it. Wave 4 gets ticket **W4-4 Zinc account connection and funding**.
+### 6.5a Funding gifts (T6, T16)
+
+Funding comes in two stages. Ordering, tracking and the data model are the same in both; only where the money comes from changes, recorded as `profiles.funding_mode` and `orders.funding_mode`.
+
+**Stage 1, MVP: each user's own Zinc wallet** (a little friction, no Stripe)
+1. **Connect (one time, in Settings).** The app starts Zinc's sign-in (`POST /device/code`) and shows the user a link. The user signs in to Zinc (or creates an account) and clicks **Allow**, and the app collects that user's key once (`POST /device/token`). The key goes into Supabase Vault, and only the server can read it. The app then registers its webhook URL on that account (`Set Webhook Endpoint`) and stores the account's webhook secret in Vault. No keys to copy or paste. W1-2 tested this flow for real.
+2. **Fund (one time, in Zinc).** The app links the user straight to Zinc's wallet page and walks them through adding funds and turning on **auto top-up** (a minimum balance plus a top-up amount, charged to a card saved in Zinc). With auto top-up on, Zinc charges the card when an order would otherwise be short, and the order goes ahead. Suggested settings: a minimum of their largest gift budget plus $1, topping up by about $100, since card top-ups cost 2.9% + $0.30 each and fewer, larger top-ups waste less.
+3. **Keep it visible in our app.** The app reads the balance (`GET /wallet/me`, free) and shows it in Settings and on the approval screen. It looks ahead: the approved and upcoming gifts in the next 3 weeks are compared with the balance, and the heads-up email warns early ("$160 in gifts due, $40 in Zinc"). This matters because each order needs its **full cap plus $1** available at once (§4.2).
+4. **If funds are short anyway** (auto top-up off, or Zinc reports `wallet.auto_topup.disabled` after failed charges): the order isn't placed. The round waits on the normal reminder schedule with a "Top up your Zinc balance" link, rather than failing.
+
+**Stage 2, later: the user's card in our app (Zinc Connect)**
+- The user adds a card in our app (Stripe's card form); it's saved on **our** Stripe account, connected to the app's Zinc account. Each order then sends a `payment` object with `mode: "connect"`. Zinc holds the card for the cap plus fees, buys, and charges the real total. There's no per-user Zinc account and no balance. The margin can be $0 or our markup (D34).
+- Needs our own Stripe account, and makes us the seller the user sees: our name on their statement, and refunds or disputes go to our Stripe account. **[Verify with Zinc before stage 2]** how return refunds reach the card.
+- Switching is per user (`funding_mode`), so both can run side by side during the move.
 
 ### 6.6 Tracking, late risk, reactions
-- Zinc webhooks update `orders`. A late-risk check runs whenever an update arrives and once a day from the round engine: if `est_delivery_date > occasion_date`, the round goes to `needs_attention` and the user is alerted (D-1, D-4).
+- Zinc webhooks update `orders`: `order.placed` (real price breakdown), `order.failed` (failure type), `order.tracking_received`, `order.shipped`, `order.estimated_delivery_updated`, `order.delivered` and `order.cancelled` (the store cancelled; the wallet is refunded automatically). Each is checked against an HMAC-SHA256 signature (`X-Webhook-Signature`) using that user's Zinc account secret. The webhook URL carries a per-user token, so the app knows which secret to check against.
+- **Delivery dates:** before purchase there's only a range (§6.3). The carrier's `estimated_delivery_date` appears per package once tracking arrives, and is updated when it changes.
+- A late-risk check runs whenever an update arrives and once a day from the round engine: if `est_delivery_date > occasion_date`, the round goes to `needs_attention` and the user is alerted (D-1, D-4).
 - One day after the occasion, the reaction prompt goes out (D-2). Notes are **text only in the MVP**. The phone keyboard's built-in dictation covers voice input, and recording and storing audio waits for later **[Claude's call]**. The answer is written to `reactions` and turned into `profile_facts` (for example, "loved: X").
 
 ### 6.7 Guided questions by email (C-4)
@@ -363,7 +378,7 @@ flowchart LR
 - RLS on every user table. The service role is only used inside the round engine and webhooks.
 - The tick endpoint rejects any call without the shared secret.
 - Webhooks verify signatures where the provider supports them. Otherwise they use a secret path token plus an IP allowlist if one is available.
-- No retailer passwords are ever stored (A-5). Card handling follows the W1-2 spike outcome, and the app **never touches raw card numbers**.
+- No retailer passwords are ever stored (A-5). The app **never touches card numbers**: in stage 1, cards live in each user's Zinc account; in stage 2, in Stripe (§6.5a). Users' Zinc keys and webhook secrets are kept in Supabase Vault.
 - Secrets live in Vercel environment variables. Supabase keys are split into anon and service role.
 - The sensitive-trait filter runs on AI output (C-8). Captures store only what the user captured.
 - Deletion cascades (C-7). Users can export their data later.
@@ -375,7 +390,7 @@ flowchart LR
   - Move to Pro before a commercial launch. **[Verify in W3]** that idea generation fits Hobby's function time limit.
   - Upgrade to Pro ($20 a month) if they aren't.
 - **Monitoring:** Vercel logs and observability, AI Gateway dashboards, and a daily "health" email to the owner listing rounds in `needs_attention` **[Claude's call]**.
-- **Test mode:** Zinc sandbox or test orders, plus a `DRY_RUN` flag that does everything except place the real order.
+- **Test mode:** Zinc's sandbox (a `zn_test_` key: test product URLs for success, price exceeded, out of stock, bad address and more, delivering in seconds, with its own webhook settings and no cost), plus a `DRY_RUN` flag that does everything except place the real order.
 
 ## 10. Cost estimate (monthly, 3 users)
 
@@ -385,7 +400,7 @@ flowchart LR
 | Supabase free, or Pro if needed | $0 / $25 |
 | AI model usage through AI Gateway, billed by Vercel (prepaid credit) | ~$5–15 (about a dozen rounds a month at ~$0.40, plus captures at ~$0.01; capped at $60) |
 | Email service | $0 (free tier) |
-| Zinc | ~$1 per order, plus any platform minimum **[Verify in W1-2]** |
+| Zinc | $1 per successful order (paid from each user's wallet), plus $0.01 per product lookup on the app account (~$1–3). No minimum or monthly fee. |
 | Domain | ~$1–2 |
 | **Total** | **~$15–85** worst case, under the $100 budget |
 
@@ -401,7 +416,8 @@ flowchart LR
 
 | Risk | Mitigation |
 |---|---|
-| Zinc can't support "user pays with own card" | The W1-2 spike runs first, and Rye is the fallback. **Accepted for the MVP:** each user has their own Zinc account and wallet (T6). |
+| Zinc can't support "user pays with own card" | **Resolved in W1-2:** each user's own Zinc wallet for the MVP, and the user's card through Zinc Connect later (T16). Rye wasn't needed. |
+| Zinc is young and changes weekly | Pin the API version in W4-2. The sandbox catches breaking changes early. |
 | AI ideas are poor or can't be bought | The resolve step requires a live offer. The spike measures quality early. The rejection loop teaches the app. |
 | Retailers block agent or API vendors | Avoid account automation. Support more than one retailer through Zinc. Add a gift card fallback later. |
 | Vercel Hobby limits | Verify in W1-6, upgrade to Pro within budget if needed. |
@@ -447,7 +463,7 @@ Each wave can start once the waves before it have the dependencies it lists. Wit
 | W4-1 | Approval UI: idea cards, multi-select, over-budget handling, reject with reason, re-generate (A-1, B-4, G-3) | W1-7, W3-3, W3-4 |
 | W4-2 | Purchase integration: Zinc orders, `max_price`, the A-8 price rule, idempotency, `DRY_RUN` (A-3, A-4, A-8, A-9, B-3, B-5) | W1-2, W3-4 |
 | W4-3 | Inbound email quick capture: match person, file note (N-2, C-5) | W1-4, W3-1 |
-| W4-4 | Zinc account connection (encrypted key), balance check, automatic or prompted top-up (§6.5a) | W1-2, W2-1 |
+| W4-4 | Zinc connection by sign-in and Allow (key and webhook secret in Vault, webhook registration), guided funding and auto top-up, balance shown in the app, look-ahead warning, held order when short (§6.5a stage 1) | W1-2, W2-1 |
 
 ### Wave 5: After the purchase
 | ID | Ticket | Depends on |
@@ -467,4 +483,4 @@ Each wave can start once the waves before it have the dependencies it lists. Wit
 **Within wave 2, W2-1 goes first.** W2-2 and W2-4 can start right after it, and W2-3 and W2-5 follow. So wave 2 is really two steps, though still more tickets than builders at each step. With two builders, nobody is blocked. Wave 1's spikes are the critical path: they decide W3-3 and W4-2. **Start Wave 1 with the spikes and look and feel (W1-7), not the scaffold.** Start the Zinc signup on day one, because account approval may take days. W1-1 is small and low-risk, so it can fill gaps or run in parallel. **W2-6** (added 2026-10-26) runs alongside W2-1 once the W1-7 mock-ups are signed off, and must land before W2-2; it also blocks W3-3, W4-1 and W4-2.
 
 ## 14. Accounts
-All services (Google, Vercel including AI Gateway billing, Supabase, Zinc, Linear) are under the owner's **allensforever711@gmail.com** account, and the code is in the free **gifts-af** GitHub organization (github.com/gifts-af/gift-me), where allensforever711, aarontallen, JimtheBurger and brb3 are all owners. Jim is added to each service (T7). **Domain:** if none is already set up, W1-6 buys a cheap placeholder domain under that account **[Claude's call]**.
+All services (Google, Vercel including AI Gateway billing, Supabase, Zinc, Linear) are under the owner's **allensforever711@gmail.com** account, and the code is in the free **gifts-af** GitHub organization (github.com/gifts-af/gift-me), where allensforever711, aarontallen, JimtheBurger and brb3 are all owners. Jim is added to each service (T7). **Zinc:** the app-owned account (product lookups, sandbox, T17) exists under allensforever711@gmail.com, created in W1-2; each user also has their own Zinc account for buying (§6.5a). **Domain:** if none is already set up, W1-6 buys a cheap placeholder domain under that account **[Claude's call]**.
