@@ -178,6 +178,16 @@ textarea.input { min-height: 88px; resize: vertical; }
 .chips button { border: 1px solid var(--border); background: var(--background); border-radius: 999px; min-height: 40px; padding: 0 14px; font-size: 14px; cursor: pointer; }
 .chips button[aria-pressed="true"] { border-color: var(--primary); background: var(--accent); color: var(--accent-foreground); font-weight: 600; }
 
+.giftgrid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.gcard { position: relative; border: 1px solid var(--border); border-radius: var(--radius); background: var(--card); padding: 8px 8px 12px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.gcard .img.lg { margin-bottom: 4px; }
+.gcard .gremove { position: absolute; top: 4px; right: 4px; background: var(--background); border-radius: 999px; width: 36px; height: 36px; }
+.gcard .btn-sm { margin-top: 4px; }
+
+/* Variants toggled from the review bar. */
+.screen:not([data-guest]) .if-guest, .screen[data-guest] .if-member { display: none; }
+.screen:not([data-owner]) .if-owner, .screen[data-owner] .if-friend { display: none; }
+
 /* Computer-width grids: 2 columns from 768 px, 3 from 1024 px of frame width. */
 @container (min-width: 768px) { .wide .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .wide .body { padding: 24px 32px; } }
 @container (min-width: 1000px) { .wide .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
@@ -384,6 +394,84 @@ textarea.input { min-height: 88px; resize: vertical; }
     </div>
   </div></div>
 </section>
+
+<section class="screen" data-screen="list" data-title="My list" data-group="Gift lists" hidden>
+  <p class="screen-note">Today's list app in the new look, with every feature kept. Paste a link and tap Add, try "Add by hand", or remove a gift to see the save bar.</p>
+  <div class="variants"><button class="chip" type="button" data-variant="list:guest" aria-pressed="false">View as a guest</button></div>
+  <div class="phone"><div class="app">
+    <div class="topbar"><button class="back" type="button" data-go="home"><span data-icon="back"></span>Home</button><button class="btn-secondary btn-sm if-member" type="button" id="share-btn"><span data-icon="share" data-size="16"></span>Share</button></div>
+    <div class="body">
+      <div class="banner if-guest">You're not signed in. <button class="btn-link" type="button" style="color:inherit;min-height:0;padding:0" data-go="signin">Sign in</button> to save and share your list.</div>
+      <p class="banner accent if-member" id="share-note" hidden>Link copied. Anyone with it can see your list and claim a gift.</p>
+      <h1 class="title">My list</h1>
+      <div class="section">
+        <form class="row" onsubmit="event.preventDefault()" style="align-items:end">
+          <label class="field grow" for="link">Paste an Amazon link<input class="input" id="link" value="amazon.com/dp/B0EXAMPLE1"></label>
+          <button class="btn-secondary" type="button" id="lookup">Add</button>
+        </form>
+        <div class="card" id="found" hidden>
+          <div class="img"><span data-icon="gift"></span></div>
+          <div class="grow"><p class="card-title">Wool hiking socks, 3 pairs</p><p class="card-sub num">$24.99 · found on Amazon</p></div>
+          <button class="btn-primary btn-sm" type="button" id="found-add">Add to list</button>
+        </div>
+        <button class="btn-link" type="button" id="manual-toggle" style="justify-self:start">Add by hand</button>
+        <form class="section" id="manual" hidden onsubmit="event.preventDefault()">
+          <label class="field" for="m-name">Gift name<input class="input" id="m-name" value="Concert tickets"></label>
+          <label class="field" for="m-price">Price<input class="input num" id="m-price" value="12.5.0" aria-invalid="true" aria-describedby="m-price-err"><p class="field-error" id="m-price-err">Enter a price like 24.99</p></label>
+          <button class="btn-secondary" type="button">Add to list</button>
+        </form>
+      </div>
+      <div class="giftgrid" id="giftgrid">
+        <div class="gcard"><div class="img lg"><span data-icon="gift" data-size="28"></span></div><p class="card-title">Pour-over coffee kettle</p><p class="price">$39.00</p><button class="iconbtn gremove" type="button" aria-label="Remove Pour-over coffee kettle"><span data-icon="x" data-size="16"></span></button></div>
+        <div class="gcard"><div class="img lg"><span data-icon="gift" data-size="28"></span></div><p class="card-title">Paperback: a mystery novel</p><p class="price">$14.50</p><button class="iconbtn gremove" type="button" aria-label="Remove paperback"><span data-icon="x" data-size="16"></span></button></div>
+        <div class="gcard"><div class="img lg"><span data-icon="gift" data-size="28"></span></div><p class="card-title">Rain jacket, size M</p><p class="price">$80.00</p><button class="iconbtn gremove" type="button" aria-label="Remove rain jacket"><span data-icon="x" data-size="16"></span></button></div>
+      </div>
+    </div>
+    <div class="dock if-member" id="savebar" hidden><div class="row" style="width:100%"><span class="grow meta" style="font-size:15px">Unsaved changes</span><button class="btn-primary" type="button" id="save">Save</button></div></div>
+    <div class="dock if-guest"><p class="meta">Guest lists are lost when you leave. Sign in to keep it.</p></div>
+  </div></div>
+</section>
+
+<section class="screen" data-screen="shared" data-title="Shared list" data-group="Gift lists" hidden>
+  <p class="screen-note">What a friend sees from a share link, signed in or not. Claiming hides the gift from others so nobody doubles up.</p>
+  <div class="variants"><button class="chip" type="button" data-variant="shared:owner" aria-pressed="false">View as the list's owner</button></div>
+  <div class="phone"><div class="app">
+    <div class="topbar"><span class="brand">GiftMe</span></div>
+    <div class="body">
+      <div class="banner accent if-owner">This is your list. Friends see a Claim button on each gift.</div>
+      <div class="section" style="gap:4px"><h1 class="title">Sam's list</h1><p class="meta">Claim a gift so nobody else buys it. Sam won't see who.</p></div>
+      <div class="giftgrid">
+        <div class="gcard"><div class="img lg"><span data-icon="gift" data-size="28"></span></div><p class="card-title">Board game for two</p><p class="price">$32.00</p><button class="btn-secondary btn-sm if-friend" type="button" data-open-sheet="claim-dialog">Claim</button></div>
+        <div class="gcard"><div class="img lg"><span data-icon="gift" data-size="28"></span></div><p class="card-title">Bluetooth speaker</p><p class="price">$45.00</p><p class="meta">Claimed by Alex</p></div>
+        <div class="gcard"><div class="img lg"><span data-icon="gift" data-size="28"></span></div><p class="card-title">Climbing chalk bag</p><p class="price">$18.00</p><button class="btn-secondary btn-sm if-friend" type="button" data-open-sheet="claim-dialog">Claim</button></div>
+      </div>
+    </div>
+    <div class="scrim center" id="claim-dialog"><div class="dialog" role="dialog" aria-label="Claim gift">
+      <h2 class="h2">Claim this gift</h2>
+      <label class="field" for="claim-name">Your name<input class="input" id="claim-name" value="Jordan"></label>
+      <p class="meta">Other friends will see it's claimed. Sam won't.</p>
+      <button class="btn-primary block" type="button" data-close>Claim gift</button>
+      <button class="btn-link" type="button" data-close>Cancel</button>
+    </div></div>
+  </div></div>
+</section>
+
+<section class="screen" data-screen="signin" data-title="Sign in" data-group="Gift lists" hidden>
+  <p class="screen-note">Google first, since contacts import needs it. Email and password stay for people already using the list app.</p>
+  <div class="phone"><div class="app">
+    <div class="body" style="justify-content:center;gap:28px">
+      <div class="section" style="gap:6px;text-align:center"><h1 class="title">GiftMe</h1><p class="meta" style="font-size:15px">The right gift, on time, without the scramble.</p></div>
+      <button class="btn-primary block" type="button" data-go="home">Continue with Google</button>
+      <div class="divider">or</div>
+      <form class="section" onsubmit="event.preventDefault()">
+        <label class="field" for="si-email">Email<input class="input" id="si-email" type="email" autocomplete="off"></label>
+        <label class="field" for="si-pass">Password<input class="input" id="si-pass" type="password" autocomplete="off"></label>
+        <button class="btn-secondary block" type="button" data-go="home">Sign in</button>
+      </form>
+      <div class="row" style="justify-content:space-between"><button class="btn-link" type="button">Forgot password?</button><button class="btn-link" type="button">Create an account</button></div>
+    </div>
+  </div></div>
+</section>
 <!-- screens:end -->
   </main>
 </div>
@@ -529,6 +617,35 @@ document.addEventListener('click', (e) => {
     const kept = facts.querySelectorAll('.toggle button:not(.drop)[aria-pressed="true"]').length;
     save.textContent = kept === 0 ? 'Done' : `Save ${kept} fact${kept > 1 ? 's' : ''}`;
   });
+})();
+
+// My list: link lookup, add by hand, remove, save bar, share notice.
+(function myList() {
+  const grid = document.getElementById('giftgrid');
+  const savebar = document.getElementById('savebar');
+  const dirty = () => { savebar.hidden = false; };
+  document.getElementById('lookup').addEventListener('click', () => { document.getElementById('found').hidden = false; });
+  document.getElementById('found-add').addEventListener('click', () => {
+    const card = document.createElement('div');
+    card.className = 'gcard';
+    card.innerHTML = '<div class="img lg"><span data-icon="gift" data-size="28"></span></div><p class="card-title">Wool hiking socks, 3 pairs</p><p class="price">$24.99</p><button class="iconbtn gremove" type="button" aria-label="Remove wool hiking socks"><span data-icon="x" data-size="16"></span></button>';
+    grid.append(card);
+    paintIcons(card);
+    document.getElementById('found').hidden = true;
+    dirty();
+  });
+  document.getElementById('manual-toggle').addEventListener('click', () => {
+    const m = document.getElementById('manual');
+    m.hidden = !m.hidden;
+  });
+  grid.addEventListener('click', (e) => {
+    const rm = e.target.closest('.gremove');
+    if (!rm) return;
+    rm.closest('.gcard').remove();
+    dirty();
+  });
+  document.getElementById('save').addEventListener('click', () => { savebar.hidden = true; });
+  document.getElementById('share-btn').addEventListener('click', () => { document.getElementById('share-note').hidden = false; });
 })();
 // screens-js:end
 
