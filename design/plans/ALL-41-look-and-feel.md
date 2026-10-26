@@ -155,7 +155,7 @@
   - "Owner ☐/☑ · Jim ☐/☑" with an "I approve this screen" toggle for the selected person.
   - Subscribe once to each collection with `onSnapshot` and filter by screen in render.
 - [ ] **Step 2: A sign-off summary at the top of the page.**
-  - "Approved by both: n of 13 screens", and a list of screens still waiting.
+  - "Approved by both: n of 14 screens (13 at first; "Dad: suggested ideas" added 2026-10-26)", and a list of screens still waiting.
 - [ ] **Step 3: Works without the database.**
   - If `await claude.use("db")` resolves `null`, the panel shows "Comments and sign-off work when this page is opened in Claude", and the screens still work (Review focus 1).
   - Write errors show inline under the box. A `quota_exceeded` error says to tell Claude.

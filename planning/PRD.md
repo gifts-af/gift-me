@@ -120,7 +120,7 @@ Priority: **M** = must have for the MVP, **S** = should have, **L** = later.
 ### 7.2 Budgets
 | ID | Requirement | Pri |
 |---|---|---|
-| B-1 | A budget for each person and occasion. It covers the **full cost**: item, shipping, tax, fees. | M |
+| B-1 | A budget for each person and occasion. It covers the **full cost**: item, shipping, tax, fees. **Revised 2026-10-26 (decision 36):** the budget is the buyer's own and optional. | M |
 | B-2 | Default budgets by relationship type, scaled by occasion, and adjustable. | S |
 | B-3 | **Automatic purchases can never go over budget.** It's checked again at checkout using the final price. | M |
 | B-4 | Optional over-budget idea, at most 15% over by default (adjustable), and only with explicit approval. | M |
@@ -154,7 +154,7 @@ Priority: **M** = must have for the MVP, **S** = should have, **L** = later.
 |---|---|---|
 | A-1 | Every MVP purchase needs the user's approval (one tap from email, push, or web). | M |
 | A-2 | Reminders escalate according to the no-reply schedule, then the round is marked skipped. | M |
-| A-3 | Buy from supported stores and ship straight to the recipient. | M |
+| A-3 | Buy from supported stores and ship straight to the recipient. **Revised 2026-10-26 (decision 38):** or to the buyer, or to another address. | M |
 | A-4 | Confirm the price, shipping, tax, and delivery estimate at checkout before paying. Stop and ask if anything changed beyond the approved amount. | M |
 | A-5 | Never store the user's retailer passwords. | M |
 | A-6 | Optional purchase through the user's own retailer account, using assisted checkout where the user clicks Buy (D8). | S |

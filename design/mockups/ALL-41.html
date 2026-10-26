@@ -189,11 +189,25 @@ textarea.input { min-height: 88px; resize: vertical; }
 .gcard .gremove { position: absolute; top: 4px; right: 4px; background: var(--background); border-radius: 999px; width: 44px; height: 44px; }
 .gcard .btn-sm { margin-top: 4px; }
 
+.source { display: flex; align-items: center; gap: 6px; font-size: 13px; margin: 6px 0 0; color: var(--muted-foreground); }
+.source-list { color: var(--accent-foreground); font-weight: 600; }
+.card.curated { border-color: color-mix(in srgb, var(--primary) 35%, var(--border)); }
+.card.claimed { opacity: .6; }
+.budget { display: flex; align-items: center; justify-content: space-between; gap: 12px; border: 1px dashed var(--input); border-radius: var(--radius); padding: 8px 12px; }
+.budget-label { display: grid; font-size: 15px; font-weight: 600; }
+.money { display: flex; align-items: center; gap: 6px; width: 112px; flex: none; }
+.radio { flex: none; width: 22px; height: 22px; border-radius: 99px; border: 1.5px solid var(--input); display: grid; place-items: center; }
+.option[aria-checked="true"] { border-color: var(--primary); box-shadow: 0 0 0 1px var(--primary); }
+.option[aria-checked="true"] .radio { border-color: var(--primary); box-shadow: inset 0 0 0 5px var(--primary); }
+
 /* Variants toggled from the review bar. */
 .screen:not([data-guest]) .if-guest, .screen[data-guest] .if-member { display: none; }
 .screen:not([data-owner]) .if-owner, .screen[data-owner] .if-friend { display: none; }
 .screen:not([data-new]) .if-new, .screen[data-new] .if-existing { display: none; }
 .screen:not([data-taken]) .if-taken, .screen[data-taken] .if-free { display: none; }
+.screen:not([data-private]) .if-private, .screen[data-private] .if-listperson { display: none; }
+.screen:not([data-auto]) .if-auto, .screen[data-auto] .if-remind { display: none; }
+.screen[data-auto] .mail-item { outline: 2px solid var(--primary); outline-offset: 6px; border-radius: 4px; }
 .screen:not([data-looking]) .if-looking, .screen:not([data-lookfail]) .if-lookfail,
 .screen:not([data-carried]) .if-carried, .screen:not([data-savefail]) .if-savefail,
 .screen:not([data-clipfail]) .if-clipfail, .screen:not([data-leave]) .if-leave { display: none; }
@@ -240,7 +254,7 @@ textarea.input { min-height: 88px; resize: vertical; }
   <main class="stage" id="stage">
 <!-- screens:start -->
 <section class="screen" data-screen="home" data-title="Home" data-group="Concierge" hidden>
-  <p class="screen-note">The front door after sign-in. Your list first, then the people you buy for. Tap Mom to approve a gift, or Dad to see his profile. "New user" shows what someone sees before using either product.</p>
+  <p class="screen-note">The front door after sign-in. Mom keeps her own list, so you pick from gifts she chose herself: the ideal case. Dad has no list, so the app suggests ideas for him. "New user" shows the empty state.</p>
   <div class="variants"><button class="chip" type="button" data-variant="home:new" aria-pressed="false">New user</button></div>
   <div class="phone"><div class="app">
     <div class="topbar"><span class="brand">GiftMe</span><button class="iconbtn" type="button" aria-label="Account"><span data-icon="user"></span></button></div>
@@ -259,16 +273,16 @@ textarea.input { min-height: 88px; resize: vertical; }
         <h2 class="h2">People</h2>
         <p class="meta if-new" style="font-size:15px">Add the people you buy for, and we'll suggest gifts before each birthday and holiday.</p>
         <div class="list if-existing">
-          <a class="card" href="#approval" data-go="approval">
-            <div class="grow"><p class="card-title">Mom</p><p class="card-sub">Birthday · Sat, Mar 14</p></div>
-            <span class="pill">Pick a gift</span>
+          <a class="card curated" href="#approval" data-go="approval">
+            <div class="grow"><p class="card-title">Mom</p><p class="card-sub">Birthday · Sat, Mar 14</p><p class="source source-list"><span data-icon="list" data-size="14"></span>Her own list · 6 wishes</p></div>
+            <span class="pill">Pick from her list</span>
           </a>
-          <a class="card" href="#person" data-go="person">
-            <div class="grow"><p class="card-title">Dad</p><p class="card-sub">Father's Day · Sun, Jun 21</p></div>
-            <span class="pill pill-muted">Ideas Jun 1</span>
+          <a class="card" href="#ideas" data-go="ideas">
+            <div class="grow"><p class="card-title">Dad</p><p class="card-sub">Birthday · Fri, Apr 10</p><p class="source"><span data-icon="sparkle" data-size="14"></span>No list · we suggest ideas</p></div>
+            <span class="pill">Ideas ready</span>
           </a>
           <div class="card">
-            <div class="grow"><p class="card-title">Sam</p><p class="card-sub">Christmas · Fri, Dec 25</p></div>
+            <div class="grow"><p class="card-title">Sam</p><p class="card-sub">Christmas · Fri, Dec 25</p><p class="source source-list"><span data-icon="list" data-size="14"></span>His own list</p></div>
             <span class="pill pill-ok">Arrives Dec 20</span>
           </div>
         </div>
@@ -285,7 +299,8 @@ textarea.input { min-height: 88px; resize: vertical; }
     <div class="body">
       <div class="section" style="gap:4px">
         <h1 class="title">Dad</h1>
-        <p class="meta">Father · Father's Day, Sun, Jun 21 · Budget $50</p>
+        <p class="meta">Father · Birthday, Fri, Apr 10</p>
+        <p class="source"><span data-icon="sparkle" data-size="14"></span>No list of his own, so we suggest ideas</p>
       </div>
       <div class="banner accent">Good to go. <button class="btn-link" type="button" style="color:inherit;min-height:0;padding:0" aria-label="Answer 1 question about Dad">Answer 1 question</button> to sharpen his ideas.</div>
       <div class="section">
@@ -295,6 +310,14 @@ textarea.input { min-height: 88px; resize: vertical; }
           <div><span class="k">Sizes</span><span class="v">Shirt L · Shoe 10.5</span><button class="iconbtn" type="button" aria-label="Edit sizes"><span data-icon="pencil" data-size="16"></span></button></div>
           <div><span class="k">Avoid</span><span class="v">Gadgets that need an app</span><button class="iconbtn" type="button" aria-label="Edit avoid"><span data-icon="pencil" data-size="16"></span></button></div>
           <div><span class="k">Address</span><span class="v">12 Oak St, Dayton, OH</span><button class="iconbtn" type="button" aria-label="Edit address"><span data-icon="pencil" data-size="16"></span></button></div>
+        </div>
+      </div>
+      <div class="section">
+        <h2 class="h2">Your budget</h2>
+        <p class="meta">Optional. Only you see it. Ideas above it are marked.</p>
+        <div class="kv">
+          <div><span class="k">Birthday</span><span class="v muted">Not set</span><button class="iconbtn" type="button" aria-label="Set birthday budget"><span data-icon="pencil" data-size="16"></span></button></div>
+          <div><span class="k">Christmas</span><span class="v num">$75</span><button class="iconbtn" type="button" aria-label="Edit Christmas budget"><span data-icon="pencil" data-size="16"></span></button></div>
         </div>
       </div>
       <div class="section">
@@ -326,70 +349,116 @@ textarea.input { min-height: 88px; resize: vertical; }
   </div></div>
 </section>
 
-<section class="screen" data-screen="approval" data-title="Approval" data-group="Concierge" hidden>
-  <p class="screen-note">The heart of the app. Pick one or more ideas; the button shows the total. The $68 idea is over budget and asks first. "None of these" asks why.</p>
-  <div class="phone"><div class="app" id="approval-app">
+<section class="screen" data-screen="approval" data-title="Mom: pick from her list" data-group="Concierge" hidden>
+  <p class="screen-note">The ideal case. Mom keeps her own list, so every option is something she asked for. Pick one or more. The budget is yours and optional: type one to see over-budget labels. Someone has already claimed the kneeler.</p>
+  <div class="phone"><div class="app pick">
     <div class="topbar"><button class="back" type="button" data-go="home"><span data-icon="back"></span>People</button></div>
     <div class="body">
       <div class="section" style="gap:6px">
         <h1 class="title">Mom's birthday</h1>
-        <p class="meta num">Sat, Mar 14 · Budget $60 · <span class="pill">Pick by Mar 5</span></p>
+        <p class="meta num">Sat, Mar 14 · <span class="pill">Pick by Mar 5</span></p>
       </div>
-      <div class="list" id="ideas">
-        <button class="card" type="button" data-price="42"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Stoneware mug set</p><p class="card-sub">She said her favourite mug chipped</p><p class="card-sub num">Arrives by Mar 10</p></div><span class="price">$42</span><span class="check"><span data-icon="check" data-size="16"></span></span></button>
-        <button class="card" type="button" data-price="35"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Garden kneeler</p><p class="card-sub">New raised beds this spring</p><p class="card-sub num">Arrives by Mar 9</p></div><span class="price">$35</span><span class="check"><span data-icon="check" data-size="16"></span></span></button>
-        <button class="card" type="button" data-price="45"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Audiobook credits</p><p class="card-sub">Listens on her morning walks</p><p class="card-sub num">Arrives instantly</p></div><span class="price">$45</span><span class="check"><span data-icon="check" data-size="16"></span></span></button>
-        <button class="card" type="button" data-price="68" data-over="8"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Cast-iron herb planter</p><p class="card-sub">Saved a photo of one in October</p><p class="card-sub num">Arrives by Mar 11</p><p class="card-sub"><span class="pill pill-warn">$8 over budget</span></p></div><span class="price">$68</span><span class="check"><span data-icon="check" data-size="16"></span></span></button>
+      <div class="banner accent row" style="gap:8px"><span data-icon="list" data-size="18"></span><span>From Mom's own list. She chose these herself.</span></div>
+      <div class="budget">
+        <label class="budget-label" for="budget-mom">Your budget <span class="meta" style="font-weight:400">Optional. Only you see it.</span></label>
+        <div class="money"><span aria-hidden="true">$</span><input class="input num budget-input" id="budget-mom" inputmode="decimal" placeholder="None"></div>
+      </div>
+      <div class="list ideas">
+        <button class="card" type="button" data-price="42"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Stoneware mug set</p><p class="card-sub">On her list since Feb 2</p><p class="card-sub num">Arrives by Mar 10</p><p class="card-sub over-line" hidden><span class="pill pill-warn over-pill"></span></p></div><span class="price">$42</span><span class="check"><span data-icon="check" data-size="16"></span></span></button>
+        <button class="card" type="button" data-price="68"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Cast-iron herb planter</p><p class="card-sub">On her list since Jan 18</p><p class="card-sub num">Arrives by Mar 11</p><p class="card-sub over-line" hidden><span class="pill pill-warn over-pill"></span></p></div><span class="price">$68</span><span class="check"><span data-icon="check" data-size="16"></span></span></button>
+        <button class="card" type="button" data-price="45"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Audiobook credits</p><p class="card-sub">On her list since Dec 30</p><p class="card-sub num">Arrives instantly</p><p class="card-sub over-line" hidden><span class="pill pill-warn over-pill"></span></p></div><span class="price">$45</span><span class="check"><span data-icon="check" data-size="16"></span></span></button>
+        <div class="card claimed"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Garden kneeler</p><p class="card-sub">Someone already claimed this</p></div><span class="price">$35</span></div>
+      </div>
+      <p class="meta">Prices include shipping and tax. Mom won't see what you pick.</p>
+    </div>
+    <div class="dock">
+      <button class="btn-primary block num send" type="button" disabled data-go="ship-to">Pick a gift</button>
+      <button class="btn-link" type="button">None of these? Suggest other ideas</button>
+    </div>
+    <div class="scrim over-sheet"><div class="sheet" role="dialog" aria-label="Over budget">
+      <h2 class="h2 over-title"></h2>
+      <p class="meta over-body" style="font-size:15px"></p>
+      <button class="btn-primary block over-yes" type="button">Yes, pick it</button>
+      <button class="btn-secondary block" type="button" data-close>Keep within budget</button>
+    </div></div>
+  </div></div>
+</section>
+
+<section class="screen" data-screen="ideas" data-title="Dad: suggested ideas" data-group="Concierge" hidden>
+  <p class="screen-note">Dad has no list, so the app suggests ideas from what you've saved about him, each with the reason it fits. Type a budget to see over-budget labels. "None of these" asks what's off.</p>
+  <div class="phone"><div class="app pick">
+    <div class="topbar"><button class="back" type="button" data-go="home"><span data-icon="back"></span>People</button></div>
+    <div class="body">
+      <div class="section" style="gap:6px">
+        <h1 class="title">Dad's birthday</h1>
+        <p class="meta num">Fri, Apr 10 · <span class="pill">Pick by Apr 1</span></p>
+      </div>
+      <div class="banner row" style="gap:8px"><span data-icon="sparkle" data-size="18"></span><span>Suggested from 4 things you saved about Dad.</span></div>
+      <div class="budget">
+        <label class="budget-label" for="budget-dad">Your budget <span class="meta" style="font-weight:400">Optional. Only you see it.</span></label>
+        <div class="money"><span aria-hidden="true">$</span><input class="input num budget-input" id="budget-dad" inputmode="decimal" placeholder="None"></div>
+      </div>
+      <div class="list ideas">
+        <button class="card" type="button" data-price="38"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Sharpening stone set</p><p class="card-sub">He wants a better sharpening stone</p><p class="card-sub num">Arrives by Apr 6</p><p class="card-sub over-line" hidden><span class="pill pill-warn over-pill"></span></p></div><span class="price">$38</span><span class="check"><span data-icon="check" data-size="16"></span></span></button>
+        <button class="card" type="button" data-price="59"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Insulated shop jacket</p><p class="card-sub">His shop is an unheated garage</p><p class="card-sub num">Arrives by Apr 7</p><p class="card-sub over-line" hidden><span class="pill pill-warn over-pill"></span></p></div><span class="price">$59</span><span class="check"><span data-icon="check" data-size="16"></span></span></button>
+        <button class="card" type="button" data-price="46"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Hand-crank coffee grinder</p><p class="card-sub">Loves strong coffee</p><p class="card-sub num">Arrives by Apr 5</p><p class="card-sub over-line" hidden><span class="pill pill-warn over-pill"></span></p></div><span class="price">$46</span><span class="check"><span data-icon="check" data-size="16"></span></span></button>
       </div>
       <p class="meta">Prices include shipping and tax.</p>
     </div>
     <div class="dock">
-      <button class="btn-primary block num" type="button" id="send" disabled>Pick a gift</button>
+      <button class="btn-primary block num send" type="button" disabled>Pick a gift</button>
       <button class="btn-link" type="button" data-open-sheet="reject-sheet">None of these</button>
     </div>
-
-    <div class="scrim" id="over-sheet"><div class="sheet" role="dialog" aria-label="Over budget">
-      <h2 class="h2">This is $8 over your $60 budget</h2>
-      <p class="meta" style="font-size:15px">The cast-iron herb planter costs $68 with shipping and tax. Send it anyway?</p>
-      <button class="btn-primary block" type="button" id="over-yes">Yes, pick it</button>
+    <div class="scrim over-sheet"><div class="sheet" role="dialog" aria-label="Over budget">
+      <h2 class="h2 over-title"></h2>
+      <p class="meta over-body" style="font-size:15px"></p>
+      <button class="btn-primary block over-yes" type="button">Yes, pick it</button>
       <button class="btn-secondary block" type="button" data-close>Keep within budget</button>
     </div></div>
-
     <div class="scrim" id="reject-sheet"><div class="sheet" role="dialog" aria-label="None of these">
       <h2 class="h2">What's off about these?</h2>
-      <div class="chips" id="reasons">
-        <button type="button" aria-pressed="false">She has one</button>
-        <button type="button" aria-pressed="false">Not her style</button>
+      <div class="chips reasons">
+        <button type="button" aria-pressed="false">He has one</button>
+        <button type="button" aria-pressed="false">Not his style</button>
         <button type="button" aria-pressed="false">Too pricey</button>
         <button type="button" aria-pressed="false">Too generic</button>
       </div>
-      <label class="field">Anything else? <span class="meta" style="font-weight:400">Optional. We'll remember it for next time.</span><textarea class="input" id="reject-text" placeholder="She's trying to own less stuff"></textarea></label>
+      <label class="field">Anything else? <span class="meta" style="font-weight:400">Optional. We'll remember it for next time.</span><textarea class="input" id="reject-text" placeholder="He's trying to own less stuff"></textarea></label>
       <button class="btn-primary block" type="button" data-close>Find new ideas</button>
     </div></div>
   </div></div>
 </section>
 
-<section class="screen" data-screen="needs-address" data-title="Needs an address" data-group="Concierge" hidden>
-  <p class="screen-note">A round can't look for ideas until it knows where the gift goes, because delivery dates and tax depend on it.</p>
+<section class="screen" data-screen="ship-to" data-title="Where it goes" data-group="Concierge" hidden>
+  <p class="screen-note">Before ordering, choose where the gift ships: to them, to you, or somewhere else. Mom shares her address through her list, so it's one tap. For someone without a list, like Dad, you add their address once.</p>
+  <div class="variants"><button class="chip" type="button" data-variant="ship-to:private" aria-pressed="false">Person without a list (Dad)</button></div>
   <div class="phone"><div class="app">
     <div class="topbar"><button class="back" type="button" data-go="home"><span data-icon="back"></span>People</button></div>
     <div class="body">
-      <div class="section" style="gap:6px">
-        <h1 class="title">Mom's birthday</h1>
-        <p class="meta num">Sat, Mar 14 · Budget $60</p>
+      <div class="section" style="gap:4px">
+        <h1 class="title">Where should it go?</h1>
+        <p class="meta if-listperson">Mom's birthday · Stoneware mug set</p>
+        <p class="meta if-private">Dad's birthday · Sharpening stone set</p>
       </div>
-      <div class="banner">We need Mom's address to find ideas that arrive in time.</div>
-      <form class="section" onsubmit="event.preventDefault()">
-        <label class="field" for="addr1">Street address<input class="input" id="addr1" autocomplete="off" value=""></label>
+      <div class="list" role="radiogroup" aria-label="Ship to">
+        <button class="card option if-listperson" type="button" role="radio" aria-checked="false" data-default data-label="Ship to Mom"><span class="radio"></span><div class="grow"><p class="card-title">Mom's address</p><p class="card-sub">Shared through her list · Dayton, OH</p></div></button>
+        <button class="card option if-private" type="button" role="radio" aria-checked="false" data-form="new" data-save="person" data-label="Ship to Dad"><span class="radio"></span><div class="grow"><p class="card-title">Dad's address</p><p class="card-sub">Not saved yet. Add it once and we'll remember it.</p></div></button>
+        <button class="card option" type="button" role="radio" aria-checked="false" data-label="Ship to me"><span class="radio"></span><div class="grow"><p class="card-title">My address</p><p class="card-sub">44 Elm St, Columbus, OH · from your profile</p></div></button>
+        <button class="card option" type="button" role="radio" aria-checked="false" data-form="new" data-label="Ship to this address"><span class="radio"></span><div class="grow"><p class="card-title">Another address</p><p class="card-sub">A party, an office, a neighbour</p></div></button>
+      </div>
+      <form class="section" id="ship-form" hidden onsubmit="event.preventDefault()">
+        <label class="field" for="addr-name">Recipient name<input class="input" id="addr-name"></label>
+        <label class="field" for="addr1">Street address<input class="input" id="addr1"></label>
         <label class="field" for="addr2">Apartment, suite <span class="meta" style="font-weight:400">Optional</span><input class="input" id="addr2"></label>
         <div class="row" style="align-items:start">
           <label class="field grow" for="city">City<input class="input" id="city"></label>
           <label class="field" for="state" style="width:84px">State<input class="input" id="state"></label>
         </div>
         <label class="field" for="zip" style="max-width:160px">ZIP code<input class="input num" id="zip" inputmode="numeric"></label>
+        <label class="row" id="save-for" for="save-addr" style="font-size:15px;min-height:44px"><input type="checkbox" id="save-addr" checked style="width:20px;height:20px">Save as Dad's address</label>
       </form>
     </div>
-    <div class="dock"><button class="btn-primary block" type="button">Save address</button></div>
+    <div class="dock"><button class="btn-primary block" type="button" id="ship-go">Ship to Mom</button></div>
   </div></div>
 </section>
 
@@ -400,10 +469,10 @@ textarea.input { min-height: 88px; resize: vertical; }
     <div class="body">
       <div class="section" style="gap:6px">
         <h1 class="title">Mom's birthday</h1>
-        <p class="meta num">Sat, Mar 14 · Budget $60 · <span class="pill pill-warn">Needs you</span></p>
+        <p class="meta num">Sat, Mar 14 · <span class="pill pill-warn">Needs you</span></p>
       </div>
-      <div class="card"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Stoneware mug set</p><p class="card-sub num">Now $49 · you approved $42</p></div></div>
-      <p style="margin:0">The price went up by $7 before we could order. It's still within Mom's $60 budget.</p>
+      <div class="card"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Stoneware mug set</p><p class="card-sub">From Mom's list</p><p class="card-sub num">Now $49 · you approved $42</p></div></div>
+      <p style="margin:0">The price went up by $7 before we could order. It's still within the $60 budget you set.</p>
     </div>
     <div class="dock">
       <button class="btn-primary block num" type="button">Send at $49</button>
@@ -464,7 +533,7 @@ textarea.input { min-height: 88px; resize: vertical; }
 </section>
 
 <section class="screen" data-screen="shared" data-title="Shared list" data-group="Gift lists" hidden>
-  <p class="screen-note">What a friend sees from a share link, signed in or not. Claiming hides the gift from others so nobody doubles up.</p>
+  <p class="screen-note">What a friend sees from a share link, signed in or not. Claiming tells other friends so nobody doubles up. The list's owner never sees claims.</p>
   <div class="variants">
     <button class="chip" type="button" data-variant="shared:owner" aria-pressed="false">View as the list's owner</button>
     <button class="chip" type="button" data-variant="shared:taken" aria-pressed="false">Someone claimed it first</button>
@@ -472,11 +541,11 @@ textarea.input { min-height: 88px; resize: vertical; }
   <div class="phone"><div class="app">
     <div class="topbar"><span class="brand">GiftMe</span></div>
     <div class="body">
-      <div class="banner accent if-owner">This is your list. Friends see a Claim button on each gift.</div>
+      <div class="banner accent if-owner">This is your list. Claims are hidden from you, so your gifts stay a surprise.</div>
       <div class="section" style="gap:4px"><h1 class="title">Sam's list</h1><p class="meta">Claim a gift so nobody else buys it. Sam won't see who.</p></div>
       <div class="giftgrid">
         <div class="gcard"><div class="img lg"><span data-icon="gift" data-size="28"></span></div><p class="card-title">Board game for two</p><p class="price">$32.00</p><button class="btn-secondary btn-sm if-friend" type="button" data-open-sheet="claim-dialog">Claim</button></div>
-        <div class="gcard"><div class="img lg"><span data-icon="gift" data-size="28"></span></div><p class="card-title">Bluetooth speaker</p><p class="price">$45.00</p><p class="meta">Claimed by Alex</p></div>
+        <div class="gcard"><div class="img lg"><span data-icon="gift" data-size="28"></span></div><p class="card-title">Bluetooth speaker</p><p class="price">$45.00</p><p class="meta if-friend">Claimed by Alex</p></div>
         <div class="gcard"><div class="img lg"><span data-icon="gift" data-size="28"></span></div><p class="card-title">Climbing chalk bag</p><p class="price">$18.00</p><button class="btn-secondary btn-sm if-friend" type="button" data-open-sheet="claim-dialog">Claim</button></div>
       </div>
     </div>
@@ -531,21 +600,27 @@ textarea.input { min-height: 88px; resize: vertical; }
 </section>
 
 <section class="screen" data-screen="email" data-title="Heads-up email" data-group="Elsewhere" hidden>
-  <p class="screen-note">Ideas arrive by email. Nothing is approved from the email itself; the button opens the approval screen.</p>
+  <p class="screen-note">Two kinds of heads-up. A reminder buys nothing until you choose. With auto-buy on (opt-in, PRD A-7), the email says which gift will be bought and when, unless you change it.</p>
+  <div class="variants"><button class="chip" type="button" data-variant="email:auto" aria-pressed="false">Auto-buy is on</button></div>
   <div class="mail">
     <div style="padding:16px 20px;border-bottom:1px solid var(--border);font-size:14px;display:grid;gap:2px">
       <div><strong>GiftMe</strong> <span class="muted">· ideas@giftme.example</span></div>
-      <div>3 gift ideas for Mom's birthday</div>
+      <div class="if-remind">Mom's birthday: 3 gifts from her list</div>
+      <div class="if-auto">We'll buy Mom's gift on March 5</div>
     </div>
     <div style="padding:24px 20px;display:grid;gap:20px">
-      <p style="margin:0">Mom's birthday is Saturday, March 14. Here are 3 ideas within your $60 budget. Pick one by March 5 and it arrives in time.</p>
+      <div class="banner accent row if-auto" style="gap:8px;font-weight:600"><span data-icon="gift" data-size="18"></span>Auto-buy is on for Mom</div>
+      <p class="if-remind" style="margin:0">Mom's birthday is Saturday, March 14. These gifts from her list can still arrive in time. Pick one by March 5.</p>
+      <p class="if-auto" style="margin:0">Mom's birthday is Saturday, March 14. On <strong>March 5</strong> we'll buy the gift marked below and ship it to Mom, unless you choose something else first.</p>
       <div style="display:grid;gap:12px">
-        <div class="row"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Stoneware mug set · <span class="num">$42</span></p><p class="card-sub">She said her favourite mug chipped. Arrives by Mar 10.</p></div></div>
-        <div class="row"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Garden kneeler · <span class="num">$35</span></p><p class="card-sub">New raised beds this spring. Arrives by Mar 9.</p></div></div>
-        <div class="row"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Audiobook credits · <span class="num">$45</span></p><p class="card-sub">Listens on her morning walks. Arrives instantly.</p></div></div>
+        <div class="row mail-item"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Stoneware mug set · <span class="num">$42</span></p><p class="card-sub">On her list. Arrives by Mar 10.</p><p class="card-sub if-auto"><span class="pill">Will be bought Mar 5</span></p></div></div>
+        <div class="row"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Cast-iron herb planter · <span class="num">$68</span></p><p class="card-sub">On her list. Arrives by Mar 11.</p></div></div>
+        <div class="row"><div class="img"><span data-icon="gift"></span></div><div class="grow"><p class="card-title">Audiobook credits · <span class="num">$45</span></p><p class="card-sub">On her list. Arrives instantly.</p></div></div>
       </div>
-      <a class="btn-primary" href="#approval" data-go="approval" style="justify-self:start">Choose a gift</a>
-      <p class="meta">Do nothing and we'll remind you on March 1. Prices include shipping and tax.</p>
+      <a class="btn-primary if-remind" href="#approval" data-go="approval" style="justify-self:start">Choose a gift</a>
+      <a class="btn-primary if-auto" href="#approval" data-go="approval" style="justify-self:start">Review or change</a>
+      <p class="meta if-remind">Nothing is bought until you choose. Do nothing and we'll remind you on March 1. Prices include shipping and tax.</p>
+      <p class="meta if-auto">To skip this gift, open the link and choose "Don't buy". You can turn auto-buy off for Mom in her profile. Prices include shipping and tax.</p>
     </div>
   </div>
 </section>
@@ -559,10 +634,10 @@ textarea.input { min-height: 88px; resize: vertical; }
       <div class="section">
         <div class="row" style="justify-content:space-between"><h2 class="h2">People</h2><button class="btn-secondary btn-sm" type="button"><span data-icon="plus" data-size="16"></span>Add someone</button></div>
         <div class="grid">
-          <a class="card" href="#approval" data-go="approval"><div class="grow"><p class="card-title">Mom</p><p class="card-sub">Birthday · Sat, Mar 14</p></div><span class="pill">Pick a gift</span></a>
-          <a class="card" href="#person" data-go="person"><div class="grow"><p class="card-title">Dad</p><p class="card-sub">Father's Day · Sun, Jun 21</p></div><span class="pill pill-muted">Ideas Jun 1</span></a>
-          <div class="card"><div class="grow"><p class="card-title">Sam</p><p class="card-sub">Christmas · Fri, Dec 25</p></div><span class="pill pill-ok">Arrives Dec 20</span></div>
-          <div class="card"><div class="grow"><p class="card-title">Grandma Margaret-Ann</p><p class="card-sub">80th birthday · Thu, Apr 2</p></div><span class="pill pill-warn">Needs address</span></div>
+          <a class="card curated" href="#approval" data-go="approval"><div class="grow"><p class="card-title">Mom</p><p class="card-sub">Birthday · Sat, Mar 14</p><p class="source source-list"><span data-icon="list" data-size="14"></span>Her own list · 6 wishes</p></div><span class="pill">Pick from her list</span></a>
+          <a class="card" href="#ideas" data-go="ideas"><div class="grow"><p class="card-title">Dad</p><p class="card-sub">Birthday · Fri, Apr 10</p><p class="source"><span data-icon="sparkle" data-size="14"></span>No list · we suggest ideas</p></div><span class="pill">Ideas ready</span></a>
+          <div class="card"><div class="grow"><p class="card-title">Sam</p><p class="card-sub">Christmas · Fri, Dec 25</p><p class="source source-list"><span data-icon="list" data-size="14"></span>His own list</p></div><span class="pill pill-ok">Arrives Dec 20</span></div>
+          <a class="card" href="#ship-to" data-go="ship-to"><div class="grow"><p class="card-title">Grandma Margaret-Ann</p><p class="card-sub">80th birthday · Thu, Apr 2</p><p class="source"><span data-icon="sparkle" data-size="14"></span>No list · we suggest ideas</p></div><span class="pill pill-warn">Needs address</span></a>
         </div>
       </div>
     </div>
@@ -622,6 +697,7 @@ const ICONS = {
   plus: '<path d="M12 5v14M5 12h14"/>',
   share: '<circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4"/>',
   pencil: '<path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/>',
+  list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
   sparkle: '<path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9Z"/>',
 };
 function paintIcons(root = document) {
@@ -707,37 +783,72 @@ document.addEventListener('click', (e) => {
 });
 
 // screens-js:start
-// Approval: pick one or more; the over-budget idea asks first; the button shows count and total.
-(function approval() {
-  const ideas = document.getElementById('ideas');
-  const send = document.getElementById('send');
-  const over = document.getElementById('over-sheet');
+// Picking screens (Mom's list, Dad's ideas): one or more picks, an optional budget of
+// the buyer's own, over-budget picks confirmed first, and the total on the button.
+function money(n) { return '$' + (Number.isInteger(n) ? n : n.toFixed(2)); }
+document.querySelectorAll('.pick').forEach((app) => {
+  const ideas = app.querySelector('.ideas');
+  const send = app.querySelector('.send');
+  const over = app.querySelector('.over-sheet');
+  const budgetIn = app.querySelector('.budget-input');
   let pending = null;
+  const budget = () => { const v = parseFloat(budgetIn.value); return v > 0 ? v : null; };
+  const overBy = (card) => { const b = budget(); const p = Number(card.dataset.price); return b && p > b ? Math.round((p - b) * 100) / 100 : 0; };
   function update() {
-    const picked = [...ideas.querySelectorAll('.card.selected')];
+    ideas.querySelectorAll('button.card').forEach((card) => {
+      const o = overBy(card);
+      card.querySelector('.over-line').hidden = !o;
+      card.querySelector('.over-pill').textContent = o ? `${money(o)} over your budget` : '';
+    });
+    const picked = [...ideas.querySelectorAll('button.card.selected')];
     const total = picked.reduce((sum, c) => sum + Number(c.dataset.price), 0);
     send.disabled = picked.length === 0;
-    send.textContent = picked.length === 0 ? 'Pick a gift' : `Send ${picked.length} gift${picked.length > 1 ? 's' : ''} · $${total}`;
+    send.textContent = picked.length === 0 ? 'Pick a gift' : `Send ${picked.length} gift${picked.length > 1 ? 's' : ''} · ${money(total)}`;
   }
+  function select(card, on) { card.classList.toggle('selected', on); card.setAttribute('aria-pressed', String(on)); }
   ideas.addEventListener('click', (e) => {
-    const card = e.target.closest('.card');
+    const card = e.target.closest('button.card');
     if (!card) return;
-    if (card.dataset.over && !card.classList.contains('selected')) { pending = card; over.setAttribute('data-open', ''); return; }
-    card.classList.toggle('selected');
-    card.setAttribute('aria-pressed', String(card.classList.contains('selected')));
+    const o = overBy(card);
+    if (o && !card.classList.contains('selected')) {
+      pending = card;
+      over.querySelector('.over-title').textContent = `This is ${money(o)} over your ${money(budget())} budget`;
+      over.querySelector('.over-body').textContent = `${card.querySelector('.card-title').textContent} costs ${money(Number(card.dataset.price))} with shipping and tax. Pick it anyway?`;
+      over.setAttribute('data-open', '');
+      return;
+    }
+    select(card, !card.classList.contains('selected'));
     update();
   });
-  document.getElementById('over-yes').addEventListener('click', () => {
-    pending?.classList.add('selected');
-    pending?.setAttribute('aria-pressed', 'true');
-    over.removeAttribute('data-open');
-    update();
-  });
-  ideas.querySelectorAll('.card').forEach((c) => c.setAttribute('aria-pressed', 'false'));
-  document.getElementById('reasons').addEventListener('click', (e) => {
+  over.querySelector('.over-yes').addEventListener('click', () => { if (pending) select(pending, true); over.removeAttribute('data-open'); update(); });
+  budgetIn.addEventListener('input', update);
+  ideas.querySelectorAll('button.card').forEach((c) => c.setAttribute('aria-pressed', 'false'));
+  app.querySelector('.reasons')?.addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (b) b.setAttribute('aria-pressed', String(b.getAttribute('aria-pressed') !== 'true'));
   });
+  update();
+});
+
+// Where it goes: them, me, or another address. A new address shows the form; for a
+// person without a list, "Save as Dad's address" keeps it for next time.
+(function shipTo() {
+  const screen = document.querySelector('.screen[data-screen="ship-to"]');
+  const opts = [...screen.querySelectorAll('.option')];
+  function pick(o) {
+    if (!o) return;
+    opts.forEach((x) => x.setAttribute('aria-checked', String(x === o)));
+    document.getElementById('ship-form').hidden = o.dataset.form !== 'new';
+    document.getElementById('save-for').hidden = o.dataset.save !== 'person';
+    document.getElementById('ship-go').textContent = o.dataset.label;
+  }
+  screen.addEventListener('click', (e) => { const o = e.target.closest('.option'); if (o) pick(o); });
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('[data-variant^="ship-to:"]')) return;
+    const priv = screen.hasAttribute('data-private');
+    pick(opts.find((o) => (priv ? !o.classList.contains('if-listperson') : !o.classList.contains('if-private'))));
+  });
+  pick(opts.find((o) => o.hasAttribute('data-default')));
 })();
 
 // Here's what I learned: keep or drop each fact; the button counts what's kept.

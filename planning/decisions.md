@@ -48,3 +48,15 @@ Platform direction from the owner and Jim. Details in [`strategy.md`](strategy.m
 | 33 | **Gift Concierge is the final stage of the funnel.** Loyal customers fill in their loved ones' profiles, including a guided tour of each person's social media to show the concierge their vibe, and the concierge automates their recurring gift giving. | Owner |
 | 34 | **Money model direction (not decided):** free gift lists, premium automation (the concierge), and a per-gift fee on scan-to-gift and custom gifts. Zinc's $1 per order can be passed to the buyer. Billing stays out of MVP scope (revisits D6). | Owner and Jim |
 | 35 | **Where the roadmap lives:** Linear projects hold live status (Gift Concierge MVP, Gift Concierge Public Launch, Scan-to-gift, plus Jim's list projects). `strategy.md` is the written source, and two shareable pages present it (roadmap and go-to-market plan). | Owner, on Claude's recommendation |
+
+## 2026-10-26
+
+From the owner's review of the ALL-41 mock-ups (`../design/ui.md`).
+
+| # | Decision | Source |
+|---|---|---|
+| 36 | **The budget is the buyer's own, and optional** (revises decision 4 and PRD B-1). It's set per person and occasion in the buyer's view, is never shown as the recipient's limit, and only you see it. With no budget there are no over-budget labels or confirm step. **[Verify]** Follow-ups: `concierge.gift_rounds.budget_cents` is `not null` today (ALL-19), and design §4.2 assumes a budget; B-3 ("automatic purchases never go over budget") then applies only when one is set. | Owner |
+| 37 | **A person's own list is the best source of gifts.** When the recipient keeps a gift list (Mom), the concierge offers picks from it, and that's the ideal case the app steers toward. When they don't (Dad), it suggests ideas from what you've saved. Home and the person page show which applies. Builds on T19 (`people.linked_user_id`) and the PRD's "gift list connection" (Later). | Owner |
+| 38 | **A gift ships to the recipient, to you, or to another address** (revises PRD A-3, which shipped only to the recipient). If the recipient keeps a list, they can share their address through it and the buyer sees only the city. Otherwise the buyer enters it once and can save it to that person. **[Verify]** Follow-up: the buyer's own address isn't stored yet (`public.profiles` has no address). | Owner |
+| 39 | **A list's owner never sees whether gifts are claimed**, so gifts stay a surprise. Friends still see claims so nobody doubles up. | Owner |
+| 40 | **The heads-up email says whether anything will be bought.** A reminder says nothing is bought until you choose. With auto-buy on (opt-in, PRD A-7, still Later), the email names the gift that will be bought, the date, and how to change or skip it. | Owner |

@@ -120,16 +120,18 @@ A clickable, phone-first prototype, published as a private shareable artifact pa
 
 | Screen | Shows | PRD |
 |---|---|---|
-| Home | The people you buy for, each with their next occasion and its round status; an empty state for a new user | P-1, P-3 |
-| Person profile | What the app knows about them (facts, sizes, likes), with edit and delete, and one readiness line with a suggested next step | C-6, C-7 |
+| Home | The people you buy for, each with their next occasion and status. Someone who keeps their own list (Mom) is marked "Her own list" and is the ideal case; someone without one (Dad) is marked "we suggest ideas". An empty state for a new user | P-1, P-3, decision 37 |
+| Person profile | What the app knows about them (facts, sizes, likes), with edit and delete, one readiness line, whether they keep a list, and your optional budget per occasion as its own section | C-6, C-7, decision 36 |
 | "Here's what I learned" | The facts pulled from a capture, each to keep or drop | C-3 |
-| Approval | Idea cards with full cost, arrive-by date and the reason it fits; picking one or several; an over-budget pick that needs a second confirm; rejecting with a reason | A-1, B-4, G-3 |
-| Round needs something **[Claude's call]** | Two variants of the approval screen: "needs an address" (a short address form, P-5) and "needs attention" (the price went up: re-approve at the new total, or pick the next-best idea, D29) | P-5, A-4 |
+| Pick from their list (Mom) | Gifts from the person's own list, with when each was added and arrive-by date; one already claimed by someone else; pick one or several. **Your budget** is a separate, optional field: only when it's filled in do over-budget labels and the confirm step appear | A-1, B-4, decisions 36, 37 |
+| Suggested ideas (Dad) | Generated ideas with the reason each fits, the same optional budget, and "None of these" with a reason | A-1, B-4, G-3, decision 36 |
+| Where it goes | Ship to the recipient, to you (your saved address), or to another address. For someone with a list, their shared address is one tap (city shown); for someone without one, you add theirs once and can save it | P-5, A-3, decision 38 |
+| Price went up **[Claude's call]** | Re-approve at the new total, or pick the next-best idea (D29) | A-4 |
 | Gift list | The list app in the new look: add by link or by hand, save, share | Existing (GiftsAF) |
-| Shared list and claim | A friend opening a share link and claiming a gift | Existing (GiftsAF) |
+| Shared list and claim | A friend opening a share link and claiming a gift; a claim that lost the race. The list's owner never sees claims | Existing (GiftsAF), decision 39 |
 | Sign-in | Google sign-in (email and password stays for existing list users) | ALL-20 |
 | Extension popup | "Capture for…" with a person picker | C-1 |
-| Heads-up email | The 3–5 ideas as small read-only cards (photo, name, full cost, arrive-by date, one-line reason) and one "Choose a gift" button. The button is a signed one-time link (design §6.4) that opens the approval screen on the phone; nothing is approved from the email itself | N-1, PRD flow step 1 |
+| Heads-up email | Two kinds. **Reminder:** the options as small read-only rows and "Choose a gift"; nothing is bought until you choose. **Auto-buy on** (opt-in, A-7): says which gift will be bought and on what date, marks it, and offers "Review or change" and how to skip. Buttons are signed one-time links (design §6.4) to the phone page | N-1, A-7, decision 40 |
 | Computer width | Home and the gift list only | — |
 
 Not mocked up now: the reaction prompt (ALL-34) and other later screens. They reuse these patterns and get mock-ups in their own tickets if needed **[Claude's call]**.
