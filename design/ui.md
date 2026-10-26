@@ -114,7 +114,7 @@ The gift list and the concierge each **work on their own**, and are linked light
 
 ## Mock-ups
 
-A clickable, phone-first prototype, published as a private shareable artifact page that the owner and Jim can each open on their phones and comment on. **Link:** *added here when published.*
+A clickable, phone-first prototype, published as a private shareable artifact page that the owner and Jim can each open on their phones and comment on. **Link:** [GiftMe mock-ups](https://claude.ai/artifact/BvdSVB6RPatUPRbBDyPRzW) (private; shared with Jim from the page's Share menu). **Source:** [`design/mockups/ALL-41.html`](mockups/ALL-41.html); republish it to the same link after changes.
 
 **Reviewing:** the owner and Jim share one claude.ai login, so the built-in comments can't tell them apart. The page therefore has its own feedback: on each screen, a comment box with a name picker (Aaron or Jim), and a per-person **"I approve this screen"** button. Comments and approvals are stored in the artifact's shared database, so both people see each other's, and Claude can read them to make changes. Sign-off is complete when both have approved every screen.
 
