@@ -562,7 +562,7 @@ textarea.input { min-height: 88px; resize: vertical; }
       <div class="fb-row">
         <span class="meta" style="font-size:14px">Commenting as</span>
         <div class="seg" role="group" aria-label="Commenting as">
-          <button type="button" data-who="owner" aria-pressed="true">Owner</button>
+          <button type="button" data-who="aaron" aria-pressed="true">Aaron</button>
           <button type="button" data-who="jim" aria-pressed="false">Jim</button>
         </div>
       </div>
@@ -772,10 +772,10 @@ document.addEventListener('click', (e) => {
 // screens-js:end
 
 // Feedback and sign-off, stored in the artifact's db:
-//   feedback/<auto id>         {screen, who: "owner"|"jim", text, at}
+//   feedback/<auto id>         {screen, who: "aaron"|"jim", text, at}
 //   approvals/<screen>__<who>  {screen, who, approved, at}
-const PEOPLE = { owner: 'Owner', jim: 'Jim' };
-let who = PEOPLE[store('mock-who')] ? store('mock-who') : 'owner';
+const PEOPLE = { aaron: 'Aaron', jim: 'Jim' };
+let who = PEOPLE[store('mock-who')] ? store('mock-who') : 'aaron';
 let db = null;
 let comments = [];
 const approvals = new Map();
@@ -841,7 +841,7 @@ function renderSignoff() {
   const waiting = [];
   all.forEach((s) => {
     const id = s.dataset.screen;
-    const n = Number(approved(id, 'owner')) + Number(approved(id, 'jim'));
+    const n = Number(approved(id, 'aaron')) + Number(approved(id, 'jim'));
     if (n === 2) both++; else waiting.push(screenLabel(s));
     const dot = document.querySelector(`.chip[data-pick="${id}"] .dot`);
     if (dot) dot.className = 'dot' + (n === 2 ? ' done' : n === 1 ? ' half' : '');
