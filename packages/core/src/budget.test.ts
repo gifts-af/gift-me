@@ -158,3 +158,13 @@ describe("no budget", () => {
     expect(maxPriceCents({ ceilingCents: 11000, committedCents: 0, reservedCents: 6800, feeCents: 100 })).toBe(4100);
   });
 });
+
+describe("no budget, once other orders in the round settle", () => {
+  it("never lets an order cost more than its own approved total when an earlier one came in cheaper", () => {
+    expect(maxPriceCents({ ceilingCents: 11000, committedCents: 3100, reservedCents: 0, feeCents: 100, pickTotalCents: 6800 })).toBe(6700);
+  });
+
+  it("never lets an order use the room a failed order released", () => {
+    expect(maxPriceCents({ ceilingCents: 11000, committedCents: 0, reservedCents: 0, feeCents: 100, pickTotalCents: 6800 })).toBe(6700);
+  });
+});

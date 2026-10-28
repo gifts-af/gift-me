@@ -4,7 +4,7 @@
 -- lists.person_list (T19).
 begin;
 \ir _helpers.psql
-select plan(20);
+select plan(26);
 
 select tests.create_user('mom@example.com', 'Mom') as mom \gset
 select tests.create_user('buyer@example.com', 'Buyer') as buyer \gset
@@ -82,6 +82,43 @@ select tests.act_as(:'mom');
 delete from lists.lists where id = :'list_id';
 select tests.act_as(:'buyer');
 select is(lists.person_list(:'person'), null, 'once Mom deletes the list, there are no picks');
+select is((select linked_user_id from public.people where id = :'person'), null, 'and the person is no longer linked to her account');
+
+-- Deleting the list also ends address sharing for everyone who linked through it.
+select tests.act_as(:'mom');
+insert into public.account_addresses (recipient_first_name, recipient_last_name, address_line1, city, state, zip, share_for_gifts)
+values ('Mary', 'Allen', '12 Oak St', 'Dayton', 'OH', '45402', true);
+select tests.act_as(:'buyer');
+select is(public.shared_city_for_person(:'person'), null, 'after the list is deleted, the buyer no longer sees her city');
+
+-- A linked person who is then deleted shows nothing.
+select tests.act_as(:'mom');
+select lists.save_list(null, 'New list', '[{"name": "Scarf", "price_cents": 2000}]'::jsonb) as list2 \gset
+select share_token as token2 from lists.lists where id = :'list2' \gset
+select tests.act_as(:'buyer');
+insert into public.people (name, relationship) values ('Mom 2', 'parent') returning id as person2 \gset
+select lists.link_person(:'token2', :'person2');
+select public.delete_person(:'person2');
+select throws_ok(format('select lists.person_list(%L)', :'person2'), 'P0002', null, 'a deleted person has no picks');
+select throws_ok(format('select public.shared_city_for_person(%L)', :'person2'), 'P0002', null, 'or city');
+
+-- When Mom deletes her account, the link goes with it.
+insert into public.people (name, relationship) values ('Mom 3', 'parent') returning id as person3 \gset
+select lists.link_person(:'token2', :'person3');
+select tests.reset_role();
+delete from auth.users where id = :'mom';
+select tests.act_as(:'buyer');
+select is(lists.person_list(:'person3'), null, 'once Mom deletes her account, there are no picks');
+
+-- An admin hard delete of a linked person still works (the link goes too).
+insert into public.people (name, relationship) values ('Linked', 'friend') returning id as person4 \gset
+select tests.act_as(:'other');
+select lists.save_list(null, 'Other list', '[]'::jsonb) as list3 \gset
+select share_token as token3 from lists.lists where id = :'list3' \gset
+select tests.act_as(:'buyer');
+select lists.link_person(:'token3', :'person4');
+select tests.act_as_server();
+select lives_ok(format($$select admin.hard_delete_person(%L, 'test', 'test')$$, :'person4'), 'an admin can hard-delete a linked person');
 
 select * from finish();
 rollback;

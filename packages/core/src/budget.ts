@@ -96,18 +96,27 @@ export function committedSpendCents(orders: CommittedOrder[]): number {
  * tax, but not the order fee. `reservedCents` holds back room for the round's
  * other picks that haven't been ordered yet, so the first order can't use
  * up the whole budget.
+ *
+ * With no budget, pass the pick's own approved total as `pickTotalCents`:
+ * the order is then never allowed to cost more than that, even when other
+ * orders in the round came in cheaper or failed and freed up room.
  */
 export function maxPriceCents(p: {
   ceilingCents: number;
   committedCents: number;
   reservedCents: number;
   feeCents: number;
+  pickTotalCents?: number;
 }): number {
   checkCents(p.ceilingCents, "Ceiling");
   checkCents(p.committedCents, "Committed spend");
   checkCents(p.reservedCents, "Reserved spend");
   checkCents(p.feeCents, "Fee");
-  const max = p.ceilingCents - p.committedCents - p.reservedCents - p.feeCents;
+  let max = p.ceilingCents - p.committedCents - p.reservedCents - p.feeCents;
+  if (p.pickTotalCents !== undefined) {
+    checkCents(p.pickTotalCents, "Pick total");
+    max = Math.min(max, p.pickTotalCents - p.feeCents);
+  }
   if (max <= 0) {
     // A budget bug, never an order: there's no room left in this round.
     throw new RangeError(`No budget left for this order (max_price would be ${max} cents)`);

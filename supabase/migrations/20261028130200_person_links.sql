@@ -19,6 +19,28 @@ create index person_links_list_id_idx on lists.person_links (list_id);
 alter table lists.person_links enable row level security;
 revoke all on lists.person_links from anon, authenticated;
 
+-- A person stays linked to an account only while the link exists. When the
+-- list is deleted (or the person is unlinked), linked_user_id is cleared
+-- too, so deleting a list also ends address sharing with everyone who
+-- linked through it (shared_city_for_person, shared_address_for_person).
+create function lists.handle_person_link_deleted()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  update public.people set linked_user_id = null
+   where id = old.person_id and linked_user_id is not null;
+  return null;
+end;
+$$;
+
+revoke execute on function lists.handle_person_link_deleted() from public, anon, authenticated;
+
+create trigger on_person_link_deleted after delete on lists.person_links
+  for each row execute function lists.handle_person_link_deleted();
+
 -- ─── link_person ────────────────────────────────────────────────────────────
 -- Links one of your people to the list behind a share link, and sets
 -- people.linked_user_id to the list's owner (T19). Linking again moves the
