@@ -1,6 +1,6 @@
 # Look and feel (W1-7, ALL-41)
 
-**Status:** direction agreed with the owner on 2026-10-26; mock-ups pending sign-off by the owner and Jim.
+**Status:** signed off 2026-10-28, with no further comments (ALL-41 done). Revised on 2026-10-26 after the owner's review (product decisions 36–40).
 
 **The answer:** one calm, clean look ("A") for the whole platform. It uses a white background, near-black text, thin grey borders and **one deep-teal accent** for the action that matters on each screen. Every screen shows only what that moment needs. The look lives in one set of tokens (CSS variables read by Tailwind and shadcn/ui), so the list app, sign-in and the concierge all match, and changing a colour is a one-line edit.
 
@@ -140,10 +140,21 @@ Not mocked up now: the reaction prompt (ALL-34) and other later screens. They re
 
 | Who | Signed off |
 |---|---|
-| Owner | ☐ |
-| Jim | ☐ |
+| Owner and Jim | ☑ 2026-10-28, in a Claude Code session ("no comments at this time"). The page's per-screen approve buttons weren't used. |
 
-After sign-off, ALL-20, ALL-21, ALL-22, ALL-23, ALL-26 and ALL-29 each link to the mock-up screens they build.
+Each screen ticket links to the screens it builds. To open one screen directly, add `#<screen>` to the link:
+
+| Ticket | Screens |
+|---|---|
+| ALL-20 app shell, sign-in, list restyle | `signin`, `home`, `home-wide`, `list`, `list-wide`, `shared` |
+| ALL-21 people, occasions, budgets | `home`, `person` |
+| ALL-22 Chrome extension | `extension` |
+| ALL-23 notifications | `email` |
+| ALL-25 capture extraction | `learned` |
+| ALL-26 profile, readiness | `person` |
+| ALL-29 approval | `approval`, `ideas` |
+| ALL-30 purchase and shipping | `ship-to`, `needs-attention` |
+| ALL-33 failure and replacement | `needs-attention` |
 
 ## Moving the list app to the new look (in ALL-20)
 
