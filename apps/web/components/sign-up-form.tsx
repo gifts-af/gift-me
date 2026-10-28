@@ -1,25 +1,18 @@
 "use client";
 
-import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
+import { safeNext } from "@/lib/safe-next";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Divider, FormError } from "./auth-frame";
+import { GoogleButton } from "./google-button";
 
-export function SignUpForm({
-  className,
-  ...props
-}: React.ComponentPropsWithoutRef<"div">) {
+export function SignUpForm({ next: rawNext }: { next?: string }) {
+  const next = safeNext(rawNext);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -30,117 +23,82 @@ export function SignUpForm({
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
-    const supabase = createClient();
-    setIsLoading(true);
     setError(null);
-
     if (password !== repeatPassword) {
-      setError("Passwords do not match");
+      setError("The passwords don't match.");
+      return;
+    }
+    setIsLoading(true);
+    // Optional; claim_gift falls back to the email when it's missing.
+    const displayName = name.trim();
+    const { error } = await createClient().auth.signUp({
+      email,
+      password,
+      options: {
+        emailRedirectTo: `${window.location.origin}${next}`,
+        data: displayName ? { display_name: displayName } : undefined,
+      },
+    });
+    if (error) {
+      setError(error.message);
       setIsLoading(false);
       return;
     }
-
-    // Optional; claim_gift falls back to the email when it's missing.
-    const displayName = name.trim();
-
-    try {
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/`,
-          data: displayName ? { display_name: displayName } : undefined,
-        },
-      });
-      if (error) throw error;
-      router.push("/auth/sign-up-success");
-    } catch (error: unknown) {
-      setError(error instanceof Error ? error.message : "An error occurred");
-    } finally {
-      setIsLoading(false);
-    }
+    router.push("/auth/sign-up-success");
   };
 
   return (
-    <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-2xl">Sign up</CardTitle>
-          <CardDescription>Create a new account</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSignUp}>
-            <div className="flex flex-col gap-6">
-              <div className="grid gap-2">
-                <Label htmlFor="name">
-                  Name{" "}
-                  <span className="font-normal text-muted-foreground">
-                    (optional)
-                  </span>
-                </Label>
-                <Input
-                  id="name"
-                  type="text"
-                  autoComplete="name"
-                  maxLength={80}
-                  aria-describedby="name-hint"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                />
-                <p id="name-hint" className="text-sm text-muted-foreground">
-                  Shown to others when you claim a gift. If you leave it blank,
-                  your email is shown instead.
-                </p>
-              </div>
-              <div className="grid gap-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="m@example.com"
-                  required
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                />
-              </div>
-              <div className="grid gap-2">
-                <div className="flex items-center">
-                  <Label htmlFor="password">Password</Label>
-                </div>
-                <Input
-                  id="password"
-                  type="password"
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                />
-              </div>
-              <div className="grid gap-2">
-                <div className="flex items-center">
-                  <Label htmlFor="repeat-password">Repeat Password</Label>
-                </div>
-                <Input
-                  id="repeat-password"
-                  type="password"
-                  required
-                  value={repeatPassword}
-                  onChange={(e) => setRepeatPassword(e.target.value)}
-                />
-              </div>
-              {error && <p className="text-sm text-red-500">{error}</p>}
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Creating an account..." : "Sign up"}
-              </Button>
-            </div>
-            <div className="mt-4 text-center text-sm">
-              Already have an account?{" "}
-              <Link href="/auth/login" className="underline underline-offset-4">
-                Login
-              </Link>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
+    <div className="flex flex-col gap-7">
+      <GoogleButton next={next} />
+      <Divider>or</Divider>
+      <form onSubmit={handleSignUp} className="flex flex-col gap-3">
+        <div className="grid gap-1.5">
+          <Label htmlFor="name">
+            Name <span className="font-normal text-muted-foreground">Optional</span>
+          </Label>
+          <Input
+            id="name"
+            type="text"
+            autoComplete="name"
+            maxLength={80}
+            aria-describedby="name-hint"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+          <p id="name-hint" className="text-[13px] text-muted-foreground">
+            Shown to others when you claim a gift. Leave it blank to show your email instead.
+          </p>
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="email">Email</Label>
+          <Input id="email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="password">Password</Label>
+          <Input id="password" type="password" autoComplete="new-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+        </div>
+        <div className="grid gap-1.5">
+          <Label htmlFor="repeat-password">Repeat password</Label>
+          <Input
+            id="repeat-password"
+            type="password"
+            autoComplete="new-password"
+            required
+            value={repeatPassword}
+            onChange={(e) => setRepeatPassword(e.target.value)}
+          />
+        </div>
+        {error && <FormError>{error}</FormError>}
+        <Button type="submit" variant="secondary" className="w-full" disabled={isLoading} aria-busy={isLoading}>
+          {isLoading ? "Creating your account…" : "Create account"}
+        </Button>
+      </form>
+      <p className="text-center text-[15px] text-muted-foreground">
+        Already have an account?{" "}
+        <Link href={next === "/" ? "/auth/login" : `/auth/login?next=${encodeURIComponent(next)}`} className="text-foreground underline underline-offset-[3px]">
+          Sign in
+        </Link>
+      </p>
     </div>
   );
 }
