@@ -1,6 +1,6 @@
 # Look and feel (W1-7, ALL-41)
 
-**Status:** signed off 2026-10-28, with no further comments (ALL-41 done). Revised on 2026-10-26 after the owner's review (product decisions 36–40).
+**Status:** signed off 2026-10-28, with no further comments (ALL-41 done). Built into the app in ALL-20 (tokens, sign-in, Home, the list app and the shared list). Revised on 2026-10-26 after the owner's review (product decisions 36–40).
 
 **The answer:** one calm, clean look ("A") for the whole platform. It uses a white background, near-black text, thin grey borders and **one deep-teal accent** for the action that matters on each screen. Every screen shows only what that moment needs. The look lives in one set of tokens (CSS variables read by Tailwind and shadcn/ui), so the list app, sign-in and the concierge all match, and changing a colour is a one-line edit.
 
@@ -33,7 +33,7 @@ This doc is the source every screen ticket builds from (ALL-20 onward). The PRD 
 
 ### Colours
 
-Light is the default for the mock-ups; the app follows the phone's light or dark setting, with a manual switch in the account menu **[Claude's call]** (it sits in the footer today). Values are given as hex and as the HSL triples shadcn's CSS variables use.
+Light is the default for the mock-ups; the app follows the phone's light or dark setting, with a manual switch in the account menu (ALL-20). Values are given as hex and as the HSL triples shadcn's CSS variables use.
 
 | Token | Use | Light | Dark |
 |---|---|---|---|
@@ -55,7 +55,24 @@ Light is the default for the mock-ups; the app follows the phone's light or dark
 - Status colours are used for small text and icons only, never as large fills, so they don't compete with teal.
 - `--success` and `--warning` aren't in stock shadcn. ALL-20 adds them to `globals.css` and `tailwind.config.ts` with the others.
 - The `--chart-*` variables are left as they are until a screen needs a chart.
-- **[Verify in ALL-20]** Check each pair's contrast with a checker once it's in code. Teal `#0f766e` on white is about 5.4:1 by calculation.
+- **Contrast, measured in code** (`apps/web/test/tokens.test.ts` checks every pair below, in both themes, on each test run):
+
+| Text on fill | Light | Dark |
+|---|---|---|
+| `--foreground` on `--background` | 17.7 | 19.0 |
+| `--muted-foreground` on `--background` | 4.9 | 7.8 |
+| `--foreground` on `--muted` | 16.2 | 14.2 |
+| `--muted-foreground` on `--muted` | 4.4 | 5.8 |
+| `--primary-foreground` on `--primary` | 5.5 | 7.7 |
+| `--primary` on `--background` | 5.5 | 10.6 |
+| `--accent-foreground` on `--accent` | 5.3 | 9.8 |
+| `--destructive` on `--background` | 6.4 | 7.2 |
+| `--success` on `--background` | 5.1 | 11.4 |
+| `--warning` on `--background` | 5.0 | 11.8 |
+| `--success` on `--success-soft` | 4.9 | 8.5 |
+| `--warning` on `--warning-soft` | 4.9 | 9.8 |
+
+- **Grey text never sits on the grey fill.** `--muted-foreground` on `--muted` is 4.4:1 in light, just under AA, so text on `--muted` (banners, image placeholders) uses `--foreground`. Icons there may stay grey (3:1 is enough for icons).
 
 ### Type
 
@@ -168,9 +185,8 @@ The prototype's colours and stylesheet go; **none of its behaviour does.** When 
 - The shared list page: a signed-out friend can view and claim; the owner sees "this is your list" and can't claim; a second claim on the same gift is refused
 - Dark mode, keyboard focus, and screen-reader announcements
 
-`gifts.css` can be retired screen by screen as each part moves to Tailwind classes, rather than all at once **[Claude's call]**.
+`gifts.css` was retired in ALL-20: every list screen moved to Tailwind classes at once, since the restyle touched them all. Each feature above has a test (`modules/lists/components/__tests__/`, and the owner-claims rule in `supabase/tests/lists.test.sql`).
 
 ## Open items
 
 - **Name and logo:** the mock-ups use "GiftMe" as plain text until ALL-14 settles the name.
-- **[Verify in ALL-20]** Contrast of every token pair in both themes, measured in code.
