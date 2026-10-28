@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { ThemeProvider } from "next-themes";
 import "./globals.css";
 
@@ -9,7 +9,18 @@ const defaultUrl = process.env.VERCEL_URL
 export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
   title: "GiftMe",
-  description: "A list of the gifts you’d actually like to receive.",
+  description: "The right gift, on time, without the scramble.",
+  // iOS reads these, not the manifest, when adding to the home screen.
+  appleWebApp: { capable: true, title: "GiftMe", statusBarStyle: "default" },
+};
+
+// The browser bar matches the page in light and dark.
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#09090b" },
+  ],
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
