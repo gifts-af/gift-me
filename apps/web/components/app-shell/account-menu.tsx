@@ -2,7 +2,6 @@
 
 import { Laptop, LogOut, Moon, Settings, Sun, User } from "lucide-react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,13 +19,12 @@ import { createClient } from "@/lib/supabase/client";
 // Settings, the light/dark switch and sign-out, behind one icon
 // (design/ui.md > Colours: the manual switch lives in the account menu).
 export function AccountMenu({ email }: { email?: string | null }) {
-  const router = useRouter();
   const { theme, setTheme } = useTheme();
 
   async function signOut() {
     await createClient().auth.signOut();
-    router.push("/auth/login");
-    router.refresh();
+    // A full page load, so no signed-in page survives in the router cache.
+    window.location.assign("/auth/login");
   }
 
   return (

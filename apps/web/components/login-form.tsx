@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Divider, FormError } from "./auth-frame";
 import { GoogleButton } from "./google-button";
@@ -19,7 +18,6 @@ export function LoginForm({ next: rawNext }: { next?: string }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const router = useRouter();
   const withNext = (path: string) =>
     next === "/" ? path : `${path}?next=${encodeURIComponent(next)}`;
 
@@ -33,8 +31,9 @@ export function LoginForm({ next: rawNext }: { next?: string }) {
       setIsLoading(false);
       return;
     }
-    router.push(next);
-    router.refresh();
+    // A full page load, not router.push: the router may hold a prefetch of
+    // `next` made while signed out (a redirect back here), and would replay it.
+    window.location.assign(next);
   };
 
   return (
