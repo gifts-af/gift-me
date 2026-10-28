@@ -2,12 +2,13 @@ import Link from "next/link";
 import { Suspense } from "react";
 import { AuthFrame } from "@/components/auth-frame";
 import { Button } from "@/components/ui/button";
+import { authErrorMessage } from "@/lib/auth-errors";
 
 async function ErrorMessage({ searchParams }: PageProps<"/auth/error">) {
   const { error } = await searchParams;
   return (
     <p className="text-center text-[15px] text-muted-foreground">
-      {typeof error === "string" && error ? error : "Something went wrong while signing you in."}
+      {authErrorMessage(typeof error === "string" ? error : undefined)}
     </p>
   );
 }

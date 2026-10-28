@@ -14,7 +14,7 @@ describe("safeNext", () => {
 
   // Browsers drop tabs and newlines from URLs, so "/\t/evil.com" loads
   // as "//evil.com". The check has to judge the URL the browser will load.
-  it.each(["/\t/evil.com", "/\n/evil.com", "/\r\\evil.com", "/\t\\evil.com", " //evil.com"])(
+  it.each(["/\t/evil.com", "/\n/evil.com", "/\r\\evil.com", "/\t\\evil.com", " //evil.com", "/.//evil.com", "/..//evil.com", "/a/..//evil.com"])(
     "falls back to / for %j",
     (value) => expect(safeNext(value)).toBe("/"),
   );

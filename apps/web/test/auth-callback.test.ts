@@ -34,14 +34,21 @@ describe("GET /auth/callback", () => {
     const res = await call("?code=old");
     const location = new URL(res.headers.get("location")!);
     expect(location.pathname).toBe("/auth/error");
-    expect(location.searchParams.get("error")).toBe("Code expired");
+    expect(location.searchParams.get("error")).toBe("failed");
   });
 
   it("shows Google's own error, e.g. when the user cancels", async () => {
     const res = await call("?error=access_denied&error_description=The+user+denied+access");
     const location = new URL(res.headers.get("location")!);
     expect(location.pathname).toBe("/auth/error");
-    expect(location.searchParams.get("error")).toBe("The user denied access");
+    expect(location.searchParams.get("error")).toBe("cancelled");
     expect(exchangeCodeForSession).not.toHaveBeenCalled();
+  });
+
+  // The error page only shows our own words, so a crafted link can't put
+  // "Your account is locked, call 555…" on a GiftMe page.
+  it("never passes the provider's text on to the error page", async () => {
+    const res = await call("?error=x&error_description=Your+account+is+locked%2C+call+555");
+    expect(res.headers.get("location")).toBe("https://app.test/auth/error?error=cancelled");
   });
 });
