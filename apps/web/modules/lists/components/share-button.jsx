@@ -1,4 +1,6 @@
+import { Share } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { BlockedButton, buttonClass } from './ui.jsx'
 
 const COPIED_MS = 2000
 
@@ -11,23 +13,18 @@ export default function ShareButton({ blockedReason, onShare }) {
     return () => clearTimeout(timer)
   }, [copied])
 
+  const label = (
+    <>
+      <Share className="size-4" aria-hidden="true" />
+      {copied ? 'Copied!' : 'Share'}
+    </>
+  )
+
   if (blockedReason) {
-    // Same aria-disabled pattern as SaveButton, so the reason stays reachable.
     return (
-      <span className="tooltip-anchor">
-        <button
-          type="button"
-          className="btn btn--muted"
-          aria-disabled="true"
-          aria-describedby="share-tooltip"
-          onClick={(event) => event.preventDefault()}
-        >
-          Share
-        </button>
-        <span className="tooltip" id="share-tooltip" role="tooltip">
-          {blockedReason}
-        </span>
-      </span>
+      <BlockedButton id="share-tooltip" reason={blockedReason} className={buttonClass.secondarySm}>
+        {label}
+      </BlockedButton>
     )
   }
 
@@ -36,8 +33,8 @@ export default function ShareButton({ blockedReason, onShare }) {
   }
 
   return (
-    <button type="button" className="btn btn--secondary" onClick={handleClick}>
-      {copied ? 'Copied!' : 'Share'}
+    <button type="button" className={buttonClass.secondarySm} onClick={handleClick}>
+      {label}
     </button>
   )
 }

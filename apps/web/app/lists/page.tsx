@@ -1,9 +1,8 @@
 import { Suspense } from "react";
 import { GiftApp, GiftAppSkeleton, getMyList } from "@/modules/lists";
-import { SiteShell } from "@/components/site-shell";
 
 // Reads the session cookie, so it has to render inside <Suspense> under
-// cacheComponents.
+// cacheComponents. Works signed in or out; a guest's list isn't saved.
 async function ListLoader() {
   const initial = await getMyList();
   return <GiftApp initial={initial} />;
@@ -11,10 +10,8 @@ async function ListLoader() {
 
 export default function ListsPage() {
   return (
-    <SiteShell>
-      <Suspense fallback={<GiftAppSkeleton />}>
-        <ListLoader />
-      </Suspense>
-    </SiteShell>
+    <Suspense fallback={<GiftAppSkeleton />}>
+      <ListLoader />
+    </Suspense>
   );
 }
