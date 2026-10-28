@@ -138,6 +138,24 @@ export default function GiftApp({ initial }) {
     return () => window.removeEventListener('beforeunload', warn)
   }, [atRisk])
 
+  // In-app links (Home, the top bar) navigate without beforeunload, so ask
+  // here. Capture on document runs before React's own listeners, so stopping
+  // the click keeps <Link> from navigating. Guests are stashed on unmount.
+  useEffect(() => {
+    if (isGuest || !dirty) return
+    function confirmLeave(event) {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+      const link = event.target instanceof Element ? event.target.closest('a[href]') : null
+      if (!link || link.target === '_blank' || link.origin !== window.location.origin) return
+      if (link.pathname === window.location.pathname) return
+      if (window.confirm('You have unsaved changes. Leave without saving?')) return
+      event.preventDefault()
+      event.stopPropagation()
+    }
+    document.addEventListener('click', confirmLeave, true)
+    return () => document.removeEventListener('click', confirmLeave, true)
+  }, [isGuest, dirty])
+
   function addGift(draft) {
     // The id is made here rather than inside the updater: StrictMode
     // double-invokes updaters in development, so the body has to stay pure.
