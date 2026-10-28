@@ -57,18 +57,23 @@ Run these from `apps/web` unless noted. Install dependencies once from the repo 
 
 | Route | Purpose |
 | --- | --- |
-| `/auth/sign-up`, `/auth/login` | Email + password forms |
-| `/auth/confirm` | Handles the link in confirmation / reset emails |
+| `/` | Home: "My list", then "People". Needs an account |
+| `/settings` | Time zone and over-budget allowance. Needs an account |
+| `/lists` | The gift list. Works signed in or out (a guest's list isn't saved) |
+| `/share/{token}` | Shared list, open to anyone with the link; friends can claim gifts. The list's owner sees no claims (product decision 39) |
+| `/auth/login`, `/auth/sign-up` | Continue with Google, or email and password |
+| `/auth/callback` | Where Google returns; turns the code into a session, then goes to `?next=` |
+| `/auth/confirm` | Handles the link in confirmation and reset emails |
 | `/auth/forgot-password`, `/auth/update-password` | Password reset |
-| `/lists` | The gift list (`/` redirects here) |
-| `/share/{token}` | Shared list, open to anyone with the link; visitors can claim gifts |
+| `/manifest.webmanifest`, `/icon`, `/apple-icon`, `/pwa-icon/{192,512}` | Install to the home screen |
 
-`proxy.ts` refreshes the session cookie on every request and redirects signed-out visitors
-to `/auth/login` for any route other than `/`, `/lists`, `/auth/*` and `/share/*`. The gift list on `/lists`
-works signed in or out.
+`proxy.ts` refreshes the session cookie on every request and sends signed-out visitors to
+`/auth/login?next=<the page they asked for>`, except on `/lists`, `/share/*`, `/auth/*`,
+`/api/keepalive` and the install files (`isPublicPath` in `lib/supabase/proxy.ts`). After sign-in
+the app goes to `next` if it's a same-site path (`lib/safe-next.ts`), otherwise Home.
 
 In Supabase → Authentication → URL Configuration, set the Site URL to the Vercel production
-URL and add `http://localhost:3000/**` to Redirect URLs so email links return to the app.
+URL and add `http://localhost:3000/**` to Redirect URLs so email links and Google return to the app.
 
 Server code reads the user with `createClient()` from `lib/supabase/server.ts`; client
 components use `lib/supabase/client.ts`.
@@ -76,18 +81,20 @@ components use `lib/supabase/client.ts`.
 ## What the gift list does
 
 - **Add a gift manually** — name, price, and an optional image URL.
-- **Add a gift from an Amazon link** — paste a product URL and press Enter (or click
-  *Autofill*) to prefill the form, then confirm.
+- **Add a gift from an Amazon link** — paste a product URL and press Enter (or tap *Add*). A
+  full match shows as a card to confirm; a partial one opens the details at the missing field.
 - **Remove gifts**, with a running item count and an exact list total.
-- **Share a saved list** — *Share* copies a `/share/{token}` link. Anyone with it sees the
-  list read-only; the owner is asked to confirm first, so they don't spoil their own gifts.
+- **Share a saved list** — *Share* copies a `/share/{token}` link (or shows it to copy by hand
+  when the clipboard is blocked). Anyone with it sees the list read-only.
 - **Claim a gift** — visitors to a shared list claim what they'll buy, so nobody buys it
   twice. Everyone with the link sees "Claimed by <name>". Signed-in visitors claim under
   their email and can unclaim; guests type a name and can't undo it. Opening an unclaimed
-  gift's link first asks "Are you going to buy?". The owner can see claims but not claim.
+  gift's link first asks "Going to buy it?". The owner sees no claims and can't claim (product
+  decision 39); a claim that loses a race says so in the dialog.
 
-The list lives in React state for the current session only. Nothing is persisted yet, so a
-reload clears it.
+A signed-in user's list is saved with *Save*, which appears when there are unsaved changes;
+leaving with unsaved changes asks first. A guest's list is kept in the browser for 24 hours
+across a trip to sign in, then brought over and offered for saving.
 
 ## About the Amazon autofill
 
@@ -130,24 +137,29 @@ you see it and can clear the field first.
 ## Project structure
 
 ```
-app/layout.tsx                   Root layout, fonts, theme provider
-app/page.tsx                     Redirects to /lists (no platform home page yet)
+app/layout.tsx                   Root layout, theme provider, iOS home-screen tags
+app/page.tsx                     Home (signed in)
+app/settings/                    Settings page, form and server action
 app/lists/page.tsx               The gift list
 app/share/[token]/page.tsx       Public share link (unchanged URL)
-app/auth/*                       Sign up, login, confirm, password reset
+app/auth/*                       Sign in, sign up, Google callback, confirm, password reset
+app/manifest.ts, icon.tsx, apple-icon.tsx, pwa-icon/  Install to the home screen
 proxy.ts                         Session refresh + auth redirects
-components/site-shell.tsx        Nav (auth state) and footer (theme switcher)
-components/ui/*                  shadcn/ui primitives (shared)
+components/app-shell/*           Top bar, account menu, page frame (shared by every product)
+components/auth-frame.tsx        The sign-in look; google-button.tsx starts Google sign-in
+components/ui/*                  shadcn/ui primitives, sized to design/ui.md (shared)
 lib/supabase/*                   Browser, server and proxy Supabase clients + env names (shared)
+lib/safe-next.ts                 Same-site check for ?next=
 modules/lists/index.ts           The lists product's public API: import only this from outside
-modules/lists/components/*.jsx   Gift app, add panel, list, card, summary, share, claim
-modules/lists/components/gifts.css  Gift list styles, scoped under .giftme
+modules/lists/components/*.jsx   Gift app, add panel, list, card, summary, share, claim; ui.jsx holds shared bits
 modules/lists/actions/*          Server actions: save list, claim and unclaim
 modules/lists/lib/amazon.js      URL parsing and product lookup (the swap point)
 modules/lists/lib/fixtures.js    Demo ASIN catalog
 modules/lists/lib/format.js      Price parsing and currency formatting
 modules/lists/lib/lists.ts       List queries and types
-modules/concierge/index.ts       Gift Concierge (empty until Wave 2)
+modules/concierge/index.ts       Gift Concierge: settings today, people next (ALL-21)
+e2e/*                            Playwright browser tests (pnpm e2e), against local Supabase
+test/*                           Vitest tests for shared code, tokens and contrast
 ```
 
 **Product boundaries:** code outside `modules/<product>/` imports that product only through its
@@ -167,3 +179,4 @@ components are still plain JSX from the Vite prototype; TypeScript allows them v
 | `pnpm lint` | Lint with ESLint, including the product boundary rule |
 | `pnpm typecheck` | Generate Next's route types, then run `tsc` |
 | `pnpm test` | Run the Vitest tests once (`pnpm test:watch` to watch) |
+| `pnpm e2e` | Run the Playwright browser tests (needs `pnpm supabase start`) |
