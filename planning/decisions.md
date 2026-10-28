@@ -55,8 +55,17 @@ From the owner's review of the ALL-41 mock-ups (`../design/ui.md`).
 
 | # | Decision | Source |
 |---|---|---|
-| 36 | **The budget is the buyer's own, and optional** (revises decision 4 and PRD B-1). It's set per person and occasion in the buyer's view, is never shown as the recipient's limit, and only you see it. With no budget there are no over-budget labels or confirm step. **[Verify]** Follow-ups: `concierge.gift_rounds.budget_cents` is `not null` today (ALL-19), and design §4.2 assumes a budget; B-3 ("automatic purchases never go over budget") then applies only when one is set. | Owner |
+| 36 | **The budget is the buyer's own, and optional** (revises decision 4 and PRD B-1). It's set per person and occasion in the buyer's view, is never shown as the recipient's limit, and only you see it. With no budget there are no over-budget labels or confirm step. Follow-ups (done in ALL-44, T31): `concierge.gift_rounds.budget_cents` is `not null` today (ALL-19), and design §4.2 assumes a budget; B-3 ("automatic purchases never go over budget") then applies only when one is set. | Owner |
 | 37 | **A person's own list is the best source of gifts.** When the recipient keeps a gift list (Mom), the concierge offers picks from it, and that's the ideal case the app steers toward. When they don't (Dad), it suggests ideas from what you've saved. Home and the person page show which applies. Builds on T19 (`people.linked_user_id`) and the PRD's "gift list connection" (Later). | Owner |
-| 38 | **A gift ships to the recipient, to you, or to another address** (revises PRD A-3, which shipped only to the recipient). If the recipient keeps a list, they can share their address through it and the buyer sees only the city. Otherwise the buyer enters it once and can save it to that person. **[Verify]** Follow-up: the buyer's own address isn't stored yet (`public.profiles` has no address). | Owner |
+| 38 | **A gift ships to the recipient, to you, or to another address** (revises PRD A-3, which shipped only to the recipient). If the recipient keeps a list, they can share their address through it and the buyer sees only the city. Otherwise the buyer enters it once and can save it to that person. Follow-up (done in ALL-44, T31): the buyer's own address isn't stored yet (`public.profiles` has no address). | Owner |
 | 39 | **A list's owner never sees whether gifts are claimed**, so gifts stay a surprise. Friends still see claims so nobody doubles up. | Owner |
 | 40 | **The heads-up email says whether anything will be bought.** A reminder says nothing is bought until you choose. With auto-buy on (opt-in, PRD A-7, still Later), the email names the gift that will be bought, the date, and how to change or skip it. | Owner |
+
+## 2026-10-28
+
+The two open questions in ALL-44 (schema v1.1). Build details in `../design/plans/ALL-44-schema-v1-1.md` and T31.
+
+| # | Decision | Source |
+|---|---|---|
+| 41 | **Your own address is one record for every product** (follows decision 38; narrows D31). One address per account, readable only by you. It's both where gifts to you ship when you keep a list and "My address" when you buy. You can turn on sharing it with gift givers; they then see only your city and state, and the full address is used only by the server to place an order. Addresses you enter for the people you buy for stay private to you. | Owner, on Claude's recommendation |
+| 42 | **Linking someone's list to your "person" needs no consent.** A buyer holding a list's share link can link it to one of their people right away, and the concierge then offers picks from that list. Consequence **[Claude's call]**: when the list's owner turns address sharing on, anyone who has linked through their share link can ship to them (city and state shown, never the street), the way Amazon wish lists work. | Owner (Claude had recommended an accept step) |
