@@ -4,5 +4,5 @@
 export { default as GiftApp, GiftAppSkeleton } from "./components/gift-app";
 export { default as OwnerGate } from "./components/owner-gate";
 export { default as SharedList } from "./components/shared-list";
-export { getMyList, getSharedList } from "./lib/lists";
+export { getMyList, getMyListSummary, getSharedList } from "./lib/lists";
 export type { MyList, SharedList as SharedListData } from "./lib/lists";

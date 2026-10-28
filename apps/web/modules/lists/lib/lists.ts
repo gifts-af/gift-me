@@ -98,6 +98,28 @@ export async function getMyList(): Promise<MyList | null> {
   };
 }
 
+/**
+ * How many gifts are on the signed-in user's list, for the "My list" card on
+ * Home; null when they haven't saved one yet.
+ */
+export async function getMyListSummary(): Promise<{ count: number } | null> {
+  const supabase = await createClient();
+  const { data: list, error } = await supabase
+    .schema("lists")
+    .from("lists")
+    .select("id, list_items(count)")
+    .order("created_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.error("loading the list summary failed", error);
+    return null;
+  }
+  if (!list) return null;
+  const counted = list.list_items as unknown as { count: number }[];
+  return { count: counted[0]?.count ?? 0 };
+}
+
 export type GiftClaim = {
   // Shown to everyone with the link: a guest's own name, or a user's
   // display name (their email if they didn't set one).
