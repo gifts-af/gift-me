@@ -1,11 +1,10 @@
+import { AuthFrame } from "@/components/auth-frame";
 import { ForgotPasswordForm } from "@/components/forgot-password-form";
 
 export default function Page() {
   return (
-    <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
-      <div className="w-full max-w-sm">
-        <ForgotPasswordForm />
-      </div>
-    </div>
+    <AuthFrame title="Reset your password" subtitle="We'll email you a link to choose a new one.">
+      <ForgotPasswordForm />
+    </AuthFrame>
   );
 }

@@ -1,34 +1,22 @@
 import { notFound } from "next/navigation";
 import { Suspense } from "react";
-import { GiftAppSkeleton, OwnerGate, SharedList, getSharedList } from "@/modules/lists";
-import { SiteShell } from "@/components/site-shell";
+import { GiftAppSkeleton, SharedList, getSharedList } from "@/modules/lists";
 
-// Params, search params and the session cookie are all runtime data, so the
-// loader has to render inside <Suspense> under cacheComponents.
-async function SharedListLoader({
-  params,
-  searchParams,
-}: PageProps<"/share/[token]">) {
+// Params and the session cookie are runtime data, so the loader has to
+// render inside <Suspense> under cacheComponents. Works signed out.
+async function SharedListLoader({ params }: PageProps<"/share/[token]">) {
   const { token } = await params;
-  const { as } = await searchParams;
-
   const list = await getSharedList(token);
   if (!list) notFound();
-
-  // The owner has to opt in: once gifts can be claimed, this view shows them.
-  if (list.isOwner && as !== "guest") {
-    return <OwnerGate proceedHref={`/share/${encodeURIComponent(token)}?as=guest`} />;
-  }
-
+  // The owner sees their list without claims (product decision 39): the
+  // database leaves them out, so there's nothing to spoil and no gate.
   return <SharedList list={list} token={token} />;
 }
 
 export default function SharePage(props: PageProps<"/share/[token]">) {
   return (
-    <SiteShell>
-      <Suspense fallback={<GiftAppSkeleton />}>
-        <SharedListLoader {...props} />
-      </Suspense>
-    </SiteShell>
+    <Suspense fallback={<GiftAppSkeleton />}>
+      <SharedListLoader {...props} />
+    </Suspense>
   );
 }

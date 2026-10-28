@@ -1,11 +1,20 @@
+import { Suspense } from "react";
+import { AuthFrame } from "@/components/auth-frame";
 import { LoginForm } from "@/components/login-form";
 
-export default function Page() {
+// Search params are runtime data, so the form renders inside <Suspense>
+// under cacheComponents.
+async function Form({ searchParams }: PageProps<"/auth/login">) {
+  const { next } = await searchParams;
+  return <LoginForm next={typeof next === "string" ? next : undefined} />;
+}
+
+export default function Page(props: PageProps<"/auth/login">) {
   return (
-    <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
-      <div className="w-full max-w-sm">
-        <LoginForm />
-      </div>
-    </div>
+    <AuthFrame>
+      <Suspense>
+        <Form {...props} />
+      </Suspense>
+    </AuthFrame>
   );
 }

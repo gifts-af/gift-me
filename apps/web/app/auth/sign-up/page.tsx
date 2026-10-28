@@ -1,11 +1,18 @@
+import { Suspense } from "react";
+import { AuthFrame } from "@/components/auth-frame";
 import { SignUpForm } from "@/components/sign-up-form";
 
-export default function Page() {
+async function Form({ searchParams }: PageProps<"/auth/sign-up">) {
+  const { next } = await searchParams;
+  return <SignUpForm next={typeof next === "string" ? next : undefined} />;
+}
+
+export default function Page(props: PageProps<"/auth/sign-up">) {
   return (
-    <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
-      <div className="w-full max-w-sm">
-        <SignUpForm />
-      </div>
-    </div>
+    <AuthFrame title="Create an account" subtitle="">
+      <Suspense>
+        <Form {...props} />
+      </Suspense>
+    </AuthFrame>
   );
 }

@@ -1,51 +1,27 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import Link from "next/link";
 import { Suspense } from "react";
+import { AuthFrame } from "@/components/auth-frame";
+import { Button } from "@/components/ui/button";
+import { authErrorMessage } from "@/lib/auth-errors";
 
-async function ErrorContent({
-  searchParams,
-}: {
-  searchParams: Promise<{ error: string }>;
-}) {
-  const params = await searchParams;
-
+async function ErrorMessage({ searchParams }: PageProps<"/auth/error">) {
+  const { error } = await searchParams;
   return (
-    <>
-      {params?.error ? (
-        <p className="text-sm text-muted-foreground">
-          Code error: {params.error}
-        </p>
-      ) : (
-        <p className="text-sm text-muted-foreground">
-          An unspecified error occurred.
-        </p>
-      )}
-    </>
+    <p className="text-center text-[15px] text-muted-foreground">
+      {authErrorMessage(typeof error === "string" ? error : undefined)}
+    </p>
   );
 }
 
-export default function Page({
-  searchParams,
-}: {
-  searchParams: Promise<{ error: string }>;
-}) {
+export default function Page(props: PageProps<"/auth/error">) {
   return (
-    <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
-      <div className="w-full max-w-sm">
-        <div className="flex flex-col gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-2xl">
-                Sorry, something went wrong.
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Suspense>
-                <ErrorContent searchParams={searchParams} />
-              </Suspense>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    </div>
+    <AuthFrame title="Sign-in didn't work" subtitle="">
+      <Suspense>
+        <ErrorMessage {...props} />
+      </Suspense>
+      <Button asChild className="w-full">
+        <Link href="/auth/login">Try again</Link>
+      </Button>
+    </AuthFrame>
   );
 }

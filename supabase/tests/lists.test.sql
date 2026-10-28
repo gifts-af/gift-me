@@ -2,7 +2,7 @@
 -- share links anyone can open, and claims (design §2.2).
 begin;
 \ir _helpers.psql
-select plan(22);
+select plan(24);
 
 select tests.create_user('a@example.com', 'Aaron') as a \gset
 select tests.create_user('b@example.com', 'Bee') as b \gset
@@ -86,6 +86,21 @@ select is(
   'saving a list keeps its claims'
 );
 
+-- The list's owner never sees claims, so gifts stay a surprise (product
+-- decision 39). Friends still do, so nobody doubles up.
+select tests.act_as(:'a');
+select is(
+  (select count(*)::int from jsonb_array_elements(lists.get_shared_list(:'token') -> 'items') i where i -> 'claim' <> 'null'::jsonb),
+  0,
+  'the owner sees no claims on their own list'
+);
+select tests.act_as(:'b');
+select is(
+  (select count(*)::int from jsonb_array_elements(lists.get_shared_list(:'token') -> 'items') i where i -> 'claim' <> 'null'::jsonb),
+  2,
+  'a signed-in friend still sees both claims'
+);
+
 -- Who may call what. A later drop-and-recreate in `lists` would lose these
 -- grants silently (new functions aren't executable by default), so pin them.
 select ok(has_function_privilege('anon', 'lists.get_shared_list(uuid)', 'execute'), 'anon can open share links');
@@ -103,6 +118,7 @@ select ok(
 );
 
 -- Signed-out visitors can't save lists.
+select tests.act_as_anon();
 select throws_ok(
   $q$select lists.save_list(null, 'x', '[]'::jsonb)$q$,
   '42501', null, 'anon cannot save a list'

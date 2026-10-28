@@ -9,7 +9,8 @@
 // When a new tool becomes required, add a check here and a row to "Local development" in README.md.
 
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { existsSync, readdirSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -26,6 +27,16 @@ const docker = run("docker", ["--version"]);
 const dockerRunning = docker.ok && run("docker", ["info", "--format", "{{.ServerVersion}}"], 10000).ok;
 const nodeMajor = Number(process.versions.node.split(".")[0]);
 const supabaseBin = join(root, "node_modules", ".bin", process.platform === "win32" ? "supabase.cmd" : "supabase");
+
+// Playwright's browser for the browser tests (ALL-20), in its default cache.
+const playwrightCache =
+  process.env.PLAYWRIGHT_BROWSERS_PATH ??
+  (os === "windows"
+    ? join(process.env.LOCALAPPDATA ?? "", "ms-playwright")
+    : os === "mac"
+      ? join(homedir(), "Library", "Caches", "ms-playwright")
+      : join(homedir(), ".cache", "ms-playwright"));
+const hasChromium = existsSync(playwrightCache) && readdirSync(playwrightCache).some((d) => d.startsWith("chromium"));
 
 // Each check: required ones block local development; the rest are reminders.
 const checks = [
@@ -54,7 +65,7 @@ const checks = [
     fix: {
       windows:
         "wsl --install --no-distribution (admin, then restart Windows), then winget install -e --id Docker.DockerDesktop",
-      mac: "brew install --cask docker (or download Docker Desktop from docker.com)",
+      mac: "brew install --cask docker-desktop in Terminal (it asks for your Mac password), or download Docker Desktop from docker.com",
       linux: "Install Docker Engine: https://docs.docker.com/engine/install/",
     },
   },
@@ -67,6 +78,12 @@ const checks = [
       mac: "Start Docker Desktop and wait until it says Engine running",
       linux: "sudo systemctl start docker",
     },
+  },
+  {
+    name: "Browser for the browser tests (Playwright's Chromium)",
+    ok: hasChromium,
+    skipIf: !existsSync(supabaseBin),
+    fix: { all: "pnpm --filter @gifts-af/web exec playwright install chromium" },
   },
   {
     name: "Web app environment file (apps/web/.env.development.local)",

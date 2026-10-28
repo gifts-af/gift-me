@@ -59,3 +59,36 @@ jobs:
           pnpm db:types
           git diff --exit-code packages/core/src/database.types.ts \
             || { echo "::error::Run 'pnpm db:types' and commit packages/core/src/database.types.ts."; exit 1; }
+
+  # Browser tests (ALL-20): a production build of apps/web against a fresh
+  # local Supabase, at phone width. Only the services sign-in needs are started.
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm supabase start -x studio,imgproxy,mailpit,edge-runtime,logflare,vector,supavisor,realtime,storage-api,postgres-meta
+      - name: Point the app and tests at the local Supabase
+        run: |
+          eval "$(pnpm -s supabase status -o env)"
+          {
+            echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL"
+            echo "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=$PUBLISHABLE_KEY"
+            echo "E2E_SUPABASE_URL=$API_URL"
+            echo "E2E_SUPABASE_PUBLISHABLE_KEY=$PUBLISHABLE_KEY"
+            echo "E2E_SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
+          } >> "$GITHUB_ENV"
+      - run: pnpm --filter @gifts-af/web exec playwright install --with-deps chromium
+      - run: pnpm --filter @gifts-af/web build
+      - run: pnpm --filter @gifts-af/web e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces
+          path: apps/web/test-results/
+          retention-days: 7

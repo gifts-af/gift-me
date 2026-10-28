@@ -5,9 +5,12 @@ import { saveList } from '@/modules/lists/actions/lists'
 import AddGiftPanel from './add-gift-panel.jsx'
 import GiftList from './gift-list.jsx'
 import GiftSummary from './gift-summary.jsx'
+import Link from 'next/link'
+import { PageFrame } from '@/components/app-shell/page-frame'
+import { TopBar } from '@/components/app-shell/top-bar'
 import SaveButton from './save-button.jsx'
 import ShareButton from './share-button.jsx'
-import './gifts.css'
+import { Banner, inputClass } from './ui.jsx'
 
 // A guest's list is carried across the trip to /auth/* in localStorage, so
 // signing in (or confirming a sign-up email in a new tab) doesn't lose it.
@@ -53,21 +56,15 @@ function putGuestStash(items) {
 
 export function GiftAppSkeleton() {
   return (
-    <div className="giftme app" aria-busy="true">
-      <AppHeader />
-      <p className="empty">Loading your list…</p>
-    </div>
-  )
-}
-
-export function AppHeader() {
-  return (
-    <header className="app-header">
-      <h1>
-        GiftMe<span className="app-header__tld">.com</span>
-      </h1>
-      <p className="tagline">A list of the gifts you’d actually like to receive.</p>
-    </header>
+    <>
+      <TopBar links current="list" wide />
+      <PageFrame wide>
+        <h1 className="text-[22px] font-bold leading-tight">My list</h1>
+        <p className="text-[15px] text-muted-foreground" aria-busy="true">
+          Loading your list…
+        </p>
+      </PageFrame>
+    </>
   )
 }
 
@@ -141,6 +138,24 @@ export default function GiftApp({ initial }) {
     return () => window.removeEventListener('beforeunload', warn)
   }, [atRisk])
 
+  // In-app links (Home, the top bar) navigate without beforeunload, so ask
+  // here. Capture on document runs before React's own listeners, so stopping
+  // the click keeps <Link> from navigating. Guests are stashed on unmount.
+  useEffect(() => {
+    if (isGuest || !dirty) return
+    function confirmLeave(event) {
+      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+      const link = event.target instanceof Element ? event.target.closest('a[href]') : null
+      if (!link || link.target === '_blank' || link.origin !== window.location.origin) return
+      if (link.pathname === window.location.pathname) return
+      if (window.confirm('You have unsaved changes. Leave without saving?')) return
+      event.preventDefault()
+      event.stopPropagation()
+    }
+    document.addEventListener('click', confirmLeave, true)
+    return () => document.removeEventListener('click', confirmLeave, true)
+  }, [isGuest, dirty])
+
   function addGift(draft) {
     // The id is made here rather than inside the updater: StrictMode
     // double-invokes updaters in development, so the body has to stay pure.
@@ -204,40 +219,41 @@ export default function GiftApp({ initial }) {
   }
 
   return (
-    <div className="giftme app">
-      <AppHeader />
+    <>
+      <TopBar
+        back={isGuest ? undefined : { href: '/', label: 'Home' }}
+        links={!isGuest}
+        current="list"
+        wide
+        actions={isGuest ? null : <ShareButton blockedReason={shareBlockedReason} onShare={handleShare} />}
+      />
 
-      <AddGiftPanel onAdd={addGift} />
-
-      <section className="list-section" aria-labelledby="list-heading">
-        <div className="list-section__head">
-          <h2 id="list-heading" ref={headingRef} tabIndex={-1}>
-            Your list
-          </h2>
-          <div className="list-section__actions">
-            <GiftSummary gifts={gifts} />
-            <ShareButton blockedReason={shareBlockedReason} onShare={handleShare} />
-            <SaveButton blockedReason={saveBlockedReason} dirty={dirty} saving={saving} onSave={handleSave} />
-          </div>
-        </div>
+      <PageFrame wide className="gap-4">
+        {isGuest && (
+          <Banner>
+            You’re not signed in.{' '}
+            <Link href="/auth/login?next=%2Flists" className="underline underline-offset-[3px]">
+              Sign in
+            </Link>{' '}
+            to save and share your list.
+          </Banner>
+        )}
         {loadError && (
-          <p className="status status--error list-section__notice" role="alert">
+          <Banner tone="error" role="alert">
             {loadError}
-          </p>
+          </Banner>
         )}
         {notice && (
-          <p className="status status--info list-section__notice" role="status">
+          <Banner tone="accent" role="status">
             {notice}
-          </p>
+          </Banner>
         )}
         {shareNotice && (
-          <div className="field list-section__notice">
-            <p className="status status--info" role="status">
-              {shareNotice.text}
-            </p>
+          <Banner tone="accent" className="flex flex-col gap-2">
+            <p role="status">{shareNotice.text}</p>
             {shareNotice.url && (
               <>
-                <label htmlFor="share-url" className="visually-hidden">
+                <label htmlFor="share-url" className="sr-only">
                   Share link
                 </label>
                 <input
@@ -246,23 +262,57 @@ export default function GiftApp({ initial }) {
                   readOnly
                   value={shareNotice.url}
                   autoFocus
+                  className={`${inputClass} num text-foreground`}
                   onFocus={(event) => event.target.select()}
                 />
               </>
             )}
-          </div>
+          </Banner>
         )}
         {saveError && (
-          <p className="status status--error list-section__notice" role="alert">
+          <Banner tone="error" role="alert">
             {saveError}
-          </p>
+          </Banner>
         )}
-        <GiftList gifts={gifts} onRemove={removeGift} />
-      </section>
 
-      <p className="visually-hidden" role="status" aria-live="polite">
+        <div className="flex flex-col gap-1">
+          <h1
+            id="list-heading"
+            ref={headingRef}
+            tabIndex={-1}
+            className="text-[22px] font-bold leading-tight"
+          >
+            My list
+          </h1>
+          <GiftSummary gifts={gifts} />
+        </div>
+
+        <AddGiftPanel onAdd={addGift} />
+
+        <section aria-labelledby="list-heading" className="pt-2">
+          <GiftList gifts={gifts} onRemove={removeGift} />
+        </section>
+      </PageFrame>
+
+      {/* The main button sits at the bottom, in thumb reach, on a phone;
+          inline under the list from 640 px (design/ui.md). */}
+      {!isGuest && (dirty || saving) && (
+        <div className="sticky bottom-0 border-t bg-background px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-3 sm:static sm:border-t-0 sm:bg-transparent sm:pt-0">
+          <div className="mx-auto flex max-w-5xl items-center gap-3 sm:px-4">
+            <span className="flex-1 text-[15px] text-muted-foreground">Unsaved changes</span>
+            <SaveButton blockedReason={saveBlockedReason} saving={saving} onSave={handleSave} />
+          </div>
+        </div>
+      )}
+      {isGuest && (
+        <div className="sticky bottom-0 border-t bg-background px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-3 text-center text-[13px] text-muted-foreground sm:static">
+          Guest lists are lost when you leave. Sign in to keep it.
+        </div>
+      )}
+
+      <p className="sr-only" role="status" aria-live="polite">
         {announcement}
       </p>
-    </div>
+    </>
   )
 }

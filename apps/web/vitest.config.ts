@@ -14,6 +14,6 @@ export default defineConfig({
     globals: true,
     setupFiles: ["./test/setup.ts"],
     include: ["**/*.{test,spec}.{js,jsx,ts,tsx}"],
-    exclude: ["node_modules", ".next", "scripts"],
+    exclude: ["node_modules", ".next", "scripts", "e2e"],
   },
 });

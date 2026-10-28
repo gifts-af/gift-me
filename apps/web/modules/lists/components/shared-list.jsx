@@ -3,14 +3,13 @@
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { claimGift, unclaimGift } from '@/modules/lists/actions/claims'
+import { PageFrame } from '@/components/app-shell/page-frame'
+import { TopBar } from '@/components/app-shell/top-bar'
 import ClaimDialog from './claim-dialog.jsx'
-import { AppHeader } from './gift-app.jsx'
 import GiftList from './gift-list.jsx'
 import GiftSummary from './gift-summary.jsx'
+import { Banner, buttonClass } from './ui.jsx'
 import ViewDialog from './view-dialog.jsx'
-import './gifts.css'
-
-const OWNER_REASON = 'You can’t claim gifts on your own list.'
 
 /**
  * @param {{ list: import('@/modules/lists/lib/lists').SharedList, token: string }} props
@@ -48,9 +47,7 @@ export default function SharedList({ list, token }) {
       setActionError('')
       setAnnouncement(`You claimed ${gift.name}.`)
     } else if (result.alreadyClaimed) {
-      // Show who got there first instead of a dialog that can't succeed.
-      setClaiming(null)
-      setActionError(`${gift.name} was just claimed by someone else.`)
+      // The dialog says so; the refresh shows who got there first.
       router.refresh()
     }
     return result
@@ -75,102 +72,94 @@ export default function SharedList({ list, token }) {
   }
 
   function renderActions(gift) {
+    // The owner never sees claims (product decision 39); the database sends
+    // none, and there's nothing for them to claim.
+    if (list.isOwner) return null
+
     if (gift.claim) {
       return (
         <>
-          <span className="claim-badge">
+          <span className="text-[13px] text-muted-foreground">
             Claimed by {gift.claim.mine ? 'you' : gift.claim.name}
           </span>
           {gift.claim.mine && (
             <button
               type="button"
-              className="btn btn--secondary btn--small"
+              className={buttonClass.secondarySm}
               onClick={() => handleUnclaim(gift)}
               disabled={unclaimingId === gift.id}
               aria-busy={unclaimingId === gift.id}
+              aria-label={`Unclaim ${gift.name}`}
             >
               {unclaimingId === gift.id ? 'Unclaiming…' : 'Unclaim'}
-              <span className="visually-hidden"> {gift.name}</span>
             </button>
           )}
         </>
       )
     }
 
-    if (list.isOwner) {
-      // aria-disabled, not disabled, so the tooltip explaining why can show.
-      const tooltipId = `claim-tooltip-${gift.id}`
-      return (
-        <span className="tooltip-anchor">
-          <button
-            type="button"
-            className="btn btn--muted btn--small"
-            aria-disabled="true"
-            aria-describedby={tooltipId}
-            onClick={(event) => event.preventDefault()}
-          >
-            Claim<span className="visually-hidden"> {gift.name}</span>
-          </button>
-          <span className="tooltip tooltip--start" id={tooltipId} role="tooltip">
-            {OWNER_REASON}
-          </span>
-        </span>
-      )
-    }
-
     return (
       <button
         type="button"
-        className="btn btn--primary btn--small"
+        className={`${buttonClass.secondarySm} w-full`}
         onClick={() => {
           setActionError('')
           setClaiming(gift)
         }}
+        aria-label={`Claim ${gift.name}`}
       >
-        Claim<span className="visually-hidden"> {gift.name}</span>
+        Claim
       </button>
     )
   }
 
   return (
-    <div className="giftme app">
-      <AppHeader />
-
-      <section className="list-section" aria-labelledby="list-heading">
-        <div className="list-section__head">
-          <h2 id="list-heading">{list.title}</h2>
+    <>
+      <TopBar wide />
+      <PageFrame wide className="gap-4">
+        {list.isOwner && (
+          <Banner tone="accent">
+            This is your list. Claims are hidden from you, so your gifts stay a surprise.
+          </Banner>
+        )}
+        <div className="flex flex-col gap-1">
+          <h1 id="list-heading" className="text-[22px] font-bold leading-tight [overflow-wrap:anywhere]">
+            {list.title}
+          </h1>
           <GiftSummary gifts={items} />
+          {!list.isOwner && (
+            <p className="text-[13px] text-muted-foreground">
+              Planning to buy something? Claim it so nobody else buys the same gift.
+            </p>
+          )}
         </div>
-        <p className="shared-note">
-          {list.isOwner
-            ? 'You’re viewing your own list as a guest. You can see claims, but can’t claim gifts here.'
-            : 'Planning to buy something? Claim it so nobody else buys the same gift.'}
-        </p>
         {actionError && (
-          <p className="status status--error" role="alert">
+          <Banner tone="error" role="alert">
             {actionError}
-          </p>
+          </Banner>
         )}
         {/* No onRemove: shared lists are read-only. Only unclaimed gifts ask
             "are you going to buy?"; the owner can't claim, so isn't asked. */}
-        <GiftList
-          gifts={items}
-          emptyMessage="This list is empty."
-          renderActions={renderActions}
-          onView={
-            list.isOwner
-              ? undefined
-              : (gift) => {
-                  const current = items.find((item) => item.id === gift.id)
-                  if (current?.claim) {
-                    window.open(gift.productUrl, '_blank', 'noopener,noreferrer')
-                  } else {
-                    setViewing(gift)
+        <section aria-labelledby="list-heading">
+          <GiftList
+            gifts={items}
+            emptyMessage="This list is empty."
+            renderActions={renderActions}
+            onView={
+              list.isOwner
+                ? undefined
+                : (gift) => {
+                    const current = items.find((item) => item.id === gift.id)
+                    if (current?.claim) {
+                      window.open(gift.productUrl, '_blank', 'noopener,noreferrer')
+                    } else {
+                      setViewing(gift)
+                    }
                   }
-                }
-          }
-        />
-      </section>
+            }
+          />
+        </section>
+      </PageFrame>
 
       {viewing && <ViewDialog gift={viewing} onClose={() => setViewing(null)} />}
       {claiming && (
@@ -183,9 +172,9 @@ export default function SharedList({ list, token }) {
         />
       )}
 
-      <p className="visually-hidden" role="status" aria-live="polite">
+      <p className="sr-only" role="status" aria-live="polite">
         {announcement}
       </p>
-    </div>
+    </>
   )
 }

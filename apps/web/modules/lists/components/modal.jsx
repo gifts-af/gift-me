@@ -19,7 +19,7 @@ export default function Modal({ labelledBy, describedBy, onClose, children }) {
   return (
     <dialog
       ref={ref}
-      className="modal"
+      className="w-[calc(100%-32px)] max-w-md rounded-lg bg-card p-0 text-foreground shadow-xl backdrop:bg-zinc-950/40 dark:backdrop:bg-black/60"
       aria-labelledby={labelledBy}
       aria-describedby={describedBy}
       // Esc fires `cancel` then `close`; route both through onClose so the
@@ -30,7 +30,7 @@ export default function Modal({ labelledBy, describedBy, onClose, children }) {
         if (event.target === event.currentTarget) onClose()
       }}
     >
-      <div className="modal__body">{children}</div>
+      <div className="flex flex-col gap-4 p-5">{children}</div>
     </dialog>
   )
 }
