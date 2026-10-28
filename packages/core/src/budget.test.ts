@@ -140,3 +140,21 @@ describe("bad input", () => {
     expect(() => maxPriceCents({ ceilingCents: 10000, committedCents: 0, reservedCents: 0, feeCents: -1 })).toThrow(RangeError);
   });
 });
+
+describe("no budget", () => {
+  it("never counts a total as over budget", () => {
+    expect(classifyTotal(1_000_000, null, 15)).toBe("within");
+  });
+
+  it("caps the round at the sum of the picks the user approved", () => {
+    expect(approvalCeilingCents([4200, 6800], null, 15, false)).toBe(11000);
+  });
+
+  it("is still refused with nothing picked", () => {
+    expect(approvalCeilingCents([], null, 15, false)).toBeNull();
+  });
+
+  it("caps each order at its own estimated total", () => {
+    expect(maxPriceCents({ ceilingCents: 11000, committedCents: 0, reservedCents: 6800, feeCents: 100 })).toBe(4100);
+  });
+});

@@ -2,6 +2,9 @@
 // cents; anything that has to round, rounds down, so a rounding error can
 // only ever spend less.
 //
+// The budget is optional (product decision 36): `null` means no budget, so
+// nothing is over budget and the cap comes from the approved picks instead.
+//
 // The checkout service's per-order fee is a setting, not a constant (T23):
 // callers read it from `concierge.app_settings` and pass it in as `feeCents`.
 
@@ -36,22 +39,24 @@ export function overBudgetLimitCents(budgetCents: number, overBudgetPct: number)
 
 /**
  * Within budget, over budget (up to and including the limit), or dropped.
- * Used for a single idea and for the sum of several picks alike.
+ * Used for a single idea and for the sum of several picks alike. With no
+ * budget, everything is within it.
  */
-export function classifyTotal(totalCents: number, budgetCents: number, overBudgetPct: number): BudgetFit {
+export function classifyTotal(totalCents: number, budgetCents: number | null, overBudgetPct: number): BudgetFit {
   checkCents(totalCents, "Total");
-  if (totalCents <= budgetCents) return "within";
+  if (budgetCents === null || totalCents <= budgetCents) return "within";
   return totalCents <= overBudgetLimitCents(budgetCents, overBudgetPct) ? "over" : "dropped";
 }
 
 /**
  * The most the round may spend once the user approves these picks: the
  * budget when they fit, or their sum when the user deliberately approved
- * going over. `null` means the approval is refused.
+ * going over. With no budget, it's their sum, so a price rise above what
+ * was approved stops the order. `null` means the approval is refused.
  */
 export function approvalCeilingCents(
   selectedTotalsCents: number[],
-  budgetCents: number,
+  budgetCents: number | null,
   overBudgetPct: number,
   overBudgetConfirmed: boolean,
 ): number | null {
@@ -59,7 +64,7 @@ export function approvalCeilingCents(
   const sum = selectedTotalsCents.reduce((a, b) => a + b, 0);
   switch (classifyTotal(sum, budgetCents, overBudgetPct)) {
     case "within":
-      return budgetCents;
+      return budgetCents ?? sum;
     case "over":
       return overBudgetConfirmed ? sum : null;
     case "dropped":
