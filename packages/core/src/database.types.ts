@@ -101,7 +101,7 @@ export type Database = {
       };
       budgets: {
         Row: {
-          amount_cents: number;
+          amount_cents: number | null;
           created_at: string;
           id: string;
           occasion_kind: string;
@@ -111,7 +111,7 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
-          amount_cents: number;
+          amount_cents?: number | null;
           created_at?: string;
           id?: string;
           occasion_kind: string;
@@ -120,7 +120,7 @@ export type Database = {
           user_id?: string;
         };
         Update: {
-          amount_cents?: number;
+          amount_cents?: number | null;
           created_at?: string;
           id?: string;
           occasion_kind?: string;
@@ -182,6 +182,7 @@ export type Database = {
           first_party: boolean | null;
           handling_days_max: number | null;
           id: string;
+          list_item_id: string | null;
           offer_id: string | null;
           over_budget: boolean;
           price_cents: number;
@@ -192,6 +193,7 @@ export type Database = {
           retailer_product_id: string | null;
           round_id: string;
           seller_name: string | null;
+          source: string;
           status: string;
           title: string;
           updated_at: string;
@@ -209,6 +211,7 @@ export type Database = {
           first_party?: boolean | null;
           handling_days_max?: number | null;
           id?: string;
+          list_item_id?: string | null;
           offer_id?: string | null;
           over_budget?: boolean;
           price_cents: number;
@@ -219,6 +222,7 @@ export type Database = {
           retailer_product_id?: string | null;
           round_id: string;
           seller_name?: string | null;
+          source?: string;
           status?: string;
           title: string;
           updated_at?: string;
@@ -235,6 +239,7 @@ export type Database = {
           first_party?: boolean | null;
           handling_days_max?: number | null;
           id?: string;
+          list_item_id?: string | null;
           offer_id?: string | null;
           over_budget?: boolean;
           price_cents?: number;
@@ -245,6 +250,7 @@ export type Database = {
           retailer_product_id?: string | null;
           round_id?: string;
           seller_name?: string | null;
+          source?: string;
           status?: string;
           title?: string;
           updated_at?: string;
@@ -264,7 +270,7 @@ export type Database = {
         Row: {
           approved_at: string | null;
           attempts: number;
-          budget_cents: number;
+          budget_cents: number | null;
           created_at: string;
           id: string;
           late: boolean;
@@ -283,7 +289,7 @@ export type Database = {
         Insert: {
           approved_at?: string | null;
           attempts?: number;
-          budget_cents: number;
+          budget_cents?: number | null;
           created_at?: string;
           id?: string;
           late?: boolean;
@@ -301,7 +307,7 @@ export type Database = {
         Update: {
           approved_at?: string | null;
           attempts?: number;
-          budget_cents?: number;
+          budget_cents?: number | null;
           created_at?: string;
           id?: string;
           late?: boolean;
@@ -451,6 +457,63 @@ export type Database = {
         };
         Relationships: [];
       };
+      order_addresses: {
+        Row: {
+          address_line1: string;
+          address_line2: string | null;
+          city: string;
+          country: string;
+          created_at: string;
+          order_id: string;
+          phone: string | null;
+          recipient_first_name: string;
+          recipient_last_name: string;
+          state: string;
+          updated_at: string;
+          user_id: string;
+          zip: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          address_line1: string;
+          address_line2?: string | null;
+          city: string;
+          country: string;
+          created_at?: string;
+          order_id: string;
+          phone?: string | null;
+          recipient_first_name: string;
+          recipient_last_name: string;
+          state: string;
+          updated_at?: string;
+          user_id: string;
+          zip: string;
+        };
+        Update: {
+          address_line1?: string;
+          address_line2?: string | null;
+          city?: string;
+          country?: string;
+          created_at?: string;
+          order_id?: string;
+          phone?: string | null;
+          recipient_first_name?: string;
+          recipient_last_name?: string;
+          state?: string;
+          updated_at?: string;
+          user_id?: string;
+          zip?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "order_addresses_order_id_user_id_fkey";
+            columns: ["order_id", "user_id"];
+            isOneToOne: false;
+            referencedRelation: "orders";
+            referencedColumns: ["id", "user_id"];
+          },
+        ];
+      };
       orders: {
         Row: {
           created_at: string;
@@ -469,6 +532,9 @@ export type Database = {
           provider: string;
           provider_order_id: string | null;
           round_id: string;
+          ship_city: string;
+          ship_state: string;
+          ship_to: string;
           shipping_cents: number | null;
           status: string;
           subtotal_cents: number | null;
@@ -495,6 +561,9 @@ export type Database = {
           provider?: string;
           provider_order_id?: string | null;
           round_id: string;
+          ship_city: string;
+          ship_state: string;
+          ship_to: string;
           shipping_cents?: number | null;
           status?: string;
           subtotal_cents?: number | null;
@@ -520,6 +589,9 @@ export type Database = {
           provider?: string;
           provider_order_id?: string | null;
           round_id?: string;
+          ship_city?: string;
+          ship_state?: string;
+          ship_to?: string;
           shipping_cents?: number | null;
           status?: string;
           subtotal_cents?: number | null;
@@ -850,6 +922,36 @@ export type Database = {
         };
         Relationships: [];
       };
+      person_links: {
+        Row: {
+          buyer_id: string;
+          created_at: string;
+          list_id: string;
+          person_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          buyer_id: string;
+          created_at?: string;
+          list_id: string;
+          person_id: string;
+        };
+        Update: {
+          buyer_id?: string;
+          created_at?: string;
+          list_id?: string;
+          person_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "person_links_list_id_fkey";
+            columns: ["list_id"];
+            isOneToOne: false;
+            referencedRelation: "lists";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -860,6 +962,11 @@ export type Database = {
         Returns: Json;
       };
       get_shared_list: { Args: { p_token: string }; Returns: Json };
+      link_person: {
+        Args: { p_person_id: string; p_token: string };
+        Returns: undefined;
+      };
+      person_list: { Args: { p_person_id: string }; Returns: Json };
       save_list: {
         Args: { p_items: Json; p_list_id: string; p_title: string };
         Returns: string;
@@ -868,6 +975,7 @@ export type Database = {
         Args: { p_item_id: string; p_token: string };
         Returns: boolean;
       };
+      unlink_person: { Args: { p_person_id: string }; Returns: boolean };
       viewer_display_name: {
         Args: Record<PropertyKey, never>;
         Returns: string;
@@ -882,6 +990,58 @@ export type Database = {
   };
   public: {
     Tables: {
+      account_addresses: {
+        Row: {
+          address_checked_at: string | null;
+          address_line1: string;
+          address_line2: string | null;
+          city: string;
+          country: string;
+          created_at: string;
+          phone: string | null;
+          recipient_first_name: string;
+          recipient_last_name: string;
+          share_for_gifts: boolean;
+          state: string;
+          updated_at: string;
+          user_id: string;
+          zip: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          address_checked_at?: string | null;
+          address_line1: string;
+          address_line2?: string | null;
+          city: string;
+          country?: string;
+          created_at?: string;
+          phone?: string | null;
+          recipient_first_name: string;
+          recipient_last_name: string;
+          share_for_gifts?: boolean;
+          state: string;
+          updated_at?: string;
+          user_id?: string;
+          zip: string;
+        };
+        Update: {
+          address_checked_at?: string | null;
+          address_line1?: string;
+          address_line2?: string | null;
+          city?: string;
+          country?: string;
+          created_at?: string;
+          phone?: string | null;
+          recipient_first_name?: string;
+          recipient_last_name?: string;
+          share_for_gifts?: boolean;
+          state?: string;
+          updated_at?: string;
+          user_id?: string;
+          zip?: string;
+        };
+        Relationships: [];
+      };
       people: {
         Row: {
           address_checked_at: string | null;
@@ -996,6 +1156,11 @@ export type Database = {
         Returns: undefined;
       };
       delete_person: { Args: { p_person_id: string }; Returns: undefined };
+      shared_address_for_person: {
+        Args: { p_person_id: string };
+        Returns: Json;
+      };
+      shared_city_for_person: { Args: { p_person_id: string }; Returns: Json };
     };
     Enums: {
       [_ in never]: never;

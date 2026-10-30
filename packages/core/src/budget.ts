@@ -2,6 +2,9 @@
 // cents; anything that has to round, rounds down, so a rounding error can
 // only ever spend less.
 //
+// The budget is optional (product decision 36): `null` means no budget, so
+// nothing is over budget and the cap comes from the approved picks instead.
+//
 // The checkout service's per-order fee is a setting, not a constant (T23):
 // callers read it from `concierge.app_settings` and pass it in as `feeCents`.
 
@@ -36,22 +39,24 @@ export function overBudgetLimitCents(budgetCents: number, overBudgetPct: number)
 
 /**
  * Within budget, over budget (up to and including the limit), or dropped.
- * Used for a single idea and for the sum of several picks alike.
+ * Used for a single idea and for the sum of several picks alike. With no
+ * budget, everything is within it.
  */
-export function classifyTotal(totalCents: number, budgetCents: number, overBudgetPct: number): BudgetFit {
+export function classifyTotal(totalCents: number, budgetCents: number | null, overBudgetPct: number): BudgetFit {
   checkCents(totalCents, "Total");
-  if (totalCents <= budgetCents) return "within";
+  if (budgetCents === null || totalCents <= budgetCents) return "within";
   return totalCents <= overBudgetLimitCents(budgetCents, overBudgetPct) ? "over" : "dropped";
 }
 
 /**
  * The most the round may spend once the user approves these picks: the
  * budget when they fit, or their sum when the user deliberately approved
- * going over. `null` means the approval is refused.
+ * going over. With no budget, it's their sum, so a price rise above what
+ * was approved stops the order. `null` means the approval is refused.
  */
 export function approvalCeilingCents(
   selectedTotalsCents: number[],
-  budgetCents: number,
+  budgetCents: number | null,
   overBudgetPct: number,
   overBudgetConfirmed: boolean,
 ): number | null {
@@ -59,7 +64,7 @@ export function approvalCeilingCents(
   const sum = selectedTotalsCents.reduce((a, b) => a + b, 0);
   switch (classifyTotal(sum, budgetCents, overBudgetPct)) {
     case "within":
-      return budgetCents;
+      return budgetCents ?? sum;
     case "over":
       return overBudgetConfirmed ? sum : null;
     case "dropped":
@@ -91,18 +96,27 @@ export function committedSpendCents(orders: CommittedOrder[]): number {
  * tax, but not the order fee. `reservedCents` holds back room for the round's
  * other picks that haven't been ordered yet, so the first order can't use
  * up the whole budget.
+ *
+ * With no budget, pass the pick's own approved total as `pickTotalCents`:
+ * the order is then never allowed to cost more than that, even when other
+ * orders in the round came in cheaper or failed and freed up room.
  */
 export function maxPriceCents(p: {
   ceilingCents: number;
   committedCents: number;
   reservedCents: number;
   feeCents: number;
+  pickTotalCents?: number;
 }): number {
   checkCents(p.ceilingCents, "Ceiling");
   checkCents(p.committedCents, "Committed spend");
   checkCents(p.reservedCents, "Reserved spend");
   checkCents(p.feeCents, "Fee");
-  const max = p.ceilingCents - p.committedCents - p.reservedCents - p.feeCents;
+  let max = p.ceilingCents - p.committedCents - p.reservedCents - p.feeCents;
+  if (p.pickTotalCents !== undefined) {
+    checkCents(p.pickTotalCents, "Pick total");
+    max = Math.min(max, p.pickTotalCents - p.feeCents);
+  }
   if (max <= 0) {
     // A budget bug, never an order: there's no room left in this round.
     throw new RangeError(`No budget left for this order (max_price would be ${max} cents)`);
