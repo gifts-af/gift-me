@@ -69,3 +69,11 @@ The two open questions in ALL-44 (schema v1.1). Build details in `../design/plan
 |---|---|---|
 | 41 | **Your own address is one record for every product** (follows decision 38; narrows D31). One address per account, readable only by you. It's both where gifts to you ship when you keep a list and "My address" when you buy. You can turn on sharing it with gift givers; they then see only your city and state, and the full address is used only by the server to place an order. Addresses you enter for the people you buy for stay private to you. | Owner, on Claude's recommendation |
 | 42 | **Linking someone's list to your "person" needs no consent.** A buyer holding a list's share link can link it to one of their people right away, and the concierge then offers picks from that list. Consequence **[Claude's call]**: when the list's owner turns address sharing on, anyone who has linked through their share link can ship to them (city and state shown, never the street), the way Amazon wish lists work. | Owner (Claude had recommended an accept step) |
+
+## 2026-10-30
+
+From the review of ALL-44 (PR #14).
+
+| # | Decision | Source |
+|---|---|---|
+| 43 | **A link to someone's list lasts only while the list is shared** (narrows decision 42). Turning sharing off, or resetting the share link, cuts off everyone who linked through the old link: they can no longer see the list, its claims, or the owner's city, and the server can no longer ship to the owner's address. Linking again needs the current share link. | Owner |
