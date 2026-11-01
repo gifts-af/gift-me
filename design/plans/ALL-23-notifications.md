@@ -258,8 +258,8 @@ Docs go straight to `main` (CLAUDE.md > Git); the code goes through the PR.
 
 | Client | Checked by | Date | Result |
 |---|---|---|---|
-| Gmail (phone) | | | |
-| iOS Mail | | | |
+| Gmail (phone) | Owner | 2026-11-01 | Pass: test email from Settings on production arrived (Gmail filed it under Promotions); the button opened `/a/…`, confirmed, and showed "It works". The other seven templates aren't checked yet: run the samples script. |
+| iOS Mail | | | Not checked yet |
 
 ## Review focus
 
