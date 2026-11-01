@@ -34,7 +34,7 @@ importers:
         specifier: ^9
         version: 9.39.5
       '@types/chrome':
-        specifier: latest
+        specifier: 0.3.7
         version: 0.3.7
       '@types/node':
         specifier: ^22
