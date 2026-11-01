@@ -162,7 +162,7 @@ None left for the owner. Calls marked **[Claude's call]** are listed in "What wa
 - Produces: `concierge.add_person(p_name text, p_relationship text, p_kinds text[], p_birthday_month int, p_birthday_day int, p_birth_year int, p_anniversary_month int, p_anniversary_day int) returns uuid`. It runs as the caller (security invoker, so RLS applies) and inserts the person plus one enabled occasion per kind in one transaction; the birthday and anniversary month and day go on those kinds' rows. Granted to `authenticated` only.
 - Produces: the two `app_settings` rows above.
 
-- [ ] **Step 1: Write `people_v1_2.test.sql`.** Checks:
+- [x] **Step 1: Write `people_v1_2.test.sql`.** Checks:
   - `add_person` saves a person with only a name, a relationship and the kinds given.
   - A birthday kind without a month and day is refused (`23514`).
   - Two enabled occasions of the same kind for one person are refused (`23505`), but a soft-deleted one doesn't block a new one.
@@ -171,11 +171,11 @@ None left for the owner. Calls marked **[Claude's call]** are listed in "What wa
   - A signed-out visitor can't call `add_person` (`42501`).
   - A user can insert an object at `<own id>/<person>/a.jpg` but not at `<other id>/…`, and another user selects 0 rows of it.
   - Both settings are readable through `concierge.setting_int`.
-- [ ] **Step 2: Run it to see it fail.** The local database is shared with other sessions, so don't `db reset` or `migration up` it. Instead, run the migration and the test in one transaction that's rolled back, the way ALL-44 did, or use a fresh local stack. Expected: errors for the missing function, columns and bucket.
-- [ ] **Step 3: Write the migration.** First check that nothing reads `people.birthday` (`grep -rn birthday apps/web supabase/tests`): today only occasion rows hold birthdays.
-- [ ] **Step 4: Run the new and all existing pgTAP files.** Expect all to pass.
-- [ ] **Step 5: Regenerate the types** (`pnpm db:types` against a database with the migration; CI checks they match). Expected diff: `birth_year`, `photo_path` and `add_person` appear, and `birthday` is gone from `people`.
-- [ ] **Step 6: Commit** `feat(db): birth year, profile photos and add_person (ALL-21)`.
+- [x] **Step 2: Run it to see it fail.** The local database is shared with other sessions, so don't `db reset` or `migration up` it. Instead, run the migration and the test in one transaction that's rolled back, the way ALL-44 did, or use a fresh local stack. Expected: errors for the missing function, columns and bucket.
+- [x] **Step 3: Write the migration.** First check that nothing reads `people.birthday` (`grep -rn birthday apps/web supabase/tests`): today only occasion rows hold birthdays.
+- [x] **Step 4: Run the new and all existing pgTAP files.** Expect all to pass.
+- [x] **Step 5: Regenerate the types** (`pnpm db:types` against a database with the migration; CI checks they match). Expected diff: `birth_year`, `photo_path` and `add_person` appear, and `birthday` is gone from `people`.
+- [x] **Step 6: Commit** `feat(db): birth year, profile photos and add_person (ALL-21)`.
 
 ### Task 2: Relationship and date rules in core [P] (AC-2 to AC-7)
 
@@ -189,15 +189,15 @@ None left for the owner. Calls marked **[Claude's call]** are listed in "What wa
 - Produces: `nextOccasion(occasions: { kind: OccasionKind; month: number | null; day: number | null; enabled: boolean }[], today: CalendarDate): { kind: OccasionKind; date: CalendarDate } | null`. It returns the soonest enabled occasion on or after today (ties go to list order), or `null` when none is enabled.
 - Produces (in `schedule.ts`): `orderBy(occasionDate: CalendarDate, today: CalendarDate, s: Pick<ScheduleSettings, "planningDeliveryDays" | "safetyBufferDays" | "fastestDaysToArrive">): { date: CalendarDate; fast: boolean } | null`. It returns the normal `shipByDeadline` if that's after today; otherwise the fast-shipping deadline (`fast: true`) if that's after today; otherwise `null` ("Too late to ship"). This is the same rule as `planRoundStart`'s deadline, so refactor `planRoundStart` to use it.
 
-- [ ] **Step 1: Write failing tests.**
+- [x] **Step 1: Write failing tests.**
   - `startingOccasions`: one test per row of the spec's table. Mother → `[christmas, mothers_day]`. Wife with both dates → `[christmas, birthday, anniversary, valentines_day]`, in any order. Girlfriend with the anniversary flag set still gets no anniversary. Son → `[christmas]`.
   - `nextOccasion`, with Christmas and a Mar 14 birthday: on 2026-03-01 → the birthday, 2026-03-14; on 2026-03-14 → 2026-03-14; on 2026-03-15 → Christmas, 2026-12-25. A Feb 29 birthday on 2027-02-01 → 2027-02-28. All occasions disabled → `null`.
   - `orderBy` with settings 7/2/1 and an occasion on 2026-12-25: today 2026-12-01 → `{ date: "2026-12-16", fast: false }`; today 2026-12-20 → `{ date: "2026-12-22", fast: true }`; today 2026-12-22 → `null`.
   - The existing `planRoundStart` tests must keep passing.
-- [ ] **Step 2: Run** `cd packages/core && npx vitest run`. Expect the new tests to fail.
-- [ ] **Step 3: Implement** in `people.ts` and `schedule.ts`, and export from `index.ts`.
-- [ ] **Step 4: Run** the core tests with coverage. Expect them to pass, with 100% lines on `people.ts`.
-- [ ] **Step 5: Commit** `feat(core): relationship occasions, next occasion and order-by date (ALL-21)`.
+- [x] **Step 2: Run** `cd packages/core && npx vitest run`. Expect the new tests to fail.
+- [x] **Step 3: Implement** in `people.ts` and `schedule.ts`, and export from `index.ts`.
+- [x] **Step 4: Run** the core tests with coverage. Expect them to pass, with 100% lines on `people.ts`.
+- [x] **Step 5: Commit** `feat(core): relationship occasions, next occasion and order-by date (ALL-21)`.
 
 ### Task 3: Form and link parsing rules [P] (AC-1, AC-8, AC-13)
 
@@ -214,11 +214,11 @@ None left for the owner. Calls marked **[Claude's call]** are listed in "What wa
 - Produces: `parseBudget(input: string): { ok: true; cents: number | null } | { ok: false; error: string }`. `""` → `null`; `"75"` and `"$75"` → `7500`; `"75.5"` and `"75.50"` → `7550`. A negative amount, more than 2 decimals, or anything that isn't a number → "Enter an amount like 75 or 75.50."
 - Produces: `parseShareToken(input: string): string | null`. It returns the UUID from `https://<any host>/share/<uuid>` (ignoring a trailing slash, query and hash) or a bare UUID, and `null` for anything else.
 
-- [ ] **Step 1: Write failing tests** for each case above, including the link shapes in Review focus 3.
-- [ ] **Step 2: Run** `cd apps/web && npx vitest run modules/concierge/__tests__/people-rules.test.ts`. Expect them to fail.
-- [ ] **Step 3: Implement** `rules.ts`.
-- [ ] **Step 4: Run.** Expect them to pass.
-- [ ] **Step 5: Commit** `feat(concierge): parse person forms, budgets and share links (ALL-21)`.
+- [x] **Step 1: Write failing tests** for each case above, including the link shapes in Review focus 3.
+- [x] **Step 2: Run** `cd apps/web && npx vitest run modules/concierge/__tests__/people-rules.test.ts`. Expect them to fail.
+- [x] **Step 3: Implement** `rules.ts`.
+- [x] **Step 4: Run.** Expect them to pass.
+- [x] **Step 5: Commit** `feat(concierge): parse person forms, budgets and share links (ALL-21)`.
 
 ### Task 4: People data layer and server actions (AC-1, AC-6 to AC-9, AC-12 to AC-17)
 
@@ -244,17 +244,17 @@ None left for the owner. Calls marked **[Claude's call]** are listed in "What wa
   - `linkList` maps `P0002` to "That link doesn't match a GiftsAF list." and `22023` to "That's your own list."
   - `app/people/actions.ts` wraps these as server actions with `(prev, formData)` signatures, working out "today" as the Global constraints say.
 
-- [ ] **Step 1: Write failing tests** against a real local database through the user client, connecting the way `e2e/local-supabase.ts` does (or with a fake client, if the existing concierge tests use one; match `notify.test.ts`). Cover:
+- [x] **Step 1: Write failing tests** against a real local database through the user client, connecting the way `e2e/local-supabase.ts` does (or with a fake client, if the existing concierge tests use one; match `notify.test.ts`). Cover:
   - adding a person, then listing them, and the sort order;
   - a budget set, then cleared, stores `null`;
   - turning an occasion off drops it from `next`;
   - linking with a valid, an unknown and an own token, then unlinking;
   - deleting hides the person;
   - **every mutation with another user's person id returns an error and changes nothing** (Review focus 1).
-- [ ] **Step 2: Run.** Expect them to fail.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run.** Expect them to pass.
-- [ ] **Step 5: Commit** `feat(concierge): people data layer and actions (ALL-21)`.
+- [x] **Step 2: Run.** Expect them to fail.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run.** Expect them to pass.
+- [x] **Step 5: Commit** `feat(concierge): people data layer and actions (ALL-21)`.
 
 ### Task 5: Photo upload and avatar [P after Task 1] (AC-10, AC-11)
 
@@ -274,15 +274,15 @@ None left for the owner. Calls marked **[Claude's call]** are listed in "What wa
   On any failure, the old photo stays.
 - `maxUploadBytes` and `px` are read on the server (`appSettingInt`) and passed in.
 
-- [ ] **Step 1: Write failing tests:**
+- [x] **Step 1: Write failing tests:**
   - initials: "Mom" → "M", "Mary Ann Allen" → "MA";
   - the picker refuses an oversized file;
   - on an upload failure, `setPhoto` isn't called and the old photo is kept;
   - on success, the old object is removed after `setPhoto` (Review focus 4).
-- [ ] **Step 2: Run.** Expect them to fail.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run.** Expect them to pass.
-- [ ] **Step 5: Commit** `feat: profile photos with an initials fallback (ALL-21)`.
+- [x] **Step 2: Run.** Expect them to fail.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run.** Expect them to pass.
+- [x] **Step 5: Commit** `feat: profile photos with an initials fallback (ALL-21)`.
 
 ### Task 6: Home cards and Add person (AC-1 to AC-4, AC-6, AC-17)
 
@@ -307,16 +307,16 @@ None left for the owner. Calls marked **[Claude's call]** are listed in "What wa
 
   It saves through `addPerson`, then goes to Home.
 
-- [ ] **Step 1: Write failing component tests:**
+- [x] **Step 1: Write failing component tests:**
   - the form submits with only a name and a relationship;
   - the anniversary appears only for Wife or Husband;
   - Skip clears the birthday;
   - the card shows "Add birthday" only when there's no birthday;
   - the card shows "Their own list" or "We suggest ideas" correctly.
-- [ ] **Step 2: Run.** Expect them to fail.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run.** Expect them to pass.
-- [ ] **Step 5: Commit** `feat: people on Home and adding a person (ALL-21)`.
+- [x] **Step 2: Run.** Expect them to fail.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run.** Expect them to pass.
+- [x] **Step 5: Commit** `feat: people on Home and adding a person (ALL-21)`.
 
 ### Task 7: Person page (AC-5, AC-7 to AC-9, AC-12 to AC-17)
 
@@ -338,16 +338,16 @@ None left for the owner. Calls marked **[Claude's call]** are listed in "What wa
   Room is left for the ALL-25 and ALL-26 sections, with no placeholders.
 - An unknown, deleted or another user's id → `notFound()`.
 
-- [ ] **Step 1: Write failing component tests:**
+- [x] **Step 1: Write failing component tests:**
   - each order-by wording;
   - the switch calls `setOccasionEnabled`;
   - the budget field shows "Not set", and an error for "abc";
   - the link field shows each error;
   - delete asks to confirm.
-- [ ] **Step 2: Run.** Expect them to fail.
-- [ ] **Step 3: Implement.**
-- [ ] **Step 4: Run.** Expect them to pass.
-- [ ] **Step 5: Commit** `feat: person page with occasions, budget and list link (ALL-21)`.
+- [x] **Step 2: Run.** Expect them to fail.
+- [x] **Step 3: Implement.**
+- [x] **Step 4: Run.** Expect them to pass.
+- [x] **Step 5: Commit** `feat: person page with occasions, budget and list link (ALL-21)`.
 
 ### Task 8: End-to-end check and docs (all ACs)
 
@@ -359,7 +359,7 @@ None left for the owner. Calls marked **[Claude's call]** are listed in "What wa
   - `design/decisions.md`: the next T#. Fetch `origin/main` first; numbers collide between parallel sessions;
   - Linear: a comment on ALL-24 and ALL-22 saying to fill `people.photo_path` only when it's empty.
 
-- [ ] **Step 1: Write the Playwright spec.** On a phone viewport, as `TEST_USER`:
+- [x] **Step 1: Write the Playwright spec.** On a phone viewport, as `TEST_USER`:
   1. Add "Mom" with only a name and Mother.
   2. Home shows her card with "Add birthday", Christmas or Mother's Day as next, and "We suggest ideas".
   3. Open her page, turn Christmas off, set a $75 Mother's Day budget, then clear it ("Not set").
@@ -368,7 +368,7 @@ None left for the owner. Calls marked **[Claude's call]** are listed in "What wa
 
   No horizontal scroll at 375 px.
 - [ ] **Step 2: Run** the repo's e2e script. Expect it to pass.
-- [ ] **Step 3: Update the docs** listed above.
+- [x] **Step 3: Update the docs** listed above.
 - [ ] **Step 4: Run** `pnpm lint && pnpm typecheck && pnpm test && pnpm build`. Expect all to pass.
 - [ ] **Step 5: Commit** `test: people end to end, plus docs (ALL-21)`, then open the PR.
 
@@ -390,3 +390,17 @@ None left for the owner. Calls marked **[Claude's call]** are listed in "What wa
   | AC-17 | 1, 4, 6 |
 - [x] Every task traces back to a story or criterion.
 - [x] No open questions are left.
+
+## As built
+
+What changed from the plan while building:
+
+- `addPerson` returns the new person's id.
+- `PhotoPicker` takes `currentPath`, and one upload function is shared with the add form.
+- Tests use a fake store; the database guarantees are checked in pgTAP.
+- No `capture` attribute on the photo input.
+- If a photo fails after the person is added, we go to the person's page with a note.
+- A malformed id shows "not found".
+- Delete redirects Home from the server.
+- One relationship list serves the app and the extension.
+- The end-to-end spec (`apps/web/e2e/people.spec.ts`) was written but first runs in CI's e2e job, which has a fresh database with every migration.
