@@ -110,7 +110,7 @@ One number per handoff: scans per item; scans that become a paid gift; scanners 
 - One brand ties it together, so people recognize all three products as one place.
 
 ## 9. Open questions for the owner and Jim
-1. **One name** for the platform, or one per product? (GiftMe is taken, ALL-14.)
+1. ~~**One name** for the platform, or one per product?~~ **Decided 2026-11-01 (planning decision 44):** one name, **GiftsAF**, at `giftsaf.com` (ALL-14).
 2. ~~**One app or two?**~~ **Decided 2026-10-25 (T19):** one app, one account, one repo from the start, built so a product can be split out later. See `design/technical-design.md` §2.2.
 3. ~~**Where the list app's code lives?**~~ **Decided 2026-10-25 (T19):** it moves into the gifts-af platform repo when Jim and the owner are ready, keeping its history. **Step 1 done 2026-10-25:** the list app's repo moved to [gifts-af/GiftsAF](https://github.com/gifts-af/GiftsAF). It's built with the same stack, so **step 2 makes it the base of the one platform app (T20)** (ALL-15).
 4. **After the concierge MVP, what's first:** its public launch, or connecting it to lists?

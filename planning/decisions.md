@@ -77,3 +77,9 @@ From the review of ALL-44 (PR #14).
 | # | Decision | Source |
 |---|---|---|
 | 43 | **A link to someone's list lasts only while the list is shared** (narrows decision 42). Turning sharing off, or resetting the share link, cuts off everyone who linked through the old link: they can no longer see the list, its claims, or the owner's city, and the server can no longer ship to the owner's address. Linking again needs the current share link. | Owner |
+
+## 2026-11-01
+
+| # | Decision | Source |
+|---|---|---|
+| 44 | **The platform is called GiftsAF, at `giftsaf.com`** (ALL-14; replaces "GiftMe", which is taken). One name for all three products (scan-to-gift, gift lists, concierge), answering strategy open question 1. The domain was bought on 2026-11-01 for $12.03 a year, in the Vercel GiftMe team with DNS on Vercel. The `.app`, `.co` and `.gift` versions were also free; we didn't buy them. Code names (`lists`, `concierge`, repo `gift-me`) stay as they are (T21). | Owner |

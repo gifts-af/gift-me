@@ -14,7 +14,7 @@ One app for three products (T19): **gift lists** (live, formerly the GiftsAF rep
 | `packages/core/` | Pure shared logic (dates, deadlines, budgets) and database types | W1-5 |
 | `supabase/` | Database migrations and local Supabase settings (`config.toml`) | Lists tables today |
 | `scripts/` | Repo tooling, such as `dev-check.mjs` (the local setup check) | Done |
-| `spikes/` | Throwaway Wave 1 experiments (Zinc, AI) | Reference only |
+| `spikes/` | Throwaway Wave 1 experiments (Zinc, AI, email) | Reference only |
 
 ## Getting started
 
