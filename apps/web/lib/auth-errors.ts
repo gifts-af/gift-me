@@ -1,5 +1,5 @@
 // The auth error page shows only these words, keyed by a short code, so a
-// crafted link can't put its own text on a GiftMe page. The raw reason is
+// crafted link can't put its own text on a GiftsAF page. The raw reason is
 // logged where it happens.
 const MESSAGES: Record<string, string> = {
   cancelled: "Google sign-in was cancelled. You can try again, or use your email.",

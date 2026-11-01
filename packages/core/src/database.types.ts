@@ -49,6 +49,61 @@ export type Database = {
         };
         Relationships: [];
       };
+      action_links: {
+        Row: {
+          action: string;
+          created_at: string;
+          expires_at: string;
+          id: string;
+          notification_id: string | null;
+          round_id: string | null;
+          token_hash: string;
+          updated_at: string;
+          used_at: string | null;
+          user_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          action: string;
+          created_at?: string;
+          expires_at: string;
+          id?: string;
+          notification_id?: string | null;
+          round_id?: string | null;
+          token_hash: string;
+          updated_at?: string;
+          used_at?: string | null;
+          user_id: string;
+        };
+        Update: {
+          action?: string;
+          created_at?: string;
+          expires_at?: string;
+          id?: string;
+          notification_id?: string | null;
+          round_id?: string | null;
+          token_hash?: string;
+          updated_at?: string;
+          used_at?: string | null;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "action_links_notification_id_fkey";
+            columns: ["notification_id"];
+            isOneToOne: false;
+            referencedRelation: "notifications";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "action_links_round_id_user_id_fkey";
+            columns: ["round_id", "user_id"];
+            isOneToOne: false;
+            referencedRelation: "gift_rounds";
+            referencedColumns: ["id", "user_id"];
+          },
+        ];
+      };
       app_settings: {
         Row: {
           description: string | null;
@@ -374,11 +429,12 @@ export type Database = {
       };
       notifications: {
         Row: {
-          action_token_hash: string | null;
           channel: string;
           created_at: string;
+          error: string | null;
           id: string;
           kind: string;
+          provider_message_id: string | null;
           round_id: string | null;
           sent_at: string | null;
           updated_at: string;
@@ -386,22 +442,24 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
-          action_token_hash?: string | null;
           channel?: string;
           created_at?: string;
+          error?: string | null;
           id?: string;
           kind: string;
+          provider_message_id?: string | null;
           round_id?: string | null;
           sent_at?: string | null;
           updated_at?: string;
           user_id?: string;
         };
         Update: {
-          action_token_hash?: string | null;
           channel?: string;
           created_at?: string;
+          error?: string | null;
           id?: string;
           kind?: string;
+          provider_message_id?: string | null;
           round_id?: string | null;
           sent_at?: string | null;
           updated_at?: string;

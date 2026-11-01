@@ -1,9 +1,15 @@
 import { localSupabase } from "./local-supabase";
-import { TEST_USER } from "./test-user";
+import { SECOND_USER, TEST_USER } from "./test-user";
 
-// Creates the test account, confirmed, so the smoke test can sign in with
-// email and password (local Supabase has no Google). Safe to run again.
+type User = { email: string; password: string; displayName: string };
+
+// Creates the test accounts, confirmed, so tests can sign in with email and
+// password (local Supabase has no Google). Safe to run again.
 export default async function globalSetup() {
+  for (const user of [TEST_USER, SECOND_USER]) await createUser(user);
+}
+
+async function createUser(user: User) {
   const { url, serviceRoleKey } = localSupabase();
   const res = await fetch(`${url}/auth/v1/admin/users`, {
     method: "POST",
@@ -13,14 +19,14 @@ export default async function globalSetup() {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      email: TEST_USER.email,
-      password: TEST_USER.password,
+      email: user.email,
+      password: user.password,
       email_confirm: true,
-      user_metadata: { display_name: TEST_USER.displayName },
+      user_metadata: { display_name: user.displayName },
     }),
   });
   const alreadyThere = res.status === 422;
   if (!res.ok && !alreadyThere) {
-    throw new Error(`Couldn't create the test user: ${res.status} ${await res.text()}`);
+    throw new Error(`Couldn't create the test user ${user.email}: ${res.status} ${await res.text()}`);
   }
 }

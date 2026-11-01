@@ -1,0 +1,55 @@
+<style>
+  .pg{background:#0b0b0d;color:#fafafa;font:14px/1.45 system-ui,-apple-system,sans-serif;text-align:left;border:1px solid #27272a;overflow:hidden;width:300px;border-radius:28px;margin:0 auto}
+  .pg p{margin:0;color:#a1a1aa}
+  .pg h1,.pg h2,.pg h3{margin:0;letter-spacing:-.02em}
+  .alpha{background:#facc15;color:#18181b;font-size:12px;font-weight:700;padding:8px 18px;display:flex;gap:6px;align-items:center}
+  .nav{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;font-weight:800}
+  .nav a{color:#2dd4bf;font-weight:600;font-size:13px}
+  .nav .a{font-size:10px;font-weight:800;background:#27272a;color:#facc15;padding:2px 6px;border-radius:6px;margin-left:6px;letter-spacing:.06em}
+  .sec{padding:22px 18px;display:grid;gap:12px;border-top:1px solid #1f1f23}
+  .sticker{justify-self:start;background:#facc15;color:#18181b;font-weight:800;font-size:12px;padding:4px 10px;border-radius:999px;transform:rotate(-3deg)}
+  .btn{display:block;text-align:center;border-radius:12px;padding:11px;font-weight:700}
+  .p{background:#2dd4bf;color:#042f2e}.s{background:#27272a;color:#fafafa}
+  .tile{background:#18181b;border:1px solid #27272a;border-radius:16px;padding:14px;display:grid;gap:6px}
+  .tile h3{font-size:16px}
+  .tag{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#2dd4bf}
+  .st{justify-self:start;font-size:11px;font-weight:800;padding:2px 8px;border-radius:99px}
+  .now{background:#052e16;color:#4ade80}.wip{background:#2a1d05;color:#fbbf24}.later{background:#27272a;color:#a1a1aa}
+  .step{display:flex;gap:12px;align-items:flex-start}
+  .num{flex:none;width:28px;height:28px;border-radius:99px;background:#2dd4bf;color:#042f2e;font-weight:800;display:grid;place-items:center;font-size:13px}
+  .foot{padding:16px 18px;font-size:12px;color:#71717a;border-top:1px solid #1f1f23}
+</style>
+
+<h2>Same page, honest about being alpha (v2: steps stacked)</h2>
+<p class="subtitle">A yellow strip on every page, an "alpha" tag by the name, and a status on each feature, so nobody is surprised when something's broken. The pitch still shows where it's heading.</p>
+
+<div class="pg">
+  <div class="alpha">🚧 Early alpha. Lots is broken. Poke around anyway.</div>
+  <div class="nav"><span>GiftsAF<span class="a">ALPHA</span></span><a>Sign in</a></div>
+  <div class="sec" style="border:0;padding-top:6px">
+    <span class="sticker">Mom's birthday is Saturday 👀</span>
+    <h1 style="font-size:30px;line-height:1.05">Gifting, handled AF.</h1>
+    <p>Where we're heading: we remember the dates, find the gift, and ship it. You just tap yes.</p>
+    <a class="btn p">Take the tour</a>
+    <a class="btn s">Sign in and poke around</a>
+  </div>
+  <div class="sec">
+    <span class="tag">What works today</span>
+    <div class="tile"><span class="st now">Works now</span><h3>Your gift list</h3><p>Make a list, share one link. Family claims a gift and nobody doubles up.</p></div>
+    <div class="tile"><span class="st wip">Being built</span><h3>Never forget a birthday</h3><p>Dates remembered, ideas a week early, one tap to send. In testing with a few friends.</p></div>
+    <div class="tile"><span class="st later">Later</span><h3>Buy-me-a-drink shirts</h3><p>Wear a QR code. Strangers buy you a drink.</p></div>
+  </div>
+  <div class="sec">
+    <span class="tag">How it'll work</span>
+    <div class="step"><span class="num">1</span><p><b style="color:#fafafa">Add your people.</b><br>Import from Google or type a few names.</p></div>
+    <div class="step"><span class="num">2</span><p><b style="color:#fafafa">We get ideas ready.</b><br>From their lists and what you've saved.</p></div>
+    <div class="step"><span class="num">3</span><p><b style="color:#fafafa">You tap yes.</b><br>We order it and it shows up on time.</p></div>
+    <p style="font-size:12px">Nothing is ever bought without your OK.</p>
+  </div>
+  <div class="sec">
+    <h2 style="font-size:20px">Found something broken? Tell us.</h2>
+    <p>It's two of us building this. Every bit of feedback helps.</p>
+    <a class="btn s">Send feedback</a>
+  </div>
+  <div class="foot">GiftsAF alpha · made by Jim and Aaron</div>
+</div>

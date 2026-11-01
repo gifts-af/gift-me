@@ -131,7 +131,7 @@ The gift list and the concierge each **work on their own**, and are linked light
 
 ## Mock-ups
 
-A clickable, phone-first prototype, published as a private shareable artifact page that the owner and Jim can each open on their phones and comment on. **Link:** [GiftMe mock-ups](https://claude.ai/artifact/BvdSVB6RPatUPRbBDyPRzW) (private; shared with Jim from the page's Share menu). **Source:** [`design/mockups/ALL-41.html`](mockups/ALL-41.html); republish it to the same link after changes.
+A clickable, phone-first prototype, published as a private shareable artifact page that the owner and Jim can each open on their phones and comment on. **Link:** [GiftsAF mock-ups](https://claude.ai/artifact/BvdSVB6RPatUPRbBDyPRzW) (private; shared with Jim from the page's Share menu). **Source:** [`design/mockups/ALL-41.html`](mockups/ALL-41.html); republish it to the same link after changes.
 
 **Reviewing:** the owner and Jim share one claude.ai login, so the built-in comments can't tell them apart. The page therefore has its own feedback: on each screen, a comment box with a name picker (Aaron or Jim), and a per-person **"I approve this screen"** button. Comments and approvals are stored in the artifact's shared database, so both people see each other's, and Claude can read them to make changes. Sign-off is complete when both have approved every screen.
 
@@ -187,6 +187,24 @@ The prototype's colours and stylesheet go; **none of its behaviour does.** When 
 
 `gifts.css` was retired in ALL-20: every list screen moved to Tailwind classes at once, since the restyle touched them all. Each feature above has a test (`modules/lists/components/__tests__/`, and the owner-claims rule in `supabase/tests/lists.test.sql`).
 
-## Open items
+## Home page (ALL-46)
 
-- **Name and logo:** the mock-ups use "GiftMe" as plain text until ALL-14 settles the name.
+The public front door at `giftsaf.com` for signed-out visitors, plus the guided tour at `/tour`. Direction **B, bold and cheeky** (chosen 2026-11-01): big type, a tilted yellow "sticker", plain talk aimed at a forgetful 24-year-old. It follows the browser's light or dark setting like the app; the mock-up shows dark. Spec, copy and layout: [`plans/ALL-46-home-page.md`](plans/ALL-46-home-page.md); mock-ups: [`mockups/ALL-46-home.html`](mockups/ALL-46-home.html).
+
+- **Honest, not shouty, about alpha:** an ALPHA tag by the name and a status chip on each feature (Works now, Being built, Later), plus the page copy. The yellow "Early alpha. Lots is broken." strip that used to top every home, tour and request-access page was removed on 2026-11-01 (ALL-50, T36): the owner doesn't want the top of the page to give an early-alpha impression. The mock-up still shows it.
+- **One new token pair:** `--sticker` / `--sticker-foreground` (`#facc15` on `#18181b`, the same in both themes) for the sticker and the logo's tag (ALL-48). Contrast is checked in `test/tokens.test.ts`.
+- **Phone first, good on a computer:** one column on phones; from 768 px the hook gets a "pick a gift" card beside it, and features and steps sit three across.
+- **The concierge story, right after the hook** (ALL-56): the owner wants the page to show GiftsAF is AI-native, with the AI doing the remembering and recommending for its users, not just helping build the app. "It gets to know your people, so you don't have to": it learns from your feedback and how they liked each gift, keeps a profile that sharpens every year, picks ideas that fit (no searching), tells you when it's time to buy, and one tap buys and ships. A sample "What it knows about Dad" card shows learned facts tagged with their source (You told us / His list / His reaction). Labelled "Being built". "How it'll work" became the same loop in four steps: tell us who you buy for, it learns them, it tells you when, you tap yes.
+- **Request access and feedback open over the page** (ALL-53, T37), not as a separate page or an email link: the owner felt a separate page read like an early-2000s "email me" form. On phones it's a sheet that slides up from the bottom; from 640 px it's a box in the middle, with the page dimmed and blurred behind. Esc, ✕ or a tap outside closes it. Feedback is a "Tell us the sad story" box (a message, plus an optional email for a reply) that emails the owner; both show a thank-you and close themselves after 4 s. The overlay is `components/ui/dialog.tsx`, for any future layer like this. `/request-access` still works as a page for direct links. Sketch: [`mockups/ALL-53-overlays.html`](mockups/ALL-53-overlays.html).
+
+## Logo (ALL-48)
+
+**The logo is "Gifts" in heavy type, then "AF" on a tilted yellow gift tag whose hole is a heart.** The owner picked it (direction C1) on 2026-11-01 from browser mock-ups: [`mockups/ALL-48-logo.html`](mockups/ALL-48-logo.html). The "AF" is a double meaning: "as f\*\*\*", and the family's "Allens Forever", which is what the small heart is for. The tag reads like the home page's sticker, aimed at people in their mid-twenties.
+
+- **Colours:** the `--sticker` yellow and near-black, the same in light and dark. No new tokens.
+- **Where it shows:** the app top bar, the home page and tour bar, the sign-in frame, and the browser-tab, Apple and install icons. The icons are the tag on a near-black square. At tab size the heart is dropped so "AF" stays readable.
+- **One source:** the shapes live in `apps/web/lib/logo-art.ts`, which the wordmark (`components/logo.tsx`) and the generated icons (`lib/app-icon.tsx`) both use. "AF" is drawn as shapes, not text, so the icons don't depend on fonts.
+- **Christmas hat:** a Santa hat on the tag's corner, plus holly on the larger icons, while today (US Eastern) is inside `HOLIDAY_LOGO_DATES` (`11-01..12-26` to start). It's an add-on layer: outside the window, or with the variable unset, the plain logo shows. It switches on and off within the hour, with no deploy. Changing the dates means editing the variable in Vercel. See T35.
+- **Link previews (ALL-55):** `app/opengraph-image.tsx` draws a 1200×630 share image (logo, "Gifting, handled AF.", the pitch, the domain) in Geist, a free font kept in `apps/web/assets/fonts/` because a generated image can't use the device font. It wears the hat in season too. The root layout sets the Open Graph and Twitter tags, with absolute URLs on giftsaf.com (`lib/site-url.ts`). The image path is public, so signed-out crawlers like LinkedIn's can load it. After changing it, refresh LinkedIn with its Post Inspector.
+- **Always in the same spot (ALL-54):** every top bar uses one row (`components/top-bar-row.tsx`), and the page always reserves the scrollbar's width, so the logo never moves between pages.
+- **Not done:** seasonal versions beyond Christmas.

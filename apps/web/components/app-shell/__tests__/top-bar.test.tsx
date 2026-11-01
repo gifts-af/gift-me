@@ -5,13 +5,13 @@ import { TopBar } from "../top-bar";
 describe("TopBar", () => {
   it("shows the name linking Home when there's no back link", () => {
     render(<TopBar />);
-    expect(screen.getByRole("link", { name: "GiftMe" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "GiftsAF" })).toHaveAttribute("href", "/");
   });
 
   it("shows a back link with its label instead of the name", () => {
     render(<TopBar back={{ href: "/", label: "Home" }} />);
     expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("href", "/");
-    expect(screen.queryByRole("link", { name: "GiftMe" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "GiftsAF" })).not.toBeInTheDocument();
   });
 
   it("marks the current product in the links", () => {

@@ -57,7 +57,7 @@ function putGuestStash(items) {
 export function GiftAppSkeleton() {
   return (
     <>
-      <TopBar links current="list" wide />
+      <TopBar links current="list" />
       <PageFrame wide>
         <h1 className="text-[22px] font-bold leading-tight">My list</h1>
         <p className="text-[15px] text-muted-foreground" aria-busy="true">
@@ -224,7 +224,6 @@ export default function GiftApp({ initial }) {
         back={isGuest ? undefined : { href: '/', label: 'Home' }}
         links={!isGuest}
         current="list"
-        wide
         actions={isGuest ? null : <ShareButton blockedReason={shareBlockedReason} onShare={handleShare} />}
       />
 

@@ -54,6 +54,11 @@ export default {
           DEFAULT: "hsl(var(--warning))",
           soft: "hsl(var(--warning-soft))",
         },
+        // The home page's yellow sticker and the logo's tag (ALL-46, ALL-48).
+        sticker: {
+          DEFAULT: "hsl(var(--sticker))",
+          foreground: "hsl(var(--sticker-foreground))",
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

@@ -11,7 +11,7 @@ import { getMyListSummary } from "@/modules/lists";
 export default function Home() {
   return (
     <>
-      <TopBar links current="people" wide account={<Account />} />
+      <TopBar links current="people" account={<Account />} />
       <PageFrame wide>
         <Suspense fallback={<ListCard title="My list" subtitle="Loading…" />}>
           <MyListCard />
