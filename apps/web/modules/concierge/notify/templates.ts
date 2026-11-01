@@ -1,5 +1,5 @@
 import { APP_NAME } from "@/lib/brand";
-import { renderEmail } from "./email-layout";
+import { renderEmail } from "@/lib/email-layout";
 
 export type NotificationKind =
   | "test"

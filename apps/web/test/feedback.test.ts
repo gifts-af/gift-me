@@ -1,6 +1,9 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
-import { EMAIL_FROM, FEEDBACK_EMAIL } from "@/lib/brand";
+import { EMAIL_FROM } from "@/lib/brand";
+import { EMAIL_LOGO_URL } from "@/lib/email-layout";
+
+const INBOX = "allensforever711+feedback@gmail.com";
 import { sendFeedback } from "@/lib/feedback";
 import { sendEmail } from "@/lib/resend";
 
@@ -37,8 +40,9 @@ describe("sendFeedback", () => {
     expect(result).toEqual({ status: "sent" });
     expect(sendEmail).toHaveBeenCalledWith(
       {
-        to: FEEDBACK_EMAIL,
+        to: INBOX,
         subject: "GiftsAF feedback",
+        html: expect.stringContaining(EMAIL_LOGO_URL),
         text: expect.stringContaining("The share link opened a blank page."),
         replyTo: "jo@example.com",
       },
@@ -49,7 +53,7 @@ describe("sendFeedback", () => {
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer re_test");
     expect(body).toMatchObject({
       from: EMAIL_FROM,
-      to: [FEEDBACK_EMAIL],
+      to: [INBOX],
       reply_to: "jo@example.com",
       subject: "GiftsAF feedback",
     });

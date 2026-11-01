@@ -16,6 +16,7 @@ export function isPublicPath(pathname: string) {
     pathname.startsWith("/icon") ||
     pathname.startsWith("/apple-icon") ||
     pathname.startsWith("/pwa-icon/") ||
+    pathname === "/email-logo.png" ||
     pathname === "/api/keepalive" ||
     // The extension calls this cross-origin with a bearer token; the route checks it (ALL-22).
     pathname === "/api/captures" ||
@@ -24,6 +25,7 @@ export function isPublicPath(pathname: string) {
     pathname.startsWith("/auth") ||
     pathname === "/welcome" ||
     pathname === "/tour" ||
+    pathname === "/tour/list" ||
     pathname === "/request-access" ||
     // The link-preview image: crawlers like LinkedIn's are never signed in (ALL-55).
     pathname.startsWith("/opengraph-image") ||

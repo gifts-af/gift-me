@@ -41,6 +41,39 @@ describe("request access overlay", () => {
   });
 });
 
+// ALL-71: the concierge hero's "Join the waitlist" uses the same form, tagged.
+describe("waitlist overlay", () => {
+  const hidden = (dialog: HTMLElement) => dialog.querySelector<HTMLInputElement>('input[name="kind"]')?.value;
+
+  it("Join the waitlist opens the waitlist form", () => {
+    render(<RequestAccessButton kind="waitlist" />);
+    fireEvent.click(screen.getByRole("button", { name: "Join the waitlist" }));
+    const dialog = screen.getByRole("dialog", { name: "Join the waitlist" });
+    expect(dialog).toHaveTextContent("The concierge is still being built.");
+    expect(hidden(dialog)).toBe("waitlist");
+    expect(within(dialog).getByRole("button", { name: "Join the waitlist" })).toHaveAttribute("type", "submit");
+  });
+
+  it("Request access posts kind=access", () => {
+    render(<RequestAccessButton />);
+    fireEvent.click(screen.getByRole("button", { name: "Request access" }));
+    expect(hidden(screen.getByRole("dialog"))).toBe("access");
+  });
+
+  it("thanks them for joining, and offers the list now", async () => {
+    submitAccessRequest.mockResolvedValue({ status: "sent" });
+    render(<RequestAccessButton kind="waitlist" />);
+    fireEvent.click(screen.getByRole("button", { name: "Join the waitlist" }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Jo" } });
+    fireEvent.change(screen.getByLabelText("Email"), { target: { value: "jo@example.com" } });
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Join the waitlist" }));
+    expect(await screen.findByText("You're on the list. We'll email you when the concierge is ready.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Want your wish list now? Request access" }));
+    const dialog = screen.getByRole("dialog", { name: "Want in?" });
+    expect(hidden(dialog)).toBe("access");
+  });
+});
+
 describe("feedback overlay", () => {
   it("opens the sad story box over the page, with no email link", () => {
     render(<FeedbackButton />);
