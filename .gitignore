@@ -6,6 +6,11 @@ spikes/**/.zinc-key*
 coverage/
 .superpowers/
 spikes/email/out/
+# The extension's build settings are public and committed (ALL-22).
 !apps/extension/.env.development
 !apps/extension/.env.production
 apps/extension/dist
+# Written by `vercel link` (project id only).
+.vercel/
+# Screenshots of real shops for the AI spike: not ours to republish (ALL-42).
+spikes/ai/fixtures/screens/*-product.png

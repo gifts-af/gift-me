@@ -10,7 +10,8 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test:watch": "vitest",
     "e2e": "playwright test",
-    "email:samples": "tsx --conditions=react-server scripts/email-samples.ts"
+    "email:samples": "tsx --conditions=react-server scripts/email-samples.ts",
+    "email:html": "tsx --conditions=react-server scripts/email-html.ts"
   },
   "dependencies": {
     "@gifts-af/core": "workspace:*",

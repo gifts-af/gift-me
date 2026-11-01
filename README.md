@@ -33,7 +33,7 @@ One app for three products (T19): **gift lists** (live, formerly the GiftsAF rep
 | pnpm | Package manager for this repo | `npm install -g pnpm` |
 | Dependencies | Includes the **Supabase CLI**, pinned in `package.json`, so there's nothing to install globally | `pnpm install` from the repo root |
 | Docker | The Supabase CLI runs a full local Supabase (database, auth, storage) in Docker containers | **Windows:** `wsl --install --no-distribution` as admin, restart Windows, then `winget install -e --id Docker.DockerDesktop`, open Docker Desktop and accept its terms. **Mac:** in Terminal, `brew install --cask docker-desktop` (it asks for your Mac password), then open Docker Desktop and accept its terms. |
-| Playwright's Chromium | Runs the browser tests (`apps/web/e2e/`) | `pnpm --filter @gifts-af/web exec playwright install chromium` |
+| Playwright's Chromium and WebKit | Run the browser tests (`apps/web/e2e/`) as an Android phone (Chromium) and an iPhone (WebKit, Safari's engine) | `pnpm --filter @gifts-af/web exec playwright install chromium webkit` |
 
 **Local database.** With Docker Desktop running:
 

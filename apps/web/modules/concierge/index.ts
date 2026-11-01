@@ -11,8 +11,10 @@ export type { LinkRow, NewLink, NotifyStore } from "./notify/store";
 export { defaultChannels, emailChannel } from "./notify/channels";
 export type { Channel } from "./notify/channels";
 export type { ActionName } from "./notify/actions";
-// Templates and their sample data: for scripts/email-samples.ts phone checks.
+// Templates and samples of each: for the phone-check scripts (email-samples.ts, email-html.ts).
 export { SAMPLE_DATA, TEMPLATES } from "./notify/templates";
+export { sampleEmails } from "./notify/samples";
+export type { SampleEmail } from "./notify/samples";
 export type { NotificationKind, RenderedEmail } from "./notify/templates";
 // Chrome extension capture (ALL-22). SaveResult is aliased: settings exports one.
 export { parseCaptureForm, saveCapture } from "./capture/capture";

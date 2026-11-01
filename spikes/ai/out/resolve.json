@@ -1,0 +1,495 @@
+{
+  "lookups": 8,
+  "results": [
+    {
+      "person": "dad",
+      "idea": "Kingfisher Blackfoot true rotary fly-tying vise (in-budget replacement for his worn-out vise)",
+      "product_search": "Kingfisher Fly Fishing Blackfoot True Rotary Fly Tying Vise",
+      "ai_est_usd": 65,
+      "search_status": 200,
+      "found": {
+        "product_id": "B0BXBM8PG9",
+        "title": "Kingfisher Fly Fishing Clarkfork True Rotary Fly Tying Vise, Gold",
+        "price": 7995
+      },
+      "brand_match": true,
+      "top5": [
+        "NIRVANA On The Fly - V2 Rotary Fly Tying Vise w/ Travel Base, Olive |  | 14999",
+        "NIRVANA On The Fly - V2 Rotary Fly Tying Vise w/ Travel Base, Teal Blu | 14999",
+        "NIRVANA On The Fly - V2 Rotary Fly Tying Vise w/ Travel Base, Silver | | 14999",
+        "NIRVANA On The Fly - V2 Rotary Fly Tying Vise w/ Travel Base, Bright P | 14999",
+        "Kingfisher Fly Fishing Clarkfork True Rotary Fly Tying Vise, Gold | 7995"
+      ],
+      "offer": {
+        "price_cents": 7995,
+        "ship_cents": 0,
+        "delivery_days": {
+          "max": 5,
+          "min": 5
+        },
+        "handling_days": {
+          "max": 5,
+          "min": 5
+        },
+        "condition": "New",
+        "buy_box": null,
+        "seller": "The Kingfisher"
+      },
+      "offers_raw": {
+        "status": "completed",
+        "asin": "B0BXBM8PG9",
+        "offers": [
+          {
+            "asin": "B0BXBM8PG9",
+            "price": 7995,
+            "seller": {
+              "id": "A14XWQX6CADFEZ",
+              "name": "The Kingfisher",
+              "first_party": false,
+              "num_ratings": 12520,
+              "percent_positive": 100
+            },
+            "comments": null,
+            "currency": "USD",
+            "greytext": "FREE delivery Friday, November 6",
+            "offer_id": "I6mHA3yzq0frJSSX5fHDYXOUNidfMSOtAXPOF58ElrZWt34iPYWB8EeyIgoMUDQrp3GgPLlJOCrt%2FtFfteEj%2F8f%2FZyiI9zcdRv48tWol3M%2FFXWYmS1cv94kIETNr1X5jI%2BZ0HIV09a9o6ehOust9IsxwlSbPn71duqUCDmvhkpC6zP7b%2F4AnhgYT5rjGv0jH",
+            "available": true,
+            "condition": "New",
+            "fba_badge": true,
+            "optimistic": {
+              "greytext": "Or Prime members get FREE delivery Tomorrow, November 2. Order within 14 hrs 24 mins. Join Prime ",
+              "quantity": null,
+              "handling_days": {
+                "max": 0,
+                "min": 0
+              },
+              "known_greytext": false,
+              "shipping_options": []
+            },
+            "prime_only": null,
+            "prime_badge": false,
+            "handling_days": {
+              "max": 5,
+              "min": 5
+            },
+            "international": false,
+            "buy_box_winner": null,
+            "known_greytext": true,
+            "minimum_quantity": null,
+            "shipping_options": [
+              {
+                "name": null,
+                "price": 0,
+                "greytext": "FREE delivery Friday, November 6",
+                "delivery_days": {
+                  "max": 5,
+                  "min": 5
+                }
+              }
+            ],
+            "expired_product_id": false,
+            "coupon_discount_fixed": null,
+            "estimated_offer_count": null,
+            "marketplace_fulfilled": true,
+            "coupon_discount_percent": null
+          },
+          {
+            "asin": "B0BXBM8PG9",
+            "price": 9221,
+            "seller": {
+              "id": "ATVPDKIKX0DER",
+              "name": "Amazon.com",
+              "first_party": true,
+              "num_ratings": 1000000,
+              "percent_positive": 100
+            },
+            "comments": null,
+            "currency": "USD",
+            "greytext": "FREE delivery Sunday, November 8",
+            "offer_id": "I6mHA3yzq0frJSSX5fHDYXOUNidfMSOt2mUmYltdx7mlFY6k%2BNZ8KDjZ6TEhOa%2FNxY56ocnjZvmZcT5fyvBstz3ToBPdkQFrmzv%2Fo00R13rd3oNlXlGIUqjLHSM5Z%2BhKAVgIerCA7rg6QFEdStR77w%3D%3D",
+            "available": true,
+            "condition": "New",
+            "fba_badge": true,
+            "optimistic": {
+              "greytext": "Or Prime members get FREE delivery Tuesday, November 3. Order within 5 hrs 14 mins. Join Prime ",
+              "quantity": null,
+              "handling_days": {
+                "max": 0,
+                "min": 0
+              },
+              "known_greytext": false,
+              "shipping_options": []
+            },
+            "prime_only": null,
+            "prime_badge": false,
+            "handling_days": {
+              "max": 7,
+              "min": 7
+            },
+            "international": false,
+            "buy_box_winner": null,
+            "known_greytext": true,
+            "minimum_quantity": null,
+            "shipping_options": [
+              {
+                "name": null,
+                "price": 0,
+                "greytext": "FREE delivery Sunday, November 8",
+                "delivery_days": {
+                  "max": 7,
+                  "min": 7
+                }
+              }
+            ],
+            "expired_product_id": false,
+            "coupon_discount_fixed": null,
+            "estimated_offer_count": null,
+            "marketplace_fulfilled": true,
+            "coupon_discount_percent": null
+          }
+        ],
+        "retailer": "amazon",
+        "strategy": "fullscrape",
+        "expired_product_id": false
+      },
+      "within_budget": true
+    },
+    {
+      "person": "dad",
+      "idea": "Brightech LightView Pro LED magnifying desk lamp",
+      "product_search": "Brightech LightView Pro LED Magnifying Desk Lamp clamp",
+      "ai_est_usd": 50,
+      "search_status": 200,
+      "found": {
+        "product_id": "B06XGZCMRD",
+        "title": "Brightech LightView Pro XL Magnifying Desk Lamp with Clamp, Adjustable Magnifying Glass with LED Light for Crafts, Reading, Close Work, Dimmable Light Magnifier with Wide Glass Lens",
+        "price": 9499
+      },
+      "brand_match": true,
+      "top5": [
+        "Brightech LightView Pro XL Magnifying Desk Lamp with Clamp, Adjustable | 9499",
+        "Brightech LightView PRO Magnifying Desk Lamp, 2.25x Light Magnifier, A | 6999",
+        "Brightech LightView Pro Magnifying Glass with Light and Stand, Magnify | 14999",
+        "Brightech LightView Pro Magnifying Desk Lamp, 2.25x Light Magnifier wi | 8999",
+        "Brightech LightView PRO Magnifying Desk Lamp, 2.25x Light Magnifier, A | 8499"
+      ],
+      "offer": {
+        "price_cents": 9499,
+        "ship_cents": 0,
+        "delivery_days": {
+          "max": 5,
+          "min": 5
+        },
+        "handling_days": {
+          "max": 5,
+          "min": 5
+        },
+        "condition": "New",
+        "buy_box": null,
+        "seller": "Brightech USA"
+      },
+      "offers_raw": {
+        "status": "completed",
+        "asin": "B06XGZCMRD",
+        "offers": [
+          {
+            "asin": "B06XGZCMRD",
+            "price": 9499,
+            "seller": {
+              "id": "A302JHK8ZA18R6",
+              "name": "Brightech USA",
+              "first_party": false,
+              "num_ratings": 68306,
+              "percent_positive": 94
+            },
+            "comments": null,
+            "currency": "USD",
+            "greytext": "FREE delivery Friday, November 6",
+            "offer_id": "b1rhQZCfk8YZQrzg3VkgNw%2FLIpoxxuSR9SoxROxbM5AkdllOKl8F4qX3oNqSffIqOjXDiMsuhdlyD2rQ65z5hqG0jATij6pjUY1yuKIDe0%2BpbxrMdvdvF4zuhKTPPtd4XpWI%2F5xw7yJG2eX9GZShklLV7UcAn2vVcydErk%2B%2Bbm5iXO0CjgZmiQ%3D%3D",
+            "available": true,
+            "condition": "New",
+            "fba_badge": true,
+            "optimistic": {
+              "greytext": "Or Prime members get FREE delivery Tomorrow, November 2. Order within 4 hrs 25 mins. Join Prime ",
+              "quantity": null,
+              "handling_days": {
+                "max": 0,
+                "min": 0
+              },
+              "known_greytext": false,
+              "shipping_options": []
+            },
+            "prime_only": null,
+            "prime_badge": false,
+            "handling_days": {
+              "max": 5,
+              "min": 5
+            },
+            "international": false,
+            "buy_box_winner": null,
+            "known_greytext": true,
+            "minimum_quantity": null,
+            "shipping_options": [
+              {
+                "name": null,
+                "price": 0,
+                "greytext": "FREE delivery Friday, November 6",
+                "delivery_days": {
+                  "max": 5,
+                  "min": 5
+                }
+              }
+            ],
+            "expired_product_id": false,
+            "coupon_discount_fixed": null,
+            "estimated_offer_count": null,
+            "marketplace_fulfilled": true,
+            "coupon_discount_percent": null
+          },
+          {
+            "asin": "B06XGZCMRD",
+            "price": 6999,
+            "seller": {
+              "id": "A1RGFUPE4YJRBJ",
+              "name": "Refurbished Lighting",
+              "first_party": false,
+              "num_ratings": 623,
+              "percent_positive": 42
+            },
+            "comments": null,
+            "currency": "USD",
+            "greytext": "FREE delivery November 9 - 12",
+            "offer_id": "b1rhQZCfk8YZQrzg3VkgNw%2FLIpoxxuSRGV%2B07Hk6DYO%2BK1NEsDGxDkCOW6YhG5Ri7zAun%2FbQ0NyVn9Ci4kPUviniAKVlFI3oQvIfRsPz6t47cV1pbspDL3wwFDr6zs4XOdMdvX7KWp6GzeBSatSrM5BjZbTY36cJsPxEkDQAMLcBZVk1Nn7IL1o0K0aH4t6p",
+            "available": true,
+            "condition": "Used - Very Good",
+            "fba_badge": true,
+            "optimistic": {
+              "greytext": "Or fastest delivery November 9 - 11",
+              "quantity": null,
+              "handling_days": {
+                "max": 10,
+                "min": 8
+              },
+              "known_greytext": true,
+              "shipping_options": [
+                {
+                  "name": null,
+                  "price": null,
+                  "greytext": "Or fastest delivery November 9 - 11",
+                  "delivery_days": {
+                    "max": 10,
+                    "min": 8
+                  }
+                }
+              ]
+            },
+            "prime_only": null,
+            "prime_badge": false,
+            "handling_days": {
+              "max": 11,
+              "min": 8
+            },
+            "international": false,
+            "buy_box_winner": null,
+            "known_greytext": true,
+            "minimum_quantity": null,
+            "shipping_options": [
+              {
+                "name": null,
+                "price": 0,
+                "greytext": "FREE delivery November 9 - 12",
+                "delivery_days": {
+                  "max": 11,
+                  "min": 8
+                }
+              }
+            ],
+            "expired_product_id": false,
+            "coupon_discount_fixed": null,
+            "estimated_offer_count": null,
+            "marketplace_fulfilled": true,
+            "coupon_discount_percent": null
+          }
+        ],
+        "retailer": "amazon",
+        "strategy": "fullscrape",
+        "expired_product_id": false
+      },
+      "within_budget": false
+    },
+    {
+      "person": "priya",
+      "idea": "Onyx Coffee Lab Tropical Weather whole-bean coffee (10 oz)",
+      "product_search": "Onyx Coffee Lab Tropical Weather Whole Bean Coffee Blend 10 Ounce",
+      "ai_est_usd": 24,
+      "search_status": 200,
+      "found": {
+        "product_id": "B0BHZYBCCQ",
+        "title": "Onyx Coffee Lab Tropical Weather Whole Bean Espresso Coffee Blend – Medium to Light Roasted Coffee Beans Whole – Ethiopian Coffee Whole Bean Blend w/Notes of Berries, Plum, & Honey",
+        "price": 2450
+      },
+      "brand_match": true,
+      "top5": [
+        "Onyx Coffee Lab Tropical Weather Whole Bean Espresso Coffee Blend – Me | 2450",
+        "Onyx Coffee Lab Tropical Weather Whole Bean Espresso Coffee Blend – Me | 6850",
+        "Onyx Coffee Lab Tropical Weather Whole Bean Espresso Coffee Blend – Me | 14600",
+        "Onyx Coffee Lab \"Tropical Weather Blend\" Medium Roasted Whole Bean Cof | 14600",
+        "Onyx Coffee Lab Southern Weather Whole Bean Coffee Blend – Medium Roas | 5650"
+      ],
+      "offer": null,
+      "offers_raw": {
+        "status": "completed",
+        "asin": "B0BHZYBCCQ",
+        "offers": [
+          {
+            "asin": "B0BHZYBCCQ",
+            "price": 2450,
+            "seller": {
+              "id": "A3LKV6SY2A7BJU",
+              "name": "ONYX Coffee Lab",
+              "first_party": false,
+              "num_ratings": 86,
+              "percent_positive": 90
+            },
+            "comments": null,
+            "currency": "USD",
+            "greytext": "$6.35 delivery Tuesday, November 10. Details",
+            "offer_id": "U97SIzeaRliOjw4015HxbjjGeRGzDLFybfRwl5xxfEr0azofhZOC1QoXCxVXGj%2Fh0Xg7tXQGlkyRE7YaH9fWNBcI1bK5KO8o8zJdMr7sUp8DlfWHI6AnvAOVMVcI6aGAt6oLz%2B1s4zIGTfb2%2FZM8fwUKYcjhkD1rFD3m%2But1UHt5DapjVFD2SWdANUfa2WcD",
+            "available": true,
+            "condition": "One-Time Purchase",
+            "fba_badge": false,
+            "prime_only": null,
+            "prime_badge": false,
+            "handling_days": {
+              "max": 9,
+              "min": 9
+            },
+            "international": false,
+            "buy_box_winner": null,
+            "known_greytext": true,
+            "minimum_quantity": null,
+            "shipping_options": [
+              {
+                "name": null,
+                "price": 635,
+                "greytext": "$6.35 delivery Tuesday, November 10.",
+                "delivery_days": {
+                  "max": 9,
+                  "min": 9
+                }
+              }
+            ],
+            "expired_product_id": false,
+            "coupon_discount_fixed": null,
+            "estimated_offer_count": null,
+            "marketplace_fulfilled": false,
+            "coupon_discount_percent": null
+          }
+        ],
+        "retailer": "amazon",
+        "strategy": "fullscrape",
+        "expired_product_id": false
+      },
+      "within_budget": null
+    },
+    {
+      "person": "priya",
+      "idea": "Ciele GOCap Classic Athletics running cap",
+      "product_search": "Ciele GOCap Classic Athletics",
+      "ai_est_usd": 53,
+      "search_status": 200,
+      "found": {
+        "product_id": "B0GKHPMDF3",
+        "title": "Ciele Athletics GOCap Running Hat",
+        "price": 5000
+      },
+      "brand_match": true,
+      "top5": [
+        "Athletics GOCap Classic - Yellow | 4550",
+        "Ciele Athletics GOCap Running Hat | 5000",
+        "Ciele Athletics GOCap Running Hat | 4000",
+        "Ciele Athletics GOCap Since Running Hat | 5000",
+        "Ciele Athletics GOCap RCC Carbon Running Hat | 4500"
+      ],
+      "offer": {
+        "price_cents": 5000,
+        "ship_cents": 0,
+        "delivery_days": {
+          "max": 5,
+          "min": 5
+        },
+        "handling_days": {
+          "max": 5,
+          "min": 5
+        },
+        "condition": "New",
+        "buy_box": null,
+        "seller": "TESMO"
+      },
+      "offers_raw": {
+        "status": "completed",
+        "asin": "B0GKHPMDF3",
+        "offers": [
+          {
+            "asin": "B0GKHPMDF3",
+            "price": 5000,
+            "seller": {
+              "id": "ANDZ1NH55NWZM",
+              "name": "TESMO",
+              "first_party": false,
+              "num_ratings": 3955,
+              "percent_positive": 100
+            },
+            "comments": null,
+            "currency": "USD",
+            "greytext": "FREE delivery Friday, November 6",
+            "offer_id": "Su0awkH8YaJpMzdVuEK9woLm1H6NbMlD1HWtHqb3rc5rsHy9KC8r8VBYcIxXpBCw7Jpkf%2BjAiM3d7NgGJP6MiEYD%2F8kWs309Qz2XhPOAdvm2J0ERKPLKSuPYbCwWsOAM7Gl2gJsUZNSmNwH2%2BB%2F56YIQw11tPKZAFg0wRhH9HJ04O1bNKHrV3VcbtmFMpKwE",
+            "available": true,
+            "condition": "New",
+            "fba_badge": true,
+            "optimistic": {
+              "greytext": "Or Prime members get FREE delivery Tuesday, November 3. Order within 11 hrs 24 mins. Join Prime ",
+              "quantity": null,
+              "handling_days": {
+                "max": 0,
+                "min": 0
+              },
+              "known_greytext": false,
+              "shipping_options": []
+            },
+            "prime_only": null,
+            "prime_badge": false,
+            "handling_days": {
+              "max": 5,
+              "min": 5
+            },
+            "international": false,
+            "buy_box_winner": null,
+            "known_greytext": true,
+            "minimum_quantity": null,
+            "shipping_options": [
+              {
+                "name": null,
+                "price": 0,
+                "greytext": "FREE delivery Friday, November 6",
+                "delivery_days": {
+                  "max": 5,
+                  "min": 5
+                }
+              }
+            ],
+            "expired_product_id": false,
+            "coupon_discount_fixed": null,
+            "estimated_offer_count": null,
+            "marketplace_fulfilled": true,
+            "coupon_discount_percent": null
+          }
+        ],
+        "retailer": "amazon",
+        "strategy": "fullscrape",
+        "expired_product_id": false
+      },
+      "within_budget": true
+    }
+  ]
+}
