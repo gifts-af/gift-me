@@ -5,7 +5,7 @@
 -- unlink_person reports whether a link was removed.
 begin;
 \ir _helpers.psql
-select plan(19);
+select plan(20);
 
 select tests.create_user('mom@example.com', 'Mom') as mom \gset
 select tests.create_user('buyer@example.com', 'Buyer') as buyer \gset
@@ -41,6 +41,14 @@ select is((select linked_user_id from public.people where id = :'person'), null,
 select tests.act_as_server();
 select is(public.shared_address_for_person(:'person'), null, 'the server can no longer ship to her address');
 select is(lists.person_list(:'person'), null, 'or read the list');
+
+-- Setting the old token back doesn't bring the old link back either.
+select tests.reset_role();
+update lists.lists set share_token = :'old_token' where id = :'list_id';
+select tests.act_as(:'buyer');
+select is(lists.person_list(:'person'), null, 'restoring the old token doesn''t revive the old link');
+select tests.reset_role();
+update lists.lists set share_token = :'new_token' where id = :'list_id';
 
 select tests.act_as(:'buyer');
 select throws_ok(format('select lists.link_person(%L, %L)', :'old_token', :'person'), 'P0002', null, 'the old link can''t be used to link again');

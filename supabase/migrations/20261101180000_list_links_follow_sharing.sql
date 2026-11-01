@@ -114,9 +114,12 @@ begin
     raise exception 'Person not found' using errcode = 'P0002';
   end if;
 
+  -- `for key share` makes a concurrent token reset wait (or this wait for
+  -- it), so a link can't be written with a token that was just replaced.
   select l.id, l.owner_id into v_list_id, v_owner_id
     from lists.lists l
-   where l.share_token = p_token;
+   where l.share_token = p_token
+     for key share;
   if not found then
     raise exception 'List not found' using errcode = 'P0002';
   end if;
