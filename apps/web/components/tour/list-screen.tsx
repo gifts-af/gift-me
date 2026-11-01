@@ -7,7 +7,9 @@ export function ListScreen() {
       <div className="grid grid-cols-2 gap-3">
         {MY_LIST.map((g) => (
           <div key={g.name} className="flex flex-col gap-1 rounded-lg border p-2">
-            <span className="aspect-[4/3] rounded-md bg-muted" aria-hidden="true" />
+            <span data-testid="gift-thumb" className="grid aspect-[4/3] place-items-center rounded-md bg-muted text-primary" aria-hidden="true">
+              <g.icon className="size-8" />
+            </span>
             <span className="text-[14px] font-semibold">{g.name}</span>
             <span className="text-[14px] font-semibold tabular-nums">{g.price}</span>
           </div>

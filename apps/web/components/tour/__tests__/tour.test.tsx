@@ -20,6 +20,14 @@ describe("guided tour (ALL-46)", () => {
     expect(screen.queryByText(/Lots is broken/)).not.toBeInTheDocument();
   });
 
+  it.each(["pick", "ideas", "list"] as const)("shows an icon in every gift's picture box on the %s step", (id) => {
+    const { container } = render(<Tour />);
+    goTo(id);
+    const boxes = container.querySelectorAll('[data-testid="gift-thumb"]');
+    expect(boxes.length).toBe(3);
+    boxes.forEach((box) => expect(box.querySelector("svg")).not.toBeNull());
+  });
+
   it("walks through all seven steps in order", () => {
     render(<Tour />);
     TOUR_STEPS.forEach((step, i) => {
