@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { claimGift, unclaimGift } from '@/modules/lists/actions/claims'
@@ -160,12 +161,12 @@ export default function SharedList({ list, token }) {
           />
         </section>
         {/* Guests arrive here on a task; a quiet way to find out more (ALL-46). */}
-        <a
+        <Link
           href="/"
           className="inline-flex min-h-11 items-center self-center text-[13px] text-muted-foreground underline underline-offset-[3px] hover:text-foreground"
         >
           What is GiftsAF?
-        </a>
+        </Link>
       </PageFrame>
 
       {viewing && <ViewDialog gift={viewing} onClose={() => setViewing(null)} />}

@@ -2,9 +2,12 @@ import { expect, test } from "@playwright/test";
 import { TEST_USER } from "./test-user";
 
 // ALL-20 acceptance: sign in, see the app shell at phone width, the session
-// survives a refresh, sign out.
+// survives a refresh, sign out. Since ALL-46 a signed-out "/" is the home page,
+// and sign-in starts from its invite-only link.
 test("sign in, see Home on a phone, stay signed in, sign out", async ({ page }) => {
   await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Gifting, handled AF." })).toBeVisible();
+  await page.getByRole("link", { name: "🔒 Invite only" }).click();
   await expect(page).toHaveURL(/\/auth\/login$/);
   await expect(page.getByRole("button", { name: "Continue with Google" })).toBeVisible();
 
@@ -28,7 +31,7 @@ test("sign in, see Home on a phone, stay signed in, sign out", async ({ page }) 
   await expect(page).toHaveURL(/\/auth\/login/);
 
   await page.goto("/");
-  await expect(page).toHaveURL(/\/auth\/login$/);
+  await expect(page.getByRole("heading", { name: "Gifting, handled AF." })).toBeVisible();
 });
 
 test("a deep link survives sign-in", async ({ page }) => {
