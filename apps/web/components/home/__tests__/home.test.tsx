@@ -48,7 +48,7 @@ describe("home page (ALL-46)", () => {
   it("asks for feedback and credits the builders", () => {
     render(<WelcomePage />);
     expect(link("Send feedback")).toHaveAttribute("href", feedbackHref());
-    expect(screen.getByText("GiftsAF alpha · made by Aaron and Jim")).toBeInTheDocument();
+    expect(screen.getByText("GiftsAF alpha · made by Jim and Aaron")).toBeInTheDocument();
   });
 
   it("sets a title and description for sharing", () => {
