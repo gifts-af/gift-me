@@ -1,9 +1,13 @@
+import { MOM_GIFTS } from "@/components/tour/tour-data";
+
 // The "pick a gift" moment, shown beside the hook on computers: what the
-// concierge will feel like. Made-up gifts from the mock-ups (ALL-41).
-const gifts = [
-  { name: "Stoneware mug set", note: "From her list · arrives Thu", price: "$42" },
-  { name: "Herb planter", note: "From her list · arrives Fri", price: "$68" },
-];
+// concierge will feel like. Mom's first two gifts from the tour, with their
+// icons (ALL-70, as ALL-62 did for the tour), and shorter notes to fit.
+const notes: Record<string, string> = {
+  mug: "From her list · arrives Thu",
+  planter: "From her list · arrives Fri",
+};
+const gifts = MOM_GIFTS.filter((g) => g.id in notes);
 
 export function PickPreview() {
   return (
@@ -14,16 +18,18 @@ export function PickPreview() {
           key={gift.name}
           className={`flex items-center gap-3 rounded-lg border p-3 ${i === 0 ? "border-primary ring-1 ring-primary" : ""}`}
         >
-          <span className="size-10 flex-none rounded-md bg-muted" />
+          <span data-testid="gift-thumb" className="grid size-10 flex-none place-items-center rounded-md bg-muted text-primary" aria-hidden="true">
+            <gift.icon className="size-5" />
+          </span>
           <span className="min-w-0 flex-1">
             <span className="block text-[14px] font-semibold">{gift.name}</span>
-            <span className="block text-[12px] text-muted-foreground">{gift.note}</span>
+            <span className="block text-[12px] text-muted-foreground">{notes[gift.id]}</span>
           </span>
-          <span className="text-[14px] font-semibold tabular-nums">{gift.price}</span>
+          <span className="text-[14px] font-semibold tabular-nums">${gift.price}</span>
         </div>
       ))}
       <span className="rounded-lg bg-primary py-2.5 text-center text-[14px] font-bold text-primary-foreground">
-        Send it · $42
+        Send it · ${gifts[0].price}
       </span>
     </div>
   );
