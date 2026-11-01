@@ -2,8 +2,10 @@ import { ChevronRight, Gift } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { Account } from "@/components/app-shell/account";
+import { InstallTip } from "@/components/app-shell/install-tip";
 import { PageFrame } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
+import { appSettingInt } from "@/lib/app-settings";
 import { getMyListSummary } from "@/modules/lists";
 
 // Home: the one front door after sign-in (T29). "My list" first, then
@@ -13,6 +15,9 @@ export default function Home() {
     <>
       <TopBar links current="people" account={<Account />} />
       <PageFrame wide>
+        <Suspense fallback={null}>
+          <HomeScreenTip />
+        </Suspense>
         <Suspense fallback={<ListCard title="My list" subtitle="Loading…" />}>
           <MyListCard />
         </Suspense>
@@ -29,6 +34,17 @@ export default function Home() {
       </PageFrame>
     </>
   );
+}
+
+// Phones only, and only outside the installed app (ALL-57). A tip never
+// breaks Home: if its setting can't be read, it just isn't shown.
+async function HomeScreenTip() {
+  try {
+    return <InstallTip snoozeDays={await appSettingInt("install_tip_snooze_days")} />;
+  } catch (error) {
+    console.error("install tip hidden", error);
+    return null;
+  }
 }
 
 async function MyListCard() {

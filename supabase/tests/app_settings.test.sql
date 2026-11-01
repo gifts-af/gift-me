@@ -1,7 +1,7 @@
 -- App-wide settings (T23): seeded by migration, readable by the server only.
 begin;
 \ir _helpers.psql
-select plan(5);
+select plan(6);
 
 select tests.create_user('a@example.com') as a \gset
 
@@ -29,10 +29,13 @@ select set_eq(
     'zinc_order_fee_cents', 'planning_delivery_days', 'safety_buffer_days', 'round_lead_days',
     'reminder_1_after_heads_up_days', 'reminder_2_before_deadline_days',
     'final_notice_before_deadline_days', 'fastest_days_to_arrive',
-    'default_over_budget_pct', 'zinc_gift_message_max_chars', 'test_action_link_hours'
+    'default_over_budget_pct', 'zinc_gift_message_max_chars', 'test_action_link_hours',
+    'install_tip_snooze_days'
   ],
   'every fee, limit, default and schedule setting is seeded'
 );
+
+select is(concierge.setting_int('install_tip_snooze_days'), 14, 'the install tip snoozes for 14 days by default');
 
 select * from finish();
 rollback;
