@@ -48,6 +48,8 @@ const NOT_FOUND = "That person wasn't found.";
 const SESSION_ENDED = "Your session ended. Sign in again.";
 const TRY_AGAIN = "That couldn't be saved. Try again.";
 const DATED_KINDS: OccasionKind[] = ["birthday", "anniversary"];
+// Any of these can be switched on for anyone; relationships only set the start.
+const HOLIDAYS: OccasionKind[] = ["christmas", "valentines_day", "mothers_day", "fathers_day"];
 
 function errorCode(e: unknown): string | undefined {
   return typeof e === "object" && e !== null && "code" in e ? String((e as { code: unknown }).code) : undefined;
@@ -103,7 +105,12 @@ export async function getPerson(store: PeopleStore, id: string, today: CalendarD
     store.signPhotos(person.photoPath ? [person.photoPath] : []),
   ]);
 
-  const rows = occasions
+  // Every holiday gets a row so the page can show a switch for each: ones the
+  // person doesn't have yet appear switched off. All rows are in date order.
+  const missing = HOLIDAYS.filter((k) => !occasions.some((o) => o.kind === k)).map((kind) => ({
+    id: "", personId: id, kind, month: null, day: null, enabled: false,
+  }));
+  const rows = [...occasions, ...missing]
     .map((o) => {
       const date = nextOccurrence(rule(o), today);
       return {
@@ -213,7 +220,12 @@ export function setOccasionEnabled(
 ): Promise<SaveResult> {
   return onOwnPerson(store, id, "switching an occasion", async () => {
     const occasion = (await store.occasions([id])).find((o) => o.kind === kind);
-    if (!occasion) return { ok: false, error: "That occasion isn't on this person." };
+    if (!occasion) {
+      if (!HOLIDAYS.includes(kind)) return { ok: false, error: "Add their date first, then switch it on." };
+      if (!enabled) return { ok: true };
+      await store.addOccasion(id, { kind, month: null, day: null });
+      return { ok: true };
+    }
     return (await store.setEnabled(occasion.id, enabled)) ? { ok: true } : notFound();
   });
 }

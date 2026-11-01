@@ -129,7 +129,9 @@ describe("getPerson", () => {
     // 7 days + 2 buffer before 1 Dec is 22 Nov; still ahead.
     expect(byKind.birthday.orderBy).toEqual({ date: "2026-11-22", fast: false });
     expect(byKind.birthday.budgetCents).toBeNull();
-    expect(p!.occasions.map((o) => o.kind)).toEqual(["birthday", "christmas", "anniversary"]);
+    expect(p!.occasions.map((o) => o.kind)).toEqual([
+      "birthday", "christmas", "valentines_day", "mothers_day", "anniversary", "fathers_day",
+    ]);
   });
 
   it("uses the fast deadline when the normal one has passed, and null when too late", async () => {
@@ -314,10 +316,47 @@ describe("another user's person, or nobody", () => {
     expect(store.writes).toEqual([]);
   });
 
-  it("setOccasionEnabled refuses a kind the person doesn't have", async () => {
+  it("enabling a holiday the person lacks creates it, enabled, without a date", async () => {
     const { store, mine } = setup();
-    expect((await setOccasionEnabled(store, mine, "mothers_day", true)).ok).toBe(false);
+    expect(await setOccasionEnabled(store, mine, "mothers_day", true)).toEqual({ ok: true });
+    expect(store.occasionRows.find((o) => o.personId === mine && o.kind === "mothers_day")).toMatchObject({
+      enabled: true, month: null, day: null,
+    });
+    expect(store.writes).toEqual([`addOccasion ${mine} mothers_day`]);
+  });
+
+  it("turning off a holiday the person lacks is a no-op success", async () => {
+    const { store, mine } = setup();
+    expect(await setOccasionEnabled(store, mine, "fathers_day", false)).toEqual({ ok: true });
     expect(store.writes).toEqual([]);
+  });
+
+  it("enabling a missing birthday still errors, since it needs a date", async () => {
+    const store = new FakePeopleStore();
+    const id = store.seed(ME, { name: "Pat" }, [{ kind: "christmas" }]);
+    expect((await setOccasionEnabled(store, id, "birthday", true)).ok).toBe(false);
+    expect(store.writes).toEqual([]);
+  });
+
+  it("enabling a missing holiday on another user's person errors with no writes", async () => {
+    const { store, theirs } = setup();
+    expect(await setOccasionEnabled(store, theirs, "mothers_day", true)).toEqual({ ok: false, error: NOT_FOUND });
+    expect(store.writes).toEqual([]);
+  });
+
+  it("getPerson lists all four holidays, missing ones switched off, ordered by date", async () => {
+    const store = new FakePeopleStore();
+    const id = store.seed(ME, { name: "Pat" }, [{ kind: "christmas" }]);
+    const p = await getPerson(store, id, TODAY);
+    expect(p!.occasions.map((o) => o.kind)).toEqual(["christmas", "valentines_day", "mothers_day", "fathers_day"].sort(
+      (a, b) => p!.occasions.find((o) => o.kind === a)!.date.localeCompare(p!.occasions.find((o) => o.kind === b)!.date),
+    ));
+    const mothers = p!.occasions.find((o) => o.kind === "mothers_day");
+    expect(mothers).toEqual({
+      kind: "mothers_day", enabled: false, date: "2027-05-09", orderBy: null, budgetCents: null,
+    });
+    expect(p!.occasions.find((o) => o.kind === "christmas")!.enabled).toBe(true);
+    expect(p!.occasions).toHaveLength(4);
   });
 });
 

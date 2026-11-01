@@ -109,7 +109,7 @@ export class FakePeopleStore implements PeopleStore {
     return true;
   }
 
-  async addOccasion(personId: string, o: { kind: OccasionKind; month: number; day: number }) {
+  async addOccasion(personId: string, o: { kind: OccasionKind; month: number | null; day: number | null }) {
     this.write("addOccasion", personId, o.kind);
     if (!this.mine(personId)) throw dbError("row-level security", "42501");
     this.occasionRows.push({ id: `o${this.next++}`, personId, enabled: true, ...o });

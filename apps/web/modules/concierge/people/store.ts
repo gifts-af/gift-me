@@ -63,7 +63,7 @@ export interface PeopleStore {
 
   createPerson(p: NewPerson): Promise<string>;
   updatePerson(id: string, p: { name: string; relationship: string; birthYear: number | null }): Promise<boolean>;
-  addOccasion(personId: string, o: { kind: OccasionKind; month: number; day: number }): Promise<void>;
+  addOccasion(personId: string, o: { kind: OccasionKind; month: number | null; day: number | null }): Promise<void>;
   moveOccasion(occasionId: string, month: number, day: number): Promise<boolean>;
   removeOccasion(occasionId: string): Promise<void>;
   setEnabled(occasionId: string, enabled: boolean): Promise<boolean>;
