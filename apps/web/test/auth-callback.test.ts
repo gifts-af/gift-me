@@ -46,7 +46,7 @@ describe("GET /auth/callback", () => {
   });
 
   // The error page only shows our own words, so a crafted link can't put
-  // "Your account is locked, call 555…" on a GiftMe page.
+  // "Your account is locked, call 555…" on a GiftsAF page.
   it("never passes the provider's text on to the error page", async () => {
     const res = await call("?error=x&error_description=Your+account+is+locked%2C+call+555");
     expect(res.headers.get("location")).toBe("https://app.test/auth/error?error=cancelled");

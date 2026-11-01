@@ -13,7 +13,7 @@ test("sign in, see Home on a phone, stay signed in, sign out", async ({ page }) 
   await page.getByRole("button", { name: "Sign in" }).click();
 
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole("link", { name: "GiftMe" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "GiftsAF" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
   await expect(page.getByRole("link", { name: /My list|Start your wish list/ })).toBeVisible();
   // Usable at 375 px: nothing wider than the screen.
