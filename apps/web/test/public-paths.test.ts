@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { isPublicPath, signInRedirect } from "@/lib/supabase/proxy";
+import { NextResponse } from "next/server";
+import { homeRewrite, isPublicPath, signInRedirect, withCookies } from "@/lib/supabase/proxy";
 
 describe("isPublicPath", () => {
   it.each([
@@ -16,6 +17,9 @@ describe("isPublicPath", () => {
     "/icon.png",
     "/apple-icon",
     "/pwa-icon/192",
+    // The home page and tour (ALL-46).
+    "/welcome",
+    "/tour",
   ])("lets signed-out visitors reach %s", (path) => expect(isPublicPath(path)).toBe(true));
 
   it.each(["/", "/settings", "/api/other", "/lists/123"])(
@@ -33,5 +37,20 @@ describe("signInRedirect", () => {
 
   it("leaves next off for Home, where sign-in lands anyway", () => {
     expect(signInRedirect(new URL("https://app.test/")).search).toBe("");
+  });
+});
+
+describe("homeRewrite", () => {
+  it("shows signed-out visitors the home page at /", () => expect(homeRewrite("/", false)).toBe("/welcome"));
+  it("leaves the app home alone for signed-in users", () => expect(homeRewrite("/", true)).toBeNull());
+  it("only rewrites /", () => expect(homeRewrite("/settings", false)).toBeNull());
+});
+
+describe("withCookies", () => {
+  it("copies refreshed session cookies onto the rewrite", () => {
+    const from = NextResponse.next();
+    from.cookies.set("sb-token", "fresh");
+    const to = withCookies(from, NextResponse.rewrite(new URL("https://app.test/welcome")));
+    expect(to.cookies.get("sb-token")?.value).toBe("fresh");
   });
 });
