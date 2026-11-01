@@ -1,4 +1,5 @@
-import { APP_NAME, FEEDBACK_EMAIL } from "@/lib/brand";
+import { APP_NAME, inboxFor } from "@/lib/brand";
+import { renderEmail } from "@/lib/email-layout";
 import { NOT_HUMAN, TURNSTILE_FIELD } from "@/lib/turnstile";
 import { sendEmail } from "@/lib/resend";
 
@@ -30,13 +31,14 @@ export async function sendFeedback(
   if (Object.keys(errors).length) return { status: "invalid", errors };
   if (field(data, "website") !== "") return { status: "sent" };
   if (!(await deps.isHuman(field(data, TURNSTILE_FIELD)))) return { status: "error", message: NOT_HUMAN };
+  // Branded like every email we send, to the +feedback inbox (ALL-71).
+  const { html, text } = renderEmail({
+    heading: `${APP_NAME} feedback`,
+    paragraphs: message.split(/\n{2,}/),
+    footer: email ? `From ${email}. Reply to answer.` : "No email left.",
+  });
   const sent = await sendEmail(
-    {
-      to: FEEDBACK_EMAIL,
-      subject: `${APP_NAME} feedback`,
-      text: [message, `\n— ${email ? `from ${email} (reply to answer)` : "no email left"}`].join("\n"),
-      replyTo: email || undefined,
-    },
+    { to: inboxFor("feedback"), subject: `${APP_NAME} feedback`, html, text, replyTo: email || undefined },
     deps,
   );
   return sent.ok ? { status: "sent" } : { status: "error", message: SEND_FAILED };
