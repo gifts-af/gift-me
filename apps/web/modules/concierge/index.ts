@@ -20,3 +20,4 @@ export type { CaptureInput, SaveResult as CaptureSaveResult } from "./capture/ca
 export type { CaptureStore, NewCaptureRow } from "./capture/store";
 export { confirmActionLink, readActionLink } from "./notify/links";
 export type { ConfirmResult, LinkDeps, LinkView } from "./notify/links";
+export { createSupabaseCaptureStore } from "./capture/supabase-store";
