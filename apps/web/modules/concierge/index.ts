@@ -11,5 +11,8 @@ export type { LinkRow, NewLink, NotifyStore } from "./notify/store";
 export { defaultChannels, emailChannel } from "./notify/channels";
 export type { Channel } from "./notify/channels";
 export type { ActionName } from "./notify/actions";
+// Templates and their sample data: for scripts/email-samples.ts phone checks.
+export { SAMPLE_DATA, TEMPLATES } from "./notify/templates";
+export type { NotificationKind, RenderedEmail } from "./notify/templates";
 export { confirmActionLink, readActionLink } from "./notify/links";
 export type { ConfirmResult, LinkDeps, LinkView } from "./notify/links";

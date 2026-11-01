@@ -1,8 +1,11 @@
 // Sends one sample of every email template to an address, for checking them on a phone.
 // Usage: pnpm --filter @gifts-af/web email:samples you@example.com
-// Needs RESEND_API_KEY in apps/web/.env.local (or already in the environment).
+// Needs RESEND_API_KEY in apps/web/.env.development.local (what `vercel env pull`
+// writes), apps/web/.env.local, or already in the environment.
+// The package script runs tsx with --conditions=react-server so the module's
+// public index (which imports server-only) loads outside Next.
 import { existsSync } from "node:fs";
-import { SAMPLE_DATA, TEMPLATES, type NotificationKind } from "@/modules/concierge/notify/templates";
+import { SAMPLE_DATA, TEMPLATES, type NotificationKind } from "@/modules/concierge";
 import { sendEmail } from "@/lib/resend";
 
 // This page shows "This link doesn't work", so tapping a sample button is harmless.
@@ -40,10 +43,16 @@ async function main() {
     console.error("Usage: pnpm --filter @gifts-af/web email:samples you@example.com");
     process.exit(1);
   }
-  if (existsSync(".env.local")) process.loadEnvFile(".env.local");
+  // Same precedence as Next: .env.development.local wins over .env.local, and
+  // loadEnvFile never overrides a value that's already set.
+  for (const file of [".env.development.local", ".env.local"]) {
+    if (existsSync(file)) process.loadEnvFile(file);
+  }
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
-    console.error("RESEND_API_KEY is not set. Add it to apps/web/.env.local (see README) and try again.");
+    console.error(
+      "RESEND_API_KEY is not set. Pull it into apps/web/.env.development.local (vercel env pull, see README) or add it to apps/web/.env.local, and try again.",
+    );
     process.exit(1);
   }
 
