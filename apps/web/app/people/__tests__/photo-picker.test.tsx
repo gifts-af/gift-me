@@ -89,7 +89,31 @@ describe("PhotoPicker", () => {
     t.action.mockResolvedValue({ ok: false, error: "Nope." } as never);
     await choose(photo);
     expect(await screen.findByRole("alert")).toHaveTextContent("Nope.");
+    const [uploaded] = t.storage.upload.mock.calls[0];
+    expect(t.storage.remove).toHaveBeenCalledTimes(1);
+    expect(t.storage.remove).toHaveBeenCalledWith(uploaded);
     expect(t.storage.remove).not.toHaveBeenCalledWith("u1/p1/old.jpg");
     expect(t.onSaved).not.toHaveBeenCalled();
+  });
+
+  it("cleans up the new upload and keeps the old photo when the action throws", async () => {
+    const t = setup();
+    t.action.mockRejectedValue(new Error("network"));
+    await choose(photo);
+    expect(await screen.findByRole("alert")).toHaveTextContent("The photo didn't save. Try again.");
+    const [uploaded] = t.storage.upload.mock.calls[0];
+    expect(t.storage.remove).toHaveBeenCalledTimes(1);
+    expect(t.storage.remove).toHaveBeenCalledWith(uploaded);
+    expect(t.onSaved).not.toHaveBeenCalled();
+  });
+
+  it("still reports success when removing the old object throws", async () => {
+    const t = setup();
+    t.storage.remove.mockRejectedValue(new Error("gone"));
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    await choose(photo);
+    await vi.waitFor(() => expect(t.onSaved).toHaveBeenCalled());
+    expect(screen.queryByRole("alert")).toBeNull();
+    log.mockRestore();
   });
 });

@@ -23,6 +23,15 @@ function supabaseStorage(): PhotoStorage {
   };
 }
 
+/** Deleting is best effort: a failure is logged and never fails the save. */
+async function tryRemove(store: PhotoStorage, path: string) {
+  try {
+    await store.remove(path);
+  } catch (error) {
+    console.error("Could not remove photo object", path, error);
+  }
+}
+
 /** Draws the image onto a canvas, longest side `px`, and returns a JPEG. Rejects if it can't be decoded. */
 export async function resizeToJpeg(file: File, px: number): Promise<Blob> {
   const bitmap = await createImageBitmap(file);
@@ -96,13 +105,18 @@ export function PhotoPicker({
       const form = new FormData();
       form.set("id", personId);
       form.set("path", newPath);
-      const result = await action(null, form);
+      let result: SaveResult;
+      try {
+        result = await action(null, form);
+      } catch {
+        result = { ok: false, error: "The photo didn't save. Try again." };
+      }
       if (!result.ok) {
-        await store.remove(newPath); // tidy the orphan; the old photo stays
+        await tryRemove(store, newPath); // tidy the orphan; the old photo stays
         setError(result.error);
         return;
       }
-      if (path) await store.remove(path); // best effort: a leftover object is harmless
+      if (path) await tryRemove(store, path); // best effort: a leftover object is harmless
       setPath(newPath);
       onSaved?.(newPath);
     } catch {
@@ -119,7 +133,6 @@ export function PhotoPicker({
         ref={input}
         type="file"
         accept="image/*"
-        capture="user"
         aria-label="Choose a photo"
         className="sr-only"
         onChange={(event) => {
