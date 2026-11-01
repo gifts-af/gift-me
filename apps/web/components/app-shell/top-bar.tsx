@@ -1,7 +1,7 @@
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
-import { APP_NAME } from "@/lib/brand";
+import { Logo } from "@/components/logo";
 
 type Current = "list" | "people";
 
@@ -58,10 +58,9 @@ export function TopBar({
 }
 
 function Brand({ className }: { className?: string }) {
-  // Plain text until there is a logo.
   return (
-    <Link href="/" className={cn("inline-flex min-h-11 items-center text-[17px] font-bold", className)}>
-      {APP_NAME}
+    <Link href="/" className={cn("inline-flex min-h-11 items-center text-[19px]", className)}>
+      <Logo />
     </Link>
   );
 }

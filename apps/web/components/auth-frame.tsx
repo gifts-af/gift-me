@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Logo } from "@/components/logo";
 import { APP_NAME, APP_TAGLINE } from "@/lib/brand";
 
 // The sign-in look (mock-up "signin"): one centred column, the name and a
@@ -17,7 +18,13 @@ export function AuthFrame({
       <div className="flex w-full max-w-sm flex-col justify-center gap-7">
         <div className="flex flex-col gap-1.5 text-center">
           <h1 className="text-[22px] font-bold leading-tight">
-            {title === APP_NAME ? <Link href="/">{title}</Link> : title}
+            {title === APP_NAME ? (
+              <Link href="/" className="inline-flex text-[26px]">
+                <Logo />
+              </Link>
+            ) : (
+              title
+            )}
           </h1>
           {subtitle && <p className="text-[15px] text-muted-foreground">{subtitle}</p>}
         </div>
