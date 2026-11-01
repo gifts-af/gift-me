@@ -69,6 +69,12 @@ Mark tasks that can run alongside others with **[P]**.
 - [ ] Every task traces back to a story or criterion (nothing extra).
 - [ ] No open questions are left.
 
+## Done: evidence on the ticket (T44)
+
+- [ ] Test evidence posted on the Linear ticket: tests added (and that they failed first), suite and CI results.
+- [ ] Screenshots of what people see (before and after for fixes; phone and desktop, light and dark where it matters) and any mock-ups, uploaded into the ticket comment.
+- [ ] Live check after deploy, or listed as **Still open**.
+
 ## Review focus
 
 The riskiest things to check in review, each with the test that covers it.

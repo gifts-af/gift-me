@@ -8,3 +8,7 @@ Closes ALL-<n>  <!-- or "Part of ALL-<n>" if this PR is one piece of the ticket 
 ## What changes
 
 ## How it was verified
+
+<!-- Tests added (and that they failed first), suite results, screenshots. Post the same evidence on the Linear ticket before it's Done (CLAUDE.md > Git > Evidence on the ticket, T44). -->
+
+- [ ] Test evidence and screenshots posted on the Linear ticket

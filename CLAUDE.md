@@ -14,7 +14,8 @@ The short list every plan is checked against (`design/plans/TEMPLATE.md` > Princ
 6. **Privacy by default.** Every user-owned row is protected by its owner; money and sensitive data stay inside the concierge (D31, T26).
 7. **The repo is the written source.** Every direction we settle gets recorded in the docs and decisions log; Linear and shared pages are views of it.
 8. **Written for a person.** Answer first, plain words, one place for each doc.
-9. **Collect the minimum, as late as possible** (T42). Ask for a piece of personal data only when a feature the person is using right now can't work without it, keep it only while it's needed, and send outside services IDs, not names or emails.
+9. **No work without a ticket; no ticket done without evidence** (T44). Every change starts from a Linear ticket, and a ticket isn't Done until its test evidence is posted on it (see Git > Evidence on the ticket).
+10. **Collect the minimum, as late as possible** (T42). Ask for a piece of personal data only when a feature the person is using right now can't work without it, keep it only while it's needed, and send outside services IDs, not names or emails.
 
 ## Superpowers is required
 
@@ -99,6 +100,13 @@ The owner's claude.ai account owns the page. To update it, a person needs **edit
 | `perf` | Faster or cheaper, same behavior |
 
   An optional scope names the area: `feat(lists): …`, `fix(db): …`. Add `!` for a breaking change (`feat!: …`).
+- **Evidence on the ticket (T44), standard operating procedure.** No work starts without a Linear ticket: if there isn't one, create it first, with acceptance criteria. No ticket is Done until its test evidence is posted on the ticket as a comment, before the PR merges or right after. Evidence means:
+  - **Tests:** what was added, that it failed first, and the suite results (counts), plus lint, typecheck and the CI result for the PR.
+  - **Screenshots** of anything a person sees, at phone and desktop width and in light and dark mode where it matters. Show before and after for a fix.
+  - **Mock-ups** made for the ticket.
+  - **Live checks** after the deploy (what was checked on giftsaf.com or in the service, and the result).
+
+  Upload images into the comment (Linear MCP `prepare_file_upload`, then PUT, then embed the returned markdown), so they stay with the ticket rather than in chat or a scratch folder. Anything that couldn't be checked is listed as **Still open**, and the ticket stays open until it is. Docs-only pushes to `main` don't need a ticket. `AGENTS.md` repeats this rule for other AI tools and points them here.
 - **Every PR is attached to its Linear ticket.** Linear's GitHub app links a PR when the branch name or title has the ticket ID. In the PR description (the template has the line), write `Closes ALL-<n>` when the PR finishes the ticket, or `Part of ALL-<n>` when it's one piece of it, so the ticket isn't moved to Done early. Linear also moves the ticket to In Progress when the PR opens (tested on PR #6).
 - **How `main` is protected** (GitHub rulesets): nobody can force-push or delete it. Changes need a PR with the CI `check` job passing. Repo admins (all of us today) can bypass that rule, which is what makes direct docs pushes work, so the code-via-PR rule above is a habit, not something GitHub enforces for us.
 - **Linear priority means "how soon"**, so the board (Ordering: Priority) reads top to bottom as what to start next. Urgent: ready to start now, nothing open blocking it. High: next up, unblocked once the current Urgent work lands. Medium: after that. Low: last or optional. When a ticket's blockers close, or a new ticket is added, set its priority by this rule and keep its "blocked by" links current.
