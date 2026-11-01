@@ -46,6 +46,7 @@ Go through CLAUDE.md > Principles. Note anything this plan bends, and why. Write
 - **Simplest version?** What we cut:
 - **Hard-coded values?** New settings rows or env vars (T23):
 - **Product boundaries?** Cross-module imports or tables (T19):
+- **New personal data?** Each new field, column or event property that holds personal data, and the feature that needs it now (T42):
 - **Docs and decisions** that need updating:
 
 ## Plan

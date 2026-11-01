@@ -412,6 +412,7 @@ Funding comes in two stages. Ordering, tracking and the data model are the same 
 - Secrets live in Vercel environment variables. Supabase keys are split into anon and service role.
 - The sensitive-trait filter runs on AI output (C-8). Captures store only what the user captured.
 - Deletion cascades (C-7). Users can export their data later.
+- **Data minimization (T42):** a column or form field for personal data is added only with the feature that needs it, and is optional until that feature is used. Analytics, AI and other vendors get IDs and amounts, never names, emails or addresses, unless the vendor's job needs them (e.g. Zinc needs the shipping address to ship).
 
 ## 9. Environments and operations
 - **Supabase:** two projects on the free tier, `dev` and `prod`, plus the local Supabase CLI for development. `pg_cron` and `pg_net` are enabled on both.

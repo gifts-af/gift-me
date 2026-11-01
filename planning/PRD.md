@@ -189,6 +189,7 @@ Priority: **M** = must have for the MVP, **S** = should have, **L** = later.
 
 ## 9. Privacy and data
 
+- **Collect the minimum, as late as possible (T42).** We ask users for a piece of personal data only when a feature they're using right now needs it: a shipping address at the first order, a phone number only if they turn on texts. No fields "for later".
 - **MVP:** personal use. Recipients are profiled only from what the user deliberately saves or types.
 - No sensitive traits inferred (C-8). Children's profiles use only what the user enters, never children's social accounts.
 - The user can see and delete everything (C-7).

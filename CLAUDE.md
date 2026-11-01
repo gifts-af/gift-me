@@ -14,6 +14,7 @@ The short list every plan is checked against (`design/plans/TEMPLATE.md` > Princ
 6. **Privacy by default.** Every user-owned row is protected by its owner; money and sensitive data stay inside the concierge (D31, T26).
 7. **The repo is the written source.** Every direction we settle gets recorded in the docs and decisions log; Linear and shared pages are views of it.
 8. **Written for a person.** Answer first, plain words, one place for each doc.
+9. **Collect the minimum, as late as possible** (T42). Ask for a piece of personal data only when a feature the person is using right now can't work without it, keep it only while it's needed, and send outside services IDs, not names or emails.
 
 ## Superpowers is required
 
