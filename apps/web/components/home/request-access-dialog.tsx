@@ -1,15 +1,14 @@
 "use client";
 
-import { useCallback, useState } from "react";
 import { RequestAccessForm } from "@/app/request-access/request-access-form";
 import {
-  CLOSE_AFTER_SENT_MS,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  useSelfClosingDialog,
 } from "@/components/ui/dialog";
 import { APP_NAME } from "@/lib/brand";
 
@@ -22,13 +21,10 @@ export function RequestAccessButton({
   className?: string;
   children?: React.ReactNode;
 }) {
-  const [open, setOpen] = useState(false);
-  const closeSoon = useCallback(() => {
-    setTimeout(() => setOpen(false), CLOSE_AFTER_SENT_MS);
-  }, []);
+  const { open, onOpenChange, closeSoon } = useSelfClosingDialog();
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger className={className}>{children}</DialogTrigger>
       <DialogContent>
         <DialogHeader>

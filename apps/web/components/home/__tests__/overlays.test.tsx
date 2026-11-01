@@ -87,4 +87,22 @@ describe("feedback overlay", () => {
     });
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
+
+  it("doesn't close a box reopened soon after sending", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    submitFeedback.mockResolvedValue({ status: "sent" });
+    render(<FeedbackButton />);
+    fireEvent.click(screen.getByRole("button", { name: "Send feedback" }));
+    fireEvent.change(screen.getByLabelText("What happened?"), { target: { value: "It broke" } });
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    expect(await screen.findByText("Thanks. Got it.")).toBeInTheDocument();
+    await act(async () => {});
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Send feedback" }));
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(screen.getByRole("dialog", { name: "Tell us the sad story" })).toBeInTheDocument();
+  });
 });

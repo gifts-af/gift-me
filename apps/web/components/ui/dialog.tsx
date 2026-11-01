@@ -13,6 +13,28 @@ import { cn } from "@/lib/utils";
 // How long a "thanks" stays up before the layer closes itself.
 export const CLOSE_AFTER_SENT_MS = 4000;
 
+// Open state for a layer that closes itself after a thank-you. Opening or
+// closing it by hand cancels a pending close, so a layer reopened soon after
+// sending stays open.
+export function useSelfClosingDialog() {
+  const [open, setOpen] = React.useState(false);
+  const timer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const cancel = React.useCallback(() => clearTimeout(timer.current), []);
+  React.useEffect(() => cancel, [cancel]);
+  const onOpenChange = React.useCallback(
+    (next: boolean) => {
+      cancel();
+      setOpen(next);
+    },
+    [cancel],
+  );
+  const closeSoon = React.useCallback(() => {
+    cancel();
+    timer.current = setTimeout(() => setOpen(false), CLOSE_AFTER_SENT_MS);
+  }, [cancel]);
+  return { open, onOpenChange, closeSoon };
+}
+
 const Dialog = DialogPrimitive.Root;
 const DialogTrigger = DialogPrimitive.Trigger;
 const DialogClose = DialogPrimitive.Close;

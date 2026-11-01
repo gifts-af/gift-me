@@ -1,15 +1,15 @@
 "use client";
 
-import { useActionState, useCallback, useEffect, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { submitFeedback } from "@/app/feedback/actions";
 import {
-  CLOSE_AFTER_SENT_MS,
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  useSelfClosingDialog,
 } from "@/components/ui/dialog";
 
 const input =
@@ -18,12 +18,9 @@ const input =
 // "Send feedback" opens a "sad story" box over the page that emails us
 // directly (ALL-53), instead of opening the visitor's email app.
 export function FeedbackButton({ className }: { className?: string }) {
-  const [open, setOpen] = useState(false);
-  const closeSoon = useCallback(() => {
-    setTimeout(() => setOpen(false), CLOSE_AFTER_SENT_MS);
-  }, []);
+  const { open, onOpenChange, closeSoon } = useSelfClosingDialog();
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger className={className}>Send feedback</DialogTrigger>
       <DialogContent>
         <DialogHeader>
