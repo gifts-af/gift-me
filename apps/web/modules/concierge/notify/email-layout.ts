@@ -52,7 +52,9 @@ export function renderEmail(parts: EmailParts): { html: string; text: string } {
     `<h1 style="margin:0 0 16px;font-size:22px;line-height:1.3;color:${INK}">${escapeHtml(parts.heading)}</h1>` +
     parts.paragraphs.map((s) => para(s)).join("") +
     (rows ? `<div style="margin:0 0 24px;border-bottom:1px solid ${RULE}">${rows}</div>` : "") +
-    `<p style="margin:0 0 24px"><a href="${escapeHtml(parts.button.url)}" style="display:inline-block;background:${TEAL};color:#ffffff;text-decoration:none;font-weight:600;font-size:16px;padding:12px 20px;border-radius:8px">${escapeHtml(parts.button.label)}</a></p>` +
+    // A fixed line height keeps the button 48px tall whatever the phone's
+    // fonts, above the 44px tap minimum (ALL-60).
+    `<p style="margin:0 0 24px"><a href="${escapeHtml(parts.button.url)}" style="display:inline-block;background:${TEAL};color:#ffffff;text-decoration:none;font-weight:600;font-size:16px;line-height:20px;padding:14px 20px;border-radius:8px">${escapeHtml(parts.button.label)}</a></p>` +
     (parts.footer ? para(parts.footer, MUTED, 14) : "") +
     `</div></body></html>`;
 
