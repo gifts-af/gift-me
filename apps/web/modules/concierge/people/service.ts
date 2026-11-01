@@ -4,16 +4,18 @@
 // live person (the database's row-level security says the same, but a
 // refused write must come back as a clear error, not a silent no-op).
 import {
+  isGooglePhotoUrl,
   nextOccasion,
   nextOccurrence,
   orderBy,
+  sizedGooglePhotoUrl,
   startingOccasions,
   type CalendarDate,
   type OccasionKind,
   type Relationship,
 } from "@gifts-af/core";
 import type { SaveResult } from "../settings";
-import { isUuid, parseShareToken, type MonthDay, type PersonInput } from "./rules";
+import { isUuid, parseShareToken, type ImportRow, type MonthDay, type PersonInput } from "./rules";
 import type { OccasionRow, PeopleStore, PersonRow } from "./store";
 
 export type PersonCard = {
@@ -296,4 +298,98 @@ export function deletePerson(store: PeopleStore, id: string): Promise<SaveResult
     await store.deletePerson(id);
     return { ok: true };
   });
+}
+
+// ─── Google Contacts import (ALL-24) ────────────────────────────────────────
+
+export type ImportResult =
+  | { ok: true; added: number; skipped: number; failed: number; photosMissed: number }
+  | { ok: false; error: string };
+
+export type ImportDeps = {
+  fetch: typeof fetch;
+  /** A fresh file name for each copied photo. */
+  newId: () => string;
+};
+
+const PHOTO_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
+
+/**
+ * Copies a contact's Google photo into the buyer's own folder. Only Google's
+ * photo host is ever fetched (the row checks say so too), redirects are
+ * refused, and anything that isn't a small image is dropped. Never throws.
+ */
+async function copyPhoto(
+  store: PeopleStore,
+  deps: ImportDeps,
+  userId: string,
+  personId: string,
+  url: string,
+  size: { px: number; maxBytes: number },
+): Promise<boolean> {
+  if (!isGooglePhotoUrl(url)) return false;
+  try {
+    const res = await deps.fetch(sizedGooglePhotoUrl(url, size.px), { redirect: "error" });
+    const type = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+    const ext = PHOTO_TYPES[type];
+    if (!res.ok || !ext) return false;
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    if (bytes.byteLength === 0 || bytes.byteLength > size.maxBytes) return false;
+    const path = `${userId}/${personId}/${deps.newId()}.${ext}`;
+    if (!(await store.uploadPhoto(path, bytes, type))) return false;
+    return await store.setPhotoPath(personId, path);
+  } catch (e) {
+    console.error("copying a contact photo failed", e);
+    return false;
+  }
+}
+
+/** Adds the ticked contacts; each one stands alone, so one failure doesn't stop the rest. */
+export async function importPeople(store: PeopleStore, rows: ImportRow[], deps: ImportDeps): Promise<ImportResult> {
+  const userId = await store.userId();
+  if (!userId) return { ok: false, error: SESSION_ENDED };
+  let imported: Set<string>;
+  let size: { px: number; maxBytes: number };
+  try {
+    [imported, size] = await Promise.all([
+      store.importedContactIds().then((ids) => new Set(ids)),
+      store.photoSettings(),
+    ]);
+  } catch (e) {
+    console.error("starting an import failed", e);
+    return { ok: false, error: TRY_AGAIN };
+  }
+
+  const result = { ok: true as const, added: 0, skipped: 0, failed: 0, photosMissed: 0 };
+  for (const row of rows) {
+    if (imported.has(row.googleId)) {
+      result.skipped++;
+      continue;
+    }
+    let id: string;
+    try {
+      id = await store.createPerson({
+        name: row.name,
+        relationship: row.relationship,
+        kinds: startingOccasions(row.relationship, { birthday: row.birthday !== null, anniversary: false }),
+        birthday: row.birthday,
+        birthYear: row.birthYear,
+        anniversary: null,
+        googleContactId: row.googleId,
+        address: row.address,
+      });
+    } catch (e) {
+      // The unique index: another import added them a moment ago.
+      if (errorCode(e) === "23505") result.skipped++;
+      else {
+        console.error("importing a person failed", e);
+        result.failed++;
+      }
+      continue;
+    }
+    imported.add(row.googleId);
+    result.added++;
+    if (row.photoUrl && !(await copyPhoto(store, deps, userId, id, row.photoUrl, size))) result.photosMissed++;
+  }
+  return result;
 }

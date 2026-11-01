@@ -853,14 +853,23 @@ export type Database = {
     Functions: {
       add_person: {
         Args: {
+          p_address_line1?: string;
+          p_address_line2?: string;
           p_anniversary_day?: number;
           p_anniversary_month?: number;
           p_birth_year?: number;
           p_birthday_day?: number;
           p_birthday_month?: number;
+          p_city?: string;
+          p_country?: string;
+          p_google_contact_id?: string;
           p_kinds: string[];
           p_name: string;
+          p_recipient_first_name?: string;
+          p_recipient_last_name?: string;
           p_relationship: string;
+          p_state?: string;
+          p_zip?: string;
         };
         Returns: string;
       };

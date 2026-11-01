@@ -30,6 +30,7 @@ export {
   addPerson,
   deletePerson,
   getPerson,
+  importPeople,
   linkList,
   listPeople,
   setBudget,
@@ -38,6 +39,6 @@ export {
   unlinkList,
   updatePerson,
 } from "./people/people";
-export type { AddResult, PersonCard, PersonDetail } from "./people/people";
-export { parseBudget, parsePersonForm, parseShareToken } from "./people/rules";
-export type { PersonInput } from "./people/rules";
+export type { AddResult, ImportResult, PersonCard, PersonDetail } from "./people/people";
+export { parseBudget, parseImportRows, parsePersonForm, parseShareToken } from "./people/rules";
+export type { ImportAddress, ImportRow, PersonInput } from "./people/rules";

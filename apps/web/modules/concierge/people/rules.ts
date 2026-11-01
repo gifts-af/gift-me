@@ -3,7 +3,7 @@
 // FormData fields read by parsePersonForm (an empty string means "not given"):
 //   name, relationship, birthdayMonth, birthdayDay, birthYear,
 //   anniversaryMonth, anniversaryDay
-import { RELATIONSHIPS, toDate, type Relationship } from "@gifts-af/core";
+import { isGooglePhotoUrl, RELATIONSHIPS, toDate, type Relationship } from "@gifts-af/core";
 
 export type MonthDay = { month: number; day: number };
 
@@ -124,4 +124,110 @@ export function parseShareToken(input: string): string | null {
   if (url.protocol !== "https:" && url.protocol !== "http:") return null;
   const m = SHARE_PATH.exec(url.pathname);
   return m ? m[1].toLowerCase() : null;
+}
+
+// ─── Google Contacts import (ALL-24) ───────────────────────────────────────
+
+export type ImportAddress = {
+  firstName: string | null;
+  lastName: string | null;
+  line1: string | null;
+  line2: string | null;
+  city: string | null;
+  state: string | null;
+  zip: string | null;
+  country: string | null;
+};
+
+/** A ticked contact, checked and ready to save. */
+export type ImportRow = {
+  googleId: string;
+  name: string;
+  relationship: Relationship;
+  birthday: MonthDay | null;
+  birthYear: number | null;
+  address: ImportAddress | null;
+  photoUrl: string | null;
+};
+
+// Input-size guards, like MAX_NAME_LENGTH: not tunables.
+const MAX_IMPORT_ROWS = 1000;
+const MAX_ADDRESS_FIELD = 200;
+const GOOGLE_ID = /^people\/c\d{1,30}$/;
+const NOTHING_TO_IMPORT = "Nothing to import. Try again.";
+
+type Raw = Record<string, unknown>;
+const isObject = (v: unknown): v is Raw => typeof v === "object" && v !== null && !Array.isArray(v);
+const str = (v: unknown): string | null => (typeof v === "string" && v.trim() ? v.trim() : null);
+
+function importAddress(v: unknown): ImportAddress | null | undefined {
+  if (v === null || v === undefined) return null;
+  if (!isObject(v)) return undefined;
+  const keys = ["firstName", "lastName", "line1", "line2", "city", "state", "zip", "country"] as const;
+  const out = {} as ImportAddress;
+  for (const k of keys) {
+    const s = str(v[k]);
+    if (s !== null && s.length > MAX_ADDRESS_FIELD) return undefined;
+    out[k] = s;
+  }
+  if (out.country !== null && !/^[A-Z]{2}$/.test(out.country)) out.country = null;
+  return out;
+}
+
+/** One row, or null when anything in it is wrong. */
+function importRow(v: unknown, currentYear: number): ImportRow | null {
+  if (!isObject(v)) return null;
+  const googleId = str(v.googleId);
+  const name = str(v.name);
+  const relationship = RELATIONSHIPS.find((r) => r === v.relationship);
+  if (!googleId || !GOOGLE_ID.test(googleId) || !name || name.length > MAX_NAME_LENGTH || !relationship) return null;
+
+  let birthday: MonthDay | null = null;
+  let birthYear: number | null = null;
+  if (v.birthday !== null && v.birthday !== undefined) {
+    if (!isObject(v.birthday)) return null;
+    const { month, day, year } = v.birthday;
+    try {
+      toDate(LEAP_YEAR, month as number, day as number);
+    } catch {
+      return null;
+    }
+    birthday = { month: month as number, day: day as number };
+    // A year we can't believe is dropped, not the birthday.
+    if (Number.isInteger(year) && (year as number) >= MIN_BIRTH_YEAR && (year as number) <= currentYear) {
+      birthYear = year as number;
+    }
+  }
+
+  const address = importAddress(v.address);
+  if (address === undefined) return null;
+
+  const photoUrl = str(v.photoUrl);
+  if (photoUrl !== null && !isGooglePhotoUrl(photoUrl)) return null;
+
+  return { googleId, name, relationship, birthday, birthYear, address, photoUrl };
+}
+
+/** The checklist's ticked rows, sent as JSON. Bad rows are counted, not fatal (AC-10). */
+export function parseImportRows(
+  json: string,
+  currentYear: number = new Date().getFullYear(),
+): { ok: true; rows: ImportRow[]; refused: number } | { ok: false; error: string } {
+  let data: unknown;
+  try {
+    data = JSON.parse(json);
+  } catch {
+    return { ok: false, error: NOTHING_TO_IMPORT };
+  }
+  if (!Array.isArray(data) || data.length === 0 || data.length > MAX_IMPORT_ROWS) {
+    return { ok: false, error: NOTHING_TO_IMPORT };
+  }
+  const rows = new Map<string, ImportRow>();
+  let refused = 0;
+  for (const v of data) {
+    const row = importRow(v, currentYear);
+    if (!row) refused++;
+    else if (!rows.has(row.googleId)) rows.set(row.googleId, row);
+  }
+  return { ok: true, rows: [...rows.values()], refused };
 }
