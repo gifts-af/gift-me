@@ -49,3 +49,14 @@ test("take the tour, then sign in with an invite", async ({ page }) => {
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
 });
+
+test("request access is a short form that checks its fields (ALL-47)", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: "Request access" }).click();
+  await expect(page).toHaveURL(/\/request-access$/);
+  await page.getByRole("button", { name: "Request access" }).click();
+  await expect(page.getByText("Tell us your name.")).toBeVisible();
+  await expect(page.getByText("Enter an email address like you@example.com.")).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+});

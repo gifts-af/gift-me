@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { accessRequestHref } from "@/lib/brand";
 import { PickPreview } from "./pick-preview";
 
 export function Hook() {
@@ -20,12 +19,12 @@ export function Hook() {
           >
             Take the tour
           </Link>
-          <a
-            href={accessRequestHref()}
+          <Link
+            href="/request-access"
             className="inline-flex min-h-12 items-center justify-center rounded-lg bg-secondary px-6 font-bold text-secondary-foreground hover:bg-secondary/70"
           >
             Request access
-          </a>
+          </Link>
         </div>
         <Link
           href="/auth/login"
