@@ -3,7 +3,8 @@ import { localSupabase } from "./e2e/local-supabase";
 
 // Browser tests (ALL-20). They need the local Supabase running
 // (`pnpm supabase start`). CI builds the app first and serves the build;
-// locally an already running `pnpm dev` is reused.
+// locally an already running `pnpm dev` is reused (stop it first if it wasn't
+// started with SUPABASE_SECRET_KEY set to the local service key).
 const supabase = localSupabase();
 const port = 3100;
 const CI = Boolean(process.env.CI);
@@ -32,6 +33,8 @@ export default defineConfig({
         env: {
           NEXT_PUBLIC_SUPABASE_URL: supabase.url,
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: supabase.publishableKey,
+          // Server-only: the /a/{token} action links read and use links with it (ALL-23).
+          SUPABASE_SECRET_KEY: supabase.serviceRoleKey,
         },
       },
 });
