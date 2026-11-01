@@ -131,7 +131,7 @@ The gift list and the concierge each **work on their own**, and are linked light
 
 ## Mock-ups
 
-A clickable, phone-first prototype, published as a private shareable artifact page that the owner and Jim can each open on their phones and comment on. **Link:** [GiftMe mock-ups](https://claude.ai/artifact/BvdSVB6RPatUPRbBDyPRzW) (private; shared with Jim from the page's Share menu). **Source:** [`design/mockups/ALL-41.html`](mockups/ALL-41.html); republish it to the same link after changes.
+A clickable, phone-first prototype, published as a private shareable artifact page that the owner and Jim can each open on their phones and comment on. **Link:** [GiftsAF mock-ups](https://claude.ai/artifact/BvdSVB6RPatUPRbBDyPRzW) (private; shared with Jim from the page's Share menu). **Source:** [`design/mockups/ALL-41.html`](mockups/ALL-41.html); republish it to the same link after changes.
 
 **Reviewing:** the owner and Jim share one claude.ai login, so the built-in comments can't tell them apart. The page therefore has its own feedback: on each screen, a comment box with a name picker (Aaron or Jim), and a per-person **"I approve this screen"** button. Comments and approvals are stored in the artifact's shared database, so both people see each other's, and Claude can read them to make changes. Sign-off is complete when both have approved every screen.
 
@@ -189,4 +189,4 @@ The prototype's colours and stylesheet go; **none of its behaviour does.** When 
 
 ## Open items
 
-- **Name and logo:** the name is **GiftsAF** (ALL-14, planning decision 44), shown as plain text from `apps/web/lib/brand.ts`. The mock-ups still say "GiftMe", the old working name. There's no logo yet.
+- **Name and logo:** the name is **GiftsAF** (ALL-14, planning decision 44), shown as plain text from `apps/web/lib/brand.ts`. The mock-ups were updated to the new name on 2026-11-01. There's no logo yet.
