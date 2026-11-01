@@ -1,7 +1,12 @@
 import "server-only";
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "@gifts-af/core";
-import { supabaseSecretKey, supabaseUrl } from "./env";
+import { supabaseUrl } from "./env";
+
+// Service-role key (bypasses RLS). Kept here, behind server-only, because
+// env.ts is also imported by client code. Deliberately not NEXT_PUBLIC.
+// Production only has the GIFT_-prefixed one from the Vercel integration.
+const supabaseSecretKey = process.env.SUPABASE_SECRET_KEY ?? process.env.GIFT_SUPABASE_SECRET_KEY;
 
 /**
  * Service-role client: bypasses Row Level Security. Server-only; never import
