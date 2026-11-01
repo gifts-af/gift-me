@@ -134,13 +134,13 @@ describe("PersonForm", () => {
     expect(push).not.toHaveBeenCalled();
   });
 
-  it("still goes Home when the person saved but the photo failed", async () => {
+  it("goes to the new person's page with ?photo=failed when the photo failed", async () => {
     const t = setup();
     t.upload.mockResolvedValue({ error: { message: "x" } });
     await fill();
     await userEvent.upload(screen.getByLabelText("Choose a photo"), photo);
     await save();
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/"));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/people/new1?photo=failed"));
     expect(t.photoAction).not.toHaveBeenCalled();
   });
 
@@ -152,5 +152,36 @@ describe("PersonForm", () => {
     );
     expect(await screen.findByRole("alert")).toHaveTextContent("That photo is too big.");
     expect(t.resize).not.toHaveBeenCalled();
+  });
+
+  it("keeps Save disabled after a successful save, so a second tap adds no duplicate", async () => {
+    const t = setup();
+    await fill();
+    const button = screen.getByRole("button", { name: "Save" });
+    await userEvent.click(button);
+    await waitFor(() => expect(push).toHaveBeenCalled());
+    expect(screen.getByRole("button", { name: "Saving…" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Saving…" }));
+    expect(t.action).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets the user try again after a failed save", async () => {
+    setup({ ok: false, error: "Add a name." });
+    await fill();
+    await save();
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+  });
+
+  it("disables Save while a picked photo is still being checked", async () => {
+    const t = setup();
+    let finish!: (b: Blob) => void;
+    t.resize.mockImplementationOnce(() => new Promise<Blob>((resolve) => (finish = resolve)));
+    await fill();
+    await userEvent.upload(screen.getByLabelText("Choose a photo"), photo);
+    const waiting = await screen.findByRole("button", { name: "Preparing photo…" });
+    expect(waiting).toBeDisabled();
+    finish(new Blob(["j"], { type: "image/jpeg" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeEnabled());
   });
 });

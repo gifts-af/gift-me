@@ -128,50 +128,62 @@ export function PersonForm({
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [preparing, setPreparing] = useState(false);
 
   const married = relationship === "wife" || relationship === "husband";
 
   async function onPickPhoto(file: File) {
     setPhoto(null);
     setPhotoError(null);
-    const checked = await prepareJpeg({ file, px, maxUploadBytes, resize });
-    if (checked.ok) setPhoto(file);
-    else setPhotoError(checked.error);
+    setPreparing(true); // Save waits, so a tap can't drop a photo still being checked
+    try {
+      const checked = await prepareJpeg({ file, px, maxUploadBytes, resize });
+      if (checked.ok) setPhoto(file);
+      else setPhotoError(checked.error);
+    } finally {
+      setPreparing(false);
+    }
   }
 
   async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (busy) return;
+    if (busy || preparing) return;
     setError(null);
     setBusy(true);
+    // The anniversary fields aren't rendered for other relationships, so a
+    // hidden stale value is never sent.
+    const form = new FormData(event.currentTarget);
+    let result: AddResult;
     try {
-      // The anniversary fields aren't rendered for other relationships, so a
-      // hidden stale value is never sent.
-      const form = new FormData(event.currentTarget);
-      let result: AddResult;
-      try {
-        result = await action(null, form);
-      } catch {
-        result = { ok: false, error: "That didn't save. Try again." };
-      }
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      if (photo) {
-        try {
-          const saved = await savePersonPhoto({
-            file: photo, personId: result.id, userId, px, maxUploadBytes, action: photoAction, storage, resize,
-          });
-          if (!saved.ok) console.error("Photo not saved for new person", saved.error);
-        } catch (e) {
-          console.error("Photo not saved for new person", e);
-        }
-      }
-      router.push(doneHref);
-    } finally {
-      setBusy(false);
+      result = await action(null, form);
+    } catch {
+      result = { ok: false, error: "That didn't save. Try again." };
     }
+    if (!result.ok) {
+      setError(result.error);
+      setBusy(false);
+      return;
+    }
+    // Saved. Stay busy from here on so a second tap can't add a duplicate
+    // while we upload the photo and navigate.
+    let photoFailed = false;
+    if (photo) {
+      try {
+        const saved = await savePersonPhoto({
+          file: photo, personId: result.id, userId, px, maxUploadBytes, action: photoAction, storage, resize,
+        });
+        if (!saved.ok) {
+          photoFailed = true;
+          console.error("Photo not saved for new person", saved.error);
+        }
+      } catch (e) {
+        photoFailed = true;
+        console.error("Photo not saved for new person", e);
+      }
+    }
+    // The person exists either way. A failed photo goes to their page, where
+    // a note and the picker let the user try again.
+    router.push(photoFailed ? `/people/${result.id}?photo=failed` : doneHref);
   }
 
   return (
@@ -266,8 +278,8 @@ export function PersonForm({
         </p>
       )}
 
-      <Button type="submit" disabled={busy} aria-busy={busy}>
-        {busy ? "Saving…" : submitLabel}
+      <Button type="submit" disabled={busy || preparing} aria-busy={busy || preparing}>
+        {busy ? "Saving…" : preparing ? "Preparing photo…" : submitLabel}
       </Button>
     </form>
   );
