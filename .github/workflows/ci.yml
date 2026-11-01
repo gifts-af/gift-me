@@ -84,6 +84,8 @@ jobs:
             echo "E2E_SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
             # Cloudflare's always-pass Turnstile test key, baked into the build (ALL-68).
             echo "NEXT_PUBLIC_TURNSTILE_SITE_KEY=1x00000000000000000000AA"
+            # Any value: the browser tests replace Google's sign-in script (ALL-24).
+            echo "NEXT_PUBLIC_GOOGLE_CLIENT_ID=e2e-fake-client-id"
           } >> "$GITHUB_ENV"
       - run: pnpm --filter @gifts-af/web exec playwright install --with-deps chromium webkit
       - run: pnpm --filter @gifts-af/web build

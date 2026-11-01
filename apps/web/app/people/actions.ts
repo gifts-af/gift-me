@@ -6,7 +6,9 @@ import { parseDate, type OccasionKind } from "@gifts-af/core";
 import { todayForRequest } from "@/lib/today";
 import {
   addPerson,
+  importPeople,
   parseBudget,
+  parseImportRows,
   parsePersonForm,
   deletePerson,
   linkList,
@@ -16,6 +18,7 @@ import {
   unlinkList,
   updatePerson,
   type AddResult,
+  type ImportResult,
   type SaveResult,
 } from "@/modules/concierge";
 
@@ -104,4 +107,17 @@ export async function deletePersonAction(_previous: SaveResult | null, formData:
   revalidatePath("/");
   revalidatePath("/people");
   redirect("/");
+}
+
+// The Google Contacts import (ALL-24): the checklist sends only the ticked
+// contacts, as JSON in `rows`. Rows the checks refuse count as failed.
+export async function importContactsAction(_previous: ImportResult | null, formData: FormData): Promise<ImportResult> {
+  const currentYear = parseDate(await todayForRequest()).year;
+  const parsed = parseImportRows(text(formData, "rows"), currentYear);
+  if (!parsed.ok) return parsed;
+  const result = await importPeople(parsed.rows);
+  if (!result.ok) return result;
+  revalidatePath("/");
+  revalidatePath("/people");
+  return { ...result, failed: result.failed + parsed.refused };
 }

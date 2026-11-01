@@ -1,6 +1,7 @@
 import "server-only";
 import type { OccasionKind } from "@gifts-af/core";
 import { appSettingInt } from "@/lib/app-settings";
+import type { ImportAddress } from "./rules";
 import { createClient } from "@/lib/supabase/server";
 
 // Everything the people logic needs from the database (ALL-21). The interface
@@ -45,6 +46,9 @@ export type NewPerson = {
   birthday: MonthDayRow | null;
   birthYear: number | null;
   anniversary: MonthDayRow | null;
+  /** From a Google Contacts import (ALL-24). */
+  googleContactId?: string | null;
+  address?: ImportAddress | null;
 };
 
 export interface PeopleStore {
@@ -72,6 +76,11 @@ export interface PeopleStore {
   linkList(token: string, personId: string): Promise<void>;
   unlinkList(personId: string): Promise<void>;
   setPhotoPath(personId: string, path: string | null): Promise<boolean>;
+  /** Google contact ids of the caller's live imported people (ALL-24). */
+  importedContactIds(): Promise<string[]>;
+  photoSettings(): Promise<{ px: number; maxBytes: number; timeoutMs: number; concurrency: number }>;
+  /** Puts a photo in the person-photos bucket; false when storage says no. */
+  uploadPhoto(path: string, bytes: Uint8Array, contentType: string): Promise<boolean>;
   deletePerson(personId: string): Promise<void>;
 }
 
@@ -194,6 +203,15 @@ export function createSupabasePeopleStore(): PeopleStore {
         p_birth_year: p.birthYear ?? undefined,
         p_anniversary_month: p.anniversary?.month,
         p_anniversary_day: p.anniversary?.day,
+        p_google_contact_id: p.googleContactId ?? undefined,
+        p_recipient_first_name: p.address?.firstName ?? undefined,
+        p_recipient_last_name: p.address?.lastName ?? undefined,
+        p_address_line1: p.address?.line1 ?? undefined,
+        p_address_line2: p.address?.line2 ?? undefined,
+        p_city: p.address?.city ?? undefined,
+        p_state: p.address?.state ?? undefined,
+        p_zip: p.address?.zip ?? undefined,
+        p_country: p.address?.country ?? undefined,
       });
       check(error, "Adding a person failed");
       if (!data) throw new Error("Adding a person returned no id.");
@@ -274,6 +292,34 @@ export function createSupabasePeopleStore(): PeopleStore {
         .select("id");
       check(error, "Saving a photo failed");
       return (data ?? []).length > 0;
+    },
+
+    async importedContactIds() {
+      const supabase = await createClient();
+      const { data, error } = await supabase
+        .from("people")
+        .select("google_contact_id")
+        .not("google_contact_id", "is", null)
+        .is("deleted_at", null);
+      check(error, "Listing imported contacts failed");
+      return (data ?? []).flatMap((r) => (r.google_contact_id ? [r.google_contact_id] : []));
+    },
+
+    async photoSettings() {
+      const [px, maxBytes, timeoutMs, concurrency] = await Promise.all([
+        appSettingInt("person_photo_px"),
+        appSettingInt("person_photo_max_upload_bytes"),
+        appSettingInt("contact_photo_timeout_ms"),
+        appSettingInt("contact_photo_concurrency"),
+      ]);
+      return { px, maxBytes, timeoutMs, concurrency };
+    },
+
+    async uploadPhoto(path, bytes, contentType) {
+      const supabase = await createClient();
+      const { error } = await supabase.storage.from("person-photos").upload(path, bytes, { contentType });
+      if (error) console.error("uploading a contact photo failed", error.message);
+      return !error;
     },
 
     async deletePerson(personId) {

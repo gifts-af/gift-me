@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { parseBudget, parsePersonForm, parseShareToken } from "../people/rules";
+import { parseBudget, parseImportRows, parsePersonForm, parseShareToken } from "../people/rules";
 
 function form(fields: Record<string, string>): FormData {
   const f = new FormData();
@@ -154,4 +154,72 @@ describe("parseShareToken", () => {
     `https://giftsaf.com/x/share/${id}`,
     `${id}x`,
   ])("rejects %j", (input) => expect(parseShareToken(input)).toBeNull());
+});
+
+// ALL-24: rows sent by the import checklist. A bad row is refused on its own;
+// the good ones still go through (AC-10).
+describe("parseImportRows", () => {
+  const good = {
+    googleId: "people/c111",
+    name: "Jane Allen",
+    relationship: "mother",
+    birthday: { month: 3, day: 14, year: 1960 },
+    address: { firstName: "Jane", lastName: "Allen", line1: "1 Elm St", line2: null, city: "Springfield", state: "IL", zip: "62701", country: "US" },
+    photoUrl: "https://lh3.googleusercontent.com/cm/ABC=s100",
+  };
+  const parse = (rows: unknown) => parseImportRows(JSON.stringify(rows), 2026);
+
+  it("accepts a full row", () => {
+    expect(parse([good])).toEqual({
+      ok: true,
+      refused: 0,
+      rows: [
+        {
+          googleId: "people/c111",
+          name: "Jane Allen",
+          relationship: "mother",
+          birthday: { month: 3, day: 14 },
+          birthYear: 1960,
+          address: good.address,
+          photoUrl: good.photoUrl,
+        },
+      ],
+    });
+  });
+
+  it("accepts a row with only a name, relationship and id", () => {
+    const r = parse([{ googleId: "people/c2", name: "Sam", relationship: "friend" }]);
+    expect(r).toMatchObject({ ok: true, refused: 0 });
+    expect(r.ok && r.rows[0]).toMatchObject({ birthday: null, birthYear: null, address: null, photoUrl: null });
+  });
+
+  it.each([
+    ["a made-up relationship", { relationship: "nemesis" }],
+    ["an impossible date", { birthday: { month: 2, day: 30, year: null } }],
+    ["a wrong-format contact id", { googleId: "contacts/123" }],
+    ["no name", { name: "  " }],
+    ["a photo on another host", { photoUrl: "https://evil.example/x.jpg" }],
+    ["a photo over plain http", { photoUrl: "http://lh3.googleusercontent.com/x" }],
+    ["an over-long address line", { address: { ...good.address, line1: "x".repeat(201) } }],
+  ])("refuses a row with %s, and keeps the others", (_what, change) => {
+    const r = parse([{ ...good, ...change }, { ...good, googleId: "people/c222" }]);
+    expect(r).toMatchObject({ ok: true, refused: 1 });
+    expect(r.ok && r.rows.map((x) => x.googleId)).toEqual(["people/c222"]);
+  });
+
+  it("drops a birth year it can't believe, but keeps the birthday", () => {
+    const r = parse([{ ...good, birthday: { month: 3, day: 14, year: 1850 } }]);
+    expect(r.ok && r.rows[0]).toMatchObject({ birthday: { month: 3, day: 14 }, birthYear: null });
+  });
+
+  it("sends the same contact only once", () => {
+    const r = parse([good, good]);
+    expect(r.ok && r.rows).toHaveLength(1);
+  });
+
+  it("refuses something that isn't a list of rows", () => {
+    expect(parseImportRows("not json", 2026)).toEqual({ ok: false, error: "Nothing to import. Try again." });
+    expect(parseImportRows("{}", 2026)).toEqual({ ok: false, error: "Nothing to import. Try again." });
+    expect(parseImportRows("[]", 2026)).toEqual({ ok: false, error: "Nothing to import. Try again." });
+  });
 });

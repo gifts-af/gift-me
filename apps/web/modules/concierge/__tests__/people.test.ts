@@ -4,6 +4,7 @@ import {
   addPerson,
   deletePerson,
   getPerson,
+  importPeople,
   linkList,
   listPeople,
   setBudget,
@@ -12,7 +13,7 @@ import {
   unlinkList,
   updatePerson,
 } from "../people/service";
-import type { PersonInput } from "../people/rules";
+import type { ImportRow, PersonInput } from "../people/rules";
 import { FakePeopleStore, ME, OTHER } from "./fake-people-store";
 
 const TODAY = "2026-11-01";
@@ -427,5 +428,165 @@ describe("when the database says no row changed", () => {
     store.noRows.add("moveOccasion");
     const result = await updatePerson(store, mine, input({ birthday: { month: 1, day: 9 }, anniversary: { month: 6, day: 5 } }));
     expect(result.ok).toBe(false);
+  });
+});
+
+// ─── Google Contacts import (ALL-24) ────────────────────────────────────────
+
+describe("importPeople", () => {
+  const PHOTO = "https://lh3.googleusercontent.com/cm/ABC=s100";
+  const row = (over: Partial<ImportRow> = {}): ImportRow => ({
+    googleId: "people/c111",
+    name: "Jane Allen",
+    relationship: "mother",
+    birthday: { month: 3, day: 14 },
+    birthYear: 1960,
+    address: {
+      firstName: "Jane", lastName: "Allen", line1: "1 Elm St", line2: null,
+      city: "Springfield", state: "IL", zip: "62701", country: "US",
+    },
+    photoUrl: null,
+    ...over,
+  });
+  const image = (bytes = 2048, type = "image/jpeg") =>
+    new Response(new Uint8Array(bytes), { status: 200, headers: { "content-type": type } });
+  const deps = (fetch: typeof globalThis.fetch = vi.fn()) => ({ fetch, newId: () => "photo-1" });
+  const sam = row({ googleId: "people/c222", name: "Sam", relationship: "friend", birthday: null, birthYear: null, address: null });
+
+  it("adds each person with their relationship's occasions, birthday, Google id and address (AC-3)", async () => {
+    const store = new FakePeopleStore();
+    const result = await importPeople(store, [row(), sam], deps());
+    expect(result).toEqual({ ok: true, added: 2, skipped: 0, failed: 0, photosMissed: 0 });
+    const people = await store.people();
+    const mom = people.find((p) => p.name === "Jane Allen")!;
+    const friend = people.find((p) => p.name === "Sam")!;
+    expect(mom).toMatchObject({ relationship: "mother", birthYear: 1960 });
+    const kinds = (id: string) => store.occasionRows.filter((o) => o.personId === id).map((o) => o.kind).sort();
+    expect(kinds(mom.id)).toEqual(["birthday", "christmas", "mothers_day"]);
+    expect(store.occasionRows.find((o) => o.personId === mom.id && o.kind === "birthday")).toMatchObject({ month: 3, day: 14 });
+    expect(kinds(friend.id)).toEqual(["christmas"]);
+    expect(store.googleIds.get(mom.id)).toBe("people/c111");
+    expect(store.addresses.get(mom.id)).toMatchObject({ line1: "1 Elm St", city: "Springfield" });
+  });
+
+  it("skips contacts already imported (AC-7)", async () => {
+    const store = new FakePeopleStore();
+    await importPeople(store, [row()], deps());
+    const again = await importPeople(store, [row(), row({ googleId: "people/c333", name: "New" })], deps());
+    expect(again).toMatchObject({ added: 1, skipped: 1, failed: 0 });
+    expect((await store.people()).filter((p) => p.name === "Jane Allen")).toHaveLength(1);
+  });
+
+  it("counts a duplicate the database refuses as skipped, for two imports at once (AC-7)", async () => {
+    const store = new FakePeopleStore();
+    await importPeople(store, [row()], deps());
+    store.importedContactIds = async () => [];
+    expect(await importPeople(store, [row()], deps())).toMatchObject({ added: 0, skipped: 1, failed: 0 });
+  });
+
+  it("copies a Google photo into the buyer's own folder at our size (AC-6)", async () => {
+    const store = new FakePeopleStore();
+    const fetch = vi.fn(async () => image());
+    const result = await importPeople(store, [row({ photoUrl: PHOTO })], deps(fetch));
+    expect(result).toMatchObject({ added: 1, photosMissed: 0 });
+    expect(fetch).toHaveBeenCalledWith(
+      "https://lh3.googleusercontent.com/cm/ABC=s512",
+      expect.objectContaining({ redirect: "error" }),
+    );
+    const [mom] = await store.people();
+    expect(store.uploads).toEqual([{ path: `${ME}/${mom.id}/photo-1.jpg`, bytes: 2048, contentType: "image/jpeg" }]);
+    expect(mom.photoPath).toBe(`${ME}/${mom.id}/photo-1.jpg`);
+  });
+
+  it.each([
+    ["Google answers with an error", 10_485_760, async () => new Response("no", { status: 404 })],
+    ["it isn't an image", 10_485_760, async () => image(100, "text/html")],
+    ["it's bigger than the photo limit", 10, async () => image(20)],
+    ["the network fails", 10_485_760, async () => { throw new Error("offline"); }],
+  ])("still adds the person when %s, without a photo", async (_what, maxBytes, answer) => {
+    const store = new FakePeopleStore();
+    store.photoSize = { ...store.photoSize, maxBytes };
+    const result = await importPeople(store, [row({ photoUrl: PHOTO })], deps(vi.fn(answer)));
+    expect(result).toMatchObject({ added: 1, photosMissed: 1 });
+    const [mom] = await store.people();
+    expect(mom.photoPath).toBeNull();
+    expect(store.uploads).toEqual([]);
+  });
+
+  it("skips a photo whose stated size is over the limit without reading it (review on PR #39)", async () => {
+    const store = new FakePeopleStore();
+    store.photoSize = { ...store.photoSize, maxBytes: 100 };
+    const body = new ReadableStream({ pull: () => { throw new Error("the body was read"); } });
+    const answer = new Response(body, { headers: { "content-type": "image/jpeg", "content-length": "5000" } });
+    const result = await importPeople(store, [row({ photoUrl: PHOTO })], deps(vi.fn(async () => answer)));
+    expect(result).toMatchObject({ added: 1, photosMissed: 1 });
+    expect(store.uploads).toEqual([]);
+  });
+
+  it("stops reading a photo once it passes the limit, even without a stated size", async () => {
+    const store = new FakePeopleStore();
+    store.photoSize = { ...store.photoSize, maxBytes: 100 };
+    let chunks = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull: (c) => { chunks++; c.enqueue(new Uint8Array(60)); if (chunks > 50) c.close(); },
+    });
+    const answer = new Response(body, { headers: { "content-type": "image/jpeg" } });
+    const result = await importPeople(store, [row({ photoUrl: PHOTO })], deps(vi.fn(async () => answer)));
+    expect(result).toMatchObject({ photosMissed: 1 });
+    expect(chunks).toBeLessThan(5);
+  });
+
+  it("gives each photo fetch the timeout from settings", async () => {
+    const store = new FakePeopleStore();
+    store.photoSize = { ...store.photoSize, timeoutMs: 1234 };
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    const fetch = vi.fn(async () => image());
+    await importPeople(store, [row({ photoUrl: PHOTO })], deps(fetch));
+    expect(timeout).toHaveBeenCalledWith(1234);
+    expect((fetch.mock.calls[0] as unknown as [string, RequestInit])[1]).toMatchObject({ signal: expect.any(AbortSignal) });
+    timeout.mockRestore();
+  });
+
+  it("copies photos a few at a time, not one after another (review on PR #39)", async () => {
+    const store = new FakePeopleStore();
+    store.photoSize = { ...store.photoSize, concurrency: 3 };
+    let running = 0;
+    let most = 0;
+    const fetch = vi.fn(async () => {
+      running++;
+      most = Math.max(most, running);
+      await new Promise((r) => setTimeout(r, 5));
+      running--;
+      return image();
+    });
+    const rows = Array.from({ length: 7 }, (_, i) => row({ googleId: `people/c${i}`, name: `P${i}`, photoUrl: PHOTO }));
+    const result = await importPeople(store, rows, { fetch, newId: (() => { let n = 0; return () => `photo-${n++}`; })() });
+    expect(result).toMatchObject({ added: 7, photosMissed: 0 });
+    expect(most).toBe(3);
+  });
+
+  it("never fetches a photo from anywhere but Google's photo host (review focus 1)", async () => {
+    const store = new FakePeopleStore();
+    const fetch = vi.fn(async () => image());
+    await importPeople(store, [row({ photoUrl: "https://169.254.169.254/latest/meta-data" })], deps(fetch));
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("counts a person the database won't save as failed, and carries on", async () => {
+    const store = new FakePeopleStore();
+    const create = store.createPerson.bind(store);
+    store.createPerson = async (p) => {
+      if (p.name === "Broken") throw new Error("boom");
+      return create(p);
+    };
+    const result = await importPeople(store, [row({ googleId: "people/c9", name: "Broken" }), row()], deps());
+    expect(result).toMatchObject({ added: 1, skipped: 0, failed: 1 });
+  });
+
+  it("needs a signed-in buyer", async () => {
+    const store = new FakePeopleStore();
+    store.caller = null;
+    expect(await importPeople(store, [row()], deps())).toEqual({ ok: false, error: "Your session ended. Sign in again." });
+    expect(store.writes).toEqual([]);
   });
 });

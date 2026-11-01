@@ -4,16 +4,18 @@
 // live person (the database's row-level security says the same, but a
 // refused write must come back as a clear error, not a silent no-op).
 import {
+  isGooglePhotoUrl,
   nextOccasion,
   nextOccurrence,
   orderBy,
+  sizedGooglePhotoUrl,
   startingOccasions,
   type CalendarDate,
   type OccasionKind,
   type Relationship,
 } from "@gifts-af/core";
 import type { SaveResult } from "../settings";
-import { isUuid, parseShareToken, type MonthDay, type PersonInput } from "./rules";
+import { isUuid, parseShareToken, type ImportRow, type MonthDay, type PersonInput } from "./rules";
 import type { OccasionRow, PeopleStore, PersonRow } from "./store";
 
 export type PersonCard = {
@@ -296,4 +298,155 @@ export function deletePerson(store: PeopleStore, id: string): Promise<SaveResult
     await store.deletePerson(id);
     return { ok: true };
   });
+}
+
+// ─── Google Contacts import (ALL-24) ────────────────────────────────────────
+
+export type ImportResult =
+  | { ok: true; added: number; skipped: number; failed: number; photosMissed: number }
+  | { ok: false; error: string };
+
+export type ImportDeps = {
+  fetch: typeof fetch;
+  /** A fresh file name for each copied photo. */
+  newId: () => string;
+};
+
+const PHOTO_TYPES: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
+
+export type PhotoCopySettings = {
+  px: number;
+  maxBytes: number;
+  /** Per photo fetch, in milliseconds. */
+  timeoutMs: number;
+  /** Photos copied at once. */
+  concurrency: number;
+};
+
+/** The body, or null once it passes `maxBytes` (stops reading there). */
+async function readCapped(res: Response, maxBytes: number): Promise<Uint8Array | null> {
+  if (!res.body) return null;
+  const reader = res.body.getReader();
+  const parts: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel();
+      return null;
+    }
+    parts.push(value);
+  }
+  const bytes = new Uint8Array(total);
+  let at = 0;
+  for (const part of parts) {
+    bytes.set(part, at);
+    at += part.byteLength;
+  }
+  return bytes;
+}
+
+/**
+ * Copies a contact's Google photo into the buyer's own folder. Only Google's
+ * photo host is ever fetched (the row checks say so too), redirects are
+ * refused, each fetch has a timeout, and anything that isn't a small image is
+ * dropped without reading past the size limit. Never throws.
+ */
+async function copyPhoto(
+  store: PeopleStore,
+  deps: ImportDeps,
+  userId: string,
+  personId: string,
+  url: string,
+  size: PhotoCopySettings,
+): Promise<boolean> {
+  if (!isGooglePhotoUrl(url)) return false;
+  try {
+    const res = await deps.fetch(sizedGooglePhotoUrl(url, size.px), {
+      redirect: "error",
+      signal: AbortSignal.timeout(size.timeoutMs),
+    });
+    const type = (res.headers.get("content-type") ?? "").split(";")[0].trim().toLowerCase();
+    const ext = PHOTO_TYPES[type];
+    const stated = Number(res.headers.get("content-length") ?? "0");
+    if (!res.ok || !ext || stated > size.maxBytes) {
+      await res.body?.cancel();
+      return false;
+    }
+    const bytes = await readCapped(res, size.maxBytes);
+    if (!bytes || bytes.byteLength === 0) return false;
+    const path = `${userId}/${personId}/${deps.newId()}.${ext}`;
+    if (!(await store.uploadPhoto(path, bytes, type))) return false;
+    return await store.setPhotoPath(personId, path);
+  } catch (e) {
+    console.error("copying a contact photo failed", e);
+    return false;
+  }
+}
+
+/** Runs `work` over `items`, at most `limit` at a time. */
+async function inBatches<T>(items: T[], limit: number, work: (item: T) => Promise<void>): Promise<void> {
+  let next = 0;
+  const runner = async () => {
+    while (next < items.length) await work(items[next++]);
+  };
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, runner));
+}
+
+/**
+ * Adds the ticked contacts; each one stands alone, so one failure doesn't stop
+ * the rest. People are added first, then their photos are copied a few at a
+ * time, so a slow photo never holds up the people.
+ */
+export async function importPeople(store: PeopleStore, rows: ImportRow[], deps: ImportDeps): Promise<ImportResult> {
+  const userId = await store.userId();
+  if (!userId) return { ok: false, error: SESSION_ENDED };
+  let imported: Set<string>;
+  let size: PhotoCopySettings;
+  try {
+    [imported, size] = await Promise.all([
+      store.importedContactIds().then((ids) => new Set(ids)),
+      store.photoSettings(),
+    ]);
+  } catch (e) {
+    console.error("starting an import failed", e);
+    return { ok: false, error: TRY_AGAIN };
+  }
+
+  const result = { ok: true as const, added: 0, skipped: 0, failed: 0, photosMissed: 0 };
+  const photos: { id: string; url: string }[] = [];
+  for (const row of rows) {
+    if (imported.has(row.googleId)) {
+      result.skipped++;
+      continue;
+    }
+    try {
+      const id = await store.createPerson({
+        name: row.name,
+        relationship: row.relationship,
+        kinds: startingOccasions(row.relationship, { birthday: row.birthday !== null, anniversary: false }),
+        birthday: row.birthday,
+        birthYear: row.birthYear,
+        anniversary: null,
+        googleContactId: row.googleId,
+        address: row.address,
+      });
+      imported.add(row.googleId);
+      result.added++;
+      if (row.photoUrl) photos.push({ id, url: row.photoUrl });
+    } catch (e) {
+      // The unique index: another import added them a moment ago.
+      if (errorCode(e) === "23505") result.skipped++;
+      else {
+        console.error("importing a person failed", e);
+        result.failed++;
+      }
+    }
+  }
+  await inBatches(photos, size.concurrency, async ({ id, url }) => {
+    if (!(await copyPhoto(store, deps, userId, id, url, size))) result.photosMissed++;
+  });
+  return result;
 }

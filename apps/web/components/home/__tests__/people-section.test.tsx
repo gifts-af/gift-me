@@ -22,4 +22,14 @@ describe("PeopleSection", () => {
     render(await PeopleSection());
     expect(screen.getByRole("link", { name: "Add someone you buy for" })).toBeInTheDocument();
   });
+
+  // ALL-24: Google import sits next to adding by hand, empty or not.
+  it.each([[[]], [[{ id: "p1", name: "Mom", relationship: "mother", photoUrl: null, next: null, keepsList: false, hasBirthday: false }]]])(
+    "offers Import from Google next to Add (%#)",
+    async (people) => {
+      listPeople.mockResolvedValue(people);
+      render(await PeopleSection());
+      expect(screen.getByRole("link", { name: "Import from Google" })).toHaveAttribute("href", "/people/import");
+    },
+  );
 });

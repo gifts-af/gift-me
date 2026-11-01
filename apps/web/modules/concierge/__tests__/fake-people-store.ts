@@ -31,6 +31,11 @@ export class FakePeopleStore implements PeopleStore {
   lists = new Map<string, string>(); // share token -> owner
   signed: string[][] = [];
   writes: string[] = [];
+  /** Google contact id and address of imported people (ALL-24). */
+  googleIds = new Map<string, string>();
+  addresses = new Map<string, unknown>();
+  photoSize = { px: 512, maxBytes: 10_485_760, timeoutMs: 5000, concurrency: 4 };
+  uploads: { path: string; bytes: number; contentType: string }[] = [];
   /** Makes the next write of this name report 0 rows changed. */
   noRows = new Set<string>();
   private next = 1;
@@ -91,6 +96,10 @@ export class FakePeopleStore implements PeopleStore {
 
   async createPerson(p: NewPerson) {
     this.write("createPerson", JSON.stringify(p));
+    // Like the unique index on (user, Google contact id) for live people.
+    if (p.googleContactId && [...this.googleIds].some(([id, g]) => g === p.googleContactId && this.mine(id))) {
+      throw dbError("duplicate key value", "23505");
+    }
     const id = this.seed(this.caller ?? "", { name: p.name, relationship: p.relationship, birthYear: p.birthYear });
     for (const kind of p.kinds) {
       const d = kind === "birthday" ? p.birthday : kind === "anniversary" ? p.anniversary : null;
@@ -98,7 +107,22 @@ export class FakePeopleStore implements PeopleStore {
         id: `o${this.next++}`, personId: id, kind, month: d?.month ?? null, day: d?.day ?? null, enabled: true,
       });
     }
+    if (p.googleContactId) this.googleIds.set(id, p.googleContactId);
+    if (p.address) this.addresses.set(id, p.address);
     return id;
+  }
+
+  async importedContactIds() {
+    return [...this.googleIds].filter(([id]) => this.mine(id)).map(([, g]) => g);
+  }
+
+  async photoSettings() { return this.photoSize; }
+
+  async uploadPhoto(path: string, bytes: Uint8Array, contentType: string) {
+    this.write("uploadPhoto", path);
+    if (!path.startsWith(`${this.caller}/`)) return false;
+    this.uploads.push({ path, bytes: bytes.byteLength, contentType });
+    return true;
   }
 
   async updatePerson(id: string, p: { name: string; relationship: string; birthYear: number | null }) {
