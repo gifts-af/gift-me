@@ -46,9 +46,68 @@ export async function resizeToJpeg(file: File, px: number): Promise<Blob> {
   return blob;
 }
 
+type Resize = (file: File, px: number) => Promise<Blob>;
+
+/** Checks the file is small enough and decodes; returns the shrunken JPEG or a plain-words error. */
+export async function prepareJpeg(o: {
+  file: File;
+  px: number;
+  maxUploadBytes: number;
+  resize?: Resize;
+}): Promise<{ ok: true; blob: Blob } | { ok: false; error: string }> {
+  if (o.file.size > o.maxUploadBytes) return { ok: false, error: "That photo is too big." };
+  try {
+    return { ok: true, blob: await (o.resize ?? resizeToJpeg)(o.file, o.px) };
+  } catch {
+    return { ok: false, error: "That file isn't a photo we can use." };
+  }
+}
+
 /**
- * Pick or take a photo, shrink it, upload it, point the person at it, and only
- * then delete the old object. On any failure the old photo and its object stay.
+ * Shrink, upload, point the person at the new object, and only then delete the
+ * old one (best effort). On any failure the new object is removed and the old
+ * photo stays. Shared by the picker (existing person) and the add form.
+ */
+export async function savePersonPhoto(o: {
+  file: File;
+  personId: string;
+  userId: string;
+  px: number;
+  maxUploadBytes: number;
+  action: Action;
+  currentPath?: string | null;
+  storage?: PhotoStorage;
+  resize?: Resize;
+}): Promise<{ ok: true; path: string } | { ok: false; error: string }> {
+  const prepared = await prepareJpeg(o);
+  if (!prepared.ok) return prepared;
+  try {
+    const store = o.storage ?? supabaseStorage();
+    const newPath = `${o.userId}/${o.personId}/${crypto.randomUUID()}.jpg`;
+    const uploaded = await store.upload(newPath, prepared.blob);
+    if (uploaded.error) return { ok: false, error: "The photo didn't upload. Try again." };
+    const form = new FormData();
+    form.set("id", o.personId);
+    form.set("path", newPath);
+    let result: SaveResult;
+    try {
+      result = await o.action(null, form);
+    } catch {
+      result = { ok: false, error: "The photo didn't save. Try again." };
+    }
+    if (!result.ok) {
+      await tryRemove(store, newPath); // tidy the orphan; the old photo stays
+      return { ok: false, error: result.error };
+    }
+    if (o.currentPath) await tryRemove(store, o.currentPath); // best effort: a leftover object is harmless
+    return { ok: true, path: newPath };
+  } catch {
+    return { ok: false, error: "The photo didn't upload. Try again." };
+  }
+}
+
+/**
+ * Pick or take a photo for an existing person and save it as soon as it is chosen.
  *
  * `userId` comes from the server (the signed-in user), because the storage
  * folder is `<user>/<person>/` and the server already knows who that is.
@@ -73,7 +132,7 @@ export function PhotoPicker({
   action: Action;
   onSaved?: (path: string) => void;
   storage?: PhotoStorage;
-  resize?: (file: File, px: number) => Promise<Blob>;
+  resize?: Resize;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -82,45 +141,17 @@ export function PhotoPicker({
 
   async function onPick(file: File) {
     setError(null);
-    if (file.size > maxUploadBytes) {
-      setError("That photo is too big.");
-      return;
-    }
     setBusy(true);
     try {
-      let blob: Blob;
-      try {
-        blob = await resize(file, px);
-      } catch {
-        setError("That file isn't a photo we can use.");
-        return;
-      }
-      const store = storage ?? supabaseStorage();
-      const newPath = `${userId}/${personId}/${crypto.randomUUID()}.jpg`;
-      const uploaded = await store.upload(newPath, blob);
-      if (uploaded.error) {
-        setError("The photo didn't upload. Try again.");
-        return;
-      }
-      const form = new FormData();
-      form.set("id", personId);
-      form.set("path", newPath);
-      let result: SaveResult;
-      try {
-        result = await action(null, form);
-      } catch {
-        result = { ok: false, error: "The photo didn't save. Try again." };
-      }
+      const result = await savePersonPhoto({
+        file, personId, userId, px, maxUploadBytes, action, currentPath: path, storage, resize,
+      });
       if (!result.ok) {
-        await tryRemove(store, newPath); // tidy the orphan; the old photo stays
         setError(result.error);
         return;
       }
-      if (path) await tryRemove(store, path); // best effort: a leftover object is harmless
-      setPath(newPath);
-      onSaved?.(newPath);
-    } catch {
-      setError("The photo didn't upload. Try again.");
+      setPath(result.path);
+      onSaved?.(result.path);
     } finally {
       setBusy(false);
       if (input.current) input.current.value = "";

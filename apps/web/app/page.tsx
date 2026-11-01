@@ -5,7 +5,11 @@ import { Account } from "@/components/app-shell/account";
 import { InstallTip } from "@/components/app-shell/install-tip";
 import { PageFrame } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
+import { PersonCard } from "@/components/home/person-card";
+import { Button } from "@/components/ui/button";
 import { appSettingInt } from "@/lib/app-settings";
+import { todayForRequest } from "@/lib/today";
+import { listPeople } from "@/modules/concierge";
 import { getMyListSummary } from "@/modules/lists";
 
 // Home: the one front door after sign-in (T29). "My list" first, then
@@ -25,11 +29,9 @@ export default function Home() {
           <h2 id="people-heading" className="text-[17px] font-semibold">
             People
           </h2>
-          {/* ALL-21 fills this with people cards in a grid
-              (grid gap-3 md:grid-cols-2 lg:grid-cols-3) and adds "Add someone". */}
-          <p className="text-[15px] text-muted-foreground">
-            Add the people you buy for, and we&apos;ll suggest gifts before each birthday and holiday.
-          </p>
+          <Suspense fallback={<p className="text-[15px] text-muted-foreground">Loading…</p>}>
+            <PeopleSection />
+          </Suspense>
         </section>
       </PageFrame>
     </>
@@ -45,6 +47,35 @@ async function HomeScreenTip() {
     console.error("install tip hidden", error);
     return null;
   }
+}
+
+async function PeopleSection() {
+  const people = await listPeople(await todayForRequest());
+  const add = (
+    <Button asChild variant="outline" className="self-start">
+      <Link href="/people/new">Add someone you buy for</Link>
+    </Button>
+  );
+  if (people.length === 0) {
+    return (
+      <>
+        <p className="text-[15px] text-muted-foreground">
+          Add the people you buy for, and we&apos;ll suggest gifts before each birthday and holiday.
+        </p>
+        {add}
+      </>
+    );
+  }
+  return (
+    <>
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+        {people.map((person) => (
+          <PersonCard key={person.id} person={person} />
+        ))}
+      </div>
+      {add}
+    </>
+  );
 }
 
 async function MyListCard() {
