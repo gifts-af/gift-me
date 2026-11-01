@@ -58,7 +58,7 @@ None open. The answers are below.
 | Who writes to the database and Storage? | The route checks the bearer token and then uses a Supabase client acting as that user, so RLS applies. The extension reads and adds people directly with supabase-js under the same RLS. | T26: captures and people are user-writable, so they don't need the admin key. **[Claude's call]** |
 | Popup UI | React plus Tailwind with the T28 tokens, built by Vite (`@crxjs/vite-plugin` or a plain multi-entry Vite build). | It matches the web app's stack and the shared tokens (T15). **[Claude's call]** |
 | Screenshot format | `captureVisibleTab` JPEG, quality 70. | The text is the main input, and this keeps files small. Tune it if extraction needs more detail. **[Claude's call]** |
-| Relationship options in quick add | One list in `packages/core` (parent, partner, child, sibling, friend, other), which ALL-21's people form reuses. | `relationship` is required free text, and `budget_defaults` holds a user's own rows with nothing seeded. A list of labels is vocabulary, not a business number, so T23 doesn't apply. **[Claude's call]** |
+| Relationship options in quick add | The same list as the web app (ALL-21's `RELATIONSHIPS` in `packages/core`); quick add saves through `concierge.add_person`, so occasions are created too. | `relationship` is required free text, and `budget_defaults` holds a user's own rows with nothing seeded. A list of labels is vocabulary, not a business number, so T23 doesn't apply. **[Claude's call]** |
 | Database changes | One migration: the private bucket `captures`, `storage.objects` policies scoped to the `{auth.uid()}/` folder, `captures.note`, and the two settings rows. It's applied to `dev` first, and to `prod` after the merge (ask first). | Neither the bucket nor any Storage policies exist yet. |
 
 ## Principles check
@@ -176,6 +176,8 @@ None open. The answers are below.
 
 ### Task 5: Relationship list in core [P]
 
+> **Superseded by ALL-21.** The six-value list below was never kept: `packages/core/src/relationships.ts` was removed, and the single list is `RELATIONSHIPS` in `packages/core/src/people.ts`. Quick add (Task 8) now saves through `concierge.add_person`, so extension-added people get their starting occasions.
+
 **Files:** `packages/core/src/relationships.ts`, `relationships.test.ts`, `index.ts` export
 
 - [ ] Write the failing test: `RELATIONSHIPS` equals `["parent","partner","child","sibling","friend","other"]`, each with a display `label`.
@@ -224,7 +226,7 @@ None open. The answers are below.
 **Files:** `apps/extension/src/popup/App.tsx`, `popup/PersonPicker.tsx`, `popup/AddPerson.tsx`, `src/lib/page.ts`, `src/lib/upload.ts`, `src/popup/__tests__/App.test.tsx`, `src/lib/__tests__/page.test.ts`, `src/lib/__tests__/upload.test.ts`
 
 **Interfaces:**
-- Consumes: `getSupabase` and `signOut` (Task 7), `RELATIONSHIPS` (Task 5)
+- Consumes: `getSupabase` and `signOut` (Task 7), `RELATIONSHIPS` and `relationshipLabel` from `packages/core/src/people.ts` (ALL-21; replaces Task 5)
 - Produces:
   - `canCapture(tabId: number): Promise<boolean>`: `executeScript` with `() => true`, returning false when it throws
   - `collectPage(tabId: number, opts: { jpegQuality: number; textMax: number }): Promise<{ url, title, text, screenshot: Blob }>`, where `text` is `document.body.innerText.slice(0, textMax)` and the popup gets `textMax` from `rpc('setting_int', { p_key: 'capture_text_max_chars' })` read when the popup opens
@@ -233,7 +235,7 @@ None open. The answers are below.
 - [ ] **Write the failing tests,** with RTL and fake chrome:
   - signed out → **Sign in** opens `${APP_ORIGIN}/extension/connect` with `chrome.tabs.create`
   - people are listed by name, and selecting one makes the button read "Save to Mom"
-  - no people → the add form; submitting "Sam" plus `friend` inserts into `people` and shows "Save to Sam" (AC-9)
+  - no people → the add form; submitting "Sam" plus `friend` calls `concierge.add_person` (ALL-21; originally a direct insert into `people`) and shows "Save to Sam" (AC-9)
   - `canCapture` false → "This page can't be captured" with Save disabled (AC-10)
   - a successful save → "Saved to Mom. We'll show you what we learned." and **Capture another** resets the form
   - an upload failure → an inline error and a **Try again** that resends

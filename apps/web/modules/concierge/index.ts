@@ -23,3 +23,21 @@ export type { CaptureStore, NewCaptureRow } from "./capture/store";
 export { confirmActionLink, readActionLink } from "./notify/links";
 export type { ConfirmResult, LinkDeps, LinkView } from "./notify/links";
 export { createSupabaseCaptureStore } from "./capture/supabase-store";
+
+// People, occasions and budgets (ALL-21). Birthday and other occasion rules
+// live in packages/core; parsing of the forms is in people/rules.ts.
+export {
+  addPerson,
+  deletePerson,
+  getPerson,
+  linkList,
+  listPeople,
+  setBudget,
+  setOccasionEnabled,
+  setPhoto,
+  unlinkList,
+  updatePerson,
+} from "./people/people";
+export type { AddResult, PersonCard, PersonDetail } from "./people/people";
+export { parseBudget, parsePersonForm, parseShareToken } from "./people/rules";
+export type { PersonInput } from "./people/rules";

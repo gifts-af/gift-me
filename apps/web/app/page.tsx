@@ -5,6 +5,7 @@ import { Account } from "@/components/app-shell/account";
 import { InstallTip } from "@/components/app-shell/install-tip";
 import { PageFrame } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
+import { PeopleSection } from "@/components/home/people-section";
 import { appSettingInt } from "@/lib/app-settings";
 import { getMyListSummary } from "@/modules/lists";
 
@@ -25,11 +26,9 @@ export default function Home() {
           <h2 id="people-heading" className="text-[17px] font-semibold">
             People
           </h2>
-          {/* ALL-21 fills this with people cards in a grid
-              (grid gap-3 md:grid-cols-2 lg:grid-cols-3) and adds "Add someone". */}
-          <p className="text-[15px] text-muted-foreground">
-            Add the people you buy for, and we&apos;ll suggest gifts before each birthday and holiday.
-          </p>
+          <Suspense fallback={<p className="text-[15px] text-muted-foreground">Loading…</p>}>
+            <PeopleSection />
+          </Suspense>
         </section>
       </PageFrame>
     </>

@@ -219,6 +219,11 @@ flowchart LR
 - New setting `test_action_link_hours` (24) in `app_settings`: how long the Settings test email's button works (T23).
 - Server code writes these server-only tables with the Supabase secret key (`lib/supabase/admin.ts`, server-only import). See README > Environments.
 
+**As built in people v1.2** (ALL-21, T41):
+- `people.birthday` is gone. A birthday is an `occasions` row; `people.birth_year` (optional) only adds an age. A partial unique index allows one live occasion per kind per person, and holidays can be added for anyone.
+- `people.photo_path` points at a photo in the private `person-photos` bucket. Each owner can read and write only their own folder (`<user_id>/...`); the app shows a short-lived signed link. The size limit and the resize width are `app_settings` (`person_photo_max_upload_bytes`, `person_photo_px`).
+- `concierge.add_person` creates a person with their starting occasions in one call, so the app and the Chrome extension save people the same way.
+
 ## 4. Key calculations (in `packages/core`, unit-tested)
 
 ### 4.1 Ship-by deadline and schedule

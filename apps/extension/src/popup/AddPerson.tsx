@@ -1,5 +1,5 @@
 import { useId, useState, type FormEvent } from "react";
-import { RELATIONSHIPS } from "@gifts-af/core";
+import { RELATIONSHIPS, relationshipLabel, startingOccasions, type Relationship } from "@gifts-af/core";
 import { getSupabase } from "../lib/supabase";
 import type { Person } from "./PersonPicker";
 
@@ -19,12 +19,14 @@ export function AddPerson({ onAdded, onCancel }: { onAdded: (person: Person) => 
     setError(null);
     try {
       const { data, error: err } = await getSupabase()
-        .from("people")
-        .insert({ name: trimmed, relationship })
-        .select("id, name")
-        .single();
+        .schema("concierge")
+        .rpc("add_person", {
+          p_name: trimmed,
+          p_relationship: relationship,
+          p_kinds: startingOccasions(relationship as Relationship, { birthday: false, anniversary: false }),
+        });
       if (err || !data) throw err;
-      onAdded(data);
+      onAdded({ id: data, name: trimmed });
     } catch {
       setError("Couldn't add them. Try again.");
       setBusy(false);
@@ -57,8 +59,8 @@ export function AddPerson({ onAdded, onCancel }: { onAdded: (person: Person) => 
             Choose one
           </option>
           {RELATIONSHIPS.map((r) => (
-            <option key={r.value} value={r.value}>
-              {r.label}
+            <option key={r} value={r}>
+              {relationshipLabel(r)}
             </option>
           ))}
         </select>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   arriveBy,
+  orderBy,
   canArriveInTime,
   planRoundStart,
   reminderSchedule,
@@ -158,5 +159,25 @@ describe("arrival", () => {
     expect(canArriveInTime({ ...idea, deliveryDaysMax: 6 }, s)).toBe(false);
     // With a 1-day buffer, the same idea is in time.
     expect(canArriveInTime({ ...idea, deliveryDaysMax: 6 }, { ...s, safetyBufferDays: 1 })).toBe(true);
+  });
+});
+
+describe("orderBy", () => {
+  const o = { planningDeliveryDays: 7, safetyBufferDays: 2, fastestDaysToArrive: 1 };
+
+  it("gives the normal deadline when it is still ahead", () => {
+    expect(orderBy("2026-12-25", "2026-12-01", o)).toEqual({ date: "2026-12-16", fast: false });
+  });
+
+  it("falls back to the fast-shipping deadline", () => {
+    expect(orderBy("2026-12-25", "2026-12-20", o)).toEqual({ date: "2026-12-22", fast: true });
+  });
+
+  it("switches to fast shipping on the normal deadline itself", () => {
+    expect(orderBy("2026-12-25", "2026-12-16", o)).toEqual({ date: "2026-12-22", fast: true });
+  });
+
+  it("is null when even fast shipping is too late", () => {
+    expect(orderBy("2026-12-25", "2026-12-22", o)).toBeNull();
   });
 });

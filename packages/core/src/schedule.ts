@@ -26,7 +26,7 @@ function checkDays(days: number, what: string): void {
   }
 }
 
-function checkSettings(s: ScheduleSettings): void {
+function checkSettings(s: Partial<ScheduleSettings>): void {
   for (const [what, days] of Object.entries(s)) checkDays(days, what);
 }
 
@@ -37,12 +37,29 @@ function checkSettings(s: ScheduleSettings): void {
  */
 export function shipByDeadline(
   occasionDate: CalendarDate,
-  s: ScheduleSettings,
+  s: Pick<ScheduleSettings, "planningDeliveryDays" | "safetyBufferDays">,
   worstCaseDaysToArrive: number = s.planningDeliveryDays,
 ): CalendarDate {
   checkSettings(s);
   checkDays(worstCaseDaysToArrive, "Days to arrive");
   return addDays(occasionDate, -(worstCaseDaysToArrive + s.safetyBufferDays));
+}
+
+/**
+ * The last day to order for an occasion: the normal ship-by deadline if it is
+ * still ahead of today, else the fast-shipping one (`fast: true`), else `null`
+ * (too late to ship this year).
+ */
+export function orderBy(
+  occasionDate: CalendarDate,
+  today: CalendarDate,
+  s: Pick<ScheduleSettings, "planningDeliveryDays" | "safetyBufferDays" | "fastestDaysToArrive">,
+): { date: CalendarDate; fast: boolean } | null {
+  const normal = shipByDeadline(occasionDate, s);
+  if (compareDates(normal, today) > 0) return { date: normal, fast: false };
+  const fast = shipByDeadline(occasionDate, s, s.fastestDaysToArrive);
+  if (compareDates(fast, today) > 0) return { date: fast, fast: true };
+  return null;
 }
 
 /** When a round normally starts: the lead time before the planning deadline. */
@@ -68,15 +85,11 @@ export function planRoundStart(
   s: ScheduleSettings,
 ): { startDate: CalendarDate; deadline: CalendarDate; late: boolean } | null {
   const normalStart = roundStartDate(occasionDate, s);
-  const planningDeadline = shipByDeadline(occasionDate, s);
-  const deadline =
-    compareDates(planningDeadline, today) > 0
-      ? planningDeadline
-      : shipByDeadline(occasionDate, s, s.fastestDaysToArrive);
-  if (compareDates(deadline, today) <= 0) return null;
+  const order = orderBy(occasionDate, today, s);
+  if (!order) return null;
   return {
     startDate: maxDate(today, normalStart),
-    deadline,
+    deadline: order.date,
     late: compareDates(today, normalStart) > 0,
   };
 }
