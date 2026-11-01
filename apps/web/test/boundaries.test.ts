@@ -19,7 +19,8 @@ describe("product boundaries", () => {
       'import { getMyList } from "@/modules/lists";\nexport const x = getMyList;\n',
     );
     expect(errors).toEqual([]);
-  });
+    // Spawns ESLint, which can take a while to start under full-suite load.
+  }, 30_000);
 
   it("blocks another product from reaching into its internals", async () => {
     const errors = await boundaryErrors(
