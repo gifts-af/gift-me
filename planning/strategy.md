@@ -8,7 +8,7 @@ The written source for where the platform is headed and how it reaches people. T
 
 | Product | For | Job in the funnel | Status | Lead |
 |---|---|---|---|---|
-| **Scan-to-gift** | Both | **Get people in.** Fun, public, instant. | Exploring. Linear: "Scan-to-gift" | — |
+| **Scan-to-gift** | Both | **Get people in.** Our guerrilla marketing: strangers gifting each other out in the wild, so growth comes from people, not ad spend. Fun, public, instant. | Exploring. Linear: "Scan-to-gift" | — |
 | **Gift lists** (was "GiftMe"; the platform is now GiftsAF) | The receiver | **Keep them.** A reason to come back for every occasion. | Live, invite only, at giftsaf.com: sharing, claiming, the GiftsAF name and logo, a home page that leads with the list and its own tour (ALL-71). Soft launch to friends and family. Linear: "Gift List Sharing", "Soft Launch" | Jim |
 | **Gift Concierge** | The giver | **Earn.** Loyal customers automate recurring gifts. | MVP: Waves 1 and 2 done (2026-11-01), Wave 3 next. A waitlist on the home page (ALL-71). Linear: "Gift Concierge MVP" | Owner |
 
