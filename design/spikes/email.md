@@ -56,12 +56,11 @@ All on Vercel DNS for `giftsaf.com` (team GiftMe), added 2026-11-01. Resend doma
 ## Accounts and cleanup
 
 - Resend account: allensforever711@gmail.com (free plan).
-- The spike key `gift-me-email-spike` (full access) is in `spikes/email/.env` (gitignored). **Delete it at the end of the spike;** it was pasted into a Claude session. W2-5 creates the app's own key.
-- The test webhook pointed at a temporary Cloudflare tunnel. **Delete it** in Resend, or re-point it at production in W4-3.
+- **Cleaned up 2026-11-01:** the spike key `gift-me-email-spike` (full access, pasted into a Claude session) and the test webhook are both deleted. The Resend account currently has **no API key**, so W2-5 creates the app's own key and webhook.
 
 ## How to rerun
 
-1. Put `RESEND_API_KEY` and `RESEND_WEBHOOK_SECRET` in `spikes/email/.env`.
+1. Create a Resend key, and put `RESEND_API_KEY` and `RESEND_WEBHOOK_SECRET` (from the webhook you create in step 3) in `spikes/email/.env`.
 2. Run `node spikes/email/webhook.mjs` (listens on port 8787).
 3. Run `cloudflared tunnel --url http://localhost:8787`, and point a Resend webhook at `<tunnel url>/resend`.
 4. Email `anything@in.giftsaf.com`. The summary prints to the console, and the full email and attachments go to `spikes/email/out/` (gitignored).
