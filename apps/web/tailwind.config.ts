@@ -54,6 +54,11 @@ export default {
           DEFAULT: "hsl(var(--warning))",
           soft: "hsl(var(--warning-soft))",
         },
+        // The home page's yellow sticker and alpha strip (ALL-46).
+        sticker: {
+          DEFAULT: "hsl(var(--sticker))",
+          foreground: "hsl(var(--sticker-foreground))",
+        },
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",
