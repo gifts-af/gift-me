@@ -986,6 +986,7 @@ export type Database = {
           created_at: string;
           list_id: string;
           person_id: string;
+          share_token: string;
         };
         ComputedFields: never;
         Insert: {
@@ -993,12 +994,14 @@ export type Database = {
           created_at?: string;
           list_id: string;
           person_id: string;
+          share_token: string;
         };
         Update: {
           buyer_id?: string;
           created_at?: string;
           list_id?: string;
           person_id?: string;
+          share_token?: string;
         };
         Relationships: [
           {
@@ -1015,6 +1018,13 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      active_link: {
+        Args: { p_person_id: string };
+        Returns: {
+          list_id: string;
+          owner_id: string;
+        }[];
+      };
       claim_gift: {
         Args: { p_item_id: string; p_name: string; p_token: string };
         Returns: Json;

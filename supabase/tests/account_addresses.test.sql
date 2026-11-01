@@ -34,12 +34,14 @@ select is((select count(*)::int from public.account_addresses), 0, 'the buyer re
 select tests.act_as_anon();
 select throws_ok('select * from public.account_addresses', '42501', null, 'signed-out visitors can''t read addresses');
 
--- The buyer's "Mom" is linked to Mom's account (set by lists.link_person in
--- real use; set directly here).
+-- The buyer links their "Mom" through her list's share link. (Setting
+-- people.linked_user_id alone shares nothing: decision 43.)
+select tests.act_as(:'mom');
+select lists.save_list(null, 'Birthday', '[]'::jsonb) as list_id \gset
+select share_token as token from lists.lists where id = :'list_id' \gset
 select tests.act_as(:'buyer');
 insert into public.people (name, relationship) values ('Mom', 'parent') returning id as person \gset
-select tests.reset_role();
-update public.people set linked_user_id = :'mom' where id = :'person';
+select lists.link_person(:'token', :'person');
 
 select tests.act_as(:'buyer');
 select is(public.shared_city_for_person(:'person'), null, 'no city while Mom hasn''t shared her address');
