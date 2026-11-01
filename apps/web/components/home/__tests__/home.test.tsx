@@ -39,6 +39,18 @@ describe("home page (ALL-46)", () => {
     expect(within(card).getAllByText("Claim")).toHaveLength(2);
   });
 
+  it.each([
+    ["list", "Mom", "What do you want for your birthday?"],
+    ["concierge", "Reminder", "Mom's birthday is Saturday"],
+  ])("the %s hero opens with a phone-notification card, not a tilted sticker (ALL-73)", (which, label, text) => {
+    render(<WelcomePage />);
+    const hero = which === "list" ? listHero() : conciergeHero();
+    const card = within(hero).getByTestId("hero-callout");
+    expect(card).toHaveTextContent(label);
+    expect(card).toHaveTextContent(text);
+    expect(hero.querySelector(".-rotate-3")).toBeNull();
+  });
+
   it("the concierge hero offers its tour and the waitlist (ALL-71)", () => {
     render(<WelcomePage />);
     const hero = within(conciergeHero());

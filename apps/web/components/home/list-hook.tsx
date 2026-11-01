@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { HeroCallout } from "@/components/home/hero-callout";
 import { RequestAccessButton } from "@/components/home/request-access-dialog";
 import { ListPreview } from "./list-preview";
 
@@ -8,9 +9,7 @@ export function ListHook() {
   return (
     <section aria-labelledby="list-hook-heading" className="mx-auto grid w-full max-w-5xl gap-8 px-4 pb-10 pt-4 md:grid-cols-[1.1fr_0.9fr] md:items-center md:px-8 md:py-16">
       <div data-testid="list-hook-text" className="flex flex-col gap-4">
-        <span className="-rotate-3 self-start rounded-full bg-sticker px-3 py-1 text-[13px] font-extrabold text-sticker-foreground">
-          &ldquo;What do you want for your birthday?&rdquo; <span aria-hidden="true">🎁</span>
-        </span>
+        <HeroCallout icon="💬" label="Mom" text="What do you want for your birthday?" />
         <h1 id="list-hook-heading" className="text-[34px] font-extrabold leading-[1.05] tracking-tight md:text-[52px]">
           Your wish list, one text away.
         </h1>
