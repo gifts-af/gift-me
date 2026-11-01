@@ -23,6 +23,8 @@ describe("isPublicPath", () => {
     "/request-access",
     // Link-preview crawlers (LinkedIn, Slack…) are never signed in (ALL-55).
     "/opengraph-image",
+    // One-time email action links show their own sign-in page (ALL-23).
+    "/a/abc",
   ])("lets signed-out visitors reach %s", (path) => expect(isPublicPath(path)).toBe(true));
 
   it.each(["/", "/settings", "/api/other", "/lists/123"])(

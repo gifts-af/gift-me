@@ -7,7 +7,8 @@ import { supabaseKey, supabaseUrl } from "./env";
 // (ALL-43). The manifest and icons must load signed out, or "Add to Home
 // Screen" breaks on the sign-in page. The home page (/welcome) and the tour
 // are public (ALL-46), and so is the link-preview image (ALL-55); "/" itself is the app home, so it's not listed here:
-// homeRewrite shows signed-out visitors the home page there instead.
+// homeRewrite shows signed-out visitors the home page there instead. Email
+// action links (/a/, ALL-23) show their own sign-in page for this link.
 export function isPublicPath(pathname: string) {
   return (
     pathname === "/lists" ||
@@ -23,7 +24,8 @@ export function isPublicPath(pathname: string) {
     pathname === "/tour" ||
     pathname === "/request-access" ||
     // The link-preview image: crawlers like LinkedIn's are never signed in (ALL-55).
-    pathname.startsWith("/opengraph-image")
+    pathname.startsWith("/opengraph-image") ||
+    pathname.startsWith("/a/")
   );
 }
 

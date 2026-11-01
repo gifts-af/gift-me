@@ -6,7 +6,9 @@ import { useState } from "react";
 import { FormError } from "./auth-frame";
 
 // Leaves for Google, which returns to /auth/callback and then to `next`.
-export function GoogleButton({ next = "/" }: { next?: string }) {
+// `loginHint` is an email Google pre-selects, skipping its account chooser
+// when that account is already in the browser (ALL-23, AC-7).
+export function GoogleButton({ next = "/", loginHint }: { next?: string; loginHint?: string }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -17,6 +19,7 @@ export function GoogleButton({ next = "/" }: { next?: string }) {
       provider: "google",
       options: {
         redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+        ...(loginHint && { queryParams: { login_hint: loginHint } }),
       },
     });
     // On success the browser is already on its way to Google.
