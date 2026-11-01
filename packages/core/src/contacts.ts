@@ -105,7 +105,20 @@ export function contactsFromPeopleApi(connections: unknown[]): GoogleContact[] {
       photoUrl: pick(p.photos, (ph) => Boolean(ph.url) && !ph.default)?.url ?? null,
     });
   }
-  return rows.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+  return rows.sort(byName);
+}
+
+// Real names first, A to Z; leading quote marks don't count ("'Donald Allen'"
+// sorts under D). Names starting with anything else (#BAL, 123, emoji) go
+// after them (ALL-72).
+const LEADING_QUOTES = /^["'‘’“”`\s]+/;
+function byName(a: GoogleContact, b: GoogleContact): number {
+  const ka = a.name.replace(LEADING_QUOTES, "");
+  const kb = b.name.replace(LEADING_QUOTES, "");
+  const la = /^\p{L}/u.test(ka);
+  const lb = /^\p{L}/u.test(kb);
+  if (la !== lb) return la ? -1 : 1;
+  return ka.localeCompare(kb, undefined, { sensitivity: "base" });
 }
 
 // What people call family in their contacts. Matched on the whole name or

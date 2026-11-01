@@ -49,6 +49,17 @@ describe("contactsFromPeopleApi", () => {
     expect(rows.map((r) => r.name)).toEqual(["Adam", "zoe"]);
   });
 
+  // ALL-72: real names first; leading quote marks don't count.
+  it("puts names that start with a letter first, and the rest after", () => {
+    const names = ["#BAL - Check Balance", "'Donald Allen'", "'Bwaddington", "zoe", "Adam", "123 Pizza", "😀 Fun"];
+    const rows = contactsFromPeopleApi(
+      names.map((n, i) => ({ resourceName: `people/c${i}`, names: [{ displayName: n }] })),
+    );
+    const sorted = rows.map((r) => r.name);
+    expect(sorted.slice(0, 4)).toEqual(["Adam", "'Bwaddington", "'Donald Allen'", "zoe"]);
+    expect(new Set(sorted.slice(4))).toEqual(new Set(["#BAL - Check Balance", "123 Pizza", "😀 Fun"]));
+  });
+
   it("keeps a birthday without a year, and drops one without a month and day", () => {
     const rows = contactsFromPeopleApi([
       { resourceName: "people/c1", names: [{ displayName: "A" }], birthdays: [{ date: { month: 7, day: 4 } }] },

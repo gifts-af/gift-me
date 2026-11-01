@@ -57,10 +57,10 @@ describe("the Google Contacts import checklist", () => {
   it("lists contacts A to Z and finds them by name (AC-2)", async () => {
     setup();
     await connect();
-    const names = screen.getAllByRole("checkbox").map((c) => c.getAttribute("aria-label"));
+    const names = screen.getAllByRole("checkbox", { name: /Kim|Allen|Lee/ }).map((c) => c.getAttribute("aria-label"));
     expect(names).toEqual(["Alex Kim", "Jane Allen", "Sam Lee"]);
     fireEvent.change(screen.getByRole("searchbox", { name: "Search your contacts" }), { target: { value: "jan" } });
-    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+    expect(screen.getAllByRole("checkbox", { name: /Kim|Allen|Lee/ })).toHaveLength(1);
     expect(screen.getByRole("checkbox", { name: "Jane Allen" })).toBeInTheDocument();
   });
 
@@ -135,12 +135,46 @@ describe("the Google Contacts import checklist", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("We couldn't get your contacts from Google.");
     fail = false;
     await connect();
-    expect(screen.getAllByRole("checkbox")).toHaveLength(3);
+    expect(screen.getAllByRole("checkbox", { name: /Kim|Allen|Lee/ })).toHaveLength(3);
   });
 
   it("says when there are no contacts to show", async () => {
     setup({ load: async () => [] });
     await connect();
     expect(screen.getByText("Google didn't send any contacts with names.")).toBeInTheDocument();
+  });
+
+  // ALL-72: a disabled Add must say why, and lead to the row that needs a pick.
+  it("names the ticked contact still missing a relationship, and takes you to it", async () => {
+    setup();
+    await connect();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Jane Allen" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Sam Lee" }));
+    fireEvent.click(screen.getByRole("button", { name: "Pick who Sam Lee is to you" }));
+    expect(within(row("Sam Lee")).getByRole("combobox")).toHaveFocus();
+  });
+
+  it("counts several missing relationships, and says nothing once all are picked", async () => {
+    setup();
+    await connect();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Alex Kim" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Sam Lee" }));
+    expect(screen.getByRole("button", { name: "Pick who 2 people are to you" })).toBeInTheDocument();
+    fireEvent.change(within(row("Alex Kim")).getByRole("combobox"), { target: { value: "friend" } });
+    fireEvent.change(within(row("Sam Lee")).getByRole("combobox"), { target: { value: "friend" } });
+    expect(screen.queryByRole("button", { name: /^Pick who/ })).not.toBeInTheDocument();
+  });
+
+  it("can show just the ticked contacts", async () => {
+    setup();
+    await connect();
+    const contactBoxes = () => screen.getAllByRole("checkbox", { name: /Kim|Allen|Lee/ });
+    expect(screen.getByRole("checkbox", { name: "Show ticked (0)" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Sam Lee" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "Show ticked (1)" }));
+    expect(contactBoxes().map((c) => c.getAttribute("aria-label"))).toEqual(["Sam Lee"]);
+    fireEvent.click(screen.getByRole("checkbox", { name: "Sam Lee" }));
+    expect(screen.getByRole("checkbox", { name: "Show ticked (0)" })).not.toBeChecked();
+    expect(contactBoxes()).toHaveLength(3);
   });
 });
