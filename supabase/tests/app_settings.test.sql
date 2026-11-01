@@ -29,7 +29,7 @@ select set_eq(
     'zinc_order_fee_cents', 'planning_delivery_days', 'safety_buffer_days', 'round_lead_days',
     'reminder_1_after_heads_up_days', 'reminder_2_before_deadline_days',
     'final_notice_before_deadline_days', 'fastest_days_to_arrive',
-    'default_over_budget_pct', 'zinc_gift_message_max_chars'
+    'default_over_budget_pct', 'zinc_gift_message_max_chars', 'test_action_link_hours'
   ],
   'every fee, limit, default and schedule setting is seeded'
 );
