@@ -195,6 +195,12 @@ The public front door at `giftsaf.com` for signed-out visitors, plus the guided 
 - **One new token pair:** `--sticker` / `--sticker-foreground` (`#facc15` on `#18181b`, the same in both themes) for the sticker and the alpha strip. Contrast is checked in `test/tokens.test.ts`.
 - **Phone first, good on a computer:** one column on phones; from 768 px the hook gets a "pick a gift" card beside it, and features and steps sit three across.
 
-## Open items
+## Logo (ALL-48)
 
-- **Name and logo:** the name is **GiftsAF** (ALL-14, planning decision 44), shown as plain text from `apps/web/lib/brand.ts`. The mock-ups were updated to the new name on 2026-11-01. There's no logo yet.
+**The logo is "Gifts" in heavy type, then "AF" on a tilted yellow gift tag whose hole is a heart.** The owner picked it (direction C1) on 2026-11-01 from browser mock-ups: [`mockups/ALL-48-logo.html`](mockups/ALL-48-logo.html). The "AF" is a double meaning: "as f\*\*\*", and the family's "Allens Forever", which is what the small heart is for. The tag reads like the home page's sticker, aimed at people in their mid-twenties.
+
+- **Colours:** the `--sticker` yellow and near-black, the same in light and dark. No new tokens.
+- **Where it shows:** the app top bar, the home page and tour bar, the sign-in frame, and the browser-tab, Apple and install icons. The icons are the tag on a near-black square. At tab size the heart is dropped so "AF" stays readable.
+- **One source:** the shapes live in `apps/web/lib/logo-art.ts`, which the wordmark (`components/logo.tsx`) and the generated icons (`lib/app-icon.tsx`) both use. "AF" is drawn as shapes, not text, so the icons don't depend on fonts.
+- **Christmas hat:** a Santa hat on the tag's corner, plus holly on the larger icons, while today (US Eastern) is inside `HOLIDAY_LOGO_DATES` (`11-01..12-26` to start). It's an add-on layer: outside the window, or with the variable unset, the plain logo shows. It switches on and off within the hour, with no deploy. Changing the dates means editing the variable in Vercel. See T35.
+- **Not done:** a link-preview (Open Graph) image, and seasonal versions beyond Christmas.
