@@ -405,6 +405,7 @@ Funding comes in two stages. Ordering, tracking and the data model are the same 
 - **Evals (light):** W1-3 builds a small fixture set (about 10 captures and 5 profiles) that later prompt changes are re-checked against.
 
 ## 8. Security and privacy
+- **No ORM (T46):** SQL migrations, the typed Supabase client running as the signed-in user, and SQL functions for multi-step work.
 - RLS on every user table. The service role is only used inside the round engine and webhooks.
 - The tick endpoint rejects any call without the shared secret.
 - Webhooks verify signatures where the provider supports them. Otherwise they use a secret path token plus an IP allowlist if one is available.
