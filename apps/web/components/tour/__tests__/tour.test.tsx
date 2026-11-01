@@ -82,7 +82,10 @@ describe("guided tour (ALL-46)", () => {
     render(<Tour />);
     expect(screen.getByRole("link", { name: "Skip tour" })).toHaveAttribute("href", "/");
     goTo("end");
-    expect(screen.getByRole("button", { name: "Request access" })).toBeInTheDocument();
+    // The concierge is still being built, so its tour ends at the waitlist (ALL-71).
+    expect(screen.getByText("The concierge is still being built. Join the waitlist and we'll email you when it's ready.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Join the waitlist" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Just want the list? Request access" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Have an invite? Sign in" })).toHaveAttribute("href", "/auth/login");
     expect(screen.getByRole("link", { name: "Back to home" })).toHaveAttribute("href", "/");
   });
