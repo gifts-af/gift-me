@@ -1,10 +1,10 @@
 import { expect, test } from "@playwright/test";
 import { TEST_USER } from "./test-user";
 
-// ALL-20 acceptance: sign in, see the app shell at phone width, the session
-// survives a refresh, sign out. Since ALL-46 a signed-out "/" is the home page,
+// ALL-20 acceptance: sign in, see the app shell, the session survives a
+// refresh, sign out. Runs on both phones and desktop Chrome (ALL-60). Since ALL-46 a signed-out "/" is the home page,
 // and sign-in starts from its invite-only link.
-test("sign in, see Home on a phone, stay signed in, sign out", async ({ page }) => {
+test("sign in, see Home, stay signed in, sign out", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Gifting, handled AF." })).toBeVisible();
   await page.getByRole("link", { name: "🔒 Invite only" }).click();
@@ -18,8 +18,10 @@ test("sign in, see Home on a phone, stay signed in, sign out", async ({ page }) 
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("link", { name: "GiftsAF" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
-  await expect(page.getByRole("link", { name: /My list|Start your wish list/ })).toBeVisible();
-  // Usable at 375 px: nothing wider than the screen.
+  // The list card (its name includes the subtitle), not the "My list" link in
+  // the top bar that computers also show.
+  await expect(page.getByRole("link", { name: /^(My list .+|Start your wish list)/ })).toBeVisible();
+  // Usable at any width, 375 px included: nothing wider than the screen.
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);
 

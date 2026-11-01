@@ -23,9 +23,11 @@ export default defineConfig({
   // Every test runs on two phones (ALL-60): an Android phone in Chromium and
   // an iPhone in WebKit, Safari's engine (iPhone Mail uses it too). Both at
   // 375 px wide, because the acceptance criterion is "usable at 375 px".
+  // App tests also run in desktop Chrome; emails are only read on phones here.
   projects: [
     { name: "android", use: { ...devices["Pixel 7"], viewport: { width: 375, height: 812 } } },
     { name: "iphone", use: { ...devices["iPhone 13 Mini"], viewport: { width: 375, height: 812 } } },
+    { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } }, testIgnore: /emails\.spec\.ts/ },
   ],
   webServer: process.env.E2E_BASE_URL
     ? undefined
