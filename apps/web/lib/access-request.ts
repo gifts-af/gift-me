@@ -1,11 +1,10 @@
 import { APP_NAME, FEEDBACK_EMAIL } from "@/lib/brand";
+import { sendEmail, type OutgoingEmail } from "@/lib/resend";
 
 // Access requests (ALL-47): a short form emails the owner through Resend.
 // Nothing is stored. A hidden "website" field catches bots: they get the same
 // thank-you, but nothing is sent.
 
-export const ACCESS_FROM = `${APP_NAME} <hello@giftsaf.com>`;
-const RESEND_URL = "https://api.resend.com/emails";
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_NAME = 100;
 const MAX_NOTE = 2000;
@@ -34,11 +33,10 @@ export function validateAccessRequest(data: FormData): Validation {
   return { ok: true, value: { name, email, note }, spam: field(data, "website") !== "" };
 }
 
-export function buildAccessRequestEmail(req: AccessRequest) {
+export function buildAccessRequestEmail(req: AccessRequest): OutgoingEmail {
   return {
-    from: ACCESS_FROM,
-    to: [FEEDBACK_EMAIL],
-    reply_to: req.email,
+    to: FEEDBACK_EMAIL,
+    replyTo: req.email,
     subject: `${APP_NAME} access request: ${req.name}`,
     text: [
       `${req.name} (${req.email}) would like to try ${APP_NAME}.`,
@@ -57,15 +55,6 @@ export async function requestAccess(
   const checked = validateAccessRequest(data);
   if (!checked.ok) return { status: "invalid", errors: checked.errors };
   if (checked.spam) return { status: "sent" };
-  if (!deps.apiKey) return { status: "error", message: SEND_FAILED };
-  try {
-    const res = await deps.fetch(RESEND_URL, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${deps.apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify(buildAccessRequestEmail(checked.value)),
-    });
-    return res.ok ? { status: "sent" } : { status: "error", message: SEND_FAILED };
-  } catch {
-    return { status: "error", message: SEND_FAILED };
-  }
+  const sent = await sendEmail(buildAccessRequestEmail(checked.value), deps);
+  return sent.ok ? { status: "sent" } : { status: "error", message: SEND_FAILED };
 }

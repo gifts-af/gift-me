@@ -13,3 +13,8 @@ export const supabaseKey =
   process.env.NEXT_PUBLIC_GIFT_SUPABASE_PUBLISHABLE_KEY ??
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ??
   process.env.NEXT_PUBLIC_GIFT_SUPABASE_ANON_KEY;
+
+// Server-only service-role key (bypasses RLS). Deliberately not NEXT_PUBLIC.
+// Production only has the GIFT_-prefixed one from the Vercel integration.
+export const supabaseSecretKey =
+  process.env.SUPABASE_SECRET_KEY ?? process.env.GIFT_SUPABASE_SECRET_KEY;
