@@ -64,7 +64,7 @@ Rules: no network calls, no database, nothing saved or bought; the visitor can l
 | AC-1 | A signed-out visitor | Opens `/` | The home page shows, with no redirect to sign-in |
 | AC-2 | A signed-in user | Opens `/` | Their app home shows, as today |
 | AC-3 | The home page | Rendered at 375 px and at 1280 px wide | Every section from "The page" is there; at 1280 px the hook is two columns and the steps are side by side; no horizontal scroll at 375 px |
-| AC-4 | The home page and tour | Viewed at any width | The alpha strip is visible, and each feature card shows its status chip |
+| AC-4 | The home page and tour | Viewed at any width | The alpha strip is visible, and each feature card shows its status chip. *Superseded by ALL-50 (T36): the strip is gone; the status chips stay.* |
 | AC-15 | The home page and tour | The browser prefers dark, then light | The page renders in the dark look, then the light look, with readable contrast in both |
 | AC-5 | A signed-out visitor | Taps **Take the tour** | `/tour` opens without sign-in, at step 1 |
 | AC-6 | The tour | The visitor steps through to the end | All 7 steps show in order; picking a gift updates the button total; no request leaves the browser (no fetch to Supabase or `/api`) |
