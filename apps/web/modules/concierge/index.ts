@@ -16,3 +16,21 @@ export { SAMPLE_DATA, TEMPLATES } from "./notify/templates";
 export type { NotificationKind, RenderedEmail } from "./notify/templates";
 export { confirmActionLink, readActionLink } from "./notify/links";
 export type { ConfirmResult, LinkDeps, LinkView } from "./notify/links";
+
+// People, occasions and budgets (ALL-21). Birthday and other occasion rules
+// live in packages/core; parsing of the forms is in people/rules.ts.
+export {
+  addPerson,
+  deletePerson,
+  getPerson,
+  linkList,
+  listPeople,
+  setBudget,
+  setOccasionEnabled,
+  setPhoto,
+  unlinkList,
+  updatePerson,
+} from "./people/people";
+export type { AddResult, PersonCard, PersonDetail } from "./people/people";
+export { parseBudget, parsePersonForm, parseShareToken } from "./people/rules";
+export type { PersonInput } from "./people/rules";
