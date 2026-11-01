@@ -54,6 +54,17 @@ Use this layout. It overrides any plugin or skill default (for example, Superpow
 - When a decision changes the design, update both `design/technical-design.md` and `design/decisions.md`, plus any affected Linear tickets.
 - Add new docs to the table in `README.md` so people can find them.
 
+## Updating the roadmap page
+
+The shareable roadmap is one claude.ai page: https://claude.ai/artifact/6D9ycNqhN2yGwvHwsWAaiW. Always update that page; never publish a new one, so the link people have keeps working. When someone asks to "update progress" or "update the roadmap" after finishing work:
+
+1. Read the live page with the Artifact tool (`action: "read"`, that URL). Build on what comes back. The page has no source file in the repo.
+2. Bring it up to date from Linear (ticket status in the projects it links) and `planning/strategy.md`. Change the "updated" date at the top, mark finished work done, and drop open questions that are now answered in the decisions logs.
+3. Republish to the same URL (`url` set to the link above).
+4. If the roadmap itself changed, not only progress, update `planning/strategy.md` too, because the repo is the written source.
+
+The owner's claude.ai account owns the page. To update it, a person needs **edit** access, which the owner grants from the page's Share menu. Without it, the publish is refused. In that case, tell the person to ask the owner for edit access. Don't publish a copy.
+
 ## Writing for the human in the loop
 
 - Lead with the answer or the decision, then the reasons.
