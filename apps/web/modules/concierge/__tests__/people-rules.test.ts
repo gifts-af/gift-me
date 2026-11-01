@@ -96,6 +96,14 @@ describe("parsePersonForm", () => {
     expect(r.ok && r.value.anniversary).toBeNull();
   });
 
+  it("keeps a partner's anniversary when editing (anyAnniversary)", () => {
+    const fields = { relationship: "partner", anniversaryMonth: "6", anniversaryDay: "1" };
+    const edit = parsePersonForm(form(fields), 2026, { anyAnniversary: true });
+    expect(edit.ok && edit.value.anniversary).toEqual({ month: 6, day: 1 });
+    const add = parsePersonForm(form(fields), 2026);
+    expect(add.ok && add.value.anniversary).toBeNull();
+  });
+
   it("rejects an impossible anniversary for a wife", () => {
     expect(
       parsePersonForm(form({ relationship: "wife", anniversaryMonth: "2", anniversaryDay: "30" }), 2026),

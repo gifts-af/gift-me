@@ -225,6 +225,15 @@ describe("updatePerson", () => {
     });
   });
 
+  it("keeps a wife's anniversary when she becomes a partner", async () => {
+    const { store, mine } = setup();
+    const before = store.occasionRows.find((o) => o.personId === mine && o.kind === "anniversary");
+    await updatePerson(store, mine, input({ relationship: "partner", birthday: { month: 12, day: 1 }, anniversary: { month: 6, day: 5 } }));
+    const after = store.occasionRows.find((o) => o.personId === mine && o.kind === "anniversary");
+    expect(after).toMatchObject({ month: 6, day: 5 });
+    expect(after).toEqual(before);
+  });
+
   it("does not touch occasions that already match", async () => {
     const { store, mine } = setup();
     await updatePerson(store, mine, input({ birthday: { month: 12, day: 1 }, anniversary: { month: 6, day: 5 } }));

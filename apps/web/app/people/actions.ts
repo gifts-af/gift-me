@@ -57,7 +57,7 @@ export async function addPersonAction(_previous: AddResult | null, formData: For
 
 export async function updatePersonAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
   const currentYear = parseDate(await todayForRequest()).year;
-  const parsed = parsePersonForm(formData, currentYear);
+  const parsed = parsePersonForm(formData, currentYear, { anyAnniversary: true });
   if (!parsed.ok) return parsed;
   const id = text(formData, "id");
   return refresh(await updatePerson(id, parsed.value), id);

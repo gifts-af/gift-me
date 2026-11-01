@@ -21,10 +21,10 @@ async function signInApi(user: { email: string; password: string }): Promise<{ t
   return { token: body.access_token, id: body.user.id };
 }
 
-// Removes any "Mom" a failed earlier run left behind (service role, so no RLS).
-async function deleteLeftoverMoms() {
+// Removes any person with this name a failed earlier run left behind (service role, so no RLS).
+async function deleteLeftovers(name: string) {
   const { id } = await signInApi(TEST_USER);
-  const res = await fetch(`${supabase.url}/rest/v1/people?user_id=eq.${id}&name=eq.Mom`, {
+  const res = await fetch(`${supabase.url}/rest/v1/people?user_id=eq.${id}&name=eq.${encodeURIComponent(name)}`, {
     method: "DELETE",
     headers: { apikey: supabase.serviceRoleKey, Authorization: `Bearer ${supabase.serviceRoleKey}` },
   });
@@ -73,20 +73,22 @@ async function noSidewaysScroll(page: Page) {
   expect(overflow).toBeLessThanOrEqual(0);
 }
 
-test("add Mom, set her occasions and budget, link her list, delete her", async ({ page }) => {
-  await deleteLeftoverMoms();
+test("add Mom, set her occasions and budget, link her list, delete her", async ({ page }, testInfo) => {
+  // The three projects run at once as the same user, so each gets its own Mom.
+  const mom = `Mom ${testInfo.project.name}`;
+  await deleteLeftovers(mom);
   await signIn(page);
 
   // 1. Add her with only a name and Mother.
   await page.getByRole("link", { name: "Add someone you buy for" }).first().click();
-  await page.getByLabel("Name").fill("Mom");
+  await page.getByLabel("Name").fill(mom);
   await page.getByLabel("Who are they to you?").selectOption({ label: "Mother" });
   await noSidewaysScroll(page);
   await page.getByRole("button", { name: "Save" }).click();
 
   // 2. Her card: Add birthday, a next occasion, and "We suggest ideas".
   await expect(page).toHaveURL(/\/$/);
-  const momLink = page.getByRole("link", { name: "Mom", exact: true });
+  const momLink = page.getByRole("link", { name: mom, exact: true });
   await expect(momLink).toBeVisible();
   const card = page.locator("div", { has: momLink }).last();
   await expect(card.getByRole("link", { name: "Add birthday" })).toBeVisible();
@@ -125,8 +127,8 @@ test("add Mom, set her occasions and budget, link her list, delete her", async (
 
   // 5. Delete her, behind the confirm. She's gone from Home.
   await momLink.click();
-  await page.getByRole("button", { name: "Delete Mom" }).click();
+  await page.getByRole("button", { name: `Delete ${mom}` }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole("link", { name: "Mom", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: mom, exact: true })).toHaveCount(0);
 });

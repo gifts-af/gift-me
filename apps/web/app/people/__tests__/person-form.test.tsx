@@ -224,6 +224,20 @@ describe("PersonForm in edit mode", () => {
     expect(push).not.toHaveBeenCalled();
   });
 
+  it("always shows the anniversary fields, even for a friend", () => {
+    useRouterMock.mockReturnValue({ push, refresh });
+    const action = vi.fn(async (...a: [unknown, FormData]) => (void a, { ok: true } as const));
+    render(
+      <PersonForm
+        mode="edit"
+        action={action}
+        initial={{ id: "p2", name: "Sam", relationship: "friend", anniversaryMonth: "6", anniversaryDay: "5" }}
+      />,
+    );
+    expect(screen.getByLabelText("Anniversary month")).toBeInTheDocument();
+    expect(screen.getByText("Anniversary (optional)")).toBeInTheDocument();
+  });
+
   it("shows the error and no Saved note when the save fails", async () => {
     useRouterMock.mockReturnValue({ push, refresh });
     setupEdit({ ok: false, error: "Add a name." });

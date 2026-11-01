@@ -146,7 +146,8 @@ export function PersonForm(props: Props) {
   const [busy, setBusy] = useState(false);
   const [preparing, setPreparing] = useState(false);
 
-  const married = relationship === "wife" || relationship === "husband";
+  // Editing always offers the anniversary, so a changed relationship keeps it.
+  const showAnniversary = !add || relationship === "wife" || relationship === "husband";
 
   async function onPickPhoto(file: File) {
     if (!add) return;
@@ -305,9 +306,9 @@ export function PersonForm(props: Props) {
         </Button>
       </fieldset>
 
-      {married && (
+      {showAnniversary && (
         <fieldset className="flex flex-col gap-3">
-          <legend className="mb-1 text-sm font-semibold">Anniversary</legend>
+          <legend className="mb-1 text-sm font-semibold">{add ? "Anniversary" : "Anniversary (optional)"}</legend>
           <DateFields
             name="anniversary"
             label="Anniversary"

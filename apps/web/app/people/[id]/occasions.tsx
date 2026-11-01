@@ -59,7 +59,8 @@ export function Occasions({
       <ul className="flex flex-col gap-2">
         {occasions.map((row) => {
           const enabled = chosen[row.kind] ?? row.enabled;
-          const line = orderByLine({ ...row, enabled });
+          // The server's order-by is only right for the server's switch position.
+          const line = enabled === row.enabled ? orderByLine(row) : null;
           return (
             <li key={row.kind} className="flex min-h-11 items-center gap-3 rounded-lg border bg-card p-3">
               <div className="min-w-0 flex-1">

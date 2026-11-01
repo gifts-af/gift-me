@@ -39,6 +39,13 @@ describe("Occasions", () => {
     expect(screen.getByRole("switch", { name: "Christmas" })).not.toBeChecked();
   });
 
+  it("shows no order-by line while a switched-on occasion waits for the server", async () => {
+    setup([{ ...christmas, enabled: false, orderBy: null }]);
+    await userEvent.click(screen.getByRole("switch", { name: "Christmas" }));
+    expect(screen.getByRole("switch", { name: "Christmas" })).toBeChecked();
+    expect(screen.queryByText(/Order by|Too late/)).not.toBeInTheDocument();
+  });
+
   it("calls the action with the person, the kind and the new setting", async () => {
     const action = setup([christmas]);
     await userEvent.click(screen.getByRole("switch", { name: "Christmas" }));

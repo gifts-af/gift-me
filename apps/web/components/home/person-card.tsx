@@ -9,7 +9,7 @@ export function PersonCard({ person }: { person: Card }) {
   const Source = person.keepsList ? ListChecks : Sparkles;
   return (
     <div className="relative flex items-center gap-3 rounded-lg border bg-card p-3 hover:border-primary/40">
-      <PersonAvatar name={person.name} photoUrl={person.photoUrl} size={56} />
+      <PersonAvatar name={person.name} photoUrl={person.photoUrl} size={56} decorative />
       <div className="min-w-0 flex-1">
         <Link
           href={`/people/${person.id}`}

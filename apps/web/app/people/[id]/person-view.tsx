@@ -45,7 +45,7 @@ export async function PersonView({ id, photoFailed }: { id: string; photoFailed:
   return (
     <>
       <header className="flex items-center gap-4">
-        <PersonAvatar name={person.name} photoUrl={person.photoUrl} size={72} />
+        <PersonAvatar name={person.name} photoUrl={person.photoUrl} size={72} decorative />
         <div className="min-w-0 flex-1">
           <PageTitle>{person.name}</PageTitle>
           <p className="text-[13px] text-muted-foreground">

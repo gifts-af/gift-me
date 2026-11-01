@@ -50,6 +50,7 @@ function parseMonthDay(month: string, day: string): Result<MonthDay | null> {
 export function parsePersonForm(
   f: FormData,
   currentYear: number = new Date().getFullYear(),
+  options: { anyAnniversary?: boolean } = {},
 ): Result<PersonInput> {
   const name = field(f, "name");
   if (name.length < 1 || name.length > MAX_NAME_LENGTH) return { ok: false, error: "Enter a name." };
@@ -69,10 +70,12 @@ export function parsePersonForm(
     }
   }
 
-  // Validated for everyone, but kept only for a wife or husband.
+  // Validated for everyone. Kept only for a wife or husband when adding; when
+  // editing (anyAnniversary) it is kept for anyone, so changing a relationship
+  // never drops an anniversary.
   const anniversary = parseMonthDay(field(f, "anniversaryMonth"), field(f, "anniversaryDay"));
   if (!anniversary.ok) return anniversary;
-  const keepAnniversary = relationship === "wife" || relationship === "husband";
+  const keepAnniversary = options.anyAnniversary || relationship === "wife" || relationship === "husband";
 
   return {
     ok: true,
