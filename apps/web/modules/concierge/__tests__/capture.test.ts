@@ -1,10 +1,12 @@
 // @vitest-environment node
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { MockInstance } from "vitest";
 import { parseCaptureForm, saveCapture } from "../capture/capture";
 import type { CaptureInput } from "../capture/capture";
 import { FakeCaptureStore } from "./fake-capture-store";
 
 let store: FakeCaptureStore;
+let consoleError: MockInstance<typeof console.error>;
 
 function input(over: Partial<CaptureInput> = {}): CaptureInput {
   return {
@@ -21,6 +23,12 @@ function input(over: Partial<CaptureInput> = {}): CaptureInput {
 beforeEach(() => {
   store = new FakeCaptureStore();
   store.people.add("p1");
+  // Store failures are logged; keep that out of the test output.
+  consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+});
+
+afterEach(() => {
+  consoleError.mockRestore();
 });
 
 describe("saveCapture", () => {
@@ -68,6 +76,45 @@ describe("saveCapture", () => {
     expect(r).toMatchObject({ ok: false, status: 500 });
     expect(store.rows).toHaveLength(0);
   });
+
+  it("logs a failing upload once, with the step name and the error only", async () => {
+    store.failUpload = true;
+    await saveCapture(store, input({ note: "secret note", text: "secret text" }));
+    expect(consoleError).toHaveBeenCalledTimes(1);
+    const [message, err] = consoleError.mock.calls[0];
+    expect(message).toBe("capture: upload failed");
+    expect(err).toBeInstanceOf(Error);
+    expect(consoleError.mock.calls[0]).toHaveLength(2);
+  });
+
+  it.each([
+    ["limits", "failLimits"],
+    ["person check", "failPersonCheck"],
+    ["insert", "failInsert"],
+    ["set path", "failSetPath"],
+  ] as const)("logs the %s step when it fails", async (step, flag) => {
+    store[flag] = true;
+    const r = await saveCapture(store, input());
+    expect(r).toMatchObject({ ok: false, status: 500 });
+    expect(consoleError).toHaveBeenCalledTimes(1);
+    expect(consoleError).toHaveBeenCalledWith(`capture: ${step} failed`, expect.any(Error));
+  });
+
+  it("logs both the upload and a failing rollback delete", async () => {
+    store.failUpload = true;
+    store.failDelete = true;
+    const r = await saveCapture(store, input());
+    expect(r).toMatchObject({ ok: false, status: 500 });
+    expect(consoleError.mock.calls.map((c) => c[0])).toEqual([
+      "capture: upload failed",
+      "capture: rollback delete failed",
+    ]);
+  });
+
+  it("logs nothing when the save succeeds", async () => {
+    await saveCapture(store, input());
+    expect(consoleError).not.toHaveBeenCalled();
+  });
 });
 
 describe("parseCaptureForm", () => {
@@ -82,6 +129,18 @@ describe("parseCaptureForm", () => {
     expect(parseCaptureForm(form({ screenshot: shot() }))).toBeNull();
     expect(parseCaptureForm(form({ person_id: "p1" }))).toBeNull();
     expect(parseCaptureForm(form({ person_id: "p1", screenshot: "text" }))).toBeNull();
+  });
+
+  it("rejects a note over 2000 characters", () => {
+    expect(parseCaptureForm(form({ person_id: "p1", screenshot: shot(), note: "a".repeat(2001) }))).toBeNull();
+    expect(parseCaptureForm(form({ person_id: "p1", screenshot: shot(), note: "a".repeat(2000) }))).not.toBeNull();
+  });
+
+  it("rejects an empty screenshot or one that isn't a JPEG", () => {
+    expect(parseCaptureForm(form({ person_id: "p1", screenshot: new Blob([], { type: "image/jpeg" }) }))).toBeNull();
+    expect(parseCaptureForm(form({ person_id: "p1", screenshot: new Blob(["x"], { type: "image/png" }) }))).toBeNull();
+    // An untyped part is still accepted.
+    expect(parseCaptureForm(form({ person_id: "p1", screenshot: new Blob(["x"]) }))).not.toBeNull();
   });
 
   it("parses fields, defaults absent ones, and turns blank notes into null", () => {
