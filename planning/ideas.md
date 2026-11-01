@@ -54,3 +54,10 @@ A cheap, lovable, collectible plushie sent with a code. The recipient scans and 
 ## A common thread
 
 Ideas 1, 2, 4 and 5 all use the same building block: **a scannable code tied to a gift that someone claims securely.** If any of these move forward, that's the piece to design once and reuse.
+
+### 6. Invite a non-user through an action
+A GiftsAF user does something that emails a friend who has no account. For example, Jim asks his friend Edgar for his address or what he'd like. Edgar answers from the email, then lands on a short "get your own GiftsAF going" teaser.
+- **Why:** it's how GiftsAF spreads. Every gift a user sends can bring in someone new.
+- **Related:** builds on ALL-23's signed action links, which today only work for an account's owner. Ticket: ALL-49.
+- **To work out:** which actions can go to a non-user, whether they sign up as part of the tap, and what the sender learns.
+- **Source:** owner, 2026-11-01, while specifying ALL-23.
