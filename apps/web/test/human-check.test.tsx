@@ -1,6 +1,7 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { turnstileMock } from "./turnstile-mock";
+import { FEEDBACK_EMAIL } from "@/lib/brand";
 
 // ALL-68: Cloudflare's widget (stood in for by test/turnstile-mock.tsx) must
 // hand over a token before a public form can be sent.
@@ -17,7 +18,9 @@ const { FeedbackButton } = await import("@/components/home/feedback-dialog");
 const { HumanCheck } = await import("@/components/human-check");
 
 afterEach(() => {
+  vi.useRealTimers();
   turnstileMock.autoToken = true;
+  turnstileMock.fails = false;
   vi.unstubAllEnvs();
   vi.stubEnv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", "test-site-key");
 });
@@ -76,5 +79,46 @@ describe("the bot check on public forms", () => {
     vi.stubEnv("NEXT_PUBLIC_TURNSTILE_SITE_KEY", "");
     render(<HumanCheck onToken={() => {}} />);
     expect(screen.getByRole("alert")).toHaveTextContent(/bot check isn't set up/i);
+  });
+
+  // ALL-69: a person Cloudflare wrongly takes for a bot must be told why the
+  // button is grey, and given a way out.
+  it("tells someone blocked on sign in to refresh, or use Google instead", async () => {
+    turnstileMock.fails = true;
+    render(<LoginForm />);
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/couldn't confirm you're a person/i);
+    expect(alert).toHaveTextContent(/refresh/i);
+    expect(alert).toHaveTextContent(/Continue with Google/);
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeDisabled();
+  });
+
+  it("offers sign-up the same way out", async () => {
+    turnstileMock.fails = true;
+    render(<SignUpForm />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/Continue with Google/);
+  });
+
+  it("offers our email on forms without Google, request access and feedback", async () => {
+    turnstileMock.fails = true;
+    render(<RequestAccessForm />);
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(/couldn't confirm you're a person/i);
+    expect(within(alert).getByRole("link", { name: FEEDBACK_EMAIL })).toHaveAttribute("href", `mailto:${FEEDBACK_EMAIL}`);
+  });
+
+  it("doesn't show our email until the check has failed", async () => {
+    render(<RequestAccessForm />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Request access" })).toBeEnabled());
+    expect(screen.queryByText(FEEDBACK_EMAIL)).not.toBeInTheDocument();
+  });
+
+  it("explains the grey button if the check takes more than a moment, but not straight away", () => {
+    vi.useFakeTimers();
+    turnstileMock.autoToken = false;
+    render(<LoginForm />);
+    expect(screen.queryByText(/Checking you're not a bot/)).not.toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(3000));
+    expect(screen.getByText(/Checking you're not a bot/)).toBeInTheDocument();
   });
 });
