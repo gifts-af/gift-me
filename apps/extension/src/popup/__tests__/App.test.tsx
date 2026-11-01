@@ -20,6 +20,7 @@ const db = {
   people: [] as Person[],
   peopleError: null as { message: string } | null,
   textMax: 50_000 as number | null,
+  screenshotMax: 2_500_000 as number | null,
   inserts: [] as unknown[],
 };
 const client = {
@@ -38,9 +39,15 @@ const client = {
     },
   })),
   schema: vi.fn(() => ({
-    rpc: vi.fn(async () =>
-      db.textMax === null ? { data: null, error: { message: "missing" } } : { data: db.textMax, error: null },
-    ),
+    rpc: vi.fn(async (_fn: string, args: { p_key: string }) => {
+      const value =
+        args.p_key === "capture_text_max_chars"
+          ? db.textMax
+          : args.p_key === "capture_screenshot_max_bytes"
+            ? db.screenshotMax
+            : null;
+      return value === null ? { data: null, error: { message: "missing" } } : { data: value, error: null };
+    }),
   })),
 };
 vi.mock("../../lib/supabase", () => ({ getSupabase: () => client }));
@@ -60,6 +67,7 @@ beforeEach(() => {
   ];
   db.peopleError = null;
   db.textMax = 50_000;
+  db.screenshotMax = 2_500_000;
   db.inserts = [];
   fetchMock = vi.fn(async () => json({ id: "c1" }, 201));
   vi.stubGlobal("fetch", fetchMock);
@@ -143,6 +151,36 @@ describe("Popup", () => {
     render(<App />);
     expect(await screen.findByRole("alert")).toHaveTextContent("Something went wrong");
     expect(screen.queryByRole("button", { name: /^Save/ })).not.toBeInTheDocument();
+  });
+
+  it("a missing screenshot cap shows a generic error rather than guessing a default", async () => {
+    db.screenshotMax = null;
+    render(<App />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Something went wrong");
+    expect(screen.queryByRole("button", { name: /^Save/ })).not.toBeInTheDocument();
+  });
+
+  it("a screenshot that can't be shrunk under the cap says the page is too large and sends nothing", async () => {
+    // The fake screenshot is 3 bytes. jsdom has no canvas, so these stand-ins
+    // make every re-encode still too big.
+    db.screenshotMax = 2;
+    vi.stubGlobal("createImageBitmap", async () => ({ width: 100, height: 100, close() {} }));
+    vi.stubGlobal(
+      "OffscreenCanvas",
+      class {
+        getContext() {
+          return { drawImage() {} };
+        }
+        async convertToBlob() {
+          return new Blob([new Uint8Array(3)], { type: "image/jpeg" });
+        }
+      },
+    );
+    render(<App />);
+    await userEvent.click(await screen.findByRole("button", { name: "Mom" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save to Mom" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("This page is too large to capture.");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("saves, confirms, and Capture another resets the form", async () => {

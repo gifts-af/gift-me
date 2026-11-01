@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { signOut } from "../lib/auth";
 import { config } from "../lib/config";
 import { getSupabase } from "../lib/supabase";
-import { collectPage } from "../lib/page";
+import { collectPage, ScreenshotTooLargeError } from "../lib/page";
 import { uploadCapture, type CaptureInput } from "../lib/upload";
 import { AddPerson } from "./AddPerson";
 import { PersonPicker, type Person } from "./PersonPicker";
@@ -80,7 +80,7 @@ function Capture({
   onPeopleChange: (people: Person[]) => void;
   onSignedOut: () => void;
 }) {
-  const { people, textMax, tabId, capturable } = loaded;
+  const { people, textMax, screenshotMaxBytes, tabId, capturable } = loaded;
   const [selected, setSelected] = useState<Person | null>(null);
   const [adding, setAdding] = useState(false);
   const [note, setNote] = useState("");
@@ -115,9 +115,9 @@ function Capture({
       if (!payload) {
         let page;
         try {
-          page = await collectPage(tabId, { jpegQuality: config.jpegQuality, textMax });
-        } catch {
-          setError("Couldn't read this page. Try again.");
+          page = await collectPage(tabId, { jpegQuality: config.jpegQuality, textMax, screenshotMaxBytes });
+        } catch (err) {
+          setError(err instanceof ScreenshotTooLargeError ? err.message : "Couldn't read this page. Try again.");
           return;
         }
         payload = { personId: selected.id, ...page, note: note.trim() || null };
