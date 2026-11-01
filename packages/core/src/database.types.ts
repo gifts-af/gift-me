@@ -848,6 +848,19 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      add_person: {
+        Args: {
+          p_anniversary_day: number;
+          p_anniversary_month: number;
+          p_birth_year: number;
+          p_birthday_day: number;
+          p_birthday_month: number;
+          p_kinds: string[];
+          p_name: string;
+          p_relationship: string;
+        };
+        Returns: string;
+      };
       delete_occasion: { Args: { p_occasion_id: string }; Returns: undefined };
       enable_owner_rls: { Args: { p_table: unknown }; Returns: undefined };
       setting_int: { Args: { p_key: string }; Returns: number };
@@ -1115,7 +1128,7 @@ export type Database = {
           address_checked_at: string | null;
           address_line1: string | null;
           address_line2: string | null;
-          birthday: string | null;
+          birth_year: number | null;
           city: string | null;
           country: string;
           created_at: string;
@@ -1126,6 +1139,7 @@ export type Database = {
           name: string;
           notes: string | null;
           phone: string | null;
+          photo_path: string | null;
           recipient_first_name: string | null;
           recipient_last_name: string | null;
           relationship: string;
@@ -1139,7 +1153,7 @@ export type Database = {
           address_checked_at?: string | null;
           address_line1?: string | null;
           address_line2?: string | null;
-          birthday?: string | null;
+          birth_year?: number | null;
           city?: string | null;
           country?: string;
           created_at?: string;
@@ -1150,6 +1164,7 @@ export type Database = {
           name: string;
           notes?: string | null;
           phone?: string | null;
+          photo_path?: string | null;
           recipient_first_name?: string | null;
           recipient_last_name?: string | null;
           relationship: string;
@@ -1162,7 +1177,7 @@ export type Database = {
           address_checked_at?: string | null;
           address_line1?: string | null;
           address_line2?: string | null;
-          birthday?: string | null;
+          birth_year?: number | null;
           city?: string | null;
           country?: string;
           created_at?: string;
@@ -1173,6 +1188,7 @@ export type Database = {
           name?: string;
           notes?: string | null;
           phone?: string | null;
+          photo_path?: string | null;
           recipient_first_name?: string | null;
           recipient_last_name?: string | null;
           relationship?: string;

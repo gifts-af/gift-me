@@ -30,7 +30,7 @@ select set_eq(
     'reminder_1_after_heads_up_days', 'reminder_2_before_deadline_days',
     'final_notice_before_deadline_days', 'fastest_days_to_arrive',
     'default_over_budget_pct', 'zinc_gift_message_max_chars', 'test_action_link_hours',
-    'install_tip_snooze_days'
+    'install_tip_snooze_days', 'person_photo_max_upload_bytes', 'person_photo_px'
   ],
   'every fee, limit, default and schedule setting is seeded'
 );
