@@ -50,13 +50,26 @@ test("take the tour, then sign in with an invite", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
 });
 
-test("request access is a short form that checks its fields (ALL-47)", async ({ page }) => {
+test("request access opens over the page and checks its fields (ALL-47, ALL-53)", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("link", { name: "Request access" }).click();
-  await expect(page).toHaveURL(/\/request-access$/);
-  await page.getByRole("button", { name: "Request access" }).click();
+  await page.getByRole("button", { name: "Request access" }).first().click();
+  const dialog = page.getByRole("dialog", { name: "Want in?" });
+  await expect(dialog).toBeVisible();
+  await expect(page).toHaveURL(/\/$/);
+  await dialog.getByRole("button", { name: "Request access" }).click();
   await expect(page.getByText("Tell us your name.")).toBeVisible();
   await expect(page.getByText("Enter an email address like you@example.com.")).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);
+});
+
+test("feedback opens a box over the page, and Esc closes it (ALL-53)", async ({ page }) => {
+  await page.goto("/");
+  const open = page.getByRole("button", { name: "Send feedback" });
+  await open.click();
+  const dialog = page.getByRole("dialog", { name: "Tell us the sad story" });
+  await expect(dialog.getByLabel("What happened?")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+  await expect(open).toBeFocused();
 });

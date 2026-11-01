@@ -74,7 +74,7 @@ describe("guided tour (ALL-46)", () => {
     render(<Tour />);
     expect(screen.getByRole("link", { name: "Skip tour" })).toHaveAttribute("href", "/");
     goTo("end");
-    expect(screen.getByRole("link", { name: "Request access" })).toHaveAttribute("href", "/request-access");
+    expect(screen.getByRole("button", { name: "Request access" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Have an invite? Sign in" })).toHaveAttribute("href", "/auth/login");
     expect(screen.getByRole("link", { name: "Back to home" })).toHaveAttribute("href", "/");
   });
