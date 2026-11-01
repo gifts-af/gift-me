@@ -27,6 +27,8 @@ export type PersonCard = {
 };
 
 export type PersonDetail = PersonCard & {
+  /** The storage path of the photo, for the picker to replace. */
+  photoPath: string | null;
   birthYear: number | null;
   birthday: MonthDay | null;
   anniversary: MonthDay | null;
@@ -125,6 +127,7 @@ export async function getPerson(store: PeopleStore, id: string, today: CalendarD
 
   return {
     ...cardOf(person, occasions, today, photos),
+    photoPath: person.photoPath,
     birthYear: person.birthYear,
     birthday: monthDay(occasions.find((o) => o.kind === "birthday")),
     anniversary: monthDay(occasions.find((o) => o.kind === "anniversary")),

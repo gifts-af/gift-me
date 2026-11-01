@@ -117,9 +117,10 @@ describe("getPerson", () => {
     const { store, mine } = setup();
     store.budgetRows.push({ personId: mine, kind: "christmas", cents: 7500 });
     store.rows.get(mine)!.birthYear = 1990;
+    store.rows.get(mine)!.photoPath = `${ME}/${mine}/a.jpg`;
     const p = await getPerson(store, mine, TODAY);
     expect(p).toMatchObject({
-      id: mine, name: "Mine", birthYear: 1990, birthday: { month: 12, day: 1 }, anniversary: { month: 6, day: 5 },
+      id: mine, photoPath: `${ME}/${mine}/a.jpg`, name: "Mine", birthYear: 1990, birthday: { month: 12, day: 1 }, anniversary: { month: 6, day: 5 },
     });
     const byKind = Object.fromEntries(p!.occasions.map((o) => [o.kind, o]));
     expect(byKind.christmas).toEqual({

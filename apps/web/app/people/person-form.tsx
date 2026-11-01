@@ -10,23 +10,24 @@ import type { AddResult, SaveResult } from "@/modules/concierge";
 import { prepareJpeg, resizeToJpeg, savePersonPhoto, type PhotoStorage } from "./photo-picker";
 
 const MONTH_NAMES = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
 ];
 
 const SELECT_CLASS =
   "flex min-h-11 w-full rounded-md border border-input bg-background px-3 py-2.5 text-base font-normal";
 
-type Props = {
-  /** Saves the person. Add mode: `addPersonAction`. Edit mode (Task 7): a wrapper that returns `{ ok: true, id }`. */
-  action: (previous: null, formData: FormData) => Promise<AddResult>;
-  /** Saves where the photo went: `setPhotoAction`. */
-  photoAction: (previous: SaveResult | null, formData: FormData) => Promise<SaveResult>;
-  userId: string;
-  maxUploadBytes: number;
-  px: number;
-  /** Where to go once saved. */
-  doneHref: string;
+type Common = {
   /** Starting values (for editing). Months and days are numbers as text, "" when not given. */
   initial?: {
     id?: string;
@@ -39,10 +40,32 @@ type Props = {
     anniversaryDay?: string;
   };
   submitLabel?: string;
+};
+
+type AddProps = Common & {
+  mode?: "add";
+  /** Saves the person: `addPersonAction`. */
+  action: (previous: null, formData: FormData) => Promise<AddResult>;
+  /** Saves where the photo went: `setPhotoAction`. */
+  photoAction: (previous: SaveResult | null, formData: FormData) => Promise<SaveResult>;
+  userId: string;
+  maxUploadBytes: number;
+  px: number;
+  /** Where to go once saved. */
+  doneHref: string;
   /** Test seams, same as PhotoPicker. */
   storage?: PhotoStorage;
   resize?: (file: File, px: number) => Promise<Blob>;
 };
+
+/** Edit mode has no photo field (the page's PhotoPicker saves photos at once) and stays on the page. */
+type EditProps = Common & {
+  mode: "edit";
+  /** `updatePersonAction`; the person's id travels as a hidden `id` field. */
+  action: (previous: null, formData: FormData) => Promise<SaveResult>;
+};
+
+type Props = AddProps | EditProps;
 
 function DateFields({
   name,
@@ -104,18 +127,10 @@ function DateFields({
  * saved, because the storage folder needs the new person's id. If the photo
  * then fails, the person still exists, so we go on anyway.
  */
-export function PersonForm({
-  action,
-  photoAction,
-  userId,
-  maxUploadBytes,
-  px,
-  doneHref,
-  initial,
-  submitLabel = "Save",
-  storage,
-  resize = resizeToJpeg,
-}: Props) {
+export function PersonForm(props: Props) {
+  const { initial, submitLabel = "Save" } = props;
+  const add = props.mode === "edit" ? null : props;
+  const resize = add?.resize ?? resizeToJpeg;
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const [relationship, setRelationship] = useState(initial?.relationship ?? "");
@@ -127,17 +142,24 @@ export function PersonForm({
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoError, setPhotoError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
   const [preparing, setPreparing] = useState(false);
 
   const married = relationship === "wife" || relationship === "husband";
 
   async function onPickPhoto(file: File) {
+    if (!add) return;
     setPhoto(null);
     setPhotoError(null);
     setPreparing(true); // Save waits, so a tap can't drop a photo still being checked
     try {
-      const checked = await prepareJpeg({ file, px, maxUploadBytes, resize });
+      const checked = await prepareJpeg({
+        file,
+        px: add.px,
+        maxUploadBytes: add.maxUploadBytes,
+        resize,
+      });
       if (checked.ok) setPhoto(file);
       else setPhotoError(checked.error);
     } finally {
@@ -149,13 +171,14 @@ export function PersonForm({
     event.preventDefault();
     if (busy || preparing) return;
     setError(null);
+    setSaved(false);
     setBusy(true);
     // The anniversary fields aren't rendered for other relationships, so a
     // hidden stale value is never sent.
     const form = new FormData(event.currentTarget);
-    let result: AddResult;
+    let result: AddResult | SaveResult;
     try {
-      result = await action(null, form);
+      result = await props.action(null, form);
     } catch {
       result = { ok: false, error: "That didn't save. Try again." };
     }
@@ -164,13 +187,28 @@ export function PersonForm({
       setBusy(false);
       return;
     }
+    if (!add || !("id" in result)) {
+      // Edit: the page re-reads from the server; stay here.
+      setSaved(true);
+      setBusy(false);
+      router.refresh();
+      return;
+    }
     // Saved. Stay busy from here on so a second tap can't add a duplicate
     // while we upload the photo and navigate.
+    const newId = (result as { id: string }).id; // add mode: addPersonAction returns the new id
     let photoFailed = false;
     if (photo) {
       try {
         const saved = await savePersonPhoto({
-          file: photo, personId: result.id, userId, px, maxUploadBytes, action: photoAction, storage, resize,
+          file: photo,
+          personId: newId,
+          userId: add.userId,
+          px: add.px,
+          maxUploadBytes: add.maxUploadBytes,
+          action: add.photoAction,
+          storage: add.storage,
+          resize,
         });
         if (!saved.ok) {
           photoFailed = true;
@@ -183,7 +221,7 @@ export function PersonForm({
     }
     // The person exists either way. A failed photo goes to their page, where
     // a note and the picker let the user try again.
-    router.push(photoFailed ? `/people/${result.id}?photo=failed` : doneHref);
+    router.push(photoFailed ? `/people/${newId}?photo=failed` : add.doneHref);
   }
 
   return (
@@ -213,28 +251,30 @@ export function PersonForm({
         </select>
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <input
-          ref={input}
-          type="file"
-          accept="image/*"
-          aria-label="Choose a photo"
-          className="sr-only"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) void onPickPhoto(file);
-          }}
-        />
-        <Button type="button" variant="outline" onClick={() => input.current?.click()}>
-          {photo ? "Change photo" : "Add a photo (optional)"}
-        </Button>
-        {photo && <p className="text-[13px] text-muted-foreground">{photo.name}</p>}
-        {photoError && (
-          <p role="alert" className="text-[13px] text-destructive">
-            {photoError}
-          </p>
-        )}
-      </div>
+      {add && (
+        <div className="flex flex-col gap-1.5">
+          <input
+            ref={input}
+            type="file"
+            accept="image/*"
+            aria-label="Choose a photo"
+            className="sr-only"
+            onChange={(e) => {
+              const file = e.target.files?.[0];
+              if (file) void onPickPhoto(file);
+            }}
+          />
+          <Button type="button" variant="outline" onClick={() => input.current?.click()}>
+            {photo ? "Change photo" : "Add a photo (optional)"}
+          </Button>
+          {photo && <p className="text-[13px] text-muted-foreground">{photo.name}</p>}
+          {photoError && (
+            <p role="alert" className="text-[13px] text-destructive">
+              {photoError}
+            </p>
+          )}
+        </div>
+      )}
 
       <fieldset id="birthday" className="flex flex-col gap-3">
         <legend className="mb-1 text-sm font-semibold">Birthday</legend>
@@ -268,13 +308,26 @@ export function PersonForm({
       {married && (
         <fieldset className="flex flex-col gap-3">
           <legend className="mb-1 text-sm font-semibold">Anniversary</legend>
-          <DateFields name="anniversary" label="Anniversary" month={aMonth} day={aDay} onMonth={setAMonth} onDay={setADay} />
+          <DateFields
+            name="anniversary"
+            label="Anniversary"
+            month={aMonth}
+            day={aDay}
+            onMonth={setAMonth}
+            onDay={setADay}
+          />
         </fieldset>
       )}
 
       {error && (
         <p role="alert" className="text-[13px] text-destructive">
           {error}
+        </p>
+      )}
+
+      {saved && (
+        <p role="status" className="text-[13px] text-muted-foreground">
+          Saved
         </p>
       )}
 

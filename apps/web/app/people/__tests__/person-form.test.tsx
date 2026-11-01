@@ -5,7 +5,8 @@ import { PersonForm } from "../person-form";
 import type { PhotoStorage } from "../photo-picker";
 
 const push = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+const useRouterMock = vi.hoisted(() => vi.fn());
+vi.mock("next/navigation", () => ({ useRouter: () => useRouterMock() }));
 
 const photo = new File(["x".repeat(100)], "me.png", { type: "image/png" });
 
@@ -50,7 +51,10 @@ const save = () => userEvent.click(screen.getByRole("button", { name: "Save" }))
 const sent = (t: ReturnType<typeof setup>) => t.action.mock.calls[0][1];
 
 describe("PersonForm", () => {
-  beforeEach(() => push.mockClear());
+  beforeEach(() => {
+    push.mockClear();
+    useRouterMock.mockReturnValue({ push });
+  });
 
   it("submits with only a name and a relationship, then goes Home", async () => {
     const t = setup();
@@ -183,5 +187,49 @@ describe("PersonForm", () => {
     expect(waiting).toBeDisabled();
     finish(new Blob(["j"], { type: "image/jpeg" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeEnabled());
+  });
+});
+
+describe("PersonForm in edit mode", () => {
+  const refresh = vi.fn();
+  beforeEach(() => {
+    push.mockClear();
+    refresh.mockClear();
+  });
+
+  function setupEdit(result: { ok: true } | { ok: false; error: string } = { ok: true }) {
+    const action = vi.fn(async (...args: [unknown, FormData]) => {
+      void args;
+      return result;
+    });
+    render(
+      <PersonForm
+        mode="edit"
+        action={action}
+        initial={{ id: "p1", name: "Dad", relationship: "father", birthdayMonth: "4", birthdayDay: "10" }}
+      />,
+    );
+    return action;
+  }
+
+  it("has no photo field, sends the id, then refreshes and says Saved without navigating", async () => {
+    useRouterMock.mockReturnValue({ push, refresh });
+    const action = setupEdit();
+    expect(screen.queryByLabelText("Choose a photo")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Saved"));
+    expect(action.mock.calls[0][1].get("id")).toBe("p1");
+    expect(action.mock.calls[0][1].get("name")).toBe("Dad");
+    expect(refresh).toHaveBeenCalled();
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("shows the error and no Saved note when the save fails", async () => {
+    useRouterMock.mockReturnValue({ push, refresh });
+    setupEdit({ ok: false, error: "Add a name." });
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Add a name.");
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(refresh).not.toHaveBeenCalled();
   });
 });
