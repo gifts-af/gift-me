@@ -14,10 +14,16 @@ export async function PeopleSection() {
     console.error("people not loaded", error);
     return <p className="text-[15px] text-muted-foreground">We couldn&apos;t load your people. Refresh to try again.</p>;
   }
+  // Adding by hand, or bringing them in from Google Contacts (ALL-24).
   const add = (
-    <Button asChild variant="outline" className="self-start">
-      <Link href="/people/new">Add someone you buy for</Link>
-    </Button>
+    <div className="flex flex-wrap gap-2">
+      <Button asChild variant="outline">
+        <Link href="/people/new">Add someone you buy for</Link>
+      </Button>
+      <Button asChild variant="outline">
+        <Link href="/people/import">Import from Google</Link>
+      </Button>
+    </div>
   );
   if (people.length === 0) {
     return (

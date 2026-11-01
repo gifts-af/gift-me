@@ -54,3 +54,8 @@ export function deletePerson(id: string): Promise<SaveResult> {
 export function importPeople(rows: ImportRow[]): Promise<service.ImportResult> {
   return service.importPeople(createSupabasePeopleStore(), rows, { fetch, newId: () => crypto.randomUUID() });
 }
+
+/** Google contact ids already imported, for the checklist's "Already added". */
+export function listImportedContactIds(): Promise<string[]> {
+  return createSupabasePeopleStore().importedContactIds();
+}

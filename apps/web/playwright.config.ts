@@ -48,6 +48,8 @@ export default defineConfig({
           SUPABASE_SECRET_KEY: supabase.serviceRoleKey,
           NEXT_PUBLIC_TURNSTILE_SITE_KEY: TURNSTILE_TEST_SITE_KEY,
           TURNSTILE_SECRET_KEY: TURNSTILE_TEST_SECRET_KEY,
+          // Any value: contacts-import.spec.ts replaces Google's sign-in script (ALL-24).
+          NEXT_PUBLIC_GOOGLE_CLIENT_ID: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "e2e-fake-client-id",
         },
       },
 });

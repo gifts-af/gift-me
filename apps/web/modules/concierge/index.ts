@@ -32,6 +32,7 @@ export {
   getPerson,
   importPeople,
   linkList,
+  listImportedContactIds,
   listPeople,
   setBudget,
   setOccasionEnabled,
