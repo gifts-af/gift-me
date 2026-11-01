@@ -1,28 +1,14 @@
 import { ImageResponse } from "next/og";
+import { holidayLogoNow } from "@/lib/holiday";
+import { iconSvg } from "@/lib/logo-art";
 
-// The home-screen and browser-tab icon: a teal square with a white "G",
-// until the name and logo are settled (ALL-14). Teal is --primary (light).
-export function appIcon(size: number, { rounded = false } = {}) {
+// The home-screen and browser-tab icon: the yellow AF tag on near-black
+// (ALL-48), wearing its Santa hat in the holiday window.
+export async function appIcon(size: number, { rounded = false } = {}) {
+  const svg = iconSvg(size, { holiday: await holidayLogoNow(), rounded });
   return new ImageResponse(
-    (
-      <div
-        style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          background: "#0f766e",
-          color: "#ffffff",
-          fontSize: size * 0.62,
-          fontWeight: 700,
-          fontFamily: "sans-serif",
-          borderRadius: rounded ? size * 0.22 : 0,
-        }}
-      >
-        G
-      </div>
-    ),
+    // eslint-disable-next-line @next/next/no-img-element -- ImageResponse draws an <img>, not a page
+    <img src={`data:image/svg+xml,${encodeURIComponent(svg)}`} width={size} height={size} alt="" />,
     { width: size, height: size },
   );
 }
