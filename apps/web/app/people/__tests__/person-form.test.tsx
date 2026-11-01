@@ -93,6 +93,15 @@ describe("PersonForm", () => {
     expect(sent(t).has("anniversaryDay")).toBe(false);
   });
 
+  it("names the birthday and anniversary groups for screen readers", async () => {
+    setup();
+    expect(screen.getByRole("group", { name: "Birthday" })).toContainElement(screen.getByLabelText("Birthday month"));
+    await userEvent.selectOptions(relationship(), "Wife");
+    expect(screen.getByRole("group", { name: "Anniversary" })).toContainElement(
+      screen.getByLabelText("Anniversary month"),
+    );
+  });
+
   it("has no Skip button", () => {
     setup();
     expect(screen.queryByRole("button", { name: "Skip" })).toBeNull();

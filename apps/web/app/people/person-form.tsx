@@ -332,10 +332,13 @@ export function PersonForm(props: Props) {
       )}
 
       <fieldset id="birthday" className="flex flex-col gap-2">
-        <div className="flex items-baseline justify-between">
-          <legend className="float-left p-0 text-base font-semibold">Birthday</legend>
-          <span className="text-[13px] text-muted-foreground">Optional</span>
-        </div>
+        {/* The legend must be the fieldset's first child to name the group. */}
+        <legend className="flex w-full items-baseline justify-between p-0">
+          <span className="text-base font-semibold">Birthday</span>
+          <span aria-hidden="true" className="text-[13px] font-normal text-muted-foreground">
+            Optional
+          </span>
+        </legend>
         <DateFields
           name="birthday"
           label="Birthday"
@@ -353,10 +356,12 @@ export function PersonForm(props: Props) {
 
       {showAnniversary && (
         <fieldset className="flex flex-col gap-2">
-          <div className="flex items-baseline justify-between">
-            <legend className="float-left p-0 text-base font-semibold">Anniversary</legend>
-            <span className="text-[13px] text-muted-foreground">Optional</span>
-          </div>
+          <legend className="flex w-full items-baseline justify-between p-0">
+            <span className="text-base font-semibold">Anniversary</span>
+            <span aria-hidden="true" className="text-[13px] font-normal text-muted-foreground">
+              Optional
+            </span>
+          </legend>
           <DateFields
             name="anniversary"
             label="Anniversary"
@@ -381,7 +386,7 @@ export function PersonForm(props: Props) {
       )}
 
       <Button type="submit" className="min-h-12 w-full text-base font-semibold" disabled={busy || preparing} aria-busy={busy || preparing}>
-        {busy ? "Saving…" : preparing ? "Preparing photo…" : submitLabel}
+        <span className="truncate">{busy ? "Saving…" : preparing ? "Preparing photo…" : submitLabel}</span>
       </Button>
     </form>
   );
