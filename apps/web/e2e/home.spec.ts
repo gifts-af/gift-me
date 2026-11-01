@@ -1,0 +1,51 @@
+import { expect, test } from "@playwright/test";
+import { TEST_USER } from "./test-user";
+
+// ALL-46: the public home page and the guided tour.
+test("a signed-out visitor sees the home page at / on a phone", async ({ page }) => {
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole("heading", { name: "Gifting, handled AF." })).toBeVisible();
+  await expect(page.getByText("Early alpha. Lots is broken. Poke around anyway.")).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+});
+
+test("on a computer the hook sits beside the pick-a-gift card", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/");
+  const text = await page.getByTestId("hook-text").boundingBox();
+  const preview = await page.getByTestId("pick-preview").boundingBox();
+  expect(text && preview).toBeTruthy();
+  // Side by side: the card starts to the right of the text, and they overlap vertically.
+  expect(preview!.x).toBeGreaterThan(text!.x + text!.width - 1);
+  expect(preview!.y).toBeLessThan(text!.y + text!.height);
+});
+
+for (const colorScheme of ["dark", "light"] as const) {
+  test(`the home page follows a ${colorScheme} browser`, async ({ browser }) => {
+    const context = await browser.newContext({ colorScheme, viewport: { width: 375, height: 812 } });
+    const page = await context.newPage();
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: "Gifting, handled AF." })).toBeVisible();
+    const isDark = await page.evaluate(() => document.documentElement.classList.contains("dark"));
+    expect(isDark).toBe(colorScheme === "dark");
+    await context.close();
+  });
+}
+
+test("take the tour, then sign in with an invite", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: "Take the tour" }).click();
+  await expect(page).toHaveURL(/\/tour$/);
+  for (let i = 0; i < 6; i++) {
+    // exact: under `pnpm dev` the Next.js dev tools button also matches "Next".
+    await page.getByRole("button", { name: "Next", exact: true }).click();
+  }
+  await expect(page.getByText("Step 7 of 7")).toBeVisible();
+  await page.getByRole("link", { name: "Have an invite? Sign in" }).click();
+  await page.getByLabel("Email").fill(TEST_USER.email);
+  await page.getByLabel("Password").fill(TEST_USER.password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
+});

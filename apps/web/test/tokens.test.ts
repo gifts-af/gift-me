@@ -37,6 +37,9 @@ const expected = {
     destructive: "0 74% 42%",
     success: "142 72% 29%",
     warning: "26 90% 37%",
+    // The home page's sticker and alpha strip (ALL-46): the same yellow in both themes.
+    sticker: "48 96% 53%",
+    "sticker-foreground": "240 6% 10%",
   },
   dark: {
     background: "240 10% 4%",
@@ -55,6 +58,8 @@ const expected = {
     destructive: "0 91% 71%",
     success: "142 69% 58%",
     warning: "43 96% 56%",
+    sticker: "48 96% 53%",
+    "sticker-foreground": "240 6% 10%",
   },
 };
 
@@ -92,6 +97,7 @@ const pairs = [
   ["warning", "background"],
   ["success", "success-soft"],
   ["warning", "warning-soft"],
+  ["sticker-foreground", "sticker"],
 ] as const;
 
 describe.each(Object.keys(themes) as (keyof typeof themes)[])("%s theme", (theme) => {
