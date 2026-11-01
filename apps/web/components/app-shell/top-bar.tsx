@@ -2,6 +2,7 @@ import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/logo";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { TopBarRow } from "@/components/top-bar-row";
 
 type Current = "list" | "people";
@@ -44,7 +45,9 @@ export function TopBar({
         </div>
         <div className="flex items-center gap-1">
           {actions}
-          {account}
+          {/* Signed in, the account menu holds the theme; signed out (a
+              shared list), this switch does (ALL-74). */}
+          {account ?? <ThemeToggle />}
         </div>
       </TopBarRow>
     </header>
