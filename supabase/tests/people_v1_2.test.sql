@@ -2,7 +2,7 @@
 -- and add_person, which saves a person and their occasions together.
 begin;
 \ir _helpers.psql
-select plan(30);
+select plan(32);
 
 select tests.create_user('a@example.com') as a \gset
 select tests.create_user('b@example.com') as b \gset
@@ -32,6 +32,13 @@ select throws_ok(
   '23514', null, 'a birthday kind without a month and day is refused');
 select is((select count(*)::int from public.people where name = 'Pat'), 0,
   'and the person is not left behind (one transaction)');
+
+-- The optional dates default to null, so a call can name just what it has.
+select concierge.add_person(p_name => 'Lee', p_relationship => 'friend', p_kinds => array['christmas']) as lee \gset
+select is((select count(*)::int from public.people where id = :'lee' and birth_year is null), 1,
+  'add_person works with only a name, relationship and kinds, by named arguments');
+select is((select count(*)::int from concierge.occasions where person_id = :'lee' and kind = 'christmas' and enabled), 1,
+  'and still adds the occasion');
 
 -- ─── one occasion per kind ──────────────────────────────────────────────────
 

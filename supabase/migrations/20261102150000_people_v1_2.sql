@@ -47,7 +47,7 @@ create unique index occasions_person_kind_key
 
 -- ─── add_person ─────────────────────────────────────────────────────────────
 
--- Saves a person and one enabled occasion per kind. Runs as the caller (no
+-- Saves a person and one enabled occasion per kind (dates are optional). Runs as the caller (no
 -- security definer), so row-level security applies and user_id is the
 -- caller's. The birthday and anniversary dates go on those kinds' rows; a
 -- birthday or anniversary without a month and day fails the occasions check
@@ -56,11 +56,11 @@ create function concierge.add_person(
   p_name text,
   p_relationship text,
   p_kinds text[],
-  p_birthday_month int,
-  p_birthday_day int,
-  p_birth_year int,
-  p_anniversary_month int,
-  p_anniversary_day int
+  p_birthday_month int default null,
+  p_birthday_day int default null,
+  p_birth_year int default null,
+  p_anniversary_month int default null,
+  p_anniversary_day int default null
 )
 returns uuid
 language plpgsql

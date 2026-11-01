@@ -850,11 +850,11 @@ export type Database = {
     Functions: {
       add_person: {
         Args: {
-          p_anniversary_day: number;
-          p_anniversary_month: number;
-          p_birth_year: number;
-          p_birthday_day: number;
-          p_birthday_month: number;
+          p_anniversary_day?: number;
+          p_anniversary_month?: number;
+          p_birth_year?: number;
+          p_birthday_day?: number;
+          p_birthday_month?: number;
           p_kinds: string[];
           p_name: string;
           p_relationship: string;
