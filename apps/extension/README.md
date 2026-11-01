@@ -5,7 +5,7 @@ Saves what's on screen to a person in GiftsAF. It is a Manifest V3 extension bui
 ## Build
 
 ```
-pnpm --filter @gifts-af/extension build:dev   # local app + local Supabase
+pnpm --filter @gifts-af/extension build:dev   # localhost:3000 app + hosted gift-me-dev Supabase
 pnpm --filter @gifts-af/extension build       # giftsaf.com + production Supabase
 ```
 
@@ -18,7 +18,7 @@ Both write to `apps/extension/dist`. The build prints the extension ID.
 
 ## Dev vs prod
 
-Settings live in `.env.development` and `.env.production` (all public values, so they are committed). A missing variable fails the build. Dev talks to `http://localhost:3000`; prod talks to `https://giftsaf.com`. The manifest only lets that one origin message the extension.
+Settings live in `.env.development` and `.env.production` (all public values, so they are committed). A missing variable fails the build. Dev talks to `http://localhost:3000` and the hosted gift-me-dev Supabase project (`bcemtqvdbrrgiipzggyw`); prod talks to `https://giftsaf.com`. The local web app must also point at gift-me-dev (which `vercel env pull` gives you), not a local `supabase start`, or the sign-in token won't verify. The manifest only lets that one origin message the extension.
 
 ## Extension ID
 
