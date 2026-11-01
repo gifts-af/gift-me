@@ -46,7 +46,6 @@ export function InstallTip({ snoozeDays }: { snoozeDays: number }) {
     });
     if (!found || installed || isSnoozed(readDismissedAt(), new Date(), snoozeDays)) return;
     // Reads browser-only state after mount, so the server render stays empty.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPlatform(found);
 
     const onOffer = (event: Event) => {
