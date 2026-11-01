@@ -1,11 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { Camera } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import { RELATIONSHIPS, relationshipLabel } from "@gifts-af/core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { PersonAvatar } from "@/components/person-avatar";
+import { cn } from "@/lib/utils";
 import type { AddResult, SaveResult } from "@/modules/concierge";
 import { prepareJpeg, resizeToJpeg, savePersonPhoto, type PhotoStorage } from "./photo-picker";
 
@@ -39,7 +42,6 @@ type Common = {
     anniversaryMonth?: string;
     anniversaryDay?: string;
   };
-  submitLabel?: string;
 };
 
 type AddProps = Common & {
@@ -67,54 +69,69 @@ type EditProps = Common & {
 
 type Props = AddProps | EditProps;
 
+/** Month, day and (birthday only) year on one row. Labels are for screen readers. */
 function DateFields({
   name,
   label,
   month,
   day,
+  year,
   onMonth,
   onDay,
+  onYear,
 }: {
   name: string;
   label: string;
   month: string;
   day: string;
+  /** Present only for the birthday; the anniversary row leaves the year cell empty. */
+  year?: string;
   onMonth: (v: string) => void;
   onDay: (v: string) => void;
+  onYear?: (v: string) => void;
 }) {
   return (
-    <div className="grid grid-cols-[1fr_5.5rem] gap-3">
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor={`${name}-month`}>{label} month</Label>
-        <select
-          id={`${name}-month`}
-          name={`${name}Month`}
-          className={SELECT_CLASS}
-          value={month}
-          onChange={(e) => onMonth(e.target.value)}
-        >
-          <option value="">Month</option>
-          {MONTH_NAMES.map((m, i) => (
-            <option key={m} value={i + 1}>
-              {m}
-            </option>
-          ))}
-        </select>
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor={`${name}-day`}>{label} day</Label>
+    <div className="grid grid-cols-[minmax(0,1fr)_4.5rem_5.75rem] gap-2">
+      <select
+        aria-label={`${label} month`}
+        name={`${name}Month`}
+        className={cn(SELECT_CLASS, "px-2.5")}
+        value={month}
+        onChange={(e) => onMonth(e.target.value)}
+      >
+        <option value="">Month</option>
+        {MONTH_NAMES.map((m, i) => (
+          <option key={m} value={i + 1}>
+            {m}
+          </option>
+        ))}
+      </select>
+      <Input
+        aria-label={`${label} day`}
+        name={`${name}Day`}
+        type="number"
+        inputMode="numeric"
+        min={1}
+        max={31}
+        placeholder="Day"
+        className="px-2.5 text-center"
+        value={day}
+        onChange={(e) => onDay(e.target.value)}
+      />
+      {onYear ? (
         <Input
-          id={`${name}-day`}
-          name={`${name}Day`}
+          aria-label="Birth year (optional)"
+          name="birthYear"
           type="number"
           inputMode="numeric"
-          min={1}
-          max={31}
-          placeholder="Day"
-          value={day}
-          onChange={(e) => onDay(e.target.value)}
+          placeholder="Year"
+          className="px-2.5 text-center"
+          value={year ?? ""}
+          onChange={(e) => onYear(e.target.value)}
         />
-      </div>
+      ) : (
+        <span aria-hidden="true" />
+      )}
     </div>
   );
 }
@@ -128,11 +145,13 @@ function DateFields({
  * then fails, the person still exists, so we go on anyway.
  */
 export function PersonForm(props: Props) {
-  const { initial, submitLabel = "Save" } = props;
+  const { initial } = props;
   const add = props.mode === "edit" ? null : props;
   const resize = add?.resize ?? resizeToJpeg;
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
+  const [name, setName] = useState(initial?.name ?? "");
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [relationship, setRelationship] = useState(initial?.relationship ?? "");
   const [bMonth, setBMonth] = useState(initial?.birthdayMonth ?? "");
   const [bDay, setBDay] = useState(initial?.birthdayDay ?? "");
@@ -145,6 +164,20 @@ export function PersonForm(props: Props) {
   const [saved, setSaved] = useState(false);
   const [busy, setBusy] = useState(false);
   const [preparing, setPreparing] = useState(false);
+
+  // The photo preview is an object URL; revoke it when the photo changes or the form goes away.
+  useEffect(() => {
+    if (!photo) {
+      setPreviewUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(photo);
+    setPreviewUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [photo]);
+
+  const trimmed = name.trim();
+  const submitLabel = add ? (trimmed ? `Add ${trimmed}` : "Add someone") : "Save";
 
   // Editing always offers the anniversary, so a changed relationship keeps it.
   const showAnniversary = !add || relationship === "wife" || relationship === "husband";
@@ -226,89 +259,104 @@ export function PersonForm(props: Props) {
   }
 
   return (
-    <form onSubmit={onSubmit} className="flex flex-col gap-5" noValidate>
+    <form onSubmit={onSubmit} className="flex flex-col gap-6" noValidate>
       {initial?.id && <input type="hidden" name="id" value={initial.id} />}
 
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="person-name">Name</Label>
-        <Input id="person-name" name="name" autoComplete="off" defaultValue={initial?.name ?? ""} />
-      </div>
+      <section aria-label="Who they are" className="flex items-start gap-4 rounded-xl border border-border p-4">
+        {add && (
+          <div className="flex w-[72px] shrink-0 flex-col items-center">
+            <input
+              ref={input}
+              type="file"
+              accept="image/*"
+              aria-label="Choose a photo"
+              className="sr-only"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void onPickPhoto(file);
+              }}
+            />
+            <button
+              type="button"
+              aria-label={photo ? "Change photo" : "Add a photo"}
+              onClick={() => input.current?.click()}
+              className="flex w-[72px] flex-col items-center gap-1.5 rounded-md text-[13px] text-primary"
+            >
+              <span className="relative inline-flex">
+                <PersonAvatar name={trimmed} photoUrl={previewUrl} size={72} decorative />
+                <span className="absolute -right-0.5 -bottom-0.5 flex size-[26px] items-center justify-center rounded-full border-2 border-background bg-primary text-primary-foreground">
+                  <Camera className="size-3.5" aria-hidden="true" />
+                </span>
+              </span>
+              <span aria-hidden="true">{photo ? "Change" : "Add photo"}</span>
+            </button>
+          </div>
+        )}
 
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor="person-relationship">Who are they to you?</Label>
-        <select
-          id="person-relationship"
-          name="relationship"
-          className={SELECT_CLASS}
-          value={relationship}
-          onChange={(e) => setRelationship(e.target.value)}
-        >
-          <option value="">Choose one</option>
-          {RELATIONSHIPS.map((r) => (
-            <option key={r} value={r}>
-              {relationshipLabel(r)}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      {add && (
-        <div className="flex flex-col gap-1.5">
-          <input
-            ref={input}
-            type="file"
-            accept="image/*"
-            aria-label="Choose a photo"
-            className="sr-only"
-            onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (file) void onPickPhoto(file);
-            }}
-          />
-          <Button type="button" variant="outline" onClick={() => input.current?.click()}>
-            {photo ? "Change photo" : "Add a photo (optional)"}
-          </Button>
-          {photo && <p className="text-[13px] text-muted-foreground">{photo.name}</p>}
-          {photoError && (
-            <p role="alert" className="text-[13px] text-destructive">
-              {photoError}
-            </p>
-          )}
+        <div className="flex min-w-0 grow flex-col gap-3">
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="person-name">Name</Label>
+            <Input
+              id="person-name"
+              name="name"
+              autoComplete="off"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+            />
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <Label htmlFor="person-relationship">Who are they to you?</Label>
+            <select
+              id="person-relationship"
+              name="relationship"
+              className={SELECT_CLASS}
+              value={relationship}
+              onChange={(e) => setRelationship(e.target.value)}
+            >
+              <option value="">Choose one</option>
+              {RELATIONSHIPS.map((r) => (
+                <option key={r} value={r}>
+                  {relationshipLabel(r)}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
+      </section>
+
+      {add && photo && <p className="-mt-3 text-[13px] text-muted-foreground">{photo.name}</p>}
+      {photoError && (
+        <p role="alert" className="-mt-3 text-[13px] text-destructive">
+          {photoError}
+        </p>
       )}
 
-      <fieldset id="birthday" className="flex flex-col gap-3">
-        <legend className="mb-1 text-sm font-semibold">Birthday</legend>
-        <DateFields name="birthday" label="Birthday" month={bMonth} day={bDay} onMonth={setBMonth} onDay={setBDay} />
-        <div className="flex flex-col gap-1.5">
-          <Label htmlFor="birth-year">Birth year (optional)</Label>
-          <Input
-            id="birth-year"
-            name="birthYear"
-            type="number"
-            inputMode="numeric"
-            placeholder="Year"
-            value={bYear}
-            onChange={(e) => setBYear(e.target.value)}
-          />
+      <fieldset id="birthday" className="flex flex-col gap-2">
+        <div className="flex items-baseline justify-between">
+          <legend className="float-left p-0 text-base font-semibold">Birthday</legend>
+          <span className="text-[13px] text-muted-foreground">Optional</span>
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          className="self-start"
-          onClick={() => {
-            setBMonth("");
-            setBDay("");
-            setBYear("");
-          }}
-        >
-          Skip
-        </Button>
+        <DateFields
+          name="birthday"
+          label="Birthday"
+          month={bMonth}
+          day={bDay}
+          year={bYear}
+          onMonth={setBMonth}
+          onDay={setBDay}
+          onYear={setBYear}
+        />
+        <p className="text-[13px] text-muted-foreground">
+          We&apos;ll suggest gifts before it. The year is just for age-right ideas.
+        </p>
       </fieldset>
 
       {showAnniversary && (
-        <fieldset className="flex flex-col gap-3">
-          <legend className="mb-1 text-sm font-semibold">{add ? "Anniversary" : "Anniversary (optional)"}</legend>
+        <fieldset className="flex flex-col gap-2">
+          <div className="flex items-baseline justify-between">
+            <legend className="float-left p-0 text-base font-semibold">Anniversary</legend>
+            <span className="text-[13px] text-muted-foreground">Optional</span>
+          </div>
           <DateFields
             name="anniversary"
             label="Anniversary"
@@ -332,7 +380,7 @@ export function PersonForm(props: Props) {
         </p>
       )}
 
-      <Button type="submit" disabled={busy || preparing} aria-busy={busy || preparing}>
+      <Button type="submit" className="min-h-12 w-full text-base font-semibold" disabled={busy || preparing} aria-busy={busy || preparing}>
         {busy ? "Saving…" : preparing ? "Preparing photo…" : submitLabel}
       </Button>
     </form>

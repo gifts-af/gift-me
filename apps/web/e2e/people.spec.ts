@@ -84,7 +84,7 @@ test("add Mom, set her occasions and budget, link her list, delete her", async (
   await page.getByLabel("Name").fill(mom);
   await page.getByLabel("Who are they to you?").selectOption({ label: "Mother" });
   await noSidewaysScroll(page);
-  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("button", { name: `Add ${mom}` }).click();
 
   // 2. Her card: Add birthday, a next occasion, and "We suggest ideas".
   await expect(page).toHaveURL(/\/$/);
