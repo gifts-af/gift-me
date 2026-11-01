@@ -40,8 +40,12 @@ export function Tour() {
   return (
     <div className="min-h-svh bg-background text-foreground">
       <HomeTopBar />
-      <main className="mx-auto flex w-full max-w-xl flex-col gap-5 px-4 pb-12 pt-4">
-        <div className="flex items-center justify-between gap-3">
+      {/* Phone: one column (step, caption, screen, buttons). From md, two
+          columns like the home page's hook: step, caption and buttons left, the
+          phone right (ALL-61). Placed with the grid, so the reading and tab order
+          stays step, caption, screen, buttons on every screen. */}
+      <main className="mx-auto flex w-full max-w-xl flex-col gap-5 px-4 pb-12 pt-4 md:grid md:max-w-5xl md:grid-cols-[minmax(0,1fr)_minmax(0,400px)] md:grid-rows-[auto_auto_auto_1fr] md:content-start md:gap-x-12 md:gap-y-6 md:px-8 md:py-16">
+        <div className="flex items-center justify-between gap-3 md:col-start-1 md:row-start-1">
           <p className="text-[13px] font-semibold text-muted-foreground">
             Step {step + 1} of {TOUR_STEPS.length}
           </p>
@@ -49,38 +53,40 @@ export function Tour() {
             Skip tour
           </Link>
         </div>
-        <h1 ref={caption} tabIndex={-1} className="text-[22px] font-extrabold leading-tight tracking-tight outline-none">
+        <h1 ref={caption} tabIndex={-1} className="text-[22px] font-extrabold leading-tight tracking-tight outline-none md:col-start-1 md:row-start-2 md:text-[36px] md:leading-[1.1]">
           {current.caption}
         </h1>
 
-        {current.id === "people" && <PeopleScreen />}
-        {current.id === "pick" && (
-          <PickScreen
-            title="Mom's birthday · Sat, Mar 14"
-            banner="From Mom's own list. She chose these herself."
-            gifts={MOM_GIFTS}
-            picked={momPicks}
-            onToggle={toggle(setMomPicks)}
-            onSend={advance}
-          />
-        )}
-        {current.id === "ship" && <ShipScreen />}
-        {current.id === "done" && <DoneScreen />}
-        {current.id === "ideas" && (
-          <PickScreen
-            title="Dad's birthday · Fri, Apr 10"
-            banner="Suggested from 4 things you saved about Dad."
-            gifts={DAD_IDEAS}
-            picked={dadPicks}
-            onToggle={toggle(setDadPicks)}
-            onSend={advance}
-          />
-        )}
-        {current.id === "list" && <ListScreen />}
-        {current.id === "end" && <EndScreen />}
+        <div data-testid="tour-screen" className="md:col-start-2 md:row-span-4 md:row-start-1">
+          {current.id === "people" && <PeopleScreen />}
+          {current.id === "pick" && (
+            <PickScreen
+              title="Mom's birthday · Sat, Mar 14"
+              banner="From Mom's own list. She chose these herself."
+              gifts={MOM_GIFTS}
+              picked={momPicks}
+              onToggle={toggle(setMomPicks)}
+              onSend={advance}
+            />
+          )}
+          {current.id === "ship" && <ShipScreen />}
+          {current.id === "done" && <DoneScreen />}
+          {current.id === "ideas" && (
+            <PickScreen
+              title="Dad's birthday · Fri, Apr 10"
+              banner="Suggested from 4 things you saved about Dad."
+              gifts={DAD_IDEAS}
+              picked={dadPicks}
+              onToggle={toggle(setDadPicks)}
+              onSend={advance}
+            />
+          )}
+          {current.id === "list" && <ListScreen />}
+          {current.id === "end" && <EndScreen />}
+        </div>
 
         {!last && (
-          <div className="flex gap-3">
+          <div className="flex gap-3 md:col-start-1 md:row-start-3 md:self-start">
             {step > 0 && (
               <button
                 type="button"
