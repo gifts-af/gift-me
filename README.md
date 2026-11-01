@@ -10,7 +10,7 @@ One app for three products (T19): **gift lists** (live, formerly the GiftsAF rep
 | `design/` | [Technical design](design/technical-design.md) (approved 2026-10-17), [decisions log](design/decisions.md). Spike write-ups go in `design/spikes/`, look and feel in `design/ui.md` (mock-ups in `design/mockups/`), and ticket specs and build plans in `design/plans/` (start from [the template](design/plans/TEMPLATE.md)). | Complete |
 | `.claude/` | Shared Claude Code settings (turns on the Superpowers plugin; runs the local setup check at session start) | Done |
 | `apps/web/` | The one web app (Next.js). Products live in `modules/lists` and `modules/concierge`; see its [README](apps/web/README.md) | Lists live; concierge from Wave 2 |
-| `apps/extension/` | Chrome capture extension | W2-4 |
+| `apps/extension/` | Chrome capture extension: save what's on screen to a person. How to build and load it is in its [README](apps/extension/README.md) | MVP built (ALL-22), loaded unpacked |
 | `packages/core/` | Pure shared logic (dates, deadlines, budgets) and database types | W1-5 |
 | `supabase/` | Database migrations and local Supabase settings (`config.toml`) | Lists tables today |
 | `scripts/` | Repo tooling, such as `dev-check.mjs` (the local setup check) | Done |
