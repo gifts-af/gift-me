@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ImportResult } from "@/modules/concierge";
 import { loadGoogleContacts } from "./google-contacts";
 import { ImportChecklist } from "./import-checklist";
@@ -17,12 +17,15 @@ export function ImportFromGoogle({
   action: (previous: ImportResult | null, formData: FormData) => Promise<ImportResult>;
 }) {
   // A fresh checklist for each round (ALL-72): after "Import more people", and
-  // when a later visit brings a new list of imported contacts. The import
-  // action deliberately doesn't refresh this page, or the result would vanish.
+  // whenever you leave the page and come back. Next.js keeps a page you leave
+  // in a hidden <Activity>, which runs effect cleanups, so the cleanup below
+  // starts a new round for your return. The import's own page refresh doesn't
+  // hide the page, so its result stays on screen.
   const [round, setRound] = useState(0);
+  useEffect(() => () => setRound((r) => r + 1), []);
   return (
     <ImportChecklist
-      key={`${round}|${imported.join(",")}`}
+      key={round}
       action={action}
       imported={imported}
       load={() => loadGoogleContacts(clientId)}

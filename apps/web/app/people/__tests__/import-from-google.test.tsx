@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
+import { Activity } from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { ImportResult } from "@/modules/concierge";
 
@@ -30,10 +31,26 @@ describe("importing again", () => {
     expect(screen.getByRole("button", { name: "Connect Google Contacts" })).toBeInTheDocument();
   });
 
-  it("starts fresh when the page comes back with new people imported", async () => {
+  // The import's server action refreshes the page, so the imported list
+  // changes while the result is on screen: the result must stay.
+  it("keeps the result when the page refreshes with the new people", async () => {
     const { rerender } = render(<ImportFromGoogle clientId="id" imported={[]} action={action} />);
     await importSam();
     rerender(<ImportFromGoogle clientId="id" imported={["people/c1"]} action={action} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Added 1 person");
+  });
+
+  // Next.js keeps a page you leave in a hidden <Activity>; coming back shows it again.
+  it("starts fresh when you leave the page and come back", async () => {
+    const page = (mode: "visible" | "hidden", imported: string[]) => (
+      <Activity mode={mode}>
+        <ImportFromGoogle clientId="id" imported={imported} action={action} />
+      </Activity>
+    );
+    const { rerender } = render(page("visible", []));
+    await importSam();
+    await act(async () => rerender(page("hidden", ["people/c1"])));
+    await act(async () => rerender(page("visible", ["people/c1"])));
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Connect Google Contacts" })));
     expect(screen.getByRole("checkbox", { name: "Sam Lee" })).toBeDisabled();
