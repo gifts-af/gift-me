@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { unstable_rethrow } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -17,7 +17,6 @@ export function DeletePerson({
   /** `deletePersonAction` */
   action: (previous: null, formData: FormData) => Promise<SaveResult>;
 }) {
-  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,13 +30,18 @@ export function DeletePerson({
     let result: SaveResult;
     try {
       result = await action(null, form);
-    } catch {
+    } catch (e) {
+      // A successful delete redirects Home from the server, which reaches us as
+      // a thrown redirect that Next handles itself. Stay busy, show nothing.
+      try {
+        unstable_rethrow(e);
+      } catch {
+        return;
+      }
       result = { ok: false, error: "That didn't go through. Try again." };
     }
-    if (result.ok) {
-      router.push("/"); // stay busy while we leave
-      return;
-    }
+    // The action only returns on failure; success redirects. Stay busy if it ever returns ok.
+    if (result.ok) return;
     setBusy(false);
     setError(result.error);
   }
