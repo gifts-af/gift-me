@@ -10,11 +10,11 @@ export const metadata: Metadata = {
   title: APP_NAME,
   description: APP_TAGLINE,
   // Link previews (ALL-55). The image is app/opengraph-image.tsx, and every
-  // page inherits these unless it sets its own.
+  // page inherits these unless it sets its own. No og:url here: each page's
+  // own address is used, so a shared list's card opens that list.
   openGraph: {
     type: "website",
     siteName: APP_NAME,
-    url: "/",
     title: `${APP_NAME} · ${APP_HOOK}`,
     description: APP_PITCH,
   },

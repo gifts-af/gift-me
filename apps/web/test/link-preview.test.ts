@@ -29,10 +29,13 @@ describe("share tags", () => {
     expect(metadata.openGraph).toMatchObject({
       type: "website",
       siteName: "GiftsAF",
-      url: "/",
       title: "GiftsAF · Gifting, handled AF.",
       description: "We remember the dates, find the gift, and ship it. You just tap yes.",
     });
+  });
+
+  it("leaves og:url to each page, so a shared list's card opens that list", () => {
+    expect(metadata.openGraph).not.toHaveProperty("url");
   });
 
   it("asks for a large image card on X and others", () => {

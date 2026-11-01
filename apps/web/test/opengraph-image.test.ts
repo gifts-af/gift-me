@@ -9,4 +9,10 @@ describe("share image", () => {
     expect(og.contentType).toBe("image/png");
     expect(og.alt).toMatch(/GiftsAF/);
   });
+
+  it("shows the domain from the brand settings, not typed into the image", async () => {
+    const { readFile } = await import("node:fs/promises");
+    const source = await readFile(new URL("../app/opengraph-image.tsx", import.meta.url), "utf8");
+    expect(source).not.toMatch(/giftsaf\.com/);
+  });
 });

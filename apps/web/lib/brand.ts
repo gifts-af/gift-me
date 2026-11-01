@@ -2,6 +2,7 @@
 // (`gift-me`, `lists`, `concierge`) stay as they are (T21); only what users
 // see uses this.
 export const APP_NAME = "GiftsAF";
+export const APP_DOMAIN = "giftsaf.com";
 export const APP_TAGLINE = "The right gift, on time, without the scramble.";
 
 // The home page's hook and pitch (ALL-46), reused for link previews (ALL-55).

@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { ImageResponse } from "next/og";
-import { APP_HOOK, APP_NAME, APP_PITCH } from "@/lib/brand";
+import { APP_DOMAIN, APP_HOOK, APP_NAME, APP_PITCH } from "@/lib/brand";
 import { holidayLogoNow } from "@/lib/holiday";
 import { STICKER, tagSvg } from "@/lib/logo-art";
 
@@ -62,7 +62,7 @@ export default async function Image() {
           </div>
         </div>
 
-        <div style={{ display: "flex", fontSize: 30, fontWeight: 900, color: TEAL }}>giftsaf.com</div>
+        <div style={{ display: "flex", fontSize: 30, fontWeight: 900, color: TEAL }}>{APP_DOMAIN}</div>
       </div>
     ),
     {
