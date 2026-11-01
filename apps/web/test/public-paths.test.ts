@@ -11,6 +11,8 @@ describe("isPublicPath", () => {
     "/auth/login",
     "/auth/callback",
     "/api/keepalive",
+    // The Chrome extension posts captures here with a bearer token (ALL-22).
+    "/api/captures",
     // The browser fetches these to offer "Add to Home Screen", signed in or not.
     "/manifest.webmanifest",
     "/icon",

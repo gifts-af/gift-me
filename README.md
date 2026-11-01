@@ -10,7 +10,7 @@ One app for three products (T19): **gift lists** (live, formerly the GiftsAF rep
 | `design/` | [Technical design](design/technical-design.md) (approved 2026-10-17), [decisions log](design/decisions.md). Spike write-ups go in `design/spikes/`, look and feel in `design/ui.md` (mock-ups in `design/mockups/`), and ticket specs and build plans in `design/plans/` (start from [the template](design/plans/TEMPLATE.md)). | Complete |
 | `.claude/` | Shared Claude Code settings (turns on the Superpowers plugin; runs the local setup check at session start) | Done |
 | `apps/web/` | The one web app (Next.js). Products live in `modules/lists` and `modules/concierge`; see its [README](apps/web/README.md) | Lists live; concierge from Wave 2 |
-| `apps/extension/` | Chrome capture extension | W2-4 |
+| `apps/extension/` | Chrome capture extension: save what's on screen to a person. How to build and load it is in its [README](apps/extension/README.md) | MVP built (ALL-22), loaded unpacked |
 | `packages/core/` | Pure shared logic (dates, deadlines, budgets) and database types | W1-5 |
 | `supabase/` | Database migrations and local Supabase settings (`config.toml`) | Lists tables today |
 | `scripts/` | Repo tooling, such as `dev-check.mjs` (the local setup check) | Done |
@@ -33,7 +33,7 @@ One app for three products (T19): **gift lists** (live, formerly the GiftsAF rep
 | pnpm | Package manager for this repo | `npm install -g pnpm` |
 | Dependencies | Includes the **Supabase CLI**, pinned in `package.json`, so there's nothing to install globally | `pnpm install` from the repo root |
 | Docker | The Supabase CLI runs a full local Supabase (database, auth, storage) in Docker containers | **Windows:** `wsl --install --no-distribution` as admin, restart Windows, then `winget install -e --id Docker.DockerDesktop`, open Docker Desktop and accept its terms. **Mac:** in Terminal, `brew install --cask docker-desktop` (it asks for your Mac password), then open Docker Desktop and accept its terms. |
-| Playwright's Chromium | Runs the browser tests (`apps/web/e2e/`) | `pnpm --filter @gifts-af/web exec playwright install chromium` |
+| Playwright's Chromium and WebKit | Run the browser tests (`apps/web/e2e/`) as an Android phone (Chromium) and an iPhone (WebKit, Safari's engine) | `pnpm --filter @gifts-af/web exec playwright install chromium webkit` |
 
 **Local database.** With Docker Desktop running:
 

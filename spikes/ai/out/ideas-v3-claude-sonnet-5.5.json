@@ -1,0 +1,319 @@
+{
+  "model": "anthropic/claude-sonnet-5.5",
+  "results": [
+    {
+      "person": "dad",
+      "brainstorm": {
+        "ideas": [
+          {
+            "title": "Kingfisher Clarkfork true rotary vise (his main want, best version)",
+            "product_search": "Kingfisher Fly Fishing Clarkfork True Rotary Fly Tying Vise Gold",
+            "retailer_hint": "Amazon (Kingfisher's own store lists it at $79.95 if Amazon is out of stock)",
+            "est_price_usd": 80,
+            "fits_facts": [
+              "wants: needs a new rotary fly-tying vise (captured)",
+              "constraint: jaws must securely hold size 18 and smaller hooks (captured)",
+              "owns: old fly-tying vise, about 20 years old and worn out (captured)",
+              "interest: ties Adams dry flies (captured)"
+            ],
+            "why": "This is the one over-budget pick, at about 7% over, and it is my top choice for his stated need. <cite index=\"1-9\">One review roundup calls it the smoothest true rotary under $100. It has dual ball-bearing housings and hardened tool-steel jaws that hold sizes 26 to 4/0 and grip tiny hooks firmly.</cite> That covers his size 18-and-smaller requirement for trout dry flies. It replaces the worn-out vise, so he isn't getting a duplicate. Check the shipped total at checkout, because the 15% allowance caps it at about $86."
+          },
+          {
+            "title": "Maxcatch rotary fly-tying vise with travel case",
+            "product_search": "Maxcatch Rotary Fly Tying Vise Alloy Travel Vise",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 55,
+            "fits_facts": [
+              "wants: needs a new rotary fly-tying vise (captured)",
+              "constraint: jaws must securely hold size 18 and smaller hooks (captured)",
+              "owns: old fly-tying vise, about 20 years old and worn out (captured)",
+              "dislike: clutter",
+              "interest: fishing trips to the Upper Delaware River (captured)"
+            ],
+            "why": "This is the in-budget vise option. <cite index=\"1-14\">It is a full rotary with adjustable tension and hardened steel jaws rated for sizes 28 to 4/0. It comes in a snap-shut case with foam holders.</cite> The jaw range easily covers size 18 and smaller. The compact case suits someone who dislikes clutter, and it could go with him on Upper Delaware trips. Confirm the price on the Amazon listing before buying, since I couldn't verify it."
+          },
+          {
+            "title": "Dr. Slick micro-tip fine scissors for tying small flies",
+            "product_search": "Dr. Slick 4 inch Micro Tip Scissors fly tying",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 22,
+            "fits_facts": [
+              "interest: fly tying (captured)",
+              "interest: ties Adams dry flies (captured)",
+              "interest: dry fly fishing for trout (captured)",
+              "dislike: clutter"
+            ],
+            "why": "Trimming hackle and wing material on size 18 and smaller flies needs a fine tip, and he will have a new vise to hold them. It is one small tool that takes almost no space. A tying guide notes that <cite index=\"27-13\">tying an Adams takes a vise, a bobbin, and fine-tipped scissors for close trimming near the hook.</cite> It pairs well with the vise if you buy both."
+          },
+          {
+            "title": "Magnifier LED task lamp for the tying bench",
+            "product_search": "Brightech LightView Pro LED magnifying desk lamp",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 60,
+            "fits_facts": [
+              "interest: fly tying (captured)",
+              "constraint: tiny hooks, size 18 and smaller (captured)",
+              "interest: woodworking / home workshop (captured)"
+            ],
+            "why": "Tying size 18 and smaller dry flies is detailed work at 68, and good light with magnification helps. It is a single clamp-on piece that keeps the bench clear. It also works as a task light in his workshop. Check which clamp or base option is in stock."
+          },
+          {
+            "title": "Wall Control metal pegboard for the workshop",
+            "product_search": "Wall Control 30-P-3232 metal pegboard 32x32",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 65,
+            "fits_facts": [
+              "interest: workshop wall storage and organization (captured)",
+              "interest: woodworking / home workshop (captured)",
+              "dislike: clutter",
+              "owns: nearly every hand tool"
+            ],
+            "why": "He owns nearly every hand tool and likes wall storage, so the useful gift is a way to hang what he already has. A metal pegboard gets tools off the bench and keeps surfaces clear. It is a stock panel, so nothing is custom-made. Check the current price and size, since I couldn't verify them."
+          },
+          {
+            "title": "Magnetic tool holder bar, 24 inch",
+            "product_search": "24 inch heavy duty magnetic tool holder bar wall mount",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 25,
+            "fits_facts": [
+              "interest: workshop wall storage and organization (captured)",
+              "dislike: clutter",
+              "owns: nearly every hand tool"
+            ],
+            "why": "This is a low-cost way to put his many hand tools on the wall with no extra hardware. It keeps chisels, screwdrivers and similar tools visible and tidy. A sturdy stock bar is a better choice than a generic organizer set. A cheaper alternative if the pegboard seems like too much."
+          },
+          {
+            "title": "Tacky dry fly box for his finished Adams flies",
+            "product_search": "Tacky Original Fly Box dry fly",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 25,
+            "fits_facts": [
+              "interest: dry fly fishing for trout (captured)",
+              "interest: ties Adams dry flies (captured)",
+              "interest: fishing trips to the Upper Delaware River (captured)",
+              "dislike: clutter"
+            ],
+            "why": "A slim box with a grippy insert keeps the dry flies he ties tidy and compact on the river. Delicate hackle holds its shape better in a good box than loose in a pocket. It gives him a neat home for his own work. Check which Tacky size and model is currently listed."
+          },
+          {
+            "title": "Columbia PFG Bahama II long-sleeve fishing shirt, size L",
+            "product_search": "Columbia PFG Bahama II Long Sleeve Shirt Men's Large",
+            "retailer_hint": "Amazon (or Columbia's own store if not stocked)",
+            "est_price_usd": 55,
+            "fits_facts": [
+              "size: shirt L",
+              "interest: fly fishing",
+              "interest: fishing trips to the Upper Delaware River (captured)"
+            ],
+            "why": "It is a vented, UPF-rated fishing shirt in his size, and he can wear it on the river. It is practical and takes up no room. Pick a neutral color that works on a stream. Confirm the color and size L are in stock."
+          }
+        ],
+        "input": 44122,
+        "output": 5710,
+        "searches": 3,
+        "cost": 0.175344,
+        "secs": 45.57
+      },
+      "rank": {
+        "ranked": [
+          {
+            "title": "Maxcatch rotary fly-tying vise with travel case",
+            "reason": "His 20-year-old vise is worn out and he needs a new rotary one, and this one holds size 18 and smaller hooks, fits in budget, and packs into a small case.",
+            "score_0_10": 9
+          },
+          {
+            "title": "Dr. Slick micro-tip fine scissors for tying small flies",
+            "reason": "He ties small Adams dry flies, and fine-tip scissors make clean trims on tiny hooks, at a price that leaves room for a vise.",
+            "score_0_10": 7
+          },
+          {
+            "title": "Tacky dry fly box for his finished Adams flies",
+            "reason": "He ties his own Adams dry flies and fishes the Upper Delaware, so this slim box keeps them tidy and protected on the river.",
+            "score_0_10": 7
+          },
+          {
+            "title": "Magnifier LED task lamp for the tying bench",
+            "reason": "He ties flies at size 18 and smaller at 68, so a clamp-on magnifying light helps and doubles as a workshop light.",
+            "score_0_10": 6
+          }
+        ],
+        "dropped": [
+          {
+            "title": "Kingfisher Clarkfork true rotary vise (his main want, best version)",
+            "why": "Likely about $80 or more, over the $75 budget once shipping is included."
+          },
+          {
+            "title": "Wall Control metal pegboard for the workshop",
+            "why": "Price and size unverified, and he already has a lot of storage, so it's a weak fit for a birthday gift."
+          },
+          {
+            "title": "Magnetic tool holder bar, 24 inch",
+            "why": "Generic workshop item with no specific tie to him, and his storage setup is unknown."
+          },
+          {
+            "title": "Columbia PFG Bahama II long-sleeve fishing shirt, size L",
+            "why": "Generic apparel, and his color and style preferences are unknown, which makes it risky."
+          }
+        ],
+        "tokens": 3585,
+        "cost": 0.01197,
+        "secs": 4.84
+      }
+    },
+    {
+      "person": "priya",
+      "brainstorm": {
+        "ideas": [
+          {
+            "title": "Onyx Ethiopia two-bag taster: Muntasha Natural 10oz plus Agaro Yukro 2oz",
+            "product_search": "Onyx Coffee Lab Ethiopia Mullugeta Muntasha Natural 10oz + Ethiopia Agaro Yukro G1 2oz",
+            "retailer_hint": "Onyx Coffee Lab own store (onyxcoffeelab.com). I didn't confirm it's sold at Amazon, Walmart, Target or Best Buy.",
+            "est_price_usd": 41,
+            "fits_facts": [
+              "brand: Onyx Coffee Lab (captured)",
+              "interest: coffee: Ethiopian single-origin beans (captured)",
+              "interest: pour-over coffee (captured)",
+              "owns: currently has Ethiopian beans from Onyx (captured)",
+              "owns: coffee grinder (captured)"
+            ],
+            "why": "Beans get used up, so this isn't a duplicate. It gives her two new Ethiopian profiles from her favorite roaster, and both brew well in her V60. Search results list the Muntasha Natural at $35 for 10oz and the Agaro Yukro at $6 for 2oz. That is about $41, and Onyx lists free shipping on orders of $40 or more. Both are consumable and take no shelf space, which suits her minimalist kitchen."
+          },
+          {
+            "title": "Hario V60 size 02 white paper filters, 200 count",
+            "product_search": "Hario V60 Paper Coffee Filter, Size 02, White, 200ct",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 17,
+            "fits_facts": [
+              "owns: Hario V60 pour-over dripper (captured)",
+              "interest: pour-over coffee (captured)",
+              "style: minimalist kitchen, keeps only items used weekly (captured)",
+              "avoid: kitchen gadgets or extra mugs that add clutter (captured)"
+            ],
+            "why": "She brews pour-over regularly, and filters are used up and need replacing. The 100-count box of white 02 filters is listed at $9.50 on Amazon, and the 200-count listing exists too. I didn't confirm the 200-count price, so $17 is an estimate. It's a practical, clutter-free gift. Check that her dripper is the 02 size. If it's the 01, buy the 01 filters instead."
+          },
+          {
+            "title": "Balega Hidden Comfort no-show running socks, 3-pack",
+            "product_search": "Balega Hidden Comfort Performance No Show Athletic Running Socks 3-pack",
+            "retailer_hint": "Walmart (3-pack seen listed there)",
+            "est_price_usd": 45,
+            "fits_facts": [
+              "interest: training for the Chicago Marathon (about 4 weeks out) (captured)",
+              "interest: running, training for a marathon",
+              "style: minimalist"
+            ],
+            "why": "Her long runs are at peak mileage, and socks wear out. Balega Hidden Comfort is a cushioned, moisture-wicking no-show sock. Walmart lists the 3-pack at $44.99, and a single pair is $17 at several running retailers. I don't know her size. Black or white is a minimalist color choice."
+          },
+          {
+            "title": "Nuun Sport electrolyte tablets, multi-tube pack",
+            "product_search": "Nuun Sport Electrolyte Tablets 4 tube pack",
+            "retailer_hint": "Amazon or Target",
+            "est_price_usd": 27,
+            "fits_facts": [
+              "interest: training for the Chicago Marathon (about 4 weeks out) (captured)",
+              "diet: vegan",
+              "style: minimalist kitchen, keeps only items used weekly (captured)"
+            ],
+            "why": "Daily hydration matters in the final weeks of marathon training, and the tablets get used up. They are compact and not a gadget. I did not verify the price or stock, so check the listing, and check the label for her vegan diet."
+          },
+          {
+            "title": "Maurten Gel 100 energy gels, 12-pack",
+            "product_search": "Maurten Gel 100 12 pack",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 45,
+            "fits_facts": [
+              "interest: training for the Chicago Marathon (about 4 weeks out) (captured)",
+              "diet: vegan",
+              "interest: marathon running (captured)"
+            ],
+            "why": "Gels are used up during long runs, and race-day fueling is a real need at 4 weeks out. Maurten gels use a plant-based hydrogel formula, which should suit her vegan diet. I did not verify the price or stock, so confirm the listing and the label. She has time to test them on her remaining long runs."
+          },
+          {
+            "title": "FlipBelt Classic running belt",
+            "product_search": "FlipBelt Classic Running Belt",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 35,
+            "fits_facts": [
+              "interest: running, training for a marathon (captured)",
+              "style: minimalist",
+              "interest: training for the Chicago Marathon (about 4 weeks out) (captured)"
+            ],
+            "why": "It's a simple, bounce-free belt that holds a phone, gels and keys on long runs and on race day. It adds no clutter. I did not verify the price or stock. Size is chosen by waist measurement, so ask a mutual friend or check a garment she already wears."
+          },
+          {
+            "title": "goodr OG running sunglasses (black)",
+            "product_search": "goodr OG Running Sunglasses Black",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 30,
+            "fits_facts": [
+              "interest: running, training for a marathon (captured)",
+              "style: minimalist"
+            ],
+            "why": "These are lightweight, no-slip sunglasses for long runs, and a plain black pair fits her minimalist taste. They also work on the marathon course. I did not verify the price or stock, and I don't know whether she already has running sunglasses."
+          },
+          {
+            "title": "Body Glide Original anti-chafe balm",
+            "product_search": "Body Glide Original Anti Chafe Balm 2.5 oz",
+            "retailer_hint": "Amazon, Target or Walmart",
+            "est_price_usd": 10,
+            "fits_facts": [
+              "interest: training for the Chicago Marathon (about 4 weeks out) (captured)",
+              "interest: marathon running (captured)",
+              "diet: vegan"
+            ],
+            "why": "It's a small, practical item for long runs and gets used up. At this price you could pair it with the Onyx beans or the filters, as long as the total stays under $60. I did not verify the price or stock, and you should check the label for animal-derived ingredients given her vegan diet."
+          }
+        ],
+        "input": 46123,
+        "output": 5497,
+        "searches": 3,
+        "cost": 0.177216,
+        "secs": 42.165
+      },
+      "rank": {
+        "ranked": [
+          {
+            "title": "Onyx Ethiopia two-bag taster: Muntasha Natural 10oz plus Agaro Yukro 2oz",
+            "reason": "She's into Ethiopian pour-over and already has Onyx beans, so two new Ethiopian coffees from her favorite roaster get used up, not shelved (about $41, free shipping at $40+).",
+            "score_0_10": 9
+          },
+          {
+            "title": "Hario V60 size 02 white paper filters, 200 count",
+            "reason": "She brews V60 pour-over and filters run out, so this is a clutter-free refill she'll use weekly (price estimated; confirm her dripper is size 02).",
+            "score_0_10": 7
+          },
+          {
+            "title": "Maurten Gel 100 energy gels, 12-pack",
+            "reason": "She's 4 weeks from the Chicago Marathon, and these plant-based gels are usable on her last long runs, though check the price and label first.",
+            "score_0_10": 6
+          },
+          {
+            "title": "Nuun Sport electrolyte tablets, multi-tube pack",
+            "reason": "She's in her final weeks of marathon training, and these compact, used-up hydration tablets add no clutter (check the price and vegan label).",
+            "score_0_10": 5
+          }
+        ],
+        "dropped": [
+          {
+            "title": "Balega Hidden Comfort no-show running socks, 3-pack",
+            "why": "Size unknown and it's the priciest of the running items for a basic that she may already have plenty of."
+          },
+          {
+            "title": "FlipBelt Classic running belt",
+            "why": "Needs a waist size we don't have, and she may already have a way to carry gels and phone."
+          },
+          {
+            "title": "goodr OG running sunglasses (black)",
+            "why": "Weakly grounded: we don't know whether she wears or already owns running sunglasses, and fit is personal."
+          },
+          {
+            "title": "Body Glide Original anti-chafe balm",
+            "why": "Too small and a bit personal as a standalone gift, and the vegan ingredient check is unverified."
+          }
+        ],
+        "tokens": 3632,
+        "cost": 0.012336,
+        "secs": 4.875
+      }
+    }
+  ]
+}

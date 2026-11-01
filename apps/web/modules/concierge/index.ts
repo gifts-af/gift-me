@@ -11,11 +11,18 @@ export type { LinkRow, NewLink, NotifyStore } from "./notify/store";
 export { defaultChannels, emailChannel } from "./notify/channels";
 export type { Channel } from "./notify/channels";
 export type { ActionName } from "./notify/actions";
-// Templates and their sample data: for scripts/email-samples.ts phone checks.
+// Templates and samples of each: for the phone-check scripts (email-samples.ts, email-html.ts).
 export { SAMPLE_DATA, TEMPLATES } from "./notify/templates";
+export { sampleEmails } from "./notify/samples";
+export type { SampleEmail } from "./notify/samples";
 export type { NotificationKind, RenderedEmail } from "./notify/templates";
+// Chrome extension capture (ALL-22). SaveResult is aliased: settings exports one.
+export { parseCaptureForm, saveCapture } from "./capture/capture";
+export type { CaptureInput, SaveResult as CaptureSaveResult } from "./capture/capture";
+export type { CaptureStore, NewCaptureRow } from "./capture/store";
 export { confirmActionLink, readActionLink } from "./notify/links";
 export type { ConfirmResult, LinkDeps, LinkView } from "./notify/links";
+export { createSupabaseCaptureStore } from "./capture/supabase-store";
 
 // People, occasions and budgets (ALL-21). Birthday and other occasion rules
 // live in packages/core; parsing of the forms is in people/rules.ts.

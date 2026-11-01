@@ -70,13 +70,13 @@ flowchart LR
 | Web app and API | **Next.js (App Router) on Vercel**, Node.js runtime | One app for UI, API routes, webhooks, and the phone page. A PWA manifest (`app/manifest.ts`) and generated icons make it installable to the home screen; no service worker until push (T12). Browser tests: Playwright (`apps/web/e2e/`), in CI (T30). |
 | Database | **Supabase Postgres** with Row Level Security | Every user-owned table has `user_id` plus RLS policies. Background jobs use the service role. |
 | Auth | **Supabase Auth, Google provider** (plus email and password for existing list users) | Cookie sessions through `@supabase/ssr`; `proxy.ts` sends signed-out visitors to sign-in and back via `?next=`, except on `/lists`, `/share/*`, `/auth/*` and the install files (T30). Google Contacts read access is requested separately, at import time (§6.1). The extension authenticates with the user's Supabase session (§6.2). |
-| File storage | **Supabase Storage** (private bucket) | Capture screenshots. Deleting a person deletes their files. |
+| File storage | **Supabase Storage** (private bucket) | Capture screenshots, in bucket `captures` at `{user_id}/{capture_id}.jpg`. Only the owner can read or write their folder. Deleting a person should delete their files too. That isn't built yet: the rows cascade but the files stay. It's noted on ALL-21, for the person-deletion work (ALL-21 or ALL-37). |
 | Background jobs | **Supabase `pg_cron`** calls the app's **round engine** (a protected API route) **once a day at 8 a.m. Eastern**, using `pg_net` | The schedule lives next to the data it checks. Vercel Cron and Workflow aren't used. All the work runs in the Next.js app, so there's one runtime and one deploy, with no Supabase Edge Functions (T8). See §5.1. |
-| AI | Any model through **Vercel AI Gateway** with the **AI SDK**. Default today: **Claude Opus 5.5** (`anthropic/claude-opus-5.5`; take IDs from the gateway's `/v1/models`) | The gateway gives one key, one bill and one spending cap across providers, plus fallbacks. Usage is **billed through the Vercel account**, so there's no separate AI provider account (T11). The model for each task is set in one config file (§7). Web search through the gateway is **confirmed in W1-3** (Anthropic's native tool; the gateway's Perplexity search is a provider-neutral alternative). Hobby plan works; Claude models need **paid** gateway credit (the free credit excludes them). |
+| AI | Any model through **Vercel AI Gateway** with the **AI SDK**. Default today: **Claude Sonnet 5.5** for every task (`anthropic/claude-sonnet-5.5`, T39; Opus 5.5 is the fallback; take IDs from the gateway's `/v1/models`) | The gateway gives one key, one bill and one spending cap across providers, plus fallbacks. Usage is **billed through the Vercel account**, so there's no separate AI provider account (T11). The model for each task is set in one config file (§7). Web search through the gateway is **confirmed in W1-3** (Anthropic's native tool; the gateway's Perplexity search is a provider-neutral alternative). Hobby plan works; Claude models need **paid** gateway credit (the free credit excludes them). |
 | Checkout | **Zinc** (API v2), confirmed by the W1-2 spike | `max_price` caps the whole order (item, shipping and tax), gift orders, signed webhooks, per-package tracking. **MVP:** each user's own Zinc wallet. **Later:** the user's card through Zinc Connect (T16, §6.5a). Product lookups go through one app-owned Zinc account (T17). |
 | Email | **Resend** on `giftsaf.com`, confirmed by the W1-4 spike (T33) | Sends from `hello@giftsaf.com` and receives on `in.giftsaf.com` (its own subdomain). The free plan covers 3,000 emails a month and 100 a day, sent and received combined. Inbound arrives as a signed webhook (Svix) carrying metadata only; the app fetches the body and attachments from the API. Open and click tracking stay off. See `spikes/email.md`. |
 | Push notifications | **Decision deferred (T12).** If added: standard Web Push (VAPID) using the `web-push` package | Works on Android, and on iOS once the PWA is added to the home screen. Email covers every message without it. The notification service sends through a channel list, so push plugs in later without changing callers. Estimated 1–2 days of work, in its own ticket (W5-4). |
-| Extension | Chrome Manifest V3, TypeScript, built with Vite | Popup plus a "Capture for…" action. Lives in the same repo. |
+| Extension | Chrome Manifest V3, TypeScript, built with Vite | Popup plus a "Capture for…" action, in `apps/extension` (React and Tailwind with the T28 tokens). Permissions are only `activeTab`, `scripting` and `storage`. It's loaded unpacked for the MVP, with a dev build (localhost and `gift-me-dev`) and a prod build (giftsaf.com and `gift-me`). See `apps/extension/README.md`. |
 | Contacts | Google People API, `contacts.readonly` scope | An unverified Google app allows up to 100 test users, which is plenty for the MVP. |
 
 ### 2.2 One app for the whole platform (T19)
@@ -305,7 +305,7 @@ flowchart LR
 6. **Checkout setup:** connect Zinc and turn on auto top-up (§6.5a).
 
 ### 6.2 Capture (extension)
-1. The extension is signed in by opening the web app once. The app passes a session token to the extension through `externally_connectable` messaging, and the extension refreshes it from there **[Claude's call; Verify in W2-4]**.
+1. **Sign-in (T40, ALL-22):** the extension has **its own Supabase session**. Its **Sign in** button opens `/extension/connect` on the web app. That page needs you signed in, and its server makes a one-time magic-link token for you; no email is sent. The page passes only the token's hash to the extension through `externally_connectable`, and the extension trades it for a session with `verifyOtp`. The session lives in `chrome.storage.local` and refreshes itself, so a browser restart keeps you signed in. Signing out of either one leaves the other alone. Sharing the web app's refresh token would sign each one out whenever the other refreshed, because Supabase revokes a session when a used refresh token comes back. The extension's ID stays the same through a fixed manifest key (`NEXT_PUBLIC_EXTENSION_ID` in the web app). Captures post to `POST /api/captures` with the user's bearer token, so RLS applies. Details are in `design/plans/ALL-22-extension.md`.
 2. The user picks a person and clicks **Capture**. The extension collects:
    - the page URL and title,
    - the visible text (`document.body.innerText`, trimmed to about 20k characters),
@@ -318,9 +318,14 @@ flowchart LR
 
 ### 6.3 Gift idea generation (G-1 to G-5)
 1. **Input:** the person's active facts, past gifts, past rejections, the occasion, the budget, the ship-by deadline, and the recipient's state.
-2. **Brainstorm:** the AI model (with web search) proposes about 10 candidate gift concepts, each with a specific product and retailer URL. Only retailers Zinc supports are allowed.
-3. **Resolve:** each candidate is checked with Zinc's product and offer lookup for live price, availability, the seller, shipping cost, and handling plus delivery days. Lookups use the **app-owned Zinc account** at $0.01 each, never the user's wallet (T17). Offers sold by the retailer itself are preferred. Offers don't include tax, so tax stays estimated (§4.2). Anything unavailable, too late in the slowest case, over the over-budget limit, or already given or rejected is dropped.
-4. **Rank:** the AI model ranks the survivors and writes the one-line reasons. The top 3–5 within budget are kept, plus at most one over-budget idea.
+2. **Brainstorm:** the AI model (with web search) proposes about 10 candidate gift concepts, each with an id, a `product_search` string (brand and model when known) and a retailer hint, **not a URL**: the AI's links and prices aren't reliable (ALL-17, ALL-42). Only retailers Zinc supports are allowed.
+3. **Resolve:** each candidate's `product_search` goes to Zinc's search, then offers, for live price, availability, the seller, condition, shipping cost, and handling plus delivery days. Lookups use the **app-owned Zinc account** at $0.01 each, never the user's wallet (T17). Rules from the ALL-42 spike ([design/spikes/ai.md](spikes/ai.md#resolve-through-zinc-all-42)):
+   - **The found item must match the idea.** Amazon's first result can be another brand. Pick the first result that matches the brand and model; if none does, the idea counts as "not found" (or the closest same-brand item, flagged as an alternative). **[Claude's call]** whether a cheap model checks the match, decided in W3-3.
+   - **New only.** Refurbished and used offers are never picked, even when cheaper.
+   - **Prefer the buy-box offer** (the seller Amazon shows by default), then the one sold by the retailer or brand itself, then the fastest delivery.
+   - **Price comes only from the offer.** The AI's estimate was off by up to half in the spike, so budget checks use the live price plus shipping.
+   - Offers don't include tax, so tax stays estimated (§4.2). Anything unavailable, too late in the slowest case, over the over-budget limit, or already given or rejected is dropped.
+4. **Rank:** the AI model ranks the survivors and writes the one-line reasons, **referring to candidates by id** (it shortens titles, so matching on titles fails). The top 3–5 within budget are kept, plus at most one over-budget idea.
 5. If fewer than 3 survive, the app repeats steps 2–4 up to 2 more times. After that it sends what it has and notes it.
 6. Results are saved as `gift_ideas`, and the heads-up is sent.
 
@@ -374,18 +379,19 @@ Funding comes in two stages. Ordering, tracking and the data model are the same 
 
 **Keeping the provider replaceable (T11):**
 - All AI calls go through `apps/web/lib/ai`, using the AI SDK's provider-neutral functions (`generateObject`, `generateText`) and the AI Gateway. No other code calls a model directly.
-- Each task's model and settings live in one config map, for example `{ extraction: "anthropic/claude-opus-5.5", ... }`. Changing a model is a one-line config change, re-checked against the eval fixtures.
+- Each task's model and settings live in one config map, for example `{ extraction: "anthropic/claude-sonnet-5.5", ... }`. Changing a model is a one-line config change, re-checked against the eval fixtures.
+- **Signing in to the gateway (T39):** on Vercel (Preview and Production) the AI SDK uses Vercel's automatic OIDC token, so there's no production key. Locally it uses the dev `AI_GATEWAY_API_KEY` from Vercel's Development variables (`vercel env pull`). **[Verify]** OIDC on a preview deploy with the first real AI call (W3-1 or W3-3); the fallback is a Sensitive production key.
 - Prompts are plain instructions plus a schema, with no vendor-specific prompt tricks.
 - **The one vendor-specific feature is web search** during brainstorming. It sits behind a small `searchWeb` step, so a different provider's search tool, or a search API, can replace it.
 
-| Task | Default model and settings (today) | Output | Cost (measured in W1-3 unless marked) |
+| Task | Default model and settings (T39) | Output | Cost (measured in W1-3 and ALL-42) |
 |---|---|---|---|
-| Capture extraction | Claude Opus 5.5, effort `low`, vision | Structured facts (schema-validated) | ~$0.01 each (text; screenshots not yet measured) |
-| Inbound note matching and extraction | Claude Opus 5.5, effort `low` | Person match plus facts | ~$0.01 each (estimate) |
-| Idea brainstorm | Claude Opus 5.5, web search (up to 3 searches) | 8 candidates with `product_search` terms, no URLs (schema) | ~$0.25–0.45 (mostly search results read) |
-| Idea ranking and reasons | Claude Opus 5.5, effort `low` | Ranked list (schema) | ~$0.02–0.04 |
+| Capture extraction | Claude Sonnet 5.5, effort `low`, vision | Structured facts (schema-validated) | ~$0.005 per text capture, ~$0.01 per phone screenshot |
+| Inbound note matching and extraction | Claude Sonnet 5.5, effort `low` | Person match plus facts | ~$0.005 each (estimate, same as text capture) |
+| Idea brainstorm | Claude Sonnet 5.5, web search (up to 3 searches) | 8 candidates with ids and `product_search` terms, no URLs (schema) | ~$0.18 (mostly search results read) |
+| Idea ranking and reasons | Claude Sonnet 5.5, effort `low` | Ranked list by candidate id (schema) | ~$0.01 |
 
-**A full round costs about $0.30–0.45** (W1-3, `spikes/ai.md`). Cheaper models are worth trying per task now that fixtures exist: Sonnet 5.5 is half the price, and brainstorm is the expensive step.
+**A full round costs about $0.20** with Sonnet 5.5 (ALL-42), against $0.30–0.45 with Opus 5.5 (W1-3). Sonnet's ideas were nearly as good as Opus's; Haiku 5.5 is far cheaper but missed the main need (it put a $15 pack of hooks above the vise Dad needs) and caught fewer facts. Opus stays the fallback if quality slips. Comparison in [`spikes/ai.md`](spikes/ai.md#model-comparison-all-42).
 
 **Prompt rules learned in W1-3** (prompt v3): stated wants come first (use the over-budget slot if needed); a worn-out owned item is a replacement need; check every idea against owned items; stock items only, no personalization; prefer Amazon, Walmart, Target and Best Buy; ship-to isn't where hobbies happen. Captured facts must reach idea generation: without them, ideas are generic.
 
