@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { Logo } from "@/components/logo";
+import { TopBarRow } from "@/components/top-bar-row";
 
 // The home page's own bar: the name with an ALPHA tag, and the invite-only
 // way in. "How it works" shows from computer width up.
 export function HomeTopBar({ howItWorks = false }: { howItWorks?: boolean }) {
   return (
-    <header className="mx-auto flex min-h-14 w-full max-w-5xl items-center justify-between gap-3 px-4 md:px-8">
+    <header>
+      <TopBarRow>
       <Link href="/" className="inline-flex min-h-11 items-center gap-2 text-[19px]">
         <Logo />
         <span className="rounded-md bg-secondary px-1.5 py-0.5 text-[10px] font-extrabold tracking-wider text-foreground">
@@ -25,6 +27,7 @@ export function HomeTopBar({ howItWorks = false }: { howItWorks?: boolean }) {
           🔒 Invite only
         </Link>
       </nav>
+      </TopBarRow>
     </header>
   );
 }

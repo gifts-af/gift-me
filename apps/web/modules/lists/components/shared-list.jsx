@@ -116,7 +116,7 @@ export default function SharedList({ list, token }) {
 
   return (
     <>
-      <TopBar wide />
+      <TopBar />
       <PageFrame wide className="gap-4">
         {list.isOwner && (
           <Banner tone="accent">
