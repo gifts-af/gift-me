@@ -79,7 +79,7 @@ export async function PersonView({ id, photoFailed }: { id: string; photoFailed:
         )}
       </div>
 
-      <section className="flex flex-col gap-3" aria-labelledby="edit-heading">
+      <section className="flex flex-col gap-3 border-b border-border pb-6" aria-labelledby="edit-heading">
         <h2 id="edit-heading" className="text-lg font-semibold">
           Edit
         </h2>

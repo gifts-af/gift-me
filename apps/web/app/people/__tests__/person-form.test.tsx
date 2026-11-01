@@ -47,7 +47,7 @@ const fill = async (name = "Mom", rel = "Mother") => {
   await userEvent.type(screen.getByLabelText("Name"), name);
   await userEvent.selectOptions(relationship(), rel);
 };
-const save = () => userEvent.click(screen.getByRole("button", { name: "Save" }));
+const save = () => userEvent.click(screen.getByRole("button", { name: /^Add (?!a photo)/ }));
 const sent = (t: ReturnType<typeof setup>) => t.action.mock.calls[0][1];
 
 describe("PersonForm", () => {
@@ -93,15 +93,52 @@ describe("PersonForm", () => {
     expect(sent(t).has("anniversaryDay")).toBe(false);
   });
 
-  it("Skip clears the birthday", async () => {
+  it("names the birthday and anniversary groups for screen readers", async () => {
     setup();
-    await userEvent.selectOptions(screen.getByLabelText("Birthday month"), "March");
-    await userEvent.type(screen.getByLabelText("Birthday day"), "14");
-    await userEvent.type(screen.getByLabelText("Birth year (optional)"), "1960");
-    await userEvent.click(screen.getByRole("button", { name: "Skip" }));
-    expect(screen.getByLabelText("Birthday month")).toHaveValue("");
-    expect(screen.getByLabelText("Birthday day")).toHaveValue(null);
-    expect(screen.getByLabelText("Birth year (optional)")).toHaveValue(null);
+    expect(screen.getByRole("group", { name: "Birthday" })).toContainElement(screen.getByLabelText("Birthday month"));
+    await userEvent.selectOptions(relationship(), "Wife");
+    expect(screen.getByRole("group", { name: "Anniversary" })).toContainElement(
+      screen.getByLabelText("Anniversary month"),
+    );
+  });
+
+  it("has no Skip button", () => {
+    setup();
+    expect(screen.queryByRole("button", { name: "Skip" })).toBeNull();
+  });
+
+  it("finds the birthday fields by accessible name, with no visible labels", () => {
+    setup();
+    expect(screen.getByLabelText("Birthday month")).toBeInTheDocument();
+    expect(screen.getByLabelText("Birthday day")).toBeInTheDocument();
+    expect(screen.getByLabelText("Birth year (optional)")).toHaveAttribute("name", "birthYear");
+    expect(screen.getByText("Optional")).toBeInTheDocument();
+    expect(screen.getByText(/The year is just for age-right ideas/)).toBeInTheDocument();
+  });
+
+  it("labels the submit button with the typed name", async () => {
+    setup();
+    expect(screen.getByRole("button", { name: "Add someone" })).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("Name"), "  Mom ");
+    expect(screen.getByRole("button", { name: "Add Mom" })).toBeInTheDocument();
+  });
+
+  it("shows initials on the photo button, then a preview and Change once a photo is chosen", async () => {
+    const url = vi.fn(() => "blob:preview");
+    const revoke = vi.fn();
+    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: url, revokeObjectURL: revoke }));
+    setup();
+    await userEvent.type(screen.getByLabelText("Name"), "Mom");
+    const button = screen.getByRole("button", { name: "Add a photo" });
+    expect(button).toHaveTextContent("M");
+    expect(button).toHaveTextContent("Add photo");
+    await userEvent.upload(screen.getByLabelText("Choose a photo"), photo);
+    const changed = await screen.findByRole("button", { name: "Change photo" });
+    expect(changed).toHaveTextContent("Change");
+    expect(changed.querySelector("img")).toHaveAttribute("src", "blob:preview");
+    await userEvent.upload(screen.getByLabelText("Choose a photo"), new File(["y"], "b.png", { type: "image/png" }));
+    await waitFor(() => expect(revoke).toHaveBeenCalledWith("blob:preview"));
+    vi.unstubAllGlobals();
   });
 
   it("sends the birthday it was given", async () => {
@@ -158,11 +195,10 @@ describe("PersonForm", () => {
     expect(t.resize).not.toHaveBeenCalled();
   });
 
-  it("keeps Save disabled after a successful save, so a second tap adds no duplicate", async () => {
+  it("keeps the submit button disabled after a successful save, so a second tap adds no duplicate", async () => {
     const t = setup();
     await fill();
-    const button = screen.getByRole("button", { name: "Save" });
-    await userEvent.click(button);
+    await save();
     await waitFor(() => expect(push).toHaveBeenCalled());
     expect(screen.getByRole("button", { name: "Saving…" })).toBeDisabled();
     await userEvent.click(screen.getByRole("button", { name: "Saving…" }));
@@ -174,10 +210,10 @@ describe("PersonForm", () => {
     await fill();
     await save();
     expect(await screen.findByRole("alert")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Add Mom" })).toBeEnabled();
   });
 
-  it("disables Save while a picked photo is still being checked", async () => {
+  it("disables the submit button while a picked photo is still being checked", async () => {
     const t = setup();
     let finish!: (b: Blob) => void;
     t.resize.mockImplementationOnce(() => new Promise<Blob>((resolve) => (finish = resolve)));
@@ -186,7 +222,7 @@ describe("PersonForm", () => {
     const waiting = await screen.findByRole("button", { name: "Preparing photo…" });
     expect(waiting).toBeDisabled();
     finish(new Blob(["j"], { type: "image/jpeg" }));
-    await waitFor(() => expect(screen.getByRole("button", { name: "Save" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Add Mom" })).toBeEnabled());
   });
 });
 
@@ -216,6 +252,7 @@ describe("PersonForm in edit mode", () => {
     useRouterMock.mockReturnValue({ push, refresh });
     const action = setupEdit();
     expect(screen.queryByLabelText("Choose a photo")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /photo/i })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Saved"));
     expect(action.mock.calls[0][1].get("id")).toBe("p1");
@@ -235,7 +272,8 @@ describe("PersonForm in edit mode", () => {
       />,
     );
     expect(screen.getByLabelText("Anniversary month")).toBeInTheDocument();
-    expect(screen.getByText("Anniversary (optional)")).toBeInTheDocument();
+    expect(screen.getByText("Anniversary")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Anniversary year")).toBeNull();
   });
 
   it("shows the error and no Saved note when the save fails", async () => {
