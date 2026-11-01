@@ -14,5 +14,9 @@ export type { ActionName } from "./notify/actions";
 // Templates and their sample data: for scripts/email-samples.ts phone checks.
 export { SAMPLE_DATA, TEMPLATES } from "./notify/templates";
 export type { NotificationKind, RenderedEmail } from "./notify/templates";
+// Chrome extension capture (ALL-22). SaveResult is aliased: settings exports one.
+export { parseCaptureForm, saveCapture } from "./capture/capture";
+export type { CaptureInput, SaveResult as CaptureSaveResult } from "./capture/capture";
+export type { CaptureStore, NewCaptureRow } from "./capture/store";
 export { confirmActionLink, readActionLink } from "./notify/links";
 export type { ConfirmResult, LinkDeps, LinkView } from "./notify/links";
