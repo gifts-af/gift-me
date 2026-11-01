@@ -9,7 +9,7 @@ The written source for where the platform is headed and how it reaches people. T
 | Product | For | Job in the funnel | Status | Lead |
 |---|---|---|---|---|
 | **Scan-to-gift** | Both | **Get people in.** Fun, public, instant. | Exploring. Linear: "Scan-to-gift" | — |
-| **Gift lists** (was "GiftMe"; needs a new name) | The receiver | **Keep them.** A reason to come back for every occasion. | In progress: sharing and guest claiming done, soft launch planned (no fixed date; we're building without an external deadline). Linear: "Gift List Sharing", "Soft Launch" | Jim |
+| **Gift lists** (was "GiftMe"; the platform is now GiftsAF) | The receiver | **Keep them.** A reason to come back for every occasion. | In progress: sharing and guest claiming done, soft launch planned (no fixed date; we're building without an external deadline). Linear: "Gift List Sharing", "Soft Launch" | Jim |
 | **Gift Concierge** | The giver | **Earn.** Loyal customers automate recurring gifts. | MVP planned, Wave 1 next. Linear: "Gift Concierge MVP" | Owner |
 
 - Each product works on its own and gets better with the others. Gift Concierge stays an isolated service that can be used alongside the list app or without it (D31).

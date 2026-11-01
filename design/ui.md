@@ -189,4 +189,4 @@ The prototype's colours and stylesheet go; **none of its behaviour does.** When 
 
 ## Open items
 
-- **Name and logo:** the mock-ups use "GiftMe" as plain text until ALL-14 settles the name.
+- **Name and logo:** the name is **GiftsAF** (ALL-14, planning decision 44), shown as plain text from `apps/web/lib/brand.ts`. The mock-ups still say "GiftMe", the old working name. There's no logo yet.
