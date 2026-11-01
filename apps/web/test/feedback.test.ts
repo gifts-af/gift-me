@@ -1,9 +1,16 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
-import { FEEDBACK_EMAIL } from "@/lib/brand";
+import { EMAIL_FROM, FEEDBACK_EMAIL } from "@/lib/brand";
 import { sendFeedback } from "@/lib/feedback";
+import { sendEmail } from "@/lib/resend";
 
-// ALL-53: the "sad story" box emails the owner through Resend.
+// ALL-53: the "sad story" box emails the owner through the shared Resend
+// sender (lib/resend.ts). The real sender runs; the spy just shows it's used.
+vi.mock("@/lib/resend", async (importOriginal) => {
+  const real = await importOriginal<typeof import("@/lib/resend")>();
+  return { ...real, sendEmail: vi.fn(real.sendEmail) };
+});
+
 function form(fields: Record<string, string>) {
   const data = new FormData();
   for (const [k, v] of Object.entries(fields)) data.set(k, v);
@@ -24,11 +31,20 @@ describe("sendFeedback", () => {
       fetch: send,
     });
     expect(result).toEqual({ status: "sent" });
+    expect(sendEmail).toHaveBeenCalledWith(
+      {
+        to: FEEDBACK_EMAIL,
+        subject: "GiftsAF feedback",
+        text: expect.stringContaining("The share link opened a blank page."),
+        replyTo: "jo@example.com",
+      },
+      { apiKey: "re_test", fetch: send },
+    );
     const { url, init, body } = sentBody(send);
     expect(url).toBe("https://api.resend.com/emails");
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer re_test");
     expect(body).toMatchObject({
-      from: "GiftsAF <hello@giftsaf.com>",
+      from: EMAIL_FROM,
       to: [FEEDBACK_EMAIL],
       reply_to: "jo@example.com",
       subject: "GiftsAF feedback",

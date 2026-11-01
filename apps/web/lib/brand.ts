@@ -12,3 +12,6 @@ export const APP_PITCH = "We remember the dates, find the gift, and ship it. You
 // Where feedback and access requests go (ALL-47, ALL-53). There's no inbox at
 // giftsaf.com yet, so they reach the owner directly.
 export const FEEDBACK_EMAIL = "allensforever711@gmail.com";
+
+// The sender on every email we send (T33).
+export const EMAIL_FROM = `${APP_NAME} <hello@giftsaf.com>`;

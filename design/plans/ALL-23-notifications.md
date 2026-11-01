@@ -70,7 +70,7 @@ None left. Settled answers are below.
 | How are tokens made? | **[Claude's call]** 32 random bytes from the platform's crypto, base64url (43 characters), stored as a SHA-256 hex hash. Looked up by hash; marked used with a single conditional update (`used_at is null and expires_at > now()`), so a double tap can't run it twice. | Enough randomness that guessing is hopeless, and SHA-256 is right for random tokens (no salt or slow hash needed). |
 | When does a link expire? | **The caller decides** (`expiresAt`); round links use the round's deadline (design §6.4). The test email's link uses a new setting, `test_action_link_hours` (24). | T23: no timing constants in code. |
 | What does the `test` action do? | Nothing beyond proving the path: it marks the link used and the result page says "It works. Buttons in our emails will look like this." | Real actions belong to their own tickets. |
-| How do you check the templates on a phone? | **[Claude's call]** `pnpm email:samples you@example.com` sends every template with sample data through the pulled dev key. Links in samples point to a sample page and don't act. | One command beats wiring six fake rounds; it uses the dev quota (100 a day). |
+| How do you check the templates on a phone? | **[Claude's call]** `pnpm --filter @gifts-af/web email:samples you@example.com` sends every template with sample data through the pulled dev key. Links in samples point to a sample page and don't act. | One command beats wiring six fake rounds; it uses the dev quota (100 a day). |
 | Which channels? | A list in code, `CHANNELS = [emailChannel]`. Each channel is `{ name, send(message, recipient) }`, and `notify()` sends through every one. | The design asks for a list so push is just another entry. It stays in code, not settings: it's what's built, not a tunable (T23 allows it). |
 | Whose email address? | `public.profiles.email`, which always mirrors the account's sign-in email. | Already kept in sync, and it's what the user signed in with. |
 | Dates and times in emails | Shown in the user's `profiles.timezone`. When that's unknown, dates (no times) are shown as calendar dates with no time zone. | Rounds are day-based (§5.1), so a date is enough. |
@@ -80,7 +80,7 @@ None left. Settled answers are below.
 - **Simplest version?** What we cut: no templating library, no notification preferences, no real actions, no push, no first-visit teaser (ALL-49), no separate confirm page per action (one generic page, where each action gives its own wording).
 - **Hard-coded values?** New setting `test_action_link_hours` (24). Sender address and name come from `lib/brand.ts` and the existing `ACCESS_FROM` pattern (moved to a shared constant). New env var `SUPABASE_SECRET_KEY` (Development and Preview; production uses `GIFT_SUPABASE_SECRET_KEY`). `RESEND_API_KEY` already exists.
 - **Product boundaries?** The service lives in `modules/concierge/notify/` and is exported through `modules/concierge/index.ts`. The `/a/[token]` route and Settings button live in `app/` and import only module `index.ts` files.
-- **Privacy:** `action_links` is server-only (no grants to `authenticated`), like `notifications` (T26). The raw token is never stored or logged.
+- **Privacy:** `action_links` is server-only (no grants to `authenticated`), like `notifications` (T26). Our code never stores or logs the raw token; `/a/{token}` URLs do appear in hosting request logs and the sign-in redirect, which is acceptable because a link needs its owner signed in and works once.
 - **Docs and decisions** to update: design §3 (`action_links` row; `notifications` loses `action_token_hash`, gains `provider_message_id` and `error`), §6.4 (sign-in required as the link's owner), new decision T36 (check `origin/main`'s latest T number first), README > Environments (`SUPABASE_SECRET_KEY`), `apps/web/.env.example`, `planning/ideas.md` (the Jim to Edgar idea and its teaser, ALL-49).
 
 ## Plan
@@ -92,7 +92,7 @@ None left. Settled answers are below.
 **Global constraints** (every task):
 - Sender `GiftsAF <hello@giftsaf.com>`, built from `APP_NAME` in `lib/brand.ts`; open and click tracking stay off (T33).
 - Emails: white background, at most 600 px wide, system font stack, inline styles only, exactly one teal button (`design/ui.md` > UI kit; teal is the `--primary` token's hex in `app/globals.css`).
-- Nothing acts on a GET. The raw token is never stored or logged.
+- Nothing acts on a GET. Our code never stores or logs the raw token (it does appear in hosting request logs and the sign-in redirect; see Privacy above).
 - No timing constants in code (T23): link expiry comes from the caller or `app_settings`.
 - The concierge module is imported only through `modules/concierge/index.ts` (T19).
 - Read `apps/web/AGENTS.md` before writing Next-specific code (Next 16).
@@ -116,7 +116,7 @@ None left. Settled answers are below.
 | `apps/web/app/a/[token]/page.tsx`, `confirm-form.tsx`, `actions.ts` | The link pages and the confirm POST |
 | `apps/web/components/google-button.tsx`, `lib/supabase/proxy.ts` | `loginHint`; `/a/` is public |
 | `apps/web/app/settings/*` | "Send me a test email" |
-| `apps/web/scripts/email-samples.ts` | `pnpm email:samples <to>` |
+| `apps/web/scripts/email-samples.ts` | `pnpm --filter @gifts-af/web email:samples <to>` |
 | `apps/web/e2e/action-links.spec.ts` | The whole link flow in a real browser |
 
 ### Task 1: Database: action links table (AC-14, AC-5, AC-2)
@@ -221,9 +221,9 @@ None left. Settled answers are below.
 
 ### Task 8: Samples script for phone checks (AC-12)
 
-**Files:** create `apps/web/scripts/email-samples.ts`; add `"email:samples": "tsx scripts/email-samples.ts"` to `apps/web/package.json`; `pnpm add -D tsx --filter @gifts-af/web`.
+**Files:** create `apps/web/scripts/email-samples.ts`; add `"email:samples": "tsx --conditions=react-server scripts/email-samples.ts"` to `apps/web/package.json` (the condition lets the module's public index, which imports `server-only`, load outside Next; templates are imported from `@/modules/concierge`); `pnpm add -D tsx --filter @gifts-af/web`.
 
-- `pnpm --filter @gifts-af/web email:samples you@example.com` sends one email per entry in `SAMPLE_DATA` (heads-up in both modes, so eight in all), with the subject prefixed `[Sample]`. It sends with `sendEmail` and `RESEND_API_KEY` from `apps/web/.env.local` (loaded with `process.loadEnvFile`), and its links point to `https://giftsaf.com/a/sample`, which shows "This link doesn't work". It refuses to run without an address argument.
+- `pnpm --filter @gifts-af/web email:samples you@example.com` sends one email per entry in `SAMPLE_DATA` (heads-up in both modes, so eight in all), with the subject prefixed `[Sample]`. It sends with `sendEmail` and `RESEND_API_KEY` from `apps/web/.env.development.local` (what `vercel env pull` writes) or `apps/web/.env.local`, whichever exist (loaded with `process.loadEnvFile`), and its links point to `https://giftsaf.com/a/sample`, which shows "This link doesn't work". It refuses to run without an address argument.
 - [ ] Run it once against the owner's address and check that all eight arrive. No unit test (it's a manual tool); `pnpm lint` and `pnpm typecheck` cover it.
 - [ ] Commit: `chore: script that sends sample emails for phone checks (ALL-23)`.
 
@@ -246,7 +246,7 @@ Docs go straight to `main` (CLAUDE.md > Git); the code goes through the PR.
 - [ ] `design/decisions.md`: **T36**, after checking `origin/main` for the latest number: action links need the owner signed in; the `action_links` table is generic for later products; the server key is in Vercel; templates are plain functions.
 - [ ] `README.md` > Environments: `SUPABASE_SECRET_KEY` (dev key in Development and Preview; production uses the integration's `GIFT_SUPABASE_SECRET_KEY`).
 - [ ] Full check: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`, plus `pnpm db:test` and e2e. Open the PR `feat: notification service with one-time email action links (ALL-23)`, with `Closes ALL-23`.
-- [ ] After merge: apply the migration to `dev` (`pnpm supabase db push --linked`). **Ask the owner before applying it to `prod`.** Then send yourself a test email from Settings on a preview and on production, run the samples script, and fill in the phone check table above.
+- [ ] After merge: apply the migration to `dev` (`pnpm supabase db push --linked`). **Ask the owner before applying it to `prod`.** Then send yourself a test email from Settings on a preview and on production, run the samples script (`pnpm --filter @gifts-af/web email:samples <your email>`), and fill in the phone check table above.
 
 ## Before coding: consistency check
 

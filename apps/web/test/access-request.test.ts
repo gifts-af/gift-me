@@ -1,12 +1,11 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import {
-  ACCESS_FROM,
   buildAccessRequestEmail,
   requestAccess,
   validateAccessRequest,
 } from "@/lib/access-request";
-import { FEEDBACK_EMAIL } from "@/lib/brand";
+import { EMAIL_FROM, FEEDBACK_EMAIL } from "@/lib/brand";
 
 function form(fields: Record<string, string>) {
   const data = new FormData();
@@ -41,14 +40,13 @@ describe("buildAccessRequestEmail", () => {
   it("goes to the owner, from GiftsAF, and replies to the requester", () => {
     const email = buildAccessRequestEmail({ name: "Jordan", email: "jo@example.com", note: "Friend of Jim" });
     expect(email).toEqual({
-      from: ACCESS_FROM,
-      to: [FEEDBACK_EMAIL],
-      reply_to: "jo@example.com",
+      to: FEEDBACK_EMAIL,
+      replyTo: "jo@example.com",
       subject: "GiftsAF access request: Jordan",
       text: expect.stringContaining("Friend of Jim"),
     });
     expect(email.text).toContain("jo@example.com");
-    expect(ACCESS_FROM).toBe("GiftsAF <hello@giftsaf.com>");
+    expect(EMAIL_FROM).toBe("GiftsAF <hello@giftsaf.com>");
   });
 });
 

@@ -149,7 +149,8 @@ All tables have `id uuid`, `created_at`, and `updated_at`. Accounts (`profiles`)
 | `rejections` | round_id, reason_code, reason_text | G-3. Also written to `profile_facts`. |
 | `orders` | round_id, idea_id, provider (zinc), provider_order_id, idempotency_key, funding_mode, max_price_cents, is_gift, gift_message (≤240 characters), price breakdown (subtotal, shipping, tax, total cents), fee_cents, status (placing, placed, failed, shipped, delivered, cancelled, refunded), failure_type, merchant_order_id, packages (jsonb: carrier, tracking number, status, estimated delivery date, proof-of-delivery photo), est_delivery_date (latest across packages), ship_to (recipient, buyer, other), ship_city, ship_state | A-3 as revised by D38, D-1. The full address it shipped to is snapshotted in `order_addresses`, which only the server reads. Zinc's own status stops at "placed"; shipping progress is per package, and one order can ship as several packages. |
 | `reactions` | round_id, rating (loved, liked, meh, returned), note, source (email, web) | D-2 |
-| `notifications` | user_id, round_id, kind, channel, sent_at, action_token_hash | Audit trail plus reminder escalation state. |
+| `notifications` | user_id, round_id, kind, channel, sent_at, provider_message_id, error | Audit trail plus reminder escalation state. Records delivery; the link token lives in `action_links` (ALL-23). |
+| `action_links` | user_id, round_id (nullable), notification_id, action, token_hash (unique), expires_at, used_at | One row per emailed button (ALL-23). Only the SHA-256 hash of the token is stored. Server-only: no policies and no grants for signed-in users. Generic on purpose, so scan-to-gift and ALL-49 can reuse it (T38). |
 | `inbound_messages` | user_id, from, subject, body, attachments, matched_person_id, status | N-2, C-5 |
 | `app_settings` | key, value (jsonb), updated_at | App-wide settings that change without a deploy (T23): `zinc_order_fee_cents` and the §4.1 schedule timings (`planning_delivery_days`, `safety_buffer_days`, `round_lead_days`, `reminder_1_after_heads_up_days`, `reminder_2_before_deadline_days`, `final_notice_before_deadline_days`, `fastest_days_to_arrive`). Not user-owned: only the server can read it, and the owner edits it. |
 
@@ -212,6 +213,11 @@ flowchart LR
 **Raw inputs are kept so the learning can be rebuilt.** When a better model or prompt comes along (T11), extraction can be re-run over past captures and notes to rebuild a person's facts.
 
 **Later, if useful:** a stored summary per person ("outdoorsy, practical, prefers experiences"), refreshed when facts change. It's one extra field and isn't needed for the MVP.
+
+**As built for notifications** (ALL-23, T38; plan: [design/plans/ALL-23-notifications.md](plans/ALL-23-notifications.md)):
+- New table `concierge.action_links` (above). `notifications.action_token_hash` is gone; `provider_message_id` and `error` record what the email provider said.
+- New setting `test_action_link_hours` (24) in `app_settings`: how long the Settings test email's button works (T23).
+- Server code writes these server-only tables with the Supabase secret key (`lib/supabase/admin.ts`, server-only import). See README > Environments.
 
 ## 4. Key calculations (in `packages/core`, unit-tested)
 
@@ -320,6 +326,9 @@ flowchart LR
 
 ### 6.4 Notifications and one-tap actions
 - Emails carry **signed one-time action links**, for example `/a/{token}`. Each token is random, stored hashed, tied to one user, round, and action, and expires at the deadline. Opening one goes to a confirmation page on the phone web app, and that page performs the action with one tap. A link never approves anything on a plain GET, because email security scanners open links automatically **[Claude's call]**.
+- **Sign-in required (ALL-23, T38):** a link only works for the person it was sent to. They must be signed in as the link's owner; signed out, the page offers sign-in (Google gets the owner's email as a hint) and returns to the same link. A forwarded link is useless to anyone else.
+- **Where the token shows up:** Our code never stores or logs the raw token (only its hash is saved), but `/a/{token}` URLs do appear in the hosting provider's request logs and in the sign-in redirect; that's acceptable because a link needs its owner signed in and works once.
+- **What `/a/{token}` shows, first match wins:** (1) unknown token: "This link doesn't work"; (2) signed out: sign-in page; (3) signed in as someone else: "This link is for a different account"; (4) already used; (5) expired; (6) the confirm page. The action and its round appear only at step 6. Confirming is a POST that marks the link used with one conditional update, so a double tap runs the action once. Full reasoning: [the plan](plans/ALL-23-notifications.md#what-was-decided-and-why).
 - Emails come from `GiftsAF <hello@giftsaf.com>` through Resend, with click tracking off, so action links are never rewritten (T33).
 - **Channels:** every message is sent through a list of channels. The MVP starts with email only. If push is added (W5-4, decision deferred, T12), the same messages also go out as Web Push notifications linking to the same pages.
 - **Escalation** follows the §4.1 schedule. Each send is logged in `notifications`.
