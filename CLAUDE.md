@@ -2,6 +2,19 @@
 
 Two people (the owner and Jim) build this with Claude. Everything written here should be easy for a person to pick up cold: they should be able to find a doc in one place, read it top to bottom, and understand what was decided and why.
 
+## Principles
+
+The short list every plan is checked against (`design/plans/TEMPLATE.md` > Principles check). The detail is in the sections below and the decisions logs.
+
+1. **Simplest thing that works.** Challenge anything harder than it needs to be, including Claude's own proposals. Add tools only for a real need (T10).
+2. **Progress over perfection.** Tunable values get a sensible, written-down default. Only bring the owner decisions that are hard to undo: architecture, vendors, data shape, money and safety.
+3. **Spec before plan, plan before code.** Write what a ticket does and how we'll know it works (acceptance criteria), settle the open questions, then plan, then build test-first (T32).
+4. **No hard-coded values** (T23). Business and vendor numbers live in settings, the database or env vars.
+5. **Products stay separable** (T19). Each product has its own module and schema, and they talk only through public interfaces.
+6. **Privacy by default.** Every user-owned row is protected by its owner; money and sensitive data stay inside the concierge (D31, T26).
+7. **The repo is the written source.** Every direction we settle gets recorded in the docs and decisions log; Linear and shared pages are views of it.
+8. **Written for a person.** Answer first, plain words, one place for each doc.
+
 ## Superpowers is required
 
 All development in this repo uses the **Superpowers** plugin. `.claude/settings.json` turns it on for everyone, and Claude Code offers to install it the first time the repo is opened and trusted.
@@ -11,7 +24,7 @@ All development in this repo uses the **Superpowers** plugin. `.claude/settings.
 
 | Situation | Skill |
 |---|---|
-| New feature, screen or change in behavior | `brainstorming` first, then `writing-plans` |
+| New feature, screen or change in behavior | `brainstorming` to write the **Spec** (stories, acceptance criteria, open questions) from `design/plans/TEMPLATE.md`; settle the open questions; then `writing-plans` for the **Plan**, ending with its consistency check |
 | Writing code | `test-driven-development` |
 | A bug or failing test | `systematic-debugging` |
 | Before saying something is done | `verification-before-completion` |
@@ -33,7 +46,7 @@ Use this layout. It overrides any plugin or skill default (for example, Superpow
 | Technical decisions | `design/decisions.md`, next number in sequence (T16, T17, …) |
 | Spike write-ups | `design/spikes/<topic>.md` (e.g. `zinc.md`, `ai.md`, `email.md`) |
 | Look and feel, UI kit, mock-up links | `design/ui.md` |
-| Build plan for a ticket | `design/plans/ALL-<n>-<short-name>.md` when a plan is worth keeping; otherwise in the Linear ticket |
+| Spec and build plan for a ticket | `design/plans/ALL-<n>-<short-name>.md`, copied from `design/plans/TEMPLATE.md`, when a plan is worth keeping; otherwise the spec (acceptance criteria) goes in the Linear ticket |
 
 - Don't create a new top-level folder or a second copy of a doc. Update the existing one.
 - **Nothing discussed gets lost.** When a conversation, chat or artifact produces a product or design direction, record it in the docs above (and the decisions log) before moving on. Shareable pages and Linear are views; the repo is the written source.
