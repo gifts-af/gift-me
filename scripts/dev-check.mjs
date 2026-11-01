@@ -28,7 +28,8 @@ const dockerRunning = docker.ok && run("docker", ["info", "--format", "{{.Server
 const nodeMajor = Number(process.versions.node.split(".")[0]);
 const supabaseBin = join(root, "node_modules", ".bin", process.platform === "win32" ? "supabase.cmd" : "supabase");
 
-// Playwright's browser for the browser tests (ALL-20), in its default cache.
+// Playwright's browsers for the browser tests, in their default cache: Chromium
+// for the Android runs (ALL-20) and WebKit for the iPhone runs (ALL-60).
 const playwrightCache =
   process.env.PLAYWRIGHT_BROWSERS_PATH ??
   (os === "windows"
@@ -36,7 +37,8 @@ const playwrightCache =
     : os === "mac"
       ? join(homedir(), "Library", "Caches", "ms-playwright")
       : join(homedir(), ".cache", "ms-playwright"));
-const hasChromium = existsSync(playwrightCache) && readdirSync(playwrightCache).some((d) => d.startsWith("chromium"));
+const playwrightBrowsers = existsSync(playwrightCache) ? readdirSync(playwrightCache) : [];
+const hasTestBrowsers = ["chromium", "webkit"].every((b) => playwrightBrowsers.some((d) => d.startsWith(b)));
 
 // Each check: required ones block local development; the rest are reminders.
 const checks = [
@@ -80,10 +82,10 @@ const checks = [
     },
   },
   {
-    name: "Browser for the browser tests (Playwright's Chromium)",
-    ok: hasChromium,
+    name: "Browsers for the browser tests (Playwright's Chromium and WebKit)",
+    ok: hasTestBrowsers,
     skipIf: !existsSync(supabaseBin),
-    fix: { all: "pnpm --filter @gifts-af/web exec playwright install chromium" },
+    fix: { all: "pnpm --filter @gifts-af/web exec playwright install chromium webkit" },
   },
   {
     name: "Web app environment file (apps/web/.env.development.local)",

@@ -94,6 +94,15 @@ for (const width of [390, 1280]) {
     await page.getByRole("button", { name: "Sign in" }).click();
     await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
     expect(await spot("/")).toEqual(home);
-    expect(await spot("/lists")).toEqual(home);
+
+    // The list, once loaded: on a phone "‹ Home" takes the logo's place, by
+    // design (mock-up "list"); from 640 px the logo is back in its spot.
+    await page.goto("/lists");
+    await expect(page.getByRole("region", { name: "My list" })).toBeVisible();
+    if (width < 640) {
+      await expect(page.getByRole("link", { name: "Home" })).toBeVisible();
+    } else {
+      expect(await spot("/lists")).toEqual(home);
+    }
   });
 }

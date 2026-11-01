@@ -83,7 +83,7 @@ jobs:
             echo "E2E_SUPABASE_PUBLISHABLE_KEY=$PUBLISHABLE_KEY"
             echo "E2E_SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
           } >> "$GITHUB_ENV"
-      - run: pnpm --filter @gifts-af/web exec playwright install --with-deps chromium
+      - run: pnpm --filter @gifts-af/web exec playwright install --with-deps chromium webkit
       - run: pnpm --filter @gifts-af/web build
       - run: pnpm --filter @gifts-af/web e2e
       - uses: actions/upload-artifact@v4
