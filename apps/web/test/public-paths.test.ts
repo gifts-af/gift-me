@@ -22,6 +22,8 @@ describe("isPublicPath", () => {
     // The home page and tour (ALL-46).
     "/welcome",
     "/tour",
+    // The logo image at the top of every email (ALL-71).
+    "/email-logo.png",
     "/request-access",
     // Link-preview crawlers (LinkedIn, Slack…) are never signed in (ALL-55).
     "/opengraph-image",
