@@ -1,12 +1,13 @@
 import type { MetadataRoute } from "next";
+import { APP_NAME, APP_TAGLINE } from "@/lib/brand";
 
 // Makes the site installable to the home screen (ALL-20). No service worker:
 // browsers no longer need one to install, and push (ALL-40) would add it.
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "GiftMe",
-    short_name: "GiftMe",
-    description: "The right gift, on time, without the scramble.",
+    name: APP_NAME,
+    short_name: APP_NAME,
+    description: APP_TAGLINE,
     start_url: "/",
     scope: "/",
     display: "standalone",
