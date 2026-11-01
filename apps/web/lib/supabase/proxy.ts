@@ -6,7 +6,7 @@ import { supabaseKey, supabaseUrl } from "./env";
 // Paths signed-out visitors may open. /api/keepalive checks its own secret
 // (ALL-43). The manifest and icons must load signed out, or "Add to Home
 // Screen" breaks on the sign-in page. The home page (/welcome) and the tour
-// are public (ALL-46); "/" itself is the app home, so it's not listed here:
+// are public (ALL-46), and so is the link-preview image (ALL-55); "/" itself is the app home, so it's not listed here:
 // homeRewrite shows signed-out visitors the home page there instead.
 export function isPublicPath(pathname: string) {
   return (
@@ -21,7 +21,9 @@ export function isPublicPath(pathname: string) {
     pathname.startsWith("/auth") ||
     pathname === "/welcome" ||
     pathname === "/tour" ||
-    pathname === "/request-access"
+    pathname === "/request-access" ||
+    // The link-preview image: crawlers like LinkedIn's are never signed in (ALL-55).
+    pathname.startsWith("/opengraph-image")
   );
 }
 
