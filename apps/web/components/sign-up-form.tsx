@@ -16,7 +16,7 @@ import { GoogleButton } from "./google-button";
 export function SignUpForm({ next: rawNext }: { next?: string }) {
   const next = safeNext(rawNext);
   const hydrated = useHydrated();
-  const human = useHumanCheck();
+  const human = useHumanCheck({ wayOut: "google" });
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
