@@ -36,8 +36,8 @@ Top to bottom (copy from the chosen mock-up; small wording polish is the builder
 | Section | Phone | Computer |
 |---|---|---|
 | **Alpha strip** (every home and tour page) | Yellow strip: "🚧 Early alpha. Lots is broken. Poke around anyway." | Same, full width |
-| **Top bar** | "GiftsAF" + an "ALPHA" tag; "Sign in" on the right | Adds a "How it works" anchor link |
-| **Hook** | Sticker "Mom's birthday is Saturday 👀"; headline "Gifting, handled AF."; "Where we're heading: we remember the dates, find the gift, and ship it. You just tap yes."; buttons **Take the tour** (primary) and **Request access** | Two columns: the text on the left, a light "pick a gift" card on the right (Mom's birthday, two gifts from her list, "Send it · $42"), as in the desktop mock-up |
+| **Top bar** | "GiftsAF" + an "ALPHA" tag; a small **🔒 Invite only** link on the right that opens sign-in | Adds a "How it works" anchor link |
+| **Hook** | Sticker "Mom's birthday is Saturday 👀"; headline "Gifting, handled AF."; "Where we're heading: we remember the dates, find the gift, and ship it. You just tap yes."; buttons **Take the tour** (primary) and **Request access**, with a quiet "Have an invite? Sign in" link under them | Two columns: the text on the left, a light "pick a gift" card on the right (Mom's birthday, two gifts from her list, "Send it · $42"), as in the desktop mock-up |
 | **What works today** | Three cards, each with a status chip: **Works now**: "Your gift list" · **Being built**: "Never forget a birthday" (in testing with a few friends) · **Later**: "Buy-me-a-drink shirts" | Three cards side by side |
 | **How it'll work** | Three stacked steps, each a numbered circle, a bold title and one line: Add your people / We get ideas ready / You tap yes. Then "Nothing is ever bought without your OK." **Each step on its own lines; nothing wraps mid-sentence** (owner) | Three steps side by side, one column each |
 | **Feedback** | "Found something broken? Tell us." / "It's two of us building this. Every bit of feedback helps." / **Send feedback** button | Same, narrower column |
@@ -53,7 +53,7 @@ A guided walkthrough of the real app screens, filled with made-up people, for di
 4. **Done:** "Ordered. (Not really, this is the tour.) It arrives Thursday, and Mom never sees what you spent."
 5. **Ideas for Dad:** no list, so ideas from what you've saved about him, each with its reason.
 6. **Your own list:** your list with a few gifts and a Share button. Caption: stop answering "what do you want?".
-7. **End:** "That's where we're heading. A lot is still broken, but your gift list works today. Want in?" Buttons: **Request access** (primary), **Already invited? Sign in**, **Back to home**.
+7. **End:** "That's where we're heading. A lot is still broken, but your gift list works today. Want in?" Buttons: **Request access** (primary), **Have an invite? Sign in**, **Back to home**.
 
 Rules: no network calls, no database, nothing saved or bought; the visitor can leave at any step (a "Skip tour" link). Example people and gifts match the ALL-41 mock-ups.
 
@@ -67,10 +67,11 @@ Rules: no network calls, no database, nothing saved or bought; the visitor can l
 | AC-4 | The home page and tour | Viewed at any width | The alpha strip is visible, and each feature card shows its status chip |
 | AC-5 | A signed-out visitor | Taps **Take the tour** | `/tour` opens without sign-in, at step 1 |
 | AC-6 | The tour | The visitor steps through to the end | All 7 steps show in order; picking a gift updates the button total; no request leaves the browser (no fetch to Supabase or `/api`) |
-| AC-7 | Any tour step | The visitor taps **Skip tour**, or at the end **Already invited? Sign in** | They reach the home page or sign-in respectively |
-| AC-8 | The home page or tour end | The visitor taps **Sign in** | Sign-in opens, and after signing in they land on their app home |
+| AC-7 | Any tour step | The visitor taps **Skip tour**, or at the end **Have an invite? Sign in** | They reach the home page or sign-in respectively |
+| AC-8 | The home page or tour end | The visitor taps **🔒 Invite only** or **Have an invite? Sign in** | Sign-in opens, and after signing in they land on their app home |
 | AC-9 | A guest on a shared list (`/share/<token>`) | Looks for more | A small "What is GiftsAF?" link to `/` is present and doesn't push the claim buttons down noticeably |
 | AC-10 | The home page | The visitor taps **Send feedback** | Their email app opens to the feedback address with the subject "GiftsAF alpha feedback" |
+| AC-14 | A signed-out visitor | Opens sign-in | A line at the top says GiftsAF is invite only for now, with a "Request access" link (same email as AC-13) |
 | AC-13 | The home page or tour end | The visitor taps **Request access** | Their email app opens to the same address with the subject "GiftsAF access request" and a one-line prefilled body asking for their name |
 | AC-11 | The home page | Its HTML is fetched | The title and description are set for sharing (title "GiftsAF", a one-line description) |
 | AC-12 | `main` is merged | Production deploys | https://giftsaf.com shows the home page to a signed-out visitor (checked on the live site) |
@@ -105,6 +106,7 @@ None left for the owner. The calls below are marked in "What was decided".
 | Feedback | A `mailto:` link to allensforever711@gmail.com with subject "GiftsAF alpha feedback" **[Claude's call]** | Simplest thing; there's no inbox at `giftsaf.com` yet (Resend only receives on `in.giftsaf.com` into a webhook). The address is already public in the repo |
 | Footer credit | "made by Aaron and Jim" **[Claude's call]** | Fits "it's two of us building this" |
 | Who can get in | **Invite only: "Request access"**, not open sign-up. The tour shows where it's heading without an account; invited people sign in to poke around the real app | Owner chose this over open sign-up (2026-11-01). Google sign-in stays in testing mode, so inviting someone means adding their email as a Google test user (up to 100) |
+| Invite-only feel | The sign-in entry is labelled **🔒 Invite only** (top bar) and "Have an invite? Sign in" (hook, tour end); sign-in says it's invite only, with a Request access link | Owner (2026-11-01): Aaron and Jim need a way in, and it signals that some people already have access, so others want in |
 | How access is requested | A `mailto:` to the same address as feedback, subject "GiftsAF access request" **[Claude's call]** | Simplest; no form, no table, no inbox to build. A request list can come later if requests pile up |
 | Concierge screens in the tour | Tour-only copies built from the ALL-41 mock-ups, in a tour folder; the list step reuses real list components where practical **[Claude's call]** | The real concierge screens don't exist yet (ALL-21 and later); the tour can switch to them when they do |
 | Tour theme | Dark, like the home page **[Claude's call]** | One continuous look from home to tour |
