@@ -11,3 +11,5 @@ export type { LinkRow, NewLink, NotifyStore } from "./notify/store";
 export { defaultChannels, emailChannel } from "./notify/channels";
 export type { Channel } from "./notify/channels";
 export type { ActionName } from "./notify/actions";
+export { confirmActionLink, readActionLink } from "./notify/links";
+export type { ConfirmResult, LinkDeps, LinkView } from "./notify/links";
