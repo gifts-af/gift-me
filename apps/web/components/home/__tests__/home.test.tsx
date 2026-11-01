@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import WelcomePage, { metadata } from "@/app/welcome/page";
-import { APP_NAME, feedbackHref } from "@/lib/brand";
+import { APP_NAME } from "@/lib/brand";
 
 function link(name: string | RegExp) {
   return screen.getByRole("link", { name });
@@ -18,7 +18,8 @@ describe("home page (ALL-46)", () => {
     render(<WelcomePage />);
     expect(link("🔒 Invite only")).toHaveAttribute("href", "/auth/login");
     expect(link("Take the tour")).toHaveAttribute("href", "/tour");
-    expect(screen.getAllByRole("link", { name: "Request access" })[0]).toHaveAttribute("href", "/request-access");
+    // Opens over the page (ALL-53), so it's a button, not a link to /request-access.
+    expect(screen.getAllByRole("button", { name: "Request access" })[0]).not.toHaveAttribute("href");
     expect(link("Have an invite? Sign in")).toHaveAttribute("href", "/auth/login");
     expect(link("How it works")).toHaveAttribute("href", "#how-it-works");
   });
@@ -47,7 +48,7 @@ describe("home page (ALL-46)", () => {
 
   it("asks for feedback and credits the builders", () => {
     render(<WelcomePage />);
-    expect(link("Send feedback")).toHaveAttribute("href", feedbackHref());
+    expect(screen.getByRole("button", { name: "Send feedback" })).not.toHaveAttribute("href");
     expect(screen.getByText("GiftsAF alpha · made by Jim and Aaron")).toBeInTheDocument();
   });
 

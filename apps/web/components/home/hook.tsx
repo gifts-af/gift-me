@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { RequestAccessButton } from "@/components/home/request-access-dialog";
 import { PickPreview } from "./pick-preview";
 
 export function Hook() {
@@ -19,12 +20,7 @@ export function Hook() {
           >
             Take the tour
           </Link>
-          <Link
-            href="/request-access"
-            className="inline-flex min-h-12 items-center justify-center rounded-lg bg-secondary px-6 font-bold text-secondary-foreground hover:bg-secondary/70"
-          >
-            Request access
-          </Link>
+          <RequestAccessButton className="inline-flex min-h-12 items-center justify-center rounded-lg bg-secondary px-6 font-bold text-secondary-foreground hover:bg-secondary/70" />
         </div>
         <Link
           href="/auth/login"

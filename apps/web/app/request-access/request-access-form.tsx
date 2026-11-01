@@ -1,13 +1,18 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect } from "react";
 import { submitAccessRequest } from "./actions";
 
 const input =
   "min-h-11 w-full rounded-md border border-input bg-background px-3 py-2.5 text-base font-normal aria-[invalid=true]:border-destructive";
 
-export function RequestAccessForm() {
+// `onSent` lets the overlay close itself after the thank-you (ALL-53).
+export function RequestAccessForm({ onSent }: { onSent?: () => void } = {}) {
   const [result, action, pending] = useActionState(submitAccessRequest, null);
+  const sent = result?.status === "sent";
+  useEffect(() => {
+    if (sent) onSent?.();
+  }, [sent, onSent]);
 
   if (result?.status === "sent") {
     return (
