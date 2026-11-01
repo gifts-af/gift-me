@@ -31,9 +31,9 @@ export function Concierge() {
             From that, it picks a short list of ideas that fit them and your budget. No searching. It tells you when
             it&apos;s time to buy, early enough to arrive on time, and one tap buys it and ships it.
           </p>
-          <p className="text-[14px] text-muted-foreground">In testing with a few friends.</p>
         </div>
 
+        {/* Sample content: an illustration of a profile, not real data or prices. */}
         <figure
           aria-label="What it knows about Dad"
           className="m-0 flex flex-col gap-4 rounded-2xl border bg-card p-5 text-card-foreground shadow-sm"
@@ -44,7 +44,7 @@ export function Concierge() {
             </span>
             <span>
               <span className="block text-[17px] font-bold">What it knows about Dad</span>
-              <span className="block text-[14px] text-muted-foreground">Birthday · Fri, Apr 10</span>
+              <span className="block text-[14px] text-muted-foreground">Birthday · Apr 10</span>
             </span>
           </figcaption>
           <ul className="flex flex-col divide-y">
