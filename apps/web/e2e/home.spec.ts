@@ -34,6 +34,29 @@ for (const colorScheme of ["dark", "light"] as const) {
   });
 }
 
+// ALL-61: on a computer the tour uses two columns, caption left and phone right;
+// on a phone it stays one column: caption, then the screen, then the buttons.
+for (const width of [375, 1280]) {
+  test(`the tour lays out for a ${width} px screen`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/tour");
+    await page.getByRole("button", { name: "Next", exact: true }).click();
+    const caption = (await page.getByRole("heading", { level: 1 }).boundingBox())!;
+    const screen = (await page.getByTestId("tour-screen").boundingBox())!;
+    const next = (await page.getByRole("button", { name: "Next", exact: true }).boundingBox())!;
+    if (width >= 768) {
+      expect(screen.x).toBeGreaterThan(caption.x + caption.width - 1);
+      expect(screen.x).toBeGreaterThan(next.x + next.width - 1);
+      expect(next.y).toBeLessThan(screen.y + screen.height);
+    } else {
+      expect(screen.y).toBeGreaterThan(caption.y + caption.height - 1);
+      expect(next.y).toBeGreaterThan(screen.y + screen.height - 1);
+    }
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+    expect(overflow).toBeLessThanOrEqual(0);
+  });
+}
+
 test("take the tour, then sign in with an invite", async ({ page }) => {
   await page.goto("/");
   await page.getByRole("link", { name: "Take the tour" }).click();

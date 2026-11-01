@@ -2,7 +2,7 @@
 // screens feel like (ALL-46).
 export function Phone({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="mx-auto flex w-full max-w-[375px] flex-col overflow-hidden rounded-[28px] border bg-card text-card-foreground shadow-sm">
+    <div className="mx-auto flex w-full max-w-[375px] flex-col overflow-hidden md:max-w-[400px] rounded-[28px] border bg-card text-card-foreground shadow-sm">
       <p className="border-b px-4 py-3 text-[15px] font-semibold">{title}</p>
       <div className="flex flex-col gap-3 p-4">{children}</div>
     </div>
