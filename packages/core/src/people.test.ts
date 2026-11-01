@@ -34,8 +34,20 @@ describe("startingOccasions", () => {
       ["anniversary", "birthday", "christmas", "valentines_day"].sort(),
     );
   });
-  it("skips the anniversary for a wife without one", () => {
+  it("skips the anniversary for a husband without one", () => {
     expect(startingOccasions("husband", none)).toEqual(["christmas", "valentines_day"]);
+  });
+  it("gives a wife or husband with only an anniversary no birthday", () => {
+    for (const r of ["wife", "husband"] as const) {
+      expect(startingOccasions(r, { birthday: false, anniversary: true }).sort()).toEqual(
+        ["anniversary", "christmas", "valentines_day"].sort(),
+      );
+    }
+  });
+  it("gives everyone else only Christmas", () => {
+    for (const r of ["daughter", "sister", "brother", "best_friend", "friend", "other"] as const) {
+      expect(startingOccasions(r, none)).toEqual(["christmas"]);
+    }
   });
   it("gives Valentine's Day to partners", () => {
     for (const r of ["girlfriend", "boyfriend", "partner"] as const) {
@@ -78,6 +90,10 @@ describe("nextOccasion", () => {
   it("ignores disabled occasions, and returns null when none are enabled", () => {
     expect(nextOccasion(rows.map((r) => ({ ...r, enabled: false })), "2026-03-01")).toBeNull();
     expect(nextOccasion([], "2026-03-01")).toBeNull();
+  });
+  it("falls to Christmas when the birthday is disabled", () => {
+    const off = [{ ...rows[1]!, enabled: false }, rows[0]!];
+    expect(nextOccasion([off[0]!, off[1]!], "2026-03-01")).toEqual({ kind: "christmas", date: "2026-12-25" });
   });
   it("throws on a birthday without a date", () => {
     expect(() => nextOccasion([{ kind: "birthday", month: null, day: null, enabled: true }], "2026-01-01")).toThrow();

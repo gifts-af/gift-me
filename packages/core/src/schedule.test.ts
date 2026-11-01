@@ -173,6 +173,10 @@ describe("orderBy", () => {
     expect(orderBy("2026-12-25", "2026-12-20", o)).toEqual({ date: "2026-12-22", fast: true });
   });
 
+  it("switches to fast shipping on the normal deadline itself", () => {
+    expect(orderBy("2026-12-25", "2026-12-16", o)).toEqual({ date: "2026-12-22", fast: true });
+  });
+
   it("is null when even fast shipping is too late", () => {
     expect(orderBy("2026-12-25", "2026-12-22", o)).toBeNull();
   });
