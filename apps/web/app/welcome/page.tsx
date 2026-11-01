@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { AlphaStrip } from "@/components/home/alpha-strip";
 import { Features } from "@/components/home/features";
 import { Feedback } from "@/components/home/feedback";
 import { HomeFooter } from "@/components/home/home-footer";
@@ -20,7 +19,6 @@ export const metadata: Metadata = {
 export default function WelcomePage() {
   return (
     <div className="min-h-svh bg-background text-foreground">
-      <AlphaStrip />
       <HomeTopBar howItWorks />
       <main>
         <Hook />

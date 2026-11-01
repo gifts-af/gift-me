@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { AlphaStrip } from "@/components/home/alpha-strip";
 import { HomeTopBar } from "@/components/home/home-top-bar";
 import { DoneScreen } from "./done-screen";
 import { EndScreen } from "./end-screen";
@@ -40,7 +39,6 @@ export function Tour() {
 
   return (
     <div className="min-h-svh bg-background text-foreground">
-      <AlphaStrip />
       <HomeTopBar />
       <main className="mx-auto flex w-full max-w-xl flex-col gap-5 px-4 pb-12 pt-4">
         <div className="flex items-center justify-between gap-3">

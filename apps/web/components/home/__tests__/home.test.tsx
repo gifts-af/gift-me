@@ -8,10 +8,10 @@ function link(name: string | RegExp) {
 }
 
 describe("home page (ALL-46)", () => {
-  it("leads with the hook and the alpha warning", () => {
+  it("leads with the hook, with no alpha banner above it (ALL-50)", () => {
     render(<WelcomePage />);
     expect(screen.getByRole("heading", { level: 1, name: "Gifting, handled AF." })).toBeInTheDocument();
-    expect(screen.getByText("Early alpha. Lots is broken. Poke around anyway.")).toBeInTheDocument();
+    expect(screen.queryByText(/Lots is broken/)).not.toBeInTheDocument();
   });
 
   it("offers the tour, access requests and an invite-only way in", () => {

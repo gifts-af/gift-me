@@ -3,8 +3,15 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("@/app/request-access/actions", () => ({ submitAccessRequest: vi.fn() }));
 const { RequestAccessForm } = await import("@/app/request-access/request-access-form");
+const { default: RequestAccessPage } = await import("@/app/request-access/page");
 
 describe("request access form (ALL-47)", () => {
+  it("has no alpha banner above the top bar (ALL-50)", () => {
+    render(<RequestAccessPage />);
+    expect(screen.getByRole("heading", { level: 1, name: "Want in?" })).toBeInTheDocument();
+    expect(screen.queryByText(/Lots is broken/)).not.toBeInTheDocument();
+  });
+
   it("asks for just a name and an email, with an optional note", () => {
     render(<RequestAccessForm />);
     expect(screen.getByLabelText("Name")).toBeRequired();

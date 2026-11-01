@@ -15,6 +15,11 @@ function goTo(id: (typeof TOUR_STEPS)[number]["id"]) {
 afterEach(() => vi.restoreAllMocks());
 
 describe("guided tour (ALL-46)", () => {
+  it("has no alpha banner above the top bar (ALL-50)", () => {
+    render(<Tour />);
+    expect(screen.queryByText(/Lots is broken/)).not.toBeInTheDocument();
+  });
+
   it("walks through all seven steps in order", () => {
     render(<Tour />);
     TOUR_STEPS.forEach((step, i) => {
