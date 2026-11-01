@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Logo } from "@/components/logo";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { TopBarRow } from "@/components/top-bar-row";
 
 // The home page's own bar: the name with an ALPHA tag, and the invite-only
@@ -14,7 +15,7 @@ export function HomeTopBar({ howItWorks = false }: { howItWorks?: boolean }) {
           ALPHA
         </span>
       </Link>
-      <nav className="flex items-center gap-5 text-[14px] font-semibold">
+      <nav className="flex items-center gap-3 text-[14px] font-semibold sm:gap-5">
         {howItWorks && (
           <a
             href="#how-it-works"
@@ -26,6 +27,7 @@ export function HomeTopBar({ howItWorks = false }: { howItWorks?: boolean }) {
         <Link href="/auth/login" className="inline-flex min-h-11 items-center text-primary">
           🔒 Invite only
         </Link>
+        <ThemeToggle />
       </nav>
       </TopBarRow>
     </header>
