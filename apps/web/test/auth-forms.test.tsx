@@ -35,7 +35,11 @@ describe("auth forms keep what was typed before the page loaded", () => {
     prefill("Password", "pw-123456");
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
     await waitFor(() =>
-      expect(auth.signInWithPassword).toHaveBeenCalledWith({ email: "sam@example.com", password: "pw-123456" }),
+      expect(auth.signInWithPassword).toHaveBeenCalledWith({
+        email: "sam@example.com",
+        password: "pw-123456",
+        options: { captchaToken: "test-token" },
+      }),
     );
   });
 
@@ -47,6 +51,7 @@ describe("auth forms keep what was typed before the page loaded", () => {
     fireEvent.click(screen.getByRole("button", { name: /sign up|create/i }));
     await waitFor(() => expect(auth.signUp).toHaveBeenCalled());
     expect(auth.signUp.mock.calls[0][0]).toMatchObject({ email: "sam@example.com", password: "pw-123456" });
+    expect(auth.signUp.mock.calls[0][0].options.captchaToken).toBe("test-token");
   });
 
   it("forgot password uses the email already in the field", async () => {
@@ -55,6 +60,7 @@ describe("auth forms keep what was typed before the page loaded", () => {
     fireEvent.click(screen.getByRole("button", { name: "Send reset link" }));
     await waitFor(() => expect(auth.resetPasswordForEmail).toHaveBeenCalled());
     expect(auth.resetPasswordForEmail.mock.calls[0][0]).toBe("sam@example.com");
+    expect(auth.resetPasswordForEmail.mock.calls[0][1].captchaToken).toBe("test-token");
   });
 
   it("update password uses the password already in the field", async () => {

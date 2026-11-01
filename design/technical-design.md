@@ -411,6 +411,7 @@ Funding comes in two stages. Ordering, tracking and the data model are the same 
 - No retailer passwords are ever stored (A-5). The app **never touches card numbers**: in stage 1, cards live in each user's Zinc account; in stage 2, in Stripe (§6.5a). Users' Zinc keys and webhook secrets are kept in Supabase Vault.
 - Secrets live in Vercel environment variables. Supabase keys are split into anon and service role.
 - The sensitive-trait filter runs on AI output (C-8). Captures store only what the user captured.
+- **Bot check on public forms (T43):** Cloudflare Turnstile on sign-up, sign-in, password reset, request access and feedback. Supabase Auth verifies the token for the auth forms; our server actions verify it for the two that email us, and fail closed.
 - Deletion cascades (C-7). Users can export their data later.
 - **Data minimization (T42):** a column or form field for personal data is added only with the feature that needs it, and is optional until that feature is used. Analytics, AI and other vendors get IDs and amounts, never names, emails or addresses, unless the vendor's job needs them (e.g. Zinc needs the shipping address to ship).
 

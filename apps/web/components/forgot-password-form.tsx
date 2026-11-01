@@ -7,10 +7,12 @@ import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { useState } from "react";
 import { useHydrated } from "@/lib/use-hydrated";
+import { useHumanCheck } from "./human-check";
 import { FormError } from "./auth-frame";
 
 export function ForgotPasswordForm() {
   const hydrated = useHydrated();
+  const human = useHumanCheck();
   // Kept for the "on its way to …" message after sending.
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -27,8 +29,10 @@ export function ForgotPasswordForm() {
     // This URL must be in Supabase > Authentication > URL Configuration > Redirect URLs.
     const { error } = await createClient().auth.resetPasswordForEmail(email, {
       redirectTo: `${window.location.origin}/auth/update-password`,
+      captchaToken: human.token ?? undefined,
     });
     setIsLoading(false);
+    human.reset();
     if (error) setError(error.message);
     else setSuccess(true);
   };
@@ -47,8 +51,9 @@ export function ForgotPasswordForm() {
         <Label htmlFor="email">Email</Label>
         <Input id="email" name="email" type="email" autoComplete="email" required />
       </div>
+      {human.widget}
       {error && <FormError>{error}</FormError>}
-      <Button type="submit" className="w-full" disabled={!hydrated || isLoading} aria-busy={isLoading}>
+      <Button type="submit" className="w-full" disabled={!hydrated || isLoading || !human.token} aria-busy={isLoading}>
         {isLoading ? "Sending…" : "Send reset link"}
       </Button>
       <Button asChild variant="link" size="sm" className="self-center">

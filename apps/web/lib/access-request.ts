@@ -1,9 +1,10 @@
 import { APP_NAME, FEEDBACK_EMAIL } from "@/lib/brand";
+import { NOT_HUMAN, TURNSTILE_FIELD } from "@/lib/turnstile";
 import { sendEmail, type OutgoingEmail } from "@/lib/resend";
 
 // Access requests (ALL-47): a short form emails the owner through Resend.
 // Nothing is stored. A hidden "website" field catches bots: they get the same
-// thank-you, but nothing is sent.
+// thank-you, but nothing is sent. The Turnstile check (ALL-68) catches the rest.
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_NAME = 100;
@@ -50,11 +51,12 @@ const SEND_FAILED = "We couldn't send that just now. Please try again in a minut
 
 export async function requestAccess(
   data: FormData,
-  deps: { apiKey: string | undefined; fetch: typeof fetch },
+  deps: { apiKey: string | undefined; fetch: typeof fetch; isHuman: (token: string) => Promise<boolean> },
 ): Promise<RequestAccessResult> {
   const checked = validateAccessRequest(data);
   if (!checked.ok) return { status: "invalid", errors: checked.errors };
   if (checked.spam) return { status: "sent" };
+  if (!(await deps.isHuman(field(data, TURNSTILE_FIELD)))) return { status: "error", message: NOT_HUMAN };
   const sent = await sendEmail(buildAccessRequestEmail(checked.value), deps);
   return sent.ok ? { status: "sent" } : { status: "error", message: SEND_FAILED };
 }

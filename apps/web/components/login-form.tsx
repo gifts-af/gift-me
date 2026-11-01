@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { useState } from "react";
 import { useHydrated } from "@/lib/use-hydrated";
+import { useHumanCheck } from "./human-check";
 import { Divider, FormError } from "./auth-frame";
 import { GoogleButton } from "./google-button";
 
@@ -16,6 +17,7 @@ import { GoogleButton } from "./google-button";
 export function LoginForm({ next: rawNext }: { next?: string }) {
   const next = safeNext(rawNext);
   const hydrated = useHydrated();
+  const human = useHumanCheck();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const withNext = (path: string) =>
@@ -30,8 +32,13 @@ export function LoginForm({ next: rawNext }: { next?: string }) {
     const password = String(form.get("password"));
     setIsLoading(true);
     setError(null);
-    const { error } = await createClient().auth.signInWithPassword({ email, password });
+    const { error } = await createClient().auth.signInWithPassword({
+      email,
+      password,
+      options: { captchaToken: human.token ?? undefined },
+    });
     if (error) {
+      human.reset();
       setError(error.message);
       setIsLoading(false);
       return;
@@ -66,8 +73,9 @@ export function LoginForm({ next: rawNext }: { next?: string }) {
             required
           />
         </div>
+        {human.widget}
         {error && <FormError>{error}</FormError>}
-        <Button type="submit" variant="secondary" className="w-full" disabled={!hydrated || isLoading} aria-busy={isLoading}>
+        <Button type="submit" variant="secondary" className="w-full" disabled={!hydrated || isLoading || !human.token} aria-busy={isLoading}>
           {isLoading ? "Signing in…" : "Sign in"}
         </Button>
       </form>

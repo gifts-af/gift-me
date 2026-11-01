@@ -13,6 +13,9 @@ function form(fields: Record<string, string>) {
   return data;
 }
 
+// Passes the bot check (ALL-68); tests of the check itself pass their own.
+const human = async () => true;
+
 describe("validateAccessRequest", () => {
   it("accepts a name and email, trimmed, with an optional note", () => {
     expect(validateAccessRequest(form({ name: "  Jordan ", email: " jo@example.com ", note: " hi " }))).toEqual({
@@ -55,7 +58,7 @@ describe("requestAccess", () => {
 
   it("sends through Resend and thanks the visitor", async () => {
     const send = vi.fn(async () => ok());
-    const result = await requestAccess(form({ name: "Jordan", email: "jo@example.com" }), { apiKey: "re_test", fetch: send });
+    const result = await requestAccess(form({ name: "Jordan", email: "jo@example.com" }), { isHuman: human, apiKey: "re_test", fetch: send });
     expect(result).toEqual({ status: "sent" });
     expect(send).toHaveBeenCalledTimes(1);
     const [url, init] = send.mock.calls[0] as unknown as [string, RequestInit];
@@ -67,14 +70,14 @@ describe("requestAccess", () => {
 
   it("sends nothing for a bad form", async () => {
     const send = vi.fn(async () => ok());
-    const result = await requestAccess(form({ name: "", email: "x" }), { apiKey: "re_test", fetch: send });
+    const result = await requestAccess(form({ name: "", email: "x" }), { isHuman: human, apiKey: "re_test", fetch: send });
     expect(result).toMatchObject({ status: "invalid" });
     expect(send).not.toHaveBeenCalled();
   });
 
   it("pretends to succeed for bots, and sends nothing", async () => {
     const send = vi.fn(async () => ok());
-    const result = await requestAccess(form({ name: "Bot", email: "b@example.com", website: "x" }), { apiKey: "re_test", fetch: send });
+    const result = await requestAccess(form({ name: "Bot", email: "b@example.com", website: "x" }), { isHuman: human, apiKey: "re_test", fetch: send });
     expect(result).toEqual({ status: "sent" });
     expect(send).not.toHaveBeenCalled();
   });
@@ -82,10 +85,23 @@ describe("requestAccess", () => {
   it("says so when sending fails, or the key is missing", async () => {
     const failing = vi.fn(async () => new Response("nope", { status: 500 }));
     const valid = form({ name: "Jordan", email: "jo@example.com" });
-    expect(await requestAccess(valid, { apiKey: "re_test", fetch: failing })).toEqual({
+    expect(await requestAccess(valid, { isHuman: human, apiKey: "re_test", fetch: failing })).toEqual({
       status: "error",
       message: "We couldn't send that just now. Please try again in a minute.",
     });
-    expect(await requestAccess(valid, { apiKey: undefined, fetch: failing })).toMatchObject({ status: "error" });
+    expect(await requestAccess(valid, { isHuman: human, apiKey: undefined, fetch: failing })).toMatchObject({ status: "error" });
+  });
+
+  it("asks the bot check about the form's token (ALL-68)", async () => {
+    const isHuman = vi.fn(async () => true);
+    await requestAccess(form({ name: "Jordan", email: "jo@example.com", "cf-turnstile-response": "tok-1" }), { isHuman, apiKey: "re_test", fetch: vi.fn(async () => new Response("{}")) });
+    expect(isHuman).toHaveBeenCalledWith("tok-1");
+  });
+
+  it("sends nothing when the bot check fails, and says so (ALL-68)", async () => {
+    const send = vi.fn();
+    const result = await requestAccess(form({ name: "Jordan", email: "jo@example.com" }), { isHuman: async () => false, apiKey: "re_test", fetch: send });
+    expect(result).toEqual({ status: "error", message: "We couldn't confirm you're a person. Please try again." });
+    expect(send).not.toHaveBeenCalled();
   });
 });
