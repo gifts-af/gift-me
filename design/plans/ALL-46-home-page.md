@@ -35,7 +35,7 @@ Top to bottom (copy from the chosen mock-up; small wording polish is the builder
 
 | Section | Phone | Computer |
 |---|---|---|
-| **Alpha strip** (every home and tour page) | Yellow strip: "🚧 Early alpha. Lots is broken. Poke around anyway." | Same, full width |
+| **Alpha strip** (every home and tour page; **removed in ALL-50**, T36) | Yellow strip: "🚧 Early alpha. Lots is broken. Poke around anyway." | Same, full width |
 | **Top bar** | "GiftsAF" + an "ALPHA" tag; a small **🔒 Invite only** link on the right that opens sign-in | Adds a "How it works" anchor link |
 | **Hook** | Sticker "Mom's birthday is Saturday 👀"; headline "Gifting, handled AF."; "Where we're heading: we remember the dates, find the gift, and ship it. You just tap yes."; buttons **Take the tour** (primary) and **Request access**, with a quiet "Have an invite? Sign in" link under them | Two columns: the text on the left, a light "pick a gift" card on the right (Mom's birthday, two gifts from her list, "Send it · $42"), as in the desktop mock-up |
 | **What works today** | Three cards, each with a status chip: **Works now**: "Your gift list" · **Being built**: "Never forget a birthday" (in testing with a few friends) · **Later**: "Buy-me-a-drink shirts" | Three cards side by side |

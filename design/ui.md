@@ -191,8 +191,8 @@ The prototype's colours and stylesheet go; **none of its behaviour does.** When 
 
 The public front door at `giftsaf.com` for signed-out visitors, plus the guided tour at `/tour`. Direction **B, bold and cheeky** (chosen 2026-11-01): big type, a tilted yellow "sticker", plain talk aimed at a forgetful 24-year-old. It follows the browser's light or dark setting like the app; the mock-up shows dark. Spec, copy and layout: [`plans/ALL-46-home-page.md`](plans/ALL-46-home-page.md); mock-ups: [`mockups/ALL-46-home.html`](mockups/ALL-46-home.html).
 
-- **Alpha, out loud:** a yellow strip on every home and tour page ("Early alpha. Lots is broken. Poke around anyway."), an ALPHA tag by the name, and a status chip on each feature (Works now, Being built, Later).
-- **One new token pair:** `--sticker` / `--sticker-foreground` (`#facc15` on `#18181b`, the same in both themes) for the sticker and the alpha strip. Contrast is checked in `test/tokens.test.ts`.
+- **Honest, not shouty, about alpha:** an ALPHA tag by the name and a status chip on each feature (Works now, Being built, Later), plus the page copy. The yellow "Early alpha. Lots is broken." strip that used to top every home, tour and request-access page was removed on 2026-11-01 (ALL-50, T36): the owner doesn't want the top of the page to give an early-alpha impression. The mock-up still shows it.
+- **One new token pair:** `--sticker` / `--sticker-foreground` (`#facc15` on `#18181b`, the same in both themes) for the sticker and the logo's tag (ALL-48). Contrast is checked in `test/tokens.test.ts`.
 - **Phone first, good on a computer:** one column on phones; from 768 px the hook gets a "pick a gift" card beside it, and features and steps sit three across.
 
 ## Logo (ALL-48)
