@@ -43,7 +43,11 @@ export function renderEmail(parts: EmailParts): { html: string; text: string } {
     .join("");
 
   const html =
-    `<!doctype html><html><body style="margin:0;padding:0;background:#ffffff">` +
+    // The viewport tag makes phone mail apps lay it out at the screen's
+    // width instead of a 980px desktop width shrunk to fit (ALL-60).
+    `<!doctype html><html><head><meta charset="utf-8">` +
+    `<meta name="viewport" content="width=device-width, initial-scale=1"></head>` +
+    `<body style="margin:0;padding:0;background:#ffffff">` +
     `<div style="max-width:600px;margin:0 auto;padding:24px 20px;background:#ffffff;font-family:${FONT}">` +
     `<h1 style="margin:0 0 16px;font-size:22px;line-height:1.3;color:${INK}">${escapeHtml(parts.heading)}</h1>` +
     parts.paragraphs.map((s) => para(s)).join("") +

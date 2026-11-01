@@ -21,6 +21,10 @@ describe.each(kinds)("template %s", (kind) => {
     expect(mail.html).not.toContain("<style");
     expect(mail.html).not.toContain("class=");
   });
+  it("lays out at the phone's width, not a 980px desktop width (ALL-60)", () => {
+    expect(mail.html).toContain('<meta name="viewport" content="width=device-width, initial-scale=1">');
+    expect(mail.html).toContain('<meta charset="utf-8">');
+  });
   it("contains every link in html and text", () => {
     for (const u of urls) {
       expect(mail.html).toContain(u);
