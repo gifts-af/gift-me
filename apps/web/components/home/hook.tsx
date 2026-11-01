@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { HeroCallout } from "@/components/home/hero-callout";
 import { RequestAccessButton } from "@/components/home/request-access-dialog";
 import { PickPreview } from "./pick-preview";
 
@@ -6,9 +7,7 @@ export function Hook() {
   return (
     <section className="mx-auto grid w-full max-w-5xl gap-8 px-4 pb-10 pt-4 md:grid-cols-[1.1fr_0.9fr] md:items-center md:px-8 md:py-16">
       <div data-testid="hook-text" className="flex flex-col gap-4">
-        <span className="-rotate-3 self-start rounded-full bg-sticker px-3 py-1 text-[13px] font-extrabold text-sticker-foreground">
-          Mom&apos;s birthday is Saturday <span aria-hidden="true">👀</span>
-        </span>
+        <HeroCallout icon="🎂" label="Reminder" text={<>Mom&apos;s birthday is Saturday <span aria-hidden="true">👀</span></>} />
         {/* An h2 since ALL-71: the list hero above has the page's h1. */}
         <h2 className="text-[34px] font-extrabold leading-[1.05] tracking-tight md:text-[52px]">Gifting, handled AF.</h2>
         <p className="max-w-prose text-[16px] text-muted-foreground md:text-[18px]">
