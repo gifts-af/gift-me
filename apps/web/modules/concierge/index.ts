@@ -16,5 +16,10 @@ export { SAMPLE_DATA, TEMPLATES } from "./notify/templates";
 export { sampleEmails } from "./notify/samples";
 export type { SampleEmail } from "./notify/samples";
 export type { NotificationKind, RenderedEmail } from "./notify/templates";
+// Chrome extension capture (ALL-22). SaveResult is aliased: settings exports one.
+export { parseCaptureForm, saveCapture } from "./capture/capture";
+export type { CaptureInput, SaveResult as CaptureSaveResult } from "./capture/capture";
+export type { CaptureStore, NewCaptureRow } from "./capture/store";
 export { confirmActionLink, readActionLink } from "./notify/links";
 export type { ConfirmResult, LinkDeps, LinkView } from "./notify/links";
+export { createSupabaseCaptureStore } from "./capture/supabase-store";

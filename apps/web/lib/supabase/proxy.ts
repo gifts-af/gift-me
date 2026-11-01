@@ -17,6 +17,8 @@ export function isPublicPath(pathname: string) {
     pathname.startsWith("/apple-icon") ||
     pathname.startsWith("/pwa-icon/") ||
     pathname === "/api/keepalive" ||
+    // The extension calls this cross-origin with a bearer token; the route checks it (ALL-22).
+    pathname === "/api/captures" ||
     pathname.startsWith("/login") ||
     pathname.startsWith("/share/") ||
     pathname.startsWith("/auth") ||

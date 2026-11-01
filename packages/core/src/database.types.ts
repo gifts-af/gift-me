@@ -189,6 +189,7 @@ export type Database = {
         Row: {
           created_at: string;
           id: string;
+          note: string | null;
           page_title: string | null;
           person_id: string;
           screenshot_path: string | null;
@@ -202,6 +203,7 @@ export type Database = {
         Insert: {
           created_at?: string;
           id?: string;
+          note?: string | null;
           page_title?: string | null;
           person_id: string;
           screenshot_path?: string | null;
@@ -214,6 +216,7 @@ export type Database = {
         Update: {
           created_at?: string;
           id?: string;
+          note?: string | null;
           page_title?: string | null;
           person_id?: string;
           screenshot_path?: string | null;

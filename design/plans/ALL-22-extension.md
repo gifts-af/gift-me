@@ -66,7 +66,7 @@ None open. The answers are below.
 - **Simplest version?** What we cut: no Web Store listing, no background script work beyond messaging, no client-side trimming, people limited to name and relationship.
 - **Hard-coded values?** New env vars: `NEXT_PUBLIC_EXTENSION_ID` (web), plus `VITE_APP_ORIGIN`, `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` (extension build, dev or prod). New settings: `capture_text_max_chars` and `capture_screenshot_max_bytes`. The JPEG quality is an extension build env var, `VITE_CAPTURE_JPEG_QUALITY`.
 - **Product boundaries?** The capture route lives in `apps/web/modules/concierge`, and the connect page is shared auth code (`apps/web/app/extension/connect`). The extension reads `public.people` (shared) and writes `concierge.captures`, both through Supabase.
-- **Docs and decisions:** `design/technical-design.md` §6.2 (the resolved hand-off) and §2.1 (the extension row; "deleting a person deletes their files" is now marked as pending ALL-21 or ALL-37). `design/decisions.md` gets the next T# for the separate extension session (check `origin/main`'s latest number first). `apps/extension/README.md` gets the install and build steps. `README.md` gets the doc table and env vars. The Linear note goes on ALL-21 about deleting Storage files.
+- **Docs and decisions:** `design/technical-design.md` §6.2 (the resolved hand-off) and §2.1 (the extension row; "deleting a person deletes their files" is now marked as pending ALL-21 or ALL-37). `design/decisions.md` gets T40 for the separate extension session. `apps/extension/README.md` gets the install and build steps. `README.md` gets the doc table and env vars. The Linear note goes on ALL-21 about deleting Storage files.
 
 ## Plan
 
