@@ -9,6 +9,7 @@ import {
   sendTestNotification,
   type SaveResult,
 } from "@/modules/concierge";
+import { baseUrlFrom } from "./base-url";
 
 // Time zone lives on the shared profile; the over-budget allowance is the
 // concierge's (T26).
@@ -45,13 +46,12 @@ export async function sendTestEmail(): Promise<{ ok: true } | { ok: false; error
   const failed = { ok: false, error: "We couldn't send it. Try again in a minute." } as const;
   try {
     const requestHeaders = await headers();
-    const host = requestHeaders.get("host");
-    if (!host) return failed;
-    const proto = requestHeaders.get("x-forwarded-proto") ?? "https";
+    const baseUrl = baseUrlFrom(requestHeaders);
+    if (!baseUrl) return failed;
     const result = await sendTestNotification(userId, {
       store: createSupabaseNotifyStore(),
       channels: defaultChannels(),
-      baseUrl: `${proto}://${host}`,
+      baseUrl,
       now: new Date(),
     });
     return result.ok ? { ok: true } : failed;
