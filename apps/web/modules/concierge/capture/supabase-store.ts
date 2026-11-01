@@ -23,6 +23,8 @@ export async function createSupabaseCaptureStore(
   const setting = async (key: string) => {
     const { data: value, error: err } = await concierge().rpc("setting_int", { p_key: key });
     if (err) throw err;
+    // setting_int returns null for an unknown key; that is an error, not a default (T23).
+    if (value === null || value === undefined) throw new Error(`setting ${key} missing`);
     return value;
   };
 
