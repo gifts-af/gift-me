@@ -20,6 +20,7 @@ describe("isPublicPath", () => {
     // The home page and tour (ALL-46).
     "/welcome",
     "/tour",
+    "/request-access",
   ])("lets signed-out visitors reach %s", (path) => expect(isPublicPath(path)).toBe(true));
 
   it.each(["/", "/settings", "/api/other", "/lists/123"])(

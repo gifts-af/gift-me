@@ -20,7 +20,8 @@ export function isPublicPath(pathname: string) {
     pathname.startsWith("/share/") ||
     pathname.startsWith("/auth") ||
     pathname === "/welcome" ||
-    pathname === "/tour"
+    pathname === "/tour" ||
+    pathname === "/request-access"
   );
 }
 

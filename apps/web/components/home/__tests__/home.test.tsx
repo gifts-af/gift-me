@@ -1,7 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import WelcomePage, { metadata } from "@/app/welcome/page";
-import { APP_NAME, accessRequestHref, feedbackHref } from "@/lib/brand";
+import { APP_NAME, feedbackHref } from "@/lib/brand";
 
 function link(name: string | RegExp) {
   return screen.getByRole("link", { name });
@@ -18,7 +18,7 @@ describe("home page (ALL-46)", () => {
     render(<WelcomePage />);
     expect(link("🔒 Invite only")).toHaveAttribute("href", "/auth/login");
     expect(link("Take the tour")).toHaveAttribute("href", "/tour");
-    expect(screen.getAllByRole("link", { name: "Request access" })[0]).toHaveAttribute("href", accessRequestHref());
+    expect(screen.getAllByRole("link", { name: "Request access" })[0]).toHaveAttribute("href", "/request-access");
     expect(link("Have an invite? Sign in")).toHaveAttribute("href", "/auth/login");
     expect(link("How it works")).toHaveAttribute("href", "#how-it-works");
   });
