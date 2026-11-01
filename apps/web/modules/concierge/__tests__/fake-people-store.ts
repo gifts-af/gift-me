@@ -34,7 +34,7 @@ export class FakePeopleStore implements PeopleStore {
   /** Google contact id and address of imported people (ALL-24). */
   googleIds = new Map<string, string>();
   addresses = new Map<string, unknown>();
-  photoSize = { px: 512, maxBytes: 10_485_760 };
+  photoSize = { px: 512, maxBytes: 10_485_760, timeoutMs: 5000, concurrency: 4 };
   uploads: { path: string; bytes: number; contentType: string }[] = [];
   /** Makes the next write of this name report 0 rows changed. */
   noRows = new Set<string>();

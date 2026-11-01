@@ -114,6 +114,17 @@ describe("guessRelationship", () => {
     expect(guessRelationship("Daddario Smith", null)).toBeNull();
     expect(guessRelationship("Sam", "Sammy")).toBeNull();
   });
+
+  // Review on PR #39: words that are also first names only count as the whole name.
+  it("doesn't take a first name like Poppy, Ma or Nan for a relationship", () => {
+    expect(guessRelationship("Poppy Jones", null)).toBeNull();
+    expect(guessRelationship("Ma Lin", null)).toBeNull();
+    expect(guessRelationship("Nan Smith", null)).toBeNull();
+    expect(guessRelationship("Gran Torino", null)).toBeNull();
+    expect(guessRelationship("Poppy", null)).toBe("grandfather");
+    expect(guessRelationship("Jo Allen", "Ma")).toBe("mother");
+    expect(guessRelationship("Nan", null)).toBe("grandmother");
+  });
 });
 
 describe("Google photo URLs", () => {

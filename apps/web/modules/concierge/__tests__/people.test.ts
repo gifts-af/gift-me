@@ -505,12 +505,64 @@ describe("importPeople", () => {
     ["the network fails", 10_485_760, async () => { throw new Error("offline"); }],
   ])("still adds the person when %s, without a photo", async (_what, maxBytes, answer) => {
     const store = new FakePeopleStore();
-    store.photoSize = { px: 512, maxBytes };
+    store.photoSize = { ...store.photoSize, maxBytes };
     const result = await importPeople(store, [row({ photoUrl: PHOTO })], deps(vi.fn(answer)));
     expect(result).toMatchObject({ added: 1, photosMissed: 1 });
     const [mom] = await store.people();
     expect(mom.photoPath).toBeNull();
     expect(store.uploads).toEqual([]);
+  });
+
+  it("skips a photo whose stated size is over the limit without reading it (review on PR #39)", async () => {
+    const store = new FakePeopleStore();
+    store.photoSize = { ...store.photoSize, maxBytes: 100 };
+    const body = new ReadableStream({ pull: () => { throw new Error("the body was read"); } });
+    const answer = new Response(body, { headers: { "content-type": "image/jpeg", "content-length": "5000" } });
+    const result = await importPeople(store, [row({ photoUrl: PHOTO })], deps(vi.fn(async () => answer)));
+    expect(result).toMatchObject({ added: 1, photosMissed: 1 });
+    expect(store.uploads).toEqual([]);
+  });
+
+  it("stops reading a photo once it passes the limit, even without a stated size", async () => {
+    const store = new FakePeopleStore();
+    store.photoSize = { ...store.photoSize, maxBytes: 100 };
+    let chunks = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull: (c) => { chunks++; c.enqueue(new Uint8Array(60)); if (chunks > 50) c.close(); },
+    });
+    const answer = new Response(body, { headers: { "content-type": "image/jpeg" } });
+    const result = await importPeople(store, [row({ photoUrl: PHOTO })], deps(vi.fn(async () => answer)));
+    expect(result).toMatchObject({ photosMissed: 1 });
+    expect(chunks).toBeLessThan(5);
+  });
+
+  it("gives each photo fetch the timeout from settings", async () => {
+    const store = new FakePeopleStore();
+    store.photoSize = { ...store.photoSize, timeoutMs: 1234 };
+    const timeout = vi.spyOn(AbortSignal, "timeout");
+    const fetch = vi.fn(async () => image());
+    await importPeople(store, [row({ photoUrl: PHOTO })], deps(fetch));
+    expect(timeout).toHaveBeenCalledWith(1234);
+    expect((fetch.mock.calls[0] as unknown as [string, RequestInit])[1]).toMatchObject({ signal: expect.any(AbortSignal) });
+    timeout.mockRestore();
+  });
+
+  it("copies photos a few at a time, not one after another (review on PR #39)", async () => {
+    const store = new FakePeopleStore();
+    store.photoSize = { ...store.photoSize, concurrency: 3 };
+    let running = 0;
+    let most = 0;
+    const fetch = vi.fn(async () => {
+      running++;
+      most = Math.max(most, running);
+      await new Promise((r) => setTimeout(r, 5));
+      running--;
+      return image();
+    });
+    const rows = Array.from({ length: 7 }, (_, i) => row({ googleId: `people/c${i}`, name: `P${i}`, photoUrl: PHOTO }));
+    const result = await importPeople(store, rows, { fetch, newId: (() => { let n = 0; return () => `photo-${n++}`; })() });
+    expect(result).toMatchObject({ added: 7, photosMissed: 0 });
+    expect(most).toBe(3);
   });
 
   it("never fetches a photo from anywhere but Google's photo host (review focus 1)", async () => {

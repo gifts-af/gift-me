@@ -2,7 +2,7 @@
 -- and the address, and one live person per user per Google contact.
 begin;
 \ir _helpers.psql
-select plan(9);
+select plan(10);
 
 select tests.create_user('a@example.com') as a \gset
 select tests.create_user('b@example.com') as b \gset
@@ -51,6 +51,10 @@ select lives_ok(
 select lives_ok(
   $$select concierge.add_person('Pat', 'friend', array['christmas'], null, null, null, null, null)$$,
   'the positional ALL-21 call still works');
+
+select is(
+  (select concierge.setting_int('contact_photo_timeout_ms') * 0 + concierge.setting_int('contact_photo_concurrency')), 6,
+  'the photo copy settings exist');
 
 select * from finish();
 rollback;

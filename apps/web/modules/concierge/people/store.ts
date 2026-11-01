@@ -78,7 +78,7 @@ export interface PeopleStore {
   setPhotoPath(personId: string, path: string | null): Promise<boolean>;
   /** Google contact ids of the caller's live imported people (ALL-24). */
   importedContactIds(): Promise<string[]>;
-  photoSettings(): Promise<{ px: number; maxBytes: number }>;
+  photoSettings(): Promise<{ px: number; maxBytes: number; timeoutMs: number; concurrency: number }>;
   /** Puts a photo in the person-photos bucket; false when storage says no. */
   uploadPhoto(path: string, bytes: Uint8Array, contentType: string): Promise<boolean>;
   deletePerson(personId: string): Promise<void>;
@@ -306,11 +306,13 @@ export function createSupabasePeopleStore(): PeopleStore {
     },
 
     async photoSettings() {
-      const [px, maxBytes] = await Promise.all([
+      const [px, maxBytes, timeoutMs, concurrency] = await Promise.all([
         appSettingInt("person_photo_px"),
         appSettingInt("person_photo_max_upload_bytes"),
+        appSettingInt("contact_photo_timeout_ms"),
+        appSettingInt("contact_photo_concurrency"),
       ]);
-      return { px, maxBytes };
+      return { px, maxBytes, timeoutMs, concurrency };
     },
 
     async uploadPhoto(path, bytes, contentType) {

@@ -58,3 +58,11 @@ grant execute on function concierge.add_person(text, text, text[], int, int, int
 -- add someone twice.
 create unique index people_user_google_contact_key on public.people (user_id, google_contact_id)
   where google_contact_id is not null and deleted_at is null;
+
+-- Copying contact photos (T23): each Google photo fetch gives up after this
+-- long, and this many are copied at once, so one slow photo can't stall an
+-- import.
+insert into concierge.app_settings (key, value, description) values
+  ('contact_photo_timeout_ms', '4000', 'How long to wait for one Google contact photo when importing, in milliseconds.'),
+  ('contact_photo_concurrency', '6', 'How many Google contact photos an import copies at once.')
+on conflict (key) do nothing;

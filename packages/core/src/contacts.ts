@@ -111,25 +111,33 @@ export function contactsFromPeopleApi(connections: unknown[]): GoogleContact[] {
 // What people call family in their contacts. Matched on the whole name or
 // nickname, or its first word ("Mom cell", "Grandma Jo"), never inside a word.
 const HINTS: [Relationship, string[]][] = [
-  ["mother", ["mom", "mum", "mommy", "mummy", "mama", "mother", "ma"]],
+  ["mother", ["mom", "mum", "mommy", "mummy", "mama", "mother"]],
   ["father", ["dad", "daddy", "father", "pops"]],
-  ["grandmother", ["grandma", "grandmother", "granny", "gran", "nana", "nan", "grammy", "meemaw"]],
-  ["grandfather", ["grandpa", "grandfather", "granddad", "grandad", "gramps", "poppy"]],
+  ["grandmother", ["grandma", "grandmother", "granny", "nana", "grammy", "meemaw"]],
+  ["grandfather", ["grandpa", "grandfather", "granddad", "grandad", "gramps"]],
   ["wife", ["wife", "wifey"]],
   ["husband", ["husband", "hubby"]],
 ];
+// These are also first names ("Poppy Jones", "Ma Lin"), so they count only as
+// the whole name or nickname.
+const WHOLE_ONLY: [Relationship, string[]][] = [
+  ["mother", ["ma"]],
+  ["grandmother", ["nan", "gran"]],
+  ["grandfather", ["poppy"]],
+];
 
-function firstWord(s: string): string {
-  return s.toLowerCase().split(/[^\p{L}]+/u).filter(Boolean)[0] ?? "";
-}
+const words = (s: string) => s.toLowerCase().split(/[^\p{L}]+/u).filter(Boolean);
 
 /** "Mom" → mother, "Grandma Jo" → grandmother; null when the name gives no hint. */
 export function guessRelationship(name: string, nickname: string | null): Relationship | null {
   for (const candidate of [nickname, name]) {
     if (!candidate) continue;
-    const word = firstWord(candidate);
-    const hit = HINTS.find(([, words]) => words.includes(word));
-    if (hit) return hit[0];
+    const w = words(candidate);
+    if (w.length === 0) continue;
+    const first = HINTS.find(([, list]) => list.includes(w[0]));
+    if (first) return first[0];
+    const whole = w.length === 1 && WHOLE_ONLY.find(([, list]) => list.includes(w[0]));
+    if (whole) return whole[0];
   }
   return null;
 }
