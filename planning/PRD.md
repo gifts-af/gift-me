@@ -211,7 +211,7 @@ Also tracked **[Claude's call]:**
 | Phase | Scope |
 |---|---|
 | **MVP (personal use)** | **No target date; it ships when it's ready (D26).** Everything marked **M**, plus **S** if time allows. Chrome extension, web app that works on phones, email. US only. **[Claude's call]** |
-| **Public launch** | Form a business entity (enables capped single-use virtual cards and paying for users). Billing (subscription plus per-gift fee to test, about $8–15/mo plus a small per-gift fee per research), text messages, privacy compliance, recipient opt-in and recipient-entered addresses, more import sources, a second browser. |
+| **Public launch** | Form a business entity (enables capped single-use virtual cards and paying for users). Billing (subscription plus per-gift fee to test, about $8–15/mo plus a small per-gift fee per research), text messages, privacy compliance, recipient opt-in and recipient-entered addresses, more import sources (ALL-67: contact file upload covering Apple, Outlook, LinkedIn and spreadsheets; Microsoft; the Android contact picker. Facebook, Instagram, WhatsApp, BeReal and Snapchat offer no way to import friends), a second browser. |
 | **Later** | Auto-buy without a reply, gift card fallback, household sharing, gift notes and wrapping, native apps, season budgets, connecting to gift lists (a loved one's list feeds their profile and ideas). |
 
 The concierge is one of three products on a wider platform (D31–D35). The platform roadmap and go-to-market plan are in [`strategy.md`](strategy.md).
