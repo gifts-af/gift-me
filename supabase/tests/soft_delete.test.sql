@@ -23,8 +23,8 @@ insert into concierge.gift_rounds (user_id, person_id, occasion_id, occasion_yea
 values (:'a', :'mom', :'bday', 2026, '2026-03-14', '2026-03-05', 10000, 'complete') returning id as old_round \gset
 insert into concierge.gift_ideas (user_id, round_id, title, price_cents, est_total_cents, rank)
 values (:'a', :'old_round', 'Garden kneeler', 3500, 4200, 1) returning id as idea \gset
-insert into concierge.orders (user_id, round_id, idea_id, max_price_cents, fee_cents, funding_mode, status)
-values (:'a', :'old_round', :'idea', 5000, 100, 'zinc_wallet', 'delivered');
+insert into concierge.orders (user_id, round_id, idea_id, max_price_cents, fee_cents, funding_mode, status, ship_to, ship_city, ship_state)
+values (:'a', :'old_round', :'idea', 5000, 100, 'zinc_wallet', 'delivered', 'recipient', 'Dayton', 'OH');
 insert into concierge.gift_rounds (user_id, person_id, occasion_id, occasion_year, occasion_date, ship_by_deadline, budget_cents, status, next_action_at)
 values (:'a', :'dad', :'fday', 2027, '2027-06-20', '2027-06-11', 8000, 'scheduled', now()) returning id as dad_round \gset
 

@@ -34,8 +34,8 @@ returning id as dad_round \gset
 insert into concierge.gift_ideas (user_id, round_id, title, price_cents, est_total_cents, rank)
 values (:'a', :'round', 'Garden kneeler', 3500, 4200, 1)
 returning id as idea \gset
-insert into concierge.orders (user_id, round_id, idea_id, max_price_cents, fee_cents, funding_mode)
-values (:'a', :'round', :'idea', 5000, 100, 'zinc_wallet')
+insert into concierge.orders (user_id, round_id, idea_id, max_price_cents, fee_cents, funding_mode, ship_to, ship_city, ship_state)
+values (:'a', :'round', :'idea', 5000, 100, 'zinc_wallet', 'recipient', 'Dayton', 'OH')
 returning id as order_id \gset
 insert into concierge.rejections (user_id, round_id, reason_code) values (:'a', :'round', 'already_owns');
 insert into concierge.reactions (user_id, round_id, rating, source) values (:'a', :'round', 'loved', 'web');
@@ -96,18 +96,18 @@ insert into concierge.gift_ideas (user_id, round_id, title, price_cents, est_tot
 values (:'a', :'round', 'Seed kit', 2000, 2600, 2)
 returning id as idea2 \gset
 select throws_ok(
-  format($q$insert into concierge.orders (user_id, round_id, idea_id, max_price_cents, fee_cents, funding_mode) values (%L, %L, %L, 1, 100, 'zinc_wallet')$q$, :'a', :'dad_round', :'idea2'),
+  format($q$insert into concierge.orders (user_id, round_id, idea_id, max_price_cents, fee_cents, funding_mode, ship_to, ship_city, ship_state) values (%L, %L, %L, 1, 100, 'zinc_wallet', 'recipient', 'Dayton', 'OH')$q$, :'a', :'dad_round', :'idea2'),
   '23503', null, 'an order can''t use an idea from a different round'
 );
 
 -- One live order per idea, so a retry or double approval can't buy twice.
 select throws_ok(
-  format($q$insert into concierge.orders (user_id, round_id, idea_id, max_price_cents, fee_cents, funding_mode) values (%L, %L, %L, 5000, 100, 'zinc_wallet')$q$, :'a', :'round', :'idea'),
+  format($q$insert into concierge.orders (user_id, round_id, idea_id, max_price_cents, fee_cents, funding_mode, ship_to, ship_city, ship_state) values (%L, %L, %L, 5000, 100, 'zinc_wallet', 'recipient', 'Dayton', 'OH')$q$, :'a', :'round', :'idea'),
   '23505', null, 'a second live order for the same idea is refused'
 );
 update concierge.orders set status = 'failed' where id = :'order_id';
 select lives_ok(
-  format($q$insert into concierge.orders (user_id, round_id, idea_id, max_price_cents, fee_cents, funding_mode) values (%L, %L, %L, 5000, 100, 'zinc_wallet')$q$, :'a', :'round', :'idea'),
+  format($q$insert into concierge.orders (user_id, round_id, idea_id, max_price_cents, fee_cents, funding_mode, ship_to, ship_city, ship_state) values (%L, %L, %L, 5000, 100, 'zinc_wallet', 'recipient', 'Dayton', 'OH')$q$, :'a', :'round', :'idea'),
   'after an order fails, the same idea can be ordered again'
 );
 
