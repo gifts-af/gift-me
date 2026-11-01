@@ -17,7 +17,8 @@ export function ImportFromGoogle({
   action: (previous: ImportResult | null, formData: FormData) => Promise<ImportResult>;
 }) {
   // A fresh checklist for each round (ALL-72): after "Import more people", and
-  // when the page comes back with a new list of imported contacts.
+  // when a later visit brings a new list of imported contacts. The import
+  // action deliberately doesn't refresh this page, or the result would vanish.
   const [round, setRound] = useState(0);
   return (
     <ImportChecklist
