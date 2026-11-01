@@ -44,6 +44,22 @@ describe("guided tour (ALL-46)", () => {
     expect(send()).toBeDisabled();
   });
 
+  it("sends the picks on to the next step", () => {
+    render(<Tour />);
+    goTo("pick");
+    fireEvent.click(screen.getByRole("button", { name: /Stoneware mug set/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Send 1 gift · $42" }));
+    expect(screen.getByText("Step 3 of 7")).toBeInTheDocument();
+  });
+
+  it("moves focus to each new step's caption, including the last", () => {
+    render(<Tour />);
+    next();
+    expect(document.activeElement).toBe(screen.getByRole("heading", { level: 1, name: TOUR_STEPS[1].caption }));
+    for (let i = 1; i < TOUR_STEPS.length - 1; i++) next();
+    expect(document.activeElement).toBe(screen.getByRole("heading", { level: 1, name: TOUR_STEPS[6].caption }));
+  });
+
   it("is honest that nothing was bought", () => {
     render(<Tour />);
     goTo("done");

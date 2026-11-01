@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlphaStrip } from "@/components/home/alpha-strip";
 import { HomeTopBar } from "@/components/home/home-top-bar";
 import { DoneScreen } from "./done-screen";
@@ -21,7 +21,21 @@ export function Tour() {
   const current = TOUR_STEPS[step];
   const last = step === TOUR_STEPS.length - 1;
 
-  const toggle = (set: React.Dispatch<React.SetStateAction<string[]>>) => (id: string) =>
+  // Each new step's caption takes focus, so keyboard and screen-reader users
+  // aren't dropped when a button they pressed disappears (the last step has
+  // no Next). Skipped on first render, so the page doesn't jump on load.
+  const caption = useRef<HTMLHeadingElement>(null);
+  const firstRender = useRef(true);
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false;
+      return;
+    }
+    caption.current?.focus();
+  }, [step]);
+  const advance = () => setStep((s) => Math.min(s + 1, TOUR_STEPS.length - 1));
+
+  const toggle =(set: React.Dispatch<React.SetStateAction<string[]>>) => (id: string) =>
     set((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
 
   return (
@@ -37,7 +51,7 @@ export function Tour() {
             Skip tour
           </Link>
         </div>
-        <h1 className="text-[22px] font-extrabold leading-tight tracking-tight" aria-live="polite">
+        <h1 ref={caption} tabIndex={-1} className="text-[22px] font-extrabold leading-tight tracking-tight outline-none">
           {current.caption}
         </h1>
 
@@ -49,6 +63,7 @@ export function Tour() {
             gifts={MOM_GIFTS}
             picked={momPicks}
             onToggle={toggle(setMomPicks)}
+            onSend={advance}
           />
         )}
         {current.id === "ship" && <ShipScreen />}
@@ -60,6 +75,7 @@ export function Tour() {
             gifts={DAD_IDEAS}
             picked={dadPicks}
             onToggle={toggle(setDadPicks)}
+            onSend={advance}
           />
         )}
         {current.id === "list" && <ListScreen />}
@@ -78,7 +94,7 @@ export function Tour() {
             )}
             <button
               type="button"
-              onClick={() => setStep((s) => s + 1)}
+              onClick={advance}
               className="min-h-12 flex-[2] rounded-lg bg-primary font-bold text-primary-foreground hover:bg-primary/90"
             >
               Next

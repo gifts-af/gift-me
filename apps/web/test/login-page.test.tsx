@@ -9,6 +9,9 @@ describe("sign-in page (ALL-46)", () => {
   it("says GiftsAF is invite only and offers a way to ask", () => {
     render(<LoginPage params={Promise.resolve({})} searchParams={Promise.resolve({})} />);
     expect(screen.getByText(/GiftsAF is invite only for now\./)).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Request access" })).toHaveAttribute("href", accessRequestHref());
+    const ask = screen.getByRole("link", { name: "Request access" });
+    expect(ask).toHaveAttribute("href", accessRequestHref());
+    // A 44 px tap target, like every other link (ui.md).
+    expect(ask).toHaveClass("min-h-11");
   });
 });

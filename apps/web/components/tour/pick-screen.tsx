@@ -9,12 +9,14 @@ export function PickScreen({
   gifts,
   picked,
   onToggle,
+  onSend,
 }: {
   title: string;
   banner: string;
   gifts: TourGift[];
   picked: string[];
   onToggle: (id: string) => void;
+  onSend: () => void;
 }) {
   const chosen = gifts.filter((g) => picked.includes(g.id));
   const total = chosen.reduce((sum, g) => sum + g.price, 0);
@@ -43,6 +45,7 @@ export function PickScreen({
       <button
         type="button"
         disabled={chosen.length === 0}
+        onClick={onSend}
         className="min-h-12 rounded-lg bg-primary font-bold text-primary-foreground disabled:opacity-45"
       >
         {chosen.length === 0

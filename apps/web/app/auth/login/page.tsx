@@ -16,7 +16,7 @@ export default function Page(props: PageProps<"/auth/login">) {
       {/* Invite only for now (ALL-46): say so, and offer a way to ask. */}
       <p className="text-center text-[14px] text-muted-foreground">
         {APP_NAME} is invite only for now. No invite?{" "}
-        <a href={accessRequestHref()} className="font-semibold text-foreground underline underline-offset-[3px]">
+        <a href={accessRequestHref()} className="inline-flex min-h-11 items-center font-semibold text-foreground underline underline-offset-[3px]">
           Request access
         </a>
       </p>
