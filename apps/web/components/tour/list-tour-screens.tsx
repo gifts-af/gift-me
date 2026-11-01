@@ -58,7 +58,7 @@ export function ShareScreen() {
 // The shared list as Mom sees it: she can claim, and sees what's taken.
 export function ClaimScreen({ claimed, onClaim }: { claimed: string[]; onClaim: (name: string) => void }) {
   return (
-    <Phone title="Your kid's list">
+    <Phone title="Your list, as Mom sees it">
       {MY_LIST.map((gift) => (
         <div key={gift.name} className="flex items-center gap-3 rounded-lg border p-3">
           <Thumb gift={gift} />
