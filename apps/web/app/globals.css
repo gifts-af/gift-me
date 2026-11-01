@@ -26,7 +26,7 @@
     --success-soft: 138 76% 97%;
     --warning: 26 90% 37%;
     --warning-soft: 48 100% 96%;
-    /* The home page's sticker and alpha strip (ALL-46), the same in both themes. */
+    /* The home page's sticker and the logo's tag (ALL-46, ALL-48), the same in both themes. */
     --sticker: 48 96% 53%;
     --sticker-foreground: 240 6% 10%;
     --border: 240 6% 90%;

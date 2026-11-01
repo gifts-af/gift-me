@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { AlphaStrip } from "@/components/home/alpha-strip";
 import { HomeTopBar } from "@/components/home/home-top-bar";
 import { APP_NAME } from "@/lib/brand";
 import { RequestAccessForm } from "./request-access-form";
@@ -14,7 +13,6 @@ export const metadata: Metadata = {
 export default function RequestAccessPage() {
   return (
     <div className="min-h-svh bg-background text-foreground">
-      <AlphaStrip />
       <HomeTopBar />
       <main className="mx-auto flex w-full max-w-md flex-col gap-5 px-4 pb-12 pt-6">
         <div className="flex flex-col gap-1.5">

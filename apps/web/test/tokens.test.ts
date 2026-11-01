@@ -37,7 +37,7 @@ const expected = {
     destructive: "0 74% 42%",
     success: "142 72% 29%",
     warning: "26 90% 37%",
-    // The home page's sticker and alpha strip (ALL-46): the same yellow in both themes.
+    // The home page's sticker and the logo's tag (ALL-46, ALL-48): the same yellow in both themes.
     sticker: "48 96% 53%",
     "sticker-foreground": "240 6% 10%",
   },

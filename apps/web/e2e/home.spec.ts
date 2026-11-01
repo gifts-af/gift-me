@@ -6,7 +6,7 @@ test("a signed-out visitor sees the home page at / on a phone", async ({ page })
   await page.goto("/");
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("heading", { name: "Gifting, handled AF." })).toBeVisible();
-  await expect(page.getByText("Early alpha. Lots is broken. Poke around anyway.")).toBeVisible();
+  await expect(page.getByText(/Lots is broken/)).toHaveCount(0);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);
 });
