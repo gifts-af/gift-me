@@ -51,10 +51,11 @@ for (const colorScheme of ["dark", "light"] as const) {
 
 // ALL-61: on a computer the tour uses two columns, caption left and phone right;
 // on a phone it stays one column: caption, then the screen, then the buttons.
-for (const width of [375, 1280]) {
-  test(`the tour lays out for a ${width} px screen`, async ({ page }) => {
+// ALL-71: the list tour uses the same frame, so the same rules.
+for (const [tour, width] of [["/tour", 375], ["/tour", 1280], ["/tour/list", 375], ["/tour/list", 1280]] as const) {
+  test(`the tour at ${tour} lays out for a ${width} px screen`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
-    await page.goto("/tour");
+    await page.goto(tour);
     await page.getByRole("button", { name: "Next", exact: true }).click();
     const caption = (await page.getByRole("heading", { level: 1 }).boundingBox())!;
     const screen = (await page.getByTestId("tour-screen").boundingBox())!;
@@ -86,6 +87,17 @@ test("take the tour, then sign in with an invite", async ({ page }) => {
   await page.getByLabel("Password").fill(TEST_USER.password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
+});
+
+test("take the list tour from the home page (ALL-71)", async ({ page }) => {
+  await page.goto("/");
+  await listHero(page).getByRole("link", { name: "Take the tour" }).click();
+  await expect(page).toHaveURL(/\/tour\/list$/);
+  for (let i = 0; i < 4; i++) {
+    await page.getByRole("button", { name: "Next", exact: true }).click();
+  }
+  await expect(page.getByText("Step 5 of 5")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Request access" })).toBeVisible();
 });
 
 test("request access opens over the page and checks its fields (ALL-47, ALL-53)", async ({ page }) => {

@@ -25,6 +25,7 @@ export function isPublicPath(pathname: string) {
     pathname.startsWith("/auth") ||
     pathname === "/welcome" ||
     pathname === "/tour" ||
+    pathname === "/tour/list" ||
     pathname === "/request-access" ||
     // The link-preview image: crawlers like LinkedIn's are never signed in (ALL-55).
     pathname.startsWith("/opengraph-image") ||

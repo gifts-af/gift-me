@@ -13,7 +13,16 @@ export const TOUR_STEPS = [
   { id: "end", caption: "That's where we're heading." },
 ] as const;
 
-export type TourStepId = (typeof TOUR_STEPS)[number]["id"];
+// The list tour (ALL-71): your own list, sharing it, and claims kept secret.
+export const LIST_TOUR_STEPS = [
+  { id: "add", caption: "Add anything you'd like, from any shop." },
+  { id: "share", caption: "Someone asks what you want? Text them one link." },
+  { id: "claim", caption: "They open it and claim a gift, so nobody doubles up." },
+  { id: "surprise", caption: "You never see who got what. It's still a surprise." },
+  { id: "end", caption: "That's your list." },
+] as const;
+
+export type TourStepId =(typeof TOUR_STEPS)[number]["id"];
 
 export type TourPerson = { name: string; occasion: string; source: string; status: string };
 

@@ -22,6 +22,7 @@ describe("isPublicPath", () => {
     // The home page and tour (ALL-46).
     "/welcome",
     "/tour",
+    "/tour/list",
     // The logo image at the top of every email (ALL-71).
     "/email-logo.png",
     "/request-access",
