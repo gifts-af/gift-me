@@ -70,3 +70,38 @@
     margin: 0;
   }
 }
+
+/* The few building blocks of the popup, matching design/mockups/ALL-41.html.
+   Every control is at least 44px tall and shows a teal focus ring. */
+@layer components {
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+  .btn-primary {
+    @apply focus-ring inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-primary px-5 text-base font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-45;
+  }
+  .btn-secondary {
+    @apply focus-ring inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-secondary px-5 text-base font-semibold text-secondary-foreground disabled:cursor-not-allowed disabled:opacity-45;
+  }
+  .btn-link {
+    @apply focus-ring min-h-11 rounded-md px-1 text-[15px] text-muted-foreground underline underline-offset-[3px];
+  }
+  .input {
+    @apply focus-ring min-h-11 w-full rounded-md border border-input bg-background px-3 py-2.5 text-base font-normal;
+  }
+  .field {
+    @apply flex flex-col gap-1.5 text-sm font-semibold;
+  }
+  .person {
+    @apply focus-ring flex min-h-11 w-full items-center gap-3 rounded-lg border border-border bg-card p-3 text-left;
+  }
+  .person[aria-pressed="true"] {
+    @apply border-primary shadow-[0_0_0_1px_hsl(var(--primary))];
+  }
+  .check {
+    @apply grid h-6 w-6 flex-none place-items-center rounded-md border-[1.5px] border-input text-transparent;
+  }
+  .person[aria-pressed="true"] .check {
+    @apply border-primary bg-primary text-primary-foreground;
+  }
+}

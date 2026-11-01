@@ -33,6 +33,18 @@ importers:
       '@eslint/js':
         specifier: ^9
         version: 9.39.5
+      '@testing-library/dom':
+        specifier: ^10.4.2
+        version: 10.4.2
+      '@testing-library/jest-dom':
+        specifier: ^7.0.1
+        version: 7.0.1(@testing-library/dom@10.4.2)(vitest@5.0.5)
+      '@testing-library/react':
+        specifier: ^16.3.3
+        version: 16.3.3(@testing-library/dom@10.4.2)(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@testing-library/user-event':
+        specifier: ^14.6.8
+        version: 14.6.8(@testing-library/dom@10.4.2)
       '@types/chrome':
         specifier: 0.3.7
         version: 0.3.7
@@ -60,6 +72,9 @@ importers:
       globals:
         specifier: ^16
         version: 16.5.0
+      jsdom:
+        specifier: ^29.1.1
+        version: 29.1.1(@noble/hashes@1.8.0)
       postcss:
         specifier: ^8
         version: 8.5.31
