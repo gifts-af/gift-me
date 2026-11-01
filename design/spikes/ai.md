@@ -1,6 +1,6 @@
 # Spike: AI capture extraction and gift ideas (W1-3, ALL-17)
 
-Date started: 2026-10-25. Status: **done (core question answered).** Prompt v1–v3 tested on made-up fixtures. Follow-ups (screenshots, a cheaper model, resolving through Zinc, key rotation) are in **ALL-42**.
+Date started: 2026-10-25. Status: **done.** Prompt v1–v3 tested on made-up fixtures (ALL-17). Follow-ups done 2026-11-01 in **ALL-42**: screenshots, Sonnet and Haiku against Opus, and resolving ideas through Zinc.
 
 ## Summary
 
@@ -8,7 +8,8 @@ Date started: 2026-10-25. Status: **done (core question answered).** Prompt v1�
 - **Gift ideas are specific and grounded *when captured facts are included*.** Without them they're generic. With them, Dad's top idea is the vise he said broke. **Captures are the product's edge.**
 - **Cost is higher than the design's estimate but within budget.** A full round (brainstorm with 3 searches, plus rank) costs **~$0.30–0.45**, against the design's ~$0.13. About a dozen rounds a month across 3 users is roughly $4–12, well inside the $60 cap.
 - **The AI's prices and links aren't reliable.** Keep the resolve step: the AI returns a `product_search` string, and Zinc's search and offers confirm the item, price and URL.
-- Spike spend: **$5.85** of gateway credit.
+- **ALL-42: Sonnet 5.5 is the default for every task** (T39). Ideas nearly as good as Opus's, a full round about **$0.20**. Haiku 5.5 is 50× cheaper but missed Dad's main need. Screenshots work (~1¢ each on Sonnet). Resolving through Zinc needs rules: matching brand, new only, live price ([below](#resolve-through-zinc-all-42)).
+- Spike spend: **$5.85** of gateway credit (ALL-17), plus **$0.60** and 23¢ of Zinc lookups (ALL-42).
 
 ## Setup
 
@@ -18,7 +19,7 @@ Date started: 2026-10-25. Status: **done (core question answered).** Prompt v1�
   3. Buying **paid credit** (prepaid, not a subscription) unlocks them. The balance after the top-up was $25.
 - **Model ID:** the gateway's ID is `anthropic/claude-opus-5.5` (with a dot). The design's `anthropic/claude-opus-5-5` is wrong. Always take IDs from `GET https://ai-gateway.vercel.sh/v1/models`.
 - **Every response reports its own cost** (`usage.cost` on Chat Completions), so the spike measures real cost instead of estimating it.
-- Key: `gift-concierge-ai-spike`, under allensforever711, in `spikes/ai/.env` (gitignored). Rotate it at the end of the spike; it was pasted into a Claude session.
+- Key: since ALL-42 the spike uses the shared dev key, `AI_GATEWAY_API_KEY` in Vercel's Development variables, from `apps/web/.env.development.local` (`vercel env pull`, T39). The old `spikes/ai/.env` key is no longer used. No rotation was needed: the owner's 2026-11-01 call is that a key seen in a session isn't rotated (README > Environments).
 
 ## Web search through the gateway: confirmed
 
@@ -87,6 +88,34 @@ What went wrong with the naive version (take the first search result, then the c
 
 These rules are now in design §6.3. Cost: 23 lookups (23¢) across the runs; the app wallet has about 33¢ left.
 
+## Model comparison (ALL-42)
+
+Same inputs as the Opus runs: all 10 text captures, and prompt v3 ideas for Dad and Priya (with the Opus-extracted captured facts, so only the idea step differs). `node spikes/ai/run.mjs extract|ideas <model>`; outputs end in `-claude-sonnet-5.5.json` and `-claude-haiku-5.5.json`. 2026-11-01.
+
+| | Opus 5.5 | Sonnet 5.5 | Haiku 5.5 |
+|---|---|---|---|
+| Extract, per text capture | ~1¢, 3–7 s | ~0.45¢, 2–3.5 s | ~0.02¢, 1–3 s |
+| Facts found (10 captures) | 58 | 56 | 47 |
+| Sensitive traps | Pass (one guess: "new parent, may like baby gear") | Pass (one: "owns baby monitor app") | Pass |
+| Brainstorm (8 ideas, 3 searches) | $0.24–0.46, 35–56 s | ~$0.18, 42–46 s | ~$0.04, 27–33 s |
+| Rank | 2–3.5¢ | ~1.2¢ | ~0.1¢ |
+| Dad's top pick | Kingfisher rotary vise (9.5), magnifying lamp | Maxcatch rotary vise (9), fine scissors, fly box, lamp | **$15 hook pack (8)**; the vise drops to #2 with no brand |
+| Priya's top pick | Onyx beans like hers | Two-bag Onyx Ethiopian taster | Onyx restock |
+
+**Choice (T39):** Sonnet 5.5 for every task. It's nearly as good as Opus at about half to two thirds of the cost. Haiku misses the person's main need and catches fewer facts, which is the product's edge. Opus stays the fallback.
+
+## Screenshots (ALL-42)
+
+Three phone-size screenshots (Pixel 7, 1082×2202 px) in `spikes/ai/fixtures/screens/`: the Onyx Tropical Weather product page and the Ciele GOCap collection (real pages), and a mock Instagram post built from the `dad-1` text (no real account). `node spikes/ai/run.mjs screens <model>`. The repo is public, so the two real-page screenshots aren't committed: `node spikes/ai/screens.mjs` recreates all three.
+
+| | Opus | Sonnet | Haiku |
+|---|---|---|---|
+| Cost per screenshot (~3.8k input tokens) | ~2¢ | **~1¢** | 0.06¢ |
+| Dad's post | All facts: wants a rotary vise, old one worn out, size 18 hooks | All facts | All facts |
+| Product pages | Brand, product and size, low confidence (0.4–0.55) | Brand and product, low confidence | Missed the Onyx brand; one fact for Ciele |
+
+Vision works through the gateway with a data URL in Chat Completions. A bare product page is weak evidence on its own, and every model rightly gave it low confidence. The user confirms facts anyway (C-3). Shrinking screenshots before sending would cut cost further; not needed at these prices.
+
 ## Findings for the design
 
 1. **Model ID:** `anthropic/claude-opus-5.5` (§2.1, §7 say `claude-opus-5-5`).
@@ -95,10 +124,10 @@ These rules are now in design §6.3. Cost: 23 lookups (23¢) across the runs; th
 4. **Captured facts must reach idea generation.** This is obvious from the design (§3.1), but the spike showed how much quality depends on it.
 5. **Cost (§7, §10):** brainstorm about $0.30, extraction about $0.01, rank about $0.03. Update the estimates.
 
-## Still to do (moved to ALL-42)
+## Follow-ups (ALL-42, done)
 
-- [ ] **Screenshots (vision):** the fixtures are text only. Test extraction from a real screenshot, which is what the extension sends (§6.2).
-- [ ] **Cheaper model:** run v3 on Sonnet 5.5 and compare quality and cost (`node spikes/ai/run.mjs ideas anthropic/claude-sonnet-5.5`).
+- [x] **Screenshots (vision):** done, see [Screenshots](#screenshots-all-42).
+- [x] **Cheaper model:** done, see [Model comparison](#model-comparison-all-42). Sonnet 5.5 for every task (T39).
 - [x] **Resolve through Zinc:** done, see [Resolve through Zinc](#resolve-through-zinc-all-42). The app account's leftover 56¢ was enough; no funding needed.
 - [x] Update design §7 with real costs and the corrected model ID
-- [ ] Rotate the gateway key (it was pasted into a Claude session)
+- [x] Gateway key: the spike now uses the shared dev key (T39). Rotation isn't needed (owner's call, 2026-11-01); the old `gift-concierge-ai-spike` key is just unused and can be deleted.

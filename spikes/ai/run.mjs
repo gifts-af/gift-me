@@ -14,7 +14,8 @@ import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const here = (p) => fileURLToPath(new URL(p, import.meta.url));
-const KEY = readFileSync(here('./.env'), 'utf8').match(/AI_GATEWAY_API_KEY=(\S+)/)[1];
+// The shared dev key from Vercel's Development env (`vercel env pull` writes this file), T39.
+const KEY = readFileSync(here('../../apps/web/.env.development.local'), 'utf8').match(/^AI_GATEWAY_API_KEY="?([^"\s]+)/m)[1];
 const GATEWAY = 'https://ai-gateway.vercel.sh';
 const MODEL = process.argv[3] ?? 'anthropic/claude-opus-5.5';
 // Output files: the Opus runs keep their original names; other models get a suffix.

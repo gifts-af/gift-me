@@ -1,0 +1,310 @@
+{
+  "model": "anthropic/claude-haiku-5.5",
+  "results": [
+    {
+      "person": "dad",
+      "brainstorm": {
+        "ideas": [
+          {
+            "title": "Replacement rotary fly-tying vise with travel case",
+            "product_search": "Kylebooker Rotary Fly Tying Vise with Travel Case",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 70.54,
+            "fits_facts": [
+              "wants: needs a new rotary fly-tying vise (captured)",
+              "owns: old fly-tying vise (about 20 years old, worn out) (captured)",
+              "constraint: new vise jaws should securely hold small hooks (size 18 and smaller) (captured)",
+              "interest: fly tying (captured)"
+            ],
+            "why": "He needs a new rotary vise and the old one is worn out, so replacing it is the top priority. This listing was about $70.54 on Amazon's best-selling list, which leaves little room for shipping. Confirm the listing's hook range covers size 18 and smaller before ordering, because I could not verify that from the search results."
+          },
+          {
+            "title": "Tiemco TMC 100 dry fly hooks, sizes 14 to 18",
+            "product_search": "Tiemco TMC 100 dry fly hooks size 18",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 15,
+            "fits_facts": [
+              "interest: ties Adams dry flies (captured)",
+              "interest: dry fly fishing for trout (captured)",
+              "constraint: new vise jaws should securely hold small hooks (size 18 and smaller) (captured)"
+            ],
+            "why": "A standard Adams dry fly is commonly tied on a Tiemco TMC 100 in sizes 18 to 10, so a supply of size 18 hooks gives him a consumable he will use right away. The price is an estimate I did not verify."
+          },
+          {
+            "title": "Dry fly hackle cape in brown and grizzly",
+            "product_search": "Whiting dry fly hackle cape brown grizzly",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 20,
+            "fits_facts": [
+              "interest: ties Adams dry flies (captured)",
+              "interest: fly tying (captured)"
+            ],
+            "why": "The Adams uses a mix of brown and grizzly rooster hackle, so a cape of both colors suits this specific pattern. The price is an estimate I did not verify, and I did not confirm the exact cape listing."
+          },
+          {
+            "title": "Dr. Slick fly tying scissors",
+            "product_search": "Dr. Slick fly tying scissors",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 25,
+            "fits_facts": [
+              "interest: fly tying (captured)",
+              "constraint: new vise jaws should securely hold small hooks (size 18 and smaller) (captured)"
+            ],
+            "why": "Fine scissors are a standard tying tool for trimming small dry fly materials, and this brand appears in fly-tying tool sets. The price is an estimate and the exact model has not been checked."
+          },
+          {
+            "title": "Loon Outdoors Super Fly dry fly floatant",
+            "product_search": "Loon Outdoors Super Fly floatant",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 10,
+            "fits_facts": [
+              "interest: dry fly fishing for trout (captured)",
+              "interest: fishing trips to the Upper Delaware River (captured)"
+            ],
+            "why": "Keeping small dry flies floating matters on trout water, and this is a low-cost consumable that fits his dry fly fishing. The price is an estimate I did not verify."
+          },
+          {
+            "title": "Fluorocarbon tippet 6X or 7X spool",
+            "product_search": "Rio fluorocarbon tippet 6X spool",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 12,
+            "fits_facts": [
+              "interest: dry fly fishing for trout (captured)",
+              "constraint: new vise jaws should securely hold small hooks (size 18 and smaller) (captured)",
+              "interest: fishing trips to the Upper Delaware River (captured)"
+            ],
+            "why": "Fine tippet is needed to fish size 18 dry flies on trout water, so a spool adds to his fishing without duplicating a tool. The price is an estimate and the exact spool is unverified."
+          },
+          {
+            "title": "Pegboard hook and bin organizer for the workshop wall",
+            "product_search": "pegboard hooks assortment workshop wall organizer",
+            "retailer_hint": "Walmart",
+            "est_price_usd": 30,
+            "fits_facts": [
+              "interest: workshop wall storage and organization (captured)",
+              "interest: woodworking / home workshop (captured)",
+              "dislike: clutter"
+            ],
+            "why": "A wall organizer helps keep the workshop tidy, which fits his wall-storage interest and his dislike of clutter. It is a general stock item, not a personalized one, and the price is an estimate."
+          },
+          {
+            "title": "Wall-mounted bar clamp rack",
+            "product_search": "wall mounted bar clamp rack",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 35,
+            "fits_facts": [
+              "interest: woodworking / home workshop (captured)",
+              "interest: workshop wall storage and organization (captured)",
+              "dislike: clutter",
+              "owns: has nearly every hand tool"
+            ],
+            "why": "A wall rack for clamps is a storage item rather than a hand tool, so it does not duplicate what he owns. It supports his workshop wall-storage interest and keeps clutter off the bench. The price is an estimate and the exact model is unverified."
+          }
+        ],
+        "input": 43918,
+        "output": 5447,
+        "searches": 3,
+        "cost": 0.0371153,
+        "secs": 27.323
+      },
+      "rank": {
+        "ranked": [
+          {
+            "title": "Tiemco TMC 100 dry fly hooks, sizes 14 to 18",
+            "reason": "He ties Adams dry flies and fishes them on the Upper Delaware, so a pack of size 18 hooks is something he'll use right away.",
+            "score_0_10": 8
+          },
+          {
+            "title": "Replacement rotary fly-tying vise with travel case",
+            "reason": "His 20-year-old vise is worn out, so a new rotary one addresses his top need, but at $70.54 it may exceed the $75 total once shipping is added.",
+            "score_0_10": 7
+          },
+          {
+            "title": "Fluorocarbon tippet 6X or 7X spool",
+            "reason": "He fishes dry flies on Upper Delaware trout water, and size 18 flies need fine tippet to fish well.",
+            "score_0_10": 6
+          },
+          {
+            "title": "Wall-mounted bar clamp rack",
+            "reason": "His woodworking shop and interest in wall storage make a clamp rack a useful way to clear bench clutter, though he may already have a storage solution.",
+            "score_0_10": 5
+          }
+        ],
+        "dropped": [
+          {
+            "title": "Dr. Slick fly tying scissors",
+            "why": "He already owns nearly every hand tool, and the exact model and price were not verified."
+          },
+          {
+            "title": "Dry fly hackle cape in brown and grizzly",
+            "why": "The exact listing was not confirmed and the price is an unverified estimate, so the gift is weakly grounded."
+          },
+          {
+            "title": "Loon Outdoors Super Fly dry fly floatant",
+            "why": "A low-cost consumable with weak personal grounding; it is a generic add-on rather than a strong gift."
+          },
+          {
+            "title": "Pegboard hook and bin organizer for the workshop wall",
+            "why": "A generic stock item not tied to a specific need, and it adds more storage hardware when he dislikes clutter."
+          }
+        ],
+        "tokens": 3921,
+        "cost": 0.0009857,
+        "secs": 7.14
+      }
+    },
+    {
+      "person": "priya",
+      "brainstorm": {
+        "ideas": [
+          {
+            "title": "GU Energy Original Gel 24-count assorted flavors",
+            "product_search": "GU Energy Original Energy Gels Assorted Flavors 24 Count",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 49,
+            "fits_facts": [
+              "interest: running, training for a marathon",
+              "interest: training for the Chicago Marathon (about 4 weeks out) (captured)",
+              "diet: vegan"
+            ],
+            "why": "A race-training stock-up for the final weeks before the marathon. The listing shows the gels are vegan, and Amazon lists free shipping on qualified orders, so the total stays near $49. Nothing she owns overlaps with this."
+          },
+          {
+            "title": "Hario V60 size 02 white paper filters, 100 count",
+            "product_search": "Hario V60 Paper Coffee Filters Size 02 White 100 Count VCF-02-100W",
+            "retailer_hint": "Walmart",
+            "est_price_usd": 11,
+            "fits_facts": [
+              "owns: Hario V60 pour-over dripper (captured)",
+              "interest: pour-over coffee (captured)",
+              "style: minimalist kitchen, keeps only items used weekly (captured)"
+            ],
+            "why": "A consumable for the V60 she already uses daily, so it adds no clutter. It is listed at Walmart for $10.75, and a 100-count box lasts months."
+          },
+          {
+            "title": "Balega Hidden Comfort no-show running socks",
+            "product_search": "Balega Hidden Comfort Performance No Show Athletic Running Socks for Men and Women",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 18,
+            "fits_facts": [
+              "interest: running, training for a marathon",
+              "interest: marathon running (captured)",
+              "style: minimalist"
+            ],
+            "why": "Performance running socks are a practical marathon-training item. A single pair was listed on Amazon around $17.75, and a plain, low-profile design suits a minimalist. Her current sock supply is unknown, so choose a color that works for her."
+          },
+          {
+            "title": "Nuun Sport electrolyte tablets variety pack",
+            "product_search": "Nuun Sport Electrolyte Tablets Variety Pack",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 15,
+            "fits_facts": [
+              "interest: running, training for a marathon",
+              "interest: training for the Chicago Marathon (about 4 weeks out) (captured)"
+            ],
+            "why": "Hydration tablets suit long training runs in the weeks before a marathon. They are small and light to store. Price is an estimate; I could not verify the current listing in this session, so check the vegan label before buying."
+          },
+          {
+            "title": "TriggerPoint GRID mini foam roller",
+            "product_search": "TriggerPoint GRID Mini Foam Roller",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 25,
+            "fits_facts": [
+              "interest: running, training for a marathon",
+              "interest: training for the Chicago Marathon (about 4 weeks out) (captured)",
+              "style: minimalist"
+            ],
+            "why": "A compact recovery tool for a runner in marathon training. It is a single, simple object with no kitchen clutter. Price is an estimate that I did not verify in this session."
+          },
+          {
+            "title": "Onyx Coffee Lab Ethiopian single-origin whole bean coffee, 12 oz",
+            "product_search": "Onyx Coffee Lab Ethiopian single origin coffee beans",
+            "retailer_hint": "Onyx Coffee Lab online store",
+            "est_price_usd": 22,
+            "fits_facts": [
+              "owns: currently has Ethiopian beans from Onyx (captured)",
+              "brand: Onyx Coffee Lab (captured)",
+              "interest: coffee: Ethiopian single-origin beans (captured)",
+              "owns: Hario V60 pour-over dripper (captured)"
+            ],
+            "why": "A restock of the exact beans she is already brewing, since her current bag will run out. I did not find this product at Amazon, Walmart, Target or Best Buy, so the brand's own store is the fallback. Price is an estimate and I did not verify it."
+          },
+          {
+            "title": "Body Glide anti-chafing balm stick",
+            "product_search": "Body Glide Original Anti-Chafe Balm",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 12,
+            "fits_facts": [
+              "interest: running, training for a marathon",
+              "interest: training for the Chicago Marathon (about 4 weeks out) (captured)",
+              "style: minimalist"
+            ],
+            "why": "A small, single-purpose item for long-distance runners, and it is easy to carry. I did not verify the current price or vegan status in this session, so check the label before buying."
+          },
+          {
+            "title": "Hydro Flask 21 oz insulated water bottle",
+            "product_search": "Hydro Flask 21 oz Standard Mouth Water Bottle",
+            "retailer_hint": "Amazon",
+            "est_price_usd": 40,
+            "fits_facts": [
+              "interest: running, training for a marathon",
+              "style: minimalist",
+              "avoid: kitchen gadgets or extra mugs that add clutter (captured)"
+            ],
+            "why": "A simple insulated bottle for training runs, and it is not a mug or kitchen gadget. Price is an estimate that I did not verify in this session. Check her current bottle first so this does not duplicate one."
+          }
+        ],
+        "input": 53672,
+        "output": 6119,
+        "searches": 3,
+        "cost": 0.038426699999999994,
+        "secs": 33.141
+      },
+      "rank": {
+        "ranked": [
+          {
+            "title": "Onyx Coffee Lab Ethiopian single-origin whole bean coffee, 12 oz",
+            "reason": "Her Onyx Ethiopian beans are nearly gone, and she brews them daily in her V60, so a restock is a direct replacement she will use right away.",
+            "score_0_10": 8
+          },
+          {
+            "title": "Hario V60 size 02 white paper filters, 100 count",
+            "reason": "She brews pour-over every day with her Hario V60, so a box of filters is a consumable that adds no clutter and lasts months.",
+            "score_0_10": 7
+          },
+          {
+            "title": "GU Energy Original Gel 24-count assorted flavors",
+            "reason": "She is about four weeks from the Chicago Marathon, and these gels are listed as vegan fuel for the long runs; at about $49 it uses most of the budget, and shipping is unverified.",
+            "score_0_10": 7
+          },
+          {
+            "title": "Balega Hidden Comfort no-show running socks",
+            "reason": "She is training for a marathon, and low-profile performance socks suit her minimalist style, though her current sock supply is unknown, so pick a color she'd wear.",
+            "score_0_10": 6
+          }
+        ],
+        "dropped": [
+          {
+            "title": "Nuun Sport electrolyte tablets variety pack",
+            "why": "Price and vegan label were not verified, and the fit is weaker than the kept items."
+          },
+          {
+            "title": "TriggerPoint GRID mini foam roller",
+            "why": "Price was not verified, and it is a generic recovery item with a weaker link to her habits."
+          },
+          {
+            "title": "Body Glide anti-chafing balm stick",
+            "why": "Vegan status and price were not verified, so it is a risky pick."
+          },
+          {
+            "title": "Hydro Flask 21 oz insulated water bottle",
+            "why": "At about $40 it would crowd out the other gifts in the $60 budget, and she may already own a bottle."
+          }
+        ],
+        "tokens": 4081,
+        "cost": 0.0010117,
+        "secs": 7.005
+      }
+    }
+  ]
+}

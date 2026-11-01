@@ -1,0 +1,367 @@
+{
+  "model": "anthropic/claude-haiku-5.5",
+  "results": [
+    {
+      "capture": "dad-1",
+      "facts": [
+        {
+          "category": "interest",
+          "value": "fly tying",
+          "confidence": 0.95,
+          "evidence": "Tied a dozen Adams dry flies tonight"
+        },
+        {
+          "category": "interest",
+          "value": "dry fly fishing",
+          "confidence": 0.85,
+          "evidence": "#dryfly #troutbum"
+        },
+        {
+          "category": "interest",
+          "value": "trout fishing on the Upper Delaware",
+          "confidence": 0.8,
+          "evidence": "for the Upper Delaware trip"
+        },
+        {
+          "category": "owns",
+          "value": "fly tying vise (worn out, jaws no longer hold size 18 hooks)",
+          "confidence": 0.9,
+          "evidence": "My vise finally gave out after 20 years, the jaws won't hold a size 18 hook anymore"
+        },
+        {
+          "category": "wants",
+          "value": "rotary fly tying vise",
+          "confidence": 0.9,
+          "evidence": "Anyone have a rotary vise they swear by?"
+        },
+        {
+          "category": "style",
+          "value": "small hooks, size 18 and smaller",
+          "confidence": 0.6,
+          "evidence": "the jaws won't hold a size 18 hook anymore"
+        }
+      ],
+      "tokens": 924,
+      "cost": 0.0002444,
+      "secs": 1.743
+    },
+    {
+      "capture": "dad-2",
+      "facts": [
+        {
+          "category": "interest",
+          "value": "workshop organization",
+          "confidence": 0.6,
+          "evidence": "Board: Shop; Workshop wall storage ideas"
+        },
+        {
+          "category": "interest",
+          "value": "woodworking",
+          "confidence": 0.5,
+          "evidence": "Wall-mounted lumber rack, 4 tiers; keep every chisel in sight"
+        },
+        {
+          "category": "wants",
+          "value": "wall storage for chisels and hand tools",
+          "confidence": 0.35,
+          "evidence": "French cleat tool wall – keep every chisel in sight"
+        },
+        {
+          "category": "wants",
+          "value": "lumber storage rack",
+          "confidence": 0.3,
+          "evidence": "Wall-mounted lumber rack, 4 tiers"
+        },
+        {
+          "category": "style",
+          "value": "minimalist workshop with clear benches",
+          "confidence": 0.4,
+          "evidence": "Minimalist workshop: nothing on the bench"
+        },
+        {
+          "category": "interest",
+          "value": "magnetic tool storage for drill bits",
+          "confidence": 0.3,
+          "evidence": "Magnetic knife strip used for drill bits"
+        }
+      ],
+      "tokens": 1205,
+      "cost": 0.0003909,
+      "secs": 3.108
+    },
+    {
+      "capture": "maya-1",
+      "facts": [
+        {
+          "category": "interest",
+          "value": "35mm film photography",
+          "confidence": 0.9,
+          "evidence": "October photo dump on 35mm"
+        },
+        {
+          "category": "owns",
+          "value": "Canon AE-1 film camera",
+          "confidence": 0.9,
+          "evidence": "my Canon AE-1 deserves better than me"
+        },
+        {
+          "category": "wants",
+          "value": "Kodak Portra 400 film",
+          "confidence": 0.6,
+          "evidence": "ran out of Portra 400 halfway through"
+        },
+        {
+          "category": "interest",
+          "value": "shooting expired film stock",
+          "confidence": 0.5,
+          "evidence": "finished the roll on some expired Fuji"
+        }
+      ],
+      "tokens": 757,
+      "cost": 0.0001657,
+      "secs": 1.464
+    },
+    {
+      "capture": "maya-2",
+      "facts": [
+        {
+          "category": "wants",
+          "value": "clip-on full spectrum plant grow light, 3 heads, with timer",
+          "confidence": 0.9,
+          "evidence": "Added to Maya's Wish List · Dorm Stuff"
+        },
+        {
+          "category": "interest",
+          "value": "houseplants or indoor plant growing",
+          "confidence": 0.6,
+          "evidence": "Plant Grow Light added to Maya's Wish List"
+        },
+        {
+          "category": "constraint",
+          "value": "needs compact lighting for small space that clips onto desk or shelf",
+          "confidence": 0.6,
+          "evidence": "Perfect for small spaces, clips onto a desk or shelf; Dorm Stuff"
+        }
+      ],
+      "tokens": 804,
+      "cost": 0.0001736,
+      "secs": 1.362
+    },
+    {
+      "capture": "june-1",
+      "facts": [
+        {
+          "category": "interest",
+          "value": "bird watching",
+          "confidence": 0.8,
+          "evidence": "The cardinals are back at my feeder this morning!"
+        },
+        {
+          "category": "owns",
+          "value": "bird feeder",
+          "confidence": 0.9,
+          "evidence": "The cardinals are back at my feeder this morning!"
+        },
+        {
+          "category": "dislike",
+          "value": "squirrels eating bird feed",
+          "confidence": 0.7,
+          "evidence": "those squirrels are eating everything before the little ones get any"
+        },
+        {
+          "category": "wants",
+          "value": "squirrel-proof bird feeder or squirrel deterrent",
+          "confidence": 0.5,
+          "evidence": "those squirrels are eating everything before the little ones get any. Bob used to have a trick for that."
+        }
+      ],
+      "tokens": 757,
+      "cost": 0.0001781,
+      "secs": 1.351
+    },
+    {
+      "capture": "june-2",
+      "facts": [
+        {
+          "category": "constraint",
+          "value": "prefers easy-open, large-grip items; has trouble with jars and small latches",
+          "confidence": 0.8,
+          "evidence": "can't open jars or work the little latches on her planters anymore"
+        },
+        {
+          "category": "dislike",
+          "value": "small latches and fiddly closures",
+          "confidence": 0.5,
+          "evidence": "work the little latches on her planters anymore"
+        }
+      ],
+      "tokens": 646,
+      "cost": 0.0001206,
+      "secs": 1.103
+    },
+    {
+      "capture": "sam-1",
+      "facts": [
+        {
+          "category": "interest",
+          "value": "craft beer",
+          "confidence": 0.85,
+          "evidence": "Hazy IPA flight at Odell; #craftbeer"
+        },
+        {
+          "category": "interest",
+          "value": "hazy IPA",
+          "confidence": 0.8,
+          "evidence": "Hazy IPA flight at Odell"
+        },
+        {
+          "category": "wants",
+          "value": "better beer for home",
+          "confidence": 0.6,
+          "evidence": "Need more sleep and better beer at home."
+        },
+        {
+          "category": "wants",
+          "value": "more sleep",
+          "confidence": 0.4,
+          "evidence": "Need more sleep"
+        },
+        {
+          "category": "constraint",
+          "value": "limited free time as a new parent",
+          "confidence": 0.5,
+          "evidence": "#newdad; First night out in 4 months"
+        }
+      ],
+      "tokens": 771,
+      "cost": 0.0001827,
+      "secs": 1.372
+    },
+    {
+      "capture": "sam-2",
+      "facts": [
+        {
+          "category": "interest",
+          "value": "golf",
+          "confidence": 0.6,
+          "evidence": "Shared by Sam: golf rangefinders article"
+        },
+        {
+          "category": "wants",
+          "value": "golf rangefinder",
+          "confidence": 0.3,
+          "evidence": "Shared by Sam: 'The best golf rangefinders of the year'"
+        }
+      ],
+      "tokens": 961,
+      "cost": 0.0002729,
+      "secs": 2.867
+    },
+    {
+      "capture": "priya-1",
+      "facts": [
+        {
+          "category": "interest",
+          "value": "marathon running",
+          "confidence": 0.95,
+          "evidence": "18 miles done, 28 days to Chicago"
+        },
+        {
+          "category": "interest",
+          "value": "Chicago Marathon",
+          "confidence": 0.9,
+          "evidence": "28 days to Chicago #chicagomarathon"
+        },
+        {
+          "category": "interest",
+          "value": "pour-over coffee",
+          "confidence": 0.9,
+          "evidence": "Post-run V60 #pourover"
+        },
+        {
+          "category": "interest",
+          "value": "single-origin coffee beans",
+          "confidence": 0.7,
+          "evidence": "new Ethiopian beans from Onyx"
+        },
+        {
+          "category": "wants",
+          "value": "Ethiopian coffee beans from Onyx",
+          "confidence": 0.4,
+          "evidence": "new Ethiopian beans from Onyx"
+        },
+        {
+          "category": "owns",
+          "value": "V60 pour-over setup",
+          "confidence": 0.6,
+          "evidence": "Post-run V60"
+        }
+      ],
+      "tokens": 889,
+      "cost": 0.0002217,
+      "secs": 1.551
+    },
+    {
+      "capture": "priya-2",
+      "facts": [
+        {
+          "category": "owns",
+          "value": "burr grinder",
+          "confidence": 0.8,
+          "evidence": "Kept: grinder"
+        },
+        {
+          "category": "owns",
+          "value": "kettle",
+          "confidence": 0.8,
+          "evidence": "Kept: grinder, kettle, V60, one good mug"
+        },
+        {
+          "category": "owns",
+          "value": "V60 pour-over dripper",
+          "confidence": 0.8,
+          "evidence": "Kept: grinder, kettle, V60, one good mug"
+        },
+        {
+          "category": "owns",
+          "value": "one good mug (favorite coffee mug)",
+          "confidence": 0.6,
+          "evidence": "Kept: ... one good mug"
+        },
+        {
+          "category": "dislike",
+          "value": "single-serve pod coffee makers (Keurig)",
+          "confidence": 0.6,
+          "evidence": "Gave away the Keurig 🙌"
+        },
+        {
+          "category": "interest",
+          "value": "coffee brewing",
+          "confidence": 0.8,
+          "evidence": "priya.runs.on.coffee; V60, grinder"
+        },
+        {
+          "category": "interest",
+          "value": "running and marathons",
+          "confidence": 0.8,
+          "evidence": "priya.runs.on.coffee; telling the world after the marathon"
+        },
+        {
+          "category": "interest",
+          "value": "minimalist kitchen, keeping only weekly-used items",
+          "confidence": 0.6,
+          "evidence": "if it doesn't get used weekly, it's gone"
+        },
+        {
+          "category": "avoid",
+          "value": "gifts that add clutter or single-use kitchen gadgets",
+          "confidence": 0.5,
+          "evidence": "if it doesn't get used weekly, it's gone"
+        }
+      ],
+      "tokens": 1072,
+      "cost": 0.0003228,
+      "secs": 2.425
+    }
+  ]
+}
