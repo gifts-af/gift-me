@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 import { TEST_USER } from "./test-user";
 
 // ALL-46: the public home page and the guided tour.
@@ -9,6 +9,21 @@ test("a signed-out visitor sees the home page at / on a phone", async ({ page })
   await expect(page.getByText(/Lots is broken/)).toHaveCount(0);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);
+});
+
+// ALL-71: the list hero leads, the concierge hook follows; each has its own tour.
+const listHero = (page: Page) => page.locator("section", { has: page.getByRole("heading", { level: 1 }) });
+const conciergeHero = (page: Page) => page.locator("section", { has: page.getByRole("heading", { name: "Gifting, handled AF." }) });
+
+test("on a computer the list hook sits beside its sample card", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your wish list, one text away.");
+  const text = await page.getByTestId("list-hook-text").boundingBox();
+  const preview = await page.getByTestId("list-preview").boundingBox();
+  expect(text && preview).toBeTruthy();
+  expect(preview!.x).toBeGreaterThan(text!.x + text!.width - 1);
+  expect(preview!.y).toBeLessThan(text!.y + text!.height);
 });
 
 test("on a computer the hook sits beside the pick-a-gift card", async ({ page }) => {
@@ -59,7 +74,7 @@ for (const width of [375, 1280]) {
 
 test("take the tour, then sign in with an invite", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("link", { name: "Take the tour" }).click();
+  await conciergeHero(page).getByRole("link", { name: "Take the tour" }).click();
   await expect(page).toHaveURL(/\/tour$/);
   for (let i = 0; i < 6; i++) {
     // exact: under `pnpm dev` the Next.js dev tools button also matches "Next".
@@ -75,13 +90,22 @@ test("take the tour, then sign in with an invite", async ({ page }) => {
 
 test("request access opens over the page and checks its fields (ALL-47, ALL-53)", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "Request access" }).first().click();
+  await listHero(page).getByRole("button", { name: "Request access" }).click();
   const dialog = page.getByRole("dialog", { name: "Want in?" });
   await expect(dialog).toBeVisible();
   await expect(page).toHaveURL(/\/$/);
   await dialog.getByRole("button", { name: "Request access" }).click();
   await expect(page.getByText("Tell us your name.")).toBeVisible();
   await expect(page.getByText("Enter an email address like you@example.com.")).toBeVisible();
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+  expect(overflow).toBeLessThanOrEqual(0);
+});
+
+test("Join the waitlist opens the waitlist form (ALL-71)", async ({ page }) => {
+  await page.goto("/");
+  await conciergeHero(page).getByRole("button", { name: "Join the waitlist" }).click();
+  const dialog = page.getByRole("dialog", { name: "Join the waitlist" });
+  await expect(dialog.getByText("The concierge is still being built.", { exact: false })).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);
 });

@@ -9,7 +9,8 @@ export function Hook() {
         <span className="-rotate-3 self-start rounded-full bg-sticker px-3 py-1 text-[13px] font-extrabold text-sticker-foreground">
           Mom&apos;s birthday is Saturday <span aria-hidden="true">👀</span>
         </span>
-        <h1 className="text-[34px] font-extrabold leading-[1.05] tracking-tight md:text-[52px]">Gifting, handled AF.</h1>
+        {/* An h2 since ALL-71: the list hero above has the page's h1. */}
+        <h2 className="text-[34px] font-extrabold leading-[1.05] tracking-tight md:text-[52px]">Gifting, handled AF.</h2>
         <p className="max-w-prose text-[16px] text-muted-foreground md:text-[18px]">
           Where we&apos;re heading: we remember the dates, find the gift, and ship it. You just tap yes.
         </p>
@@ -20,7 +21,7 @@ export function Hook() {
           >
             Take the tour
           </Link>
-          <RequestAccessButton className="inline-flex min-h-12 items-center justify-center rounded-lg bg-secondary px-6 font-bold text-secondary-foreground hover:bg-secondary/70" />
+          <RequestAccessButton kind="waitlist" className="inline-flex min-h-12 items-center justify-center rounded-lg bg-secondary px-6 font-bold text-secondary-foreground hover:bg-secondary/70" />
         </div>
         <Link
           href="/auth/login"
