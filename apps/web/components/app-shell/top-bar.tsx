@@ -2,6 +2,7 @@ import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/logo";
+import { TopBarRow } from "@/components/top-bar-row";
 
 type Current = "list" | "people";
 
@@ -14,23 +15,16 @@ export function TopBar({
   current,
   actions,
   account,
-  wide = false,
 }: {
   back?: { href: string; label: string };
   links?: boolean;
   current?: Current;
   actions?: React.ReactNode;
   account?: React.ReactNode;
-  wide?: boolean;
 }) {
   return (
     <header className="border-b">
-      <div
-        className={cn(
-          "mx-auto flex min-h-14 items-center justify-between gap-2 px-4 py-1.5 sm:px-8",
-          wide ? "max-w-5xl" : "max-w-2xl",
-        )}
-      >
+      <TopBarRow>
         <div className="flex min-w-0 items-center gap-8">
           {back ? (
             <>
@@ -52,7 +46,7 @@ export function TopBar({
           {actions}
           {account}
         </div>
-      </div>
+      </TopBarRow>
     </header>
   );
 }

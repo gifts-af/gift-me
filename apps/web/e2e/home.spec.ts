@@ -73,3 +73,27 @@ test("feedback opens a box over the page, and Esc closes it (ALL-53)", async ({ 
   await expect(dialog).toBeHidden();
   await expect(open).toBeFocused();
 });
+
+// ALL-54: the logo stays exactly where it is on the home page.
+for (const width of [390, 1280]) {
+  test(`the logo stays put across pages at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 });
+    const logo = page.getByRole("img", { name: "GiftsAF" }).first();
+    const spot = async (path: string) => {
+      await page.goto(path);
+      const box = await logo.boundingBox();
+      return box && { x: Math.round(box.x), y: Math.round(box.y) };
+    };
+    const home = await spot("/");
+    expect(await spot("/tour")).toEqual(home);
+    expect(await spot("/request-access")).toEqual(home);
+
+    await page.goto("/auth/login");
+    await page.getByLabel("Email").fill(TEST_USER.email);
+    await page.getByLabel("Password").fill(TEST_USER.password);
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
+    expect(await spot("/")).toEqual(home);
+    expect(await spot("/lists")).toEqual(home);
+  });
+}

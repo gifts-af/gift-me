@@ -79,6 +79,9 @@
   }
   html {
     -webkit-text-size-adjust: 100%;
+    /* Keep room for a scrollbar on every page, so long and short pages
+       line up and the logo never moves (ALL-54). */
+    scrollbar-gutter: stable;
   }
   body {
     @apply bg-background text-foreground antialiased;
