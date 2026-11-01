@@ -22,7 +22,7 @@ values (:'a', :'round', :'notif', 'approve', 'hash-1', now() + interval '1 day')
 insert into concierge.action_links (user_id, action, token_hash, expires_at)
 values (:'a', 'test', 'hash-expired', now() - interval '1 hour');
 
-select is((select count(*)::int from concierge.action_links), 2, 'the server can insert links for A');
+select is((select count(*)::int from concierge.action_links where user_id = :'a'), 2, 'the server can insert links for A');
 
 -- A can't see or change links, even their own.
 select tests.act_as(:'a');
