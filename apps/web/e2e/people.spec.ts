@@ -85,7 +85,7 @@ test("add Mom, set her occasions and budget, link her list, delete her", async (
   await page.getByRole("button", { name: "Save" }).click();
 
   // 2. Her card: Add birthday, a next occasion, and "We suggest ideas".
-  await page.goto("/");
+  await expect(page).toHaveURL(/\/$/);
   const momLink = page.getByRole("link", { name: "Mom", exact: true });
   await expect(momLink).toBeVisible();
   const card = page.locator("div", { has: momLink }).last();
@@ -111,7 +111,8 @@ test("add Mom, set her occasions and budget, link her list, delete her", async (
   await budgets.getByRole("button", { name: "Edit Mother's Day budget" }).click();
   await budgets.getByLabel("Mother's Day budget").fill("");
   await budgets.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(budgets.getByText("Not set").first()).toBeVisible();
+  await expect(budgets.getByRole("listitem").filter({ hasText: "Mother's Day" }).getByText("Not set")).toBeVisible();
+  await expect(budgets.getByRole("button", { name: "Set Mother's Day budget" })).toBeVisible();
   await noSidewaysScroll(page);
 
   // 4. SECOND_USER's list, linked by its share link: "Their own list".
