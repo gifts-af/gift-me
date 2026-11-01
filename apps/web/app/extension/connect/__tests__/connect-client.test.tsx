@@ -16,6 +16,27 @@ describe("ConnectClient", () => {
     expect(action).not.toHaveBeenCalled();
   });
 
+  it("shows an error with a retry button when the action rejects", async () => {
+    vi.stubEnv("NEXT_PUBLIC_EXTENSION_ID", "abc");
+    vi.stubGlobal("chrome", { runtime: { sendMessage: vi.fn() } });
+    const action = vi.fn(async () => {
+      throw new Error("Failed to find Server Action");
+    });
+    render(<ConnectClient action={action} />);
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.queryByText(/Failed to find/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
+  });
+
+  it("reloads the page from the not-installed state", async () => {
+    vi.stubEnv("NEXT_PUBLIC_EXTENSION_ID", "abc");
+    const reload = vi.fn();
+    vi.stubGlobal("location", { ...window.location, reload });
+    render(<ConnectClient action={vi.fn()} />);
+    (await screen.findByRole("button", { name: /reload/i })).click();
+    expect(reload).toHaveBeenCalled();
+  });
+
   it("shows connected when the extension replies ok, calling the action once", async () => {
     vi.stubEnv("NEXT_PUBLIC_EXTENSION_ID", "abc");
     const sendMessage = vi.fn((_id, _msg, cb) => cb({ ok: true }));

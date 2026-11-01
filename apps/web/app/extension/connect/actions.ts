@@ -16,11 +16,16 @@ export async function createExtensionToken(): Promise<ExtensionTokenResult> {
   if (!user) return { error: "Your session ended. Sign in again." };
   if (!user.email) return { error: "Your account has no email address, so the extension can't sign in." };
 
-  const { data: link, error } = await createAdminClient().auth.admin.generateLink({
-    type: "magiclink",
-    email: user.email,
-  });
-  const tokenHash = link?.properties?.hashed_token;
-  if (error || !tokenHash) return { error: "Couldn't create a sign-in for the extension. Try again." };
-  return { tokenHash };
+  const failure = { error: "Couldn't create a sign-in for the extension. Try again." };
+  try {
+    const { data: link, error } = await createAdminClient().auth.admin.generateLink({
+      type: "magiclink",
+      email: user.email,
+    });
+    const tokenHash = link?.properties?.hashed_token;
+    if (error || !tokenHash) return failure;
+    return { tokenHash };
+  } catch {
+    return failure; // never leak provider text
+  }
 }

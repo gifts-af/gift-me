@@ -39,7 +39,14 @@ export function ConnectClient({
       return;
     }
 
-    const result = await action();
+    let result: Awaited<ReturnType<typeof action>>;
+    try {
+      result = await action();
+    } catch {
+      setMessage("Couldn't reach GiftsAF. Check your connection and try again.");
+      setState("error");
+      return;
+    }
     if ("error" in result) {
       setMessage(result.error);
       setState("error");
@@ -84,8 +91,8 @@ export function ConnectClient({
             Load the GiftsAF extension in Chrome (see apps/extension/README.md), then reload this page. Ask Aaron or
             Jim for the extension folder.
           </p>
-          <Button type="button" variant="outline" onClick={() => void connect()} className="w-full sm:w-auto">
-            Try again
+          <Button type="button" variant="outline" onClick={() => location.reload()} className="w-full sm:w-auto">
+            Reload this page
           </Button>
         </>
       )}

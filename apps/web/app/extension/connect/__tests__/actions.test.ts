@@ -56,6 +56,14 @@ describe("createExtensionToken", () => {
     expect(JSON.stringify(result)).not.toContain("999");
   });
 
+  it("returns a generic error when generateLink throws", async () => {
+    getUser.mockResolvedValue({ data: { user: { email: "a@b.co" } }, error: null });
+    generateLink.mockRejectedValue(new Error("provider secret detail"));
+    const result = await createExtensionToken();
+    expect(result).toEqual({ error: expect.any(String) });
+    expect(JSON.stringify(result)).not.toContain("provider secret detail");
+  });
+
   it("returns an error when generateLink fails", async () => {
     getUser.mockResolvedValue({ data: { user: { email: "a@b.co" } }, error: null });
     generateLink.mockResolvedValue({ data: null, error: { message: "boom" } });
