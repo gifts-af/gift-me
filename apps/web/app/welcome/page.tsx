@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Concierge } from "@/components/home/concierge";
 import { Features } from "@/components/home/features";
 import { Feedback } from "@/components/home/feedback";
 import { HomeFooter } from "@/components/home/home-footer";
@@ -22,6 +23,7 @@ export default function WelcomePage() {
       <HomeTopBar howItWorks />
       <main>
         <Hook />
+        <Concierge />
         <Features />
         <Steps />
         <Feedback />
