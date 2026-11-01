@@ -1,0 +1,72 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Tokens copied from apps/web/app/globals.css. The extension follows the
+   system theme, so the dark values sit under prefers-color-scheme. */
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 6% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 6% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 6% 10%;
+    --primary: 175 77% 26%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 5% 96%;
+    --secondary-foreground: 240 6% 10%;
+    --muted: 240 5% 96%;
+    --muted-foreground: 240 4% 46%;
+    --accent: 166 76% 97%;
+    --accent-foreground: 175 77% 26%;
+    --destructive: 0 74% 42%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 142 72% 29%;
+    --success-soft: 138 76% 97%;
+    --warning: 26 90% 37%;
+    --warning-soft: 48 100% 96%;
+    --sticker: 48 96% 53%;
+    --sticker-foreground: 240 6% 10%;
+    --border: 240 6% 90%;
+    --input: 240 6% 90%;
+    --ring: 175 77% 26%;
+    --radius: 0.75rem;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --background: 240 10% 4%;
+      --foreground: 0 0% 98%;
+      --card: 240 6% 10%;
+      --card-foreground: 0 0% 98%;
+      --popover: 240 6% 10%;
+      --popover-foreground: 0 0% 98%;
+      --primary: 172 66% 50%;
+      --primary-foreground: 179 84% 10%;
+      --secondary: 240 4% 16%;
+      --secondary-foreground: 0 0% 98%;
+      --muted: 240 4% 16%;
+      --muted-foreground: 240 5% 65%;
+      --accent: 179 84% 10%;
+      --accent-foreground: 171 77% 64%;
+      --destructive: 0 91% 71%;
+      --destructive-foreground: 240 10% 4%;
+      --success: 142 69% 58%;
+      --success-soft: 145 80% 10%;
+      --warning: 43 96% 56%;
+      --warning-soft: 39 79% 9%;
+      --sticker: 48 96% 53%;
+      --sticker-foreground: 240 6% 10%;
+      --border: 240 4% 16%;
+      --input: 240 4% 16%;
+      --ring: 172 66% 50%;
+    }
+  }
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+    margin: 0;
+  }
+}

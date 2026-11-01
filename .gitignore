@@ -6,3 +6,6 @@ spikes/**/.zinc-key*
 coverage/
 .superpowers/
 spikes/email/out/
+!apps/extension/.env.development
+!apps/extension/.env.production
+apps/extension/dist
