@@ -12,9 +12,11 @@ const TINTS = [
 ];
 
 export function initialsOf(name: string): string {
-  // Words of letters only, so quotes and symbols ("'Donald Allen'", "#BAL")
-  // don't become initials (ALL-72). No letters at all: the first character.
-  const words = name.match(/[\p{L}\p{N}]+/gu)?.filter((w) => /\p{L}/u.test(w)) ?? [];
+  // Words of letters (with their accents, and an apostrophe or hyphen inside,
+  // as in O'Brien or Mary-Ann), so quotes and symbols around names
+  // ("'Donald Allen'", "#BAL") don't become initials (ALL-72). No letters at
+  // all: the first character.
+  const words = name.match(/[\p{L}\p{M}\p{N}]+(?:['’-][\p{L}\p{M}\p{N}]+)*/gu)?.filter((w) => /\p{L}/u.test(w)) ?? [];
   if (words.length === 0) return Array.from(name.trim())[0] ?? "";
   return words
     .slice(0, 2)
