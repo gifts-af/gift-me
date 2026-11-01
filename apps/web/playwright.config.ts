@@ -8,6 +8,11 @@ import { localSupabase } from "./e2e/local-supabase";
 const supabase = localSupabase();
 const port = 3100;
 const CI = Boolean(process.env.CI);
+// Cloudflare's published Turnstile test keys (ALL-68): the widget always
+// passes and its dummy token always verifies. CI's build gets the site key
+// from the workflow, since NEXT_PUBLIC_ values are fixed at build time.
+const TURNSTILE_TEST_SITE_KEY = "1x00000000000000000000AA";
+const TURNSTILE_TEST_SECRET_KEY = "1x0000000000000000000000000000000AA";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -41,6 +46,8 @@ export default defineConfig({
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: supabase.publishableKey,
           // Server-only: the /a/{token} action links read and use links with it (ALL-23).
           SUPABASE_SECRET_KEY: supabase.serviceRoleKey,
+          NEXT_PUBLIC_TURNSTILE_SITE_KEY: TURNSTILE_TEST_SITE_KEY,
+          TURNSTILE_SECRET_KEY: TURNSTILE_TEST_SECRET_KEY,
         },
       },
 });

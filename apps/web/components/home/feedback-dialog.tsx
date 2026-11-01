@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { submitFeedback } from "@/app/feedback/actions";
+import { useHumanCheck } from "@/components/human-check";
 import {
   Dialog,
   DialogContent,
@@ -35,6 +36,12 @@ export function FeedbackButton({ className }: { className?: string }) {
 
 function FeedbackForm({ onSent }: { onSent: () => void }) {
   const [result, action, pending] = useActionState(submitFeedback, null);
+  const human = useHumanCheck();
+  const { reset } = human;
+  // Each answer uses up the token, so fetch a new one for the next try.
+  useEffect(() => {
+    if (result) reset();
+  }, [result, reset]);
   // Held in state so a failed send doesn't wipe what they typed (React resets
   // a form's own fields after its action runs).
   const [message, setMessage] = useState("");
@@ -102,6 +109,7 @@ function FeedbackForm({ onSent }: { onSent: () => void }) {
       <div aria-hidden="true" className="absolute -left-[9999px] h-px w-px overflow-hidden">
         <input name="website" tabIndex={-1} autoComplete="off" />
       </div>
+      {human.widget}
       {result?.status === "error" && (
         <p role="alert" className="text-[14px] text-destructive">
           {result.message}
@@ -109,7 +117,7 @@ function FeedbackForm({ onSent }: { onSent: () => void }) {
       )}
       <button
         type="submit"
-        disabled={pending}
+        disabled={pending || !human.token}
         className="min-h-12 rounded-lg bg-primary font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-45"
       >
         {pending ? "Sending…" : "Send"}

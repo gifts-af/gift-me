@@ -1,10 +1,11 @@
 import { APP_NAME, FEEDBACK_EMAIL } from "@/lib/brand";
+import { NOT_HUMAN, TURNSTILE_FIELD } from "@/lib/turnstile";
 import { sendEmail } from "@/lib/resend";
 
 // Feedback (ALL-53): the "sad story" box emails the owner through the shared
 // Resend sender (lib/resend.ts), like access requests. Nothing is stored. A
 // hidden "website" field catches bots: they get the same thank-you, but
-// nothing is sent.
+// nothing is sent. The Turnstile check (ALL-68) catches the rest.
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_MESSAGE = 5000;
@@ -19,7 +20,7 @@ const field = (data: FormData, key: string) => String(data.get(key) ?? "").trim(
 
 export async function sendFeedback(
   data: FormData,
-  deps: { apiKey: string | undefined; fetch: typeof fetch },
+  deps: { apiKey: string | undefined; fetch: typeof fetch; isHuman: (token: string) => Promise<boolean> },
 ): Promise<FeedbackResult> {
   const message = field(data, "message").slice(0, MAX_MESSAGE);
   const email = field(data, "email");
@@ -28,6 +29,7 @@ export async function sendFeedback(
   if (email && !EMAIL_PATTERN.test(email)) errors.email = "Enter an email address like you@example.com, or leave it blank.";
   if (Object.keys(errors).length) return { status: "invalid", errors };
   if (field(data, "website") !== "") return { status: "sent" };
+  if (!(await deps.isHuman(field(data, TURNSTILE_FIELD)))) return { status: "error", message: NOT_HUMAN };
   const sent = await sendEmail(
     {
       to: FEEDBACK_EMAIL,

@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect } from "react";
 import { submitAccessRequest } from "./actions";
+import { useHumanCheck } from "@/components/human-check";
 
 const input =
   "min-h-11 w-full rounded-md border border-input bg-background px-3 py-2.5 text-base font-normal aria-[invalid=true]:border-destructive";
@@ -9,6 +10,12 @@ const input =
 // `onSent` lets the overlay close itself after the thank-you (ALL-53).
 export function RequestAccessForm({ onSent }: { onSent?: () => void } = {}) {
   const [result, action, pending] = useActionState(submitAccessRequest, null);
+  const human = useHumanCheck();
+  const { reset } = human;
+  // Each answer uses up the token, so fetch a new one for the next try.
+  useEffect(() => {
+    if (result) reset();
+  }, [result, reset]);
   const sent = result?.status === "sent";
   useEffect(() => {
     if (sent) onSent?.();
@@ -72,6 +79,7 @@ export function RequestAccessForm({ onSent }: { onSent?: () => void } = {}) {
       <div aria-hidden="true" className="absolute -left-[9999px] h-px w-px overflow-hidden">
         <input name="website" tabIndex={-1} autoComplete="off" />
       </div>
+      {human.widget}
       {result?.status === "error" && (
         <p role="alert" className="text-[14px] text-destructive">
           {result.message}
@@ -79,7 +87,7 @@ export function RequestAccessForm({ onSent }: { onSent?: () => void } = {}) {
       )}
       <button
         type="submit"
-        disabled={pending}
+        disabled={pending || !human.token}
         className="min-h-12 rounded-lg bg-primary font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-45"
       >
         {pending ? "Sending…" : "Request access"}
