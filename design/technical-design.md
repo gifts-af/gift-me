@@ -318,9 +318,14 @@ flowchart LR
 
 ### 6.3 Gift idea generation (G-1 to G-5)
 1. **Input:** the person's active facts, past gifts, past rejections, the occasion, the budget, the ship-by deadline, and the recipient's state.
-2. **Brainstorm:** the AI model (with web search) proposes about 10 candidate gift concepts, each with a specific product and retailer URL. Only retailers Zinc supports are allowed.
-3. **Resolve:** each candidate is checked with Zinc's product and offer lookup for live price, availability, the seller, shipping cost, and handling plus delivery days. Lookups use the **app-owned Zinc account** at $0.01 each, never the user's wallet (T17). Offers sold by the retailer itself are preferred. Offers don't include tax, so tax stays estimated (§4.2). Anything unavailable, too late in the slowest case, over the over-budget limit, or already given or rejected is dropped.
-4. **Rank:** the AI model ranks the survivors and writes the one-line reasons. The top 3–5 within budget are kept, plus at most one over-budget idea.
+2. **Brainstorm:** the AI model (with web search) proposes about 10 candidate gift concepts, each with an id, a `product_search` string (brand and model when known) and a retailer hint, **not a URL**: the AI's links and prices aren't reliable (ALL-17, ALL-42). Only retailers Zinc supports are allowed.
+3. **Resolve:** each candidate's `product_search` goes to Zinc's search, then offers, for live price, availability, the seller, condition, shipping cost, and handling plus delivery days. Lookups use the **app-owned Zinc account** at $0.01 each, never the user's wallet (T17). Rules from the ALL-42 spike ([design/spikes/ai.md](spikes/ai.md#resolve-through-zinc-all-42)):
+   - **The found item must match the idea.** Amazon's first result can be another brand. Pick the first result that matches the brand and model; if none does, the idea counts as "not found" (or the closest same-brand item, flagged as an alternative). **[Claude's call]** whether a cheap model checks the match, decided in W3-3.
+   - **New only.** Refurbished and used offers are never picked, even when cheaper.
+   - **Prefer the buy-box offer** (the seller Amazon shows by default), then the one sold by the retailer or brand itself, then the fastest delivery.
+   - **Price comes only from the offer.** The AI's estimate was off by up to half in the spike, so budget checks use the live price plus shipping.
+   - Offers don't include tax, so tax stays estimated (§4.2). Anything unavailable, too late in the slowest case, over the over-budget limit, or already given or rejected is dropped.
+4. **Rank:** the AI model ranks the survivors and writes the one-line reasons, **referring to candidates by id** (it shortens titles, so matching on titles fails). The top 3–5 within budget are kept, plus at most one over-budget idea.
 5. If fewer than 3 survive, the app repeats steps 2–4 up to 2 more times. After that it sends what it has and notes it.
 6. Results are saved as `gift_ideas`, and the heads-up is sent.
 

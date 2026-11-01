@@ -67,6 +67,26 @@ Example reason (v3, Dad): *"His 20-year-old vise is worn out, and this rotary re
 
 Search results make up most of the brainstorm cost. Ways to lower it: allow 2 searches, use Sonnet 5.5 (half the price), or the gateway's Perplexity search tool. **Prices from the AI are often "not confirmed"**, and one idea (the vise) came back with no price at all. That's fine, because resolving through Zinc fills it in.
 
+## Resolve through Zinc (ALL-42)
+
+The v3 ideas for Dad and Priya, top 2 each, went through Zinc search and offers on the app-owned account (T17), the real Amazon catalogue (`node spikes/ai/run.mjs resolve`, output in `spikes/ai/out/resolve.json`). 2026-11-01.
+
+| Idea | AI's estimate | Live result | Within budget (+15%)? |
+|---|---|---|---|
+| Dad: Kingfisher Blackfoot rotary vise | $65 | Exact model not on Amazon (maybe discontinued). Same brand's **Clarkfork rotary vise $79.95**, new, 5 days | Yes (budget $75) |
+| Dad: Brightech LightView Pro magnifying lamp | $50 | **$94.99**, new, sold by Brightech, 5 days | **No**: the AI's price was half the real one |
+| Priya: Ciele GOCap | $53 | $50.00, new, 5 days (third-party seller) | Yes |
+| Priya: Onyx Tropical Weather beans | $24 | First run: $24.50 + $6.35 shipping. Last run: no new offer found | Unclear |
+
+What went wrong with the naive version (take the first search result, then the cheapest offer), and the rule that fixes it:
+
+1. **The first search result was another brand.** For the Kingfisher vise, Amazon's top 4 results were a $149.99 NIRVANA vise. **Rule:** pick the first result matching the brand and model, otherwise "not found" or a flagged same-brand alternative.
+2. **The cheapest offer was refurbished.** The lamp's cheapest offer was $69.99 *refurbished* from a third party, 8–11 days; the new one from Brightech was $94.99 in 5 days. **Rule:** new only; prefer the buy box, then the brand or retailer itself, then the fastest delivery.
+3. **AI prices are unreliable.** One was 47% low. **Rule:** budget checks use only the live offer price plus shipping.
+4. **Rank shortens titles**, so matching ranked ideas back to the brainstorm by title failed once. **Rule:** candidates carry an id.
+
+These rules are now in design §6.3. Cost: 23 lookups (23¢) across the runs; the app wallet has about 33¢ left.
+
 ## Findings for the design
 
 1. **Model ID:** `anthropic/claude-opus-5.5` (§2.1, §7 say `claude-opus-5-5`).
@@ -79,6 +99,6 @@ Search results make up most of the brainstorm cost. Ways to lower it: allow 2 se
 
 - [ ] **Screenshots (vision):** the fixtures are text only. Test extraction from a real screenshot, which is what the extension sends (§6.2).
 - [ ] **Cheaper model:** run v3 on Sonnet 5.5 and compare quality and cost (`node spikes/ai/run.mjs ideas anthropic/claude-sonnet-5.5`).
-- [ ] **Resolve through Zinc:** feed `product_search` into Zinc's search on the app account (T17). Needs a funded app Zinc account or a sandbox key. Sandbox search returns sample data only.
+- [x] **Resolve through Zinc:** done, see [Resolve through Zinc](#resolve-through-zinc-all-42). The app account's leftover 56¢ was enough; no funding needed.
 - [x] Update design §7 with real costs and the corrected model ID
 - [ ] Rotate the gateway key (it was pasted into a Claude session)
