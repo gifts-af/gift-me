@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useMemo, useState } from "react";
+import { useActionState, useEffect, useMemo, useState } from "react";
 import { guessRelationship, RELATIONSHIPS, relationshipLabel, type GoogleContact } from "@gifts-af/core";
 import { PersonAvatar } from "@/components/person-avatar";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,8 @@ const SELECT_CLASS =
 type Stage = { kind: "start" } | { kind: "loading" } | { kind: "failed" } | { kind: "list"; contacts: GoogleContact[] };
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+const checkboxId = (c: GoogleContact) => `contact-${c.googleId.replace(/\W/g, "-")}`;
+const pickerId = (c: GoogleContact) => `${checkboxId(c)}-who`;
 
 // The "Who do you buy gifts for?" checklist (ALL-24). Contacts come from
 // `load` (Google's popup and People API, in the browser); only the ticked ones
@@ -33,6 +35,16 @@ export function ImportChecklist({
   const [search, setSearch] = useState("");
   // Ticked contacts and the relationship picked for each ("" until picked).
   const [picked, setPicked] = useState<Map<string, string>>(new Map());
+  const [onlyTicked, setOnlyTicked] = useState(false);
+  // A picker to scroll to and focus once it's rendered (ALL-72).
+  const [focusId, setFocusId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!focusId) return;
+    const el = document.getElementById(focusId);
+    el?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+    el?.focus();
+    setFocusId(null);
+  }, [focusId]);
   const [result, submit, saving] = useActionState(action, null);
   const done = useMemo(() => new Set(imported), [imported]);
 
@@ -73,9 +85,20 @@ export function ImportChecklist({
   }
 
   const query = search.trim().toLowerCase();
-  const shown = query ? contacts.filter((c) => c.name.toLowerCase().includes(query)) : contacts;
   const ticked = contacts.filter((c) => picked.has(c.googleId));
-  const ready = ticked.length > 0 && ticked.every((c) => picked.get(c.googleId));
+  const showOnlyTicked = onlyTicked && ticked.length > 0;
+  const shown = contacts.filter(
+    (c) => (!query || c.name.toLowerCase().includes(query)) && (!showOnlyTicked || picked.has(c.googleId)),
+  );
+  // Ticked but no relationship yet: the reason Add is off (ALL-72).
+  const missing = ticked.filter((c) => !picked.get(c.googleId));
+  const ready = ticked.length > 0 && missing.length === 0;
+
+  function goToMissing() {
+    const first = missing[0];
+    if (!shown.includes(first)) setSearch("");
+    setFocusId(pickerId(first));
+  }
 
   function toggle(c: GoogleContact) {
     const next = new Map(picked);
@@ -107,12 +130,22 @@ export function ImportChecklist({
         value={search}
         onChange={(e) => setSearch(e.target.value)}
       />
+      <label className="flex min-h-11 items-center gap-2 self-start text-[14px] font-semibold">
+        <input
+          type="checkbox"
+          className="size-5 accent-primary"
+          checked={showOnlyTicked}
+          disabled={ticked.length === 0}
+          onChange={(e) => setOnlyTicked(e.target.checked)}
+        />
+        Show ticked ({ticked.length})
+      </label>
       <ul className="flex flex-col divide-y rounded-lg border">
         {shown.map((c) => {
           const already = done.has(c.googleId);
           const on = picked.has(c.googleId);
           const relationship = picked.get(c.googleId) ?? "";
-          const id = `contact-${c.googleId.replace(/\W/g, "-")}`;
+          const id = checkboxId(c);
           return (
             <li key={c.googleId} className="flex flex-col gap-2 p-3 sm:flex-row sm:items-center">
               <label htmlFor={id} className="flex min-h-11 flex-1 items-center gap-3">
@@ -143,6 +176,7 @@ export function ImportChecklist({
               {on && (
                 <div className="flex flex-col gap-1 pl-8 sm:pl-0">
                   <select
+                    id={pickerId(c)}
                     aria-label={`Who is ${c.name} to you?`}
                     className={SELECT_CLASS}
                     value={relationship}
@@ -168,13 +202,26 @@ export function ImportChecklist({
         </p>
       )}
       <div className="sticky bottom-0 -mx-4 border-t bg-background/95 px-4 py-3 backdrop-blur sm:mx-0 sm:rounded-lg sm:border">
-        <Button type="submit" className="w-full sm:w-auto" disabled={!ready || saving} aria-busy={saving}>
-          {saving
-            ? "Adding…"
-            : ticked.length === 0
-              ? "Add people"
-              : `Add ${plural(ticked.length, "person", "people")}`}
-        </Button>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+          <Button type="submit" className="w-full sm:w-auto" disabled={!ready || saving} aria-busy={saving}>
+            {saving
+              ? "Adding…"
+              : ticked.length === 0
+                ? "Add people"
+                : `Add ${plural(ticked.length, "person", "people")}`}
+          </Button>
+          {missing.length > 0 && (
+            <button
+              type="button"
+              onClick={goToMissing}
+              className="min-h-11 text-left text-[14px] font-semibold text-warning underline underline-offset-[3px]"
+            >
+              {missing.length === 1
+                ? `Pick who ${missing[0].name} is to you`
+                : `Pick who ${missing.length} people are to you`}
+            </button>
+          )}
+        </div>
       </div>
     </form>
   );

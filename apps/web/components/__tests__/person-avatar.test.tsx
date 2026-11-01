@@ -12,6 +12,16 @@ describe("initialsOf", () => {
   it("copes with extra spaces and lower case", () => {
     expect(initialsOf("  jim  ")).toBe("J");
   });
+  // ALL-72: imported contact names often carry quotes and symbols.
+  it("skips punctuation and symbols around the names", () => {
+    expect(initialsOf("'Donald Allen'")).toBe("DA");
+    expect(initialsOf("#BAL - Check Balance")).toBe("BC");
+    expect(initialsOf("Jo (work)")).toBe("JW");
+  });
+  it("falls back to the first character when there are no letters", () => {
+    expect(initialsOf("411")).toBe("4");
+    expect(initialsOf("***")).toBe("*");
+  });
 });
 
 describe("PersonAvatar", () => {
