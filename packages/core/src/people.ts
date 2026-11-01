@@ -25,7 +25,9 @@ export const RELATIONSHIPS = [
 
 export type Relationship = (typeof RELATIONSHIPS)[number];
 
-export function relationshipLabel(r: Relationship): string {
+/** A readable name; a stored value we don't know (say, from an older build) reads "Other". */
+export function relationshipLabel(r: string): string {
+  if (!(RELATIONSHIPS as readonly string[]).includes(r)) return "Other";
   const words = r.replace("_", " ");
   return words.charAt(0).toUpperCase() + words.slice(1);
 }

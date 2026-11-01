@@ -1,3 +1,4 @@
+import { relationshipLabel } from "@gifts-af/core";
 import { describe, expect, it, vi } from "vitest";
 import {
   addPerson,
@@ -37,6 +38,18 @@ function setup() {
   const theirs = store.seed(OTHER, { name: "Theirs" }, [{ kind: "birthday", month: 11, day: 3 }, { kind: "christmas" }]);
   return { store, mine, theirs };
 }
+
+describe("a stored relationship we don't list", () => {
+  it("lists and shows the person without throwing", async () => {
+    const store = new FakePeopleStore();
+    const id = store.seed(ME, { name: "Old", relationship: "parent" }, [{ kind: "christmas" }]);
+    const cards = await listPeople(store, TODAY);
+    expect(cards.map((c) => c.name)).toEqual(["Old"]);
+    const detail = await getPerson(store, id, TODAY);
+    expect(detail?.name).toBe("Old");
+    expect(relationshipLabel(detail!.relationship)).toBe("Other");
+  });
+});
 
 describe("addPerson", () => {
   it("saves the person with the occasions their relationship implies and returns the id", async () => {

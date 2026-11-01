@@ -1,6 +1,6 @@
 # GiftsAF Chrome extension
 
-Saves what's on screen to a person in GiftsAF. It is a Manifest V3 extension built with Vite, React and Tailwind. It asks Chrome for three permissions only: `activeTab`, `scripting` and `storage`. It shares `packages/core` with the web app.
+Saves what's on screen to a person in GiftsAF. It is a Manifest V3 extension built with Vite, React and Tailwind. It asks Chrome for three permissions only: `activeTab`, `scripting` and `storage`. It shares `packages/core` with the web app, including the one relationship list that quick add uses.
 
 ## Build
 

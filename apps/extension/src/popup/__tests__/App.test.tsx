@@ -21,7 +21,7 @@ const db = {
   peopleError: null as { message: string } | null,
   textMax: 50_000 as number | null,
   screenshotMax: 2_500_000 as number | null,
-  inserts: [] as unknown[],
+  adds: [] as unknown[],
 };
 const client = {
   auth: { getSession: vi.fn(async () => ({ data: { session: db.session }, error: null })) },
@@ -29,17 +29,13 @@ const client = {
     select: () => ({
       order: async () => ({ data: db.peopleError ? null : db.people, error: db.peopleError }),
     }),
-    insert: (row: { name: string; relationship: string }) => {
-      db.inserts.push(row);
-      return {
-        select: () => ({
-          single: async () => ({ data: { id: `new-${row.name}`, name: row.name }, error: null }),
-        }),
-      };
-    },
   })),
   schema: vi.fn(() => ({
-    rpc: vi.fn(async (_fn: string, args: { p_key: string }) => {
+    rpc: vi.fn(async (fn: string, args: { p_key: string; p_name?: string }) => {
+      if (fn === "add_person") {
+        db.adds.push(args);
+        return { data: `new-${args.p_name}`, error: null };
+      }
       const value =
         args.p_key === "capture_text_max_chars"
           ? db.textMax
@@ -68,7 +64,7 @@ beforeEach(() => {
   db.peopleError = null;
   db.textMax = 50_000;
   db.screenshotMax = 2_500_000;
-  db.inserts = [];
+  db.adds = [];
   fetchMock = vi.fn(async () => json({ id: "c1" }, 201));
   vi.stubGlobal("fetch", fetchMock);
   document.title = "Stoneware mug set";
@@ -120,16 +116,27 @@ describe("Popup", () => {
     expect(fake.tabs.captures).toHaveLength(0);
   });
 
-  it("no people: shows the add form; adding Sam (friend) inserts and selects Sam (AC-9)", async () => {
+  it("no people: shows the add form; adding Sam (friend) saves through add_person and selects Sam (AC-9)", async () => {
     db.people = [];
     render(<App />);
     await userEvent.type(await screen.findByLabelText("Name"), "Sam");
     await userEvent.selectOptions(screen.getByLabelText("Relationship"), "friend");
     await userEvent.click(screen.getByRole("button", { name: "Add" }));
 
-    expect(db.inserts).toEqual([{ name: "Sam", relationship: "friend" }]);
+    expect(db.adds).toEqual([{ p_name: "Sam", p_relationship: "friend", p_kinds: ["christmas"] }]);
     expect(await screen.findByRole("button", { name: "Save to Sam" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Sam" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("adding a mother also starts Mother's Day", async () => {
+    db.people = [];
+    render(<App />);
+    await userEvent.type(await screen.findByLabelText("Name"), "Mom2");
+    await userEvent.selectOptions(screen.getByLabelText("Relationship"), "mother");
+    await userEvent.click(screen.getByRole("button", { name: "Add" }));
+    await screen.findByRole("button", { name: "Save to Mom2" });
+    const args = db.adds[0] as { p_kinds: string[] };
+    expect(args.p_kinds).toEqual(expect.arrayContaining(["christmas", "mothers_day"]));
   });
 
   it("with people: Add a person opens the same form", async () => {

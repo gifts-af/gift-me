@@ -11,6 +11,11 @@ describe("relationships", () => {
     ]);
   });
 
+  it("labels an unknown stored value as Other", () => {
+    expect(relationshipLabel("parent")).toBe("Other");
+    expect(relationshipLabel("")).toBe("Other");
+  });
+
   it("labels them for people", () => {
     expect(relationshipLabel("mother")).toBe("Mother");
     expect(relationshipLabel("best_friend")).toBe("Best friend");
