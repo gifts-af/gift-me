@@ -102,3 +102,17 @@ export function iconSvg(size: number, { holiday, rounded = true }: { holiday: bo
     `</svg>`
   );
 }
+
+// The wordmark's tag on its own, as an SVG string, for generated images such
+// as the link preview (ALL-55). The hole is a real hole, so any background
+// shows through; the viewBox leaves room above for the hat.
+export function tagSvg({ holiday }: { holiday: boolean }) {
+  return (
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-4 -26 84 72">` +
+    `<g transform="rotate(${TAG_TILT} 38 20)">` +
+    `<path data-part="tag" fill="${STICKER}" fill-rule="evenodd" d="${TAG_WITH_HEART}"/>` +
+    `<path data-part="af" fill="${INK}" fill-rule="evenodd" transform="${AF_ON_TAG}" d="${AF}"/>` +
+    (holiday ? hatSvg() : "") +
+    `</g></svg>`
+  );
+}
