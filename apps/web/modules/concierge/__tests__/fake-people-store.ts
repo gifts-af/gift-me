@@ -41,7 +41,7 @@ export class FakePeopleStore implements PeopleStore {
     p: Partial<PersonRow> & { name: string },
     occasions: { kind: OccasionKind; month?: number; day?: number; enabled?: boolean }[] = [],
   ): string {
-    const id = `p${this.next++}`;
+    const id = `00000000-0000-4000-8000-${String(this.next++).padStart(12, "0")}`;
     this.owners.set(id, owner);
     this.rows.set(id, {
       id, relationship: "friend", birthYear: null, photoPath: null, linkedUserId: null, ...p,

@@ -101,6 +101,11 @@ export function parseBudget(
 
 const UUID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 const BARE_UUID = new RegExp(`^${UUID}$`, "i");
+/** True for a UUID; anything else can never be a stored id (and would make Postgres error). */
+export function isUuid(id: string): boolean {
+  return BARE_UUID.test(id);
+}
+
 const SHARE_PATH = new RegExp(`^/share/(${UUID})/?$`, "i");
 
 // The UUID (lower case) from a share link on any host, or a bare UUID.

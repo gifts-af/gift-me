@@ -13,7 +13,7 @@ import {
   type Relationship,
 } from "@gifts-af/core";
 import type { SaveResult } from "../settings";
-import { parseShareToken, type MonthDay, type PersonInput } from "./rules";
+import { isUuid, parseShareToken, type MonthDay, type PersonInput } from "./rules";
 import type { OccasionRow, PeopleStore, PersonRow } from "./store";
 
 export type PersonCard = {
@@ -98,6 +98,7 @@ export async function listPeople(store: PeopleStore, today: CalendarDate): Promi
 
 /** One person with everything the detail screen shows; null if not the caller's. */
 export async function getPerson(store: PeopleStore, id: string, today: CalendarDate): Promise<PersonDetail | null> {
+  if (!isUuid(id)) return null; // not an id we could have issued; skip the query
   const person = await store.person(id);
   if (!person) return null;
   const [occasions, budgets, schedule, photos] = await Promise.all([
@@ -163,6 +164,7 @@ async function onOwnPerson(
   what: string,
   run: (person: PersonRow) => Promise<SaveResult>,
 ): Promise<SaveResult> {
+  if (!isUuid(id)) return { ok: false, error: NOT_FOUND };
   try {
     const person = await store.person(id);
     if (!person) return { ok: false, error: NOT_FOUND };

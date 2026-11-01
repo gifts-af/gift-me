@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { parseDate, type OccasionKind } from "@gifts-af/core";
 import { todayForRequest } from "@/lib/today";
 import {
@@ -96,6 +97,11 @@ export async function setPhotoAction(_previous: SaveResult | null, formData: For
 }
 
 export async function deletePersonAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
-  const id = text(formData, "id");
-  return refresh(await deletePerson(id), id);
+  const result = await deletePerson(text(formData, "id"));
+  if (!result.ok) return result;
+  // Not the person's own path: revalidating it while the user is still on it
+  // would flash a 404. Go straight Home instead.
+  revalidatePath("/");
+  revalidatePath("/people");
+  redirect("/");
 }

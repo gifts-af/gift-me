@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   addPerson,
   deletePerson,
@@ -154,12 +154,29 @@ describe("getPerson", () => {
     expect(p!.occasions.find((o) => o.kind === "christmas")).toMatchObject({ enabled: false, orderBy: null });
   });
 
+  it("returns null for an id that is not a UUID, without asking the store", async () => {
+    const { store } = setup();
+    const spy = vi.spyOn(store, "person");
+    expect(await getPerson(store, "abc", TODAY)).toBeNull();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
   it("returns null for an unknown, deleted or someone else's person", async () => {
     const { store, mine, theirs } = setup();
     expect(await getPerson(store, "nope", TODAY)).toBeNull();
     expect(await getPerson(store, theirs, TODAY)).toBeNull();
     await deletePerson(store, mine);
     expect(await getPerson(store, mine, TODAY)).toBeNull();
+  });
+});
+
+describe("a malformed id", () => {
+  it("is a not-found error from a mutation, with no writes", async () => {
+    const { store } = setup();
+    expect(await setOccasionEnabled(store, "abc", "christmas", false)).toEqual({
+      ok: false, error: "That person wasn't found.",
+    });
+    expect(store.writes).toEqual([]);
   });
 });
 
