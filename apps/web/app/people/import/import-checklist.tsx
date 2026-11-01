@@ -25,11 +25,14 @@ export function ImportChecklist({
   action,
   imported,
   load,
+  onAgain,
 }: {
   action: (previous: ImportResult | null, formData: FormData) => Promise<ImportResult>;
   /** Google contact ids already imported: shown as "Already added". */
   imported: string[];
   load: () => Promise<GoogleContact[]>;
+  /** Starts the checklist over after an import (ALL-72). */
+  onAgain?: () => void;
 }) {
   const [stage, setStage] = useState<Stage>({ kind: "start" });
   const [search, setSearch] = useState("");
@@ -58,7 +61,7 @@ export function ImportChecklist({
     }
   }
 
-  if (result?.ok) return <Finished result={result} />;
+  if (result?.ok) return <Finished result={result} onAgain={onAgain} />;
 
   if (stage.kind !== "list") {
     return (
@@ -227,7 +230,7 @@ export function ImportChecklist({
   );
 }
 
-function Finished({ result }: { result: Extract<ImportResult, { ok: true }> }) {
+function Finished({ result, onAgain }: { result: Extract<ImportResult, { ok: true }>; onAgain?: () => void }) {
   const notes = [
     result.skipped > 0 && `${plural(result.skipped, "was", "were")} already added`,
     result.failed > 0 && `${plural(result.failed, "couldn't", "couldn't")} be added; try them again`,
@@ -241,6 +244,11 @@ function Finished({ result }: { result: Extract<ImportResult, { ok: true }> }) {
       <Link href="/" className="self-start font-semibold underline underline-offset-[3px]">
         See them on Home
       </Link>
+      {onAgain && (
+        <Button variant="outline" className="self-start" onClick={onAgain}>
+          Import more people
+        </Button>
+      )}
     </div>
   );
 }

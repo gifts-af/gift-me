@@ -119,5 +119,7 @@ export async function importContactsAction(_previous: ImportResult | null, formD
   if (!result.ok) return result;
   revalidatePath("/");
   revalidatePath("/people");
+  // So the page's "Already added" list is fresh next time (ALL-72).
+  revalidatePath("/people/import");
   return { ...result, failed: result.failed + parsed.refused };
 }
