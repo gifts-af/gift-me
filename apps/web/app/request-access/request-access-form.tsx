@@ -12,9 +12,10 @@ export function RequestAccessForm({ onSent }: { onSent?: () => void } = {}) {
   const [result, action, pending] = useActionState(submitAccessRequest, null);
   const human = useHumanCheck();
   const { reset } = human;
-  // Each answer uses up the token, so fetch a new one for the next try.
+  // A send attempt uses up the token, so fetch a new one before the next try.
+  // A form that failed our own checks never reached Cloudflare, so its token is still good.
   useEffect(() => {
-    if (result) reset();
+    if (result?.status === "error") reset();
   }, [result, reset]);
   const sent = result?.status === "sent";
   useEffect(() => {

@@ -38,9 +38,10 @@ function FeedbackForm({ onSent }: { onSent: () => void }) {
   const [result, action, pending] = useActionState(submitFeedback, null);
   const human = useHumanCheck();
   const { reset } = human;
-  // Each answer uses up the token, so fetch a new one for the next try.
+  // A send attempt uses up the token, so fetch a new one before the next try.
+  // A form that failed our own checks never reached Cloudflare, so its token is still good.
   useEffect(() => {
-    if (result) reset();
+    if (result?.status === "error") reset();
   }, [result, reset]);
   // Held in state so a failed send doesn't wipe what they typed (React resets
   // a form's own fields after its action runs).
