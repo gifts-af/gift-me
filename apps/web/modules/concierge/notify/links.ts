@@ -1,4 +1,4 @@
-import { ACTIONS, type Action } from "./actions";
+import { ACTIONS, type Action, type ActionResult } from "./actions";
 import type { NotifyStore } from "./store";
 import { hashActionToken } from "./tokens";
 
@@ -22,6 +22,15 @@ export type ConfirmResult =
 export type LinkDeps = { store: NotifyStore; now: Date };
 
 /**
+ * The action a saved link names, or null when this build doesn't have it: the
+ * dev database is shared across previews and a rollback can meet newer links.
+ * Object.hasOwn keeps prototype names like "constructor" out.
+ */
+function actionFor(name: string): Action | null {
+  return Object.hasOwn(ACTIONS, name) ? ACTIONS[name as keyof typeof ACTIONS] : null;
+}
+
+/**
  * The spec's check order; the first that applies decides: unknown token,
  * signed out, someone else, used, expired, otherwise confirm.
  */
@@ -32,6 +41,8 @@ export async function readActionLink(
 ): Promise<LinkView> {
   const link = await store.findLink(hashActionToken(token));
   if (!link) return { state: "invalid" };
+  const action = actionFor(link.action);
+  if (!action) return { state: "invalid" };
   if (viewerId === null) {
     const { email } = await store.recipient(link.userId);
     return { state: "sign_in", email };
@@ -40,7 +51,7 @@ export async function readActionLink(
   if (link.usedAt) return { state: "used" };
   // Same boundary as claimLink (expires_at > now): at the expiry instant it's expired.
   if (link.expiresAt.getTime() <= now.getTime()) return { state: "expired" };
-  return { state: "confirm", confirm: ACTIONS[link.action].confirm };
+  return { state: "confirm", confirm: action.confirm };
 }
 
 export async function confirmActionLink(
@@ -57,8 +68,9 @@ export async function confirmActionLink(
   // Someone else's confirm claimed it between our read and this claim.
   if (!claimed) return { state: "used" };
 
-  const action = ACTIONS[claimed.action];
-  const result = await action.run({ userId: claimed.userId, roundId: claimed.roundId });
+  const action = actionFor(claimed.action);
+  if (!action) return { state: "invalid" };
+  const result = await runSafely(action, claimed.userId, claimed.roundId);
   if (!result.ok) {
     // [Claude's call] The link stays used: real actions must be safe to treat as
     // done or report their own failure. Never log the raw token.
@@ -66,4 +78,17 @@ export async function confirmActionLink(
     return { state: "invalid" };
   }
   return { state: "done", done: action.done };
+}
+
+/** A throwing action counts as a failed one, so the page still answers. */
+async function runSafely(
+  action: Action,
+  userId: string,
+  roundId: string | null,
+): Promise<ActionResult> {
+  try {
+    return await action.run({ userId, roundId });
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
 }

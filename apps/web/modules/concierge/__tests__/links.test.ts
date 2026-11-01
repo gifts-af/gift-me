@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ACTIONS } from "../notify/actions";
+import { ACTIONS, type ActionName } from "../notify/actions";
 import { confirmActionLink, readActionLink } from "../notify/links";
 import { hashActionToken } from "../notify/tokens";
 import { FakeStore } from "./fake-store";
@@ -11,7 +11,7 @@ const NOW = new Date("2026-11-01T12:00:00Z");
 const HOUR = 60 * 60 * 1000;
 
 async function storeWithLink(
-  opts: { expiresAt?: Date; usedAt?: Date | null } = {},
+  opts: { expiresAt?: Date; usedAt?: Date | null; action?: string } = {},
 ): Promise<FakeStore> {
   const store = new FakeStore();
   store.recipients.set(OWNER, { email: "mom@example.com", timezone: null });
@@ -20,7 +20,8 @@ async function storeWithLink(
       hash: hashActionToken(TOKEN),
       userId: OWNER,
       roundId: null,
-      action: "test",
+      // A link saved by another build can name an action this build lacks.
+      action: (opts.action ?? "test") as ActionName,
       expiresAt: opts.expiresAt ?? new Date(NOW.getTime() + HOUR),
     },
   ]);
@@ -182,6 +183,32 @@ describe("confirmActionLink", () => {
     });
     expect(log).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(log.mock.calls)).toContain("boom");
+    expect(JSON.stringify(log.mock.calls)).not.toContain(TOKEN);
+    expect(store.links[0].usedAt).toEqual(NOW);
+  });
+
+  it("is invalid on read and confirm for an action this build doesn't know, and runs nothing", async () => {
+    for (const name of ["retired-action", "constructor", "toString"]) {
+      const store = await storeWithLink({ action: name });
+      const run = vi.spyOn(ACTIONS.test, "run");
+      expect(await readActionLink(TOKEN, OWNER, { store, now: NOW })).toEqual({ state: "invalid" });
+      expect(await confirmActionLink(TOKEN, OWNER, { store, now: NOW })).toEqual({
+        state: "invalid",
+      });
+      expect(run).not.toHaveBeenCalled();
+      expect(store.links[0].usedAt).toBeNull();
+    }
+  });
+
+  it("treats an action that throws like a failure: logged without the token, link stays used", async () => {
+    const store = await storeWithLink();
+    vi.spyOn(ACTIONS.test, "run").mockRejectedValue(new Error("kaboom"));
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await confirmActionLink(TOKEN, OWNER, { store, now: NOW })).toEqual({
+      state: "invalid",
+    });
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(log.mock.calls)).toContain("kaboom");
     expect(JSON.stringify(log.mock.calls)).not.toContain(TOKEN);
     expect(store.links[0].usedAt).toEqual(NOW);
   });
