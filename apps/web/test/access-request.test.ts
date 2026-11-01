@@ -94,6 +94,24 @@ describe("buildAccessRequestEmail", () => {
 });
 
 describe("buildRequestConfirmation (ALL-71)", () => {
+  it("carries nothing the visitor typed, so it can't be used to message strangers", () => {
+    const sneaky: AccessRequest = { ...jordan, name: "Claim your refund at evil.example", note: "visit evil.example" };
+    for (const kind of ["access", "waitlist"] as const) {
+      const email = buildRequestConfirmation({ ...sneaky, kind });
+      expect(email.subject + email.text + email.html).not.toContain("evil.example");
+    }
+  });
+
+  it("says exactly what the spec says, and nothing that turns into a link", () => {
+    const access = buildRequestConfirmation(jordan);
+    expect(access.text).toContain("Thanks, we got your request. We'll email you when you're in.");
+    const waitlist = buildRequestConfirmation({ ...jordan, kind: "waitlist" });
+    expect(waitlist.text).toContain("You're on the concierge waitlist. We'll email you when it's ready.");
+    for (const email of [access, waitlist]) {
+      expect(email.text).not.toMatch(/day or two|giftsaf\.com|https?:/);
+    }
+  });
+
   it("the person gets a branded confirmation for access", () => {
     const email = buildRequestConfirmation(jordan);
     expect(email.to).toBe("jo@example.com");

@@ -65,26 +65,15 @@ export function buildAccessRequestEmail(req: AccessRequest): OutgoingEmail {
   };
 }
 
-// The person's own copy (ALL-71): no links to act on, sent only after the bot
-// check, so the form can't be used to email strangers.
+// The person's own copy (ALL-71), sent only after the bot check. It carries
+// nothing they typed (not even their name) and no links, so the form can't be
+// used to send strangers a GiftsAF email with someone else's words in it.
 export function buildRequestConfirmation(req: AccessRequest): OutgoingEmail {
   const waitlist = req.kind === "waitlist";
   const { html, text } = renderEmail(
     waitlist
-      ? {
-          heading: `Thanks, ${req.name}!`,
-          paragraphs: [
-            "You're on the concierge waitlist. We'll email you when it's ready.",
-            "It remembers the people you buy for, finds gifts that fit, and ships them on time. You just tap yes.",
-          ],
-        }
-      : {
-          heading: `Thanks, ${req.name}!`,
-          paragraphs: [
-            "We got your request. We'll email you when you're in.",
-            "Usually within a day or two. Meanwhile, the tour is always open at giftsaf.com.",
-          ],
-        },
+      ? { heading: "Thanks!", paragraphs: ["You're on the concierge waitlist. We'll email you when it's ready."] }
+      : { heading: "Got it.", paragraphs: ["Thanks, we got your request. We'll email you when you're in."] },
   );
   return {
     to: req.email,
