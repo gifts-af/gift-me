@@ -39,6 +39,11 @@ export function validateEnv(
     throw new Error(`VITE_APP_ORIGIN must be a bare origin like https://giftsaf.com (no path, trailing slash or wildcard), got "${origin}".`);
   }
 
+  const quality = env.VITE_CAPTURE_JPEG_QUALITY!;
+  if (!/^\d+$/.test(quality) || Number(quality) < 1 || Number(quality) > 100) {
+    throw new Error(`VITE_CAPTURE_JPEG_QUALITY must be a whole number from 1 to 100, got "${quality}".`);
+  }
+
   if (mode === "production") {
     for (const name of REQUIRED_ENV) {
       if (env[name] !== committedProduction[name]) {

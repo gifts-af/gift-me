@@ -34,6 +34,17 @@ describe("validateEnv", () => {
     }
   });
 
+  it("requires VITE_CAPTURE_JPEG_QUALITY to be a whole number from 1 to 100", () => {
+    for (const bad of ["0", "101", "70.5", "abc", "-5", "1e2"]) {
+      expect(() => validateEnv("development", { ...dev, VITE_CAPTURE_JPEG_QUALITY: bad }, prod)).toThrow(
+        /VITE_CAPTURE_JPEG_QUALITY/,
+      );
+    }
+    for (const ok of ["1", "100"]) {
+      expect(() => validateEnv("development", { ...dev, VITE_CAPTURE_JPEG_QUALITY: ok }, prod)).not.toThrow();
+    }
+  });
+
   it("production refuses dev values, such as from a .env.local or shell override", () => {
     expect(() => validateEnv("production", dev, prod)).toThrow(/VITE_APP_ORIGIN/);
     expect(() => validateEnv("production", { ...prod, VITE_SUPABASE_URL: dev.VITE_SUPABASE_URL }, prod)).toThrow(
