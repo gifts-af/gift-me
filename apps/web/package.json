@@ -9,7 +9,8 @@
     "test": "vitest run",
     "typecheck": "next typegen && tsc --noEmit",
     "test:watch": "vitest",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "email:samples": "tsx scripts/email-samples.ts"
   },
   "dependencies": {
     "@gifts-af/core": "workspace:*",
@@ -50,6 +51,7 @@
     "server-only": "^0.0.1",
     "tailwindcss": "^3.4.1",
     "tailwindcss-animate": "^1.0.7",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "vite": "^8.3.1",
     "vitest": "^5.0.2"
