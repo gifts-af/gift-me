@@ -2,6 +2,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const createStore = vi.fn();
+const processCapture = vi.fn();
 vi.mock("@/modules/concierge", async () => {
   const actual = await vi.importActual<typeof import("@/modules/concierge/capture/capture")>(
     "@/modules/concierge/capture/capture",
@@ -10,6 +11,7 @@ vi.mock("@/modules/concierge", async () => {
     parseCaptureForm: actual.parseCaptureForm,
     saveCapture: actual.saveCapture,
     createSupabaseCaptureStore: (token: string) => createStore(token),
+    processCapture: (...args: unknown[]) => processCapture(...args),
   };
 });
 
@@ -45,6 +47,7 @@ const fakeStore = () => ({
 beforeEach(() => {
   vi.stubEnv("NEXT_PUBLIC_EXTENSION_ID", ID);
   createStore.mockReset();
+  processCapture.mockReset();
 });
 
 describe("OPTIONS", () => {
@@ -94,12 +97,26 @@ describe("POST", () => {
     expect(res.headers.get("access-control-allow-origin")).toBe(ORIGIN);
   });
 
-  it("201 with the id on success", async () => {
-    createStore.mockResolvedValue(fakeStore());
+  it("201 with the id and what was learned on success", async () => {
+    const store = fakeStore();
+    createStore.mockResolvedValue(store);
+    const extraction = { status: "extracted", facts: [{ id: "f1", category: "wants", value: "a vise" }] };
+    processCapture.mockResolvedValue(extraction);
     const res = await POST(post({ origin: ORIGIN, authorization: "Bearer t" }));
     expect(res.status).toBe(201);
-    expect(await res.json()).toEqual({ id: "c1" });
+    expect(await res.json()).toEqual({ id: "c1", extraction });
+    expect(processCapture).toHaveBeenCalledWith(store, expect.any(Function), "c1");
     expect(res.headers.get("access-control-allow-origin")).toBe(ORIGIN);
+  });
+
+  it("still 201, with extraction failed, when reading the capture throws", async () => {
+    createStore.mockResolvedValue(fakeStore());
+    processCapture.mockRejectedValue(new Error("boom"));
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const res = await POST(post({ origin: ORIGIN, authorization: "Bearer t" }));
+    expect(res.status).toBe(201);
+    expect(await res.json()).toEqual({ id: "c1", extraction: { status: "failed", facts: [] } });
+    spy.mockRestore();
   });
 
   it("500 when the extension id is not configured", async () => {

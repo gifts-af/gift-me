@@ -1,60 +1,35 @@
+import { createExtractor } from "@/lib/ai/extract";
+import { AI_MODELS } from "@/lib/ai/models";
 import {
   createSupabaseCaptureStore,
   parseCaptureForm,
+  processCapture,
   saveCapture,
+  type Extraction,
 } from "@/modules/concierge";
+import { allowedOrigin, bearer, json, preflight } from "./http";
 
 // The Chrome extension (ALL-22) posts captures here from chrome-extension://{id}
 // with the user's bearer token. The proxy lets this path through signed out;
-// the token is checked by the store.
+// the token is checked by the store. The capture is then read by the AI model
+// in the same request (ALL-25, T48), so the popup can show what was learned.
 
-/** Read at request time so a missing value fails the request, not the build. */
-function allowedOrigin(): string | null {
-  const id = process.env.NEXT_PUBLIC_EXTENSION_ID;
-  if (!id) {
-    console.error("NEXT_PUBLIC_EXTENSION_ID is not set; /api/captures is disabled.");
-    return null;
-  }
-  return `chrome-extension://${id}`;
-}
-
-function respond(request: Request, allowed: string | null, body: BodyInit | null, init: ResponseInit) {
-  const headers = new Headers(init.headers);
-  headers.set("Vary", "Origin");
-  if (allowed && request.headers.get("origin") === allowed) {
-    headers.set("Access-Control-Allow-Origin", allowed);
-  }
-  return new Response(body, { ...init, headers });
-}
-
-function json(request: Request, allowed: string | null, data: unknown, status: number) {
-  return respond(request, allowed, JSON.stringify(data), {
-    status,
-    headers: { "Content-Type": "application/json" },
-  });
-}
+// Reading a capture takes 3–7 s; this leaves room for a slow model call.
+export const maxDuration = 60;
 
 export async function OPTIONS(request: Request) {
-  const allowed = process.env.NEXT_PUBLIC_EXTENSION_ID ? allowedOrigin() : null;
-  return respond(request, allowed, null, {
-    status: 204,
-    headers: {
-      "Access-Control-Allow-Methods": "POST, OPTIONS",
-      "Access-Control-Allow-Headers": "authorization, content-type",
-      "Access-Control-Max-Age": "86400",
-    },
-  });
+  return preflight(request);
 }
 
 export async function POST(request: Request) {
   const allowed = allowedOrigin();
   if (!allowed) return json(request, null, { error: "Captures aren't set up." }, 500);
 
-  const match = /^Bearer\s+(.+)$/i.exec(request.headers.get("authorization") ?? "");
-  if (!match) return json(request, allowed, { error: "Sign in again." }, 401);
+  const token = bearer(request);
+  if (!token) return json(request, allowed, { error: "Sign in again." }, 401);
 
   try {
-    const store = await createSupabaseCaptureStore(match[1]);
+    const store = await createSupabaseCaptureStore(token);
     if (!store) return json(request, allowed, { error: "Sign in again." }, 401);
 
     let form: FormData;
@@ -68,7 +43,16 @@ export async function POST(request: Request) {
 
     const result = await saveCapture(store, input);
     if (!result.ok) return json(request, allowed, { error: result.error }, result.status);
-    return json(request, allowed, { id: result.id }, 201);
+
+    // The capture is saved either way; a failed read can be retried.
+    let extraction: Extraction;
+    try {
+      extraction = await processCapture(store, createExtractor(AI_MODELS.extraction), result.id);
+    } catch (error) {
+      console.error("capture extraction failed", error);
+      extraction = { status: "failed", facts: [] };
+    }
+    return json(request, allowed, { id: result.id, extraction }, 201);
   } catch (error) {
     console.error("capture failed", error);
     return json(request, allowed, { error: "Couldn't save the capture." }, 500);
