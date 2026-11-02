@@ -31,7 +31,7 @@
 1. "Reading the page…" (spinner). Extraction runs while the popup waits; it took 3–7 s in the spike.
 2. One of:
    - **Learned something:** "Here's what I learned about Dad", one line per fact ("Wants: a new rotary fly-tying vise", "Already has: Owala water bottle", "Size: large shirt"), then **See everything about Dad →** (opens `/people/<id>` in a new tab).
-   - **Nothing confident:** "Nothing confident to learn from this page. The capture is saved." plus the same link.
+   - **Nothing confident:** "Nothing new to learn from this page. The capture is saved." plus the same link.
    - **Failed:** "Couldn't read this page. The capture is saved." plus **Try again**.
    - **Extraction switched off** (kill switch): "Saved. We'll learn from it later." The capture stays `pending`.
 
@@ -127,7 +127,7 @@ None left. Calls made along the way are in the table below.
 - Business logic (`modules/concierge`, `lib/ai` functions) never reads `process.env` and never creates clients. Routes and actions build the model and the stores (E3).
 - New server logging goes through `logEvent` (`apps/web/lib/log.ts`): one JSON line, ids and counts only (E6).
 - Fact categories, exactly: `interest, dislike, size, brand, owns, wants, style, avoid, constraint` (the model's enum). The database also keeps `loved`.
-- Popup and page copy is the spec's, word for word: "Reading the page…", "Here's what I learned about {name}", "Nothing confident to learn from this page. The capture is saved.", "Couldn't read this page. The capture is saved.", "Saved. We'll learn from it later.", "See everything about {name} →", "✨ AI suggestions from your captures", "What you've told us", "{n} capture(s) hasn't/haven't been read. Read it/them now".
+- Popup and page copy is the spec's, word for word: "Reading the page…", "Here's what I learned about {name}", "Nothing new to learn from this page. The capture is saved.", "Couldn't read this page. The capture is saved.", "Saved. We'll learn from it later.", "See everything about {name} →", "✨ AI suggestions from your captures", "What you've told us", "{n} capture(s) hasn't/haven't been read. Read it/them now".
 - Route `maxDuration = 60` on both capture routes.
 
 ### Review focus
