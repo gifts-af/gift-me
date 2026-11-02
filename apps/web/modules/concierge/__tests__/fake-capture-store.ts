@@ -1,4 +1,7 @@
-import type { CaptureStore, NewCaptureRow } from "../capture/store";
+import type { CandidateFact } from "@/lib/ai/extract";
+import type { SavedFact } from "../capture/extract";
+import type { CaptureStatus, CaptureStore, NewCaptureRow, StoredCapture } from "../capture/store";
+import { factKey } from "../capture/extract";
 
 export type FakeCaptureRow = NewCaptureRow & {
   id: string;
@@ -20,6 +23,13 @@ export class FakeCaptureStore implements CaptureStore {
   failSetPath = false;
   failDelete = false;
   private n = 0;
+  // Extraction (ALL-25).
+  extraction = { enabled: true, minConfidencePct: 60 };
+  captures = new Map<string, StoredCapture>();
+  screenshots = new Map<string, Uint8Array>();
+  facts: (SavedFact & { personId: string; captureId: string | null; active: boolean })[] = [];
+  downloads: string[] = [];
+  failInsertFacts = false;
 
   async limits() {
     if (this.failLimits) throw new Error("limits failed");
@@ -47,5 +57,38 @@ export class FakeCaptureStore implements CaptureStore {
   async deleteCapture(id: string) {
     if (this.failDelete) throw new Error("delete failed");
     this.rows = this.rows.filter((r) => r.id !== id);
+  }
+
+  async extractionSettings() {
+    return this.extraction;
+  }
+  async loadCapture(id: string) {
+    return this.captures.get(id) ?? null;
+  }
+  async downloadScreenshot(path: string) {
+    this.downloads.push(path);
+    const bytes = this.screenshots.get(path);
+    if (!bytes) throw new Error("no such screenshot");
+    return bytes;
+  }
+  async factKeys(personId: string) {
+    return new Set(this.facts.filter((f) => f.personId === personId).map((f) => factKey(f.category, f.value)));
+  }
+  async capturedFacts(captureId: string) {
+    return this.facts
+      .filter((f) => f.captureId === captureId && f.active)
+      .map(({ id, category, value }) => ({ id, category, value }));
+  }
+  async insertFacts(personId: string, captureId: string, facts: CandidateFact[]) {
+    if (this.failInsertFacts) throw new Error("insert facts failed");
+    return facts.map((f) => {
+      const saved = { id: `fact-${++this.n}`, category: f.category, value: f.value };
+      this.facts.push({ ...saved, personId, captureId, active: true });
+      return saved;
+    });
+  }
+  async setCaptureStatus(id: string, status: CaptureStatus) {
+    const c = this.captures.get(id);
+    if (c) c.status = status;
   }
 }
