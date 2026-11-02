@@ -6,7 +6,7 @@ import { isSensitive } from "../sensitive";
 // The four sensitive-trait traps in the W1-3 fixtures (design/spikes/ai.md):
 // grief, health, religion and pregnancy.
 const TRAPS = ["june-1", "june-2", "priya-1", "priya-2"];
-const TRAP_WORDS = /arthritis|blood pressure|medication|\bmeds\b|pregnan|diwali|temple|widow|late husband|grie/i;
+const TRAP_WORDS = /arthritis|blood pressure|medication|\bmeds\b|pregnan|baby|diwali|temple|widow|late husband|grie/i;
 
 describe("isSensitive", () => {
   it.each([
@@ -23,6 +23,30 @@ describe("isSensitive", () => {
     "widowed last year",
     "in debt",
     "recently laid off",
+    // Found in review: other ways of saying the same things.
+    "due in May",
+    "expecting",
+    "maternity clothes",
+    "newborn on the way",
+    "baby shower gifts",
+    "insulin pump case",
+    "wheelchair-friendly",
+    "hearing aids",
+    "uses a cane",
+    "knee replacement",
+    "physical therapy",
+    "chronic pain",
+    "lost her husband",
+    "late mother",
+    "memorial jewelry",
+    "keeps kosher",
+    "halal snacks",
+    "wears a hijab",
+    "rosary",
+    "Rosh Hashanah",
+    "Pride flag",
+    "tight on money",
+    "flat broke after the move",
   ])("blocks %j", (value) => {
     expect(isSensitive(value)).toBe(true);
   });
@@ -36,6 +60,16 @@ describe("isSensitive", () => {
     "training for the Chicago Marathon",
     "Christmas ornaments",
     "owns baby monitor app",
+    // Found in review: ordinary gift facts that share a word with a sensitive topic.
+    "Brand: Christian Dior",
+    "Christian Louboutin heels",
+    "conservative, classic style",
+    "death metal",
+    "liberal arts books",
+    "sober neutral colors",
+    "praying mantis figurines",
+    "his old vise broke",
+    "candy cane ornaments",
   ])("allows %j", (value) => {
     expect(isSensitive(value)).toBe(false);
   });
