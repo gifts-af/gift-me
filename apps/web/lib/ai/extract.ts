@@ -29,10 +29,11 @@ Return candidate facts.
 
 Categories: ${FACT_CATEGORIES_EXTRACTED.join(", ")}.
 - value: short and specific ("fly tying", "a new rotary fly-tying vise", "film: Kodak Portra 400").
-- confidence: 0 to 1. Lower it for jokes, guesses or things said in passing.
+- confidence: 0 to 1, on this scale: 0.9 when the page says it outright; 0.7 when it's clearly implied, like posting about or sharing a page on a hobby; 0.5 or lower for a guess, a joke or something said in passing.
 - evidence: the few words from the page that support it.
 - "owns" and "wants" matter most: they stop duplicate gifts and point at real needs.
 - Something the person is only seen with, using or wearing is "owns", never "interest" or "wants", unless the page says they want another one. A photo of someone with an Owala bottle means they already have one.
+- Record what the page says before any gift idea it suggests: a complaint is a "dislike", and a guessed fix for it is a separate, lower-confidence "wants".
 - If nothing is clear, return an empty list. Never pad it with weak guesses.
 
 Never record or hint at sensitive traits: health or medical conditions, medications, pregnancy,

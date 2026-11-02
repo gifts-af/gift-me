@@ -62,6 +62,10 @@ describe("createExtractor", () => {
     const system = model.doGenerateCalls[0].prompt.find((m) => m.role === "system")?.content;
     expect(system).toMatch(/seen with, using or wearing is "owns"/);
     expect(system).toMatch(/return an empty list/i);
+    // Fixed scale, so the 60% cut means the same thing run to run (ai:eval missed golf without it).
+    expect(system).toMatch(/0\.9 when the page says it outright; 0\.7 when it's clearly implied/);
+    // A complaint is recorded as a dislike before any guessed gift (ai:eval missed june-1's squirrels).
+    expect(system).toMatch(/a complaint is a "dislike"/);
   });
 
   it("sends the screenshot as an image when there is one", async () => {
