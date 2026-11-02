@@ -3,7 +3,7 @@ Title: <type>: <what changed> (ALL-<n>), e.g. "feat: budget math for multi-selec
 Types: feat, fix, docs, refactor, test, chore, ci, perf. See CLAUDE.md > Git.
 -->
 
-Closes ALL-<n>  <!-- or "Part of ALL-<n>" if this PR is one piece of the ticket -->
+Part of ALL-<n>  <!-- never "Closes": the author marks the ticket Done after the live checks and evidence (CLAUDE.md > Git) -->
 
 ## What changes
 
