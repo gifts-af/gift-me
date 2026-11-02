@@ -26,6 +26,8 @@ export { createCookieCaptureStore, createSupabaseCaptureStore } from "./capture/
 // Reading captures into AI-suggested facts (ALL-25).
 export { CaptureNotFound, processCapture } from "./capture/extract";
 export type { Extraction, SavedFact } from "./capture/extract";
+export { getWhatWeKnow, readUnreadCaptures, removeFact } from "./capture/facts";
+export type { AiFact, WhatWeKnow } from "./capture/facts";
 
 // People, occasions and budgets (ALL-21). Birthday and other occasion rules
 // live in packages/core; parsing of the forms is in people/rules.ts.

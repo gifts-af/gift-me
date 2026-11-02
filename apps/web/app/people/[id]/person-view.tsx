@@ -7,10 +7,12 @@ import { PageTitle } from "@/components/app-shell/page-frame";
 import { appSettingInt } from "@/lib/app-settings";
 import { createClient } from "@/lib/supabase/server";
 import { todayForRequest } from "@/lib/today";
-import { getPerson } from "@/modules/concierge";
+import { getPerson, getWhatWeKnow } from "@/modules/concierge";
 import {
   deletePersonAction,
   linkListAction,
+  readCapturesAction,
+  removeFactAction,
   setBudgetAction,
   setOccasionEnabledAction,
   setPhotoAction,
@@ -23,6 +25,7 @@ import { Budgets } from "./budgets";
 import { DeletePerson } from "./delete-person";
 import { ListLink } from "./list-link";
 import { Occasions } from "./occasions";
+import { WhatWeKnow } from "./what-we-know";
 
 const text = (n: number | undefined) => (n === undefined ? "" : String(n));
 
@@ -37,9 +40,10 @@ export async function PersonView({ id, photoFailed }: { id: string; photoFailed:
   if (!userId) redirect("/");
   const person = await getPerson(id, await todayForRequest());
   if (!person) notFound();
-  const [maxUploadBytes, px] = await Promise.all([
+  const [maxUploadBytes, px, knowledge] = await Promise.all([
     appSettingInt("person_photo_max_upload_bytes"),
     appSettingInt("person_photo_px"),
+    getWhatWeKnow(person.id),
   ]);
 
   return (
@@ -78,6 +82,14 @@ export async function PersonView({ id, photoFailed }: { id: string; photoFailed:
           </p>
         )}
       </div>
+
+      <WhatWeKnow
+        personId={person.id}
+        name={person.name}
+        knowledge={knowledge}
+        removeAction={removeFactAction}
+        readAction={readCapturesAction}
+      />
 
       <section className="flex flex-col gap-3 border-b border-border pb-6" aria-labelledby="edit-heading">
         <h2 id="edit-heading" className="text-lg font-semibold">
