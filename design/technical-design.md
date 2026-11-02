@@ -142,7 +142,7 @@ All tables have `id uuid`, `created_at`, and `updated_at`. Accounts (`profiles`)
 | `budgets` | user_id, person_id, occasion_kind, amount_cents (nullable) | B-1. Overrides the default for that person and occasion. The budget is the buyer's own and optional (D36): `null` means no budget, even when the relationship has a default. |
 | `account_addresses` (in `public`) | user_id, recipient name, line 1, line 2, city, state, ZIP, country, phone, address_checked_at, share_for_gifts | Your own address, for every product (D41): "My address" when you buy, and where gifts to you ship when you keep a list and turn sharing on. Owner-only. |
 | `captures` | user_id, person_id, source_url, page_title, text_excerpt, screenshot_path, status (pending, extracted, failed) | C-1, C-2 |
-| `profile_facts` | user_id, person_id, category (interest, dislike, size, brand, owns, style, avoid), value, source (capture, question, note, reaction, rejection), source_id, confirmed (bool), active | C-3, C-7. A person's profile is the set of their active facts. |
+| `profile_facts` | user_id, person_id, category (interest, dislike, size, brand, owns, wants, style, avoid, constraint, loved), value, source (capture, question, note, reaction, rejection), source_id, confirmed (bool), active | C-3, C-7. A person's profile is the set of their active facts. |
 | `questions` | user_id, person_id, prompt, answer, status | C-4 |
 | `gift_rounds` | user_id, person_id, occasion_id, occasion_date, ship_by_deadline, budget_cents (null = no budget, D36), status (§5), next_action_at, locked_until, attempts, approved_at | One per person per occasion per year. `next_action_at` is when the round engine should look at it next (§5.1). |
 | `gift_ideas` | round_id, title, retailer, product_url (the exact size or color variant), retailer_product_id, offer_id, seller_name, first_party (bool), price_cents, est_shipping_cents, est_tax_cents, est_total_cents, handling_days_max, delivery_days_min, delivery_days_max, arrive_by (worst case), reason, over_budget (bool), rank, status (proposed, selected, rejected), source (generated, list), list_item_id | G-1, G-2. `source = list` for a pick from the person's own list (D37). Delivery is a range before purchase; `arrive_by` uses the slowest case. |
@@ -206,7 +206,7 @@ flowchart LR
 | How the recipient liked a gift | `reactions` |
 | A loved one's own gift list (D37) | read through `lists.person_list` once their account is linked (§3, schema v1.1). Its gifts are offered as picks (`gift_ideas.source = list`); turning list items into `profile_facts` is still to be designed |
 
-**Layer 2: learned facts.** `profile_facts` is where the learning lives. Each fact is small and specific ("interest: fly fishing", "size: medium shirt", "avoid: clutter") and records its category, its source, a link back to the input it came from, whether the user confirmed it, and whether it's still active. **A person's profile is the set of their active facts**, and the user can see, edit or remove any of them (C-7).
+**Layer 2: learned facts.** `profile_facts` is where the learning lives. Each fact is small and specific ("interest: fly fishing", "size: medium shirt", "avoid: clutter") and records its category, its source, a link back to the input it came from, whether the user confirmed it (facts from captures are saved unconfirmed and marked as AI suggestions, D47), and whether it's still active. **A person's profile is the set of their active facts**, and the user can see, edit or remove any of them (C-7).
 
 **Synthesis happens at idea time.** Nothing stores a written summary of a person. Each round, the AI model reads the person's active facts, gift history and rejections and builds its picture from scratch, so the facts stay the single source of truth and nothing goes stale.
 
@@ -317,9 +317,9 @@ flowchart LR
    - a screenshot of the visible area (`chrome.tabs.captureVisibleTab`).
 
    It never scrolls or crawls on its own (C-2). Permissions are `activeTab`, `scripting`, and `storage`, with no broad host permissions.
-3. The app stores the capture (screenshot to Storage) and queues extraction.
-4. **Extraction:** the AI model gets the text and screenshot and returns structured candidate facts (category, value, confidence). The prompt tells it not to infer sensitive traits, and a post-filter blocks those categories (C-8).
-5. The user reviews **"Here's what I learned"** in the web app or extension popup, then confirms or removes items. Confirmed items become active `profile_facts`.
+3. The app stores the capture (screenshot to Storage) and reads it **in the same request** while the popup waits (T48).
+4. **Extraction:** the AI model gets the text and screenshot and returns structured candidate facts (category, value, confidence). The prompt tells it not to infer sensitive traits, and a post-filter blocks those categories (C-8). Facts under `capture_fact_min_confidence_pct` are dropped, duplicates of existing or removed facts are skipped, and something only seen in a photo is `owns`, never `wants` (D47).
+5. The popup shows **"Here's what I learned"** (or that nothing confident was found) with a link to the person. The facts are already saved as active `profile_facts` (`source = capture`, `confirmed = false`), listed on the person's page under "✨ AI suggestions from your captures", where any can be removed (D47, ALL-25).
 
 ### 6.3 Gift idea generation (G-1 to G-5)
 1. **Input:** the person's active facts, past gifts, past rejections, the occasion, the budget, the ship-by deadline, and the recipient's state.
