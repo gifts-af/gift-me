@@ -166,7 +166,9 @@ export function captureStoreFor(supabase: SupabaseClient<Database>, userId: stri
       return rows.map((r) => ({ id: r.id, category: r.category as FactCategory, value: r.value }));
     },
     async setCaptureStatus(id, status) {
-      const { error: err } = await concierge().from("captures").update({ status }).eq("id", id);
+      let query = concierge().from("captures").update({ status }).eq("id", id);
+      if (status === "failed") query = query.neq("status", "extracted");
+      const { error: err } = await query;
       if (err) throw err;
     },
   };

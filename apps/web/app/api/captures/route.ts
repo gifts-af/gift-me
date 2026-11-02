@@ -1,5 +1,6 @@
 import { createExtractor } from "@/lib/ai/extract";
 import { AI_MODELS } from "@/lib/ai/models";
+import { logEvent } from "@/lib/log";
 import {
   createSupabaseCaptureStore,
   parseCaptureForm,
@@ -49,12 +50,13 @@ export async function POST(request: Request) {
     try {
       extraction = await processCapture(store, createExtractor(AI_MODELS.extraction), result.id);
     } catch (error) {
-      console.error("capture extraction failed", error);
+      // E6: ids and the error type only; the text may quote the page.
+      logEvent("capture.extract_error", { capture_id: result.id, error: error instanceof Error ? error.name : "unknown" });
       extraction = { status: "failed", facts: [] };
     }
     return json(request, allowed, { id: result.id, extraction }, 201);
   } catch (error) {
-    console.error("capture failed", error);
+    logEvent("capture.save_failed", { error: error instanceof Error ? error.name : "unknown" });
     return json(request, allowed, { error: "Couldn't save the capture." }, 500);
   }
 }

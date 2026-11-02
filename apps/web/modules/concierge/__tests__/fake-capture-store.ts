@@ -88,6 +88,6 @@ export class FakeCaptureStore implements CaptureStore {
   }
   async setCaptureStatus(id: string, status: CaptureStatus) {
     const c = this.captures.get(id);
-    if (c) c.status = status;
+    if (c && !(status === "failed" && c.status === "extracted")) c.status = status;
   }
 }

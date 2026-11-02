@@ -47,5 +47,6 @@ export interface CaptureStore {
   capturedFacts(captureId: string): Promise<SavedFact[]>;
   /** Saves facts as source = capture, confirmed = false, active. */
   insertFacts(personId: string, captureId: string, facts: CandidateFact[]): Promise<SavedFact[]>;
+  /** "failed" never replaces "extracted": an overlapping read may have succeeded first. */
   setCaptureStatus(id: string, status: CaptureStatus): Promise<void>;
 }

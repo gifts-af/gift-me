@@ -121,6 +121,18 @@ describe("processCapture", () => {
     expect(calls[0].known).toEqual([]);
   });
 
+  it("doesn't mark a capture failed when an overlapping read already succeeded", async () => {
+    capture();
+    reply = async () => {
+      // Another read (Try again, or Read it now) finished first.
+      store.captures.get("cap-1")!.status = "extracted";
+      throw new Error("timed out");
+    };
+    const result = await processCapture(store, extract, "cap-1");
+    expect(result.status).toBe("failed");
+    expect(store.captures.get("cap-1")!.status).toBe("extracted");
+  });
+
   it("gives the model the timeout from settings", async () => {
     capture();
     store.extraction.timeoutMs = 1234;
