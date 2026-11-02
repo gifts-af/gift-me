@@ -7,4 +7,4 @@ For any AI coding agent working in this repo (Codex, Cursor, Copilot, Gemini and
 The two rules that are never skipped (T44):
 
 1. **No work without a ticket.** Every change starts from a Linear ticket (team `ALL`) with acceptance criteria. If there isn't one, create it first.
-2. **No ticket done without evidence.** Before a ticket is Done, post its test evidence on the ticket as a comment: tests and results, CI, screenshots (before and after for fixes), mock-ups, and live checks after deploy. Images go into the comment, not just the chat. See `CLAUDE.md` > Git > Evidence on the ticket.
+2. **No ticket done without evidence.** Before a ticket is Done, post its test evidence on the ticket as a comment: tests and results, CI, screenshots (before and after for fixes), mock-ups, and live checks after deploy. Images go into the comment, not just the chat. See `CLAUDE.md` > Git > Evidence on the ticket. A PR says `Closes ALL-<n>` only if merging finishes the ticket; if anything is known to be left, it says `Part of ALL-<n>`, and you move the ticket to Done in Linear once the evidence is posted (`CLAUDE.md` > Git).

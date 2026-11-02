@@ -4,7 +4,9 @@ Two people (the owner and Jim) build this with Claude. Everything written here s
 
 ## Principles
 
-The short list every plan is checked against (`design/plans/TEMPLATE.md` > Principles check). The detail is in the sections below and the decisions logs.
+Every plan is checked against these (`design/plans/TEMPLATE.md` > Principles check), and a reviewer can point at a diff and name the principle it breaks. **How we work** covers process; **How we build** covers engineering (T47). The detail is in the sections below and the decisions logs.
+
+### How we work
 
 1. **Simplest thing that works.** Challenge anything harder than it needs to be, including Claude's own proposals. Add tools only for a real need (T10).
 2. **Progress over perfection.** Tunable values get a sensible, written-down default. Only bring the owner decisions that are hard to undo: architecture, vendors, data shape, money and safety.
@@ -16,6 +18,40 @@ The short list every plan is checked against (`design/plans/TEMPLATE.md` > Princ
 8. **Written for a person.** Answer first, plain words, one place for each doc.
 9. **No work without a ticket; no ticket done without evidence** (T44). Every change starts from a Linear ticket, and a ticket isn't Done until its test evidence is posted on it (see Git > Evidence on the ticket).
 10. **Collect the minimum, as late as possible** (T42). Ask for a piece of personal data only when a feature the person is using right now can't work without it, keep it only while it's needed, and send outside services IDs, not names or emails.
+
+### How we build
+
+Numbered E1–E10 (E for engineering), so they never get mixed up with the PRD's requirement ids like B-5. Each principle ends with **Breaks it:**, the thing to look for in a diff. Existing code that breaks one is fixed when we next touch it, not all at once.
+
+**E1. Don't distribute by default.** We run one Next.js app on Vercel and one Supabase database (T10, T19). A new service, process, queue, worker or scheduled job needs a T# in `design/decisions.md` that ties it to one of four reasons: the data no longer fits, compute that's truly independent, users far enough away to need lower latency, or a separate team owning it. Coordination costs network round trips, not milliseconds.
+*Breaks it:* a diff adds a deployable, queue or scheduled job with no decision behind it.
+
+**E2. Optimize for deletion, not extension.** Keep each module small enough for one person to delete and rewrite in a day. Don't build for a need we don't have yet. Inline the code until that hurts, and extract on the third copy, because duplication is cheaper than the wrong abstraction.
+*Breaks it:* a new interface, base class, factory or generic helper with one caller.
+
+**E3. Make dependencies explicit.** Everything a function uses arrives through its arguments or the imports at the top of its file. No hidden global state, and no work done at import time. Business logic (`packages/core` and module logic) never reads `process.env` and never creates its own clients. Route handlers and server actions build the clients and settings and pass them in, which is how `packages/core` already works (T23).
+*Breaks it:* logic that reads env vars, a module-level client or mutable module state that isn't in its signature.
+
+**E4. Contract at the boundary, not in the middle.** Wherever data crosses into or out of the app (routes, webhooks, inbound email, files, vendor APIs, the database), it has a written schema and is validated right there. For the database, that's migrations plus generated types (`pnpm db:types`, checked in CI). Shapes get a **version only when something outside this deploy depends on them**: the browser extension, webhooks we publish, share links, emails. Routes used only by our own pages ship together with those pages. The side that understands both shapes does the translation; for example, the Zinc adapter turns Zinc's order into ours. A product never writes another product's tables (T19).
+*Breaks it:* using a request or webhook body without validating it, or a vendor's raw shape leaking past its adapter.
+
+**E5. Test the transformation, not the plumbing.** Vitest covers pure logic, such as budget and schedule math. Integration tests cover the boundaries: pgTAP for the database, and Playwright for the app against local Supabase. Don't mock what we own (our code, our database), so run the real thing locally. Do mock what we don't own (Zinc, AI Gateway, email). A bug fix includes a test that failed before the fix.
+*Breaks it:* a `fix:` PR with no new failing-then-passing test, or a test that mocks Supabase or one of our own modules.
+
+**E6. Emit structured events, derive everything else.** New server code logs through one small helper that writes one JSON event per line, which Vercel captures. Logs, metrics and traces all come from those events. Each event carries the ids needed to find it again: the request id and user id, plus the round, order or person id when there is one. **Ids only:** never names, emails, addresses, gift messages or keys (D31, T27).
+*Breaks it:* a new free-text `console.log`, or an event that contains personal data.
+
+**E7. Recovery over prevention, except where money moves.** Any deploy can be undone in under five minutes without a code change. Code goes back with Vercel's instant rollback, and a risky path is switched off with an `app_settings` row. Those rows double as feature flags, so we don't need a flag service (T23). Migrations are expand-then-contract: add the new thing, ship the code that uses it, and remove the old thing in a later migration. **Purchases can't be undone (T18)**, so ordering also prevents mistakes up front: price caps (PRD B-5), one live order per idea (T26), and a setting that stops all ordering. We rehearse a rollback once before the public launch and record how in the README.
+*Breaks it:* a migration that drops or renames something live code still uses, or a risky new path with no off switch.
+
+**E8. Attention is finite.** An alert exists only if it matches something a user would notice and links to a runbook (a README section) that says what to do. Dashboards are saved queries we actually use, not decoration. Delete any alert that hasn't led to useful action in 90 days.
+*Breaks it:* an alert with no user-visible symptom or no runbook.
+
+**E9. Value is realized at the user, not at merge.** Merged isn't done. A ticket is done when the change is on production, its events show it working, and it can be rolled back or switched off (E7). Every PR answers two questions: *how will we see this working on production?* and *how do we turn it off?* After merging, the author checks it on production and notes the result on the ticket, reopening the ticket if the check fails. Until real users arrive, "in users' hands" means it works for us on production.
+*Breaks it:* a PR that can't answer those two questions.
+
+**E10. Commands are discoverable, and local matches CI.** Every repeatable action is a root `pnpm` script listed in one README table. CI runs those same scripts and nothing else: no CI-only shell logic, no hidden arguments. A new contributor should be able to list every command in 30 seconds.
+*Breaks it:* a CI step with inline shell, or a command that needs undocumented flags or env vars.
 
 ## Superpowers is required
 
@@ -107,7 +143,8 @@ The owner's claude.ai account owns the page. To update it, a person needs **edit
   - **Live checks** after the deploy (what was checked on giftsaf.com or in the service, and the result).
 
   Upload images into the comment (Linear MCP `prepare_file_upload`, then PUT, then embed the returned markdown), so they stay with the ticket rather than in chat or a scratch folder. Anything that couldn't be checked is listed as **Still open**, and the ticket stays open until it is. Docs-only pushes to `main` don't need a ticket. `AGENTS.md` repeats this rule for other AI tools and points them here.
-- **Every PR is attached to its Linear ticket.** Linear's GitHub app links a PR when the branch name or title has the ticket ID. In the PR description (the template has the line), write `Closes ALL-<n>` when the PR finishes the ticket, or `Part of ALL-<n>` when it's one piece of it, so the ticket isn't moved to Done early. Linear also moves the ticket to In Progress when the PR opens (tested on PR #6).
+- **Every PR is attached to its Linear ticket.** Linear's GitHub app links a PR when the branch name or title has the ticket ID. Linear also moves the ticket to In Progress when the PR opens (tested on PR #6).
+- **`Closes` or `Part of`: say `Closes` only if merging finishes the ticket.** `Closes ALL-<n>` makes Linear mark the ticket Done the moment the PR merges. Use it when the PR covers every acceptance criterion and nothing is left but the routine check on production. Write `Part of ALL-<n>` when you already know something will be open after the merge: another PR, a migration still to apply to prod, a check only the owner can do (ALL-71 said `Closes` while the owner still had to test the forms in Gmail, so it closed itself early). `Part of` links the PR without moving the ticket, even with the ID in the branch name (ALL-39's PRs #5, #6, #8). The agent finishing the work moves a `Part of` ticket to Done through Linear once the evidence is posted and nothing is Still open. If a ticket closes and something turns out to be open, the agent moves it back to In Progress and comments why.
 - **How `main` is protected** (GitHub rulesets): nobody can force-push or delete it. Changes need a PR with the CI `check` job passing. Repo admins (all of us today) can bypass that rule, which is what makes direct docs pushes work, so the code-via-PR rule above is a habit, not something GitHub enforces for us.
 - **Linear priority means "how soon"**, so the board (Ordering: Priority) reads top to bottom as what to start next. Urgent: ready to start now, nothing open blocking it. High: next up, unblocked once the current Urgent work lands. Medium: after that. Low: last or optional. When a ticket's blockers close, or a new ticket is added, set its priority by this rule and keep its "blocked by" links current.
 - The repo is `gifts-af/gift-me`. Linear project: Gift Concierge MVP (team key `ALL`).
