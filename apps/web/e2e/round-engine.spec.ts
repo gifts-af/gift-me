@@ -9,6 +9,9 @@ import { TEST_USER } from "./test-user";
 // The tick is global: it also starts rounds for people other specs seed. So every
 // assertion is scoped to this person's round id. The spec switches the engine on
 // and always switches it back off.
+// Desktop only, set in playwright.config.ts (testIgnore on the phones), so the hooks below
+// can't run in a phone worker and undo the desktop run. A reused local dev server must have
+// been started with CRON_SECRET=e2e-cron-secret and EMAIL_OUTBOX=log (reuseExistingServer).
 test.describe.configure({ mode: "serial" });
 
 const supabase = localSupabase();
@@ -93,8 +96,7 @@ test.afterAll(async () => {
 test("a round starts without an address, resumes when one is saved, and is skipped at the deadline", async ({
   page,
   baseURL,
-}, testInfo) => {
-  test.skip(testInfo.project.name !== "desktop", "One run is enough: the tick isn't layout-dependent.");
+}) => {
   const base = baseURL ?? "http://localhost:3100";
 
   // A birthday 35 days from today: the planning deadline is 9 days before it,
