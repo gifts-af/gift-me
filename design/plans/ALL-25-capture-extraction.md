@@ -121,7 +121,7 @@ None left. Calls made along the way are in the table below.
 
 ### Global constraints
 
-- Settings (T23), read with `concierge.setting_int`: `capture_fact_min_confidence_pct` = 60, `capture_extraction_enabled` = 1. No fallback constants in code.
+- Settings (T23), read with `concierge.setting_int`: `capture_fact_min_confidence_pct` = 60, `capture_extraction_enabled` = 1, `capture_extract_timeout_ms` = 40000 (added in the final review). No fallback constants in code.
 - Model: `AI_MODELS.extraction` in `apps/web/lib/ai/models.ts`, Sonnet 5.5's gateway ID from `GET https://ai-gateway.vercel.sh/v1/models` (spike: dots, not dashes), effort `low`.
 - The prompt names the person only by relationship (`relationshipLabel` from `@gifts-af/core`), never by name or email (AC-13, T42).
 - Business logic (`modules/concierge`, `lib/ai` functions) never reads `process.env` and never creates clients. Routes and actions build the model and the stores (E3).
@@ -143,7 +143,7 @@ None left. Calls made along the way are in the table below.
 ### Task 1: Migration: two fact categories and two settings (AC-4, AC-12)
 
 **Files:**
-- Create: `supabase/migrations/20261102130000_capture_extraction.sql`
+- Create: `supabase/migrations/20261104100000_capture_extraction.sql` (plus `…100100_profile_fact_unique.sql` and `…100200_capture_extract_timeout.sql` from the final review)
 - Create: `supabase/tests/capture_extraction.test.sql`
 - Modify: `packages/core/src/database.types.ts` (generated)
 
