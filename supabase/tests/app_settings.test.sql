@@ -32,7 +32,8 @@ select set_eq(
     'default_over_budget_pct', 'zinc_gift_message_max_chars', 'test_action_link_hours',
     'install_tip_snooze_days', 'capture_text_max_chars', 'capture_screenshot_max_bytes',
     'person_photo_max_upload_bytes', 'person_photo_px', 'contact_photo_timeout_ms', 'contact_photo_concurrency',
-    'capture_fact_min_confidence_pct', 'capture_extraction_enabled', 'capture_extract_timeout_ms'
+    'capture_fact_min_confidence_pct', 'capture_extraction_enabled', 'capture_extract_timeout_ms',
+    'round_engine_enabled', 'round_lock_minutes', 'round_max_attempts'
   ],
   'every fee, limit, default and schedule setting is seeded'
 );
