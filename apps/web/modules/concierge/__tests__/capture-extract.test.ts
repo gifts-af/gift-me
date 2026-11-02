@@ -49,9 +49,11 @@ describe("processCapture", () => {
   let store: FakeCaptureStore;
   let log: MockInstance<typeof console.log>;
   let calls: ExtractInput[];
+  let timeouts: number[];
   let reply: () => Promise<CandidateFact[]>;
-  const extract = async (input: ExtractInput) => {
+  const extract = async (input: ExtractInput, options: { timeoutMs: number }) => {
     calls.push(input);
+    timeouts.push(options.timeoutMs);
     return reply();
   };
 
@@ -76,6 +78,7 @@ describe("processCapture", () => {
     store = new FakeCaptureStore();
     store.screenshots.set("user-1/cap-1.jpg", new Uint8Array([1, 2, 3]));
     calls = [];
+    timeouts = [];
     reply = async () => [fact("wants", "a new rotary vise"), fact("owns", "old vise", 0.3)];
     log = vi.spyOn(console, "log").mockImplementation(() => {});
   });
@@ -99,6 +102,13 @@ describe("processCapture", () => {
     expect(calls[0].relationship).toBe("father");
     expect(calls[0].screenshot).toEqual(new Uint8Array([1, 2, 3]));
     expect(Object.keys(calls[0])).not.toContain("name");
+  });
+
+  it("gives the model the timeout from settings", async () => {
+    capture();
+    store.extraction.timeoutMs = 1234;
+    await processCapture(store, extract, "cap-1");
+    expect(timeouts).toEqual([1234]);
   });
 
   it("marks a page with nothing confident as extracted with no facts", async () => {

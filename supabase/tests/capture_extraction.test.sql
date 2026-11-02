@@ -1,13 +1,14 @@
 -- Fact categories and settings for capture extraction (ALL-25).
 begin;
 \ir _helpers.psql
-select plan(9);
+select plan(10);
 
 select tests.create_user('a@example.com') as a \gset
 select tests.create_user('b@example.com') as b \gset
 
 select is(concierge.setting_int('capture_fact_min_confidence_pct'), 60, 'confidence cut setting');
 select is(concierge.setting_int('capture_extraction_enabled'), 1, 'extraction is on by default');
+select is(concierge.setting_int('capture_extract_timeout_ms'), 40000, 'a model call gives up after 40 s');
 
 select tests.act_as(:'a');
 insert into public.people (name, relationship) values ('Dad', 'parent');

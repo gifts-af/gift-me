@@ -19,7 +19,9 @@ export type ExtractInput = {
   screenshot: Uint8Array | null;
 };
 
-export type Extract = (input: ExtractInput) => Promise<CandidateFact[]>;
+/** `timeoutMs` comes from the capture_extract_timeout_ms setting (T23). */
+export type ExtractOptions = { timeoutMs: number };
+export type Extract = (input: ExtractInput, options: ExtractOptions) => Promise<CandidateFact[]>;
 
 const SYSTEM = `You help a gift-giving app learn what one specific person might like.
 You get what the user captured from a web page about that person: the page text, a screenshot of what was on screen, and sometimes a note from the user.
@@ -57,7 +59,7 @@ function who(relationship: string): string {
 
 /** The model is built by the caller (a route or script), never here (E3). */
 export function createExtractor(model: LanguageModel): Extract {
-  return async (input) => {
+  return async (input, { timeoutMs }) => {
     const lines = [
       `This capture is about ${who(input.relationship)}.`,
       `Page: ${input.title}`,
@@ -71,6 +73,9 @@ export function createExtractor(model: LanguageModel): Extract {
     const { output } = await generateText({
       model,
       reasoning: "low",
+      // One try within the time limit: the popup is waiting, and Try again is one tap away.
+      maxRetries: 0,
+      abortSignal: AbortSignal.timeout(timeoutMs),
       system: SYSTEM,
       output: Output.object({ schema }),
       messages: [

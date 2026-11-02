@@ -36,7 +36,7 @@ export interface CaptureStore {
   deleteCapture(id: string): Promise<void>;
 
   // Extraction (ALL-25).
-  extractionSettings(): Promise<{ enabled: boolean; minConfidencePct: number }>;
+  extractionSettings(): Promise<{ enabled: boolean; minConfidencePct: number; timeoutMs: number }>;
   /** RLS-scoped: null for an unknown or someone else's capture. */
   loadCapture(id: string): Promise<StoredCapture | null>;
   downloadScreenshot(path: string): Promise<Uint8Array>;

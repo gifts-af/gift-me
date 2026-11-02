@@ -88,6 +88,7 @@ export function captureStoreFor(supabase: SupabaseClient<Database>, userId: stri
       return {
         enabled: (await setting("capture_extraction_enabled")) === 1,
         minConfidencePct: await setting("capture_fact_min_confidence_pct"),
+        timeoutMs: await setting("capture_extract_timeout_ms"),
       };
     },
     async loadCapture(id) {

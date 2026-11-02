@@ -24,7 +24,7 @@ export class FakeCaptureStore implements CaptureStore {
   failDelete = false;
   private n = 0;
   // Extraction (ALL-25).
-  extraction = { enabled: true, minConfidencePct: 60 };
+  extraction = { enabled: true, minConfidencePct: 60, timeoutMs: 40000 };
   captures = new Map<string, StoredCapture>();
   screenshots = new Map<string, Uint8Array>();
   facts: (SavedFact & { personId: string; captureId: string | null; active: boolean })[] = [];

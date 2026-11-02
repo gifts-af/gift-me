@@ -69,7 +69,7 @@ export async function processCapture(store: CaptureStore, extract: Extract, capt
       text: capture.text,
       note: capture.note,
       screenshot,
-    });
+    }, { timeoutMs: settings.timeoutMs });
     const { keep, blocked } = selectFacts(candidates, await store.factKeys(capture.personId), settings.minConfidencePct);
     const facts = keep.length > 0 ? await store.insertFacts(capture.personId, capture.id, keep) : [];
     await store.setCaptureStatus(capture.id, "extracted");

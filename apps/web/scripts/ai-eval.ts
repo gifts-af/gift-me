@@ -23,6 +23,8 @@ if (!process.env.AI_GATEWAY_API_KEY) {
 
 // The app's settings value (capture_fact_min_confidence_pct); the spike used the same.
 const MIN_CONFIDENCE_PCT = 60;
+// The app's capture_extract_timeout_ms.
+const TIMEOUT_MS = 40000;
 // The spike's people (spikes/ai/fixtures/people.json), by relationship only.
 const RELATIONSHIP: Record<string, string> = { dad: "father", maya: "sister", june: "grandmother", sam: "brother", priya: "friend" };
 
@@ -70,7 +72,7 @@ async function main() {
         text: c.text_excerpt,
         note: null,
         screenshot: null,
-      }),
+      }, { timeoutMs: TIMEOUT_MS }),
     );
   }
 
@@ -89,7 +91,7 @@ async function main() {
         text: "",
         note: null,
         screenshot: new Uint8Array(readFileSync(file)),
-      }),
+      }, { timeoutMs: TIMEOUT_MS }),
     );
   }
 

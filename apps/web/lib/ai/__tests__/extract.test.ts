@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
+import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { createExtractor, type ExtractInput } from "../extract";
 
@@ -27,6 +28,8 @@ const input: ExtractInput = {
   screenshot: null,
 };
 
+const opts = { timeoutMs: 5000 };
+
 const vise = { category: "wants", value: "a new rotary fly-tying vise", confidence: 0.9, evidence: "gave out" };
 
 /** Everything the model was sent, as one string. */
@@ -37,25 +40,25 @@ function sent(model: MockLanguageModelV4): string {
 describe("createExtractor", () => {
   it("returns the model's facts without the evidence", async () => {
     const model = modelReturning({ facts: [vise] });
-    const facts = await createExtractor(model)(input);
+    const facts = await createExtractor(model)(input, opts);
     expect(facts).toEqual([{ category: "wants", value: "a new rotary fly-tying vise", confidence: 0.9 }]);
   });
 
   it("returns an empty list when the model finds nothing", async () => {
-    const facts = await createExtractor(modelReturning({ facts: [] }))(input);
+    const facts = await createExtractor(modelReturning({ facts: [] }))(input, opts);
     expect(facts).toEqual([]);
   });
 
   it("describes the person by relationship only", async () => {
     const model = modelReturning({ facts: [] });
-    await createExtractor(model)(input);
+    await createExtractor(model)(input, opts);
     expect(sent(model)).toContain("their father");
     expect(sent(model)).not.toMatch(/name/i);
   });
 
   it("tells the model that something only seen is owned, and never to pad the list", async () => {
     const model = modelReturning({ facts: [] });
-    await createExtractor(model)(input);
+    await createExtractor(model)(input, opts);
     const system = model.doGenerateCalls[0].prompt.find((m) => m.role === "system")?.content;
     expect(system).toMatch(/seen with, using or wearing is "owns"/);
     expect(system).toMatch(/return an empty list/i);
@@ -63,20 +66,20 @@ describe("createExtractor", () => {
 
   it("sends the screenshot as an image when there is one", async () => {
     const model = modelReturning({ facts: [] });
-    await createExtractor(model)({ ...input, screenshot: new Uint8Array([1, 2, 3]) });
+    await createExtractor(model)({ ...input, screenshot: new Uint8Array([1, 2, 3]) }, opts);
     const user = model.doGenerateCalls[0].prompt.find((m) => m.role === "user");
     expect(JSON.stringify(user)).toContain("image/jpeg");
   });
 
   it("sends no image when there is no screenshot", async () => {
     const model = modelReturning({ facts: [] });
-    await createExtractor(model)(input);
+    await createExtractor(model)(input, opts);
     expect(sent(model)).not.toContain("image/jpeg");
   });
 
   it("labels the buyer's note as theirs", async () => {
     const model = modelReturning({ facts: [] });
-    await createExtractor(model)({ ...input, note: "He said this broke" });
+    await createExtractor(model)({ ...input, note: "He said this broke" }, opts);
     expect(sent(model)).toContain("Note from the person who captured this: He said this broke");
   });
 
@@ -86,6 +89,24 @@ describe("createExtractor", () => {
     ["an empty value", { ...vise, value: "" }],
     ["a value over 200 characters", { ...vise, value: "x".repeat(201) }],
   ])("rejects output with %s", async (_label, fact) => {
-    await expect(createExtractor(modelReturning({ facts: [fact] }))(input)).rejects.toThrow();
+    await expect(createExtractor(modelReturning({ facts: [fact] }))(input, opts)).rejects.toThrow();
+  });
+
+  it("gives up when the model takes longer than timeoutMs", async () => {
+    const model = new MockLanguageModelV4({
+      doGenerate: ({ abortSignal }) =>
+        new Promise((_resolve, reject) => abortSignal?.addEventListener("abort", () => reject(abortSignal.reason))),
+    });
+    await expect(createExtractor(model)(input, { timeoutMs: 20 })).rejects.toThrow();
+  });
+
+  it("tries once: a failed call isn't retried, so the popup gets an answer in time", async () => {
+    const model = new MockLanguageModelV4({
+      doGenerate: async () => {
+        throw new APICallError({ message: "overloaded", url: "x", requestBodyValues: {}, statusCode: 529, isRetryable: true });
+      },
+    });
+    await expect(createExtractor(model)(input, opts)).rejects.toThrow();
+    expect(model.doGenerateCalls).toHaveLength(1);
   });
 });
