@@ -104,6 +104,23 @@ describe("processCapture", () => {
     expect(Object.keys(calls[0])).not.toContain("name");
   });
 
+  it("tells the model what's already recorded about this person, removed facts included", async () => {
+    capture();
+    store.facts.push(
+      { id: "f1", personId: "p1", captureId: "old", category: "owns", value: "UCF pocket t-shirt (dark gray)", active: true },
+      { id: "f2", personId: "p1", captureId: "old", category: "interest", value: "golf", active: false },
+      { id: "f3", personId: "p2", captureId: "other", category: "interest", value: "knitting", active: true },
+    );
+    await processCapture(store, extract, "cap-1");
+    expect(calls[0].known).toEqual(["Already has: UCF pocket t-shirt (dark gray)", "Into: golf"]);
+  });
+
+  it("tells the model nothing is recorded for a new person", async () => {
+    capture();
+    await processCapture(store, extract, "cap-1");
+    expect(calls[0].known).toEqual([]);
+  });
+
   it("gives the model the timeout from settings", async () => {
     capture();
     store.extraction.timeoutMs = 1234;

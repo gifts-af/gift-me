@@ -72,6 +72,7 @@ async function main() {
         text: c.text_excerpt,
         note: null,
         screenshot: null,
+        known: [],
       }, { timeoutMs: TIMEOUT_MS }),
     );
   }
@@ -91,6 +92,7 @@ async function main() {
         text: "",
         note: null,
         screenshot: new Uint8Array(readFileSync(file)),
+        known: [],
       }, { timeoutMs: TIMEOUT_MS }),
     );
   }

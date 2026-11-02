@@ -17,6 +17,8 @@ export type ExtractInput = {
   note: string | null;
   /** JPEG bytes, or null when the capture has no screenshot. */
   screenshot: Uint8Array | null;
+  /** What's already recorded about them, active or removed, as factLine text. */
+  known: string[];
 };
 
 /** `timeoutMs` comes from the capture_extract_timeout_ms setting (T23). */
@@ -34,6 +36,7 @@ Categories: ${FACT_CATEGORIES_EXTRACTED.join(", ")}.
 - "owns" and "wants" matter most: they stop duplicate gifts and point at real needs.
 - Something the person is only seen with, using or wearing is "owns", never "interest" or "wants", unless the page says they want another one. A photo of someone with an Owala bottle means they already have one.
 - Record what the page says before any gift idea it suggests: a complaint is a "dislike", and a guessed fix for it is a separate, lower-confidence "wants".
+- Never return a fact that is already recorded about them, even in other words ("UCF t-shirt" and "UCF Knights pocket tee" are the same fact).
 - If nothing is clear, return an empty list. Never pad it with weak guesses.
 
 Never record or hint at sensitive traits: health or medical conditions, medications, pregnancy,
@@ -66,6 +69,7 @@ export function createExtractor(model: LanguageModel): Extract {
       `Page: ${input.title}`,
       `URL: ${input.url}`,
       input.note ? `Note from the person who captured this: ${input.note}` : null,
+      ...(input.known.length > 0 ? ["", "Already recorded about them:", ...input.known.map((line) => `- ${line}`)] : []),
       "",
       "Page text:",
       input.text,

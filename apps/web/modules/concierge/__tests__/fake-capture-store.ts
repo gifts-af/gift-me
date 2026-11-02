@@ -1,7 +1,6 @@
 import type { CandidateFact } from "@/lib/ai/extract";
 import type { SavedFact } from "../capture/extract";
 import type { CaptureStatus, CaptureStore, NewCaptureRow, StoredCapture } from "../capture/store";
-import { factKey } from "../capture/extract";
 
 export type FakeCaptureRow = NewCaptureRow & {
   id: string;
@@ -71,8 +70,8 @@ export class FakeCaptureStore implements CaptureStore {
     if (!bytes) throw new Error("no such screenshot");
     return bytes;
   }
-  async factKeys(personId: string) {
-    return new Set(this.facts.filter((f) => f.personId === personId).map((f) => factKey(f.category, f.value)));
+  async knownFacts(personId: string) {
+    return this.facts.filter((f) => f.personId === personId).map(({ category, value }) => ({ category, value }));
   }
   async capturedFacts(captureId: string) {
     return this.facts

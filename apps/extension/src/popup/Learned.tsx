@@ -45,7 +45,7 @@ export function Learned({
         </div>
       ) : facts.length === 0 ? (
         <p className="m-0" role="status">
-          Nothing confident to learn from this page. The capture is saved.
+          Nothing new to learn from this page. The capture is saved.
         </p>
       ) : (
         <section className="flex flex-col gap-2" aria-labelledby="learned-heading">

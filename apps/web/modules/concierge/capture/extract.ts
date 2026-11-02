@@ -1,4 +1,4 @@
-import type { FactCategory } from "@gifts-af/core";
+import { factLine, type FactCategory } from "@gifts-af/core";
 import type { CandidateFact, Extract } from "@/lib/ai/extract";
 import { isSensitive } from "@/lib/ai/sensitive";
 import { logEvent } from "@/lib/log";
@@ -61,6 +61,7 @@ export async function processCapture(store: CaptureStore, extract: Extract, capt
   const ids = { capture_id: capture.id, person_id: capture.personId };
   const started = Date.now();
   try {
+    const known = await store.knownFacts(capture.personId);
     const screenshot = capture.screenshotPath ? await store.downloadScreenshot(capture.screenshotPath) : null;
     const candidates = await extract({
       relationship: capture.relationship,
@@ -69,8 +70,13 @@ export async function processCapture(store: CaptureStore, extract: Extract, capt
       text: capture.text,
       note: capture.note,
       screenshot,
+      known: known.map((f) => factLine(f.category, f.value)),
     }, { timeoutMs: settings.timeoutMs });
-    const { keep, blocked } = selectFacts(candidates, await store.factKeys(capture.personId), settings.minConfidencePct);
+    const { keep, blocked } = selectFacts(
+      candidates,
+      new Set(known.map((f) => factKey(f.category, f.value))),
+      settings.minConfidencePct,
+    );
     const facts = keep.length > 0 ? await store.insertFacts(capture.personId, capture.id, keep) : [];
     await store.setCaptureStatus(capture.id, "extracted");
     logEvent("capture.extracted", { ...ids, facts: facts.length, blocked, ms: Date.now() - started });

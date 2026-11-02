@@ -26,6 +26,7 @@ const input: ExtractInput = {
   text: "My vise finally gave out after 20 years.",
   note: null,
   screenshot: null,
+  known: [],
 };
 
 const opts = { timeoutMs: 5000 };
@@ -54,6 +55,22 @@ describe("createExtractor", () => {
     await createExtractor(model)(input, opts);
     expect(sent(model)).toContain("their father");
     expect(sent(model)).not.toMatch(/name/i);
+  });
+
+  it("lists what's already recorded so the model doesn't repeat it in other words", async () => {
+    const model = modelReturning({ facts: [] });
+    await createExtractor(model)({ ...input, known: ["Already has: UCF pocket t-shirt (dark gray)", "Into: golf"] }, opts);
+    expect(sent(model)).toContain("Already recorded about them");
+    expect(sent(model)).toContain("Already has: UCF pocket t-shirt (dark gray)");
+    expect(sent(model)).toContain("Into: golf");
+    const system = model.doGenerateCalls[0].prompt.find((m) => m.role === "system")?.content;
+    expect(system).toMatch(/already recorded.*even in other words/i);
+  });
+
+  it("leaves the recorded list out when nothing is known yet", async () => {
+    const model = modelReturning({ facts: [] });
+    await createExtractor(model)(input, opts);
+    expect(sent(model)).not.toContain("Already recorded about them");
   });
 
   it("tells the model that something only seen is owned, and never to pad the list", async () => {

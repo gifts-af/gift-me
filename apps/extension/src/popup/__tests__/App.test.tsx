@@ -288,7 +288,7 @@ describe("Here's what I learned (ALL-25)", () => {
   it("says so honestly when nothing confident was found", async () => {
     fetchMock.mockResolvedValueOnce(json({ id: "c1", extraction: { status: "extracted", facts: [] } }, 201));
     await capture();
-    expect(await screen.findByText("Nothing confident to learn from this page. The capture is saved.")).toBeInTheDocument();
+    expect(await screen.findByText("Nothing new to learn from this page. The capture is saved.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "See everything about Mom →" })).toBeInTheDocument();
   });
 

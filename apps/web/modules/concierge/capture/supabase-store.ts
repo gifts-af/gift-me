@@ -3,7 +3,6 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database, FactCategory } from "@gifts-af/core";
 import { supabaseKey, supabaseUrl } from "@/lib/supabase/env";
 import { createClient as createCookieClient } from "@/lib/supabase/server";
-import { factKey } from "./extract";
 import type { CaptureStatus, CaptureStore } from "./store";
 
 /**
@@ -125,13 +124,14 @@ export function captureStoreFor(supabase: SupabaseClient<Database>, userId: stri
       if (err) throw err;
       return new Uint8Array(await blob.arrayBuffer());
     },
-    async factKeys(personId) {
+    async knownFacts(personId) {
       const { data: rows, error: err } = await concierge()
         .from("profile_facts")
         .select("category, value")
-        .eq("person_id", personId);
+        .eq("person_id", personId)
+        .order("created_at");
       if (err) throw err;
-      return new Set(rows.map((r) => factKey(r.category, r.value)));
+      return rows.map((r) => ({ category: r.category as FactCategory, value: r.value }));
     },
     async capturedFacts(captureId) {
       const { data: rows, error: err } = await concierge()

@@ -1,3 +1,4 @@
+import type { FactCategory } from "@gifts-af/core";
 import type { CandidateFact } from "@/lib/ai/extract";
 import type { SavedFact } from "./extract";
 
@@ -40,8 +41,8 @@ export interface CaptureStore {
   /** RLS-scoped: null for an unknown or someone else's capture. */
   loadCapture(id: string): Promise<StoredCapture | null>;
   downloadScreenshot(path: string): Promise<Uint8Array>;
-  /** factKey of every fact the person has, active or removed. */
-  factKeys(personId: string): Promise<Set<string>>;
+  /** Every fact the person has, active or removed, oldest first. */
+  knownFacts(personId: string): Promise<{ category: FactCategory; value: string }[]>;
   /** Active facts saved from this capture. */
   capturedFacts(captureId: string): Promise<SavedFact[]>;
   /** Saves facts as source = capture, confirmed = false, active. */
