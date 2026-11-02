@@ -50,6 +50,10 @@ export default defineConfig({
           TURNSTILE_SECRET_KEY: TURNSTILE_TEST_SECRET_KEY,
           // Any value: contacts-import.spec.ts replaces Google's sign-in script (ALL-24).
           NEXT_PUBLIC_GOOGLE_CLIENT_ID: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "e2e-fake-client-id",
+          // round-engine.spec.ts (ALL-28): emails are logged, not sent, and the daily tick takes this secret.
+          // Neither applies in production; VERCEL_ENV is only set on Vercel, so CI's `pnpm start` is fine.
+          EMAIL_OUTBOX: "log",
+          CRON_SECRET: "e2e-cron-secret",
         },
       },
 });
