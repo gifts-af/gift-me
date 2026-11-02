@@ -297,7 +297,7 @@ flowchart LR
 - **Reminders are just due dates:** the next reminder's date is stored in `next_action_at`, and that morning's tick sends it. No process sleeps or waits. If ticks are missed, only the latest overdue reminder goes out, and an overdue deadline still skips.
 - **Every email is recorded first:** each email a round sends is written once per round to `concierge.round_sends` (round, step) before it is sent. A crash between the record and the send means that email is never sent (at-most-once, on purpose: a missing reminder is better than a duplicate). If the email service cleanly refuses, the record is removed so the next tick retries.
 - **User actions and webhooks don't wait for a tick.** Approving, rejecting, adding an address (saving a person resumes their `needs_address` rounds), or a Zinc webhook updates the round and advances it right away, using the same step function. The tick is the safety net.
-- **Stuck rounds stay put:** if a step fails, its lock expires and the next tick retries it; `attempts` counts the failures. Once `attempts` passes `round_max_attempts` (3), each failure logs a `round_stuck` event for the owner (ids only, E6). The round **does not** move to `needs_attention` (that status is for order and price problems, §5); it stays in its status and the deadline skip still happens. The 28-day runway leaves plenty of room to fix it.
+- **Stuck rounds stay put:** if a step fails, its lock expires and the next tick retries it; `attempts` counts the failures. The claim step logs a `round_stuck` event for the owner (ids only, E6) on each retry once a round has had more than `round_max_attempts` (3) claims end without a successful finish. The round **does not** move to `needs_attention` (that status is for order and price problems, §5); it stays in its status and the deadline skip still happens. The 28-day runway leaves plenty of room to fix it.
 - **Long steps:** idea generation is a stub today. When ALL-27 makes it take minutes, the tick should hand each round to its own function call so one slow round doesn't hold up the others, and each stays within Vercel's function time limit **[Verify in W1-6]**.
 - **Testing:** outside production the route accepts `?now=<ISO time>` as a test clock (it reads `VERCEL_ENV` and passes `now` in; production ignores it). `EMAIL_OUTBOX=log` (also never in production) logs emails instead of sending them, so the Playwright round test (ALL-28) needs no Resend key.
 
@@ -467,7 +467,7 @@ Each wave can start once the waves before it have the dependencies it lists. Wit
 | ID | Ticket | Depends on |
 |---|---|---|
 | W1-1 | Monorepo scaffold and CI (pnpm workspaces, Next.js shell, `packages/core`, `supabase/` folder, lint, typecheck, tests, GitHub Actions, branch protection), plus the platform guardrails (§2.2, T19): `apps/web/modules/concierge` with a public `index.ts`, the ESLint boundary rule, and `/concierge` as the product path | — |
-| W1-6 | Platform provisioning and environments: Vercel project and previews, Supabase dev and prod with `pg_cron` and `pg_net`, the inactivity-pause check, AI Gateway with Vercel billing and cap, domain and DNS, env and secrets conventions, Hobby limits check, Jim's access to every service | — |
+| W1-6 | Platform provisioning and environments: Vercel project and previews, Supabase dev and prod with `pg_cron` and `pg_net` (superseded for the round tick by T49: Vercel Cron), the inactivity-pause check, AI Gateway with Vercel billing and cap, domain and DNS, env and secrets conventions, Hobby limits check, Jim's access to every service | — |
 | W1-2 | Checkout spike (Zinc) | — |
 | W1-3 | AI spike (extraction, ideas, cost) | — |
 | W1-4 | Email spike (send and inbound) | — |
@@ -490,7 +490,7 @@ Each wave can start once the waves before it have the dependencies it lists. Wit
 | W3-1 | Capture extraction plus the "Here's what I learned" review (C-3, C-8) | W1-3, W2-4 |
 | W3-2 | Profile view and editing, guided questions, readiness meter (C-4, C-6, C-7) | W1-7, W2-2 |
 | W3-3 | Gift idea engine: brainstorm, resolve via checkout lookup, rank (G-1, G-2, G-4, G-5) | W1-2, W1-3, W2-2 |
-| W3-4 | Round engine: `pg_cron` tick, round creation, claiming and locking, round statuses, reminders as due times, skip (A-2) (§5.1) | W1-5, W1-6, W2-2, W2-5 |
+| W3-4 | Round engine: Vercel Cron tick (T49), round creation, claiming and locking, round statuses, reminders as due times, skip (A-2) (§5.1) | W1-5, W1-6, W2-2, W2-5 |
 
 ### Wave 4: Approve and buy
 | ID | Ticket | Depends on |
