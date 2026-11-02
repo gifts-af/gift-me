@@ -29,7 +29,8 @@ export type EngineDeps = { store: RoundStore; notify: NotifyDeps; now: Date; gen
 
 export type TickSummary = { enabled: boolean; created: number; advanced: number; failed: number };
 
-export type AdvanceResult = "advanced" | "busy" | "failed";
+/** "off": the engine is switched off (`round_engine_enabled`), so nothing was touched. */
+export type AdvanceResult = "advanced" | "busy" | "failed" | "off";
 
 const FINISHED: RoundStatus[] = ["complete", "skipped", "ordered", "delivered"];
 
@@ -51,11 +52,12 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
   }
 
   const s = await store.scheduleSettings();
-  const created = await createDueRounds(deps, s);
+  const { created, failed: createFailed } = await createDueRounds(deps, s);
 
   // One after another, each on its own: one failing round can't stop the rest.
+  // `failed` counts occasions that couldn't be created and rounds that failed.
   let advanced = 0;
-  let failed = 0;
+  let failed = createFailed;
   for (const round of await store.claimDue(now)) {
     if (await advanceClaimed(round, deps, s)) advanced++;
     else failed++;
@@ -68,6 +70,7 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
 
 /** Moves one round on now, if it's due and no one else holds it (AC-10). */
 export async function advanceRound(roundId: string, deps: EngineDeps): Promise<AdvanceResult> {
+  if (!(await engineOn(deps.store))) return "off";
   const round = await deps.store.claim(roundId, deps.now);
   if (!round) return "busy";
   const s = await deps.store.scheduleSettings();
@@ -82,27 +85,37 @@ export async function resumeRoundsForPerson(personId: string, deps: EngineDeps):
   }
 }
 
-async function createDueRounds({ store, now }: EngineDeps, s: ScheduleSettings): Promise<number> {
+async function createDueRounds(
+  { store, now }: EngineDeps,
+  s: ScheduleSettings,
+): Promise<{ created: number; failed: number }> {
   const today = dayOf(now);
   let created = 0;
+  let failed = 0;
   for (const c of await store.candidates(today)) {
-    const plan = roundToCreate(c.rule, today, s);
-    if (!plan) continue;
-    // The unique (person, occasion, year) key makes a repeat a no-op (AC-4).
-    const inserted = await store.insertRound({
-      userId: c.userId,
-      personId: c.personId,
-      occasionId: c.occasionId,
-      occasionYear: plan.occasionYear,
-      occasionDate: plan.occasionDate,
-      shipByDeadline: plan.shipByDeadline,
-      budgetCents: c.budgetCents,
-      late: plan.late,
-      nextActionAt: now,
-    });
-    if (inserted) created++;
+    // Each occasion on its own: one bad one can't stop the tick.
+    try {
+      const plan = roundToCreate(c.rule, today, s);
+      if (!plan) continue;
+      // The unique (person, occasion, year) key makes a repeat a no-op (AC-4).
+      const inserted = await store.insertRound({
+        userId: c.userId,
+        personId: c.personId,
+        occasionId: c.occasionId,
+        occasionYear: plan.occasionYear,
+        occasionDate: plan.occasionDate,
+        shipByDeadline: plan.shipByDeadline,
+        budgetCents: c.budgetCents,
+        late: plan.late,
+        nextActionAt: now,
+      });
+      if (inserted) created++;
+    } catch {
+      failed++;
+      logEvent("round_create_failed", { occasion_id: c.occasionId, person_id: c.personId, user_id: c.userId });
+    }
   }
-  return created;
+  return { created, failed };
 }
 
 /** Runs a claimed round's step; true if it finished. Never throws. */

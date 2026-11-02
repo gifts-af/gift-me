@@ -285,6 +285,19 @@ describe("advanceRound", () => {
     expect(h.store.sends.get("round-1")!.has("reminder_1")).toBe(false);
   });
 
+  it("does nothing when the engine is off", async () => {
+    const h = harness();
+    await h.runDays("2027-02-11", "2027-02-15");
+    h.store.settings.set("round_engine_enabled", 0);
+    const writes = h.store.writes.length;
+    const sent = h.emails.length;
+
+    h.today = "2027-02-16";
+    expect(await advanceRound("round-1", h.deps(at("2027-02-16")))).toBe("off");
+    expect(h.store.writes).toHaveLength(writes);
+    expect(h.emails).toHaveLength(sent);
+  });
+
   it("advances a due round right away", async () => {
     const h = harness();
     await h.runDays("2027-02-11", "2027-02-15");
@@ -391,6 +404,33 @@ describe("failures", () => {
 
     expect(summary).toEqual({ enabled: true, created: 2, advanced: 1, failed: 1 });
     expect(h.store.round("round-2").status).toBe("awaiting_approval");
+  });
+
+  it("keeps creating and advancing rounds when one occasion fails to create", async () => {
+    const h = harness();
+    h.store.people.set("person-2", { name: "Other", hasAddress: true });
+    h.store.occasionKinds.set("occasion-2", "birthday");
+    const insert = h.store.insertRound.bind(h.store);
+    h.store.insertRound = async (r) => {
+      if (r.personId === PERSON) throw new Error("insert failed");
+      return insert(r);
+    };
+    const rule = { kind: "birthday" as const, month: 3, day: 20 };
+    h.today = "2027-02-11";
+    h.store.candidateRows = [
+      { userId: USER, personId: PERSON, occasionId: OCCASION, rule, budgetCents: 5000 },
+      { userId: USER, personId: "person-2", occasionId: "occasion-2", rule, budgetCents: null },
+    ];
+
+    const summary = await runTick(h.deps(at("2027-02-11")));
+
+    // `failed` counts the occasion that couldn't be created as well as rounds that failed.
+    expect(summary).toEqual({ enabled: true, created: 1, advanced: 1, failed: 1 });
+    expect(h.store.rounds[0]).toMatchObject({ personId: "person-2", status: "awaiting_approval" });
+    expect(named("round_create_failed")).toEqual([
+      expect.objectContaining({ occasion_id: OCCASION, person_id: PERSON, user_id: USER }),
+    ]);
+    expect(named("round_tick")).toHaveLength(1);
   });
 });
 
