@@ -11,7 +11,7 @@
 ### Who it's for and what they can do
 
 1. **See what was learned right away:** as a buyer, after I click **Capture** in the extension, I see a loading state and then a short "Here's what I learned" about that person, with a link to their page, so I know the capture was worth it.
-2. **Be told honestly when nothing was learned:** as a buyer, when the page has nothing the app is confident about, I'm told so ("Nothing confident to learn from this page") instead of seeing weak guesses.
+2. **Be told honestly when nothing was learned:** as a buyer, when the page has nothing the app is confident about, I'm told so ("Nothing new to learn from this page", which also covers a page that only repeats what we know) instead of seeing weak guesses.
 3. **Tell AI suggestions apart from what I entered:** as a buyer, on the person's page, the AI's facts sit in their own group, "✨ AI suggestions from your captures", each showing the page it came from. They never look like something I entered.
 4. **Remove a wrong suggestion:** as a buyer, I can remove any AI suggestion. It disappears from the page, gift ideas never use it, and a later capture doesn't bring it back.
 5. **Retry a failed read:** as a buyer, when the app couldn't read a capture, I'm told and can try again from the popup or the person's page.
@@ -57,7 +57,7 @@ Nothing creates hand-entered facts yet (ALL-26 adds that), so today only the AI 
 | AC-3 | A capture whose extraction yields a sensitive fact | The capture is processed | That fact never reaches `profile_facts` (database check) |
 | AC-4 | A model output with facts at 0.4 and 0.8 and `capture_fact_min_confidence_pct` = 60 | Facts are saved | Only the 0.8 fact is saved |
 | AC-5 | A signed-in extension user | They capture a page with learnable facts | The response carries `status: extracted` and the saved facts; the popup shows them, owned items as "Already has: …", plus the link to the person |
-| AC-6 | A page with nothing confident | It's captured | The capture is `extracted` with zero facts, and the popup says "Nothing confident to learn from this page" |
+| AC-6 | A page with nothing confident | It's captured | The capture is `extracted` with zero facts, and the popup says "Nothing new to learn from this page" |
 | AC-7 | The model call fails or returns output that doesn't fit the schema | A capture is processed | The capture is marked `failed`, no facts are saved, and the popup and person page offer Try again |
 | AC-8 | A `failed` or `pending` capture | The user taps Try again | Extraction runs again; on success the capture becomes `extracted` with its facts |
 | AC-9 | A person with AI facts | The buyer opens their page | AI facts appear only under "✨ AI suggestions from your captures", each with its source page |
