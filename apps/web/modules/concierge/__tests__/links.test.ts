@@ -212,4 +212,24 @@ describe("confirmActionLink", () => {
     expect(JSON.stringify(log.mock.calls)).not.toContain(TOKEN);
     expect(store.links[0].usedAt).toEqual(NOW);
   });
+
+  it("open_person: done page carries a link to the round's person (ALL-28)", async () => {
+    const store = await storeWithLink({ action: "open_person" });
+    store.links[0].roundId = "round-1";
+    store.roundPeople.set("round-1", "person-1");
+    expect(ACTIONS.open_person.confirm.button).toBeTruthy();
+    expect(await confirmActionLink(TOKEN, OWNER, { store, now: NOW })).toEqual({
+      state: "done",
+      done: ACTIONS.open_person.done,
+      next: "/people/person-1",
+    });
+  });
+
+  it("open_person: no round or person means a plain done page", async () => {
+    const store = await storeWithLink({ action: "open_person" });
+    expect(await confirmActionLink(TOKEN, OWNER, { store, now: NOW })).toEqual({
+      state: "done",
+      done: ACTIONS.open_person.done,
+    });
+  });
 });

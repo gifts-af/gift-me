@@ -67,3 +67,44 @@ describe("heads_up", () => {
     expect(mail.text).toContain("Nothing is bought until you choose.");
   });
 });
+
+describe("skipped", () => {
+  it("says nothing was bought and has one button", () => {
+    const s = SAMPLE_DATA.skipped;
+    const mail = TEMPLATES.skipped(s.data, s.links);
+    expect(mail.subject).toBe("No gift for Mom's birthday this time");
+    expect(mail.text).toContain("No gift was chosen for Mom's birthday (Saturday, March 14), so nothing was bought.");
+    expect(mail.text).toContain("You can still buy something yourself. We'll be back for the next occasion.");
+    expect(mail.html).toContain("Open GiftsAF");
+    expect(mail.html.match(/<a[\s>]/g)).toHaveLength(1);
+  });
+});
+
+describe("final_notice", () => {
+  it("names the order-by time instead of claiming it's the last day", () => {
+    const s = SAMPLE_DATA.final_notice;
+    const mail = TEMPLATES.final_notice({ ...s.data, orderByText: "Thursday, March 12" }, s.links);
+    expect(mail.text).not.toContain("last day");
+    expect(mail.text).toContain("Choose a gift by Thursday, March 12 so it arrives in time.");
+  });
+});
+
+describe("heads_up late", () => {
+  it("adds the time-is-short line only when late", () => {
+    const s = SAMPLE_DATA.heads_up;
+    const line = "Mom's birthday is close, so we've kept only gifts that can still arrive in time.";
+    expect(TEMPLATES.heads_up({ ...s.data, late: true }, s.links).text).toContain(line);
+    expect(TEMPLATES.heads_up(s.data, s.links).text).not.toContain(line);
+    const auto = { ...s.data, mode: "auto_buy" as const, autoBuyIdea: "x", autoBuyDate: "y", late: true };
+    expect(TEMPLATES.heads_up(auto, s.links).text).toContain(line);
+  });
+});
+
+describe("needs_address reminder", () => {
+  it("adds the reminder line only when it's a reminder", () => {
+    const s = SAMPLE_DATA.needs_address;
+    const line = "A reminder: we still need Mom's address to find gifts that arrive by Saturday, March 14.";
+    expect(TEMPLATES.needs_address({ ...s.data, reminder: true }, s.links).text).toContain(line);
+    expect(TEMPLATES.needs_address(s.data, s.links).text).not.toContain("A reminder");
+  });
+});

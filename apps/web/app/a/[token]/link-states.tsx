@@ -70,7 +70,13 @@ export function LinkState({ view, token }: { view: ConfirmResult; token: string 
       // AC-10: the action's own words, then home.
       return (
         <LinkMessage title={view.done.title} body={view.done.body}>
-          <HomeLink />
+          {view.next ? (
+            <Button asChild className="w-full">
+              <Link href={view.next}>Open their page</Link>
+            </Button>
+          ) : (
+            <HomeLink />
+          )}
         </LinkMessage>
       );
   }
