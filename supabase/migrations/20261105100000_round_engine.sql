@@ -27,8 +27,9 @@ grant all on concierge.round_sends to service_role;
 
 -- Every enabled, live occasion of a live person, with the budget resolved:
 -- the person's own budget for that kind, else the user's default for the
--- person's relationship, else null. has_round_this_year only looks at the
--- year of p_today; the caller does the real year matching.
+-- person's relationship, else null. Year matching and dedupe are the caller's
+-- job (insert on conflict on the rounds' unique key); p_today is kept for the
+-- engine's call signature.
 create function concierge.round_candidates(p_today date)
 returns table (
   user_id uuid,
@@ -37,8 +38,7 @@ returns table (
   kind text,
   month int,
   day int,
-  budget_cents int,
-  has_round_this_year boolean
+  budget_cents int
 )
 language sql
 stable
@@ -52,11 +52,7 @@ as $$
     o.kind,
     o.month,
     o.day,
-    coalesce(b.amount_cents, d.base_amount_cents),
-    exists (
-      select 1 from concierge.gift_rounds r
-      where r.occasion_id = o.id and r.occasion_year = extract(year from p_today)::int
-    )
+    coalesce(b.amount_cents, d.base_amount_cents)
   from concierge.occasions o
   join public.people p on p.id = o.person_id and p.user_id = o.user_id
   left join concierge.budgets b on b.person_id = o.person_id and b.occasion_kind = o.kind

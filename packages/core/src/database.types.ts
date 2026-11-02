@@ -982,7 +982,6 @@ export type Database = {
         Returns: {
           budget_cents: number;
           day: number;
-          has_round_this_year: boolean;
           kind: string;
           month: number;
           occasion_id: string;
