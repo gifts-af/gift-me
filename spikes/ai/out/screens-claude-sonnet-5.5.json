@@ -1,0 +1,104 @@
+{
+  "model": "anthropic/claude-sonnet-5.5",
+  "results": [
+    {
+      "screen": "onyx-product.png",
+      "person": "priya",
+      "facts": [
+        {
+          "category": "interest",
+          "value": "specialty coffee",
+          "confidence": 0.4,
+          "evidence": "Onyx Coffee Lab product page: Tropical Weather, specialty whole bean coffee"
+        },
+        {
+          "category": "brand",
+          "value": "Onyx Coffee Lab",
+          "confidence": 0.35,
+          "evidence": "ONYX COFFEE"
+        },
+        {
+          "category": "style",
+          "value": "light roast, fruit-forward, floral coffees",
+          "confidence": 0.25,
+          "evidence": "LIGHT ROAST LEVEL - FRUIT FORWARD, FLORAL, AND BOTANICAL"
+        }
+      ],
+      "tokens": 3798,
+      "cost": 0.009428,
+      "secs": 2.417
+    },
+    {
+      "screen": "ciele-product.png",
+      "person": "priya",
+      "facts": [
+        {
+          "category": "interest",
+          "value": "running / athletic caps (browsing Ciele Athletics GOCap collection)",
+          "confidence": 0.4,
+          "evidence": "cieleathletics.com GOCap collection"
+        },
+        {
+          "category": "brand",
+          "value": "Ciele Athletics",
+          "confidence": 0.35,
+          "evidence": "ciele ATHLETICS"
+        },
+        {
+          "category": "wants",
+          "value": "possibly a Ciele GOCap FLTWND Ultra Iconic cap (winter cap with ear flaps, $80)",
+          "confidence": 0.3,
+          "evidence": "GOCap - FLTWND - Ultra Iconic $80 USD"
+        }
+      ],
+      "tokens": 3788,
+      "cost": 0.00932,
+      "secs": 2.487
+    },
+    {
+      "screen": "dad-post-mock.png",
+      "person": "dad",
+      "facts": [
+        {
+          "category": "interest",
+          "value": "fly tying",
+          "confidence": 0.95,
+          "evidence": "Tied a dozen Adams dry flies tonight; #flytying"
+        },
+        {
+          "category": "interest",
+          "value": "dry fly fishing for trout",
+          "confidence": 0.85,
+          "evidence": "#dryfly #troutbum; Upper Delaware trip"
+        },
+        {
+          "category": "wants",
+          "value": "new rotary vise for fly tying",
+          "confidence": 0.9,
+          "evidence": "My vise finally gave out after 20 years... Anyone have a rotary vise they swear by?"
+        },
+        {
+          "category": "owns",
+          "value": "old fly-tying vise that no longer works (jaws won't hold size 18 hooks), needs replacing",
+          "confidence": 0.8,
+          "evidence": "My vise finally gave out after 20 years, the jaws won't hold a size 18 hook anymore"
+        },
+        {
+          "category": "interest",
+          "value": "fishing trips (Upper Delaware)",
+          "confidence": 0.6,
+          "evidence": "for the Upper Delaware trip"
+        },
+        {
+          "category": "constraint",
+          "value": "ties small flies (size 18 hooks), so vise must hold small hooks securely",
+          "confidence": 0.6,
+          "evidence": "jaws won't hold a size 18 hook anymore"
+        }
+      ],
+      "tokens": 4008,
+      "cost": 0.011496,
+      "secs": 3.324
+    }
+  ]
+}

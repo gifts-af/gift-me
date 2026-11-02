@@ -1,0 +1,102 @@
+<style>
+  .pg{background:#0b0b0d;color:#fafafa;font:14px/1.45 system-ui,-apple-system,sans-serif;text-align:left;border:1px solid #27272a;overflow:hidden}
+  .pg p{margin:0;color:#a1a1aa}
+  .pg h1,.pg h2,.pg h3{margin:0;letter-spacing:-.02em}
+  .nav{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;font-weight:800}
+  .nav a{color:#2dd4bf;font-weight:600;font-size:13px}
+  .sec{padding:22px 18px;display:grid;gap:12px;border-top:1px solid #1f1f23}
+  .sticker{justify-self:start;background:#facc15;color:#18181b;font-weight:800;font-size:12px;padding:4px 10px;border-radius:999px;transform:rotate(-3deg)}
+  .btn{display:block;text-align:center;border-radius:12px;padding:11px;font-weight:700}
+  .p{background:#2dd4bf;color:#042f2e}.s{background:#27272a;color:#fafafa}
+  .tile{background:#18181b;border:1px solid #27272a;border-radius:16px;padding:14px;display:grid;gap:6px}
+  .tile h3{font-size:16px}
+  .tag{font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#2dd4bf}
+  .step{display:flex;gap:10px;align-items:flex-start}
+  .num{flex:none;width:26px;height:26px;border-radius:99px;background:#2dd4bf;color:#042f2e;font-weight:800;display:grid;place-items:center;font-size:13px}
+  .soon{border:1px dashed #3f3f46}
+  .foot{padding:16px 18px;font-size:12px;color:#71717a;border-top:1px solid #1f1f23}
+  .phone{width:280px;border-radius:28px}
+  .desk{width:100%;max-width:760px;border-radius:12px}
+  .desk .hero{display:grid;grid-template-columns:1.1fr .9fr;gap:24px;align-items:center;padding:34px 28px}
+  .desk .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .desk .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+  .shot{background:#fff;color:#18181b;border-radius:16px;padding:12px;display:grid;gap:8px;font-size:12px}
+  .shot .row{display:flex;gap:8px;align-items:center}
+  .shot .img{width:30px;height:30px;border-radius:8px;background:#e4e4e7}
+  .shot .go{background:#0f766e;color:#fff;border-radius:10px;text-align:center;padding:7px;font-weight:700}
+  .label{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#71717a;margin:0 0 6px}
+  .wrap{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start;justify-content:center}
+</style>
+
+<h2>The whole home page, direction B</h2>
+<p class="subtitle">Phone on the left, computer on the right (scaled down). Sections from top to bottom: the hook, the two problems it fixes, how it works in 3 steps, why it's safe, what's coming next, and a final nudge. Click a section you'd cut or change, then tell me in the terminal.</p>
+
+<div class="wrap">
+  <div>
+    <p class="label">Phone</p>
+    <div class="pg phone">
+      <div class="nav">GiftsAF <a>Sign in</a></div>
+      <div class="sec" style="border:0;padding-top:6px">
+        <span class="sticker">Mom's birthday is Saturday 👀</span>
+        <h1 style="font-size:30px;line-height:1.05">Gifting, handled AF.</h1>
+        <p>We remember the dates, find the gift, and ship it. You just tap yes.</p>
+        <a class="btn p">Try it, no sign-up</a>
+        <a class="btn s">Sign in</a>
+      </div>
+      <div class="sec" data-choice="problems" onclick="toggleSelect(this)" style="cursor:pointer">
+        <span class="tag">Sound familiar?</span>
+        <div class="tile"><h3>"Wait, that was today?"</h3><p>Every birthday and holiday, remembered. Ideas show up a week early, from things they actually like.</p></div>
+        <div class="tile"><h3>"What do you even want?"</h3><p>Keep a list and share one link. Family claims a gift, nobody doubles up, and it stays a surprise.</p></div>
+      </div>
+      <div class="sec" data-choice="how" onclick="toggleSelect(this)" style="cursor:pointer">
+        <span class="tag">How it works</span>
+        <div class="step"><span class="num">1</span><p><b style="color:#fafafa">Add your people.</b> Import from Google or type a few names.</p></div>
+        <div class="step"><span class="num">2</span><p><b style="color:#fafafa">We get ideas ready.</b> From their lists and what you've saved.</p></div>
+        <div class="step"><span class="num">3</span><p><b style="color:#fafafa">You tap yes.</b> We order it and it shows up on time.</p></div>
+      </div>
+      <div class="sec" data-choice="trust" onclick="toggleSelect(this)" style="cursor:pointer">
+        <span class="tag">No surprises (except the gift)</span>
+        <p>Nothing is bought without your OK. Your people's details stay private. You set the budget, or don't.</p>
+      </div>
+      <div class="sec" data-choice="soon" onclick="toggleSelect(this)" style="cursor:pointer">
+        <div class="tile soon"><span class="tag" style="color:#facc15">Coming soon</span><h3>Buy-me-a-drink shirts</h3><p>Wear a QR code. Strangers buy you a drink.</p></div>
+      </div>
+      <div class="sec">
+        <h2 style="font-size:20px">Never be the one who forgot.</h2>
+        <a class="btn p">Try it, no sign-up</a>
+      </div>
+      <div class="foot">GiftsAF · Privacy · Contact</div>
+    </div>
+  </div>
+
+  <div style="flex:1;min-width:300px">
+    <p class="label">Computer</p>
+    <div class="pg desk">
+      <div class="nav" style="padding:16px 28px">GiftsAF <span style="display:flex;gap:18px;font-size:13px;font-weight:600;color:#a1a1aa">How it works<a>Sign in</a></span></div>
+      <div class="hero">
+        <div style="display:grid;gap:14px">
+          <span class="sticker">Mom's birthday is Saturday 👀</span>
+          <h1 style="font-size:40px;line-height:1.02">Gifting, handled AF.</h1>
+          <p style="font-size:15px">We remember the dates, find the gift, and ship it. You just tap yes.</p>
+          <div style="display:flex;gap:10px"><a class="btn p" style="padding:11px 18px">Try it, no sign-up</a><a class="btn s" style="padding:11px 18px">Sign in</a></div>
+        </div>
+        <div class="shot">
+          <b>Mom's birthday · Sat</b>
+          <div class="row"><span class="img"></span><span style="flex:1"><b>Stoneware mug set</b><br>From her list · arrives Thu</span><b>$42</b></div>
+          <div class="row"><span class="img"></span><span style="flex:1"><b>Herb planter</b><br>From her list · arrives Fri</span><b>$68</b></div>
+          <div class="go">Send it · $42</div>
+        </div>
+      </div>
+      <div class="sec" style="padding:22px 28px"><div class="grid2">
+        <div class="tile"><h3>"Wait, that was today?"</h3><p>Every birthday and holiday, remembered. Ideas a week early.</p></div>
+        <div class="tile"><h3>"What do you even want?"</h3><p>One list, one link. Family claims, nobody doubles up.</p></div>
+      </div></div>
+      <div class="sec" style="padding:22px 28px"><div class="grid3">
+        <div class="step"><span class="num">1</span><p><b style="color:#fafafa">Add your people</b></p></div>
+        <div class="step"><span class="num">2</span><p><b style="color:#fafafa">We get ideas ready</b></p></div>
+        <div class="step"><span class="num">3</span><p><b style="color:#fafafa">You tap yes</b></p></div>
+      </div></div>
+      <div class="foot" style="padding:16px 28px">GiftsAF · Privacy · Contact</div>
+    </div>
+  </div>
+</div>

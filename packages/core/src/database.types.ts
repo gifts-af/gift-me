@@ -49,6 +49,61 @@ export type Database = {
         };
         Relationships: [];
       };
+      action_links: {
+        Row: {
+          action: string;
+          created_at: string;
+          expires_at: string;
+          id: string;
+          notification_id: string | null;
+          round_id: string | null;
+          token_hash: string;
+          updated_at: string;
+          used_at: string | null;
+          user_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          action: string;
+          created_at?: string;
+          expires_at: string;
+          id?: string;
+          notification_id?: string | null;
+          round_id?: string | null;
+          token_hash: string;
+          updated_at?: string;
+          used_at?: string | null;
+          user_id: string;
+        };
+        Update: {
+          action?: string;
+          created_at?: string;
+          expires_at?: string;
+          id?: string;
+          notification_id?: string | null;
+          round_id?: string | null;
+          token_hash?: string;
+          updated_at?: string;
+          used_at?: string | null;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "action_links_notification_id_fkey";
+            columns: ["notification_id"];
+            isOneToOne: false;
+            referencedRelation: "notifications";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "action_links_round_id_user_id_fkey";
+            columns: ["round_id", "user_id"];
+            isOneToOne: false;
+            referencedRelation: "gift_rounds";
+            referencedColumns: ["id", "user_id"];
+          },
+        ];
+      };
       app_settings: {
         Row: {
           description: string | null;
@@ -101,7 +156,7 @@ export type Database = {
       };
       budgets: {
         Row: {
-          amount_cents: number;
+          amount_cents: number | null;
           created_at: string;
           id: string;
           occasion_kind: string;
@@ -111,7 +166,7 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
-          amount_cents: number;
+          amount_cents?: number | null;
           created_at?: string;
           id?: string;
           occasion_kind: string;
@@ -120,7 +175,7 @@ export type Database = {
           user_id?: string;
         };
         Update: {
-          amount_cents?: number;
+          amount_cents?: number | null;
           created_at?: string;
           id?: string;
           occasion_kind?: string;
@@ -134,6 +189,7 @@ export type Database = {
         Row: {
           created_at: string;
           id: string;
+          note: string | null;
           page_title: string | null;
           person_id: string;
           screenshot_path: string | null;
@@ -147,6 +203,7 @@ export type Database = {
         Insert: {
           created_at?: string;
           id?: string;
+          note?: string | null;
           page_title?: string | null;
           person_id: string;
           screenshot_path?: string | null;
@@ -159,6 +216,7 @@ export type Database = {
         Update: {
           created_at?: string;
           id?: string;
+          note?: string | null;
           page_title?: string | null;
           person_id?: string;
           screenshot_path?: string | null;
@@ -182,6 +240,7 @@ export type Database = {
           first_party: boolean | null;
           handling_days_max: number | null;
           id: string;
+          list_item_id: string | null;
           offer_id: string | null;
           over_budget: boolean;
           price_cents: number;
@@ -192,6 +251,7 @@ export type Database = {
           retailer_product_id: string | null;
           round_id: string;
           seller_name: string | null;
+          source: string;
           status: string;
           title: string;
           updated_at: string;
@@ -209,6 +269,7 @@ export type Database = {
           first_party?: boolean | null;
           handling_days_max?: number | null;
           id?: string;
+          list_item_id?: string | null;
           offer_id?: string | null;
           over_budget?: boolean;
           price_cents: number;
@@ -219,6 +280,7 @@ export type Database = {
           retailer_product_id?: string | null;
           round_id: string;
           seller_name?: string | null;
+          source?: string;
           status?: string;
           title: string;
           updated_at?: string;
@@ -235,6 +297,7 @@ export type Database = {
           first_party?: boolean | null;
           handling_days_max?: number | null;
           id?: string;
+          list_item_id?: string | null;
           offer_id?: string | null;
           over_budget?: boolean;
           price_cents?: number;
@@ -245,6 +308,7 @@ export type Database = {
           retailer_product_id?: string | null;
           round_id?: string;
           seller_name?: string | null;
+          source?: string;
           status?: string;
           title?: string;
           updated_at?: string;
@@ -264,7 +328,7 @@ export type Database = {
         Row: {
           approved_at: string | null;
           attempts: number;
-          budget_cents: number;
+          budget_cents: number | null;
           created_at: string;
           id: string;
           late: boolean;
@@ -283,7 +347,7 @@ export type Database = {
         Insert: {
           approved_at?: string | null;
           attempts?: number;
-          budget_cents: number;
+          budget_cents?: number | null;
           created_at?: string;
           id?: string;
           late?: boolean;
@@ -301,7 +365,7 @@ export type Database = {
         Update: {
           approved_at?: string | null;
           attempts?: number;
-          budget_cents?: number;
+          budget_cents?: number | null;
           created_at?: string;
           id?: string;
           late?: boolean;
@@ -368,11 +432,12 @@ export type Database = {
       };
       notifications: {
         Row: {
-          action_token_hash: string | null;
           channel: string;
           created_at: string;
+          error: string | null;
           id: string;
           kind: string;
+          provider_message_id: string | null;
           round_id: string | null;
           sent_at: string | null;
           updated_at: string;
@@ -380,22 +445,24 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
-          action_token_hash?: string | null;
           channel?: string;
           created_at?: string;
+          error?: string | null;
           id?: string;
           kind: string;
+          provider_message_id?: string | null;
           round_id?: string | null;
           sent_at?: string | null;
           updated_at?: string;
           user_id?: string;
         };
         Update: {
-          action_token_hash?: string | null;
           channel?: string;
           created_at?: string;
+          error?: string | null;
           id?: string;
           kind?: string;
+          provider_message_id?: string | null;
           round_id?: string | null;
           sent_at?: string | null;
           updated_at?: string;
@@ -451,6 +518,63 @@ export type Database = {
         };
         Relationships: [];
       };
+      order_addresses: {
+        Row: {
+          address_line1: string;
+          address_line2: string | null;
+          city: string;
+          country: string;
+          created_at: string;
+          order_id: string;
+          phone: string | null;
+          recipient_first_name: string;
+          recipient_last_name: string;
+          state: string;
+          updated_at: string;
+          user_id: string;
+          zip: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          address_line1: string;
+          address_line2?: string | null;
+          city: string;
+          country: string;
+          created_at?: string;
+          order_id: string;
+          phone?: string | null;
+          recipient_first_name: string;
+          recipient_last_name: string;
+          state: string;
+          updated_at?: string;
+          user_id: string;
+          zip: string;
+        };
+        Update: {
+          address_line1?: string;
+          address_line2?: string | null;
+          city?: string;
+          country?: string;
+          created_at?: string;
+          order_id?: string;
+          phone?: string | null;
+          recipient_first_name?: string;
+          recipient_last_name?: string;
+          state?: string;
+          updated_at?: string;
+          user_id?: string;
+          zip?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "order_addresses_order_id_user_id_fkey";
+            columns: ["order_id", "user_id"];
+            isOneToOne: false;
+            referencedRelation: "orders";
+            referencedColumns: ["id", "user_id"];
+          },
+        ];
+      };
       orders: {
         Row: {
           created_at: string;
@@ -469,6 +593,9 @@ export type Database = {
           provider: string;
           provider_order_id: string | null;
           round_id: string;
+          ship_city: string;
+          ship_state: string;
+          ship_to: string;
           shipping_cents: number | null;
           status: string;
           subtotal_cents: number | null;
@@ -495,6 +622,9 @@ export type Database = {
           provider?: string;
           provider_order_id?: string | null;
           round_id: string;
+          ship_city: string;
+          ship_state: string;
+          ship_to: string;
           shipping_cents?: number | null;
           status?: string;
           subtotal_cents?: number | null;
@@ -520,6 +650,9 @@ export type Database = {
           provider?: string;
           provider_order_id?: string | null;
           round_id?: string;
+          ship_city?: string;
+          ship_state?: string;
+          ship_to?: string;
           shipping_cents?: number | null;
           status?: string;
           subtotal_cents?: number | null;
@@ -718,6 +851,28 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      add_person: {
+        Args: {
+          p_address_line1?: string;
+          p_address_line2?: string;
+          p_anniversary_day?: number;
+          p_anniversary_month?: number;
+          p_birth_year?: number;
+          p_birthday_day?: number;
+          p_birthday_month?: number;
+          p_city?: string;
+          p_country?: string;
+          p_google_contact_id?: string;
+          p_kinds: string[];
+          p_name: string;
+          p_recipient_first_name?: string;
+          p_recipient_last_name?: string;
+          p_relationship: string;
+          p_state?: string;
+          p_zip?: string;
+        };
+        Returns: string;
+      };
       delete_occasion: { Args: { p_occasion_id: string }; Returns: undefined };
       enable_owner_rls: { Args: { p_table: unknown }; Returns: undefined };
       setting_int: { Args: { p_key: string }; Returns: number };
@@ -850,16 +1005,61 @@ export type Database = {
         };
         Relationships: [];
       };
+      person_links: {
+        Row: {
+          buyer_id: string;
+          created_at: string;
+          list_id: string;
+          person_id: string;
+          share_token: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          buyer_id: string;
+          created_at?: string;
+          list_id: string;
+          person_id: string;
+          share_token: string;
+        };
+        Update: {
+          buyer_id?: string;
+          created_at?: string;
+          list_id?: string;
+          person_id?: string;
+          share_token?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "person_links_list_id_fkey";
+            columns: ["list_id"];
+            isOneToOne: false;
+            referencedRelation: "lists";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
     };
     Functions: {
+      active_link: {
+        Args: { p_person_id: string };
+        Returns: {
+          list_id: string;
+          owner_id: string;
+        }[];
+      };
       claim_gift: {
         Args: { p_item_id: string; p_name: string; p_token: string };
         Returns: Json;
       };
       get_shared_list: { Args: { p_token: string }; Returns: Json };
+      link_person: {
+        Args: { p_person_id: string; p_token: string };
+        Returns: undefined;
+      };
+      person_list: { Args: { p_person_id: string }; Returns: Json };
       save_list: {
         Args: { p_items: Json; p_list_id: string; p_title: string };
         Returns: string;
@@ -868,6 +1068,7 @@ export type Database = {
         Args: { p_item_id: string; p_token: string };
         Returns: boolean;
       };
+      unlink_person: { Args: { p_person_id: string }; Returns: boolean };
       viewer_display_name: {
         Args: Record<PropertyKey, never>;
         Returns: string;
@@ -882,12 +1083,64 @@ export type Database = {
   };
   public: {
     Tables: {
+      account_addresses: {
+        Row: {
+          address_checked_at: string | null;
+          address_line1: string;
+          address_line2: string | null;
+          city: string;
+          country: string;
+          created_at: string;
+          phone: string | null;
+          recipient_first_name: string;
+          recipient_last_name: string;
+          share_for_gifts: boolean;
+          state: string;
+          updated_at: string;
+          user_id: string;
+          zip: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          address_checked_at?: string | null;
+          address_line1: string;
+          address_line2?: string | null;
+          city: string;
+          country?: string;
+          created_at?: string;
+          phone?: string | null;
+          recipient_first_name: string;
+          recipient_last_name: string;
+          share_for_gifts?: boolean;
+          state: string;
+          updated_at?: string;
+          user_id?: string;
+          zip: string;
+        };
+        Update: {
+          address_checked_at?: string | null;
+          address_line1?: string;
+          address_line2?: string | null;
+          city?: string;
+          country?: string;
+          created_at?: string;
+          phone?: string | null;
+          recipient_first_name?: string;
+          recipient_last_name?: string;
+          share_for_gifts?: boolean;
+          state?: string;
+          updated_at?: string;
+          user_id?: string;
+          zip?: string;
+        };
+        Relationships: [];
+      };
       people: {
         Row: {
           address_checked_at: string | null;
           address_line1: string | null;
           address_line2: string | null;
-          birthday: string | null;
+          birth_year: number | null;
           city: string | null;
           country: string;
           created_at: string;
@@ -898,6 +1151,7 @@ export type Database = {
           name: string;
           notes: string | null;
           phone: string | null;
+          photo_path: string | null;
           recipient_first_name: string | null;
           recipient_last_name: string | null;
           relationship: string;
@@ -911,7 +1165,7 @@ export type Database = {
           address_checked_at?: string | null;
           address_line1?: string | null;
           address_line2?: string | null;
-          birthday?: string | null;
+          birth_year?: number | null;
           city?: string | null;
           country?: string;
           created_at?: string;
@@ -922,6 +1176,7 @@ export type Database = {
           name: string;
           notes?: string | null;
           phone?: string | null;
+          photo_path?: string | null;
           recipient_first_name?: string | null;
           recipient_last_name?: string | null;
           relationship: string;
@@ -934,7 +1189,7 @@ export type Database = {
           address_checked_at?: string | null;
           address_line1?: string | null;
           address_line2?: string | null;
-          birthday?: string | null;
+          birth_year?: number | null;
           city?: string | null;
           country?: string;
           created_at?: string;
@@ -945,6 +1200,7 @@ export type Database = {
           name?: string;
           notes?: string | null;
           phone?: string | null;
+          photo_path?: string | null;
           recipient_first_name?: string | null;
           recipient_last_name?: string | null;
           relationship?: string;
@@ -996,6 +1252,11 @@ export type Database = {
         Returns: undefined;
       };
       delete_person: { Args: { p_person_id: string }; Returns: undefined };
+      shared_address_for_person: {
+        Args: { p_person_id: string };
+        Returns: Json;
+      };
+      shared_city_for_person: { Args: { p_person_id: string }; Returns: Json };
     };
     Enums: {
       [_ in never]: never;

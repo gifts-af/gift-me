@@ -8,21 +8,28 @@ import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { useHydrated } from "@/lib/use-hydrated";
+import { useHumanCheck } from "./human-check";
 import { Divider, FormError } from "./auth-frame";
 import { GoogleButton } from "./google-button";
 
 export function SignUpForm({ next: rawNext }: { next?: string }) {
   const next = safeNext(rawNext);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [repeatPassword, setRepeatPassword] = useState("");
+  const hydrated = useHydrated();
+  const human = useHumanCheck({ wayOut: "google" });
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  const handleSignUp = async (e: React.FormEvent) => {
+  // Fields are read on submit, so anything typed or autofilled before the
+  // page loaded is kept (ALL-60).
+  const handleSignUp = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    const name = String(form.get("name") ?? "");
+    const email = String(form.get("email"));
+    const password = String(form.get("password"));
+    const repeatPassword = String(form.get("repeat-password"));
     setError(null);
     if (password !== repeatPassword) {
       setError("The passwords don't match.");
@@ -37,9 +44,11 @@ export function SignUpForm({ next: rawNext }: { next?: string }) {
       options: {
         emailRedirectTo: `${window.location.origin}${next}`,
         data: displayName ? { display_name: displayName } : undefined,
+        captchaToken: human.token ?? undefined,
       },
     });
     if (error) {
+      human.reset();
       setError(error.message);
       setIsLoading(false);
       return;
@@ -51,19 +60,18 @@ export function SignUpForm({ next: rawNext }: { next?: string }) {
     <div className="flex flex-col gap-7">
       <GoogleButton next={next} />
       <Divider>or</Divider>
-      <form onSubmit={handleSignUp} className="flex flex-col gap-3">
+      <form method="post" onSubmit={handleSignUp} className="flex flex-col gap-3">
         <div className="grid gap-1.5">
           <Label htmlFor="name">
             Name <span className="font-normal text-muted-foreground">Optional</span>
           </Label>
           <Input
             id="name"
+            name="name"
             type="text"
             autoComplete="name"
             maxLength={80}
             aria-describedby="name-hint"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
           />
           <p id="name-hint" className="text-[13px] text-muted-foreground">
             Shown to others when you claim a gift. Leave it blank to show your email instead.
@@ -71,25 +79,25 @@ export function SignUpForm({ next: rawNext }: { next?: string }) {
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="email">Email</Label>
-          <Input id="email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+          <Input id="email" name="email" type="email" autoComplete="email" required />
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="password">Password</Label>
-          <Input id="password" type="password" autoComplete="new-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+          <Input id="password" name="password" type="password" autoComplete="new-password" required />
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="repeat-password">Repeat password</Label>
           <Input
             id="repeat-password"
+            name="repeat-password"
             type="password"
             autoComplete="new-password"
             required
-            value={repeatPassword}
-            onChange={(e) => setRepeatPassword(e.target.value)}
           />
         </div>
+        {human.widget}
         {error && <FormError>{error}</FormError>}
-        <Button type="submit" variant="secondary" className="w-full" disabled={isLoading} aria-busy={isLoading}>
+        <Button type="submit" variant="secondary" className="w-full" disabled={!hydrated || isLoading || !human.token} aria-busy={isLoading}>
           {isLoading ? "Creating your account…" : "Create account"}
         </Button>
       </form>

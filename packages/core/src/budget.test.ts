@@ -103,22 +103,27 @@ describe("committed spend", () => {
 });
 
 describe("max_price for an order", () => {
-  const fee = { feeCents: 100 };
+  // A round with a $100 budget; this order's pick was estimated at $58.
+  const order = { ceilingCents: 10000, budgetCents: 10000, committedCents: 0, reservedCents: 0, feeCents: 100, pickTotalCents: 5800 };
 
   it("leaves room for the other picks and the order fee", () => {
-    expect(maxPriceCents({ ceilingCents: 10000, committedCents: 0, reservedCents: 4000, ...fee })).toBe(5900);
+    expect(maxPriceCents({ ...order, reservedCents: 4000 })).toBe(5900);
   });
 
   it("subtracts what earlier orders in the round committed", () => {
-    expect(maxPriceCents({ ceilingCents: 10000, committedCents: 4100, reservedCents: 0, ...fee })).toBe(5800);
+    expect(maxPriceCents({ ...order, committedCents: 4100 })).toBe(5800);
   });
 
   it("subtracts whatever fee is configured", () => {
-    expect(maxPriceCents({ ceilingCents: 10000, committedCents: 0, reservedCents: 0, feeCents: 250 })).toBe(9750);
+    expect(maxPriceCents({ ...order, feeCents: 250 })).toBe(9750);
+  });
+
+  it("with a budget, lets a price rise use the budget's room (D28)", () => {
+    expect(maxPriceCents(order)).toBe(9900);
   });
 
   it("refuses when nothing is left, rather than placing a $0 order", () => {
-    expect(() => maxPriceCents({ ceilingCents: 10000, committedCents: 9900, reservedCents: 0, ...fee })).toThrow(RangeError);
+    expect(() => maxPriceCents({ ...order, committedCents: 9900 })).toThrow(RangeError);
   });
 });
 
@@ -137,6 +142,71 @@ describe("bad input", () => {
     expect(() => estimatedTotalCents({ priceCents: 1, shippingCents: -1, taxCents: 0, feeCents: 100 })).toThrow(RangeError);
     expect(() => walletRequiredCents(0.5, 100)).toThrow(RangeError);
     expect(() => walletRequiredCents(5900, -1)).toThrow(RangeError);
-    expect(() => maxPriceCents({ ceilingCents: 10000, committedCents: 0, reservedCents: 0, feeCents: -1 })).toThrow(RangeError);
+    const order = { ceilingCents: 10000, budgetCents: 10000, committedCents: 0, reservedCents: 0, feeCents: 100, pickTotalCents: 5800 };
+    expect(() => maxPriceCents({ ...order, feeCents: -1 })).toThrow(RangeError);
+    expect(() => maxPriceCents({ ...order, pickTotalCents: -1 })).toThrow(RangeError);
+    expect(() => maxPriceCents({ ...order, budgetCents: 0.5 })).toThrow(RangeError);
+  });
+});
+
+describe("no budget", () => {
+  it("never counts a total as over budget", () => {
+    expect(classifyTotal(1_000_000, null, 15)).toBe("within");
+  });
+
+  it("caps the round at the sum of the picks the user approved", () => {
+    expect(approvalCeilingCents([4200, 6800], null, 15, false)).toBe(11000);
+  });
+
+  it("is still refused with nothing picked", () => {
+    expect(approvalCeilingCents([], null, 15, false)).toBeNull();
+  });
+
+  it("caps each order at its own estimated total", () => {
+    expect(maxPriceCents({ ceilingCents: 11000, budgetCents: null, committedCents: 0, reservedCents: 6800, feeCents: 100, pickTotalCents: 4200 })).toBe(4100);
+  });
+});
+
+// Picks of $42 and $68 (each including the $1 fee), approved together.
+const noBudget = { ceilingCents: 11000, budgetCents: null, feeCents: 100, pickTotalCents: 6800 };
+
+describe("no budget, once other orders in the round settle", () => {
+  it("never lets an order cost more than its own approved total when an earlier one came in cheaper", () => {
+    expect(maxPriceCents({ ...noBudget, committedCents: 3100, reservedCents: 0 })).toBe(6700);
+  });
+
+  it("never lets an order use the room a failed order released", () => {
+    expect(maxPriceCents({ ...noBudget, committedCents: 0, reservedCents: 0 })).toBe(6700);
+  });
+});
+
+describe("the per-pick cap can't be skipped", () => {
+  it("refuses an order without its pick's approved total", () => {
+    const { pickTotalCents: _, ...missing } = { ...noBudget, committedCents: 0, reservedCents: 0 };
+    // @ts-expect-error pickTotalCents is required
+    expect(() => maxPriceCents(missing)).toThrow(RangeError);
+  });
+
+  it("refuses an order without the round's budget", () => {
+    const { budgetCents: _, ...missing } = { ...noBudget, committedCents: 0, reservedCents: 0 };
+    // @ts-expect-error budgetCents is required (null means no budget)
+    expect(() => maxPriceCents(missing)).toThrow(RangeError);
+  });
+});
+
+describe("a confirmed over-budget round, once other orders in the round settle", () => {
+  // A $100 budget; the user confirmed $110 of picks, so the ceiling is their sum.
+  const over = { ...noBudget, budgetCents: 10000 };
+
+  it("starts from the approved sum", () => {
+    expect(approvalCeilingCents([4200, 6800], 10000, 15, true)).toBe(11000);
+  });
+
+  it("never lets an order use the room a failed order released", () => {
+    expect(maxPriceCents({ ...over, committedCents: 0, reservedCents: 0 })).toBe(6700);
+  });
+
+  it("never lets an order cost more than its own approved total when an earlier one came in cheaper", () => {
+    expect(maxPriceCents({ ...over, committedCents: 3100, reservedCents: 0 })).toBe(6700);
   });
 });

@@ -4,7 +4,7 @@ Two people (the owner and Jim) build this with Claude. Everything written here s
 
 ## Principles
 
-Every plan is checked against these (`design/plans/TEMPLATE.md` > Principles check), and a reviewer can point at a diff and name the principle it breaks. **How we work** covers process; **How we build** covers engineering (T33). The detail is in the sections below and the decisions logs.
+Every plan is checked against these (`design/plans/TEMPLATE.md` > Principles check), and a reviewer can point at a diff and name the principle it breaks. **How we work** covers process; **How we build** covers engineering (T47). The detail is in the sections below and the decisions logs.
 
 ### How we work
 
@@ -16,6 +16,8 @@ Every plan is checked against these (`design/plans/TEMPLATE.md` > Principles che
 6. **Privacy by default.** Every user-owned row is protected by its owner; money and sensitive data stay inside the concierge (D31, T26).
 7. **The repo is the written source.** Every direction we settle gets recorded in the docs and decisions log; Linear and shared pages are views of it.
 8. **Written for a person.** Answer first, plain words, one place for each doc.
+9. **No work without a ticket; no ticket done without evidence** (T44). Every change starts from a Linear ticket, and a ticket isn't Done until its test evidence is posted on it (see Git > Evidence on the ticket).
+10. **Collect the minimum, as late as possible** (T42). Ask for a piece of personal data only when a feature the person is using right now can't work without it, keep it only while it's needed, and send outside services IDs, not names or emails.
 
 ### How we build
 
@@ -89,6 +91,17 @@ Use this layout. It overrides any plugin or skill default (for example, Superpow
 - When a decision changes the design, update both `design/technical-design.md` and `design/decisions.md`, plus any affected Linear tickets.
 - Add new docs to the table in `README.md` so people can find them.
 
+## Updating the roadmap page
+
+The shareable roadmap is one claude.ai page: https://claude.ai/artifact/6D9ycNqhN2yGwvHwsWAaiW. Always update that page; never publish a new one, so the link people have keeps working. When someone asks to "update progress" or "update the roadmap" after finishing work:
+
+1. Read the live page with the Artifact tool (`action: "read"`, that URL). Build on what comes back. The page has no source file in the repo.
+2. Bring it up to date from Linear (ticket status in the projects it links) and `planning/strategy.md`. Change the "updated" date at the top, mark finished work done, and drop open questions that are now answered in the decisions logs.
+3. Republish to the same URL (`url` set to the link above).
+4. If the roadmap itself changed, not only progress, update `planning/strategy.md` too, because the repo is the written source.
+
+The owner's claude.ai account owns the page. To update it, a person needs **edit** access, which the owner grants from the page's Share menu. Without it, the publish is refused. In that case, tell the person to ask the owner for edit access. Don't publish a copy.
+
 ## Writing for the human in the loop
 
 - Lead with the answer or the decision, then the reasons.
@@ -123,6 +136,13 @@ Use this layout. It overrides any plugin or skill default (for example, Superpow
 | `perf` | Faster or cheaper, same behavior |
 
   An optional scope names the area: `feat(lists): …`, `fix(db): …`. Add `!` for a breaking change (`feat!: …`).
+- **Evidence on the ticket (T44), standard operating procedure.** No work starts without a Linear ticket: if there isn't one, create it first, with acceptance criteria. No ticket is Done until its test evidence is posted on the ticket as a comment, before the PR merges or right after. Evidence means:
+  - **Tests:** what was added, that it failed first, and the suite results (counts), plus lint, typecheck and the CI result for the PR.
+  - **Screenshots** of anything a person sees, at phone and desktop width and in light and dark mode where it matters. Show before and after for a fix.
+  - **Mock-ups** made for the ticket.
+  - **Live checks** after the deploy (what was checked on giftsaf.com or in the service, and the result).
+
+  Upload images into the comment (Linear MCP `prepare_file_upload`, then PUT, then embed the returned markdown), so they stay with the ticket rather than in chat or a scratch folder. Anything that couldn't be checked is listed as **Still open**, and the ticket stays open until it is. Docs-only pushes to `main` don't need a ticket. `AGENTS.md` repeats this rule for other AI tools and points them here.
 - **Every PR is attached to its Linear ticket.** Linear's GitHub app links a PR when the branch name or title has the ticket ID. In the PR description (the template has the line), write `Closes ALL-<n>` when the PR finishes the ticket, or `Part of ALL-<n>` when it's one piece of it, so the ticket isn't moved to Done early. Linear also moves the ticket to In Progress when the PR opens (tested on PR #6).
 - **How `main` is protected** (GitHub rulesets): nobody can force-push or delete it. Changes need a PR with the CI `check` job passing. Repo admins (all of us today) can bypass that rule, which is what makes direct docs pushes work, so the code-via-PR rule above is a habit, not something GitHub enforces for us.
 - **Linear priority means "how soon"**, so the board (Ordering: Priority) reads top to bottom as what to start next. Urgent: ready to start now, nothing open blocking it. High: next up, unblocked once the current Urgent work lands. Medium: after that. Low: last or optional. When a ticket's blockers close, or a new ticket is added, set its priority by this rule and keep its "blocked by" links current.
@@ -132,5 +152,5 @@ Use this layout. It overrides any plugin or skill default (for example, Superpow
 
 - **Contribution** (commits, branches, PRs, Linear tickets): each person uses their own account. The owner is `aarontallen` / aaron.aallen@gmail.com; Jim is `JimtheBurger`. Branches are named `<github-login>/all-<n>-<short-name>`.
 - **Admin** goes through the shared **allensforever711** account (allensforever711@gmail.com). This covers repo transfers, org and repo settings, branch protection, secrets, members, connecting Vercel, Supabase and other services, billing, and vendor accounts such as Zinc. Others may also have admin rights, but admin work is done as allensforever711 (T7).
-- **Vercel and Supabase while on Hobby (T25):** the GiftMe Vercel team can't have other members, and Supabase access goes through it. So everyone signs in to the Vercel and Supabase CLIs and dashboards as allensforever711, for daily work too (`vercel env pull`, `supabase db push`). GitHub, Linear and Google Cloud use personal accounts.
+- **Vercel and Supabase while on Hobby (T25):** the GiftsAF Vercel team (slug `gift-me3`, formerly GiftMe) can't have other members, and Supabase access goes through it. So everyone signs in to the Vercel and Supabase CLIs and dashboards as allensforever711, for daily work too (`vercel env pull`, `supabase db push`). GitHub, Linear and Google Cloud use personal accounts.
 - If Claude's GitHub login isn't allensforever711, it gives the person the admin steps instead of doing them as someone else.

@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { useState } from "react";
+import { useHydrated } from "@/lib/use-hydrated";
+import { useHumanCheck } from "./human-check";
 import { Divider, FormError } from "./auth-frame";
 import { GoogleButton } from "./google-button";
 
@@ -14,19 +16,29 @@ import { GoogleButton } from "./google-button";
 // people already using the list app (mock-up "signin").
 export function LoginForm({ next: rawNext }: { next?: string }) {
   const next = safeNext(rawNext);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const hydrated = useHydrated();
+  const human = useHumanCheck({ wayOut: "google" });
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const withNext = (path: string) =>
     next === "/" ? path : `${path}?next=${encodeURIComponent(next)}`;
 
-  const handleLogin = async (e: React.FormEvent) => {
+  // Fields are read on submit, not tracked as you type, so anything typed or
+  // autofilled before the page loaded is kept (ALL-60).
+  const handleLogin = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const form = new FormData(e.currentTarget);
+    const email = String(form.get("email"));
+    const password = String(form.get("password"));
     setIsLoading(true);
     setError(null);
-    const { error } = await createClient().auth.signInWithPassword({ email, password });
+    const { error } = await createClient().auth.signInWithPassword({
+      email,
+      password,
+      options: { captchaToken: human.token ?? undefined },
+    });
     if (error) {
+      human.reset();
       setError(error.message);
       setIsLoading(false);
       return;
@@ -40,31 +52,30 @@ export function LoginForm({ next: rawNext }: { next?: string }) {
     <div className="flex flex-col gap-7">
       <GoogleButton next={next} />
       <Divider>or</Divider>
-      <form onSubmit={handleLogin} className="flex flex-col gap-3">
+      <form method="post" onSubmit={handleLogin} className="flex flex-col gap-3">
         <div className="grid gap-1.5">
           <Label htmlFor="email">Email</Label>
           <Input
             id="email"
+            name="email"
             type="email"
             autoComplete="email"
             required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
           />
         </div>
         <div className="grid gap-1.5">
           <Label htmlFor="password">Password</Label>
           <Input
             id="password"
+            name="password"
             type="password"
             autoComplete="current-password"
             required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
           />
         </div>
+        {human.widget}
         {error && <FormError>{error}</FormError>}
-        <Button type="submit" variant="secondary" className="w-full" disabled={isLoading} aria-busy={isLoading}>
+        <Button type="submit" variant="secondary" className="w-full" disabled={!hydrated || isLoading || !human.token} aria-busy={isLoading}>
           {isLoading ? "Signing in…" : "Sign in"}
         </Button>
       </form>

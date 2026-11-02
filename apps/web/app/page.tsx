@@ -2,8 +2,11 @@ import { ChevronRight, Gift } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 import { Account } from "@/components/app-shell/account";
+import { InstallTip } from "@/components/app-shell/install-tip";
 import { PageFrame } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
+import { PeopleSection } from "@/components/home/people-section";
+import { appSettingInt } from "@/lib/app-settings";
 import { getMyListSummary } from "@/modules/lists";
 
 // Home: the one front door after sign-in (T29). "My list" first, then
@@ -11,8 +14,11 @@ import { getMyListSummary } from "@/modules/lists";
 export default function Home() {
   return (
     <>
-      <TopBar links current="people" wide account={<Account />} />
+      <TopBar links current="people" account={<Account />} />
       <PageFrame wide>
+        <Suspense fallback={null}>
+          <HomeScreenTip />
+        </Suspense>
         <Suspense fallback={<ListCard title="My list" subtitle="Loading…" />}>
           <MyListCard />
         </Suspense>
@@ -20,15 +26,24 @@ export default function Home() {
           <h2 id="people-heading" className="text-[17px] font-semibold">
             People
           </h2>
-          {/* ALL-21 fills this with people cards in a grid
-              (grid gap-3 md:grid-cols-2 lg:grid-cols-3) and adds "Add someone". */}
-          <p className="text-[15px] text-muted-foreground">
-            Add the people you buy for, and we&apos;ll suggest gifts before each birthday and holiday.
-          </p>
+          <Suspense fallback={<p className="text-[15px] text-muted-foreground">Loading…</p>}>
+            <PeopleSection />
+          </Suspense>
         </section>
       </PageFrame>
     </>
   );
+}
+
+// Phones only, and only outside the installed app (ALL-57). A tip never
+// breaks Home: if its setting can't be read, it just isn't shown.
+async function HomeScreenTip() {
+  try {
+    return <InstallTip snoozeDays={await appSettingInt("install_tip_snooze_days")} />;
+  } catch (error) {
+    console.error("install tip hidden", error);
+    return null;
+  }
 }
 
 async function MyListCard() {

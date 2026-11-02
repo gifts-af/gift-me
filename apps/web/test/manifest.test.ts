@@ -6,7 +6,7 @@ describe("web app manifest", () => {
   const m = manifest();
 
   it("opens Home full-screen once installed", () => {
-    expect(m).toMatchObject({ name: "GiftMe", short_name: "GiftMe", start_url: "/", display: "standalone" });
+    expect(m).toMatchObject({ name: "GiftsAF", short_name: "GiftsAF", start_url: "/", display: "standalone" });
   });
 
   it("has the 192 and 512 px PNG icons Android needs", () => {

@@ -1,6 +1,9 @@
 import { ChevronLeft } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
+import { Logo } from "@/components/logo";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { TopBarRow } from "@/components/top-bar-row";
 
 type Current = "list" | "people";
 
@@ -13,23 +16,16 @@ export function TopBar({
   current,
   actions,
   account,
-  wide = false,
 }: {
   back?: { href: string; label: string };
   links?: boolean;
   current?: Current;
   actions?: React.ReactNode;
   account?: React.ReactNode;
-  wide?: boolean;
 }) {
   return (
     <header className="border-b">
-      <div
-        className={cn(
-          "mx-auto flex min-h-14 items-center justify-between gap-2 px-4 py-1.5 sm:px-8",
-          wide ? "max-w-5xl" : "max-w-2xl",
-        )}
-      >
+      <TopBarRow>
         <div className="flex min-w-0 items-center gap-8">
           {back ? (
             <>
@@ -49,18 +45,19 @@ export function TopBar({
         </div>
         <div className="flex items-center gap-1">
           {actions}
-          {account}
+          {/* Signed in, the account menu holds the theme; signed out (a
+              shared list), this switch does (ALL-74). */}
+          {account ?? <ThemeToggle />}
         </div>
-      </div>
+      </TopBarRow>
     </header>
   );
 }
 
 function Brand({ className }: { className?: string }) {
-  // Plain text until the name and logo are settled (ALL-14).
   return (
-    <Link href="/" className={cn("inline-flex min-h-11 items-center text-[17px] font-bold", className)}>
-      GiftMe
+    <Link href="/" className={cn("inline-flex min-h-11 items-center text-[19px]", className)}>
+      <Logo />
     </Link>
   );
 }

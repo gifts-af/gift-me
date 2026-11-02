@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Tokens copied from apps/web/app/globals.css. The extension follows the
+   system theme, so the dark values sit under prefers-color-scheme. */
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 6% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 6% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 6% 10%;
+    --primary: 175 77% 26%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 5% 96%;
+    --secondary-foreground: 240 6% 10%;
+    --muted: 240 5% 96%;
+    --muted-foreground: 240 4% 46%;
+    --accent: 166 76% 97%;
+    --accent-foreground: 175 77% 26%;
+    --destructive: 0 74% 42%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 142 72% 29%;
+    --success-soft: 138 76% 97%;
+    --warning: 26 90% 37%;
+    --warning-soft: 48 100% 96%;
+    --sticker: 48 96% 53%;
+    --sticker-foreground: 240 6% 10%;
+    --border: 240 6% 90%;
+    --input: 240 6% 90%;
+    --ring: 175 77% 26%;
+    --radius: 0.75rem;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --background: 240 10% 4%;
+      --foreground: 0 0% 98%;
+      --card: 240 6% 10%;
+      --card-foreground: 0 0% 98%;
+      --popover: 240 6% 10%;
+      --popover-foreground: 0 0% 98%;
+      --primary: 172 66% 50%;
+      --primary-foreground: 179 84% 10%;
+      --secondary: 240 4% 16%;
+      --secondary-foreground: 0 0% 98%;
+      --muted: 240 4% 16%;
+      --muted-foreground: 240 5% 65%;
+      --accent: 179 84% 10%;
+      --accent-foreground: 171 77% 64%;
+      --destructive: 0 91% 71%;
+      --destructive-foreground: 240 10% 4%;
+      --success: 142 69% 58%;
+      --success-soft: 145 80% 10%;
+      --warning: 43 96% 56%;
+      --warning-soft: 39 79% 9%;
+      --sticker: 48 96% 53%;
+      --sticker-foreground: 240 6% 10%;
+      --border: 240 4% 16%;
+      --input: 240 4% 16%;
+      --ring: 172 66% 50%;
+    }
+  }
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background font-sans text-foreground antialiased;
+    margin: 0;
+  }
+}
+
+/* The few building blocks of the popup, matching design/mockups/ALL-41.html.
+   Every control is at least 44px tall and shows a teal focus ring. */
+@layer components {
+  .focus-ring {
+    @apply focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background;
+  }
+  .btn-primary {
+    @apply focus-ring inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-primary px-5 text-base font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-45;
+  }
+  .btn-secondary {
+    @apply focus-ring inline-flex min-h-12 w-full items-center justify-center rounded-lg bg-secondary px-5 text-base font-semibold text-secondary-foreground disabled:cursor-not-allowed disabled:opacity-45;
+  }
+  .btn-link {
+    @apply focus-ring min-h-11 rounded-md px-1 text-[15px] text-muted-foreground underline underline-offset-[3px];
+  }
+  .input {
+    @apply focus-ring min-h-11 w-full rounded-md border border-input bg-background px-3 py-2.5 text-base font-normal;
+  }
+  .field {
+    @apply flex flex-col gap-1.5 text-sm font-semibold;
+  }
+  .person {
+    @apply focus-ring flex min-h-11 w-full items-center gap-3 rounded-lg border border-border bg-card p-3 text-left;
+  }
+  .person[aria-pressed="true"] {
+    @apply border-primary shadow-[0_0_0_1px_hsl(var(--primary))];
+  }
+  .check {
+    @apply grid h-6 w-6 flex-none place-items-center rounded-md border-[1.5px] border-input text-transparent;
+  }
+  .person[aria-pressed="true"] .check {
+    @apply border-primary bg-primary text-primary-foreground;
+  }
+}

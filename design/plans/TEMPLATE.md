@@ -46,6 +46,7 @@ Go through CLAUDE.md > Principles. Note anything this plan bends, and why. Write
 - **Simplest version?** What we cut:
 - **Hard-coded values?** New settings rows or env vars (T23):
 - **Product boundaries?** Cross-module imports or tables (T19):
+- **New personal data?** Each new field, column or event property that holds personal data, and the feature that needs it now (T42):
 - **Docs and decisions** that need updating:
 
 ## Plan
@@ -67,6 +68,12 @@ Mark tasks that can run alongside others with **[P]**.
 - [ ] Every acceptance criterion maps to a task and a test.
 - [ ] Every task traces back to a story or criterion (nothing extra).
 - [ ] No open questions are left.
+
+## Done: evidence on the ticket (T44)
+
+- [ ] Test evidence posted on the Linear ticket: tests added (and that they failed first), suite and CI results.
+- [ ] Screenshots of what people see (before and after for fixes; phone and desktop, light and dark where it matters) and any mock-ups, uploaded into the ticket comment.
+- [ ] Live check after deploy, or listed as **Still open**.
 
 ## Review focus
 

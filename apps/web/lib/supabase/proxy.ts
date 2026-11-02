@@ -5,7 +5,10 @@ import { supabaseKey, supabaseUrl } from "./env";
 
 // Paths signed-out visitors may open. /api/keepalive checks its own secret
 // (ALL-43). The manifest and icons must load signed out, or "Add to Home
-// Screen" breaks on the sign-in page. Home ("/") needs an account (ALL-20).
+// Screen" breaks on the sign-in page. The home page (/welcome) and the tour
+// are public (ALL-46), and so is the link-preview image (ALL-55); "/" itself is the app home, so it's not listed here:
+// homeRewrite shows signed-out visitors the home page there instead. Email
+// action links (/a/, ALL-23) show their own sign-in page for this link.
 export function isPublicPath(pathname: string) {
   return (
     pathname === "/lists" ||
@@ -13,11 +16,34 @@ export function isPublicPath(pathname: string) {
     pathname.startsWith("/icon") ||
     pathname.startsWith("/apple-icon") ||
     pathname.startsWith("/pwa-icon/") ||
+    pathname === "/email-logo.png" ||
     pathname === "/api/keepalive" ||
+    // The extension calls this cross-origin with a bearer token; the route checks it (ALL-22).
+    pathname === "/api/captures" ||
     pathname.startsWith("/login") ||
     pathname.startsWith("/share/") ||
-    pathname.startsWith("/auth")
+    pathname.startsWith("/auth") ||
+    pathname === "/welcome" ||
+    pathname === "/tour" ||
+    pathname === "/tour/list" ||
+    pathname === "/request-access" ||
+    // The link-preview image: crawlers like LinkedIn's are never signed in (ALL-55).
+    pathname.startsWith("/opengraph-image") ||
+    pathname.startsWith("/a/")
   );
+}
+
+// Signed out, "/" shows the home page while the address stays giftsaf.com
+// (ALL-46). Signed in, it's the app home as before.
+export function homeRewrite(pathname: string, signedIn: boolean): string | null {
+  return pathname === "/" && !signedIn ? "/welcome" : null;
+}
+
+// Supabase may have refreshed the session cookies on `from`; a new response
+// has to carry them, or the refreshed session is lost.
+export function withCookies(from: NextResponse, to: NextResponse): NextResponse {
+  from.cookies.getAll().forEach((cookie) => to.cookies.set(cookie));
+  return to;
 }
 
 // Sign-in, then back to the page that was asked for.
@@ -72,6 +98,11 @@ export async function updateSession(request: NextRequest) {
   // with the Supabase client, your users may be randomly logged out.
   const { data } = await supabase.auth.getClaims();
   const user = data?.claims;
+
+  const rewrite = homeRewrite(request.nextUrl.pathname, Boolean(user));
+  if (rewrite) {
+    return withCookies(supabaseResponse, NextResponse.rewrite(new URL(rewrite, request.url)));
+  }
 
   if (!user && !isPublicPath(request.nextUrl.pathname)) {
     return NextResponse.redirect(signInRedirect(request.nextUrl));

@@ -26,6 +26,9 @@
     --success-soft: 138 76% 97%;
     --warning: 26 90% 37%;
     --warning-soft: 48 100% 96%;
+    /* The home page's sticker and the logo's tag (ALL-46, ALL-48), the same in both themes. */
+    --sticker: 48 96% 53%;
+    --sticker-foreground: 240 6% 10%;
     --border: 240 6% 90%;
     --input: 240 6% 90%;
     --ring: 175 77% 26%;
@@ -57,6 +60,8 @@
     --success-soft: 145 80% 10%;
     --warning: 43 96% 56%;
     --warning-soft: 39 79% 9%;
+    --sticker: 48 96% 53%;
+    --sticker-foreground: 240 6% 10%;
     --border: 240 4% 16%;
     --input: 240 4% 16%;
     --ring: 172 66% 50%;
@@ -74,6 +79,9 @@
   }
   html {
     -webkit-text-size-adjust: 100%;
+    /* Keep room for a scrollbar on every page, so long and short pages
+       line up and the logo never moves (ALL-54). */
+    scrollbar-gutter: stable;
   }
   body {
     @apply bg-background text-foreground antialiased;

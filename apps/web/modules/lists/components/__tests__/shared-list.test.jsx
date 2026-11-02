@@ -46,6 +46,16 @@ describe("SharedList", () => {
     expect(screen.getByText("Claimed by Alex")).toBeInTheDocument();
   });
 
+  it("offers a quiet way to find out about GiftsAF, after the gifts (ALL-46)", () => {
+    render(
+      <SharedList token="t" list={{ title: "Sam's list", isOwner: false, viewer: guest, items: [item("a", "Board game")] }} />,
+    );
+    const about = screen.getByRole("link", { name: "What is GiftsAF?" });
+    expect(about).toHaveAttribute("href", "/");
+    const claim = screen.getByRole("button", { name: "Claim Board game" });
+    expect(claim.compareDocumentPosition(about) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("shows the owner their list with no claims and nothing to claim", () => {
     render(
       <SharedList

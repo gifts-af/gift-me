@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Status** | **Approved** v1.0 (2026-10-17). Revised v1.1 (2026-10-18) after the owner's review: Supabase `pg_cron` runs gift rounds once a day (T8, T9), a lean repo layout (T10), a replaceable AI backend billed through Vercel (T11), push deferred (T12), email capture kept (T13), round statuses cut from 11 to 9 (T14), and a new §3.1 on how the app learns about a person. Revised v1.2 (2026-10-25) with the checkout spike's findings (W1-2, `spikes/checkout.md`): funding in stages (T16), one app-owned Zinc account for product lookups (T17), and approval means buy now (T18). Also 2026-10-25: the platform is one app, account and repo, built to split later (§2.2, T19). Revised 2026-10-28 for schema v1.1 (ALL-44, T31): optional budgets, your own address, where an order ships, and picks from a person's own list. Tunable values (buffers, timings, retries) are sensible defaults to adjust once real usage shows what's needed. |
+| **Status** | **Approved** v1.0 (2026-10-17). Revised v1.1 (2026-10-18) after the owner's review: Supabase `pg_cron` runs gift rounds once a day (T8, T9), a lean repo layout (T10), a replaceable AI backend billed through Vercel (T11), push deferred (T12), email capture kept (T13), round statuses cut from 11 to 9 (T14), and a new §3.1 on how the app learns about a person. Revised v1.2 (2026-10-25) with the checkout spike's findings (W1-2, `spikes/checkout.md`): funding in stages (T16), one app-owned Zinc account for product lookups (T17), and approval means buy now (T18). Also 2026-10-25: the platform is one app, account and repo, built to split later (§2.2, T19). Revised 2026-10-28 for schema v1.1 (ALL-44, T31): optional budgets, your own address, where an order ships, and picks from a person's own list. Revised 2026-11-01 with the email spike's findings (W1-4, `spikes/email.md`): Resend on `giftsaf.com`, per-user capture addresses (T33). Tunable values (buffers, timings, retries) are sensible defaults to adjust once real usage shows what's needed. |
 | **Date** | 2026-10-28 |
 | **Implements** | `../planning/PRD.md` (approved v1.0). Requirement IDs (B-3, A-9, etc.) refer to it. |
 | **Decisions** | `decisions.md` (T#), `../planning/decisions.md` (D#) |
@@ -70,13 +70,13 @@ flowchart LR
 | Web app and API | **Next.js (App Router) on Vercel**, Node.js runtime | One app for UI, API routes, webhooks, and the phone page. A PWA manifest (`app/manifest.ts`) and generated icons make it installable to the home screen; no service worker until push (T12). Browser tests: Playwright (`apps/web/e2e/`), in CI (T30). |
 | Database | **Supabase Postgres** with Row Level Security | Every user-owned table has `user_id` plus RLS policies. Background jobs use the service role. |
 | Auth | **Supabase Auth, Google provider** (plus email and password for existing list users) | Cookie sessions through `@supabase/ssr`; `proxy.ts` sends signed-out visitors to sign-in and back via `?next=`, except on `/lists`, `/share/*`, `/auth/*` and the install files (T30). Google Contacts read access is requested separately, at import time (§6.1). The extension authenticates with the user's Supabase session (§6.2). |
-| File storage | **Supabase Storage** (private bucket) | Capture screenshots. Deleting a person deletes their files. |
+| File storage | **Supabase Storage** (private bucket) | Capture screenshots, in bucket `captures` at `{user_id}/{capture_id}.jpg`. Only the owner can read or write their folder. Deleting a person should delete their files too. That isn't built yet: the rows cascade but the files stay. It's noted on ALL-21, for the person-deletion work (ALL-21 or ALL-37). |
 | Background jobs | **Supabase `pg_cron`** calls the app's **round engine** (a protected API route) **once a day at 8 a.m. Eastern**, using `pg_net` | The schedule lives next to the data it checks. Vercel Cron and Workflow aren't used. All the work runs in the Next.js app, so there's one runtime and one deploy, with no Supabase Edge Functions (T8). See §5.1. |
-| AI | Any model through **Vercel AI Gateway** with the **AI SDK**. Default today: **Claude Opus 5.5** (`anthropic/claude-opus-5.5`; take IDs from the gateway's `/v1/models`) | The gateway gives one key, one bill and one spending cap across providers, plus fallbacks. Usage is **billed through the Vercel account**, so there's no separate AI provider account (T11). The model for each task is set in one config file (§7). Web search through the gateway is **confirmed in W1-3** (Anthropic's native tool; the gateway's Perplexity search is a provider-neutral alternative). Hobby plan works; Claude models need **paid** gateway credit (the free credit excludes them). |
+| AI | Any model through **Vercel AI Gateway** with the **AI SDK**. Default today: **Claude Sonnet 5.5** for every task (`anthropic/claude-sonnet-5.5`, T39; Opus 5.5 is the fallback; take IDs from the gateway's `/v1/models`) | The gateway gives one key, one bill and one spending cap across providers, plus fallbacks. Usage is **billed through the Vercel account**, so there's no separate AI provider account (T11). The model for each task is set in one config file (§7). Web search through the gateway is **confirmed in W1-3** (Anthropic's native tool; the gateway's Perplexity search is a provider-neutral alternative). Hobby plan works; Claude models need **paid** gateway credit (the free credit excludes them). |
 | Checkout | **Zinc** (API v2), confirmed by the W1-2 spike | `max_price` caps the whole order (item, shipping and tax), gift orders, signed webhooks, per-package tracking. **MVP:** each user's own Zinc wallet. **Later:** the user's card through Zinc Connect (T16, §6.5a). Product lookups go through one app-owned Zinc account (T17). |
-| Email | Resend or Postmark **[decided in W1-4]** | Needs sending and inbound-to-webhook. **[Verify]** inbound support and free-tier limits. |
+| Email | **Resend** on `giftsaf.com`, confirmed by the W1-4 spike (T33) | Sends from `hello@giftsaf.com` and receives on `in.giftsaf.com` (its own subdomain). The free plan covers 3,000 emails a month and 100 a day, sent and received combined. Inbound arrives as a signed webhook (Svix) carrying metadata only; the app fetches the body and attachments from the API. Open and click tracking stay off. See `spikes/email.md`. |
 | Push notifications | **Decision deferred (T12).** If added: standard Web Push (VAPID) using the `web-push` package | Works on Android, and on iOS once the PWA is added to the home screen. Email covers every message without it. The notification service sends through a channel list, so push plugs in later without changing callers. Estimated 1–2 days of work, in its own ticket (W5-4). |
-| Extension | Chrome Manifest V3, TypeScript, built with Vite | Popup plus a "Capture for…" action. Lives in the same repo. |
+| Extension | Chrome Manifest V3, TypeScript, built with Vite | Popup plus a "Capture for…" action, in `apps/extension` (React and Tailwind with the T28 tokens). Permissions are only `activeTab`, `scripting` and `storage`. There's a dev build (localhost and `gift-me-dev`) and a prod build (giftsaf.com and `gift-me`). See `apps/extension/README.md`. **How people get it (owner, 2026-11-01):** for now, technical testers load it unpacked from the zip. The beta goes out as an **unlisted Chrome Web Store listing**, installed in one click from an "Add to Chrome" link on the site and updated automatically (ALL-65). That needs a privacy policy page, icons, and the web app accepting both the store's extension ID and the dev build's. |
 | Contacts | Google People API, `contacts.readonly` scope | An unverified Google app allows up to 100 test users, which is plenty for the MVP. |
 
 ### 2.2 One app for the whole platform (T19)
@@ -136,7 +136,7 @@ All tables have `id uuid`, `created_at`, and `updated_at`. Accounts (`profiles`)
 | Table | Key fields | Notes |
 |---|---|---|
 | `profiles` | user_id, display_name, email, phone, timezone, notification prefs, over_budget_pct (default 15), **funding_mode** (`zinc_wallet`; `connect` later), zinc_api_key (in Vault), zinc_webhook_secret (in Vault), zinc_connected_at, auto_topup_on (bool, last known) | One row per user. Push subscriptions are added with W5-4 if push goes ahead. Funding fields: §6.5a (T16). |
-| `people` | user_id, name, relationship, birthday (nullable), address (structured, nullable: recipient first and last name, line 1, line 2, city, state, ZIP, country), phone (nullable; the user's own phone is used when empty), address_checked_at, notes, google_contact_id | P-1, P-5. Zinc requires a phone on every order, and the carrier is the only one who uses it. The address is checked when it's entered, not at purchase time (§6.1). |
+| `people` | user_id, name, relationship, birth_year (nullable; the birthday itself is an `occasions` row, ALL-21), photo_path (nullable, decision 46), address (structured, nullable: recipient first and last name, line 1, line 2, city, state, ZIP, country), phone (nullable; the user's own phone is used when empty), address_checked_at, notes, google_contact_id | P-1, P-5. Zinc requires a phone on every order, and the carrier is the only one who uses it. The address is checked when it's entered, not at purchase time (§6.1). |
 | `budget_defaults` | user_id, relationship, base_amount_cents | B-2 (S) |
 | `occasions` | user_id, person_id (nullable for shared holidays), kind (birthday, anniversary, christmas, mothers_day, …), date rule (fixed date or holiday rule), enabled | P-3. Holidays are computed from rules in `core`. |
 | `budgets` | user_id, person_id, occasion_kind, amount_cents (nullable) | B-1. Overrides the default for that person and occasion. The budget is the buyer's own and optional (D36): `null` means no budget, even when the relationship has a default. |
@@ -149,7 +149,8 @@ All tables have `id uuid`, `created_at`, and `updated_at`. Accounts (`profiles`)
 | `rejections` | round_id, reason_code, reason_text | G-3. Also written to `profile_facts`. |
 | `orders` | round_id, idea_id, provider (zinc), provider_order_id, idempotency_key, funding_mode, max_price_cents, is_gift, gift_message (≤240 characters), price breakdown (subtotal, shipping, tax, total cents), fee_cents, status (placing, placed, failed, shipped, delivered, cancelled, refunded), failure_type, merchant_order_id, packages (jsonb: carrier, tracking number, status, estimated delivery date, proof-of-delivery photo), est_delivery_date (latest across packages), ship_to (recipient, buyer, other), ship_city, ship_state | A-3 as revised by D38, D-1. The full address it shipped to is snapshotted in `order_addresses`, which only the server reads. Zinc's own status stops at "placed"; shipping progress is per package, and one order can ship as several packages. |
 | `reactions` | round_id, rating (loved, liked, meh, returned), note, source (email, web) | D-2 |
-| `notifications` | user_id, round_id, kind, channel, sent_at, action_token_hash | Audit trail plus reminder escalation state. |
+| `notifications` | user_id, round_id, kind, channel, sent_at, provider_message_id, error | Audit trail plus reminder escalation state. Records delivery; the link token lives in `action_links` (ALL-23). |
+| `action_links` | user_id, round_id (nullable), notification_id, action, token_hash (unique), expires_at, used_at | One row per emailed button (ALL-23). Only the SHA-256 hash of the token is stored. Server-only: no policies and no grants for signed-in users. Generic on purpose, so scan-to-gift and ALL-49 can reuse it (T38). |
 | `inbound_messages` | user_id, from, subject, body, attachments, matched_person_id, status | N-2, C-5 |
 | `app_settings` | key, value (jsonb), updated_at | App-wide settings that change without a deploy (T23): `zinc_order_fee_cents` and the §4.1 schedule timings (`planning_delivery_days`, `safety_buffer_days`, `round_lead_days`, `reminder_1_after_heads_up_days`, `reminder_2_before_deadline_days`, `final_notice_before_deadline_days`, `fastest_days_to_arrive`). Not user-owned: only the server can read it, and the owner edits it. |
 
@@ -167,7 +168,7 @@ Gift history (D-3) is a view over `gift_rounds`, `gift_ideas`, `orders`, and `re
 **As built in schema v1.1** (ALL-44, T31):
 - **Optional budgets:** `gift_rounds.budget_cents` and `budgets.amount_cents` can be `null` (no budget). `budget_defaults` has no row when there's no default.
 - **Your own address:** `public.account_addresses`, above. `public.shared_city_for_person(person_id)` gives the buyer city and state of a linked person who shares their address; `public.shared_address_for_person(person_id)` gives the full address to the server only.
-- **Picks from a person's own list:** a buyer with the list's share link calls `lists.link_person(share_token, person_id)`. That records the list in `lists.person_links` and sets `people.linked_user_id`, with no consent step (D42). `lists.unlink_person(person_id)` reverses it, and so does deleting the list, which also ends address sharing through it. `lists.person_list(person_id)` returns that list's gifts in order, each with `claimed` and `claimed_by_me` (never who claimed it). A signed-in buyer can ask only about their own people; the server can ask about any. The concierge reads lists only through this function (T19). The list's owner never sees claims on their own list (D39, ALL-20).
+- **Picks from a person's own list:** a buyer with the list's share link calls `lists.link_person(share_token, person_id)`. That records the list in `lists.person_links` and sets `people.linked_user_id`, with no consent step (D42). `lists.unlink_person(person_id)` reverses it, and so do deleting the list or the person. **A link lasts only while the list is shared (D43):** each link remembers the share token it was made with, and every read (`person_list` and both shared-address functions) goes through `lists.active_link`, which requires that token to still be the list's. Resetting the share link therefore cuts off everyone who linked through the old one, and a trigger also deletes those links so `linked_user_id` is cleared. A future "stop sharing" switch must be checked in `lists.active_link` too. `lists.person_list(person_id)` returns that list's gifts in order, each with `claimed` and `claimed_by_me` (never who claimed it). A signed-in buyer can ask only about their own people; the server (recognised by its `service_role` key) can ask about any, so server code such as the round engine must call it through the service-role client, not a direct database connection. The concierge reads lists only through this function (T19). The list's owner never sees claims on their own list (D39, ALL-20).
 - **Where an order ships:** `orders.ship_to`, `ship_city` and `ship_state` for the buyer; the full snapshot in `concierge.order_addresses`, server-only, so a shared address never reaches the buyer through their order. A one-off "other" address is saved to the person by writing the person's own address fields.
 
 ### 3.1 How the app learns about a person
@@ -213,6 +214,16 @@ flowchart LR
 
 **Later, if useful:** a stored summary per person ("outdoorsy, practical, prefers experiences"), refreshed when facts change. It's one extra field and isn't needed for the MVP.
 
+**As built for notifications** (ALL-23, T38; plan: [design/plans/ALL-23-notifications.md](plans/ALL-23-notifications.md)):
+- New table `concierge.action_links` (above). `notifications.action_token_hash` is gone; `provider_message_id` and `error` record what the email provider said.
+- New setting `test_action_link_hours` (24) in `app_settings`: how long the Settings test email's button works (T23).
+- Server code writes these server-only tables with the Supabase secret key (`lib/supabase/admin.ts`, server-only import). See README > Environments.
+
+**As built in people v1.2** (ALL-21, T41):
+- `people.birthday` is gone. A birthday is an `occasions` row; `people.birth_year` (optional) only adds an age. A partial unique index allows one live occasion per kind per person, and holidays can be added for anyone.
+- `people.photo_path` points at a photo in the private `person-photos` bucket. Each owner can read and write only their own folder (`<user_id>/...`); the app shows a short-lived signed link. The size limit and the resize width are `app_settings` (`person_photo_max_upload_bytes`, `person_photo_px`).
+- `concierge.add_person` creates a person with their starting occasions in one call, so the app and the Chrome extension save people the same way.
+
 ## 4. Key calculations (in `packages/core`, unit-tested)
 
 ### 4.1 Ship-by deadline and schedule
@@ -235,7 +246,7 @@ flowchart LR
 - **Dates are calendar days** in US dates (Mother's Day is the 2nd Sunday of May, Father's Day the 3rd Sunday of June). A Feb 29 birthday or anniversary falls on Feb 28 in other years, since early beats late. Delivery and handling days count calendar days, with the slowest case plus the buffer covering weekends **[Claude's call]**. The code is in `packages/core` (`occasions.ts`, `schedule.ts`).
 
 ### 4.2 Budget
-- **The budget is optional** (D36). With no budget (`null`), nothing is over budget and there's no over-budget label or confirm step. The approval ceiling is then the sum of the picks' estimated totals, and each order's `max_price` is capped at its own estimated total minus the fee (pass `pickTotalCents`), even after other orders in the round settle or fail. A price rise still stops the order and asks (A-4). B-3 ("automatic purchases never go over budget") applies when a budget is set. Every rule below assumes one is.
+- **The budget is optional** (D36). With no budget (`null`), nothing is over budget and there's no over-budget label or confirm step. The approval ceiling is then the sum of the picks' estimated totals, and each order's `max_price` is capped at its own estimated total minus the fee, even after other orders in the round settle or fail. The same cap applies to a confirmed over-budget round, whose ceiling is also the sum of the picks. `maxPriceCents` requires the round's budget and the pick's approved total, so the cap can't be skipped. A price rise still stops the order and asks (A-4). B-3 ("automatic purchases never go over budget") applies when a budget is set. Every rule below assumes one is.
 - `est_total = price + shipping + tax + fees` (D10). Tax is estimated from the recipient's state until checkout gives the real figure.
 - An idea is **within budget** if `est_total ≤ budget`. It **counts as over-budget** if `budget < est_total ≤ budget × (1 + over_budget_pct)` (D11). Anything above that is dropped.
 - If several ideas are selected, the sum of their `est_total` values must fit the round's budget, unless the over-budget idea was deliberately approved (PRD §6.2.3).
@@ -292,14 +303,14 @@ flowchart LR
 
 ### 6.1 Setup and contacts import
 1. Sign in with Google through Supabase Auth.
-2. **Import contacts** (optional). This is a separate Google authorization for `contacts.readonly` only. The app calls the People API, shows the "Who do you buy gifts for?" checklist, and creates `people` rows with any names, birthdays, and addresses it finds. The Google token is used once and not stored **[Claude's call]**.
+2. **Import contacts** (optional, ALL-24, T45). From Home, "Import from Google" opens `/people/import`. Google Identity Services' popup asks for `contacts.readonly` only, separate from sign-in; the browser reads the contacts from the People API and revokes the token at once, so it never reaches our server. The "Who do you buy gifts for?" checklist (search, A–Z) sends only the ticked contacts, each with a relationship the buyer picks ("Mom", "Dad", "Grandma" pre-fill it). Each becomes a `people` row with their name, birthday and birth year, address (saved unchecked) and Google contact id, plus their relationship's occasions; the server copies a real Google photo into private storage. A unique index on (user, Google contact id) stops duplicates. No phone numbers or emails are imported (T42).
 3. Occasions are added automatically by relationship (P-4). Budgets come from relationship defaults (B-2).
-4. **Missing address (P-5):** the add-person form asks for the address but doesn't require it. When a round starts and the address is still missing, the round goes to `needs_address`. The heads-up then asks for the address (one-tap link to a form) and that request follows the same reminder schedule. No ideas are generated until there's an address, because delivery estimates and tax need it. If the deadline passes, the round is skipped **[Claude's call]**.
+4. **Missing address (P-5):** the add-person form doesn't ask for the address (decision 45, ask late, ask once). When a round starts and the address is still missing, the round goes to `needs_address`. The heads-up then asks for the address (one-tap link to a form) and that request follows the same reminder schedule. No ideas are generated until there's an address, because delivery estimates and tax need it. If the deadline passes, the round is skipped **[Claude's call]**.
 5. **Address check on entry:** Zinc rejects incomplete addresses at order time (for example, a missing apartment number), which would surface on the day of purchase. The form requires the fields Zinc requires and checks the address when it's saved **[Verify in W2-2: which address check to use, since Zinc has no standalone one]**.
 6. **Checkout setup:** connect Zinc and turn on auto top-up (§6.5a).
 
 ### 6.2 Capture (extension)
-1. The extension is signed in by opening the web app once. The app passes a session token to the extension through `externally_connectable` messaging, and the extension refreshes it from there **[Claude's call; Verify in W2-4]**.
+1. **Sign-in (T40, ALL-22):** the extension has **its own Supabase session**. Its **Sign in** button opens `/extension/connect` on the web app. That page needs you signed in, and its server makes a one-time magic-link token for you; no email is sent. The page passes only the token's hash to the extension through `externally_connectable`, and the extension trades it for a session with `verifyOtp`. The session lives in `chrome.storage.local` and refreshes itself, so a browser restart keeps you signed in. Signing out of either one leaves the other alone. Sharing the web app's refresh token would sign each one out whenever the other refreshed, because Supabase revokes a session when a used refresh token comes back. The extension's ID stays the same through a fixed manifest key (`NEXT_PUBLIC_EXTENSION_ID` in the web app). Captures post to `POST /api/captures` with the user's bearer token, so RLS applies. Details are in `design/plans/ALL-22-extension.md`.
 2. The user picks a person and clicks **Capture**. The extension collects:
    - the page URL and title,
    - the visible text (`document.body.innerText`, trimmed to about 20k characters),
@@ -312,14 +323,23 @@ flowchart LR
 
 ### 6.3 Gift idea generation (G-1 to G-5)
 1. **Input:** the person's active facts, past gifts, past rejections, the occasion, the budget, the ship-by deadline, and the recipient's state.
-2. **Brainstorm:** the AI model (with web search) proposes about 10 candidate gift concepts, each with a specific product and retailer URL. Only retailers Zinc supports are allowed.
-3. **Resolve:** each candidate is checked with Zinc's product and offer lookup for live price, availability, the seller, shipping cost, and handling plus delivery days. Lookups use the **app-owned Zinc account** at $0.01 each, never the user's wallet (T17). Offers sold by the retailer itself are preferred. Offers don't include tax, so tax stays estimated (§4.2). Anything unavailable, too late in the slowest case, over the over-budget limit, or already given or rejected is dropped.
-4. **Rank:** the AI model ranks the survivors and writes the one-line reasons. The top 3–5 within budget are kept, plus at most one over-budget idea.
+2. **Brainstorm:** the AI model (with web search) proposes about 10 candidate gift concepts, each with an id, a `product_search` string (brand and model when known) and a retailer hint, **not a URL**: the AI's links and prices aren't reliable (ALL-17, ALL-42). Only retailers Zinc supports are allowed.
+3. **Resolve:** each candidate's `product_search` goes to Zinc's search, then offers, for live price, availability, the seller, condition, shipping cost, and handling plus delivery days. Lookups use the **app-owned Zinc account** at $0.01 each, never the user's wallet (T17). Rules from the ALL-42 spike ([design/spikes/ai.md](spikes/ai.md#resolve-through-zinc-all-42)):
+   - **The found item must match the idea.** Amazon's first result can be another brand. Pick the first result that matches the brand and model; if none does, the idea counts as "not found" (or the closest same-brand item, flagged as an alternative). **[Claude's call]** whether a cheap model checks the match, decided in W3-3.
+   - **New only.** Refurbished and used offers are never picked, even when cheaper.
+   - **Prefer the buy-box offer** (the seller Amazon shows by default), then the one sold by the retailer or brand itself, then the fastest delivery.
+   - **Price comes only from the offer.** The AI's estimate was off by up to half in the spike, so budget checks use the live price plus shipping.
+   - Offers don't include tax, so tax stays estimated (§4.2). Anything unavailable, too late in the slowest case, over the over-budget limit, or already given or rejected is dropped.
+4. **Rank:** the AI model ranks the survivors and writes the one-line reasons, **referring to candidates by id** (it shortens titles, so matching on titles fails). The top 3–5 within budget are kept, plus at most one over-budget idea.
 5. If fewer than 3 survive, the app repeats steps 2–4 up to 2 more times. After that it sends what it has and notes it.
 6. Results are saved as `gift_ideas`, and the heads-up is sent.
 
 ### 6.4 Notifications and one-tap actions
 - Emails carry **signed one-time action links**, for example `/a/{token}`. Each token is random, stored hashed, tied to one user, round, and action, and expires at the deadline. Opening one goes to a confirmation page on the phone web app, and that page performs the action with one tap. A link never approves anything on a plain GET, because email security scanners open links automatically **[Claude's call]**.
+- **Sign-in required (ALL-23, T38):** a link only works for the person it was sent to. They must be signed in as the link's owner; signed out, the page offers sign-in (Google gets the owner's email as a hint) and returns to the same link. A forwarded link is useless to anyone else.
+- **Where the token shows up:** Our code never stores or logs the raw token (only its hash is saved), but `/a/{token}` URLs do appear in the hosting provider's request logs and in the sign-in redirect; that's acceptable because a link needs its owner signed in and works once.
+- **What `/a/{token}` shows, first match wins:** (1) unknown token: "This link doesn't work"; (2) signed out: sign-in page; (3) signed in as someone else: "This link is for a different account"; (4) already used; (5) expired; (6) the confirm page. The action and its round appear only at step 6. Confirming is a POST that marks the link used with one conditional update, so a double tap runs the action once. Full reasoning: [the plan](plans/ALL-23-notifications.md#what-was-decided-and-why).
+- Emails come from `GiftsAF <hello@giftsaf.com>` through Resend, with click tracking off, so action links are never rewritten (T33).
 - **Channels:** every message is sent through a list of channels. The MVP starts with email only. If push is added (W5-4, decision deferred, T12), the same messages also go out as Web Push notifications linking to the same pages.
 - **Escalation** follows the §4.1 schedule. Each send is logged in `notifications`.
 
@@ -356,25 +376,27 @@ Funding comes in two stages. Ordering, tracking and the data model are the same 
 - Open questions for a person are included in heads-up and reminder emails as a signed link to a short form on the phone web page. That counts as "answerable by email" for the MVP. Replying in the body of the email is not parsed **[Claude's call]**.
 
 ### 6.8 Inbound email quick capture (N-2, C-5)
-- Each user gets an address such as `notes+{user-token}@<domain>`, or the app matches on the sender's address **[decided in W1-4]**.
+- **Each user gets a private capture address, `notes+{token}@in.giftsaf.com` (T33).** The token is random, identifies the user, and can be reset in Settings. It works from any account the user sends from. Heads-up and reminder emails use it as their Reply-To, so replying with news is the same as emailing a note. Mail to an unknown token is logged and dropped.
+- **Webhook handling (W1-4 findings):** verify the Svix signature against the raw body, answer 200 straight away, and dedupe on `email_id`. Then fetch the body and attachments from Resend's API, and **copy attachments into Supabase Storage at once**, because their download links expire after an hour. Use the plain-text body plus attachments, and ignore the HTML: pasted images appear in it a second time as base64.
 - The inbound webhook stores the message. The AI model then matches it to a person, using names in the text and the user's list of people, and extracts facts. If it isn't confident, it emails back asking "Who is this about?"
 
 ## 7. AI design
 
 **Keeping the provider replaceable (T11):**
 - All AI calls go through `apps/web/lib/ai`, using the AI SDK's provider-neutral functions (`generateObject`, `generateText`) and the AI Gateway. No other code calls a model directly.
-- Each task's model and settings live in one config map, for example `{ extraction: "anthropic/claude-opus-5.5", ... }`. Changing a model is a one-line config change, re-checked against the eval fixtures.
+- Each task's model and settings live in one config map, for example `{ extraction: "anthropic/claude-sonnet-5.5", ... }`. Changing a model is a one-line config change, re-checked against the eval fixtures.
+- **Signing in to the gateway (T39):** on Vercel (Preview and Production) the AI SDK uses Vercel's automatic OIDC token, so there's no production key. Locally it uses the dev `AI_GATEWAY_API_KEY` from Vercel's Development variables (`vercel env pull`). **[Verify]** OIDC on a preview deploy with the first real AI call (W3-1 or W3-3); the fallback is a Sensitive production key.
 - Prompts are plain instructions plus a schema, with no vendor-specific prompt tricks.
 - **The one vendor-specific feature is web search** during brainstorming. It sits behind a small `searchWeb` step, so a different provider's search tool, or a search API, can replace it.
 
-| Task | Default model and settings (today) | Output | Cost (measured in W1-3 unless marked) |
+| Task | Default model and settings (T39) | Output | Cost (measured in W1-3 and ALL-42) |
 |---|---|---|---|
-| Capture extraction | Claude Opus 5.5, effort `low`, vision | Structured facts (schema-validated) | ~$0.01 each (text; screenshots not yet measured) |
-| Inbound note matching and extraction | Claude Opus 5.5, effort `low` | Person match plus facts | ~$0.01 each (estimate) |
-| Idea brainstorm | Claude Opus 5.5, web search (up to 3 searches) | 8 candidates with `product_search` terms, no URLs (schema) | ~$0.25–0.45 (mostly search results read) |
-| Idea ranking and reasons | Claude Opus 5.5, effort `low` | Ranked list (schema) | ~$0.02–0.04 |
+| Capture extraction | Claude Sonnet 5.5, effort `low`, vision | Structured facts (schema-validated) | ~$0.005 per text capture, ~$0.01 per phone screenshot |
+| Inbound note matching and extraction | Claude Sonnet 5.5, effort `low` | Person match plus facts | ~$0.005 each (estimate, same as text capture) |
+| Idea brainstorm | Claude Sonnet 5.5, web search (up to 3 searches) | 8 candidates with ids and `product_search` terms, no URLs (schema) | ~$0.18 (mostly search results read) |
+| Idea ranking and reasons | Claude Sonnet 5.5, effort `low` | Ranked list by candidate id (schema) | ~$0.01 |
 
-**A full round costs about $0.30–0.45** (W1-3, `spikes/ai.md`). Cheaper models are worth trying per task now that fixtures exist: Sonnet 5.5 is half the price, and brainstorm is the expensive step.
+**A full round costs about $0.20** with Sonnet 5.5 (ALL-42), against $0.30–0.45 with Opus 5.5 (W1-3). Sonnet's ideas were nearly as good as Opus's; Haiku 5.5 is far cheaper but missed the main need (it put a $15 pack of hooks above the vise Dad needs) and caught fewer facts. Opus stays the fallback if quality slips. Comparison in [`spikes/ai.md`](spikes/ai.md#model-comparison-all-42).
 
 **Prompt rules learned in W1-3** (prompt v3): stated wants come first (use the over-budget slot if needed); a worn-out owned item is a replacement need; check every idea against owned items; stock items only, no personalization; prefer Amazon, Walmart, Target and Best Buy; ship-to isn't where hobbies happen. Captured facts must reach idea generation: without them, ideas are generic.
 
@@ -383,13 +405,16 @@ Funding comes in two stages. Ordering, tracking and the data model are the same 
 - **Evals (light):** W1-3 builds a small fixture set (about 10 captures and 5 profiles) that later prompt changes are re-checked against.
 
 ## 8. Security and privacy
+- **No ORM (T46):** SQL migrations, the typed Supabase client running as the signed-in user, and SQL functions for multi-step work.
 - RLS on every user table. The service role is only used inside the round engine and webhooks.
 - The tick endpoint rejects any call without the shared secret.
 - Webhooks verify signatures where the provider supports them. Otherwise they use a secret path token plus an IP allowlist if one is available.
 - No retailer passwords are ever stored (A-5). The app **never touches card numbers**: in stage 1, cards live in each user's Zinc account; in stage 2, in Stripe (§6.5a). Users' Zinc keys and webhook secrets are kept in Supabase Vault.
 - Secrets live in Vercel environment variables. Supabase keys are split into anon and service role.
 - The sensitive-trait filter runs on AI output (C-8). Captures store only what the user captured.
+- **Bot check on public forms (T43):** Cloudflare Turnstile on sign-up, sign-in, password reset, request access and feedback. Supabase Auth verifies the token for the auth forms; our server actions verify it for the two that email us, and fail closed.
 - Deletion cascades (C-7). Users can export their data later.
+- **Data minimization (T42):** a column or form field for personal data is added only with the feature that needs it, and is optional until that feature is used. Analytics, AI and other vendors get IDs and amounts, never names, emails or addresses, unless the vendor's job needs them (e.g. Zinc needs the shipping address to ship).
 
 ## 9. Environments and operations
 - **Supabase:** two projects on the free tier, `dev` and `prod`, plus the local Supabase CLI for development. `pg_cron` and `pg_net` are enabled on both.
@@ -407,9 +432,9 @@ Funding comes in two stages. Ordering, tracking and the data model are the same 
 | Vercel Hobby, or Pro if needed | $0 / $20 |
 | Supabase free, or Pro if needed | $0 / $25 |
 | AI model usage through AI Gateway, billed by Vercel (prepaid credit) | ~$5–15 (about a dozen rounds a month at ~$0.40, plus captures at ~$0.01; capped at $60) |
-| Email service | $0 (free tier) |
+| Email service (Resend) | $0 (free tier: 3,000 a month, 100 a day, sent plus received) |
 | Zinc | $1 per successful order (paid from each user's wallet), plus $0.01 per product lookup on the app account (~$1–3). No minimum or monthly fee. |
-| Domain | ~$1–2 |
+| Domain (`giftsaf.com`, $12.03 a year) | ~$1 |
 | **Total** | **~$15–85** worst case, under the $100 budget |
 
 ## 11. Spikes (wave 1)
@@ -418,7 +443,7 @@ Funding comes in two stages. Ordering, tracking and the data model are the same 
 |---|---|---|
 | **W1-2 Checkout (Zinc)** | How does each user pay with their own card (A-9)? Options: a Zinc account per user, a user-funded wallet, or a payment method passed per order. What is Zinc's pricing and minimum? Does `max_price` include shipping and tax? How reliable are its delivery estimates? Which webhook events does it send? Does product and offer lookup work for idea resolution? **Can the wallet be funded automatically:** an API to add funds, auto-recharge from a saved card, or a balance check the app can poll? | A written recommendation in `design/spikes/checkout.md`, plus one real test order placed, tracked, and delivered (or returned). If Zinc doesn't work, Rye is evaluated as the fallback. |
 | **W1-3 AI** | Can it pull useful facts from real captures (Instagram, Pinterest, a product page)? Can it produce 3–5 good, purchasable ideas from a profile? What is the real cost per call? | `design/spikes/ai.md` with sample inputs and outputs, prompt v1, and measured cost. The fixture set is committed. |
-| **W1-4 Email** | Which provider (Resend or Postmark) supports inbound email on the free tier? Which domain? Which address scheme? | `design/spikes/email.md`, plus a working send and receive using the chosen provider. |
+| **W1-4 Email** | Which provider (Resend or Postmark) supports inbound email on the free tier? Which domain? Which address scheme? | `design/spikes/email.md`, plus a working send and receive using the chosen provider. **Done 2026-11-01:** Resend on `giftsaf.com`, both directions tested (T33). |
 
 ## 12. Risks
 
@@ -491,4 +516,4 @@ Each wave can start once the waves before it have the dependencies it lists. Wit
 **Within wave 2, W2-1 goes first.** W2-2 and W2-4 can start right after it, and W2-3 and W2-5 follow. So wave 2 is really two steps, though still more tickets than builders at each step. With two builders, nobody is blocked. Wave 1's spikes are the critical path: they decide W3-3 and W4-2. **Start Wave 1 with the spikes and look and feel (W1-7), not the scaffold.** Start the Zinc signup on day one, because account approval may take days. W1-1 is small and low-risk, so it can fill gaps or run in parallel. **W2-6** (added 2026-10-26) runs alongside W2-1 once the W1-7 mock-ups are signed off, and must land before W2-2; it also blocks W3-3, W4-1 and W4-2.
 
 ## 14. Accounts
-All services (Google, Vercel including AI Gateway billing, Supabase, Zinc, Linear) are under the owner's **allensforever711@gmail.com** account, and the code is in the free **gifts-af** GitHub organization (github.com/gifts-af/gift-me), where allensforever711, aarontallen, JimtheBurger and brb3 are all owners. Jim is added to each service (T7). **Zinc:** the app-owned account (product lookups, sandbox, T17) exists under allensforever711@gmail.com, created in W1-2; each user also has their own Zinc account for buying (§6.5a). **Domain:** if none is already set up, W1-6 buys a cheap placeholder domain under that account **[Claude's call]**.
+All services (Google, Vercel including AI Gateway billing, Supabase, Zinc, Linear) are under the owner's **allensforever711@gmail.com** account, and the code is in the free **gifts-af** GitHub organization (github.com/gifts-af/gift-me), where allensforever711, aarontallen, JimtheBurger and brb3 are all owners. Jim is added to each service (T7). **Zinc:** the app-owned account (product lookups, sandbox, T17) exists under allensforever711@gmail.com, created in W1-2; each user also has their own Zinc account for buying (§6.5a). **Domain:** `giftsaf.com`, bought 2026-11-01 under that account in the Vercel GiftMe team (DNS on Vercel). **Email:** Resend, under the same account (T33).

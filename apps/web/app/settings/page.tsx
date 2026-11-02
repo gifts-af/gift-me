@@ -4,8 +4,9 @@ import { PageFrame, PageTitle } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
 import { createClient } from "@/lib/supabase/server";
 import { getConciergeSettings } from "@/modules/concierge";
-import { saveSettings } from "./actions";
+import { saveSettings, sendTestEmail } from "./actions";
 import { SettingsForm } from "./settings-form";
+import { TestEmailButton } from "./test-email-button";
 
 async function LoadedForm() {
   const supabase = await createClient();
@@ -14,10 +15,13 @@ async function LoadedForm() {
     getConciergeSettings(),
   ]);
   return (
-    <SettingsForm
-      initial={{ timezone: profile?.timezone ?? null, overBudgetPct: concierge.overBudgetPct }}
-      action={saveSettings}
-    />
+    <div className="flex flex-col gap-6">
+      <SettingsForm
+        initial={{ timezone: profile?.timezone ?? null, overBudgetPct: concierge.overBudgetPct }}
+        action={saveSettings}
+      />
+      <TestEmailButton action={sendTestEmail} />
+    </div>
   );
 }
 

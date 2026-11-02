@@ -1,0 +1,122 @@
+{
+  "model": "anthropic/claude-opus-5.5",
+  "results": [
+    {
+      "screen": "onyx-product.png",
+      "person": "priya",
+      "facts": [
+        {
+          "category": "wants",
+          "value": "Onyx Coffee Lab 'Tropical Weather' whole bean coffee, 10oz",
+          "confidence": 0.5,
+          "evidence": "tropical weather ... 10oz ... $24.50 - Add"
+        },
+        {
+          "category": "brand",
+          "value": "Onyx Coffee Lab",
+          "confidence": 0.5,
+          "evidence": "ONYX COFFEE"
+        },
+        {
+          "category": "interest",
+          "value": "specialty whole bean coffee",
+          "confidence": 0.55,
+          "evidence": "SPECIALTY WHOLE BEAN COFFEE"
+        },
+        {
+          "category": "style",
+          "value": "coffee: light roast, fruit-forward, floral flavor profile",
+          "confidence": 0.4,
+          "evidence": "LIGHT ROAST LEVEL - FRUIT FORWARD, FLORAL, AND BOTANICAL"
+        }
+      ],
+      "tokens": 3873,
+      "cost": 0.020356,
+      "secs": 3.738
+    },
+    {
+      "screen": "ciele-product.png",
+      "person": "priya",
+      "facts": [
+        {
+          "category": "brand",
+          "value": "Ciele Athletics",
+          "confidence": 0.5,
+          "evidence": "ciele ATHLETICS"
+        },
+        {
+          "category": "wants",
+          "value": "Ciele GOCap - FLTWND - Ultra Iconic (cap with ear flaps, $80 USD)",
+          "confidence": 0.4,
+          "evidence": "GOCap - FLTWND - Ultra Iconic $80 USD"
+        },
+        {
+          "category": "style",
+          "value": "5-panel athletic caps",
+          "confidence": 0.35,
+          "evidence": "GOCap collection"
+        },
+        {
+          "category": "interest",
+          "value": "running",
+          "confidence": 0.3,
+          "evidence": "ciele ATHLETICS GOCap"
+        }
+      ],
+      "tokens": 3963,
+      "cost": 0.02214,
+      "secs": 4.618
+    },
+    {
+      "screen": "dad-post-mock.png",
+      "person": "dad",
+      "facts": [
+        {
+          "category": "interest",
+          "value": "fly tying",
+          "confidence": 0.95,
+          "evidence": "Tied a dozen Adams dry flies tonight"
+        },
+        {
+          "category": "interest",
+          "value": "fly fishing for trout (dry fly)",
+          "confidence": 0.9,
+          "evidence": "#dryfly #troutbum"
+        },
+        {
+          "category": "wants",
+          "value": "needs a new rotary fly-tying vise",
+          "confidence": 0.9,
+          "evidence": "My vise finally gave out... Anyone have a rotary vise they swear by?"
+        },
+        {
+          "category": "constraint",
+          "value": "new vise jaws must hold small hooks (size 18 and smaller)",
+          "confidence": 0.8,
+          "evidence": "the jaws won't hold a size 18 hook anymore"
+        },
+        {
+          "category": "owns",
+          "value": "old fly-tying vise, now worn out",
+          "confidence": 0.85,
+          "evidence": "My vise finally gave out after 20 years"
+        },
+        {
+          "category": "interest",
+          "value": "fishing the Upper Delaware River",
+          "confidence": 0.8,
+          "evidence": "for the Upper Delaware trip"
+        },
+        {
+          "category": "interest",
+          "value": "ties Adams dry fly patterns",
+          "confidence": 0.75,
+          "evidence": "a dozen Adams dry flies"
+        }
+      ],
+      "tokens": 4004,
+      "cost": 0.022912,
+      "secs": 4.735
+    }
+  ]
+}

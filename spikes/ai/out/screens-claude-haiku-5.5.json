@@ -1,0 +1,98 @@
+{
+  "model": "anthropic/claude-haiku-5.5",
+  "results": [
+    {
+      "screen": "onyx-product.png",
+      "person": "priya",
+      "facts": [
+        {
+          "category": "interest",
+          "value": "light roast specialty coffee",
+          "confidence": 0.3,
+          "evidence": "Screenshot of Onyx Coffee 'tropical weather' product page, 'LIGHT ROAST LEVEL - FRUIT FORWARD, FLORAL, AND BOTANICAL'"
+        },
+        {
+          "category": "interest",
+          "value": "fruity, floral coffee flavors",
+          "confidence": 0.3,
+          "evidence": "'MIXED BERRIES | SWEET TEA | RAW HONEY | PLUM'"
+        },
+        {
+          "category": "interest",
+          "value": "whole bean coffee",
+          "confidence": 0.25,
+          "evidence": "'283g SPECIALTY WHOLE BEAN COFFEE'; 10oz size selected"
+        }
+      ],
+      "tokens": 4064,
+      "cost": 0.0006044,
+      "secs": 3.444
+    },
+    {
+      "screen": "ciele-product.png",
+      "person": "priya",
+      "facts": [
+        {
+          "category": "interest",
+          "value": "Ciele Athletics GOCap hats (FLTWND Ultra Iconic)",
+          "confidence": 0.3,
+          "evidence": "Screenshot of cieleathletics.com GOCap collection showing GOCap - FLTWND - Ultra Iconic listings"
+        }
+      ],
+      "tokens": 3952,
+      "cost": 0.000548,
+      "secs": 3.074
+    },
+    {
+      "screen": "dad-post-mock.png",
+      "person": "dad",
+      "facts": [
+        {
+          "category": "interest",
+          "value": "fly tying",
+          "confidence": 0.95,
+          "evidence": "Tied a dozen Adams dry flies tonight; #flytying"
+        },
+        {
+          "category": "interest",
+          "value": "dry fly fishing",
+          "confidence": 0.85,
+          "evidence": "#dryfly #troutbum; Upper Delaware trip"
+        },
+        {
+          "category": "interest",
+          "value": "trout fishing",
+          "confidence": 0.8,
+          "evidence": "#troutbum; Upper Delaware trip"
+        },
+        {
+          "category": "owns",
+          "value": "rotary vise (old, worn out)",
+          "confidence": 0.7,
+          "evidence": "My vise finally gave out after 20 years, the jaws won't hold a size 18 hook"
+        },
+        {
+          "category": "wants",
+          "value": "replacement rotary vise",
+          "confidence": 0.9,
+          "evidence": "Anyone have a rotary vise they swear by?"
+        },
+        {
+          "category": "wants",
+          "value": "vise that holds small hooks (size 18)",
+          "confidence": 0.75,
+          "evidence": "the jaws won't hold a size 18 hook anymore"
+        },
+        {
+          "category": "interest",
+          "value": "Adams dry fly pattern",
+          "confidence": 0.6,
+          "evidence": "Tied a dozen Adams dry flies"
+        }
+      ],
+      "tokens": 4002,
+      "cost": 0.0005718,
+      "secs": 2.165
+    }
+  ]
+}
