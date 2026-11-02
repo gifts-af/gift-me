@@ -74,13 +74,12 @@ function dueFromSchedule(
 ): NextAction {
   if (!r.headsUpOn) throw new RangeError(`A ${r.status} round needs the day its first message went out`);
   const entries = reminderSchedule(r.shipByDeadline, r.headsUpOn, s).map((e) => ({ key: keys[e.kind], date: e.date }));
-  const skip = entries[entries.length - 1];
-  if (compareDates(skip.date, today) <= 0) return { do: "skip", send: "skipped" };
-  const pending = entries.filter((e) => !r.sent.has(e.key));
-  const overdue = pending.filter((e) => compareDates(e.date, today) <= 0);
-  // After a missed tick only the latest overdue reminder goes out; older ones are dropped.
-  if (overdue.length > 0) return { do: "send", send: overdue[overdue.length - 1].key };
-  return { do: "wait", until: (pending[0] ?? skip).date };
+  const due = entries.filter((e) => compareDates(e.date, today) <= 0);
+  // Only the latest due step matters: older ones are dropped after a missed tick,
+  // and are never sent once a later one has gone out.
+  const latest = due[due.length - 1];
+  if (latest && !r.sent.has(latest.key)) return { do: "send", send: latest.key };
+  return { do: "wait", until: entries[due.length].date };
 }
 
 /**
@@ -88,6 +87,11 @@ function dueFromSchedule(
  * return `wait` until the deadline, so a caller never has to special-case them.
  */
 export function nextAction(r: RoundView, today: CalendarDate, s: ScheduleSettings): NextAction {
+  const actionable = ["scheduled", "generating", "awaiting_approval", "needs_address", "needs_attention"];
+  // The deadline skip comes first, so a stuck round still ends on time.
+  if (actionable.includes(r.status) && compareDates(r.shipByDeadline, today) <= 0) {
+    return { do: "skip", send: "skipped" };
+  }
   switch (r.status) {
     case "scheduled":
       return r.hasAddress ? { do: "generate" } : { do: "request_address", send: "address_request" };
@@ -97,11 +101,7 @@ export function nextAction(r: RoundView, today: CalendarDate, s: ScheduleSetting
       return dueFromSchedule(r, today, s, APPROVAL_KEYS);
     case "needs_address":
       return r.hasAddress ? { do: "generate" } : dueFromSchedule(r, today, s, ADDRESS_KEYS);
-    case "needs_attention":
-      return compareDates(r.shipByDeadline, today) <= 0
-        ? { do: "skip", send: "skipped" }
-        : { do: "wait", until: r.shipByDeadline };
-    default:
+    default: // needs_attention and the statuses we never act on
       return { do: "wait", until: r.shipByDeadline };
   }
 }

@@ -90,6 +90,12 @@ describe("nextAction: awaiting approval", () => {
     expect(nextAction(approval("2027-02-22"), "2027-03-21", s)).toEqual({ do: "send", send: "final_notice" });
   });
 
+  it("never sends an earlier reminder after a later one went out", () => {
+    const a = (sent: StepKey[]) => nextAction({ ...approval("2027-02-22"), sent: new Set(sent) }, "2027-03-21", s);
+    expect(a(["final_notice"])).toEqual({ do: "wait", until: "2027-03-22" });
+    expect(a(["reminder_2"])).toEqual({ do: "send", send: "final_notice" });
+  });
+
   it("lets an overdue skip win over reminders", () => {
     expect(nextAction(approval("2027-02-22"), "2027-03-23", s)).toEqual({ do: "skip", send: "skipped" });
   });
@@ -147,6 +153,13 @@ describe("nextAction: other statuses", () => {
 
   it("generates for a round stuck in generating", () => {
     expect(nextAction(view("generating"), "2027-02-22", s)).toEqual({ do: "generate" });
+  });
+
+  it("skips at the deadline from every actionable status, before any other work", () => {
+    expect(nextAction(view("generating"), "2027-03-22", s)).toEqual({ do: "skip", send: "skipped" });
+    expect(nextAction(view("scheduled"), "2027-03-22", s)).toEqual({ do: "skip", send: "skipped" });
+    expect(nextAction(view("awaiting_approval"), "2027-03-22", s)).toEqual({ do: "skip", send: "skipped" });
+    expect(nextAction(view("needs_address"), "2027-03-22", s)).toEqual({ do: "skip", send: "skipped" });
   });
 
   it("skips a needs_attention round only at the deadline", () => {
