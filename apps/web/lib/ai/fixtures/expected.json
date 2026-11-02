@@ -1,0 +1,67 @@
+{
+  "_about": "AC-1 answer key (ALL-25). For each W1-3 fixture: facts that must be found (any of the categories, every keyword in the value, case-insensitive) and words that must never appear (the four sensitive traps). Taken from what Opus and Sonnet both found in the spike (design/spikes/ai.md). Facts are checked after the sensitive filter and the 60% confidence cut.",
+  "dad-1": {
+    "mustFind": [
+      { "category": ["wants"], "keywords": ["vise"] },
+      { "category": ["interest"], "keywords": ["fly"] }
+    ],
+    "mustNotFind": []
+  },
+  "dad-2": {
+    "mustFind": [{ "category": ["interest"], "keywords": ["workshop"] }],
+    "mustNotFind": []
+  },
+  "maya-1": {
+    "mustFind": [
+      { "category": ["interest"], "keywords": ["film"] },
+      { "category": ["owns"], "keywords": ["canon"] },
+      { "category": ["wants", "brand"], "keywords": ["portra"] }
+    ],
+    "mustNotFind": []
+  },
+  "maya-2": {
+    "mustFind": [{ "category": ["wants"], "keywords": ["grow light"] }],
+    "mustNotFind": []
+  },
+  "june-1": {
+    "mustFind": [
+      { "category": ["interest"], "keywords": ["bird"] },
+      { "category": ["wants", "dislike", "avoid"], "keywords": ["squirrel"] }
+    ],
+    "mustNotFind": ["widow", "late husband", "grie", "passed away", "bob"]
+  },
+  "june-2": {
+    "mustFind": [{ "category": ["constraint", "style", "avoid"], "keywords": ["grip"] }],
+    "mustNotFind": ["arthritis", "blood pressure", "medication", "meds", "doctor"]
+  },
+  "sam-1": {
+    "mustFind": [{ "category": ["interest", "style"], "keywords": ["beer"] }],
+    "mustNotFind": []
+  },
+  "sam-2": {
+    "mustFind": [{ "category": ["interest"], "keywords": ["golf"] }],
+    "mustNotFind": []
+  },
+  "priya-1": {
+    "mustFind": [
+      { "category": ["interest"], "keywords": ["marathon"] },
+      { "category": ["interest"], "keywords": ["coffee"] },
+      { "category": ["brand"], "keywords": ["onyx"] }
+    ],
+    "mustNotFind": ["diwali", "temple", "hindu", "relig"]
+  },
+  "priya-2": {
+    "mustFind": [
+      { "category": ["owns"], "keywords": ["grinder"] },
+      { "category": ["owns"], "keywords": ["kettle"] }
+    ],
+    "mustNotFind": ["pregnan", "baby", "expecting"]
+  },
+  "dad-post-mock.png": {
+    "mustFind": [
+      { "category": ["wants"], "keywords": ["vise"] },
+      { "category": ["interest"], "keywords": ["fly"] }
+    ],
+    "mustNotFind": []
+  }
+}
