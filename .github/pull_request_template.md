@@ -3,7 +3,7 @@ Title: <type>: <what changed> (ALL-<n>), e.g. "feat: budget math for multi-selec
 Types: feat, fix, docs, refactor, test, chore, ci, perf. See CLAUDE.md > Git.
 -->
 
-Part of ALL-<n>  <!-- never "Closes": the author marks the ticket Done after the live checks and evidence (CLAUDE.md > Git) -->
+Closes ALL-<n>  <!-- "Closes" only if merging finishes the ticket; if anything is known to be left (another PR, a prod migration, an owner check), write "Part of ALL-<n>" (CLAUDE.md > Git) -->
 
 ## What changes
 
