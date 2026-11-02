@@ -146,7 +146,9 @@ export function captureStoreFor(supabase: SupabaseClient<Database>, userId: stri
     async insertFacts(personId, captureId, facts) {
       const { data: rows, error: err } = await concierge()
         .from("profile_facts")
-        .insert(
+        // A fact the person already has is skipped, not an error: two reads of one
+        // capture can overlap (unique index profile_facts_person_fact_key).
+        .upsert(
           facts.map((f) => ({
             user_id: userId,
             person_id: personId,
@@ -156,6 +158,7 @@ export function captureStoreFor(supabase: SupabaseClient<Database>, userId: stri
             source_id: captureId,
             confirmed: false,
           })),
+          { onConflict: "person_id,category,value_key", ignoreDuplicates: true },
         )
         .select("id, category, value");
       if (err) throw err;

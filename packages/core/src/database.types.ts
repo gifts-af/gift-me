@@ -691,6 +691,7 @@ export type Database = {
           updated_at: string;
           user_id: string;
           value: string;
+          value_key: string | null;
         };
         ComputedFields: never;
         Insert: {
@@ -705,6 +706,7 @@ export type Database = {
           updated_at?: string;
           user_id?: string;
           value: string;
+          value_key?: never;
         };
         Update: {
           active?: boolean;
@@ -718,6 +720,7 @@ export type Database = {
           updated_at?: string;
           user_id?: string;
           value?: string;
+          value_key?: never;
         };
         Relationships: [];
       };
