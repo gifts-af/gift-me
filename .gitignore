@@ -14,3 +14,4 @@ apps/extension/dist
 .vercel/
 # Screenshots of real shops for the AI spike: not ours to republish (ALL-42).
 spikes/ai/fixtures/screens/*-product.png
+apps/web/lib/ai/fixtures/screens/*-product.png

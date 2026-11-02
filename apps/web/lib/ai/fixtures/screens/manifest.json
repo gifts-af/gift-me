@@ -1,0 +1,5 @@
+[
+  { "file": "onyx-product.png", "person_id": "priya", "source": "Screenshot of onyxcoffeelab.com product page (phone)" },
+  { "file": "ciele-product.png", "person_id": "priya", "source": "Screenshot of cieleathletics.com GOCap collection (phone)" },
+  { "file": "dad-post-mock.png", "person_id": "dad", "source": "Screenshot of an Instagram post (mock built from the dad-1 fixture)" }
+]
