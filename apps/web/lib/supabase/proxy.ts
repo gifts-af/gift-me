@@ -20,6 +20,7 @@ export function isPublicPath(pathname: string) {
     pathname === "/api/keepalive" ||
     // The extension calls this cross-origin with a bearer token; the route checks it (ALL-22).
     pathname === "/api/captures" ||
+    /^\/api\/captures\/[^/]+\/extract$/.test(pathname) ||
     pathname.startsWith("/login") ||
     pathname.startsWith("/share/") ||
     pathname.startsWith("/auth") ||

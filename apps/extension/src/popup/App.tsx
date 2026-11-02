@@ -3,10 +3,11 @@ import { signOut } from "../lib/auth";
 import { config } from "../lib/config";
 import { getSupabase } from "../lib/supabase";
 import { collectPage, ScreenshotTooLargeError } from "../lib/page";
-import { uploadCapture, type CaptureInput } from "../lib/upload";
+import { retryExtraction, uploadCapture, type CaptureInput, type Extraction } from "../lib/upload";
 import { AddPerson } from "./AddPerson";
 import { PersonPicker, type Person } from "./PersonPicker";
 import { CaptureForm } from "./CaptureForm";
+import { Learned } from "./Learned";
 import { loadPopup, type LoadResult, type Loaded } from "./load";
 
 type View = { kind: "loading" } | LoadResult;
@@ -88,7 +89,9 @@ function Capture({
   const [error, setError] = useState<string | null>(null);
   // The collected page, kept so Try again resends it rather than re-reading the tab.
   const [pending, setPending] = useState<CaptureInput | null>(null);
-  const [savedTo, setSavedTo] = useState<string | null>(null);
+  // The saved capture and what the web app learned from it (ALL-25).
+  const [saved, setSaved] = useState<{ captureId: string; person: Person; extraction: Extraction | null } | null>(null);
+  const [retryError, setRetryError] = useState<string | null>(null);
 
   function select(person: Person) {
     setSelected(person);
@@ -127,7 +130,7 @@ function Capture({
       if (!data.session) return onSignedOut();
       const result = await uploadCapture(data.session.access_token, payload);
       if (result.ok) {
-        setSavedTo(selected.name);
+        setSaved({ captureId: result.id, person: selected, extraction: result.extraction });
         setPending(null);
       } else if (result.status === 401) {
         onSignedOut();
@@ -139,8 +142,25 @@ function Capture({
     }
   }
 
+  async function retry() {
+    if (!saved) return;
+    setBusy(true);
+    setRetryError(null);
+    try {
+      const { data } = await getSupabase().auth.getSession();
+      if (!data.session) return onSignedOut();
+      const result = await retryExtraction(data.session.access_token, saved.captureId);
+      if (result.ok) setSaved({ ...saved, extraction: result.extraction });
+      else if (result.status === 401) onSignedOut();
+      else setRetryError(result.error);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function captureAnother() {
-    setSavedTo(null);
+    setSaved(null);
+    setRetryError(null);
     setSelected(null);
     setNote("");
     setError(null);
@@ -148,17 +168,17 @@ function Capture({
     setAdding(false);
   }
 
-  if (savedTo) {
+  if (saved) {
     return (
-      <div className="flex flex-col items-center gap-3 px-4 py-8 text-center">
-        <span className="rounded-full bg-success-soft px-2.5 py-1 text-[13px] font-semibold text-success">Saved</span>
-        <p className="m-0" role="status">
-          Saved to {savedTo}. We'll show you what we learned.
-        </p>
-        <button className="btn-link" type="button" onClick={captureAnother}>
-          Capture another
-        </button>
-      </div>
+      <Learned
+        personId={saved.person.id}
+        name={saved.person.name}
+        extraction={saved.extraction}
+        busy={busy}
+        error={retryError}
+        onRetry={() => void retry()}
+        onAnother={captureAnother}
+      />
     );
   }
 
@@ -173,6 +193,11 @@ function Capture({
         <button className="btn-link self-start" type="button" onClick={() => setAdding(true)}>
           Add a person
         </button>
+      )}
+      {busy && (
+        <p className="m-0 text-sm text-muted-foreground" role="status">
+          Reading the page…
+        </p>
       )}
       <CaptureForm
         note={note}

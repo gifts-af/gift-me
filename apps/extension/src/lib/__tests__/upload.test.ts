@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { uploadCapture, type CaptureInput } from "../upload";
+import { retryExtraction, uploadCapture, type CaptureInput } from "../upload";
 
 vi.mock("../config", () => ({ config: { appOrigin: "https://app.test" } }));
 
@@ -29,7 +29,7 @@ afterEach(() => vi.unstubAllGlobals());
 describe("uploadCapture", () => {
   it("posts multipart with every field and the bearer token", async () => {
     const fetchMock = stubFetch(json({ id: "c1" }, 201));
-    expect(await uploadCapture("tok", input)).toEqual({ ok: true, id: "c1" });
+    expect(await uploadCapture("tok", input)).toEqual({ ok: true, id: "c1", extraction: null });
 
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("https://app.test/api/captures");
@@ -75,5 +75,46 @@ describe("uploadCapture", () => {
       status: 0,
       error: "Couldn't reach GiftsAF. Check your connection.",
     });
+  });
+});
+
+describe("uploadCapture: what was learned (ALL-25)", () => {
+  const extraction = { status: "extracted", facts: [{ id: "f1", category: "owns", value: "Owala water bottle" }] };
+
+  it("returns the extraction the server sends", async () => {
+    stubFetch(json({ id: "c1", extraction }, 201));
+    expect(await uploadCapture("tok", input)).toEqual({ ok: true, id: "c1", extraction });
+  });
+
+  it.each([
+    ["no extraction", { id: "c1" }],
+    ["an unknown status", { id: "c1", extraction: { status: "odd", facts: [] } }],
+    ["facts that aren't a list", { id: "c1", extraction: { status: "extracted", facts: "x" } }],
+    ["a fact with an unknown category", { id: "c1", extraction: { status: "extracted", facts: [{ id: "f", category: "mood", value: "x" }] } }],
+  ])("treats %s as no extraction", async (_label, body) => {
+    stubFetch(json(body, 201));
+    expect(await uploadCapture("tok", input)).toEqual({ ok: true, id: "c1", extraction: null });
+  });
+});
+
+describe("retryExtraction", () => {
+  it("posts to the capture's extract route with the bearer token", async () => {
+    const extraction = { status: "extracted", facts: [] };
+    const fetchMock = stubFetch(json({ extraction }, 200));
+    expect(await retryExtraction("tok", "c1")).toEqual({ ok: true, extraction });
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://app.test/api/captures/c1/extract");
+    expect(init.method).toBe("POST");
+    expect(init.headers).toEqual({ Authorization: "Bearer tok" });
+  });
+
+  it("passes on the server's error", async () => {
+    stubFetch(json({ error: "That capture wasn't found." }, 404));
+    expect(await retryExtraction("tok", "c1")).toEqual({ ok: false, status: 404, error: "That capture wasn't found." });
+  });
+
+  it("says when the network is down", async () => {
+    stubFetch(new TypeError("offline"));
+    expect(await retryExtraction("tok", "c1")).toEqual({ ok: false, status: 0, error: "Couldn't reach GiftsAF. Check your connection." });
   });
 });

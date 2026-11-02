@@ -13,6 +13,8 @@ describe("isPublicPath", () => {
     "/api/keepalive",
     // The Chrome extension posts captures here with a bearer token (ALL-22).
     "/api/captures",
+    // ...and retries a capture's read the same way (ALL-25).
+    "/api/captures/0b6f7c3e-1a2b-4c5d-8e9f-001122334455/extract",
     // The browser fetches these to offer "Add to Home Screen", signed in or not.
     "/manifest.webmanifest",
     "/icon",
@@ -32,7 +34,7 @@ describe("isPublicPath", () => {
     "/a/abc",
   ])("lets signed-out visitors reach %s", (path) => expect(isPublicPath(path)).toBe(true));
 
-  it.each(["/", "/settings", "/api/other", "/lists/123"])(
+  it.each(["/", "/settings", "/api/other", "/lists/123", "/api/captures/x/other", "/api/captures/a/b/extract"])(
     "sends signed-out visitors on %s to sign in",
     (path) => expect(isPublicPath(path)).toBe(false),
   );

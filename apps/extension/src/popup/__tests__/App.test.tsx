@@ -253,3 +253,61 @@ describe("Popup", () => {
     expect(await screen.findByRole("button", { name: "Sign in" })).toBeInTheDocument();
   });
 });
+
+describe("Here's what I learned (ALL-25)", () => {
+  async function capture() {
+    render(<App />);
+    await userEvent.click(await screen.findByRole("button", { name: "Mom" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save to Mom" }));
+  }
+  const facts = [
+    { id: "f1", category: "wants", value: "a ceramic pour-over set" },
+    { id: "f2", category: "owns", value: "Owala water bottle" },
+  ];
+
+  it("says it's reading the page while it waits", async () => {
+    let answer: (r: Response) => void = () => {};
+    fetchMock.mockImplementationOnce(() => new Promise<Response>((resolve) => (answer = resolve)));
+    await capture();
+    expect(await screen.findByText("Reading the page…")).toBeInTheDocument();
+    answer(json({ id: "c1", extraction: { status: "extracted", facts } }, 201));
+    expect(await screen.findByText("Here's what I learned about Mom")).toBeInTheDocument();
+  });
+
+  it("lists what was learned, owned things as Already has, and links to the person", async () => {
+    fetchMock.mockResolvedValueOnce(json({ id: "c1", extraction: { status: "extracted", facts } }, 201));
+    await capture();
+    expect(await screen.findByText("Here's what I learned about Mom")).toBeInTheDocument();
+    expect(screen.getByText("Wants: a ceramic pour-over set")).toBeInTheDocument();
+    expect(screen.getByText("Already has: Owala water bottle")).toBeInTheDocument();
+    const link = screen.getByRole("link", { name: "See everything about Mom →" });
+    expect(link).toHaveAttribute("href", "https://app.test/people/p-mom");
+    expect(link).toHaveAttribute("target", "_blank");
+  });
+
+  it("says so honestly when nothing confident was found", async () => {
+    fetchMock.mockResolvedValueOnce(json({ id: "c1", extraction: { status: "extracted", facts: [] } }, 201));
+    await capture();
+    expect(await screen.findByText("Nothing new to learn from this page. The capture is saved.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "See everything about Mom →" })).toBeInTheDocument();
+  });
+
+  it("a failed read offers Try again, which retries the read, not the upload", async () => {
+    fetchMock
+      .mockResolvedValueOnce(json({ id: "c1", extraction: { status: "failed", facts: [] } }, 201))
+      .mockResolvedValueOnce(json({ extraction: { status: "extracted", facts } }, 200));
+    await capture();
+    expect(await screen.findByText("Couldn't read this page. The capture is saved.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByText("Wants: a ceramic pour-over set")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect((fetchMock.mock.calls[1] as unknown as [string])[0]).toBe("https://app.test/api/captures/c1/extract");
+  });
+
+  it("with reading switched off, says it'll learn later", async () => {
+    fetchMock.mockResolvedValueOnce(json({ id: "c1", extraction: { status: "pending", facts: [] } }, 201));
+    await capture();
+    expect(await screen.findByText("Saved. We'll learn from it later.")).toBeInTheDocument();
+  });
+});
+

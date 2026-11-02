@@ -3,6 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { parseDate, type OccasionKind } from "@gifts-af/core";
+import { createExtractor } from "@/lib/ai/extract";
+import { AI_MODELS } from "@/lib/ai/models";
 import { todayForRequest } from "@/lib/today";
 import {
   addPerson,
@@ -11,6 +13,8 @@ import {
   parseImportRows,
   parsePersonForm,
   deletePerson,
+  readUnreadCaptures,
+  removeFact,
   linkList,
   setBudget,
   setOccasionEnabled,
@@ -120,4 +124,17 @@ export async function importContactsAction(_previous: ImportResult | null, formD
   revalidatePath("/");
   revalidatePath("/people");
   return { ...result, failed: result.failed + parsed.refused };
+}
+
+// "What we know" (ALL-25): remove an AI suggestion, or read unread captures.
+export async function removeFactAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
+  return refresh(await removeFact(text(formData, "id")), text(formData, "personId"));
+}
+
+export async function readCapturesAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
+  const personId = text(formData, "personId");
+  const result = await readUnreadCaptures(createExtractor(AI_MODELS.extraction), personId);
+  // Some may have been read even when another failed, so refresh either way.
+  revalidatePath(`/people/${personId}`);
+  return result;
 }

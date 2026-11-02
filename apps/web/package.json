@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "e2e": "playwright test",
     "email:samples": "tsx --conditions=react-server scripts/email-samples.ts",
-    "email:html": "tsx --conditions=react-server scripts/email-html.ts"
+    "email:html": "tsx --conditions=react-server scripts/email-html.ts",
+    "ai:eval": "tsx scripts/ai-eval.ts"
   },
   "dependencies": {
     "@gifts-af/core": "workspace:*",
@@ -24,6 +25,7 @@
     "@radix-ui/react-switch": "^1.4.1",
     "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.117.0",
+    "ai": "7.0.159",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.511.0",
@@ -31,7 +33,8 @@
     "next-themes": "^0.4.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "tailwind-merge": "^3.3.0"
+    "tailwind-merge": "^3.3.0",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",

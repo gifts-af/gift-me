@@ -44,6 +44,7 @@ pnpm supabase db reset # rebuild the local database from the migrations, e.g. af
 pnpm supabase stop     # stop the containers; your local data is kept
 pnpm db:test           # run the database tests in supabase/tests/ (privacy rules, keys, cascades)
 pnpm db:types          # regenerate packages/core/src/database.types.ts after changing the schema
+pnpm ai:eval           # check capture extraction against the fixtures with the real model (~10¢, needs AI_GATEWAY_API_KEY; not in CI)
 ```
 
 Write new migrations with `pnpm supabase migration new <name>` and test them locally before they go to `dev` or `prod`. Local settings live in `supabase/config.toml`. Every new user-owned table needs `user_id`, its privacy rule and a test in `supabase/tests/` (see `design/decisions.md` T26). CI runs `pnpm db:test` and fails if the generated types are stale.
