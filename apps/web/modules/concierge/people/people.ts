@@ -2,6 +2,13 @@ import "server-only";
 import type { CalendarDate, OccasionKind } from "@gifts-af/core";
 import type { SaveResult } from "../settings";
 import type { ImportRow, PersonInput } from "./rules";
+import { logEvent } from "@/lib/log";
+import { siteUrl } from "@/lib/site-url";
+import { defaultChannels } from "../notify/channels";
+import { createSupabaseNotifyStore } from "../notify/store";
+import { resumeRoundsForPerson } from "../rounds/engine";
+import { createStubGenerateIdeas } from "../rounds/ideas";
+import { createSupabaseRoundStore } from "../rounds/store";
 import * as service from "./service";
 import { createSupabasePeopleStore } from "./store";
 
@@ -22,8 +29,23 @@ export function addPerson(input: PersonInput): Promise<service.AddResult> {
   return service.addPerson(createSupabasePeopleStore(), input);
 }
 
-export function updatePerson(id: string, input: PersonInput): Promise<SaveResult> {
-  return service.updatePerson(createSupabasePeopleStore(), id, input);
+export async function updatePerson(id: string, input: PersonInput): Promise<SaveResult> {
+  const result = await service.updatePerson(createSupabasePeopleStore(), id, input);
+  if (result.ok) {
+    // A new address can unpause a round waiting on one (ALL-28). Never affects the save.
+    try {
+      const now = new Date();
+      await resumeRoundsForPerson(id, {
+        store: createSupabaseRoundStore(),
+        notify: { store: createSupabaseNotifyStore(), channels: defaultChannels(), baseUrl: siteUrl(), now },
+        now,
+        generateIdeas: createStubGenerateIdeas({ production: process.env.VERCEL_ENV === "production" }),
+      });
+    } catch {
+      logEvent("round_resume_failed", { person_id: id });
+    }
+  }
+  return result;
 }
 
 export function setOccasionEnabled(id: string, kind: OccasionKind, enabled: boolean): Promise<SaveResult> {
