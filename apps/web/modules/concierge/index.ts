@@ -48,3 +48,11 @@ export {
 export type { AddResult, ImportResult, PersonCard, PersonDetail } from "./people/people";
 export { parseBudget, parseImportRows, parsePersonForm, parseShareToken } from "./people/rules";
 export type { ImportAddress, ImportRow, PersonInput } from "./people/rules";
+
+// The round engine (ALL-28): the daily tick, advancing one round, and resuming
+// rounds that waited for an address. The idea stub stands in for ALL-27.
+export { advanceRound, resumeRoundsForPerson, runTick } from "./rounds/engine";
+export type { AdvanceResult, EngineDeps, GenerateIdeas, TickSummary } from "./rounds/engine";
+export { createSupabaseRoundStore } from "./rounds/store";
+export type { Candidate, ClaimedRound, NewRoundRow, RoundContext, RoundFinish, RoundStore } from "./rounds/store";
+export { createStubGenerateIdeas } from "./rounds/ideas";
