@@ -271,8 +271,8 @@ flowchart LR
 
 | Main path | Meaning | Moves on when |
 |---|---|---|
-| `scheduled` | The round exists; its start date hasn't arrived | Start date reached (→ `generating`, or `needs_address` if there's no address) |
-| `generating` | The AI model is preparing ideas | Ideas are ready and the heads-up is sent |
+| `scheduled` | The round exists; its start date hasn't arrived | Start date reached (→ `generating`, or `needs_address` if there's no address), or the deadline passes (→ `skipped`) |
+| `generating` | The AI model is preparing ideas | Ideas are ready and the heads-up is sent, or the deadline passes (→ `skipped`) |
 | `awaiting_approval` | Waiting for the user to pick or reject | Approved (→ `ordered`), or rejected with a reason (→ `generating`) |
 | `ordered` | Approved and bought. Each order's own progress (placing, placed, shipped, …) lives in `orders` | The delivered webhook arrives |
 | `delivered` | Arrived; the reaction prompt goes out the day after the occasion | A reaction is logged, or 7 days pass |
