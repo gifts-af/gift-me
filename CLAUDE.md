@@ -141,6 +141,7 @@ The owner's claude.ai account owns the page. To update it, a person needs **edit
   - **Screenshots** of anything a person sees, at phone and desktop width and in light and dark mode where it matters. Show before and after for a fix.
   - **Mock-ups** made for the ticket.
   - **Live checks** after the deploy (what was checked on giftsaf.com or in the service, and the result).
+  - **Ticked acceptance criteria:** as each criterion's evidence is posted, tick its box in the ticket description (`- [x]`) and add a short pointer to the evidence. All boxes are ticked before the ticket moves to Done; one that can't be ticked goes under **Still open**.
 
   Upload images into the comment (Linear MCP `prepare_file_upload`, then PUT, then embed the returned markdown), so they stay with the ticket rather than in chat or a scratch folder. Anything that couldn't be checked is listed as **Still open**, and the ticket stays open until it is. Docs-only pushes to `main` don't need a ticket. `AGENTS.md` repeats this rule for other AI tools and points them here.
 - **Every PR is attached to its Linear ticket.** Linear's GitHub app links a PR when the branch name or title has the ticket ID. Linear also moves the ticket to In Progress when the PR opens (tested on PR #6).

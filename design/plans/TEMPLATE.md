@@ -74,6 +74,7 @@ Mark tasks that can run alongside others with **[P]**.
 - [ ] Test evidence posted on the Linear ticket: tests added (and that they failed first), suite and CI results.
 - [ ] Screenshots of what people see (before and after for fixes; phone and desktop, light and dark where it matters) and any mock-ups, uploaded into the ticket comment.
 - [ ] Live check after deploy, or listed as **Still open**.
+- [ ] Every acceptance-criteria box in the ticket description ticked, each with a pointer to its evidence.
 
 ## Review focus
 
