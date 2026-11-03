@@ -312,15 +312,15 @@ export function removeAddress(store, id): Promise<SaveResult>;
 
 ### Task 7: Docs and Linear (done alongside the spec push, on `main`)
 
-- [ ] `design/decisions.md`: add **T51** ("A person's address is checked by format only, and the round engine uses the same check").
-- [ ] `design/technical-design.md`:
+- [x] `design/decisions.md`: add **T51** ("A person's address is checked by format only, and the round engine uses the same check").
+- [x] `design/technical-design.md`:
   - §6.1 step 4: the form exists (ALL-81).
   - §6.1 step 5: resolve the **[Verify]** with the T51 answer.
   - §3 `people` row: `address_checked_at` means "passed our format check"; the phone isn't collected.
-- [ ] Linear:
+- [x] Linear:
   - Comment on ALL-30: refuse without a complete address; send the round back to `needs_address` on a missing or rejected address; ask the buyer for their own phone at checkout setup.
   - Comment on ALL-63: the engine and orders should count a shared address as ready, and a shared address wins.
-  - Create "Suggest an address update to a list owner", blocked by ALL-63, priority Low.
+  - Created [ALL-86](https://linear.app/allens-forever/issue/ALL-86) "Suggest an address update to a list owner", blocked by ALL-63, priority Low.
   - Move ALL-81 to In Progress.
 
 ### Task 8: Verify, review, ship, evidence
