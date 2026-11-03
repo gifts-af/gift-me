@@ -58,6 +58,13 @@ A GiftsAF user does something that emails a friend who has no account. For examp
 - **To work out:** which actions can go to a non-user, whether they sign up as part of the tap, and what the sender learns.
 - **Source:** owner, 2026-11-01, while specifying ALL-23.
 
+### 7. Concierge for your own list (premium)
+The concierge works for you as a receiver, not only as a giver. It curates suggestions for **your own** gift list from what it learns about you, and you add the ones you like so others can buy them for you.
+- **Why:** a good list is the best source of gifts (D37), but keeping one up to date is work. This keeps your list fresh without you having to think of things. It's the "automated receiving" half of premium in strategy §6.
+- **Related:** the same idea engine as ALL-27, pointed at yourself instead of someone you buy for. You stay in control: suggestions only reach your list when you add them. Pricing: ALL-76.
+- **To work out:** what it learns from (your captures, what you've added, gifts you kept or returned), how often it suggests, and whether suggestions can be timed to your birthday or the holidays.
+- **Source:** owner, 2026-11-03.
+
 ## A common thread
 
 Ideas 1, 2, 4 and 5 all use the same building block: **a scannable code tied to a gift that someone claims securely.** If any of these move forward, that's the piece to design once and reuse.

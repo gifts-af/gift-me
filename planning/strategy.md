@@ -92,7 +92,7 @@ How the concierge's intelligence works (matches design §3.1):
 
 ## 6. Money model (direction, not decided) (D34)
 - **Free:** managing and sharing gift lists.
-- **Premium:** automated giving and receiving (the concierge).
+- **Premium:** automated giving and receiving (the concierge). Receiving includes the concierge curating suggestions for your own list, which you add for others to buy (ideas.md idea 7).
 - **Per gift:** a fee on scan-to-gift and custom gifts. Zinc's $1 per order can be passed to the buyer.
 
 Billing stays out of MVP scope.
