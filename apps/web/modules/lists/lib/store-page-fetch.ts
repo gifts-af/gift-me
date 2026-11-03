@@ -95,9 +95,21 @@ async function hostIsPublic(url: URL, resolve: StorePageDeps["resolve"]): Promis
   return addresses.length > 0 && addresses.every(isPublicAddress);
 }
 
+// A body that's never read keeps its connection open until garbage collection.
+async function discard(response: Response): Promise<void> {
+  try {
+    await response.body?.cancel();
+  } catch {
+    // already closed
+  }
+}
+
 async function readCapped(response: Response, maxBytes: number): Promise<string | null> {
   const declared = Number(response.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > maxBytes) return null;
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    await discard(response);
+    return null;
+  }
   if (!response.body) return "";
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
@@ -135,12 +147,17 @@ export async function fetchStorePage(rawUrl: string, limits: StorePageLimits, de
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get("location");
         const next: URL | null = location ? checkUrl(new URL(location, url).href) : null;
+        await discard(response);
         if (!next) return { ok: false, reason: "bad_url" };
         url = next;
         continue;
       }
-      if (response.status !== 200) return { ok: false, reason: "http_status" };
+      if (response.status !== 200) {
+        await discard(response);
+        return { ok: false, reason: "http_status" };
+      }
       if (!/^\s*(text\/html|application\/xhtml\+xml)/i.test(response.headers.get("content-type") ?? "")) {
+        await discard(response);
         return { ok: false, reason: "not_html" };
       }
       const html = await readCapped(response, limits.maxBytes);

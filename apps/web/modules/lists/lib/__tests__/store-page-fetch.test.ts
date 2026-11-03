@@ -40,11 +40,31 @@ describe("fetchStorePage (ALL-10)", () => {
     ["IPv6 loopback", "::1"],
     ["an IPv6 private network", "fd12:3456::1"],
     ["an IPv4 address wrapped in IPv6", "::ffff:127.0.0.1"],
+    ["a wrapped IPv4 address in hex (loopback)", "::ffff:7f00:1"],
+    ["a wrapped IPv4 address in hex (cloud metadata)", "::ffff:a9fe:a9fe"],
   ])("refuses a host that points at %s", async (_label, address) => {
     const d = deps({ resolve: vi.fn(async () => [PUBLIC_IP, address]) });
     const result = await fetchStorePage("https://sneaky.example.com/p/1", limits, d);
     expect(result).toEqual({ ok: false, reason: "blocked_address" });
     expect(d.fetch).not.toHaveBeenCalled();
+  });
+
+  it("refuses a link written as a wrapped IPv6 address", async () => {
+    const d = deps();
+    for (const url of ["http://[::ffff:7f00:1]/", "http://[::ffff:a9fe:a9fe]/latest"]) {
+      expect(await fetchStorePage(url, limits, d)).toEqual({ ok: false, reason: "blocked_address" });
+    }
+    expect(d.fetch).not.toHaveBeenCalled();
+  });
+
+  it("closes the body of every response it doesn't read", async () => {
+    const bodies: Response[] = [
+      new Response("moved", { status: 301, headers: { location: "/next" } }),
+      new Response("nope", { status: 403, headers: { "content-type": "text/html" } }),
+    ];
+    const fetch = vi.fn().mockResolvedValueOnce(bodies[0]).mockResolvedValueOnce(bodies[1]);
+    await fetchStorePage("https://shop.example.com/p", limits, deps({ fetch }));
+    expect(bodies.every((r) => r.bodyUsed || r.body?.locked)).toBe(true);
   });
 
   it("refuses odd ports and non-web links before looking anything up", async () => {
