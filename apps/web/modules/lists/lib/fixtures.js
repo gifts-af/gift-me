@@ -1,6 +1,6 @@
 // Demo catalog for the proof of concept.
 //
-// Amazon blocks automated page fetches (see the note in ./amazon.js), so name and
+// Amazon blocks automated page fetches (see the note in ./product-link.js), so name and
 // price cannot be read for an arbitrary product. These few ASINs are hardcoded so
 // the complete auto-fill flow can be demonstrated end to end.
 //

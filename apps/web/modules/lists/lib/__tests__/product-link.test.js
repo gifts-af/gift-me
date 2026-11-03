@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { lookupProductLink } from '../amazon.js'
+import { lookupProductLink } from '../product-link.js'
 
 describe('lookupProductLink: links from stores other than Amazon (ALL-10)', () => {
   it('takes the name from a Walmart link and asks for the price', async () => {
@@ -45,6 +45,16 @@ describe('lookupProductLink: links from stores other than Amazon (ALL-10)', () =
     expect(result.product.productUrl).toBe('https://walmart.com/ip/Lipton-Tea/123?selected=true')
   })
 
+  it('never saves a username or password that was in the link', async () => {
+    const result = await lookupProductLink('https://me:secret@shop.example.com/p/Blue-Mug/1')
+    expect(result.product.productUrl).toBe('https://shop.example.com/p/Blue-Mug/1')
+  })
+
+  it('refuses links to an IP address, which no store uses', async () => {
+    expect((await lookupProductLink('http://192.168.0.1/admin')).error.code).toBe('INVALID_URL')
+    expect((await lookupProductLink('http://[::1]/x')).error.code).toBe('INVALID_URL')
+  })
+
   it('refuses links that are not web pages', async () => {
     expect((await lookupProductLink('ftp://files.example.com/x')).error.code).toBe('INVALID_URL')
     expect((await lookupProductLink('localhost/thing')).error.code).toBe('INVALID_URL')
@@ -63,7 +73,7 @@ describe('lookupProductLink: links from stores other than Amazon (ALL-10)', () =
 
 describe('storeName', () => {
   it('says Amazon for any Amazon site and the bare domain for other stores', async () => {
-    const { storeName } = await import('../amazon.js')
+    const { storeName } = await import('../product-link.js')
     expect(storeName('https://www.amazon.co.uk/dp/B0EXAMPLE1')).toBe('Amazon')
     expect(storeName('https://www.walmart.com/ip/x/1')).toBe('walmart.com')
     expect(storeName('https://shop.example.co/p/1')).toBe('shop.example.co')

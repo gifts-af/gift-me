@@ -134,7 +134,7 @@ link itself is used: the name comes from the URL path when it has one, the link 
 
 ### Wiring in a real lookup
 
-All of it sits behind one function, `lookupProductLink(url)` in `lib/amazon.js`,
+All of it sits behind one function, `lookupProductLink(url)` in `lib/product-link.js`,
 marked with a `SWAP POINT` comment. Replace its body with a call to a scraping API and map
 the response onto the same `LookupResult` shape; no UI code needs to change.
 
@@ -161,7 +161,7 @@ lib/safe-next.ts                 Same-site check for ?next=
 modules/lists/index.ts           The lists product's public API: import only this from outside
 modules/lists/components/*.jsx   Gift app, add panel, list, card, summary, share, claim; ui.jsx holds shared bits
 modules/lists/actions/*          Server actions: save list, claim and unclaim
-modules/lists/lib/amazon.js      Link parsing and product lookup, Amazon and other stores (the swap point)
+modules/lists/lib/product-link.js      Link parsing and product lookup, Amazon and other stores (the swap point)
 modules/lists/lib/fixtures.js    Demo ASIN catalog
 modules/lists/lib/format.js      Price parsing and currency formatting
 modules/lists/lib/lists.ts       List queries and types

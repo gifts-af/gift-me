@@ -1,20 +1,24 @@
 import { AMAZON_FIXTURES } from './fixtures.js'
 
+// Turns a pasted product link into gift details. Client-only, best effort.
+//
 // ─── SWAP POINT ──────────────────────────────────────────────────────────────
-// Everything in this module is a best-effort, client-only lookup.
+// Store pages (Amazon, Walmart, Target...) serve a captcha to any automated
+// fetch, often with HTTP 200, so a status check will not detect the block.
+// The PRICE therefore can't be read from a URL alone, and we don't scrape
+// store pages from our server (planning decision 49).
 //
-// Amazon serves a captcha interstitial to any automated page fetch, and serves
-// it with HTTP 200 -- so a status check will not detect the block. The product
-// PRICE therefore cannot be read from a URL alone without a paid scraping API.
+// What works with no server at all:
+//   * Amazon: the image, via the ASIN image CDN pattern in buildImageUrl();
+//     the name, de-slugified from the URL path; the name AND price for the
+//     demo ASINs in ./fixtures.js
+//   * Any other store (ALL-10): the name, de-slugified from the URL path,
+//     and the link itself, minus tracking tags and any username/password
 //
-// What does work with no server at all:
-//   * the image, via the ASIN image CDN pattern in buildImageUrl()
-//   * the name, de-slugified from the URL path when the URL carries a slug
-//   * the name AND price, for the demo ASINs in ./fixtures.js
-//
-// To use a real scraping API later, replace the body of lookupProductLink()
-// with a fetch to your backend and map its response onto a LookupResult. Keep
-// the signature and the return shape -- the UI depends on nothing else.
+// To use a real lookup later (Zinc, ALL-88), replace the body of
+// lookupProductLink() with a fetch to your backend and map its response onto
+// a LookupResult. Keep the signature and the return shape -- the UI depends
+// on nothing else.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ASIN_RE = /^[A-Z0-9]{10}$/
@@ -86,9 +90,17 @@ function normalizeUrl(raw) {
   }
   // Only web pages: the link ends up in an href, and a host with no dot
   // (localhost, a typo'd word) is never a store.
-  if (!/^https?:$/.test(url.protocol) || !url.hostname.includes('.')) {
+  if (
+    !/^https?:$/.test(url.protocol) ||
+    !url.hostname.includes('.') ||
+    /^\d{1,3}(\.\d{1,3}){3}$/.test(url.hostname) // an IP address, never a store
+  ) {
     return { error: 'INVALID_URL' }
   }
+  // A pasted link can carry a username and password (me:secret@shop.com). The
+  // link is shown on shared lists, so they are dropped before anything else.
+  url.username = ''
+  url.password = ''
   return { url }
 }
 

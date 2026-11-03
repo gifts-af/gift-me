@@ -1,4 +1,4 @@
-import { storeName } from '@/modules/lists/lib/amazon.js'
+import { storeName } from '@/modules/lists/lib/product-link.js'
 import Modal from './modal.jsx'
 import { buttonClass } from './ui.jsx'
 

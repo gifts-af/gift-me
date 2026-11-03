@@ -1,6 +1,6 @@
 import { X } from 'lucide-react'
 import { useState } from 'react'
-import { storeName } from '@/modules/lists/lib/amazon.js'
+import { storeName } from '@/modules/lists/lib/product-link.js'
 import { formatCents } from '@/modules/lists/lib/format.js'
 
 /**

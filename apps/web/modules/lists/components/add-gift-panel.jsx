@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react'
-import { lookupProductLink } from '@/modules/lists/lib/amazon.js'
+import { lookupProductLink } from '@/modules/lists/lib/product-link.js'
 import { centsToInputValue, formatCents, parsePriceToCents } from '@/modules/lists/lib/format.js'
 import LookupStatus from './lookup-status.jsx'
 import { buttonClass, inputClass, labelClass } from './ui.jsx'
