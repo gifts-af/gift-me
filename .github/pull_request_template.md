@@ -12,6 +12,7 @@ Closes ALL-<n>  <!-- "Closes" only if merging finishes the ticket; if anything i
 <!-- Tests added (and that they failed first), suite results, screenshots. Post the same evidence on the Linear ticket before it's Done (CLAUDE.md > Git > Evidence on the ticket, T44). -->
 
 - [ ] Test evidence and screenshots posted on the Linear ticket
+- [ ] Any new migration is expand-then-contract (E7): it adds without dropping or renaming anything live code uses, because CI applies it to `dev` and `prod` while Vercel deploys the code (T50)
 
 ## On production (CLAUDE.md > E9)
 
