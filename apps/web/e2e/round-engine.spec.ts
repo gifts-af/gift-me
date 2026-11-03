@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { localSupabase } from "./local-supabase";
 import { TEST_USER } from "./test-user";
@@ -124,9 +125,19 @@ test("a round starts without an address, resumes when one is saved, and is skipp
   if (!added.ok) throw new Error(`Couldn't add the test person: ${added.status} ${await added.text()}`);
   const personId = (await added.json()) as string;
 
+  // An imported-style address (ALL-24 saves addresses unchecked): no recipient
+  // names and a state written out. It fails the format check, so it counts as
+  // no address (ALL-81 AC-10).
+  const imported = await fetch(`${supabase.url}/rest/v1/people?id=eq.${personId}`, {
+    method: "PATCH",
+    headers: serviceHeaders,
+    body: JSON.stringify({ address_line1: "1 Test Street", city: "Portland", state: "Oregon", zip: "97201", country: "US" }),
+  });
+  if (!imported.ok) throw new Error(`Couldn't seed the address: ${imported.status} ${await imported.text()}`);
+
   await setEngine(true);
 
-  // 1. First tick: the round starts, and with no address it waits for one.
+  // 1. First tick: the round starts, and with no usable address it waits for one.
   expect(await tick(base, today)).toMatchObject({ ok: true, enabled: true });
   const rounds = await roundsFor(personId);
   expect(rounds).toHaveLength(1);
@@ -137,31 +148,42 @@ test("a round starts without an address, resumes when one is saved, and is skipp
   expect(asked).toHaveLength(1);
   expect(asked[0].sent_at).not.toBeNull();
 
-  // 2. An address arrives and the person is saved from their page: the round resumes.
-  // (There's no address field on the page yet, so the address goes in by the service key;
-  // saving the page is what calls the engine.)
-  const filled = await fetch(`${supabase.url}/rest/v1/people?id=eq.${personId}`, {
-    method: "PATCH",
-    headers: serviceHeaders,
+  // 2. The email's "Add an address" button (an add_address link, stored the way
+  // the app stores one) lands on the form, which shows what needs fixing
+  // (ALL-81 AC-8, AC-10). Saving it resumes the round (AC-7).
+  const linkToken = randomBytes(32).toString("base64url");
+  const link = await fetch(`${supabase.url}/rest/v1/action_links`, {
+    method: "POST",
+    headers: concierge,
     body: JSON.stringify({
-      recipient_first_name: "Rita",
-      recipient_last_name: "Engine",
-      address_line1: "1 Test Street",
-      city: "Portland",
-      state: "OR",
-      zip: "97201",
+      user_id: (await signInApi()).id,
+      action: "add_address",
+      round_id: round.id,
+      token_hash: createHash("sha256").update(linkToken).digest("hex"),
+      expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
     }),
   });
-  if (!filled.ok) throw new Error(`Couldn't save the address: ${filled.status} ${await filled.text()}`);
+  if (!link.ok) throw new Error(`Couldn't store the link: ${link.status} ${await link.text()}`);
 
   await page.goto("/auth/login");
   await page.getByLabel("Email").fill(TEST_USER.email);
   await page.getByLabel("Password").fill(TEST_USER.password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
-  await page.goto(`/people/${personId}`);
-  await expect(page.getByRole("heading", { name: "Edit", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await page.goto(`/a/${linkToken}`);
+  await page.getByRole("button", { name: "Add an address", exact: true }).click();
+  await page.getByRole("link", { name: "Open their page" }).click();
+  await expect(page).toHaveURL(new RegExp(`/people/${personId}\\?address=open`));
+
+  const section = page.locator("#address");
+  await expect(section.getByLabel("Street address")).toHaveValue("1 Test Street");
+  await expect(section.getByText("Pick a state.")).toBeVisible();
+  await expect(section.getByText("Add their first name.")).toBeVisible();
+  await section.getByLabel("First name").fill("Rita");
+  await section.getByLabel("Last name").fill("Engine");
+  await section.getByLabel("State").selectOption("OR");
+  await section.getByRole("button", { name: "Save address" }).click();
+  await expect(section.getByText("Portland, OR 97201")).toBeVisible();
 
   await expect.poll(async () => (await roundsFor(personId))[0].status).toBe("awaiting_approval");
   expect((await notificationsFor(round.id)).filter((n) => n.kind === "heads_up")).toHaveLength(1);
