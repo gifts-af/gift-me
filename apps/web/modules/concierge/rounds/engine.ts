@@ -19,7 +19,7 @@ import type { ClaimedRound, RoundContext, RoundFinish, RoundStore } from "./stor
 // in packages/core (round-plan.ts); this file only carries it out.
 //
 // One step, in order: record the send → notify → (on a clean refusal: forget
-// the send and fail) → finish. A step that dies after recording keeps the
+// the send and fail; the deadline skip finishes anyway) → finish. A step that dies after recording keeps the
 // record, so a retry never sends the same email twice (AC-11). A step that
 // fails leaves its lease to expire and is retried by the next tick (AC-12).
 
@@ -148,9 +148,18 @@ async function runStep(claimed: ClaimedRound, deps: EngineDeps, s: ScheduleSetti
     case "send":
       await sendStep(round, ctx, action.send, sent, deps);
       return finishStep(round, ctx, sent, { status: round.status }, deps, s, action.send);
-    case "skip":
-      await sendStep(round, ctx, action.send, sent, deps);
-      return finishStep(round, ctx, sent, { status: "skipped" }, deps, s, action.send);
+    case "skip": {
+      const ids = { round_id: round.id, user_id: round.userId };
+      // Tell the buyer about a skip only if we asked them something (ruling 13).
+      if (!sent.has("heads_up") && !sent.has("address_request")) {
+        logEvent("round_skipped_silently", { ...ids, status: round.status });
+        return finishStep(round, ctx, sent, { status: "skipped" }, deps, s);
+      }
+      // The deadline never waits on its email (ruling 12): a refused send is logged, not retried.
+      const delivered = await trySend(round, ctx, action.send, sent, deps);
+      if (!delivered) logEvent("round_skip_email_failed", ids);
+      return finishStep(round, ctx, sent, { status: "skipped" }, deps, s, delivered ? action.send : null);
+    }
     case "request_address":
       await sendStep(round, ctx, action.send, sent, deps);
       return finishStep(round, ctx, sent, { status: "needs_address", headsUpOn: today }, deps, s, action.send);
@@ -187,7 +196,7 @@ async function moveToGenerating(round: ClaimedRound, { store, now }: EngineDeps)
   return store.claim(round.id, now);
 }
 
-/** Records the step, then sends it. An already-recorded step isn't sent again (AC-11). */
+/** Records the step, then sends it; fails on a clean refusal, so the next tick tries again. */
 async function sendStep(
   round: ClaimedRound,
   ctx: RoundContext,
@@ -195,16 +204,28 @@ async function sendStep(
   sent: Set<StepKey>,
   deps: EngineDeps,
 ): Promise<void> {
+  if (!(await trySend(round, ctx, step, sent, deps))) throw new Error(`Sending ${step} failed`);
+}
+
+/**
+ * Records the step, then sends it. An already-recorded step isn't sent again (AC-11).
+ * False on a clean refusal: nothing went out, so the record is forgotten.
+ */
+async function trySend(
+  round: ClaimedRound,
+  ctx: RoundContext,
+  step: StepKey,
+  sent: Set<StepKey>,
+  deps: EngineDeps,
+): Promise<boolean> {
   const fresh = await deps.store.recordSend(round.id, round.userId, step);
   sent.add(step);
-  if (!fresh) return;
+  if (!fresh) return true;
   const result = await sendEmail(step, round, ctx, deps.notify);
-  if (!result.ok) {
-    // A clean refusal: nothing went out, so the next tick may try again.
-    sent.delete(step);
-    await deps.store.forgetSend(round.id, step);
-    throw new Error(`Sending ${step} failed`);
-  }
+  if (result.ok) return true;
+  sent.delete(step);
+  await deps.store.forgetSend(round.id, step);
+  return false;
 }
 
 /** Writes the new status and when to look again, and releases the lease. */

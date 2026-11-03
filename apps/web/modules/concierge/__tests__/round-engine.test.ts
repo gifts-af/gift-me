@@ -385,6 +385,42 @@ describe("failures", () => {
     expect(h.sent().at(-1)).toBe("skipped@2027-03-11");
   });
 
+  it("still skips at the deadline when the skipped email is refused, and says so (ruling 12)", async () => {
+    const h = harness();
+    await h.runDays("2027-02-11", "2027-03-10");
+    h.refuseOn = new Set(["2027-03-11"]);
+
+    expect(await h.tick("2027-03-11")).toMatchObject({ advanced: 1, failed: 0 });
+
+    const round = h.store.rounds[0];
+    expect(round.status).toBe("skipped");
+    expect(round.nextActionAt).toBeNull();
+    // Nothing went out, so nothing is recorded as sent.
+    expect(h.store.sends.get(round.id)!.has("skipped")).toBe(false);
+    expect(named("round_skip_email_failed")).toEqual([
+      expect.objectContaining({ round_id: round.id, user_id: USER }),
+    ]);
+    await h.runDays("2027-03-12", "2027-03-20");
+    expect(h.sent().filter((s) => s.startsWith("skipped"))).toEqual([]);
+  });
+
+  it("skips silently a round whose buyer was never asked (ruling 13)", async () => {
+    const h = harness();
+    h.generateIdeas.mockImplementation(async () => {
+      throw new Error("ideas failed");
+    });
+    await h.runDays("2027-02-11", "2027-03-20");
+
+    const round = h.store.rounds[0];
+    expect(round.status).toBe("skipped");
+    expect(round.history).toEqual(["scheduled", "generating", "skipped"]);
+    expect(round.nextActionAt).toBeNull();
+    expect(h.sent()).toEqual([]);
+    expect(named("round_skipped_silently")).toEqual([
+      expect.objectContaining({ round_id: round.id, user_id: USER, status: "generating" }),
+    ]);
+  });
+
   it("keeps the other rounds going when one fails", async () => {
     const h = harness();
     h.store.people.set("person-2", { name: "Other", hasAddress: true });
