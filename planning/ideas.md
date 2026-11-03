@@ -84,6 +84,13 @@ Earn a commission when people buy through GiftsAF, through Amazon Associates and
 - **To work out:** whether it works with Zinc-placed orders or only click-throughs, each program's terms (disclosures, bans on links in email or extensions), and whether rewriting links people paste onto their own list is allowed and honest.
 - **Related:** competitors mostly earn this way (strategy §1). Pricing: ALL-76. **Ticket:** ALL-84. **Source:** owner, 2026-11-02.
 
+### 11. A GiftsAF MCP server for AI assistants
+Let people's AI assistants (Claude, ChatGPT, Muse and the like) use GiftsAF for them through MCP, the standard way assistants call outside tools: "add Mom's birthday", "what should I get Dad?", "add this to my list", "buy the first idea".
+- **Why:** meets people where they already ask for help. The PRD names big AI shopping assistants as the main threat; this makes them a channel instead. They bring the request, we bring the people, dates, lists, ideas and buying.
+- **Rules to keep:** the assistant signs in as the user with scopes they choose, buying stays within the user's approval or limits, it returns only the data a request needs (T42), the spoiler rule (D39) holds, and every action shows in the app and can be revoked.
+- **To work out:** which assistants support remote MCP servers and how they sign users in, pricing (premium or per action, ALL-76), and limits on AI cost.
+- **Source:** owner, 2026-11-03.
+
 ## A common thread
 
 Ideas 1, 2, 4 and 5 all use the same building block: **a scannable code tied to a gift that someone claims securely.** If any of these move forward, that's the piece to design once and reuse.
