@@ -56,3 +56,25 @@ describe("GiftCard image handling", () => {
     expect(onRemove).toHaveBeenCalledWith("g1");
   });
 });
+
+describe("GiftCard store link (ALL-10)", () => {
+  it("names Amazon for an Amazon gift", () => {
+    render(<GiftCard gift={baseGift} onRemove={() => {}} />);
+    expect(screen.getByRole("link", { name: /View on Amazon/ })).toBeInTheDocument();
+  });
+
+  it("names the store for a gift from another store", () => {
+    const walmart = {
+      ...baseGift,
+      imageUrl: null,
+      productUrl: "https://www.walmart.com/ip/Great-Value-Rice/10315394",
+      asin: null,
+      source: "store-url",
+    };
+    render(<GiftCard gift={walmart} onRemove={() => {}} />);
+    expect(screen.getByRole("link", { name: /View on walmart\.com/ })).toHaveAttribute(
+      "href",
+      "https://www.walmart.com/ip/Great-Value-Rice/10315394",
+    );
+  });
+});

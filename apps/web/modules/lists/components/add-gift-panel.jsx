@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react'
-import { lookupAmazonProduct } from '@/modules/lists/lib/amazon.js'
+import { lookupProductLink } from '@/modules/lists/lib/amazon.js'
 import { centsToInputValue, formatCents, parsePriceToCents } from '@/modules/lists/lib/format.js'
 import LookupStatus from './lookup-status.jsx'
 import { buttonClass, inputClass, labelClass } from './ui.jsx'
@@ -91,7 +91,7 @@ export default function AddGiftPanel({ onAdd }) {
 
     let result
     try {
-      result = await lookupAmazonProduct(url)
+      result = await lookupProductLink(url)
     } catch {
       result = {
         status: 'error',
@@ -177,16 +177,16 @@ export default function AddGiftPanel({ onAdd }) {
       <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-3">
         <div className="flex items-end gap-3">
           <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-            <label htmlFor="amazon-url" className={labelClass}>
-              Paste an Amazon link
+            <label htmlFor="product-url" className={labelClass}>
+              Paste a link
             </label>
             <input
-              id="amazon-url"
+              id="product-url"
               ref={urlRef}
               type="text"
               inputMode="url"
               autoComplete="off"
-              placeholder="amazon.com/dp/…"
+              placeholder="amazon.com, walmart.com, target.com…"
               className={inputClass}
               value={url}
               onChange={(event) => setUrl(event.target.value)}

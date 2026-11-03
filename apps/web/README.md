@@ -124,9 +124,17 @@ https://www.amazon.com/dp/B0BSHF7WHW   MacBook Pro 16" M2 Pro
 
 Any other Amazon URL takes the best-effort path and asks you for the price.
 
+### Links from other stores (ALL-10)
+
+A Walmart, Target, Best Buy or any other store link is accepted too. Those stores block
+server fetches the same way, and we don't scrape them (planning decision 49), so only the
+link itself is used: the name comes from the URL path when it has one, the link is saved
+(minus tracking tags like `utm_*`), and you type the price. These gifts are saved with
+`source = 'store-url'`. Reading the price in your own browser is the extension's job (ALL-78).
+
 ### Wiring in a real lookup
 
-All of it sits behind one function, `lookupAmazonProduct(url)` in `lib/amazon.js`,
+All of it sits behind one function, `lookupProductLink(url)` in `lib/amazon.js`,
 marked with a `SWAP POINT` comment. Replace its body with a call to a scraping API and map
 the response onto the same `LookupResult` shape; no UI code needs to change.
 
@@ -153,7 +161,7 @@ lib/safe-next.ts                 Same-site check for ?next=
 modules/lists/index.ts           The lists product's public API: import only this from outside
 modules/lists/components/*.jsx   Gift app, add panel, list, card, summary, share, claim; ui.jsx holds shared bits
 modules/lists/actions/*          Server actions: save list, claim and unclaim
-modules/lists/lib/amazon.js      URL parsing and product lookup (the swap point)
+modules/lists/lib/amazon.js      Link parsing and product lookup, Amazon and other stores (the swap point)
 modules/lists/lib/fixtures.js    Demo ASIN catalog
 modules/lists/lib/format.js      Price parsing and currency formatting
 modules/lists/lib/lists.ts       List queries and types

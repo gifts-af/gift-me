@@ -12,7 +12,7 @@ import { AMAZON_FIXTURES } from './fixtures.js'
 //   * the name, de-slugified from the URL path when the URL carries a slug
 //   * the name AND price, for the demo ASINs in ./fixtures.js
 //
-// To use a real scraping API later, replace the body of lookupAmazonProduct()
+// To use a real scraping API later, replace the body of lookupProductLink()
 // with a fetch to your backend and map its response onto a LookupResult. Keep
 // the signature and the return shape -- the UI depends on nothing else.
 // ─────────────────────────────────────────────────────────────────────────────
@@ -42,10 +42,23 @@ function isAmazonHost(hostname) {
   )
 }
 
+/**
+ * The store a saved link points to, for "View on …": "Amazon" for any Amazon
+ * site, otherwise the bare domain ("walmart.com"). Null if it isn't a link.
+ */
+export function storeName(productUrl) {
+  let hostname
+  try {
+    hostname = new URL(productUrl).hostname
+  } catch {
+    return null
+  }
+  return isAmazonHost(hostname) ? 'Amazon' : hostname.replace(/^www\./i, '').toLowerCase()
+}
+
 const ERROR_MESSAGES = {
-  EMPTY_INPUT: 'Paste an Amazon product link first.',
+  EMPTY_INPUT: 'Paste a product link first.',
   INVALID_URL: "That doesn't look like a web address. Check the link and try again.",
-  NOT_AMAZON: "That isn't an Amazon link -- fill the fields in below instead.",
   SHORT_LINK:
     "Short links like a.co and amzn.to can't be followed from the browser. Open the link in a new tab, then paste the full amazon.com/.../dp/... address.",
   NO_ASIN:
@@ -65,10 +78,52 @@ function normalizeUrl(raw) {
   if (!cleaned) return { error: 'EMPTY_INPUT' }
   // new URL() throws without a scheme, and people paste "amazon.com/dp/...".
   const withScheme = /^[a-z][a-z0-9+.-]*:\/\//i.test(cleaned) ? cleaned : `https://${cleaned}`
+  let url
   try {
-    return { url: new URL(withScheme) }
+    url = new URL(withScheme)
   } catch {
     return { error: 'INVALID_URL' }
+  }
+  // Only web pages: the link ends up in an href, and a host with no dot
+  // (localhost, a typo'd word) is never a store.
+  if (!/^https?:$/.test(url.protocol) || !url.hostname.includes('.')) {
+    return { error: 'INVALID_URL' }
+  }
+  return { url }
+}
+
+// Tracking tags add nothing to the gift and say where the person came from.
+const TRACKING_PARAM_RE = /^(utm_.*|gclid|fbclid|msclkid|mc_eid|mc_cid)$/i
+
+function cleanStoreUrl(url) {
+  const clean = new URL(url.href)
+  clean.hash = ''
+  for (const key of [...clean.searchParams.keys()]) {
+    if (TRACKING_PARAM_RE.test(key)) clean.searchParams.delete(key)
+  }
+  return clean.href
+}
+
+/**
+ * Any store but Amazon (ALL-10). Our server and the browser can't read these
+ * pages (decision 49), so only what's in the link itself is used: the name,
+ * when the link carries one. The price is always typed by the person.
+ */
+function storeLinkResult(url) {
+  const product = {
+    name: deslugifyName(url.pathname, null),
+    priceCents: null,
+    imageUrl: null,
+    productUrl: cleanStoreUrl(url),
+    asin: null,
+    source: 'store-url',
+    store: storeName(url.href),
+  }
+  return {
+    status: 'partial',
+    product,
+    missing: product.name ? ['priceCents'] : ['name', 'priceCents'],
+    error: null,
   }
 }
 
@@ -154,12 +209,12 @@ function fail(code) {
  *   error: { code: string, message: string } | null,
  * }>}
  */
-export async function lookupAmazonProduct(rawUrl) {
+export async function lookupProductLink(rawUrl) {
   const { url, error } = normalizeUrl(rawUrl)
   if (error) return fail(error)
 
   if (SHORT_LINK_HOST_RE.test(url.hostname)) return fail('SHORT_LINK')
-  if (!isAmazonHost(url.hostname)) return fail('NOT_AMAZON')
+  if (!isAmazonHost(url.hostname)) return storeLinkResult(url)
 
   // Match against the path only, so #fragments and &query params can't confuse
   // the trailing boundary.

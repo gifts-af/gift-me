@@ -27,6 +27,14 @@ export default function LookupStatus({ lookup, pending }) {
   }
 
   const needsName = lookup.missing.includes('name')
+  if (lookup.product.source === 'store-url') {
+    return (
+      <p className="text-[13px] text-warning" role="status">
+        {needsName ? 'Saved the link.' : 'Got the name from that link.'} We can’t read prices from{' '}
+        {lookup.product.store} yet, so {needsName ? 'name it and add the price' : 'add the price'} below.
+      </p>
+    )
+  }
   return (
     <p className="text-[13px] text-warning" role="status">
       Got the image{needsName ? '' : ' and the name'} from that link. Amazon doesn’t share prices
