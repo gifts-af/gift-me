@@ -325,11 +325,11 @@ export function removeAddress(store, id): Promise<SaveResult>;
 
 ### Task 8: Verify, review, ship, evidence
 
-- [ ] Run `pnpm lint && pnpm typecheck && pnpm test && pnpm build` from the repo root, plus the e2e from Task 6. Every one passes; note the counts.
-- [ ] Get a code review with superpowers:requesting-code-review, and fix what it finds.
-- [ ] Open the PR. Title: `feat: add and edit a person's shipping address on their page (ALL-81)`. The body says how we'll see it working on production (the form on giftsaf.com) and how to turn it off (instant rollback; no data change). Use **`Part of ALL-81`**, because the live check on giftsaf.com happens after merge.
-- [ ] Screenshots of the address section in the "No address", form-open, form-with-errors and saved states, at 375 px and 1280 px, light and dark, taken with a throwaway Playwright script in the scratchpad. Upload them into the Linear evidence comment along with the tests (each seen failing first), the suite counts, CI, and the round-engine e2e result.
-- [ ] After merge: on giftsaf.com, add a test person, add, change and remove an address, then delete the test person. Post the result. Move ALL-81 to Done only when nothing is Still open.
+- [x] Run `pnpm lint && pnpm typecheck && pnpm test && pnpm build` from the repo root, plus the e2e from Task 6. Every one passes; note the counts.
+- [x] Get a code review with superpowers:requesting-code-review, and fix what it finds.
+- [x] Open the PR. Title: `feat: add and edit a person's shipping address on their page (ALL-81)`. The body says how we'll see it working on production (the form on giftsaf.com) and how to turn it off (instant rollback; no data change). Use **`Part of ALL-81`**, because the live check on giftsaf.com happens after merge.
+- [x] Screenshots of the address section in the "No address", form-open, form-with-errors and saved states, at 375 px and 1280 px, light and dark, taken with a throwaway Playwright script in the scratchpad. Upload them into the Linear evidence comment along with the tests (each seen failing first), the suite counts, CI, and the round-engine e2e result.
+- [x] After merge: on giftsaf.com, add a test person, add, change and remove an address, then delete the test person. Post the result. Move ALL-81 to Done only when nothing is Still open.
 
 ## Before coding: consistency check
 
@@ -360,7 +360,9 @@ export function removeAddress(store, id): Promise<SaveResult>;
 
 ## Done: evidence on the ticket (T44)
 
-- [ ] Test evidence on ALL-81: the tests added (each seen failing first), suite counts, lint, typecheck, build and CI.
-- [ ] Screenshots of the address section at phone and desktop width, light and dark, uploaded into the comment.
-- [ ] The round-engine e2e: imported bad address → `needs_address` → email link → form → `awaiting_approval` + heads-up.
-- [ ] A live check on giftsaf.com after deploy, with the test person deleted, or listed as **Still open**.
+- [x] Test evidence on ALL-81: the tests added (each seen failing first), suite counts, lint, typecheck, build and CI.
+- [x] Screenshots of the address section at phone and desktop width, light and dark, uploaded into the comment.
+- [x] The round-engine e2e: imported bad address → `needs_address` → email link → form → `awaiting_approval` + heads-up.
+- [x] A live check on giftsaf.com after deploy, with the test person deleted, or listed as **Still open**.
+
+**Shipped 2026-11-03:** PR #47 (`951a439`). Evidence and the giftsaf.com live check are on ALL-81.
