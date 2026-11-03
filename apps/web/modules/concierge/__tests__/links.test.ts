@@ -225,6 +225,26 @@ describe("confirmActionLink", () => {
     });
   });
 
+  it("add_address: done page opens the person's address form (ALL-81 AC-8)", async () => {
+    const store = await storeWithLink({ action: "add_address" });
+    store.links[0].roundId = "round-1";
+    store.roundPeople.set("round-1", "person-1");
+    expect(ACTIONS.add_address.confirm.button).toBe("Add an address");
+    expect(await confirmActionLink(TOKEN, OWNER, { store, now: NOW })).toEqual({
+      state: "done",
+      done: ACTIONS.add_address.done,
+      next: "/people/person-1?address=open#address",
+    });
+  });
+
+  it("add_address: no round or person means a plain done page", async () => {
+    const store = await storeWithLink({ action: "add_address" });
+    expect(await confirmActionLink(TOKEN, OWNER, { store, now: NOW })).toEqual({
+      state: "done",
+      done: ACTIONS.add_address.done,
+    });
+  });
+
   it("open_person: no round or person means a plain done page", async () => {
     const store = await storeWithLink({ action: "open_person" });
     expect(await confirmActionLink(TOKEN, OWNER, { store, now: NOW })).toEqual({
