@@ -3,7 +3,7 @@
 // FormData fields read by parsePersonForm (an empty string means "not given"):
 //   name, relationship, birthdayMonth, birthdayDay, birthYear,
 //   anniversaryMonth, anniversaryDay
-import { isGooglePhotoUrl, RELATIONSHIPS, toDate, type Relationship } from "@gifts-af/core";
+import { ADDRESS_FIELD_MAX, isGooglePhotoUrl, RELATIONSHIPS, toDate, type Relationship } from "@gifts-af/core";
 
 export type MonthDay = { month: number; day: number };
 
@@ -152,7 +152,6 @@ export type ImportRow = {
 
 // Input-size guards, like MAX_NAME_LENGTH: not tunables.
 const MAX_IMPORT_ROWS = 1000;
-const MAX_ADDRESS_FIELD = 200;
 const GOOGLE_ID = /^people\/c\d{1,30}$/;
 const NOTHING_TO_IMPORT = "Nothing to import. Try again.";
 
@@ -167,7 +166,7 @@ function importAddress(v: unknown): ImportAddress | null | undefined {
   const out = {} as ImportAddress;
   for (const k of keys) {
     const s = str(v[k]);
-    if (s !== null && s.length > MAX_ADDRESS_FIELD) return undefined;
+    if (s !== null && s.length > ADDRESS_FIELD_MAX) return undefined;
     out[k] = s;
   }
   if (out.country !== null && !/^[A-Z]{2}$/.test(out.country)) out.country = null;
