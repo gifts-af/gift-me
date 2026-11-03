@@ -223,6 +223,14 @@ describe("runTick", () => {
     expect(h.generateIdeas).not.toHaveBeenCalled();
     expect(h.emails[0].text).not.toContain("A reminder:");
     expect(h.emails[1].text).toContain("A reminder:");
+    // The address emails' button opens the address form; the skipped email's opens the page (ALL-81 AC-8, AC-9).
+    expect(h.notifyStore.links.map((l) => l.action)).toEqual([
+      "add_address",
+      "add_address",
+      "add_address",
+      "add_address",
+      "open_person",
+    ]);
   });
 });
 

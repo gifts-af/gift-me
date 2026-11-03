@@ -3,7 +3,7 @@
 // owner presses confirm. Real actions (ALL-28 and later) add entries here.
 import type { NotifyStore } from "./store";
 
-export type ActionName = "test" | "open_person";
+export type ActionName = "test" | "open_person" | "add_address";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -51,6 +51,27 @@ export const ACTIONS: Record<ActionName, Action> = {
     async next(roundId, store) {
       const personId = roundId ? await store.roundPersonId(roundId) : null;
       return personId ? `/people/${personId}` : null;
+    },
+  },
+
+  // The "Add an address" button in needs_address emails (ALL-81): like
+  // open_person, but the done page opens the person's address form.
+  add_address: {
+    confirm: {
+      title: "Add their address",
+      body: "Confirm to open this person's page at their address.",
+      button: "Add an address",
+    },
+    done: {
+      title: "Done",
+      body: "Open their page to add the address.",
+    },
+    async run() {
+      return { ok: true };
+    },
+    async next(roundId, store) {
+      const personId = roundId ? await store.roundPersonId(roundId) : null;
+      return personId ? `/people/${personId}?address=open#address` : null;
     },
   },
 };

@@ -12,7 +12,9 @@ import {
   deletePersonAction,
   linkListAction,
   readCapturesAction,
+  removeAddressAction,
   removeFactAction,
+  saveAddressAction,
   setBudgetAction,
   setOccasionEnabledAction,
   setPhotoAction,
@@ -21,6 +23,7 @@ import {
 } from "../actions";
 import { PersonForm } from "../person-form";
 import { PhotoPicker } from "../photo-picker";
+import { AddressSection } from "./address";
 import { Budgets } from "./budgets";
 import { DeletePerson } from "./delete-person";
 import { ListLink } from "./list-link";
@@ -34,7 +37,16 @@ const text = (n: number | undefined) => (n === undefined ? "" : String(n));
  * deleted or someone else's id is a 404. Room for the ALL-25 and ALL-26
  * sections goes between the list line and Edit.
  */
-export async function PersonView({ id, photoFailed }: { id: string; photoFailed: boolean }) {
+export async function PersonView({
+  id,
+  photoFailed,
+  openAddress,
+}: {
+  id: string;
+  photoFailed: boolean;
+  /** From `?address=open`, the "Add an address" email's link (ALL-81). */
+  openAddress: boolean;
+}) {
   const supabase = await createClient();
   const userId = (await supabase.auth.getClaims()).data?.claims?.sub;
   if (!userId) redirect("/");
@@ -113,6 +125,14 @@ export async function PersonView({ id, photoFailed }: { id: string; photoFailed:
 
       <Occasions personId={person.id} occasions={person.occasions} action={setOccasionEnabledAction} />
       <Budgets personId={person.id} occasions={person.occasions} action={setBudgetAction} />
+      <AddressSection
+        personId={person.id}
+        name={person.name}
+        address={person.address}
+        startOpen={openAddress}
+        saveAction={saveAddressAction}
+        removeAction={removeAddressAction}
+      />
       <ListLink
         personId={person.id}
         keepsList={person.keepsList}

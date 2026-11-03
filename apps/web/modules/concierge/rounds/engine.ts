@@ -274,6 +274,8 @@ function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundContext, deps: 
   // Every button opens the person's page until the approval screen (ALL-29).
   // Links last until the end of the deadline day.
   const link = { action: "open_person" as const, expiresAt: new Date(`${round.shipByDeadline}T23:59:00Z`) };
+  // The address emails open the person's address form instead (ALL-81).
+  const addressLink = { ...link, action: "add_address" as const };
 
   switch (step) {
     case "heads_up":
@@ -297,12 +299,12 @@ function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundContext, deps: 
     case "skipped":
       return notify({ ...base, kind: "skipped", data: occasion, links: { open: link } }, deps);
     case "address_request":
-      return notify({ ...base, kind: "needs_address", data: occasion, links: { addAddress: link } }, deps);
+      return notify({ ...base, kind: "needs_address", data: occasion, links: { addAddress: addressLink } }, deps);
     case "address_reminder_1":
     case "address_reminder_2":
     case "address_final_notice":
       return notify(
-        { ...base, kind: "needs_address", data: { ...occasion, reminder: true }, links: { addAddress: link } },
+        { ...base, kind: "needs_address", data: { ...occasion, reminder: true }, links: { addAddress: addressLink } },
         deps,
       );
   }

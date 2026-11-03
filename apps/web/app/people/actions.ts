@@ -9,12 +9,15 @@ import { todayForRequest } from "@/lib/today";
 import {
   addPerson,
   importPeople,
+  parseAddressForm,
   parseBudget,
   parseImportRows,
   parsePersonForm,
   deletePerson,
   readUnreadCaptures,
+  removeAddress,
   removeFact,
+  saveAddress,
   linkList,
   setBudget,
   setOccasionEnabled,
@@ -22,6 +25,7 @@ import {
   unlinkList,
   updatePerson,
   type AddResult,
+  type AddressSaveResult,
   type ImportResult,
   type SaveResult,
 } from "@/modules/concierge";
@@ -68,6 +72,19 @@ export async function updatePersonAction(_previous: SaveResult | null, formData:
   if (!parsed.ok) return parsed;
   const id = text(formData, "id");
   return refresh(await updatePerson(id, parsed.value), id);
+}
+
+/** The Shipping address form (ALL-81): checked by format, then saved; a waiting round goes on. */
+export async function saveAddressAction(_previous: AddressSaveResult | null, formData: FormData): Promise<AddressSaveResult> {
+  const parsed = parseAddressForm(formData);
+  if (!parsed.ok) return parsed;
+  const id = text(formData, "id");
+  return refresh(await saveAddress(id, parsed.value), id);
+}
+
+export async function removeAddressAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
+  const id = text(formData, "id");
+  return refresh(await removeAddress(id), id);
 }
 
 export async function setOccasionEnabledAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {

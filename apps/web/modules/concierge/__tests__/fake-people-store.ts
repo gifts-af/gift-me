@@ -1,4 +1,4 @@
-import type { OccasionKind } from "@gifts-af/core";
+import type { Address, OccasionKind } from "@gifts-af/core";
 import type {
   BudgetRow,
   NewPerson,
@@ -6,6 +6,7 @@ import type {
   PeopleStore,
   PersonRow,
   ScheduleDays,
+  StoredAddress,
 } from "../people/store";
 
 export const ME = "me";
@@ -36,6 +37,12 @@ export class FakePeopleStore implements PeopleStore {
   addresses = new Map<string, unknown>();
   photoSize = { px: 512, maxBytes: 10_485_760, timeoutMs: 5000, concurrency: 4 };
   uploads: { path: string; bytes: number; contentType: string }[] = [];
+  /** Address columns by person (ALL-81); null once removed. Missing means never set. */
+  addressRows = new Map<string, StoredAddress | null>();
+  /** City and state the linked list owner shares, by person. */
+  shared = new Map<string, { city: string; state: string }>();
+  /** Makes saveAddress throw a database error that names the address, like a real one could. */
+  failSaveAddress = false;
   /** Makes the next write of this name report 0 rows changed. */
   noRows = new Set<string>();
   private next = 1;
@@ -198,5 +205,27 @@ export class FakePeopleStore implements PeopleStore {
     this.write("deletePerson", personId);
     if (!this.mine(personId)) throw dbError("Person not found", "P0002");
     this.deleted.add(personId);
+  }
+
+  async address(personId: string) {
+    if (!this.mine(personId)) return null;
+    const empty: StoredAddress = {
+      firstName: null, lastName: null, line1: null, line2: null, city: null, state: null, zip: null,
+      country: "US", checkedAt: null,
+    };
+    return this.addressRows.get(personId) ?? empty;
+  }
+
+  async sharedCity(personId: string) {
+    if (!this.mine(personId)) throw dbError("Person not found", "P0002");
+    return this.shared.get(personId) ?? null;
+  }
+
+  async saveAddress(personId: string, a: (Address & { checkedAt: string }) | null) {
+    this.write("saveAddress", personId);
+    if (this.failSaveAddress) throw dbError(`Saving an address failed: bad row (${a?.line1})`, "XX000");
+    if (!this.mine(personId) || !this.changed("saveAddress")) return false;
+    this.addressRows.set(personId, a ? { ...a, country: "US" } : null);
+    return true;
   }
 }

@@ -15,7 +15,7 @@ vi.mock("../../actions", () => {
   return {
     deletePersonAction: action, linkListAction: action, setBudgetAction: action, setOccasionEnabledAction: action,
     setPhotoAction: action, unlinkListAction: action, updatePersonAction: action, removeFactAction: action,
-    readCapturesAction: action,
+    readCapturesAction: action, saveAddressAction: action, removeAddressAction: action,
   };
 });
 const notFound = vi.hoisted(() =>
@@ -37,10 +37,11 @@ const dad = {
   occasions: [
     { kind: "birthday", enabled: true, date: "2027-04-10", orderBy: { date: "2027-04-01", fast: false }, budgetCents: null },
   ],
+  address: { kind: "none" },
 };
 
-async function show(photoFailed = false) {
-  render(await PersonView({ id: "p1", photoFailed }));
+async function show(photoFailed = false, openAddress = false) {
+  return render(await PersonView({ id: "p1", photoFailed, openAddress }));
 }
 
 describe("PersonView", () => {
@@ -48,7 +49,7 @@ describe("PersonView", () => {
 
   it("is a 404 for a person who is not found", async () => {
     getPerson.mockResolvedValue(null);
-    await expect(PersonView({ id: "nope", photoFailed: false })).rejects.toThrow("NEXT_NOT_FOUND");
+    await expect(PersonView({ id: "nope", photoFailed: false, openAddress: false })).rejects.toThrow("NEXT_NOT_FOUND");
     expect(notFound).toHaveBeenCalled();
   });
 
@@ -58,7 +59,7 @@ describe("PersonView", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Dad" })).toBeInTheDocument();
     expect(screen.getByText("No list of their own, so we suggest ideas")).toBeInTheDocument();
     const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
-    expect(headings).toEqual(["What we know", "Edit", "Occasions", "Your budget", "Link to their list"]);
+    expect(headings).toEqual(["What we know", "Edit", "Occasions", "Your budget", "Shipping address", "Link to their list"]);
     expect(getWhatWeKnow).toHaveBeenCalledWith("p1");
     expect(screen.getByRole("button", { name: "Delete Dad" })).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
@@ -74,5 +75,26 @@ describe("PersonView", () => {
     getPerson.mockResolvedValue(dad);
     await show(true);
     expect(screen.getByRole("status")).toHaveTextContent("The photo didn't save. Try again.");
+  });
+
+  it("opens the address form when asked to by the address email (ALL-81 AC-8)", async () => {
+    getPerson.mockResolvedValue(dad);
+    await show(false, true);
+    expect(screen.getByLabelText("Street address")).toBeInTheDocument();
+  });
+
+  it("keeps the address form closed otherwise (AC-1, AC-9)", async () => {
+    getPerson.mockResolvedValue(dad);
+    await show();
+    expect(screen.queryByLabelText("Street address")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add an address" })).toBeInTheDocument();
+  });
+
+  it("never puts a shared address's street in the page (AC-12)", async () => {
+    getPerson.mockResolvedValue({ ...dad, keepsList: true, address: { kind: "shared", city: "Tampa", state: "FL" } });
+    const { container } = await show(false, true);
+    expect(screen.getByText("Gifts ship to Dad's own address in Tampa, FL. They keep it up to date.")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Street address")).not.toBeInTheDocument();
+    expect(container.innerHTML).not.toMatch(/Oak|line1/);
   });
 });

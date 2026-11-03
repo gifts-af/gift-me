@@ -3,7 +3,16 @@
 // FormData fields read by parsePersonForm (an empty string means "not given"):
 //   name, relationship, birthdayMonth, birthdayDay, birthYear,
 //   anniversaryMonth, anniversaryDay
-import { isGooglePhotoUrl, RELATIONSHIPS, toDate, type Relationship } from "@gifts-af/core";
+import {
+  ADDRESS_FIELD_MAX,
+  checkAddress,
+  isGooglePhotoUrl,
+  RELATIONSHIPS,
+  toDate,
+  type Address,
+  type AddressField,
+  type Relationship,
+} from "@gifts-af/core";
 
 export type MonthDay = { month: number; day: number };
 
@@ -152,7 +161,6 @@ export type ImportRow = {
 
 // Input-size guards, like MAX_NAME_LENGTH: not tunables.
 const MAX_IMPORT_ROWS = 1000;
-const MAX_ADDRESS_FIELD = 200;
 const GOOGLE_ID = /^people\/c\d{1,30}$/;
 const NOTHING_TO_IMPORT = "Nothing to import. Try again.";
 
@@ -167,7 +175,7 @@ function importAddress(v: unknown): ImportAddress | null | undefined {
   const out = {} as ImportAddress;
   for (const k of keys) {
     const s = str(v[k]);
-    if (s !== null && s.length > MAX_ADDRESS_FIELD) return undefined;
+    if (s !== null && s.length > ADDRESS_FIELD_MAX) return undefined;
     out[k] = s;
   }
   if (out.country !== null && !/^[A-Z]{2}$/.test(out.country)) out.country = null;
@@ -230,4 +238,21 @@ export function parseImportRows(
     else if (!rows.has(row.googleId)) rows.set(row.googleId, row);
   }
   return { ok: true, rows: [...rows.values()], refused };
+}
+
+// ─── A person's shipping address (ALL-81) ────────────────────────────────────
+
+/** What the address form's action returns: per-field messages on a bad address. */
+export type AddressSaveResult =
+  | { ok: true }
+  | { ok: false; error: string; fields?: Partial<Record<AddressField, string>> };
+
+const ADDRESS_FIELDS: AddressField[] = ["firstName", "lastName", "line1", "line2", "city", "state", "zip"];
+
+/** The address form (fields named as AddressField), checked by the shared format check (T51). */
+export function parseAddressForm(
+  f: FormData,
+): { ok: true; value: Address } | { ok: false; error: "Check the address below."; fields: Partial<Record<AddressField, string>> } {
+  const checked = checkAddress(Object.fromEntries(ADDRESS_FIELDS.map((k) => [k, field(f, k)])));
+  return checked.ok ? checked : { ok: false, error: "Check the address below.", fields: checked.errors };
 }

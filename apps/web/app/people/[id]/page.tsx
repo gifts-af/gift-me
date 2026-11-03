@@ -11,7 +11,7 @@ export default function PersonPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ photo?: string }>;
+  searchParams: Promise<{ photo?: string; address?: string }>;
 }) {
   return (
     <>
@@ -30,8 +30,8 @@ async function Loaded({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ photo?: string }>;
+  searchParams: Promise<{ photo?: string; address?: string }>;
 }) {
-  const [{ id }, { photo }] = await Promise.all([params, searchParams]);
-  return <PersonView id={id} photoFailed={photo === "failed"} />;
+  const [{ id }, { photo, address }] = await Promise.all([params, searchParams]);
+  return <PersonView id={id} photoFailed={photo === "failed"} openAddress={address === "open"} />;
 }
