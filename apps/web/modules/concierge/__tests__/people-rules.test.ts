@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { parseBudget, parseImportRows, parsePersonForm, parseShareToken } from "../people/rules";
+import { parseAddressForm, parseBudget, parseImportRows, parsePersonForm, parseShareToken } from "../people/rules";
 
 function form(fields: Record<string, string>): FormData {
   const f = new FormData();
@@ -221,5 +221,35 @@ describe("parseImportRows", () => {
     expect(parseImportRows("not json", 2026)).toEqual({ ok: false, error: "Nothing to import. Try again." });
     expect(parseImportRows("{}", 2026)).toEqual({ ok: false, error: "Nothing to import. Try again." });
     expect(parseImportRows("[]", 2026)).toEqual({ ok: false, error: "Nothing to import. Try again." });
+  });
+});
+
+describe("parseAddressForm (ALL-81)", () => {
+  const address = (over: Record<string, string> = {}) => {
+    const f = new FormData();
+    const base = { firstName: "Mary", lastName: "Smith", line1: "12 Oak Lane", line2: "", city: "Tampa", state: "FL", zip: "33602" };
+    for (const [k, v] of Object.entries({ ...base, ...over })) f.set(k, v);
+    return f;
+  };
+
+  it("returns the checked address", () => {
+    expect(parseAddressForm(address({ zip: "336021234" }))).toEqual({
+      ok: true,
+      value: { firstName: "Mary", lastName: "Smith", line1: "12 Oak Lane", line2: null, city: "Tampa", state: "FL", zip: "33602-1234" },
+    });
+  });
+
+  it("returns a summary and a message per bad field", () => {
+    expect(parseAddressForm(address({ city: "", state: "Florida" }))).toEqual({
+      ok: false,
+      error: "Check the address below.",
+      fields: { city: "Add a city.", state: "Pick a state." },
+    });
+  });
+
+  it("treats a missing field like an empty one", () => {
+    const f = address();
+    f.delete("zip");
+    expect(parseAddressForm(f)).toMatchObject({ ok: false, fields: { zip: "Enter a 5-digit ZIP code." } });
   });
 });

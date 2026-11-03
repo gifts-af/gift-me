@@ -39,15 +39,17 @@ export {
   linkList,
   listImportedContactIds,
   listPeople,
+  removeAddress,
+  saveAddress,
   setBudget,
   setOccasionEnabled,
   setPhoto,
   unlinkList,
   updatePerson,
 } from "./people/people";
-export type { AddResult, ImportResult, PersonCard, PersonDetail } from "./people/people";
-export { parseBudget, parseImportRows, parsePersonForm, parseShareToken } from "./people/rules";
-export type { ImportAddress, ImportRow, PersonInput } from "./people/rules";
+export type { AddResult, ImportResult, PersonAddress, PersonCard, PersonDetail } from "./people/people";
+export { parseAddressForm, parseBudget, parseImportRows, parsePersonForm, parseShareToken } from "./people/rules";
+export type { AddressSaveResult, ImportAddress, ImportRow, PersonInput } from "./people/rules";
 
 // The round engine (ALL-28): the daily tick, advancing one round, and resuming
 // rounds that waited for an address. The idea stub stands in for ALL-27.

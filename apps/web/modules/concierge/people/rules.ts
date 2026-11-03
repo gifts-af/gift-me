@@ -3,7 +3,16 @@
 // FormData fields read by parsePersonForm (an empty string means "not given"):
 //   name, relationship, birthdayMonth, birthdayDay, birthYear,
 //   anniversaryMonth, anniversaryDay
-import { ADDRESS_FIELD_MAX, isGooglePhotoUrl, RELATIONSHIPS, toDate, type Relationship } from "@gifts-af/core";
+import {
+  ADDRESS_FIELD_MAX,
+  checkAddress,
+  isGooglePhotoUrl,
+  RELATIONSHIPS,
+  toDate,
+  type Address,
+  type AddressField,
+  type Relationship,
+} from "@gifts-af/core";
 
 export type MonthDay = { month: number; day: number };
 
@@ -229,4 +238,21 @@ export function parseImportRows(
     else if (!rows.has(row.googleId)) rows.set(row.googleId, row);
   }
   return { ok: true, rows: [...rows.values()], refused };
+}
+
+// ─── A person's shipping address (ALL-81) ────────────────────────────────────
+
+/** What the address form's action returns: per-field messages on a bad address. */
+export type AddressSaveResult =
+  | { ok: true }
+  | { ok: false; error: string; fields?: Partial<Record<AddressField, string>> };
+
+const ADDRESS_FIELDS: AddressField[] = ["firstName", "lastName", "line1", "line2", "city", "state", "zip"];
+
+/** The address form (fields named as AddressField), checked by the shared format check (T51). */
+export function parseAddressForm(
+  f: FormData,
+): { ok: true; value: Address } | { ok: false; error: "Check the address below."; fields: Partial<Record<AddressField, string>> } {
+  const checked = checkAddress(Object.fromEntries(ADDRESS_FIELDS.map((k) => [k, field(f, k)])));
+  return checked.ok ? checked : { ok: false, error: "Check the address below.", fields: checked.errors };
 }

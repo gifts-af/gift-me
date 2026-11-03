@@ -4,6 +4,7 @@
 // live person (the database's row-level security says the same, but a
 // refused write must come back as a clear error, not a silent no-op).
 import {
+  checkAddress,
   isGooglePhotoUrl,
   nextOccasion,
   nextOccurrence,
@@ -12,11 +13,15 @@ import {
   startingOccasions,
   type CalendarDate,
   type OccasionKind,
+  type Address,
+  type AddressDraft,
+  type AddressField,
   type Relationship,
 } from "@gifts-af/core";
+import { logEvent } from "@/lib/log";
 import type { SaveResult } from "../settings";
 import { isUuid, parseShareToken, type ImportRow, type MonthDay, type PersonInput } from "./rules";
-import type { OccasionRow, PeopleStore, PersonRow } from "./store";
+import type { OccasionRow, PeopleStore, PersonRow, StoredAddress } from "./store";
 
 export type PersonCard = {
   id: string;
@@ -27,6 +32,14 @@ export type PersonCard = {
   keepsList: boolean;
   hasBirthday: boolean;
 };
+
+/** What the person page's Shipping address section shows (ALL-81). */
+export type PersonAddress =
+  | { kind: "none" }
+  /** The buyer's own entry; `problems` is empty when it's complete. */
+  | { kind: "own"; address: AddressDraft; problems: Partial<Record<AddressField, string>> }
+  /** The list owner shares their own address: city and state only, never the street (decision 38). */
+  | { kind: "shared"; city: string; state: string };
 
 export type PersonDetail = PersonCard & {
   /** The storage path of the photo, for the picker to replace. */
@@ -41,6 +54,7 @@ export type PersonDetail = PersonCard & {
     orderBy: { date: CalendarDate; fast: boolean } | null;
     budgetCents: number | null;
   }[];
+  address: PersonAddress;
 };
 
 export type AddResult = { ok: true; id: string } | { ok: false; error: string };
@@ -103,11 +117,13 @@ export async function getPerson(store: PeopleStore, id: string, today: CalendarD
   if (!isUuid(id)) return null; // not an id we could have issued; skip the query
   const person = await store.person(id);
   if (!person) return null;
-  const [occasions, budgets, schedule, photos] = await Promise.all([
+  const [occasions, budgets, schedule, photos, stored, shared] = await Promise.all([
     store.occasions([id]),
     store.budgets([id]),
     store.schedule(),
     store.signPhotos(person.photoPath ? [person.photoPath] : []),
+    store.address(id),
+    store.sharedCity(id),
   ]);
 
   // Every holiday gets a row so the page can show a switch for each: ones the
@@ -135,7 +151,18 @@ export async function getPerson(store: PeopleStore, id: string, today: CalendarD
     birthday: monthDay(occasions.find((o) => o.kind === "birthday")),
     anniversary: monthDay(occasions.find((o) => o.kind === "anniversary")),
     occasions: rows,
+    address: personAddress(stored, shared),
   };
+}
+
+const ADDRESS_KEYS: AddressField[] = ["firstName", "lastName", "line1", "line2", "city", "state", "zip"];
+
+function personAddress(stored: StoredAddress | null, shared: { city: string; state: string } | null): PersonAddress {
+  if (shared) return { kind: "shared", ...shared };
+  if (!stored || ADDRESS_KEYS.every((k) => !stored[k])) return { kind: "none" };
+  const address = Object.fromEntries(ADDRESS_KEYS.map((k) => [k, stored[k] ?? null])) as AddressDraft;
+  const checked = checkAddress(address);
+  return { kind: "own", address, problems: checked.ok ? {} : checked.errors };
 }
 
 export async function addPerson(store: PeopleStore, input: PersonInput): Promise<AddResult> {
@@ -165,6 +192,8 @@ async function onOwnPerson(
   id: string,
   what: string,
   run: (person: PersonRow) => Promise<SaveResult>,
+  /** Logs a failure instead of console.error, for writes whose errors could carry personal data. */
+  onError: (e: unknown) => void = (e) => console.error(`${what} failed`, e),
 ): Promise<SaveResult> {
   if (!isUuid(id)) return { ok: false, error: NOT_FOUND };
   try {
@@ -173,7 +202,7 @@ async function onOwnPerson(
     return await run(person);
   } catch (e) {
     if (errorCode(e) === "P0002") return { ok: false, error: NOT_FOUND };
-    console.error(`${what} failed`, e);
+    onError(e);
     return { ok: false, error: TRY_AGAIN };
   }
 }
@@ -217,6 +246,32 @@ export function updatePerson(store: PeopleStore, id: string, input: PersonInput)
     }
     return { ok: true };
   });
+}
+
+const SHARED_ADDRESS = "Their address is kept by them.";
+
+/** Writes the address (or clears it); refused while the list owner shares theirs (ALL-81). Ids only in logs (E6). */
+function writeAddress(store: PeopleStore, id: string, a: (Address & { checkedAt: string }) | null): Promise<SaveResult> {
+  return onOwnPerson(
+    store,
+    id,
+    "saving an address",
+    async () => {
+      if (await store.sharedCity(id)) return { ok: false, error: SHARED_ADDRESS };
+      return (await store.saveAddress(id, a)) ? { ok: true } : notFound();
+    },
+    (e) => logEvent("person_address_failed", { person_id: id, code: errorCode(e) ?? null }),
+  );
+}
+
+/** Saves a checked address as a US address, checked at `now` (T51). */
+export function saveAddress(store: PeopleStore, id: string, a: Address, now: Date): Promise<SaveResult> {
+  return writeAddress(store, id, { ...a, checkedAt: now.toISOString() });
+}
+
+/** Clears every address column at once (AC-6). */
+export function removeAddress(store: PeopleStore, id: string): Promise<SaveResult> {
+  return writeAddress(store, id, null);
 }
 
 export function setOccasionEnabled(

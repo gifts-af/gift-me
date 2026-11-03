@@ -6,6 +6,8 @@ import {
   getPerson,
   importPeople,
   linkList,
+  removeAddress,
+  saveAddress,
   listPeople,
   setBudget,
   setOccasionEnabled,
@@ -588,5 +590,104 @@ describe("importPeople", () => {
     store.caller = null;
     expect(await importPeople(store, [row()], deps())).toEqual({ ok: false, error: "Your session ended. Sign in again." });
     expect(store.writes).toEqual([]);
+  });
+});
+
+describe("a person's shipping address (ALL-81)", () => {
+  const NOW = new Date("2026-11-03T15:00:00Z");
+  const address = {
+    firstName: "Mary", lastName: "Smith", line1: "12 Oak Lane", line2: "Apt 3", city: "Tampa", state: "FL", zip: "33602",
+  };
+  const ADDRESS_TEXT = ["Mary", "Smith", "12 Oak Lane", "Apt 3", "Tampa", "33602"];
+
+  it("saves the address as a US address, checked now (AC-2, AC-4)", async () => {
+    const { store, mine } = setup();
+    expect(await saveAddress(store, mine, address, NOW)).toEqual({ ok: true });
+    expect(store.addressRows.get(mine)).toEqual({ ...address, country: "US", checkedAt: "2026-11-03T15:00:00.000Z" });
+  });
+
+  it("removes the address in one write (AC-6)", async () => {
+    const { store, mine } = setup();
+    await saveAddress(store, mine, address, NOW);
+    expect(await removeAddress(store, mine)).toEqual({ ok: true });
+    expect(store.addressRows.get(mine)).toBeNull();
+    expect(store.writes.filter((w) => w.startsWith("saveAddress"))).toHaveLength(2);
+  });
+
+  it.each([
+    ["someone else's person", "theirs"],
+    ["a made-up id", "not-a-uuid"],
+    ["a deleted person", "deleted"],
+  ])("refuses %s and writes nothing (AC-13)", async (_label, which) => {
+    const { store, mine, theirs } = setup();
+    const id = which === "theirs" ? theirs : which === "deleted" ? mine : which;
+    if (which === "deleted") store.deleted.add(mine);
+    expect(await saveAddress(store, id, address, NOW)).toEqual({ ok: false, error: NOT_FOUND });
+    expect(await removeAddress(store, id)).toEqual({ ok: false, error: NOT_FOUND });
+    expect(store.writes.filter((w) => w.startsWith("saveAddress"))).toEqual([]);
+  });
+
+  it("won't change or remove an address the list owner shares (AC-12)", async () => {
+    const { store, mine } = setup();
+    store.shared.set(mine, { city: "Tampa", state: "FL" });
+    expect(await saveAddress(store, mine, address, NOW)).toEqual({ ok: false, error: "Their address is kept by them." });
+    expect(await removeAddress(store, mine)).toEqual({ ok: false, error: "Their address is kept by them." });
+    expect(store.writes.filter((w) => w.startsWith("saveAddress"))).toEqual([]);
+  });
+
+  it("keeps the address out of the logs when a save fails (AC-14)", async () => {
+    const { store, mine } = setup();
+    store.failSaveAddress = true;
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    expect(await saveAddress(store, mine, address, NOW)).toEqual({ ok: false, error: "That couldn't be saved. Try again." });
+    const logged = JSON.stringify([...error.mock.calls, ...log.mock.calls].map((c) => c.map(String)));
+    error.mockRestore();
+    log.mockRestore();
+    expect(logged).toContain("person_address_failed");
+    for (const t of ADDRESS_TEXT) expect(logged).not.toContain(t);
+  });
+
+  describe("on the person's page", () => {
+    it("is none when nothing is stored", async () => {
+      const { store, mine } = setup();
+      expect((await getPerson(store, mine, TODAY))?.address).toEqual({ kind: "none" });
+    });
+
+    it("is none after a remove", async () => {
+      const { store, mine } = setup();
+      await saveAddress(store, mine, address, NOW);
+      await removeAddress(store, mine);
+      expect((await getPerson(store, mine, TODAY))?.address).toEqual({ kind: "none" });
+    });
+
+    it("is the buyer's own, complete, after a save", async () => {
+      const { store, mine } = setup();
+      await saveAddress(store, mine, address, NOW);
+      expect((await getPerson(store, mine, TODAY))?.address).toEqual({ kind: "own", address, problems: {} });
+    });
+
+    it("marks what an imported address is missing (AC-10)", async () => {
+      const { store, mine } = setup();
+      store.addressRows.set(mine, {
+        firstName: null, lastName: null, line1: "12 Oak Lane", line2: null, city: "Tampa", state: "Florida", zip: "33602",
+        country: "US", checkedAt: null,
+      });
+      const detail = await getPerson(store, mine, TODAY);
+      expect(detail?.address).toEqual({
+        kind: "own",
+        address: { firstName: null, lastName: null, line1: "12 Oak Lane", line2: null, city: "Tampa", state: "Florida", zip: "33602" },
+        problems: { firstName: "Add their first name.", lastName: "Add their last name.", state: "Pick a state." },
+      });
+    });
+
+    it("shows only the city and state of a shared address, even when the buyer saved one (AC-12)", async () => {
+      const { store, mine } = setup();
+      await saveAddress(store, mine, address, NOW);
+      store.shared.set(mine, { city: "Orlando", state: "FL" });
+      const detail = await getPerson(store, mine, TODAY);
+      expect(detail?.address).toEqual({ kind: "shared", city: "Orlando", state: "FL" });
+      expect(JSON.stringify(detail)).not.toContain("12 Oak Lane");
+    });
   });
 });

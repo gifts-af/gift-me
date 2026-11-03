@@ -1,5 +1,5 @@
 import "server-only";
-import type { OccasionKind } from "@gifts-af/core";
+import type { Address, AddressDraft, OccasionKind } from "@gifts-af/core";
 import { appSettingInt } from "@/lib/app-settings";
 import type { ImportAddress } from "./rules";
 import { createClient } from "@/lib/supabase/server";
@@ -38,6 +38,9 @@ export type ScheduleDays = {
 };
 
 export type MonthDayRow = { month: number; day: number };
+
+/** A person's address columns as stored; every field may be empty (ALL-81). */
+export type StoredAddress = AddressDraft & { country: string | null; checkedAt: string | null };
 
 export type NewPerson = {
   name: string;
@@ -82,6 +85,12 @@ export interface PeopleStore {
   /** Puts a photo in the person-photos bucket; false when storage says no. */
   uploadPhoto(path: string, bytes: Uint8Array, contentType: string): Promise<boolean>;
   deletePerson(personId: string): Promise<void>;
+  /** The caller's live person's address columns, or null when not theirs (ALL-81). */
+  address(personId: string): Promise<StoredAddress | null>;
+  /** City and state of the address the linked list owner shares, or null (public.shared_city_for_person). */
+  sharedCity(personId: string): Promise<{ city: string; state: string } | null>;
+  /** Saves a checked US address, or clears every address column when null. False when no row changed. */
+  saveAddress(personId: string, a: (Address & { checkedAt: string }) | null): Promise<boolean>;
 }
 
 // Signed photo links last this long: long enough to browse the list.
@@ -326,6 +335,62 @@ export function createSupabasePeopleStore(): PeopleStore {
       const supabase = await createClient();
       const { error } = await supabase.rpc("delete_person", { p_person_id: personId });
       check(error, "Deleting a person failed");
+    },
+
+    async address(personId) {
+      const supabase = await createClient();
+      const { data, error } = await supabase
+        .from("people")
+        .select("recipient_first_name, recipient_last_name, address_line1, address_line2, city, state, zip, country, address_checked_at")
+        .eq("id", personId)
+        .is("deleted_at", null)
+        .maybeSingle();
+      check(error, "Loading an address failed");
+      if (!data) return null;
+      return {
+        firstName: data.recipient_first_name,
+        lastName: data.recipient_last_name,
+        line1: data.address_line1,
+        line2: data.address_line2,
+        city: data.city,
+        state: data.state,
+        zip: data.zip,
+        country: data.country,
+        checkedAt: data.address_checked_at,
+      };
+    },
+
+    async sharedCity(personId) {
+      const supabase = await createClient();
+      const { data, error } = await supabase.rpc("shared_city_for_person", { p_person_id: personId });
+      check(error, "Loading a shared city failed");
+      const shared = data as { city?: unknown; state?: unknown } | null;
+      return shared && typeof shared.city === "string" && typeof shared.state === "string"
+        ? { city: shared.city, state: shared.state }
+        : null;
+    },
+
+    async saveAddress(personId, a) {
+      const supabase = await createClient();
+      // Removing resets country to its default, since the column is not null.
+      const { data, error } = await supabase
+        .from("people")
+        .update({
+          recipient_first_name: a?.firstName ?? null,
+          recipient_last_name: a?.lastName ?? null,
+          address_line1: a?.line1 ?? null,
+          address_line2: a?.line2 ?? null,
+          city: a?.city ?? null,
+          state: a?.state ?? null,
+          zip: a?.zip ?? null,
+          country: "US",
+          address_checked_at: a?.checkedAt ?? null,
+        })
+        .eq("id", personId)
+        .is("deleted_at", null)
+        .select("id");
+      check(error, "Saving an address failed");
+      return (data ?? []).length > 0;
     },
   };
 }
