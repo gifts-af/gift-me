@@ -60,6 +60,33 @@ jobs:
           git diff --exit-code packages/core/src/database.types.ts \
             || { echo "::error::Run 'pnpm db:types' and commit packages/core/src/database.types.ts."; exit 1; }
 
+  # Migrations (ALL-79, T50): after a merge to main, apply new migrations to
+  # dev, then to prod only if dev succeeded. Vercel deploys the code at the same
+  # time, so every migration must be expand-then-contract (E7).
+  # Off switch: set the repo variable MIGRATE_ON_MERGE to "off".
+  migrate:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.MIGRATE_ON_MERGE != 'off'
+    needs: db
+    runs-on: ubuntu-latest
+    concurrency:
+      group: migrate
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The token reaches only these two steps, never install scripts.
+      - run: pnpm db:push:dev
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      - run: pnpm db:push:prod
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+
   # Browser tests (ALL-20): a production build of apps/web against a fresh
   # local Supabase, at phone width. Only the services sign-in needs are started.
   e2e:

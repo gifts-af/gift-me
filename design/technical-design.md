@@ -422,6 +422,7 @@ Funding comes in two stages. Ordering, tracking and the data model are the same 
 
 ## 9. Environments and operations
 - **Supabase:** two projects on the free tier, `dev` and `prod`, plus the local Supabase CLI for development. `pg_cron` and `pg_net` are enabled on `dev` only and aren't needed (T49).
+  - **Migrations deploy from CI (T50):** every merge to `main` applies new migrations to `dev`, then to `prod` if `dev` succeeded, while Vercel deploys the code alongside. Migrations are expand-then-contract (E7) so either order is safe.
   - **Inactivity pause:** free projects pause after 7 days without activity, which would stop the round engine. W1-6 checks whether the tick counts as activity. If it doesn't, the owner either upgrades `prod` to Pro ($25 a month) or schedules a keep-alive call.
 - **Vercel:** Hobby while developing and testing (T24). Production comes from `main`, and pull requests get preview deployments against Supabase `dev`.
   - Move to Pro before a commercial launch. **[Verify in W3]** that idea generation fits Hobby's function time limit.

@@ -13,6 +13,8 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "db:test": "supabase test db",
+    "db:push:dev": "supabase db push --project-ref bcemtqvdbrrgiipzggyw --yes",
+    "db:push:prod": "supabase db push --project-ref pegtrucfuaaufqvsavpb --yes",
     "db:types": "supabase gen types typescript --local --schema public --schema concierge --schema lists > packages/core/src/database.types.ts && prettier --write --log-level warn packages/core/src/database.types.ts",
     "ai:eval": "pnpm --filter @gifts-af/web ai:eval"
   },
