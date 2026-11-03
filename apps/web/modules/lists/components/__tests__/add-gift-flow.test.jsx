@@ -81,3 +81,70 @@ describe("adding a gift", () => {
     expect(screen.getByLabelText("Gift name")).toHaveFocus();
   });
 });
+
+describe("adding a gift from another store while signed in (ALL-10)", () => {
+  const WALMART = "https://www.walmart.com/ip/Great-Value-Long-Grain-Enriched-Rice-32-oz/10315394";
+
+  async function lookUpWith(readStorePage, url) {
+    const onAdd = vi.fn();
+    render(<AddGiftPanel onAdd={onAdd} readStorePage={readStorePage} />);
+    await userEvent.type(screen.getByLabelText("Paste a link"), url);
+    await userEvent.click(screen.getByRole("button", { name: "Add" }));
+    return onAdd;
+  }
+
+  it("fills the name, price and photo read from the store page", async () => {
+    const readStorePage = vi.fn(async () => ({
+      ok: true,
+      product: { name: "Great Value Rice, 32 oz", priceCents: 182, imageUrl: "https://i5.walmartimages.com/rice.jpeg" },
+    }));
+    const onAdd = await lookUpWith(readStorePage, WALMART);
+    expect(await screen.findByText(/\$1\.82 · found on walmart\.com/)).toBeInTheDocument();
+    expect(readStorePage).toHaveBeenCalledWith(WALMART);
+    await userEvent.click(screen.getByRole("button", { name: "Add to list" }));
+    expect(onAdd).toHaveBeenCalledWith({
+      name: "Great Value Rice, 32 oz",
+      priceCents: 182,
+      imageUrl: "https://i5.walmartimages.com/rice.jpeg",
+      productUrl: WALMART,
+      asin: null,
+      source: "store-page",
+    });
+  });
+
+  it("asks only for the price when the page has no price (Target)", async () => {
+    const readStorePage = vi.fn(async () => ({
+      ok: true,
+      product: { name: "Scarecrow T-Shirt", priceCents: null, imageUrl: "https://target.scene7.com/shirt" },
+    }));
+    await lookUpWith(readStorePage, "https://www.target.com/p/scarecrow-tee/-/A-1000465184");
+    await waitFor(() => expect(screen.getByLabelText("Price")).toHaveFocus());
+    expect(screen.getByLabelText("Gift name")).toHaveValue("Scarecrow T-Shirt");
+    expect(screen.getByLabelText(/Image URL/)).toHaveValue("https://target.scene7.com/shirt");
+    expect(screen.getByText(/Got the name and the photo from target\.com/)).toBeInTheDocument();
+  });
+
+  it("falls back to the name in the link when the store blocks us", async () => {
+    const readStorePage = vi.fn(async () => ({ ok: false, reason: "http_status" }));
+    await lookUpWith(readStorePage, WALMART);
+    await waitFor(() => expect(screen.getByLabelText("Price")).toHaveFocus());
+    expect(screen.getByLabelText("Gift name")).toHaveValue("Great Value Long Grain Enriched Rice 32 Oz");
+    expect(screen.getByText(/can’t read prices from/)).toHaveTextContent("walmart.com");
+  });
+
+  it("falls back the same way when the server call itself fails", async () => {
+    const readStorePage = vi.fn(async () => {
+      throw new Error("offline");
+    });
+    await lookUpWith(readStorePage, WALMART);
+    await waitFor(() => expect(screen.getByLabelText("Price")).toHaveFocus());
+    expect(screen.getByLabelText("Gift name")).toHaveValue("Great Value Long Grain Enriched Rice 32 Oz");
+  });
+
+  it("never asks the server about Amazon links", async () => {
+    const readStorePage = vi.fn();
+    await lookUpWith(readStorePage, "https://www.amazon.com/Wool-Hiking-Socks/dp/B0EXAMPLE1");
+    await waitFor(() => expect(screen.getByLabelText("Price")).toHaveFocus());
+    expect(readStorePage).not.toHaveBeenCalled();
+  });
+});

@@ -126,11 +126,19 @@ Any other Amazon URL takes the best-effort path and asks you for the price.
 
 ### Links from other stores (ALL-10)
 
-A Walmart, Target, Best Buy or any other store link is accepted too. Those stores block
-server fetches the same way, and we don't scrape them (planning decision 49), so only the
-link itself is used: the name comes from the URL path when it has one, the link is saved
-(minus tracking tags like `utm_*`), and you type the price. These gifts are saved with
-`source = 'store-url'`. Reading the price in your own browser is the extension's job (ALL-78).
+A Walmart, Target, Banana Republic or any other store link is accepted too.
+
+- **Signed in:** the server reads the store's page (`actions/store-page.ts`) for the name,
+  price and photo from its standard product tags (planning decision 50, T52). Brand sites
+  that use the standard product block (Banana Republic) give all three; Target gives the
+  name and photo; stores whose bot check blocks our server (Walmart, Best Buy, Etsy, Amazon
+  as of 2026-11-03) fall back to the next line. Switch it off with the
+  `store_page_read_enabled` setting.
+- **Guest, or the store blocked us:** the name comes from the URL path when it has one, the
+  link is saved (minus tracking tags like `utm_*` and any username or password), and you type
+  the price.
+
+Saved with `source = 'store-page'` (read from the page) or `'store-url'` (link only).
 
 ### Wiring in a real lookup
 
@@ -162,6 +170,7 @@ modules/lists/index.ts           The lists product's public API: import only thi
 modules/lists/components/*.jsx   Gift app, add panel, list, card, summary, share, claim; ui.jsx holds shared bits
 modules/lists/actions/*          Server actions: save list, claim and unclaim
 modules/lists/lib/product-link.js      Link parsing and product lookup, Amazon and other stores (the swap point)
+modules/lists/lib/store-page*.ts       Reading a store's page on the server: fetch with safety checks, and the tag reader
 modules/lists/lib/fixtures.js    Demo ASIN catalog
 modules/lists/lib/format.js      Price parsing and currency formatting
 modules/lists/lib/lists.ts       List queries and types

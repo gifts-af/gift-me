@@ -27,7 +27,18 @@ export default function LookupStatus({ lookup, pending }) {
   }
 
   const needsName = lookup.missing.includes('name')
-  if (lookup.product.source === 'store-url') {
+  const got = lookup.product.pageRead
+    ? [lookup.product.name && 'the name', lookup.product.imageUrl && 'the photo'].filter(Boolean)
+    : []
+  if (got.length > 0 && !lookup.missing.includes('name')) {
+    return (
+      <p className="text-[13px] text-warning" role="status">
+        Got {got.join(' and ')} from {lookup.product.store}. {lookup.product.store} doesn’t show us the
+        price, so add it below.
+      </p>
+    )
+  }
+  if (lookup.product.source === 'store-url' || lookup.product.pageRead) {
     return (
       <p className="text-[13px] text-warning" role="status">
         {needsName ? 'Saved the link.' : 'Got the name from that link.'} We can’t read prices from{' '}
