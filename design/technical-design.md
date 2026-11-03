@@ -33,6 +33,7 @@ flowchart LR
     MAIL[User's email inbox]
   end
   subgraph Vercel["Vercel: all code"]
+    CRON[Vercel Cron<br/>daily, 12:00 UTC]
     APP[Next.js app<br/>UI + API routes + webhooks]
     WF[Round engine<br/>tick API route]
     GW[AI Gateway]
@@ -41,7 +42,6 @@ flowchart LR
     AUTH[Auth<br/>Google sign-in]
     DB[(Postgres + RLS)]
     ST[Storage<br/>capture screenshots]
-    CRON[pg_cron<br/>daily, 8 a.m. ET]
   end
   CLAUDE[AI model provider<br/>Anthropic today, swappable]
   ZINC[Checkout service<br/>Zinc]
@@ -53,7 +53,7 @@ flowchart LR
   APP --> AUTH
   APP --> DB
   APP --> ST
-  CRON -->|pg_net HTTPS call| WF
+  CRON -->|GET with CRON_SECRET| WF
   WF --> DB
   WF --> GW --> CLAUDE
   WF -->|orders| ZINC
@@ -71,7 +71,7 @@ flowchart LR
 | Database | **Supabase Postgres** with Row Level Security | Every user-owned table has `user_id` plus RLS policies. Background jobs use the service role. |
 | Auth | **Supabase Auth, Google provider** (plus email and password for existing list users) | Cookie sessions through `@supabase/ssr`; `proxy.ts` sends signed-out visitors to sign-in and back via `?next=`, except on `/lists`, `/share/*`, `/auth/*` and the install files (T30). Google Contacts read access is requested separately, at import time (§6.1). The extension authenticates with the user's Supabase session (§6.2). |
 | File storage | **Supabase Storage** (private bucket) | Capture screenshots, in bucket `captures` at `{user_id}/{capture_id}.jpg`. Only the owner can read or write their folder. Deleting a person should delete their files too. That isn't built yet: the rows cascade but the files stay. It's noted on ALL-21, for the person-deletion work (ALL-21 or ALL-37). |
-| Background jobs | **Supabase `pg_cron`** calls the app's **round engine** (a protected API route) **once a day at 8 a.m. Eastern**, using `pg_net` | The schedule lives next to the data it checks. Vercel Cron and Workflow aren't used. All the work runs in the Next.js app, so there's one runtime and one deploy, with no Supabase Edge Functions (T8). See §5.1. |
+| Background jobs | **Vercel Cron** calls the app's **round engine** (a protected API route, `GET /api/rounds/tick`) **once a day at 12:00 UTC** (8 a.m. Eastern in summer) | One scheduler, shared with the keep-alive (T22); Vercel runs crons only on production. All the work runs in the Next.js app, so there's one runtime and one deploy, with no Supabase Edge Functions (T8) and no `pg_cron`/`pg_net` (T49, pending the owner's OK). Vercel Workflow isn't used. See §5.1. |
 | AI | Any model through **Vercel AI Gateway** with the **AI SDK**. Default today: **Claude Sonnet 5.5** for every task (`anthropic/claude-sonnet-5.5`, T39; Opus 5.5 is the fallback; take IDs from the gateway's `/v1/models`) | The gateway gives one key, one bill and one spending cap across providers, plus fallbacks. Usage is **billed through the Vercel account**, so there's no separate AI provider account (T11). The model for each task is set in one config file (§7). Web search through the gateway is **confirmed in W1-3** (Anthropic's native tool; the gateway's Perplexity search is a provider-neutral alternative). Hobby plan works; Claude models need **paid** gateway credit (the free credit excludes them). |
 | Checkout | **Zinc** (API v2), confirmed by the W1-2 spike | `max_price` caps the whole order (item, shipping and tax), gift orders, signed webhooks, per-package tracking. **MVP:** each user's own Zinc wallet. **Later:** the user's card through Zinc Connect (T16, §6.5a). Product lookups go through one app-owned Zinc account (T17). |
 | Email | **Resend** on `giftsaf.com`, confirmed by the W1-4 spike (T33) | Sends from `hello@giftsaf.com` and receives on `in.giftsaf.com` (its own subdomain). The free plan covers 3,000 emails a month and 100 a day, sent and received combined. Inbound arrives as a signed webhook (Svix) carrying metadata only; the app fetches the body and attachments from the API. Open and click tracking stay off. See `spikes/email.md`. |
@@ -116,7 +116,7 @@ gift-me/
 ├── packages/
 │   └── core/           Pure domain logic (budget math, schedule/deadline math, round statuses) plus types
 │                       shared by both apps, including generated database types (no I/O, heavily tested)
-├── supabase/           Supabase CLI folder: SQL migrations (including the pg_cron schedule), local config
+├── supabase/           Supabase CLI folder: SQL migrations, local config
 ├── spikes/             Throwaway wave-1 experiments (not production code)
 ├── planning/  design/
 └── pnpm-workspace.yaml
@@ -239,7 +239,7 @@ flowchart LR
 | Reminder 1 | 5 days after the heads-up |
 | Reminder 2 (email, plus push if W5-4 ships) | 7 days before the deadline |
 | Final notice | 48 hours before the deadline |
-| Marked skipped | At the deadline |
+| Marked skipped (a short `skipped` email says no gift was chosen and nothing was bought) | At the deadline |
 
 - If a round has to start late, for example a person added close to their birthday, it compresses the schedule, filters ideas to those that can still arrive in time, and says so in the heads-up.
   - **How it compresses** (agreed 2026-10-25, ALL-19): the round starts today, never in the past. Any reminder that would land on or before the heads-up is dropped, and so is reminder 1 if it would land on or after reminder 2. The skip at the deadline always stays. If the 7-day planning deadline has already arrived, the deadline moves to the last day next-day shipping could still make it (occasion − 3 days), ideas are kept only if they can arrive by then with the 2-day buffer, and the chosen idea's own deadline replaces it once ideas exist. A round always leaves at least one day to answer; if it can't, no round is created that year **[Claude's call]**.
@@ -271,8 +271,8 @@ flowchart LR
 
 | Main path | Meaning | Moves on when |
 |---|---|---|
-| `scheduled` | The round exists; its start date hasn't arrived | Start date reached (→ `generating`, or `needs_address` if there's no address) |
-| `generating` | The AI model is preparing ideas | Ideas are ready and the heads-up is sent |
+| `scheduled` | The round exists; its start date hasn't arrived | Start date reached (→ `generating`, or `needs_address` if there's no address), or the deadline passes (→ `skipped`) |
+| `generating` | The AI model is preparing ideas | Ideas are ready and the heads-up is sent, or the deadline passes (→ `skipped`) |
 | `awaiting_approval` | Waiting for the user to pick or reject | Approved (→ `ordered`), or rejected with a reason (→ `generating`) |
 | `ordered` | Approved and bought. Each order's own progress (placing, placed, shipped, …) lives in `orders` | The delivered webhook arrives |
 | `delivered` | Arrived; the reaction prompt goes out the day after the occasion | A reaction is logged, or 7 days pass |
@@ -287,17 +287,21 @@ flowchart LR
 - Every transition writes `gift_rounds.status` and `next_action_at` together, so the UI and recovery logic only need to read the database.
 - **Idempotency:** each Zinc order request uses `idempotency_key = order.id`, so a retry can never buy twice. Zinc webhooks have no event ID, so they're de-duplicated on event type plus order ID (Zinc's own guidance).
 
-### 5.1 Round engine (T8)
-- **The tick:** a `pg_cron` job runs **once a day at 12:00 UTC** (8 a.m. Eastern in summer, 7 a.m. in winter) and uses `pg_net` to POST to `/api/rounds/tick` on the production app. Every step in a round is measured in days, so daily is enough, and it means reminders and heads-ups always arrive in the morning (T9). A shared secret, kept in Supabase Vault and in Vercel environment variables, authenticates the call.
+### 5.1 Round engine (T8, T49)
+- **The tick:** Vercel Cron calls `GET /api/rounds/tick` **once a day at 12:00 UTC** (8 a.m. Eastern in summer, 7 a.m. in winter; on Hobby it may fire any time in that hour) with `Authorization: Bearer $CRON_SECRET`, the same secret as the keep-alive (T49, T22). Every step in a round is measured in days, so daily is enough, and reminders and heads-ups always arrive in the morning (T9). Vercel runs crons only on production, so `dev` and previews never tick on their own.
+- **Off switch:** `round_engine_enabled` in `concierge.app_settings` (0 on every environment until ALL-27 turns it on in production). While it is 0 the tick logs `round_tick {enabled:false}` and does nothing.
 - **Each tick:**
-  1. Creates `gift_rounds` for occasions whose start date (§4.1) has arrived. A unique key on person, occasion and year means a repeated tick never creates duplicates.
-  2. Claims due rounds: `next_action_at <= now()` and not locked. It sets `locked_until = now() + 10 minutes` using `FOR UPDATE SKIP LOCKED`, so the tick and a user action or webhook never work on the same round at once.
-  3. Advances each claimed round one step (generate ideas, send a reminder, skip at the deadline, run the daily late-risk check), then writes the new status, sets the next `next_action_at`, and clears the lock.
-- **Reminders are just due dates:** the next reminder's date is stored in `next_action_at`, and that morning's tick sends it. No process sleeps or waits.
-- **User actions and webhooks don't wait for a tick.** Approving, rejecting, adding an address, or a Zinc webhook updates the round and advances it right away, using the same step function. The tick is the safety net.
-- **Crash recovery:** if a step dies, its lock expires and the next day's tick retries it. `attempts` counts retries. After 3 failed days, the round moves to `needs_attention` and the owner is alerted. The 28-day runway leaves plenty of room for this.
-- **Long steps:** idea generation can take a minute or two. The tick hands each round to its own function call, so one slow round doesn't hold up the others, and each stays within Vercel's function time limit **[Verify in W1-6]**.
-- **Testing:** outside production, the tick takes a "now" override for a test clock, and the dev project's schedule is off by default. It's run by hand or from tests.
+  1. Creates `gift_rounds` for occasions whose start date (§4.1) has arrived. A unique key on person, occasion and year means a repeated tick never creates duplicates. If one occasion fails, the tick logs `round_create_failed` and carries on.
+  2. Claims due rounds: `next_action_at <= now()` and not locked. It sets `locked_until = now() + round_lock_minutes` (10) using `FOR UPDATE SKIP LOCKED`, so the tick and a user action or webhook never work on the same round at once.
+  3. Advances the claimed rounds **one after another**, each in its own try/catch so one failing round can't stop the rest. A step generates ideas, sends a reminder or the skipped email, or skips at the deadline, then writes the new status, sets the next `next_action_at` and clears the lock. (The daily late-risk check joins in with ordering.)
+- **Reminders are just due dates:** the next reminder's date is stored in `next_action_at`, and that morning's tick sends it. No process sleeps or waits. If ticks are missed, only the latest overdue reminder goes out, and an overdue deadline still skips.
+- **Every email is recorded first:** each email a round sends is written once per round to `concierge.round_sends` (round, step) before it is sent. A crash between the record and the send means that email is never sent (at-most-once, on purpose: a missing reminder is better than a duplicate). If the email service cleanly refuses, the record is removed so the next tick retries.
+- **The deadline skip never waits on its email** (ALL-28 ruling 12): if the `skipped` email is cleanly refused, the round still finishes as `skipped`, the send record is removed (nothing went out) and `round_skip_email_failed` is logged. It isn't retried.
+- **A skip is emailed only if the buyer was asked** (ALL-28 ruling 13) **[Claude's call]**: the `skipped` email goes out only when the round already sent its `heads_up` or `address_request`. Otherwise (for example a round stuck in `generating` until its deadline) it is skipped silently and `round_skipped_silently` is logged. Switching an occasion off (or deleting it) also skips its open round with no email, in the database.
+- **User actions and webhooks don't wait for a tick.** Approving, rejecting, adding an address (saving a person resumes their `needs_address` rounds), or a Zinc webhook updates the round and advances it right away, using the same step function. The tick is the safety net.
+- **Stuck rounds stay put:** if a step fails, its lock expires and the next tick retries it; `attempts` counts the claims since the round's last successful finish. The claim step logs a `round_stuck` event for the owner (ids only, E6) on each retry once a round has had more than `round_max_attempts` (3) claims end without a successful finish. The round **does not** move to `needs_attention` (that status is for order and price problems, §5); it stays in its status and the deadline skip still happens. The 28-day runway leaves plenty of room to fix it.
+- **Long steps:** idea generation is a stub today. When ALL-27 makes it take minutes, the tick should hand each round to its own function call so one slow round doesn't hold up the others, and each stays within Vercel's function time limit **[Verify in W1-6]**.
+- **Testing:** outside production the route accepts `?now=<ISO time>` as a test clock (it reads `VERCEL_ENV` and passes `now` in; production ignores it). `EMAIL_OUTBOX=log` (also never in production) logs emails instead of sending them, so the Playwright round test (ALL-28) needs no Resend key.
 
 ## 6. Key flows
 
@@ -305,7 +309,7 @@ flowchart LR
 1. Sign in with Google through Supabase Auth.
 2. **Import contacts** (optional, ALL-24, T45). From Home, "Import from Google" opens `/people/import`. Google Identity Services' popup asks for `contacts.readonly` only, separate from sign-in; the browser reads the contacts from the People API and revokes the token at once, so it never reaches our server. The "Who do you buy gifts for?" checklist (search, A–Z) sends only the ticked contacts, each with a relationship the buyer picks ("Mom", "Dad", "Grandma" pre-fill it). Each becomes a `people` row with their name, birthday and birth year, address (saved unchecked) and Google contact id, plus their relationship's occasions; the server copies a real Google photo into private storage. A unique index on (user, Google contact id) stops duplicates. No phone numbers or emails are imported (T42).
 3. Occasions are added automatically by relationship (P-4). Budgets come from relationship defaults (B-2).
-4. **Missing address (P-5):** the add-person form doesn't ask for the address (decision 45, ask late, ask once). When a round starts and the address is still missing, the round goes to `needs_address`. The heads-up then asks for the address (one-tap link to a form) and that request follows the same reminder schedule. No ideas are generated until there's an address, because delivery estimates and tax need it. If the deadline passes, the round is skipped **[Claude's call]**.
+4. **Missing address (P-5):** the add-person form doesn't ask for the address (decision 45, ask late, ask once). When a round starts and the address is still missing, the round goes to `needs_address`. The heads-up then asks for the address (one-tap link to a form) and that request follows the same reminder schedule. No ideas are generated until there's an address, because delivery estimates and tax need it. If the deadline passes, the round is skipped **[Claude's call]**. **The recipient-address form doesn't exist yet** ([ALL-81](https://linear.app/allens-forever/issue/ALL-81)); saving a person resumes their `needs_address` rounds, but until the form ships nobody can supply the address, so ALL-81 blocks switching the engine on (ALL-27).
 5. **Address check on entry:** Zinc rejects incomplete addresses at order time (for example, a missing apartment number), which would surface on the day of purchase. The form requires the fields Zinc requires and checks the address when it's saved **[Verify in W2-2: which address check to use, since Zinc has no standalone one]**.
 6. **Checkout setup:** connect Zinc and turn on auto top-up (§6.5a).
 
@@ -417,7 +421,7 @@ Funding comes in two stages. Ordering, tracking and the data model are the same 
 - **Data minimization (T42):** a column or form field for personal data is added only with the feature that needs it, and is optional until that feature is used. Analytics, AI and other vendors get IDs and amounts, never names, emails or addresses, unless the vendor's job needs them (e.g. Zinc needs the shipping address to ship).
 
 ## 9. Environments and operations
-- **Supabase:** two projects on the free tier, `dev` and `prod`, plus the local Supabase CLI for development. `pg_cron` and `pg_net` are enabled on both.
+- **Supabase:** two projects on the free tier, `dev` and `prod`, plus the local Supabase CLI for development. `pg_cron` and `pg_net` are enabled on `dev` only and aren't needed (T49).
   - **Inactivity pause:** free projects pause after 7 days without activity, which would stop the round engine. W1-6 checks whether the tick counts as activity. If it doesn't, the owner either upgrades `prod` to Pro ($25 a month) or schedules a keep-alive call.
 - **Vercel:** Hobby while developing and testing (T24). Production comes from `main`, and pull requests get preview deployments against Supabase `dev`.
   - Move to Pro before a commercial launch. **[Verify in W3]** that idea generation fits Hobby's function time limit.
@@ -465,7 +469,7 @@ Each wave can start once the waves before it have the dependencies it lists. Wit
 | ID | Ticket | Depends on |
 |---|---|---|
 | W1-1 | Monorepo scaffold and CI (pnpm workspaces, Next.js shell, `packages/core`, `supabase/` folder, lint, typecheck, tests, GitHub Actions, branch protection), plus the platform guardrails (§2.2, T19): `apps/web/modules/concierge` with a public `index.ts`, the ESLint boundary rule, and `/concierge` as the product path | — |
-| W1-6 | Platform provisioning and environments: Vercel project and previews, Supabase dev and prod with `pg_cron` and `pg_net`, the inactivity-pause check, AI Gateway with Vercel billing and cap, domain and DNS, env and secrets conventions, Hobby limits check, Jim's access to every service | — |
+| W1-6 | Platform provisioning and environments: Vercel project and previews, Supabase dev and prod with `pg_cron` and `pg_net` (superseded for the round tick by T49: Vercel Cron), the inactivity-pause check, AI Gateway with Vercel billing and cap, domain and DNS, env and secrets conventions, Hobby limits check, Jim's access to every service | — |
 | W1-2 | Checkout spike (Zinc) | — |
 | W1-3 | AI spike (extraction, ideas, cost) | — |
 | W1-4 | Email spike (send and inbound) | — |
@@ -488,7 +492,7 @@ Each wave can start once the waves before it have the dependencies it lists. Wit
 | W3-1 | Capture extraction plus the "Here's what I learned" review (C-3, C-8) | W1-3, W2-4 |
 | W3-2 | Profile view and editing, guided questions, readiness meter (C-4, C-6, C-7) | W1-7, W2-2 |
 | W3-3 | Gift idea engine: brainstorm, resolve via checkout lookup, rank (G-1, G-2, G-4, G-5) | W1-2, W1-3, W2-2 |
-| W3-4 | Round engine: `pg_cron` tick, round creation, claiming and locking, round statuses, reminders as due times, skip (A-2) (§5.1) | W1-5, W1-6, W2-2, W2-5 |
+| W3-4 | Round engine: Vercel Cron tick (T49), round creation, claiming and locking, round statuses, reminders as due times, skip (A-2) (§5.1) | W1-5, W1-6, W2-2, W2-5 |
 
 ### Wave 4: Approve and buy
 | ID | Ticket | Depends on |

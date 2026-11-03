@@ -21,6 +21,12 @@ export class FakeStore implements NotifyStore {
   links: FakeLink[] = [];
   notifications: FakeNotification[] = [];
 
+  roundPeople = new Map<string, string>();
+
+  async roundPersonId(roundId: string) {
+    return this.roundPeople.get(roundId) ?? null;
+  }
+
   async recipient(userId: string) {
     return this.recipients.get(userId) ?? { email: null, timezone: null };
   }

@@ -5,8 +5,10 @@ import { canTransition, ROUND_STATUSES, type RoundStatus } from "./rounds";
 const allowed: [RoundStatus, RoundStatus][] = [
   ["scheduled", "generating"],
   ["scheduled", "needs_address"],
+  ["scheduled", "skipped"], // the deadline passes first (round-plan.ts)
   ["generating", "awaiting_approval"],
   ["generating", "needs_attention"],
+  ["generating", "skipped"],
   ["awaiting_approval", "ordered"],
   ["awaiting_approval", "generating"],
   ["awaiting_approval", "skipped"],

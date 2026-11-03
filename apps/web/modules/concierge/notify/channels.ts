@@ -1,3 +1,4 @@
+import { logEvent } from "@/lib/log";
 import { sendEmail } from "@/lib/resend";
 import type { RenderedEmail } from "./templates";
 
@@ -15,6 +16,20 @@ export function emailChannel(deps: { apiKey: string | undefined; fetch: typeof f
   return { name: "email", send: (email) => sendEmail(email, deps) };
 }
 
-export function defaultChannels(): Channel[] {
-  return [emailChannel({ apiKey: process.env.RESEND_API_KEY, fetch })];
+// EMAIL_OUTBOX=log swaps Resend for a logged event, so local and e2e runs need no
+// key. Never in production, whatever the variable says (ALL-28).
+function outboxChannel(): Channel {
+  return {
+    name: "email",
+    async send() {
+      // The channel doesn't know the notification kind, so only the shape is logged.
+      logEvent("email_outbox", { to_user: false, subject_kind: null });
+      return { ok: true, id: `outbox-${crypto.randomUUID()}` };
+    },
+  };
+}
+
+export function defaultChannels(env: Record<string, string | undefined> = process.env): Channel[] {
+  if (env.EMAIL_OUTBOX === "log" && env.VERCEL_ENV !== "production") return [outboxChannel()];
+  return [emailChannel({ apiKey: env.RESEND_API_KEY, fetch })];
 }

@@ -330,6 +330,7 @@ export type Database = {
           attempts: number;
           budget_cents: number | null;
           created_at: string;
+          heads_up_on: string | null;
           id: string;
           late: boolean;
           locked_until: string | null;
@@ -349,6 +350,7 @@ export type Database = {
           attempts?: number;
           budget_cents?: number | null;
           created_at?: string;
+          heads_up_on?: string | null;
           id?: string;
           late?: boolean;
           locked_until?: string | null;
@@ -367,6 +369,7 @@ export type Database = {
           attempts?: number;
           budget_cents?: number | null;
           created_at?: string;
+          heads_up_on?: string | null;
           id?: string;
           late?: boolean;
           locked_until?: string | null;
@@ -849,6 +852,36 @@ export type Database = {
           },
         ];
       };
+      round_sends: {
+        Row: {
+          created_at: string;
+          round_id: string;
+          step: string;
+          user_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          round_id: string;
+          step: string;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          round_id?: string;
+          step?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "round_sends_round_id_user_id_fkey";
+            columns: ["round_id", "user_id"];
+            isOneToOne: false;
+            referencedRelation: "gift_rounds";
+            referencedColumns: ["id", "user_id"];
+          },
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -876,8 +909,86 @@ export type Database = {
         };
         Returns: string;
       };
+      claim_due_rounds: {
+        Args: { p_now: string };
+        Returns: {
+          approved_at: string | null;
+          attempts: number;
+          budget_cents: number | null;
+          created_at: string;
+          heads_up_on: string | null;
+          id: string;
+          late: boolean;
+          locked_until: string | null;
+          next_action_at: string | null;
+          occasion_date: string;
+          occasion_id: string;
+          occasion_year: number;
+          person_id: string;
+          ship_by_deadline: string;
+          status: Database["concierge"]["Enums"]["round_status"];
+          updated_at: string;
+          user_id: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "gift_rounds";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      claim_round: {
+        Args: { p_now: string; p_round_id: string };
+        Returns: {
+          approved_at: string | null;
+          attempts: number;
+          budget_cents: number | null;
+          created_at: string;
+          heads_up_on: string | null;
+          id: string;
+          late: boolean;
+          locked_until: string | null;
+          next_action_at: string | null;
+          occasion_date: string;
+          occasion_id: string;
+          occasion_year: number;
+          person_id: string;
+          ship_by_deadline: string;
+          status: Database["concierge"]["Enums"]["round_status"];
+          updated_at: string;
+          user_id: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "gift_rounds";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
       delete_occasion: { Args: { p_occasion_id: string }; Returns: undefined };
       enable_owner_rls: { Args: { p_table: unknown }; Returns: undefined };
+      finish_round: {
+        Args: {
+          p_heads_up_on: string;
+          p_lock: string;
+          p_next_action_at: string;
+          p_round_id: string;
+          p_status: Database["concierge"]["Enums"]["round_status"];
+        };
+        Returns: boolean;
+      };
+      round_candidates: {
+        Args: { p_today: string };
+        Returns: {
+          budget_cents: number;
+          day: number;
+          kind: string;
+          month: number;
+          occasion_id: string;
+          person_id: string;
+          user_id: string;
+        }[];
+      };
       setting_int: { Args: { p_key: string }; Returns: number };
       skip_open_rounds: {
         Args: { p_occasion_id: string; p_person_id: string };

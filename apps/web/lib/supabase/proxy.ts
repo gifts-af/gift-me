@@ -18,6 +18,8 @@ export function isPublicPath(pathname: string) {
     pathname.startsWith("/pwa-icon/") ||
     pathname === "/email-logo.png" ||
     pathname === "/api/keepalive" ||
+    // The daily round tick checks its own cron secret (ALL-28).
+    pathname === "/api/rounds/tick" ||
     // The extension calls this cross-origin with a bearer token; the route checks it (ALL-22).
     pathname === "/api/captures" ||
     /^\/api\/captures\/[^/]+\/extract$/.test(pathname) ||

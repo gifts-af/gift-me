@@ -11,6 +11,7 @@ describe("isPublicPath", () => {
     "/auth/login",
     "/auth/callback",
     "/api/keepalive",
+    "/api/rounds/tick",
     // The Chrome extension posts captures here with a bearer token (ALL-22).
     "/api/captures",
     // ...and retries a capture's read the same way (ALL-25).

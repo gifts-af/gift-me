@@ -28,6 +28,8 @@ export type NewLink = {
 export interface NotifyStore {
   recipient(userId: string): Promise<{ email: string | null; timezone: string | null }>;
   setting(key: string): Promise<number>;
+  /** The person a round is for, or null. Used by the open_person action's done page. */
+  roundPersonId(roundId: string): Promise<string | null>;
   insertLinks(rows: NewLink[]): Promise<void>;
   insertNotification(row: {
     userId: string;
@@ -88,6 +90,16 @@ export function createSupabaseNotifyStore(): NotifyStore {
       const { data, error } = await concierge.rpc("setting_int", { p_key: key });
       if (error) fail(`Reading setting ${key} failed`, error);
       return data;
+    },
+
+    async roundPersonId(roundId) {
+      const { data, error } = await concierge
+        .from("gift_rounds")
+        .select("person_id")
+        .eq("id", roundId)
+        .maybeSingle();
+      if (error) fail("Loading the round's person failed", error);
+      return data?.person_id ?? null;
     },
 
     async insertLinks(rows) {

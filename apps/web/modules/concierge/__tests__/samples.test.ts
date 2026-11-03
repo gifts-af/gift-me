@@ -14,6 +14,7 @@ describe("sampleEmails", () => {
       "needs_attention",
       "reaction_prompt",
       "needs_address",
+      "skipped",
     ]);
   });
 

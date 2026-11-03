@@ -16,7 +16,7 @@ export type LinkView =
   | { state: "confirm"; confirm: Action["confirm"] };
 
 export type ConfirmResult =
-  | { state: "done"; done: Action["done"] }
+  | { state: "done"; done: Action["done"]; next?: string }
   | Exclude<LinkView, { state: "confirm" }>;
 
 export type LinkDeps = { store: NotifyStore; now: Date };
@@ -77,7 +77,9 @@ export async function confirmActionLink(
     console.error(`Action link "${claimed.action}" failed for user ${userId}: ${result.error}`);
     return { state: "invalid" };
   }
-  return { state: "done", done: action.done };
+  // The link is already used, so a failed lookup only costs the shortcut.
+  const next = await action.next?.(claimed.roundId, deps.store).catch(() => null);
+  return next ? { state: "done", done: action.done, next } : { state: "done", done: action.done };
 }
 
 /** A throwing action counts as a failed one, so the page still answers. */

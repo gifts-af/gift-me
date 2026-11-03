@@ -8,7 +8,8 @@ export type NotificationKind =
   | "final_notice"
   | "needs_attention"
   | "reaction_prompt"
-  | "needs_address";
+  | "needs_address"
+  | "skipped";
 
 export type RenderedEmail = { subject: string; html: string; text: string };
 
@@ -20,18 +21,20 @@ type Occasion = { personName: string; occasion: string; dateText: string };
 export type TemplateData = {
   test: Record<string, never>;
   heads_up:
-    | (Occasion & { mode: "reminder"; ideas: IdeaRow[] })
+    | (Occasion & { mode: "reminder"; ideas: IdeaRow[]; late?: boolean })
     | (Occasion & {
         mode: "auto_buy";
         ideas: IdeaRow[];
         autoBuyIdea: string;
         autoBuyDate: string;
+        late?: boolean;
       });
   reminder: Occasion & { ideas: IdeaRow[] };
-  final_notice: Occasion & { ideas: IdeaRow[] };
+  final_notice: Occasion & { ideas: IdeaRow[]; orderByText: string };
   needs_attention: Occasion & { reason: string };
   reaction_prompt: { personName: string; occasion: string; giftTitle: string };
-  needs_address: Occasion;
+  needs_address: Occasion & { reminder?: boolean };
+  skipped: Occasion;
 };
 
 export type TemplateLinks = {
@@ -43,6 +46,7 @@ export type TemplateLinks = {
   needs_attention: { open: string };
   reaction_prompt: { open: string };
   needs_address: { addAddress: string };
+  skipped: { open: string };
 };
 
 const rowsOf = (ideas: IdeaRow[]) => ideas.map((i) => ({ title: `${i.title} · ${i.price}` }));
@@ -62,6 +66,9 @@ export const TEMPLATES: {
   }),
 
   heads_up: (d, links) => {
+    const late = d.late
+      ? [`${d.personName}'s ${d.occasion} is close, so we've kept only gifts that can still arrive in time.`]
+      : [];
     if (d.mode === "auto_buy") {
       return {
         subject: `We'll buy ${d.personName}'s gift on ${d.autoBuyDate}`,
@@ -69,6 +76,7 @@ export const TEMPLATES: {
           heading: `Auto-buy is on for ${d.personName}`,
           paragraphs: [
             `${d.personName}'s ${d.occasion} is ${d.dateText}. On ${d.autoBuyDate} we'll buy ${d.autoBuyIdea} and ship it to ${d.personName}, unless you choose something else first.`,
+            ...late,
           ],
           rows: rowsOf(d.ideas),
           button: { label: "Review or change", url: links.choose },
@@ -84,6 +92,7 @@ export const TEMPLATES: {
         heading: `${d.personName}'s ${d.occasion} is coming up`,
         paragraphs: [
           `${d.personName}'s ${d.occasion} is ${d.dateText}. These gifts can still arrive in time.`,
+          ...late,
         ],
         rows: rowsOf(d.ideas),
         button: { label: "Choose a gift", url: links.choose },
@@ -111,7 +120,7 @@ export const TEMPLATES: {
     ...renderEmail({
       heading: `Last chance to choose a gift for ${d.personName}`,
       paragraphs: [
-        `${d.personName}'s ${d.occasion} is ${d.dateText}, and this is the last day a gift can still arrive in time.`,
+        `${d.personName}'s ${d.occasion} is ${d.dateText}. Choose a gift by ${d.orderByText} so it arrives in time.`,
         "Choose one now so it gets there.",
       ],
       rows: rowsOf(d.ideas),
@@ -151,8 +160,23 @@ export const TEMPLATES: {
       paragraphs: [
         `${d.personName}'s ${d.occasion} is ${d.dateText}, and we don't have an address for them yet.`,
         "Add one so the gift can arrive in time.",
+        ...(d.reminder
+          ? [`A reminder: we still need ${d.personName}'s address to find gifts that arrive by ${d.dateText}.`]
+          : []),
       ],
       button: { label: "Add an address", url: links.addAddress },
+    }),
+  }),
+
+  skipped: (d, links) => ({
+    subject: `No gift for ${d.personName}'s ${d.occasion} this time`,
+    ...renderEmail({
+      heading: `No gift for ${d.personName}'s ${d.occasion}`,
+      paragraphs: [
+        `No gift was chosen for ${d.personName}'s ${d.occasion} (${d.dateText}), so nothing was bought.`,
+        "You can still buy something yourself. We'll be back for the next occasion.",
+      ],
+      button: { label: `Open ${APP_NAME}`, url: links.open },
     }),
   }),
 };
@@ -177,7 +201,7 @@ export const SAMPLE_DATA: {
     links: { choose: "https://example.com/a/reminder-token" },
   },
   final_notice: {
-    data: { ...OCC, ideas: IDEAS },
+    data: { ...OCC, ideas: IDEAS, orderByText: "Thursday, March 12" },
     links: { choose: "https://example.com/a/final-token" },
   },
   needs_attention: {
@@ -189,4 +213,5 @@ export const SAMPLE_DATA: {
     links: { open: "https://example.com/a/reaction-token" },
   },
   needs_address: { data: OCC, links: { addAddress: "https://example.com/a/address-token" } },
+  skipped: { data: OCC, links: { open: "https://example.com/a/skipped-token" } },
 };
