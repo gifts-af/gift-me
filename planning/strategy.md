@@ -2,7 +2,7 @@
 
 The written source for where the platform is headed and how it reaches people. Two shareable pages present it: the [roadmap](https://claude.ai/artifact/6D9ycNqhN2yGwvHwsWAaiW) and the [go-to-market plan](https://claude.ai/artifact/XXghrwZVuTndZNBvnyhkxg). Live status is in [Linear projects](https://linear.app/allens-forever/projects).
 
-**Status:** draft direction from the owner and Jim (2026-10-24 to 2026-10-25), recorded as D31–D35. Progress last brought up to date 2026-11-01. Nothing beyond the Gift Concierge MVP is committed. Raw ideas live in [`ideas.md`](ideas.md).
+**Status:** draft direction from the owner and Jim (2026-10-24 to 2026-10-25), recorded as D31–D35. Progress last brought up to date 2026-11-03. Nothing beyond the Gift Concierge MVP is committed. Raw ideas live in [`ideas.md`](ideas.md).
 
 ## 1. One platform, three products
 
@@ -10,7 +10,7 @@ The written source for where the platform is headed and how it reaches people. T
 |---|---|---|---|---|
 | **Scan-to-gift** | Both | **Get people in.** Our guerrilla marketing: strangers gifting each other out in the wild, so growth comes from people, not ad spend. Fun, public, instant. | Exploring. Linear: "Scan-to-gift" | — |
 | **Gift lists** (was "GiftMe"; the platform is now GiftsAF) | The receiver | **Keep them.** A reason to come back for every occasion. | Live, invite only, at giftsaf.com: sharing, claiming, the GiftsAF name and logo, a home page that leads with the list and its own tour (ALL-71). Soft launch to friends and family. Linear: "Gift List Sharing", "Soft Launch" | Jim |
-| **Gift Concierge** | The giver | **Earn.** Loyal customers automate recurring gifts. | MVP: Waves 1 and 2 done (2026-11-01), Wave 3 next. A waitlist on the home page (ALL-71). Linear: "Gift Concierge MVP" | Owner |
+| **Gift Concierge** | The giver | **Earn.** Loyal customers automate recurring gifts. | MVP: Waves 1 and 2 done (2026-11-01). Wave 3 under way: capture learning shipped (ALL-25, 2026-11-02); gift ideas (ALL-27) and the round engine (ALL-28) specced. A waitlist on the home page (ALL-71). Linear: "Gift Concierge MVP" | Owner |
 
 - Each product works on its own and gets better with the others. Gift Concierge stays an isolated service that can be used alongside the list app or without it (D31).
 - Competitive research shows wishlist apps are crowded and mostly earn from affiliate links. A list on its own isn't the edge. Connecting it to the concierge is.
@@ -21,8 +21,8 @@ No dates (D26). Order within each product:
 
 | Product | Now | Next | Later |
 |---|---|---|---|
-| **Gift Concierge** | MVP for personal use: 6 waves (ALL-15 to ALL-41 plus follow-ups). Waves 1 and 2 done; Wave 3 (capture learning, profiles, gift ideas, round engine) next | Public launch: business entity, billing, text messages, privacy review and recipient opt-in, recipient-entered addresses, more import sources, a second browser (Linear: "Gift Concierge Public Launch") | Auto-buy without a reply, gift card fallback, household sharing, gift notes and wrapping, native apps, season budgets |
-| **Gift lists** | Soft launch: done so far are the GiftsAF name and logo, mobile layout, home page and list tour, request access. Rolling out to friends and family, invite only | Multiple list types (ALL-7), non-Amazon gifts (ALL-10), connect to the concierge | Thank-you card reminders, premium automation of receiving |
+| **Gift Concierge** | MVP for personal use: 6 waves (ALL-15 to ALL-41 plus follow-ups). Waves 1 and 2 done; Wave 3 under way (capture learning shipped; gift ideas and round engine next) | Public launch: business entity, pricing (ALL-76) and billing, text messages, privacy review and recipient opt-in, recipient-entered addresses, more import sources, a second browser (Linear: "Gift Concierge Public Launch") | Auto-buy without a reply, gift card fallback, household sharing, gift notes and wrapping, native apps, season budgets, Secret Santa groups (ALL-82), White Elephant gift help (ALL-83) |
+| **Gift lists** | Soft launch: done so far are the GiftsAF name and logo, mobile layout, home page and list tour, request access. Rolling out to friends and family, invite only | Multiple list types (ALL-7), non-Amazon gifts (ALL-10), connect to the concierge | Thank-you card reminders, premium automation of receiving: the concierge suggests gifts for your own list (idea 7) |
 | **Scan-to-gift** | Ideas captured | Brainstorm and design the shared building block (scan, pay, claim securely); payments and payouts research | Buy-me-a-drink clothing, QR greeting cards, pay-it-forward plushie and cookie |
 
 ## 3. Go-to-market: the funnel
@@ -94,6 +94,10 @@ How the concierge's intelligence works (matches design §3.1):
 - **Free:** managing and sharing gift lists.
 - **Premium:** automated giving and receiving (the concierge). Receiving includes the concierge curating suggestions for your own list, which you add for others to buy (ideas.md idea 7).
 - **Per gift:** a fee on scan-to-gift and custom gifts. Zinc's $1 per order can be passed to the buyer.
+- **Per run (option):** concierge runs people schedule for their own list could carry a small fee that covers our AI cost plus a margin, instead of or alongside limits per plan (idea 7).
+- **Affiliate links (option):** commission on purchases made through GiftsAF, never used to rank or pick gifts (PRD G-5; idea 10, ALL-84).
+
+To be decided before we take money: ALL-76. Taking money also means moving off free hosting plans and making the repo private (ALL-75).
 
 Billing stays out of MVP scope.
 

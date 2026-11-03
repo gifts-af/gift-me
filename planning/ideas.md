@@ -66,6 +66,24 @@ The concierge works for you as a receiver, not only as a giver. It curates sugge
 - **To work out:** what it learns from (your captures, what you've added, gifts you kept or returned), which of the cost options above, and whether suggestions can be timed to your birthday or the holidays.
 - **Source:** owner, 2026-11-03.
 
+### 8. Secret Santa groups
+A family, friend group or office runs a Secret Santa on GiftsAF. The organiser invites people and sets a budget and date, and GiftsAF draws names. Each person sees only who they're buying for, sees that person's list (or AI ideas if they have none), and buys and ships in one tap.
+- **Why:** one organiser brings a whole group onto the platform, and it uses what we already have: lists, gift ideas, budgets, addresses and one-tap buying.
+- **To work out:** who can't draw whom (couples, last year's match), keeping the draw secret even from the organiser, shipping without showing the buyer the address, anonymous questions ("what size?"), and people who aren't users yet.
+- **Ticket:** ALL-82. **Source:** owner, 2026-11-02.
+
+### 9. White Elephant gift help
+Someone is going to a White Elephant (or Yankee Swap) party. There's no recipient, just a strict price limit, a date and maybe a theme or crowd ("office", "funny"). GiftsAF suggests gifts people will fight over, in budget and arriving before the party, and buys them in one tap.
+- **Why it's different:** the idea engine (ALL-27) works from the occasion and crowd instead of a person's facts, the price limit is a rule of the game, and the gift ships to the buyer.
+- **Maybe later:** organiser tools (invite guests, share the limit and date, reminders).
+- **Ticket:** ALL-83. **Source:** owner, 2026-11-02.
+
+### 10. Affiliate links as income
+Earn a commission when people buy through GiftsAF, through Amazon Associates and other retailer programs: on list items bought by clicking through to the store, on gift ideas, and on products added from the extension.
+- **Rules we already have:** gifts are never ranked or picked by commission (PRD G-5), and partners get no names or emails (T42).
+- **To work out:** whether it works with Zinc-placed orders or only click-throughs, each program's terms (disclosures, bans on links in email or extensions), and whether rewriting links people paste onto their own list is allowed and honest.
+- **Related:** competitors mostly earn this way (strategy §1). Pricing: ALL-76. **Ticket:** ALL-84. **Source:** owner, 2026-11-02.
+
 ## A common thread
 
 Ideas 1, 2, 4 and 5 all use the same building block: **a scannable code tied to a gift that someone claims securely.** If any of these move forward, that's the piece to design once and reuse.
