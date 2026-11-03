@@ -7,6 +7,7 @@ import type {
   ScheduleSettings,
   StepKey,
 } from "@gifts-af/core";
+import { isShippableAddress } from "@gifts-af/core";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 // Everything the round engine needs from the database (ALL-28). The interface
@@ -143,7 +144,6 @@ function fail(what: string, error: { message: string }): never {
   throw new Error(`${what}: ${error.message}`);
 }
 
-const filled = (s: string | null) => !!s && s.trim() !== "";
 
 export function createSupabaseRoundStore(): RoundStore {
   const db = createAdminClient();
@@ -262,7 +262,7 @@ export function createSupabaseRoundStore(): RoundStore {
       const [person, occasion, ideas] = await Promise.all([
         db
           .from("people")
-          .select("name, address_line1, city, state, zip")
+          .select("name, recipient_first_name, recipient_last_name, address_line1, address_line2, city, state, zip, country")
           .eq("id", round.person_id)
           .single(),
         concierge.from("occasions").select("kind").eq("id", round.occasion_id).single(),
@@ -284,7 +284,17 @@ export function createSupabaseRoundStore(): RoundStore {
         occasionKind: occasion.data.kind as OccasionKind,
         occasionDate: round.occasion_date,
         shipByDeadline: round.ship_by_deadline,
-        hasAddress: [p.address_line1, p.city, p.state, p.zip].every(filled),
+        // The same format check as the address form (T51): an incomplete import still asks.
+        hasAddress: isShippableAddress({
+          firstName: p.recipient_first_name,
+          lastName: p.recipient_last_name,
+          line1: p.address_line1,
+          line2: p.address_line2,
+          city: p.city,
+          state: p.state,
+          zip: p.zip,
+          country: p.country,
+        }),
         ideas: ideas.data.map((i) => ({ title: i.title, totalCents: i.est_total_cents })),
       };
     },
