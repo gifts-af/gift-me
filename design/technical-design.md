@@ -143,7 +143,7 @@ All tables have `id uuid`, `created_at`, and `updated_at`. Accounts (`profiles`)
 | `account_addresses` (in `public`) | user_id, recipient name, line 1, line 2, city, state, ZIP, country, phone, address_checked_at, share_for_gifts | Your own address, for every product (D41): "My address" when you buy, and where gifts to you ship when you keep a list and turn sharing on. Owner-only. |
 | `captures` | user_id, person_id, source_url, page_title, text_excerpt, screenshot_path, status (pending, extracted, failed) | C-1, C-2 |
 | `profile_facts` | user_id, person_id, category (interest, dislike, size, brand, owns, wants, style, avoid, constraint, loved), value, source (capture, question, note, reaction, rejection), source_id, confirmed (bool), active | C-3, C-7. A person's profile is the set of their active facts. |
-| `questions` | user_id, person_id, prompt, answer, status | C-4 |
+| `questions` | user_id, person_id, question_key, prompt, status | C-4. A row exists only once a question is answered or skipped; open questions are computed from facts (T53). `answer` is left empty: answers live only as `profile_facts` (D51). |
 | `gift_rounds` | user_id, person_id, occasion_id, occasion_date, ship_by_deadline, budget_cents (null = no budget, D36), status (§5), next_action_at, locked_until, attempts, approved_at | One per person per occasion per year. `next_action_at` is when the round engine should look at it next (§5.1). |
 | `gift_ideas` | round_id, title, retailer, product_url (the exact size or color variant), retailer_product_id, offer_id, seller_name, first_party (bool), price_cents, est_shipping_cents, est_tax_cents, est_total_cents, handling_days_max, delivery_days_min, delivery_days_max, arrive_by (worst case), reason, over_budget (bool), rank, status (proposed, selected, rejected), source (generated, list), list_item_id | G-1, G-2. `source = list` for a pick from the person's own list (D37). Delivery is a range before purchase; `arrive_by` uses the slowest case. |
 | `rejections` | round_id, reason_code, reason_text | G-3. Also written to `profile_facts`. |
@@ -202,12 +202,12 @@ flowchart LR
 |---|---|
 | Social media and web captures (extension) | `captures` (URL, title, visible text) plus the screenshot in Supabase Storage |
 | Emailed or forwarded notes | `inbound_messages` |
-| Answers to guided questions | `questions` |
+| Answers to guided questions | `profile_facts` directly, with `source = question`; `questions` records which were asked (T53) |
 | Rejected ideas and the reason | `rejections` |
 | How the recipient liked a gift | `reactions` |
 | A loved one's own gift list (D37) | read through `lists.person_list` once their account is linked (§3, schema v1.1). Its gifts are offered as picks (`gift_ideas.source = list`); turning list items into `profile_facts` is still to be designed |
 
-**Layer 2: learned facts.** `profile_facts` is where the learning lives. Each fact is small and specific ("interest: fly fishing", "size: medium shirt", "avoid: clutter") and records its category, its source, a link back to the input it came from, whether the user confirmed it (facts from captures are saved unconfirmed and marked as AI suggestions, D47), and whether it's still active. **A person's profile is the set of their active facts**, and the user can see, edit or remove any of them (C-7).
+**Layer 2: learned facts.** `profile_facts` is where the learning lives. Each fact is small and specific ("interest: fly fishing", "size: medium shirt", "avoid: clutter") and records its category, its source, a link back to the input it came from, whether the user confirmed it (facts from captures are saved unconfirmed and marked as AI suggestions, D47), and whether it's still active. **A person's profile is the set of their active facts**, and the user can see, edit, turn off or delete any of them (C-7, D51). Turning off keeps the text so the AI won't suggest it again; deleting erases it.
 
 **Synthesis happens at idea time.** Nothing stores a written summary of a person. Each round, the AI model reads the person's active facts, gift history and rejections and builds its picture from scratch, so the facts stay the single source of truth and nothing goes stale.
 
@@ -224,6 +224,8 @@ flowchart LR
 - `people.birthday` is gone. A birthday is an `occasions` row; `people.birth_year` (optional) only adds an age. A partial unique index allows one live occasion per kind per person, and holidays can be added for anyone.
 - `people.photo_path` points at a photo in the private `person-photos` bucket. Each owner can read and write only their own folder (`<user_id>/...`); the app shows a short-lived signed link. The size limit and the resize width are `app_settings` (`person_photo_max_upload_bytes`, `person_photo_px`).
 - `concierge.add_person` creates a person with their starting occasions in one call, so the app and the Chrome extension save people the same way.
+
+**As built for the profile view** (ALL-26, T53): `questions.question_key` and `concierge.answer_questions`, above; `activeFacts` in `modules/concierge/profile` is what idea generation reads; the meter's points and the question limit are `app_settings` rows.
 
 ## 4. Key calculations (in `packages/core`, unit-tested)
 
@@ -379,6 +381,7 @@ Funding comes in two stages. Ordering, tracking and the data model are the same 
 
 ### 6.7 Guided questions by email (C-4)
 - Open questions for a person are included in heads-up and reminder emails as a signed link to a short form on the phone web page. That counts as "answerable by email" for the MVP. Replying in the body of the email is not parsed **[Claude's call]**.
+- **As built (ALL-26, T53):** a plain link under the email's one button, using the `answer_questions` action on `action_links`. It follows §6.4's sign-in and confirm steps, then goes straight to `/people/{id}/questions`. Answers become `profile_facts` with `source = question`, `confirmed = true`.
 
 ### 6.8 Inbound email quick capture (N-2, C-5)
 - **Each user gets a private capture address, `notes+{token}@in.giftsaf.com` (T33).** The token is random, identifies the user, and can be reset in Settings. It works from any account the user sends from. Heads-up and reminder emails use it as their Reply-To, so replying with news is the same as emailing a note. Mail to an unknown token is logged and dropped.

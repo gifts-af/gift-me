@@ -132,12 +132,12 @@ Priority: **M** = must have for the MVP, **S** = should have, **L** = later.
 |---|---|---|
 | C-1 | Browser extension for Chrome: one click captures the visible page and saves it to a chosen person. | M |
 | C-2 | Captures **only what's on screen when the user clicks**. No automatic scrolling, crawling, or background collection. | M |
-| C-3 | AI pulls likely preferences from captured text and images and shows "Here's what I learned". Facts are saved as clearly marked AI suggestions the user can remove (D47). | M |
+| C-3 | AI pulls likely preferences from captured text and images and shows "Here's what I learned". Facts are saved as clearly marked AI suggestions the user can turn off or delete (D47, D51). | M |
 | C-4 | Guided questions that target gaps in a profile, answerable in the web app or by email. | M |
 | C-5 | Notes by email, filed to the right person. | M |
 | C-6 | Readiness meter per person, with a suggested next step. | S |
-| C-7 | The user can view, edit, and delete anything in a profile. Deleting a person deletes all of their data. | M |
-| C-8 | The app doesn't infer or store sensitive traits (health, religion, sexuality, politics). | M |
+| C-7 | The user can view, edit, turn off, and delete anything in a profile (D51). Deleting a person deletes all of their data. | M |
+| C-8 | The app doesn't infer or store sensitive traits (health, religion, sexuality, politics), including in what a buyer types (D51). | M |
 | C-9 | Extensions for other browsers (Firefox, Safari). | L |
 
 ### 7.4 Gift ideas

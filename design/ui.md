@@ -152,6 +152,8 @@ A clickable, phone-first prototype, published as a private shareable artifact pa
 | Heads-up email | Two kinds. **Reminder:** the options as small read-only rows and "Choose a gift"; nothing is bought until you choose. **Auto-buy on** (opt-in, A-7): says which gift will be bought and on what date, marks it, and offers "Review or change" and how to skip. Buttons are signed one-time links (design §6.4) to the phone page | N-1, A-7, decision 40 |
 | Computer width | Home and the gift list only | — |
 
+**As built on the person page (ALL-26, D51):** facts are one list by category, each with its source and ✨ on unconfirmed AI suggestions, and a "More" menu (Edit, Turn off, Delete). "Add a note" isn't built yet.
+
 Not mocked up now: the reaction prompt (ALL-34) and other later screens. They reuse these patterns and get mock-ups in their own tickets if needed **[Claude's call]**.
 
 **Sign-off** (ticket "done when"):
