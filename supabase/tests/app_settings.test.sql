@@ -34,7 +34,10 @@ select set_eq(
     'person_photo_max_upload_bytes', 'person_photo_px', 'contact_photo_timeout_ms', 'contact_photo_concurrency',
     'capture_fact_min_confidence_pct', 'capture_extraction_enabled', 'capture_extract_timeout_ms',
     'round_engine_enabled', 'round_lock_minutes', 'round_max_attempts',
-    'store_page_read_enabled', 'store_page_read_timeout_ms', 'store_page_read_max_bytes'
+    'store_page_read_enabled', 'store_page_read_timeout_ms', 'store_page_read_max_bytes',
+    'guided_questions_max', 'guided_answer_max_facts', 'readiness_points_interests', 'readiness_points_wants',
+    'readiness_points_avoid', 'readiness_points_sizes', 'readiness_points_brands', 'readiness_points_owns',
+    'readiness_points_own_list', 'readiness_ready_pct', 'readiness_meter_enabled'
   ],
   'every fee, limit, default and schedule setting is seeded'
 );
