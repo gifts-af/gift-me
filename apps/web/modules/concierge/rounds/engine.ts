@@ -276,16 +276,27 @@ function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundContext, deps: 
   const link = { action: "open_person" as const, expiresAt: new Date(`${round.shipByDeadline}T23:59:00Z`) };
   // The address emails open the person's address form instead (ALL-81).
   const addressLink = { ...link, action: "add_address" as const };
+  // Open guided questions, when there are any (ALL-26, design §6.7).
+  const asks = ctx.openQuestions > 0 ? { questions: ctx.openQuestions } : {};
+  const questionsLink = ctx.openQuestions > 0 ? { questions: { ...link, action: "answer_questions" as const } } : {};
 
   switch (step) {
     case "heads_up":
       return notify(
-        { ...base, kind: "heads_up", data: { ...occasion, mode: "reminder", ideas, late: round.late }, links: { choose: link } },
+        {
+          ...base,
+          kind: "heads_up",
+          data: { ...occasion, ...asks, mode: "reminder", ideas, late: round.late },
+          links: { choose: link, ...questionsLink },
+        },
         deps,
       );
     case "reminder_1":
     case "reminder_2":
-      return notify({ ...base, kind: "reminder", data: { ...occasion, ideas }, links: { choose: link } }, deps);
+      return notify(
+        { ...base, kind: "reminder", data: { ...occasion, ...asks, ideas }, links: { choose: link, ...questionsLink } },
+        deps,
+      );
     case "final_notice":
       return notify(
         {

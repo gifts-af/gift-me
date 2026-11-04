@@ -108,3 +108,35 @@ describe("needs_address reminder", () => {
     expect(TEMPLATES.needs_address(s.data, s.links).text).not.toContain("A reminder");
   });
 });
+
+describe("guided questions link (ALL-26 AC-10)", () => {
+  const QUESTIONS_URL = "https://example.com/a/questions-token";
+
+  it.each(["heads_up", "reminder"] as const)("%s shows it under the one button, in html and text", (kind) => {
+    const s = SAMPLE_DATA[kind];
+    const render = TEMPLATES[kind] as (d: unknown, l: unknown) => { html: string; text: string };
+    const mail = render({ ...s.data, questions: 3 }, { ...s.links, questions: QUESTIONS_URL });
+    expect(mail.html).toContain(QUESTIONS_URL);
+    expect(mail.text).toContain(`Answer 3 quick questions about Mom: ${QUESTIONS_URL}`);
+    expect(mail.html.match(/<a[\s>]/g)).toHaveLength(2);
+    expect(mail.html.match(/background:#0f766e/g)).toHaveLength(1);
+    expect(mail.html.indexOf(s.links.choose)).toBeLessThan(mail.html.indexOf(QUESTIONS_URL));
+  });
+
+  it("says question, not questions, for one", () => {
+    const s = SAMPLE_DATA.reminder;
+    const mail = TEMPLATES.reminder({ ...s.data, questions: 1 }, { ...s.links, questions: QUESTIONS_URL });
+    expect(mail.text).toContain("Answer 1 quick question about Mom");
+  });
+
+  it("the auto-buy heads-up shows it too", () => {
+    const s = SAMPLE_DATA.heads_up;
+    const data = { ...s.data, mode: "auto_buy" as const, autoBuyIdea: "A mug", autoBuyDate: "Mar 1", questions: 2 };
+    expect(TEMPLATES.heads_up(data, { ...s.links, questions: QUESTIONS_URL }).html).toContain(QUESTIONS_URL);
+  });
+
+  it("is absent without one", () => {
+    const s = SAMPLE_DATA.reminder;
+    expect(TEMPLATES.reminder(s.data, s.links).text).not.toContain("quick question");
+  });
+});

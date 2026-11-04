@@ -8,7 +8,9 @@ import type {
   StepKey,
 } from "@gifts-af/core";
 import { isShippableAddress } from "@gifts-af/core";
+import { logEvent } from "@/lib/log";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { getOpenQuestions } from "../profile/profile";
 
 // Everything the round engine needs from the database (ALL-28). The interface
 // keeps engine.ts testable with an in-memory store; the Supabase version below
@@ -57,6 +59,8 @@ export type RoundContext = {
   occasionDate: CalendarDate;
   shipByDeadline: CalendarDate;
   hasAddress: boolean;
+  /** Guided questions open for the person (ALL-26); the emails link them when above 0. */
+  openQuestions: number;
   /** Proposed ideas, best first. */
   ideas: { title: string; totalCents: number }[];
 };
@@ -277,6 +281,12 @@ export function createSupabaseRoundStore(): RoundStore {
       if (occasion.error) fail("Loading the round's occasion failed", occasion.error);
       if (ideas.error) fail("Loading the round's ideas failed", ideas.error);
 
+      // A bonus in the email: failing to count them mustn't hold up a gift reminder.
+      const open = await getOpenQuestions(db, round.person_id).catch(() => {
+        logEvent("round_questions_failed", { round_id: roundId, person_id: round.person_id });
+        return [];
+      });
+
       const p = person.data;
       return {
         personId: round.person_id,
@@ -295,6 +305,7 @@ export function createSupabaseRoundStore(): RoundStore {
           zip: p.zip,
           country: p.country,
         }),
+        openQuestions: open.length,
         ideas: ideas.data.map((i) => ({ title: i.title, totalCents: i.est_total_cents })),
       };
     },

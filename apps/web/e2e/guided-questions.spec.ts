@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import { localSupabase } from "./local-supabase";
 import { phoneLayoutProblems } from "./phone-layout";
@@ -132,4 +133,82 @@ test("someone else's person is a 404, and a deleted person too (AC-12)", async (
   await page.goto(`/people/${personId}/questions`);
   await expect(page.getByRole("textbox")).toHaveCount(0);
   await expect(page.getByText(/could not be found|couldn't find|404/i).first()).toBeVisible();
+
+  // The owner, once the person is deleted (an email's link can outlive them).
+  await rest(`people?id=eq.${personId}`, { method: "PATCH", body: JSON.stringify({ deleted_at: new Date().toISOString() }) });
+  await page.context().clearCookies();
+  await signIn(page);
+  await page.goto(`/people/${personId}/questions`);
+  await expect(page.getByRole("textbox")).toHaveCount(0);
+  await expect(page.getByText(/could not be found|couldn't find|404/i).first()).toBeVisible();
+});
+
+/** A round for the person and a stored answer_questions link, the way notify() makes them. */
+async function questionLink(personId: string): Promise<{ token: string; hash: string }> {
+  const owner = await userId(TEST_USER);
+  const [occasion] = await rest("occasions", {
+    method: "POST",
+    profile: "concierge",
+    body: JSON.stringify({ user_id: owner, person_id: personId, kind: "birthday", month: 3, day: 20 }),
+  });
+  const [round] = await rest("gift_rounds", {
+    method: "POST",
+    profile: "concierge",
+    body: JSON.stringify({
+      user_id: owner,
+      person_id: personId,
+      occasion_id: occasion.id,
+      occasion_year: 2027,
+      occasion_date: "2027-03-20",
+      ship_by_deadline: "2027-03-11",
+    }),
+  });
+  const token = randomBytes(32).toString("base64url");
+  const hash = createHash("sha256").update(token).digest("hex");
+  await rest("action_links", {
+    method: "POST",
+    profile: "concierge",
+    body: JSON.stringify({
+      user_id: owner,
+      round_id: round.id,
+      action: "answer_questions",
+      token_hash: hash,
+      expires_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    }),
+  });
+  return { token, hash };
+}
+
+test("the form works from a signed email link (AC-3)", async ({ page }, info) => {
+  const personId = await newPerson(`Sam L ${info.project.name}`);
+  const { token, hash } = await questionLink(personId);
+  const usedAt = async () =>
+    (await rest(`action_links?token_hash=eq.${hash}&select=used_at`, { profile: "concierge" }))[0].used_at;
+
+  // Signed out: asked to sign in, and opening it uses nothing up.
+  await page.goto(`/a/${token}`);
+  await expect(page.getByRole("heading", { name: "Sign in to continue" })).toBeVisible();
+  expect(await usedAt()).toBeNull();
+  await page.getByRole("link", { name: "Sign in with email" }).click();
+  await page.getByLabel("Email").fill(TEST_USER.email);
+  await page.getByLabel("Password").fill(TEST_USER.password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+
+  // Back on the link: a plain visit still uses nothing up; confirming does.
+  await expect(page.getByRole("heading", { name: "Answer a few questions" })).toBeVisible();
+  expect(await usedAt()).toBeNull();
+  await page.getByRole("button", { name: "Answer the questions" }).click();
+
+  // Straight to the form, with no done page in between.
+  await expect(page).toHaveURL(new RegExp(`/people/${personId}/questions$`));
+  await box(page, INTERESTS).fill("birdwatching");
+  await page.getByRole("button", { name: "Save answers" }).click();
+  await expect(page).toHaveURL(new RegExp(`/people/${personId}$`));
+  await expect(page.getByRole("meter")).toHaveAttribute("aria-valuenow", "30");
+  expect(await usedAt()).not.toBeNull();
+  expect(await facts(personId)).toEqual([{ category: "interest", value: "birdwatching", source: "question", confirmed: true }]);
+
+  // The same link again says it's been used.
+  await page.goto(`/a/${token}`);
+  await expect(page.getByRole("heading", { name: "This link has already been used" })).toBeVisible();
 });

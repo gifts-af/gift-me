@@ -3,7 +3,7 @@ import { render, screen } from "@testing-library/react";
 
 const getPerson = vi.hoisted(() => vi.fn());
 const getProfile = vi.hoisted(() =>
-  vi.fn(async (..._args: unknown[]) => ({ groups: [], off: [], unread: 0, openCount: 0, readiness: null as unknown })),
+  vi.fn(async (...args: unknown[]) => (void args, { groups: [], off: [], unread: 0, openCount: 0, readiness: null as unknown })),
 );
 vi.mock("@/modules/concierge", () => ({ getPerson, getProfile }));
 vi.mock("@/lib/today", () => ({ todayForRequest: async () => "2026-11-01" }));

@@ -19,7 +19,7 @@ export type FakeRound = Omit<NewRoundRow, "nextActionAt"> & {
   history: RoundStatus[];
 };
 
-export type FakePerson = { name: string; hasAddress: boolean };
+export type FakePerson = { name: string; hasAddress: boolean; openQuestions?: number };
 
 const FINISHED: RoundStatus[] = ["complete", "skipped", "ordered", "delivered"];
 
@@ -162,6 +162,7 @@ export class FakeRoundStore implements RoundStore {
       occasionDate: r.occasionDate,
       shipByDeadline: r.shipByDeadline,
       hasAddress: person.hasAddress,
+      openQuestions: person.openQuestions ?? 0,
       ideas: this.ideas.get(roundId) ?? [],
     };
   }

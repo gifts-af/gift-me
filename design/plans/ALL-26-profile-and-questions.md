@@ -168,7 +168,7 @@ Sensitive text uses `isSensitive` from `lib/ai/sensitive.ts`. The refusal says: 
 
 Readiness banner under the header, as in the mock-up: the label, a thin bar with `role="meter"`, `aria-valuenow`, `aria-label="How ready ideas for {name} are"`, and the step ("Answer 3 questions" links to `/people/{id}/questions`; capture step is plain text). Read the `dataviz` skill before drawing the bar.
 
-Each fact row: value, source line (with the captured page link when there is one), and a "More" menu labelled `More for {line}` with Edit, Turn off, Delete. Edit opens an inline form with value and category. Delete opens the existing Dialog pattern with the words "A later capture could suggest it again." Turned-off facts sit in a closed `<details>` "Turned off (n)" with Turn on and Delete. Empty state points to questions when they're on.
+Each fact row: value, source line (with the captured page link when there is one), and a pencil labelled `Edit {value}`, as in the mock-up, which opens an inline form with value, category, Save, Cancel, Turn off and Delete. (Changed from a "More" menu while building: the mock-up has the pencil, and it needs less UI.) Delete opens the existing Dialog pattern with the words "A later capture could suggest it again." Turned-off facts sit in a closed `<details>` "Turned off (n)" with Turn on and Delete. Empty state points to questions when they're on.
 
 - [ ] Update component tests first: groups and labels, source lines, ✨ only on unconfirmed AI, turned-off list, meter value and step, null readiness renders nothing. Run: fail.
 - [ ] Implement; run: pass. Update `e2e/what-we-know.spec.ts` for the new row actions (turn off, reload, still gone, `active=false`; delete, row gone). Commit.

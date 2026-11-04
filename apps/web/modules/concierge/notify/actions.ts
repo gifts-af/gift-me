@@ -3,7 +3,7 @@
 // owner presses confirm. Real actions (ALL-28 and later) add entries here.
 import type { NotifyStore } from "./store";
 
-export type ActionName = "test" | "open_person" | "add_address";
+export type ActionName = "test" | "open_person" | "add_address" | "answer_questions";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
 
@@ -13,6 +13,8 @@ export type Action = {
   run(ctx: { userId: string; roundId: string | null }): Promise<ActionResult>;
   /** Where the done page's button goes instead of home, when the action knows (e.g. "/people/<id>"). */
   next?(roundId: string | null, store: NotifyStore): Promise<string | null>;
+  /** Go to `next` right after confirming, with no done page in between. */
+  straight?: true;
 };
 
 export const ACTIONS: Record<ActionName, Action> = {
@@ -73,5 +75,26 @@ export const ACTIONS: Record<ActionName, Action> = {
       const personId = roundId ? await store.roundPersonId(roundId) : null;
       return personId ? `/people/${personId}?address=open#address` : null;
     },
+  },
+
+  // The questions link in heads-up and reminder emails (ALL-26, design §6.7).
+  answer_questions: {
+    confirm: {
+      title: "Answer a few questions",
+      body: "Confirm to open the questions about this person.",
+      button: "Answer the questions",
+    },
+    done: {
+      title: "Done",
+      body: "Open their page to answer the questions.",
+    },
+    async run() {
+      return { ok: true };
+    },
+    async next(roundId, store) {
+      const personId = roundId ? await store.roundPersonId(roundId) : null;
+      return personId ? `/people/${personId}/questions` : null;
+    },
+    straight: true,
   },
 };
