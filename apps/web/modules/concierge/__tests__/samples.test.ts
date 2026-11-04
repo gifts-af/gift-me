@@ -10,6 +10,7 @@ describe("sampleEmails", () => {
       "heads_up-reminder",
       "heads_up-auto_buy",
       "reminder",
+      "reminder-questions",
       "final_notice",
       "needs_attention",
       "reaction_prompt",

@@ -1,5 +1,6 @@
 "use server";
 
+import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { confirmActionLink, createSupabaseNotifyStore, type ConfirmResult } from "@/modules/concierge";
 
@@ -10,5 +11,7 @@ import { confirmActionLink, createSupabaseNotifyStore, type ConfirmResult } from
 export async function confirmLink(token: string): Promise<ConfirmResult> {
   const supabase = await createClient();
   const viewerId = (await supabase.auth.getClaims()).data?.claims?.sub ?? null;
-  return confirmActionLink(token, viewerId, { store: createSupabaseNotifyStore(), now: new Date() });
+  const result = await confirmActionLink(token, viewerId, { store: createSupabaseNotifyStore(), now: new Date() });
+  if (result.state === "done" && result.straight && result.next) redirect(result.next);
+  return result;
 }

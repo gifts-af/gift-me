@@ -18,18 +18,21 @@ export type IdeaRow = { title: string; price: string };
 
 type Occasion = { personName: string; occasion: string; dateText: string };
 
+/** How many guided questions are open for the person (ALL-26), when any are. */
+type Asks = { questions?: number };
+
 export type TemplateData = {
   test: Record<string, never>;
   heads_up:
-    | (Occasion & { mode: "reminder"; ideas: IdeaRow[]; late?: boolean })
-    | (Occasion & {
+    | (Occasion & Asks & { mode: "reminder"; ideas: IdeaRow[]; late?: boolean })
+    | (Occasion & Asks & {
         mode: "auto_buy";
         ideas: IdeaRow[];
         autoBuyIdea: string;
         autoBuyDate: string;
         late?: boolean;
       });
-  reminder: Occasion & { ideas: IdeaRow[] };
+  reminder: Occasion & Asks & { ideas: IdeaRow[] };
   final_notice: Occasion & { ideas: IdeaRow[]; orderByText: string };
   needs_attention: Occasion & { reason: string };
   reaction_prompt: { personName: string; occasion: string; giftTitle: string };
@@ -40,8 +43,8 @@ export type TemplateData = {
 export type TemplateLinks = {
   test: { tryIt: string };
   // `skip`, when given, is shown as a plain link to copy; the button stays the only anchor.
-  heads_up: { choose: string; skip?: string };
-  reminder: { choose: string };
+  heads_up: { choose: string; skip?: string; questions?: string };
+  reminder: { choose: string; questions?: string };
   final_notice: { choose: string };
   needs_attention: { open: string };
   reaction_prompt: { open: string };
@@ -52,6 +55,12 @@ export type TemplateLinks = {
 const rowsOf = (ideas: IdeaRow[]) => ideas.map((i) => ({ title: `${i.title} · ${i.price}` }));
 
 const PRICES_NOTE = "Prices include shipping and tax.";
+
+/** The plain link to the guided questions (design §6.7), when there are any. */
+function questionsLink(d: Occasion & Asks, url: string | undefined): { label: string; url: string } | undefined {
+  if (!d.questions || !url) return undefined;
+  return { label: `Answer ${d.questions} quick ${d.questions === 1 ? "question" : "questions"} about ${d.personName}`, url };
+}
 
 export const TEMPLATES: {
   [K in NotificationKind]: (data: TemplateData[K], links: TemplateLinks[K]) => RenderedEmail;
@@ -80,6 +89,7 @@ export const TEMPLATES: {
           ],
           rows: rowsOf(d.ideas),
           button: { label: "Review or change", url: links.choose },
+          link: questionsLink(d, links.questions),
           footer:
             `To skip this gift, open the link and choose "Don't buy". You can turn auto-buy off for ${d.personName} in their profile. ${PRICES_NOTE}` +
             (links.skip ? ` Or skip directly: ${links.skip}` : ""),
@@ -96,6 +106,7 @@ export const TEMPLATES: {
         ],
         rows: rowsOf(d.ideas),
         button: { label: "Choose a gift", url: links.choose },
+        link: questionsLink(d, links.questions),
         footer: `Nothing is bought until you choose. ${PRICES_NOTE}`,
       }),
     };
@@ -111,6 +122,7 @@ export const TEMPLATES: {
       ],
       rows: rowsOf(d.ideas),
       button: { label: "Choose a gift", url: links.choose },
+      link: questionsLink(d, links.questions),
       footer: `Nothing is bought until you choose. ${PRICES_NOTE}`,
     }),
   }),

@@ -191,6 +191,25 @@ describe("runTick", () => {
     }
   });
 
+  it("links open questions in the heads-up and reminders only (ALL-26 AC-10)", async () => {
+    const h = harness();
+    h.store.people.set(PERSON, { name: NAME, hasAddress: true, openQuestions: 2 });
+    await h.runDays("2027-02-01", "2027-03-12");
+
+    const asked = h.emails.filter((e) => e.text.includes(`Answer 2 quick questions about ${NAME}`));
+    expect(asked.map((e) => h.sent()[h.emails.indexOf(e)].split("@")[0])).toEqual(["heads_up", "reminder", "reminder"]);
+    const questionLinks = h.notifyStore.links.filter((l) => l.action === "answer_questions");
+    expect(questionLinks).toHaveLength(3);
+    for (const l of questionLinks) expect(l).toMatchObject({ userId: USER, roundId: "round-1" });
+  });
+
+  it("adds no link when no questions are open (ALL-26 AC-10)", async () => {
+    const h = harness();
+    await h.runDays("2027-02-01", "2027-03-12");
+    expect(h.emails.some((e) => e.text.includes("quick question"))).toBe(false);
+    expect(h.notifyStore.links.some((l) => l.action === "answer_questions")).toBe(false);
+  });
+
   it("squeezes a late round's schedule and says time is short (AC-6)", async () => {
     const h = harness({ candidateFrom: "2027-03-05" });
     await h.runDays("2027-03-01", "2027-03-15");

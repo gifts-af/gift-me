@@ -734,6 +734,7 @@ export type Database = {
           id: string;
           person_id: string;
           prompt: string;
+          question_key: string | null;
           status: string;
           updated_at: string;
           user_id: string;
@@ -745,6 +746,7 @@ export type Database = {
           id?: string;
           person_id: string;
           prompt: string;
+          question_key?: string | null;
           status?: string;
           updated_at?: string;
           user_id?: string;
@@ -755,6 +757,7 @@ export type Database = {
           id?: string;
           person_id?: string;
           prompt?: string;
+          question_key?: string | null;
           status?: string;
           updated_at?: string;
           user_id?: string;
@@ -908,6 +911,10 @@ export type Database = {
           p_zip?: string;
         };
         Returns: string;
+      };
+      answer_questions: {
+        Args: { p_answers: Json; p_person_id: string };
+        Returns: number;
       };
       claim_due_rounds: {
         Args: { p_now: string };

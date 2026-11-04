@@ -10,6 +10,8 @@ const redirect = vi.hoisted(() =>
 vi.mock("next/cache", () => ({ revalidatePath }));
 vi.mock("next/navigation", () => ({ redirect }));
 vi.mock("@/lib/today", () => ({ todayForRequest: async () => "2026-11-01" }));
+vi.mock("@/lib/app-settings", () => ({ appSettingInt: async () => 20 }));
+vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({}) }));
 vi.mock("@/modules/concierge", () => ({ deletePerson }));
 
 import { deletePersonAction } from "../actions";

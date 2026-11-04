@@ -33,7 +33,7 @@ The first three rows are the ticket's own criteria.
 | AC-9 | A question | The buyer skips it | It's not asked again; the meter doesn't change; the next missing question can take its place |
 | AC-10 | A round whose person has open questions | The heads-up or a reminder is sent | The email has a plain link to the form with the count, under its one button. With no open questions, or in any other email, there's no link |
 | AC-11 | `guided_questions_max` = 0, or `readiness_meter_enabled` = 0 | Pages and emails render | Questions (form, next step, email link) or the meter are off, with no deploy |
-| AC-12 | Another signed-in user, or a deleted person | Answering or reading through the database | Refused. `questions.answer` stays empty after answering |
+| AC-12 | Another signed-in user, or a person since deleted | Answering, or opening their pages | Another user is refused everything. A deleted person's pages are a 404 and answers are refused; their facts stay readable by the owner in the database until a hard delete (T27), so ALL-27 starts only from live people. `questions.answer` stays empty after answering |
 | AC-13 | Any of the actions above | It runs | One structured event with ids and counts only (E6) |
 
 ### Out of scope
@@ -168,7 +168,7 @@ Sensitive text uses `isSensitive` from `lib/ai/sensitive.ts`. The refusal says: 
 
 Readiness banner under the header, as in the mock-up: the label, a thin bar with `role="meter"`, `aria-valuenow`, `aria-label="How ready ideas for {name} are"`, and the step ("Answer 3 questions" links to `/people/{id}/questions`; capture step is plain text). Read the `dataviz` skill before drawing the bar.
 
-Each fact row: value, source line (with the captured page link when there is one), and a "More" menu labelled `More for {line}` with Edit, Turn off, Delete. Edit opens an inline form with value and category. Delete opens the existing Dialog pattern with the words "A later capture could suggest it again." Turned-off facts sit in a closed `<details>` "Turned off (n)" with Turn on and Delete. Empty state points to questions when they're on.
+Each fact row: value, source line (with the captured page link when there is one), and a pencil labelled `Edit {value}`, as in the mock-up, which opens an inline form with value, category, Save, Cancel, Turn off and Delete. (Changed from a "More" menu while building: the mock-up has the pencil, and it needs less UI.) Delete opens the existing Dialog pattern with the words "A later capture could suggest it again." Turned-off facts sit in a closed `<details>` "Turned off (n)" with Turn on and Delete. Empty state points to questions when they're on.
 
 - [ ] Update component tests first: groups and labels, source lines, ✨ only on unconfirmed AI, turned-off list, meter value and step, null readiness renders nothing. Run: fail.
 - [ ] Implement; run: pass. Update `e2e/what-we-know.spec.ts` for the new row actions (turn off, reload, still gone, `active=false`; delete, row gone). Commit.
@@ -212,8 +212,9 @@ Link words: "Answer 3 quick questions about {name}" ("1 quick question" for one)
 
 The riskiest things to check in review, each with the test that covers it.
 
-1. **A deleted fact really is gone and isn't re-created by the form:** a stale form re-submitting the same answer is a new answer, by design. pgTAP and `guided-questions.spec.ts`.
+1. **A deleted fact really is gone and isn't re-created by the form:** the form forgets answers after saving, because Next keeps a page's state for a later visit. `question-form.test.tsx`, `guided-questions.spec.ts`, pgTAP.
 2. **Another user's person through the SQL function:** `security invoker` plus the visibility check. pgTAP, user B.
 3. **Sensitive text in one of several answers saves nothing at all:** `parseAnswers` refuses before any write. `profile-rules.test.ts`, Playwright AC-8.
 4. **A question whose fact was turned off comes back; a skipped one doesn't:** `profile.test.ts`.
-5. **The email link for a person deleted after sending:** the round is skipped (T27) and the form is a 404, not an error. `guided-questions.spec.ts`.
+5. **The email link for a person deleted after sending:** the round is skipped (T27) and the form is a 404, not an error. `guided-questions.spec.ts`, through a real link.
+6. **The off switches (AC-11):** the rules and components are tested, but flipping a global setting would collide with parallel browser tests, so the pages were checked once by hand on local Supabase and recorded on the ticket. Same reason `round-engine.spec.ts` stays desktop-only.

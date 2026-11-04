@@ -7,15 +7,17 @@ import { PageTitle } from "@/components/app-shell/page-frame";
 import { appSettingInt } from "@/lib/app-settings";
 import { createClient } from "@/lib/supabase/server";
 import { todayForRequest } from "@/lib/today";
-import { getPerson, getWhatWeKnow } from "@/modules/concierge";
+import { getPerson, getProfile, type Db } from "@/modules/concierge";
 import {
+  deleteFactAction,
   deletePersonAction,
+  editFactAction,
   linkListAction,
   readCapturesAction,
   removeAddressAction,
-  removeFactAction,
   saveAddressAction,
   setBudgetAction,
+  setFactActiveAction,
   setOccasionEnabledAction,
   setPhotoAction,
   unlinkListAction,
@@ -28,6 +30,7 @@ import { Budgets } from "./budgets";
 import { DeletePerson } from "./delete-person";
 import { ListLink } from "./list-link";
 import { Occasions } from "./occasions";
+import { ReadinessBanner } from "./readiness";
 import { WhatWeKnow } from "./what-we-know";
 
 const text = (n: number | undefined) => (n === undefined ? "" : String(n));
@@ -52,10 +55,10 @@ export async function PersonView({
   if (!userId) redirect("/");
   const person = await getPerson(id, await todayForRequest());
   if (!person) notFound();
-  const [maxUploadBytes, px, knowledge] = await Promise.all([
+  const [maxUploadBytes, px, profile] = await Promise.all([
     appSettingInt("person_photo_max_upload_bytes"),
     appSettingInt("person_photo_px"),
-    getWhatWeKnow(person.id),
+    getProfile(supabase as unknown as Db, person.id, person.keepsList),
   ]);
 
   return (
@@ -79,6 +82,8 @@ export async function PersonView({
         </div>
       </header>
 
+      {profile.readiness && <ReadinessBanner personId={person.id} name={person.name} readiness={profile.readiness} />}
+
       <div className="flex flex-col gap-1.5">
         <PhotoPicker
           personId={person.id}
@@ -98,8 +103,11 @@ export async function PersonView({
       <WhatWeKnow
         personId={person.id}
         name={person.name}
-        knowledge={knowledge}
-        removeAction={removeFactAction}
+        knowledge={profile}
+        questionsHref={profile.openCount > 0 ? `/people/${person.id}/questions` : null}
+        editAction={editFactAction}
+        setActiveAction={setFactActiveAction}
+        deleteAction={deleteFactAction}
         readAction={readCapturesAction}
       />
 

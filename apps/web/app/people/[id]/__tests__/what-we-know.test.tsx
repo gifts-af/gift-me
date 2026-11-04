@@ -5,84 +5,170 @@ import { WhatWeKnow, type Knowledge } from "../what-we-know";
 
 const ok = { ok: true } as const;
 
-const empty: Knowledge = { told: [], ai: [], unread: 0 };
-const withAi: Knowledge = {
-  told: [],
-  ai: [
-    {
-      id: "f1",
-      category: "wants",
-      value: "a new rotary fly-tying vise",
-      sourceTitle: "Instagram",
-      sourceUrl: "https://www.instagram.com/p/x",
-    },
-    { id: "f2", category: "owns", value: "Owala water bottle", sourceTitle: null, sourceUrl: null },
-  ],
-  unread: 0,
-};
+const fact = (over: Partial<Knowledge["off"][number]> & { id: string; value: string }): Knowledge["off"][number] => ({
+  category: "interest",
+  source: "question",
+  sourceId: null,
+  confirmed: true,
+  sourceLabel: "You answered",
+  sourceTitle: null,
+  sourceUrl: null,
+  ...over,
+});
 
-function setup(knowledge: Knowledge) {
-  const remove = vi.fn(async (...a: [unknown, FormData]) => (void a, ok));
-  const read = vi.fn(async (...a: [unknown, FormData]) => (void a, ok));
-  render(<WhatWeKnow personId="p1" name="Dad" knowledge={knowledge} removeAction={remove} readAction={read} />);
-  return { remove, read };
+const aiFact = fact({
+  id: "f1",
+  category: "wants",
+  value: "a rotary vise",
+  source: "capture",
+  confirmed: false,
+  sourceLabel: "✨ AI suggestion",
+  sourceTitle: "Instagram",
+  sourceUrl: "https://www.instagram.com/p/x",
+});
+const askedFact = fact({ id: "f2", value: "fly fishing" });
+
+const knowledge = (over: Partial<Knowledge> = {}): Knowledge => ({
+  groups: [
+    { category: "interest", label: "Interests", facts: [askedFact] },
+    { category: "wants", label: "Wants", facts: [aiFact] },
+  ],
+  off: [],
+  unread: 0,
+  ...over,
+});
+
+function setup(k: Knowledge = knowledge(), questionsHref: string | null = "/people/p1/questions") {
+  const actions = {
+    editAction: vi.fn(async (...a: [unknown, FormData]) => (void a, ok as { ok: true } | { ok: false; error: string })),
+    setActiveAction: vi.fn(async (...a: [unknown, FormData]) => (void a, ok)),
+    deleteAction: vi.fn(async (...a: [unknown, FormData]) => (void a, ok)),
+    readAction: vi.fn(async (...a: [unknown, FormData]) => (void a, ok)),
+  };
+  render(<WhatWeKnow personId="p1" name="Dad" knowledge={k} questionsHref={questionsHref} {...actions} />);
+  return actions;
 }
 
 describe("WhatWeKnow", () => {
-  it("lists AI facts under their own heading, with where they came from", () => {
-    setup(withAi);
-    const group = screen.getByRole("region", { name: /AI suggestions from your captures/ });
-    expect(within(group).getByText("Wants: a new rotary fly-tying vise")).toBeInTheDocument();
-    expect(within(group).getByText("Already has: Owala water bottle")).toBeInTheDocument();
-    const link = within(group).getByRole("link", { name: /Instagram/ });
+  it("groups facts by category, each with its source (AC-7)", () => {
+    setup();
+    const interests = screen.getByRole("region", { name: "Interests" });
+    expect(within(interests).getByText("fly fishing")).toBeInTheDocument();
+    expect(within(interests).getByText("You answered")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Wants" })).getByText("a rotary vise")).toBeInTheDocument();
+  });
+
+  it("marks an AI suggestion and links to where it came from (D47)", () => {
+    setup();
+    const wants = screen.getByRole("region", { name: "Wants" });
+    expect(within(wants).getByText("✨ AI suggestion")).toBeInTheDocument();
+    const link = within(wants).getByRole("link", { name: /Instagram/ });
     expect(link).toHaveAttribute("href", "https://www.instagram.com/p/x");
     expect(link).toHaveAttribute("target", "_blank");
   });
 
-  it("hides What you've told us while it's empty", () => {
-    setup(withAi);
-    expect(screen.queryByText("What you've told us")).not.toBeInTheDocument();
+  it("points to the questions when there's nothing yet", () => {
+    setup(knowledge({ groups: [] }));
+    expect(screen.getByText(/Nothing yet/)).toBeInTheDocument();
   });
 
-  it("shows facts the buyer entered apart from the AI's", () => {
-    setup({ ...withAi, told: [{ id: "t1", category: "size", value: "large shirt" }] });
-    const told = screen.getByRole("region", { name: "What you've told us" });
-    expect(within(told).getByText("Size: large shirt")).toBeInTheDocument();
-    expect(within(told).queryByRole("button", { name: /Remove/ })).not.toBeInTheDocument();
+  it("edits a fact's value and category (AC-6)", async () => {
+    const user = userEvent.setup();
+    const { editAction } = setup();
+    await user.click(screen.getByRole("button", { name: "Edit fly fishing" }));
+    const value = screen.getByLabelText("Fact");
+    await user.clear(value);
+    await user.type(value, "dry-fly fishing");
+    await user.selectOptions(screen.getByLabelText("Kind"), "brand");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(editAction).toHaveBeenCalledOnce());
+    const form = editAction.mock.calls[0][1];
+    expect(form.get("id")).toBe("f2");
+    expect(form.get("value")).toBe("dry-fly fishing");
+    expect(form.get("category")).toBe("brand");
+    expect(form.get("personId")).toBe("p1");
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument());
   });
 
-  it("removes a fact", async () => {
-    const { remove } = setup(withAi);
-    await userEvent.click(screen.getByRole("button", { name: "Remove Wants: a new rotary fly-tying vise" }));
-    await waitFor(() => expect(remove).toHaveBeenCalled());
-    const form = remove.mock.calls[0][1];
-    expect([form.get("id"), form.get("personId")]).toEqual(["f1", "p1"]);
+  it("keeps the text and says why when an edit is refused (AC-8)", async () => {
+    const user = userEvent.setup();
+    const { editAction } = setup();
+    editAction.mockResolvedValueOnce({ ok: false, error: "Try wording it another way." } as never);
+    await user.click(screen.getByRole("button", { name: "Edit fly fishing" }));
+    const value = screen.getByLabelText("Fact");
+    await user.clear(value);
+    await user.type(value, "church");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Try wording it another way.");
+    expect(value).toHaveValue("church");
+    // In the open editor, where a phone is looking, not at the end of the section.
+    expect(value.closest("li")).toContainElement(alert);
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("says how to start when nothing is known", () => {
-    setup(empty);
-    expect(screen.getByText("Nothing yet. Capture a page about Dad with the extension and we'll learn from it.")).toBeInTheDocument();
+  it("turns a fact off (AC-5)", async () => {
+    const user = userEvent.setup();
+    const { setActiveAction } = setup();
+    await user.click(screen.getByRole("button", { name: "Edit fly fishing" }));
+    await user.click(screen.getByRole("button", { name: "Turn off" }));
+    await waitFor(() => expect(setActiveAction).toHaveBeenCalledOnce());
+    const form = setActiveAction.mock.calls[0][1];
+    expect(form.get("id")).toBe("f2");
+    expect(form.get("active")).toBe("false");
   });
 
-  it("offers to read one unread capture", async () => {
-    const { read } = setup({ ...withAi, unread: 1 });
-    expect(screen.getByText("1 capture hasn't been read.")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Read it now" }));
-    await waitFor(() => expect(read).toHaveBeenCalled());
-    expect(read.mock.calls[0][1].get("personId")).toBe("p1");
+  it("asks before deleting, and says a capture could bring it back (AC-4)", async () => {
+    const user = userEvent.setup();
+    const { deleteAction } = setup();
+    await user.click(screen.getByRole("button", { name: "Edit fly fishing" }));
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    expect(deleteAction).not.toHaveBeenCalled();
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText(/A later capture could suggest it again/)).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Delete for good" }));
+    await waitFor(() => expect(deleteAction).toHaveBeenCalledOnce());
+    expect(deleteAction.mock.calls[0][1].get("id")).toBe("f2");
   });
 
-  it("uses the plural for more than one", () => {
-    setup({ ...empty, unread: 2 });
+  it("lists turned-off facts apart, and turns one back on (AC-5)", async () => {
+    const user = userEvent.setup();
+    const { setActiveAction } = setup(knowledge({ off: [fact({ id: "f3", value: "golf" })] }));
+    expect(screen.getByText("Turned off (1)")).toBeInTheDocument();
+    await user.click(screen.getByText("Turned off (1)"));
+    await user.click(screen.getByRole("button", { name: "Turn on golf" }));
+    await waitFor(() => expect(setActiveAction).toHaveBeenCalledOnce());
+    expect(setActiveAction.mock.calls[0][1].get("active")).toBe("true");
+  });
+
+  it("deletes a turned-off fact without turning it on first (AC-4)", async () => {
+    const user = userEvent.setup();
+    const { deleteAction, setActiveAction } = setup(knowledge({ off: [fact({ id: "f3", value: "golf" })] }));
+    await user.click(screen.getByText("Turned off (1)"));
+    await user.click(screen.getByRole("button", { name: "Delete golf" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Delete for good" }));
+    await waitFor(() => expect(deleteAction).toHaveBeenCalledOnce());
+    expect(deleteAction.mock.calls[0][1].get("id")).toBe("f3");
+    expect(setActiveAction).not.toHaveBeenCalled();
+  });
+
+  it("offers to read unread captures", async () => {
+    const user = userEvent.setup();
+    const { readAction } = setup(knowledge({ unread: 2 }));
     expect(screen.getByText("2 captures haven't been read.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Read them now" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Read them now" }));
+    await waitFor(() => expect(readAction).toHaveBeenCalledOnce());
+    expect(readAction.mock.calls[0][1].get("personId")).toBe("p1");
   });
 
-  it("shows an error from Read now", async () => {
-    const remove = vi.fn(async () => ok);
-    const read = vi.fn(async () => ({ ok: false as const, error: "Couldn't read them. Try again." }));
-    render(<WhatWeKnow personId="p1" name="Dad" knowledge={{ ...empty, unread: 1 }} removeAction={remove} readAction={read} />);
-    await userEvent.click(screen.getByRole("button", { name: "Read it now" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't read them. Try again.");
+  it("shows a failed action's message", async () => {
+    const user = userEvent.setup();
+    const { setActiveAction } = setup();
+    setActiveAction.mockResolvedValueOnce({ ok: false, error: "That didn't go through." } as never);
+    await user.click(screen.getByRole("button", { name: "Edit fly fishing" }));
+    await user.click(screen.getByRole("button", { name: "Turn off" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("That didn't go through.");
   });
 });

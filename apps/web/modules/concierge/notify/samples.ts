@@ -25,6 +25,10 @@ export function sampleEmails(link: string): SampleEmail[] {
       list.push({ name: "heads_up-auto_buy", email: render(autoBuy, { ...linksTo(links, link), skip: link }) });
     } else {
       list.push({ name: kind, email: render(data, linksTo(links, link)) });
+      if (kind === "reminder") {
+        const asked = { ...SAMPLE_DATA.reminder.data, questions: 3 };
+        list.push({ name: "reminder-questions", email: render(asked, { ...linksTo(links, link), questions: link }) });
+      }
     }
   }
   return list;

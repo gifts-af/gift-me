@@ -245,6 +245,26 @@ describe("confirmActionLink", () => {
     });
   });
 
+  it("answer_questions: goes straight to the person's question form (ALL-26 AC-3)", async () => {
+    const store = await storeWithLink({ action: "answer_questions" });
+    store.links[0].roundId = "round-1";
+    store.roundPeople.set("round-1", "person-1");
+    expect(await confirmActionLink(TOKEN, OWNER, { store, now: NOW })).toEqual({
+      state: "done",
+      done: ACTIONS.answer_questions.done,
+      next: "/people/person-1/questions",
+      straight: true,
+    });
+  });
+
+  it("answer_questions: no round means a plain done page, not a broken redirect", async () => {
+    const store = await storeWithLink({ action: "answer_questions" });
+    expect(await confirmActionLink(TOKEN, OWNER, { store, now: NOW })).toEqual({
+      state: "done",
+      done: ACTIONS.answer_questions.done,
+    });
+  });
+
   it("open_person: no round or person means a plain done page", async () => {
     const store = await storeWithLink({ action: "open_person" });
     expect(await confirmActionLink(TOKEN, OWNER, { store, now: NOW })).toEqual({

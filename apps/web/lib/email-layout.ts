@@ -31,6 +31,8 @@ export type EmailParts = {
   paragraphs: string[];
   rows?: { title: string; detail?: string }[];
   button?: { label: string; url: string };
+  /** A plain link under the button, for something optional: never a second button. */
+  link?: { label: string; url: string };
   footer?: string;
 };
 
@@ -66,6 +68,10 @@ export function renderEmail(parts: EmailParts): { html: string; text: string } {
     (parts.button
       ? `<p style="margin:0 0 24px"><a href="${escapeHtml(parts.button.url)}" style="display:inline-block;background:${TEAL};color:#ffffff;text-decoration:none;font-weight:600;font-size:16px;line-height:20px;padding:14px 20px;border-radius:8px">${escapeHtml(parts.button.label)}</a></p>`
       : "") +
+    // Padding keeps it above the 44px tap minimum (ALL-60).
+    (parts.link
+      ? `<p style="margin:0 0 16px"><a href="${escapeHtml(parts.link.url)}" style="display:inline-block;color:${INK};font-size:16px;line-height:20px;padding:12px 0">${escapeHtml(parts.link.label)}</a></p>`
+      : "") +
     (parts.footer ? para(parts.footer, MUTED, 14) : "") +
     `</div></body></html>`;
 
@@ -75,6 +81,7 @@ export function renderEmail(parts: EmailParts): { html: string; text: string } {
     lines.push("");
   }
   if (parts.button) lines.push(`${parts.button.label}: ${parts.button.url}`);
+  if (parts.link) lines.push(`${parts.link.label}: ${parts.link.url}`);
   if (parts.footer) lines.push("", parts.footer);
 
   return { html, text: lines.join("\n") };
