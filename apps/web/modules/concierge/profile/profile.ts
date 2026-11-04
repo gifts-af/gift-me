@@ -127,10 +127,11 @@ async function readinessSettings(db: Db): Promise<ReadinessSettings> {
 /** Everything the person page shows about what we know (AC-1, AC-5, AC-7). */
 export async function getProfile(db: Db, personId: string, keepsList: boolean): Promise<Profile> {
   const concierge = db.schema("concierge");
-  const [facts, captures, open, meterOn] = await Promise.all([
+  const [facts, captures, skipped, max, meterOn] = await Promise.all([
     concierge.from("profile_facts").select(`${FACT_COLUMNS}, active`).eq("person_id", personId).order("created_at"),
     concierge.from("captures").select("id, status, page_title, source_url").eq("person_id", personId),
-    getOpenQuestions(db, personId),
+    skippedKeys(db, personId),
+    setting(db, "guided_questions_max"),
     setting(db, "readiness_meter_enabled"),
   ]);
   if (facts.error) throw new Error(`Couldn't load facts: ${facts.error.message}`);
@@ -147,6 +148,7 @@ export async function getProfile(db: Db, personId: string, keepsList: boolean): 
     };
   };
   const on = facts.data.filter((f) => f.active).map(shown);
+  const open = openQuestions(on.map((f) => f.category), skipped, max);
 
   let readiness: Readiness | null = null;
   if (meterOn === 1) {
@@ -190,7 +192,11 @@ export async function answerQuestions(db: Db, personId: string, answers: Answer[
   return { ok: true };
 }
 
-/** Skipped questions aren't asked again (AC-9, decision 45). */
+/**
+ * Skipped questions aren't asked again (AC-9, decision 45). The last choice wins,
+ * even over an earlier answer: a question comes back once its facts are deleted,
+ * and Skip has to work on it then. Skipping from a stale form keeps the facts.
+ */
 export async function skipQuestion(db: Db, personId: string, key: QuestionKey, prompt: string): Promise<SaveResult> {
   const { error } = await db
     .schema("concierge")
