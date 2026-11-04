@@ -148,3 +148,57 @@ describe("adding a gift from another store while signed in (ALL-10)", () => {
     expect(readStorePage).not.toHaveBeenCalled();
   });
 });
+
+describe("pasting a new link starts a fresh draft (ALL-91)", () => {
+  const BANANA = "https://bananarepublic.gap.com/browse/product.do?pid=795219002";
+  const WALMART = "https://www.walmart.com/ip/Apple-AirTag-2nd-Generation-1-Pack/19390102536";
+
+  async function paste(url) {
+    const field = screen.getByLabelText("Paste a link");
+    await userEvent.clear(field);
+    await userEvent.type(field, url);
+    await userEvent.click(screen.getByRole("button", { name: "Add" }));
+  }
+
+  it("clears the previous link's price and photo", async () => {
+    const readStorePage = vi.fn(async (url) =>
+      url.includes("bananarepublic")
+        ? { ok: true, product: { name: "Slim Chino", priceCents: 1997, imageUrl: "https://content.gapinc.com/chino.png" } }
+        : { ok: false, reason: "nothing_found" },
+    );
+    render(<AddGiftPanel onAdd={vi.fn()} readStorePage={readStorePage} />);
+
+    await paste(BANANA);
+    await screen.findByText(/\$19\.97 · found on bananarepublic\.gap\.com/);
+
+    await paste(WALMART);
+    await waitFor(() => expect(screen.getByLabelText("Price")).toHaveFocus());
+    expect(screen.getByLabelText("Gift name")).toHaveValue("Apple AirTag 2nd Generation 1 Pack");
+    expect(screen.getByLabelText("Price")).toHaveValue("");
+    expect(screen.getByLabelText(/Image URL/)).toHaveValue("");
+  });
+
+  it("clears a price typed before the new link", async () => {
+    render(<AddGiftPanel onAdd={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "Add by hand" }));
+    await userEvent.type(screen.getByLabelText("Price"), "45");
+    await userEvent.type(screen.getByLabelText(/Image URL/), "https://example.com/old.jpg");
+
+    await paste(WALMART);
+    await waitFor(() => expect(screen.getByLabelText("Price")).toHaveFocus());
+    expect(screen.getByLabelText("Price")).toHaveValue("");
+    expect(screen.getByLabelText(/Image URL/)).toHaveValue("");
+  });
+
+  it("still leaves the fields alone when a link can't be read", async () => {
+    render(<AddGiftPanel onAdd={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "Add by hand" }));
+    await userEvent.type(screen.getByLabelText("Gift name"), "Concert tickets");
+    await userEvent.type(screen.getByLabelText("Price"), "80");
+
+    await paste("not a link");
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.getByLabelText("Gift name")).toHaveValue("Concert tickets");
+    expect(screen.getByLabelText("Price")).toHaveValue("80");
+  });
+});

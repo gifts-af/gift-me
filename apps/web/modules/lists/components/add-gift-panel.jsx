@@ -143,12 +143,15 @@ export default function AddGiftPanel({ onAdd, readStorePage }) {
       return
     }
 
+    // A new link is a new gift: start from an empty draft so nothing from an
+    // earlier link or typed value survives, including fields added later (ALL-91).
     const { product } = result
-    setDraft((prev) => ({
+    setDraft({
+      ...EMPTY_DRAFT,
       name: product.name ?? '',
-      price: product.priceCents === null ? prev.price : centsToInputValue(product.priceCents),
+      price: product.priceCents === null ? '' : centsToInputValue(product.priceCents),
       imageUrl: product.imageUrl ?? '',
-    }))
+    })
     setMeta({ productUrl: product.productUrl, asin: product.asin, source: product.source })
     setErrors({})
 
