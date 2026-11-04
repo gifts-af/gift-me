@@ -114,19 +114,7 @@ export function WhatWeKnow({
           <p className="text-[13px] text-muted-foreground">These don&apos;t shape ideas, and we won&apos;t suggest them again.</p>
           <ul className="flex flex-col divide-y divide-border">
             {off.map((f) => (
-              <li key={f.id} className="flex flex-wrap items-center justify-between gap-x-3 py-1">
-                <p className="min-w-0 break-words text-[15px] text-muted-foreground">{f.value}</p>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  disabled={busy}
-                  aria-label={`Turn on ${f.value}`}
-                  onClick={() => void run(setActiveAction, { id: f.id, active: "true" })}
-                >
-                  Turn on
-                </Button>
-              </li>
+              <OffRow key={f.id} fact={f} busy={busy} run={run} setActiveAction={setActiveAction} deleteAction={deleteAction} />
             ))}
           </ul>
         </details>
@@ -149,6 +137,86 @@ export function WhatWeKnow({
         </p>
       )}
     </section>
+  );
+}
+
+function ConfirmDelete({
+  open,
+  busy,
+  onOpenChange,
+  onConfirm,
+}: {
+  open: boolean;
+  busy: boolean;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: () => Promise<void>;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Delete this?</DialogTitle>
+          <DialogDescription>
+            It&apos;s erased for good. A later capture could suggest it again. To keep it from coming back, keep it turned off instead.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-2">
+          <Button type="button" variant="destructive" disabled={busy} onClick={() => void onConfirm()}>
+            Delete for good
+          </Button>
+          <Button type="button" variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function OffRow({
+  fact,
+  busy,
+  run,
+  setActiveAction,
+  deleteAction,
+}: { fact: ProfileFact; busy: boolean; run: Run } & Pick<Actions, "setActiveAction" | "deleteAction">) {
+  const [confirming, setConfirming] = useState(false);
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-x-3 py-1">
+      <p className="min-w-0 break-words text-[15px] text-muted-foreground">{fact.value}</p>
+      <div className="flex gap-1">
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={busy}
+          aria-label={`Turn on ${fact.value}`}
+          onClick={() => void run(setActiveAction, { id: fact.id, active: "true" })}
+        >
+          Turn on
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="text-destructive"
+          disabled={busy}
+          aria-label={`Delete ${fact.value}`}
+          onClick={() => setConfirming(true)}
+        >
+          Delete
+        </Button>
+      </div>
+      <ConfirmDelete
+        open={confirming}
+        busy={busy}
+        onOpenChange={setConfirming}
+        onConfirm={async () => {
+          await run(deleteAction, { id: fact.id });
+          setConfirming(false);
+        }}
+      />
+    </li>
   );
 }
 
@@ -252,32 +320,15 @@ function FactRow({
           Delete
         </Button>
       </div>
-      <Dialog open={confirming} onOpenChange={setConfirming}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete this?</DialogTitle>
-            <DialogDescription>
-              It&apos;s erased for good. A later capture could suggest it again. To keep it from coming back, turn it off instead.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-2">
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={busy}
-              onClick={async () => {
-                await run(deleteAction, { id: fact.id });
-                setConfirming(false);
-              }}
-            >
-              Delete for good
-            </Button>
-            <Button type="button" variant="outline" disabled={busy} onClick={() => setConfirming(false)}>
-              Cancel
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDelete
+        open={confirming}
+        busy={busy}
+        onOpenChange={setConfirming}
+        onConfirm={async () => {
+          await run(deleteAction, { id: fact.id });
+          setConfirming(false);
+        }}
+      />
     </li>
   );
 }

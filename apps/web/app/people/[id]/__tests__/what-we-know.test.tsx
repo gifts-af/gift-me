@@ -137,6 +137,18 @@ describe("WhatWeKnow", () => {
     expect(setActiveAction.mock.calls[0][1].get("active")).toBe("true");
   });
 
+  it("deletes a turned-off fact without turning it on first (AC-4)", async () => {
+    const user = userEvent.setup();
+    const { deleteAction, setActiveAction } = setup(knowledge({ off: [fact({ id: "f3", value: "golf" })] }));
+    await user.click(screen.getByText("Turned off (1)"));
+    await user.click(screen.getByRole("button", { name: "Delete golf" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Delete for good" }));
+    await waitFor(() => expect(deleteAction).toHaveBeenCalledOnce());
+    expect(deleteAction.mock.calls[0][1].get("id")).toBe("f3");
+    expect(setActiveAction).not.toHaveBeenCalled();
+  });
+
   it("offers to read unread captures", async () => {
     const user = userEvent.setup();
     const { readAction } = setup(knowledge({ unread: 2 }));

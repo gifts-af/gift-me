@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // ones; the save is faked.
 const importPeople = vi.hoisted(() => vi.fn());
 const revalidatePath = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/app-settings", () => ({ appSettingInt: async () => 20 }));
+vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({}) }));
 vi.mock("next/cache", () => ({ revalidatePath }));
 vi.mock("@/lib/today", () => ({ todayForRequest: async () => "2026-11-01" }));
 vi.mock("@/modules/concierge", async () => {
