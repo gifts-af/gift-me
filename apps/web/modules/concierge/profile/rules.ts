@@ -7,6 +7,13 @@ import { isSensitive } from "@/lib/ai/sensitive";
 /** C-8 and decision 51: typed text follows the same rule as what the AI reads. */
 export const SENSITIVE_REFUSAL = "We don't keep notes about health, religion, politics or similar. Try wording it another way.";
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Ids come back from forms, so they're checked before reaching a query or an event (E4, E6). */
+export function isId(value: string): boolean {
+  return UUID.test(value);
+}
+
 export type Answer = { key: QuestionKey; prompt: string; category: FactCategory; values: string[] };
 export type ParsedAnswers = { ok: true; answers: Answer[] } | { ok: false; error: string; key?: QuestionKey };
 

@@ -99,8 +99,13 @@ describe("WhatWeKnow", () => {
     await user.clear(value);
     await user.type(value, "church");
     await user.click(screen.getByRole("button", { name: "Save" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Try wording it another way.");
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Try wording it another way.");
     expect(value).toHaveValue("church");
+    // In the open editor, where a phone is looking, not at the end of the section.
+    expect(value.closest("li")).toContainElement(alert);
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("turns a fact off (AC-5)", async () => {

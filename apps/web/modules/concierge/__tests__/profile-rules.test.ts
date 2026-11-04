@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SENSITIVE_REFUSAL, parseAnswers, parseFactEdit } from "../profile/rules";
+import { SENSITIVE_REFUSAL, isId, parseAnswers, parseFactEdit } from "../profile/rules";
 
 describe("parseAnswers", () => {
   it("leaves out questions left blank, and splits the rest into facts", () => {
@@ -39,6 +39,14 @@ describe("parseAnswers", () => {
       key: "avoid",
       error: SENSITIVE_REFUSAL,
     });
+  });
+});
+
+describe("isId", () => {
+  it("accepts a uuid and nothing else", () => {
+    expect(isId("44c8b69e-2232-4a2b-b970-5af24cefcbc5")).toBe(true);
+    expect(isId("")).toBe(false);
+    expect(isId("44c8b69e' or 1=1")).toBe(false);
   });
 });
 

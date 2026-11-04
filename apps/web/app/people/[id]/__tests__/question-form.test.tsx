@@ -4,6 +4,9 @@ import userEvent from "@testing-library/user-event";
 import { GUIDED_QUESTIONS } from "@gifts-af/core";
 import { QuestionForm } from "../questions/question-form";
 
+const push = vi.hoisted(() => vi.fn());
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+
 const questions = GUIDED_QUESTIONS.slice(0, 2);
 
 function setup() {
@@ -27,6 +30,17 @@ describe("QuestionForm", () => {
     expect(form.get("personId")).toBe("p1");
     expect(form.get("interests")).toBe("golf, chess");
     expect(form.get("wants")).toBe("");
+  });
+
+  it("forgets the answers and goes to the person's page after saving", async () => {
+    const user = userEvent.setup();
+    const { answerAction } = setup();
+    await user.type(screen.getByLabelText(questions[0].prompt), "golf");
+    await user.click(screen.getByRole("button", { name: "Save answers" }));
+    await waitFor(() => expect(answerAction).toHaveBeenCalledOnce());
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/people/p1"));
+    expect(screen.getByLabelText(questions[0].prompt)).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Save answers" })).toBeEnabled();
   });
 
   it("keeps every answer and says why when refused (AC-8)", async () => {

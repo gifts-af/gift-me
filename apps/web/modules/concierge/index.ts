@@ -39,7 +39,7 @@ export {
   updateFact,
 } from "./profile/profile";
 export type { ActiveFact, Db, Profile, ProfileFact, Readiness } from "./profile/profile";
-export { SENSITIVE_REFUSAL, parseAnswers, parseFactEdit } from "./profile/rules";
+export { SENSITIVE_REFUSAL, isId, parseAnswers, parseFactEdit } from "./profile/rules";
 export type { Answer } from "./profile/rules";
 
 // People, occasions and budgets (ALL-21). Birthday and other occasion rules

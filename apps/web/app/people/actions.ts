@@ -13,6 +13,7 @@ import {
   answerQuestions,
   deleteFact,
   importPeople,
+  isId,
   parseAnswers,
   parseFactEdit,
   setFactActive,
@@ -158,35 +159,41 @@ const db = async () => (await createClient()) as unknown as Db;
 export async function editFactAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
   const parsed = parseFactEdit({ category: text(formData, "category"), value: text(formData, "value") });
   if (!parsed.ok) return parsed;
+  if (!isId(text(formData, "id"))) return BAD_FORM;
   const edit = { category: parsed.category, value: parsed.value };
   return refresh(await updateFact(await db(), text(formData, "id"), edit), text(formData, "personId"));
 }
 
 export async function setFactActiveAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
+  if (!isId(text(formData, "id"))) return BAD_FORM;
   const active = text(formData, "active") === "true";
   return refresh(await setFactActive(await db(), text(formData, "id"), active), text(formData, "personId"));
 }
 
 export async function deleteFactAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
+  if (!isId(text(formData, "id"))) return BAD_FORM;
   return refresh(await deleteFact(await db(), text(formData, "id")), text(formData, "personId"));
 }
 
 // Guided questions (ALL-26): fields are named after each question's key.
 export async function answerQuestionsAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
   const personId = text(formData, "personId");
+  if (!isId(personId)) return BAD_FORM;
   const fields = Object.fromEntries(GUIDED_QUESTIONS.map((q) => [q.key, text(formData, q.key)]));
   const parsed = parseAnswers(fields, await appSettingInt("guided_answer_max_facts"));
   if (!parsed.ok) return parsed;
   const result = await answerQuestions(await db(), personId, parsed.answers);
-  if (!result.ok) return result;
-  revalidatePath(`/people/${personId}`);
-  redirect(`/people/${personId}`);
+  if (result.ok) {
+    revalidatePath(`/people/${personId}`);
+    revalidatePath(`/people/${personId}/questions`);
+  }
+  return result;
 }
 
 export async function skipQuestionAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
   const personId = text(formData, "personId");
   const question = GUIDED_QUESTIONS.find((q) => q.key === text(formData, "key"));
-  if (!question) return BAD_FORM;
+  if (!question || !isId(personId)) return BAD_FORM;
   const result = await skipQuestion(await db(), personId, question.key, question.prompt);
   if (result.ok) {
     revalidatePath(`/people/${personId}`);

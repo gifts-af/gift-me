@@ -177,7 +177,8 @@ export async function answerQuestions(db: Db, personId: string, answers: Answer[
     .rpc("answer_questions", { p_person_id: personId, p_answers: answers });
   if (error) {
     if (error.code === POSTGRES_CHECK) return { ok: false, error: "One of those is too long. Shorten it and try again." };
-    if (error.code !== POSTGRES_NO_DATA) logEvent("questions.answer_failed", { person_id: personId, code: error.code });
+    if (error.code === POSTGRES_NO_DATA) return { ok: false, error: "This person is no longer on your list." };
+    logEvent("questions.answer_failed", { person_id: personId, code: error.code });
     return { ok: false, error: "Your answers didn't save. Try again." };
   }
   logEvent("questions.answered", {

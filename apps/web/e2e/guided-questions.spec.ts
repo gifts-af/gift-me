@@ -87,6 +87,14 @@ test("a new person gets questions, and answering raises the meter (AC-1, AC-2)",
   await expect(page.getByRole("region", { name: "Interests" }).getByText("crime podcasts")).toBeVisible();
   await expect(page.getByRole("link", { name: "Answer 4 questions" })).toBeVisible();
 
+  // Following the next step: a live form, nothing left over, the answered ones gone.
+  await page.getByRole("link", { name: "Answer 4 questions" }).click();
+  await expect(page).toHaveURL(new RegExp(`/people/${personId}/questions$`));
+  await expect(box(page, INTERESTS)).toHaveCount(0);
+  await expect(page.getByRole("textbox")).toHaveCount(4);
+  await expect(page.getByRole("button", { name: "Save answers" })).toBeEnabled();
+  for (const input of await page.getByRole("textbox").all()) await expect(input).toHaveValue("");
+
   expect(await facts(personId)).toEqual([
     { category: "interest", value: "fly fishing", source: "question", confirmed: true },
     { category: "interest", value: "crime podcasts", source: "question", confirmed: true },
@@ -178,6 +186,17 @@ async function questionLink(personId: string): Promise<{ token: string; hash: st
   });
   return { token, hash };
 }
+
+test("a link to someone deleted since the email went out ends at a 404, not an error (review focus 5)", async ({ page }, info) => {
+  const personId = await newPerson(`Sam D ${info.project.name}`);
+  const { token } = await questionLink(personId);
+  await rest(`people?id=eq.${personId}`, { method: "PATCH", body: JSON.stringify({ deleted_at: new Date().toISOString() }) });
+  await signIn(page);
+  await page.goto(`/a/${token}`);
+  await page.getByRole("button", { name: "Answer the questions" }).click();
+  await expect(page.getByText(/could not be found|couldn't find|404/i).first()).toBeVisible();
+  await expect(page.getByRole("textbox")).toHaveCount(0);
+});
 
 test("the form works from a signed email link (AC-3)", async ({ page }, info) => {
   const personId = await newPerson(`Sam L ${info.project.name}`);

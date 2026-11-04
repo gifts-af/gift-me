@@ -17,7 +17,7 @@ export type Knowledge = Pick<Profile, "groups" | "off" | "unread">;
 
 type Action = (previous: null, formData: FormData) => Promise<SaveResult>;
 
-type Run = (action: Action, fields: Record<string, string>) => Promise<boolean>;
+type Run = (action: Action, fields: Record<string, string>, onError?: (message: string) => void) => Promise<boolean>;
 
 type Actions = {
   /** `editFactAction` */
@@ -50,7 +50,7 @@ export function WhatWeKnow({
   const [error, setError] = useState<string | null>(null);
   const { groups, off, unread } = knowledge;
 
-  const run: Run = async (action, fields) => {
+  const run: Run = async (action, fields, onError = setError) => {
     if (busy) return false;
     setBusy(true);
     setError(null);
@@ -64,7 +64,7 @@ export function WhatWeKnow({
       result = { ok: false, error: "That didn't work. Try again." };
     }
     setBusy(false);
-    if (!result.ok) setError(result.error);
+    if (!result.ok) onError(result.error);
     return result.ok;
   };
 
@@ -157,7 +157,7 @@ function ConfirmDelete({
         <DialogHeader>
           <DialogTitle>Delete this?</DialogTitle>
           <DialogDescription>
-            It&apos;s erased for good. A later capture could suggest it again. To keep it from coming back, keep it turned off instead.
+            It&apos;s removed from their profile for good. A later capture could suggest it again. To keep it from coming back, keep it turned off instead.
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-col gap-2">
@@ -232,6 +232,8 @@ function FactRow({
   const [value, setValue] = useState(fact.value);
   const [category, setCategory] = useState<string>(fact.category);
   const [confirming, setConfirming] = useState(false);
+  // Shown in the editor: the section's own message can be a screen away on a phone.
+  const [error, setError] = useState<string | null>(null);
 
   if (!editing) {
     return (
@@ -262,6 +264,7 @@ function FactRow({
           onClick={() => {
             setValue(fact.value);
             setCategory(fact.category);
+            setError(null);
             setEditing(true);
           }}
         >
@@ -293,18 +296,33 @@ function FactRow({
           ))}
         </select>
       </div>
+      {error && (
+        <p role="alert" className="text-[13px] text-destructive">
+          {error}
+        </p>
+      )}
       <div className="flex flex-wrap gap-2">
         <Button
           type="button"
           size="sm"
           disabled={busy}
           onClick={async () => {
-            if (await run(editAction, { id: fact.id, value, category })) setEditing(false);
+            setError(null);
+            if (await run(editAction, { id: fact.id, value, category }, setError)) setEditing(false);
           }}
         >
           Save
         </Button>
-        <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => setEditing(false)}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={busy}
+          onClick={() => {
+            setError(null);
+            setEditing(false);
+          }}
+        >
           Cancel
         </Button>
         <Button
@@ -312,7 +330,10 @@ function FactRow({
           variant="outline"
           size="sm"
           disabled={busy}
-          onClick={() => void run(setActiveAction, { id: fact.id, active: "false" })}
+          onClick={() => {
+            setError(null);
+            void run(setActiveAction, { id: fact.id, active: "false" }, setError);
+          }}
         >
           Turn off
         </Button>
@@ -325,7 +346,7 @@ function FactRow({
         busy={busy}
         onOpenChange={setConfirming}
         onConfirm={async () => {
-          await run(deleteAction, { id: fact.id });
+          await run(deleteAction, { id: fact.id }, setError);
           setConfirming(false);
         }}
       />

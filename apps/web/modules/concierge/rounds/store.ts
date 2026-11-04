@@ -282,8 +282,9 @@ export function createSupabaseRoundStore(): RoundStore {
       if (ideas.error) fail("Loading the round's ideas failed", ideas.error);
 
       // A bonus in the email: failing to count them mustn't hold up a gift reminder.
-      const open = await getOpenQuestions(db, round.person_id).catch(() => {
-        logEvent("round_questions_failed", { round_id: roundId, person_id: round.person_id });
+      const open = await getOpenQuestions(db, round.person_id).catch((err: unknown) => {
+        const error = err instanceof Error ? err.name : "unknown";
+        logEvent("round_questions_failed", { round_id: roundId, person_id: round.person_id, error });
         return [];
       });
 

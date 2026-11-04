@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { unstable_rethrow } from "next/navigation";
+import { useRouter } from "next/navigation";
 import type { GuidedQuestion } from "@gifts-af/core";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -22,7 +22,7 @@ export function QuestionForm({
   personId: string;
   name: string;
   questions: readonly GuidedQuestion[];
-  /** `answerQuestionsAction`: redirects to the person's page when it saves. */
+  /** `answerQuestionsAction` */
   answerAction: Action;
   /** `skipQuestionAction` */
   skipAction: Action;
@@ -30,29 +30,33 @@ export function QuestionForm({
   const [text, setText] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ message: string; key?: string } | null>(null);
+  const router = useRouter();
 
-  async function run(action: Action, form: FormData) {
-    if (busy) return;
+  async function run(action: Action, form: FormData): Promise<boolean> {
+    if (busy) return false;
     setBusy(true);
     setError(null);
     form.set("personId", personId);
     let result: Result;
     try {
       result = await action(null, form);
-    } catch (e) {
-      // A successful save redirects from the server, which reaches us as a throw.
-      unstable_rethrow(e);
+    } catch {
       result = { ok: false, error: "That didn't go through. Try again." };
     }
     setBusy(false);
     if (!result.ok) setError({ message: result.error, key: result.key });
+    return result.ok;
   }
 
-  function save(event: React.FormEvent) {
+  async function save(event: React.FormEvent) {
     event.preventDefault();
     const form = new FormData();
     for (const q of questions) form.set(q.key, text[q.key] ?? "");
-    void run(answerAction, form);
+    if (!(await run(answerAction, form))) return;
+    // Next keeps this page's state for a later visit, so forget the answers: a
+    // fact deleted later mustn't be waiting here, one tap from coming back.
+    setText({});
+    router.push(`/people/${personId}`);
   }
 
   function skip(key: string) {
@@ -62,7 +66,7 @@ export function QuestionForm({
   }
 
   return (
-    <form onSubmit={save} className="flex flex-col gap-6">
+    <form onSubmit={(e) => void save(e)} className="flex flex-col gap-6">
       <p className="text-[15px] text-muted-foreground">
         Answer what you can about {name}. Only you see these, and you can change them later.
       </p>
