@@ -120,7 +120,9 @@ test("facts show by category with their source, and can be turned off, turned on
   // Delete (AC-4): the row is really gone, and so is it from what ideas read.
   await page.getByRole("button", { name: "Delete", exact: true }).click();
   await page.getByRole("button", { name: "Delete for good" }).click();
-  await expect(page.getByRole("region", { name: "Wants" })).toHaveCount(0);
+  // By text, and with the dialog gone: an open dialog hides the page from role queries.
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByText("a rotary vise")).toHaveCount(0);
   await page.reload();
   await expect(page.getByText("a rotary vise")).toHaveCount(0);
   const rows = await rest(`profile_facts?id=eq.${vise}&select=id`, { profile: "concierge" });
