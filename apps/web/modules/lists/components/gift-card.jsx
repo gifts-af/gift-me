@@ -1,5 +1,6 @@
 import { X } from 'lucide-react'
 import { useState } from 'react'
+import { storeName } from '@/modules/lists/lib/product-link.js'
 import { formatCents } from '@/modules/lists/lib/format.js'
 
 /**
@@ -56,7 +57,7 @@ export default function GiftCard({ gift, onRemove, onView, actions }) {
             })
           }
         >
-          View on Amazon
+          View on {storeName(gift.productUrl)}
           <span className="sr-only"> (opens in a new tab)</span>
         </a>
       )}

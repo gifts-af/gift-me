@@ -1,5 +1,5 @@
 import { useLayoutEffect, useRef, useState } from 'react'
-import { lookupAmazonProduct } from '@/modules/lists/lib/amazon.js'
+import { lookupProductLink, storeName } from '@/modules/lists/lib/product-link.js'
 import { centsToInputValue, formatCents, parsePriceToCents } from '@/modules/lists/lib/format.js'
 import LookupStatus from './lookup-status.jsx'
 import { buttonClass, inputClass, labelClass } from './ui.jsx'
@@ -41,11 +41,34 @@ function FieldError({ id, children }) {
 }
 
 /**
+ * Merges what the server read off a store page (ALL-10) into the link-only
+ * result. The page's name beats the one guessed from the link.
+ */
+function withStorePage(result, page) {
+  const product = {
+    ...result.product,
+    name: page.name ?? result.product.name,
+    priceCents: page.priceCents,
+    imageUrl: page.imageUrl,
+    source: 'store-page',
+    pageRead: true,
+  }
+  const missing = []
+  if (!product.name) missing.push('name')
+  if (product.priceCents === null) missing.push('priceCents')
+  return { status: missing.length === 0 ? 'complete' : 'partial', product, missing, error: null }
+}
+
+/**
  * Paste a link and tap Add (mock-up "list"): a full match shows as a card to
  * confirm; a partial one opens the details, prefilled, at the missing field.
  * "Add by hand" opens the same details empty.
+ *
+ * `readStorePage(url)`, when given (signed in only), reads a non-Amazon
+ * store's page on the server for its name, price and photo. Without it, or
+ * when the store blocks us, only what's in the link is used.
  */
-export default function AddGiftPanel({ onAdd }) {
+export default function AddGiftPanel({ onAdd, readStorePage }) {
   const [url, setUrl] = useState('')
   // Every field is seeded with '' and never undefined, so React never has to
   // switch an input from uncontrolled to controlled when autofill lands.
@@ -91,13 +114,22 @@ export default function AddGiftPanel({ onAdd }) {
 
     let result
     try {
-      result = await lookupAmazonProduct(url)
+      result = await lookupProductLink(url)
     } catch {
       result = {
         status: 'error',
         product: null,
         missing: [],
         error: { code: 'NETWORK_ERROR', message: 'That lookup failed. Try again.' },
+      }
+    }
+
+    if (result.status !== 'error' && result.product.source === 'store-url' && readStorePage) {
+      try {
+        const page = await readStorePage(result.product.productUrl)
+        if (page?.ok) result = withStorePage(result, page.product)
+      } catch {
+        // Keep the link-only result: the person can still add it by hand.
       }
     }
 
@@ -177,16 +209,16 @@ export default function AddGiftPanel({ onAdd }) {
       <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-3">
         <div className="flex items-end gap-3">
           <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-            <label htmlFor="amazon-url" className={labelClass}>
-              Paste an Amazon link
+            <label htmlFor="product-url" className={labelClass}>
+              Paste a link
             </label>
             <input
-              id="amazon-url"
+              id="product-url"
               ref={urlRef}
               type="text"
               inputMode="url"
               autoComplete="off"
-              placeholder="amazon.com/dp/…"
+              placeholder="amazon.com, walmart.com, target.com…"
               className={inputClass}
               value={url}
               onChange={(event) => setUrl(event.target.value)}
@@ -219,7 +251,7 @@ export default function AddGiftPanel({ onAdd }) {
             <div className="min-w-0 flex-1">
               <p className="text-[15px] font-semibold [overflow-wrap:anywhere]">{draft.name}</p>
               <p className="num text-[13px] text-muted-foreground">
-                {formatCents(parsePriceToCents(draft.price) ?? 0)} · found on Amazon
+                {formatCents(parsePriceToCents(draft.price) ?? 0)} · found on {storeName(meta.productUrl)}
               </p>
               <button type="button" className="text-[13px] text-muted-foreground underline underline-offset-[3px]" onClick={() => setMode('details')}>
                 Edit details

@@ -1,6 +1,6 @@
 import GiftCard from './gift-card.jsx'
 
-const DEFAULT_EMPTY_MESSAGE = 'Nothing here yet. Paste an Amazon link above, or add a gift by hand.'
+const DEFAULT_EMPTY_MESSAGE = 'Nothing here yet. Paste a link from any store above, or add a gift by hand.'
 
 // Without onRemove the list is read-only, as on a shared list. onView and
 // renderActions pass through to each card (see GiftCard).

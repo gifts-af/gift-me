@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { saveList } from '@/modules/lists/actions/lists'
+import { readStorePage } from '@/modules/lists/actions/store-page'
 import AddGiftPanel from './add-gift-panel.jsx'
 import GiftList from './gift-list.jsx'
 import GiftSummary from './gift-summary.jsx'
@@ -288,7 +289,8 @@ export default function GiftApp({ initial }) {
           <GiftSummary gifts={gifts} />
         </div>
 
-        <AddGiftPanel onAdd={addGift} />
+        {/* Only signed-in people can have our server read a store page (ALL-10). */}
+        <AddGiftPanel onAdd={addGift} readStorePage={isGuest ? undefined : readStorePage} />
 
         <section aria-labelledby="list-heading" className="pt-2">
           <GiftList gifts={gifts} onRemove={removeGift} />

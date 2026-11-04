@@ -3,6 +3,7 @@ import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("@/modules/lists/actions/lists", () => ({ saveList: vi.fn() }));
+vi.mock("@/modules/lists/actions/store-page", () => ({ readStorePage: vi.fn() }));
 const { saveList } = await import("@/modules/lists/actions/lists");
 const { default: GiftApp } = await import("../gift-app.jsx");
 

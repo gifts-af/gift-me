@@ -1,3 +1,4 @@
+import { storeName } from '@/modules/lists/lib/product-link.js'
 import Modal from './modal.jsx'
 import { buttonClass } from './ui.jsx'
 
@@ -22,7 +23,7 @@ export default function ViewDialog({ gift, onClose }) {
         rel="noopener noreferrer"
         onClick={onClose}
       >
-        Open on Amazon, and I’ll claim it if I buy it
+        Open on {storeName(gift.productUrl)}, and I’ll claim it if I buy it
         <span className="sr-only"> (opens in a new tab)</span>
       </a>
       <button type="button" className={`${buttonClass.link} self-center`} onClick={onClose}>
