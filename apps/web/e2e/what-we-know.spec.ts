@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { localSupabase } from "./local-supabase";
+import { phoneLayoutProblems } from "./phone-layout";
 import { TEST_USER } from "./test-user";
 
 // ALL-25: a person's page lists the AI's suggestions from captures apart from
@@ -70,27 +71,60 @@ async function signIn(page: Page) {
   await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
 }
 
-test("AI suggestions show apart and can be removed for good", async ({ page }, testInfo) => {
+test("facts show by category with their source, and can be turned off, turned on and deleted", async ({ page }, testInfo) => {
   // The projects run at once as the same user, so each gets its own Dad.
   const { personId, vise } = await seed(`Dad ${testInfo.project.name}`);
   await signIn(page);
   await page.goto(`/people/${personId}`);
 
-  const ai = page.getByRole("region", { name: /AI suggestions from your captures/ });
-  await expect(ai.getByText("Wants: a new rotary fly-tying vise")).toBeVisible();
-  await expect(ai.getByText("Already has: Owala water bottle")).toBeVisible();
-  await expect(ai.getByRole("link", { name: /Instagram/ }).first()).toHaveAttribute("href", "https://www.instagram.com/p/x");
+  const wants = page.getByRole("region", { name: "Wants" });
+  await expect(wants.getByText("a new rotary fly-tying vise")).toBeVisible();
+  await expect(wants.getByText("✨ AI suggestion")).toBeVisible();
+  await expect(wants.getByRole("link", { name: /Instagram/ })).toHaveAttribute("href", "https://www.instagram.com/p/x");
+  await expect(page.getByRole("region", { name: "Already has" }).getByText("Owala water bottle")).toBeVisible();
   await expect(page.getByText("1 capture hasn't been read.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Read it now" })).toBeVisible();
+  expect(await phoneLayoutProblems(page)).toEqual([]);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);
 
-  await ai.getByRole("button", { name: "Remove Wants: a new rotary fly-tying vise" }).click();
-  await expect(page.getByText("Wants: a new rotary fly-tying vise")).toHaveCount(0);
+  // Turn off (AC-5): gone from the profile, kept so the AI won't suggest it again.
+  await wants.getByRole("button", { name: "Edit a new rotary fly-tying vise" }).click();
+  await page.getByRole("button", { name: "Turn off" }).click();
+  await expect(page.getByRole("region", { name: "Wants" })).toHaveCount(0);
   await page.reload();
-  await expect(page.getByText("Already has: Owala water bottle")).toBeVisible();
-  await expect(page.getByText("Wants: a new rotary fly-tying vise")).toHaveCount(0);
-
+  await expect(page.getByRole("region", { name: "Wants" })).toHaveCount(0);
+  await expect(page.getByText("Turned off (1)")).toBeVisible();
   const [row] = await rest(`profile_facts?id=eq.${vise}&select=active`, { profile: "concierge" });
   expect(row.active).toBe(false);
+
+  // Turn it back on.
+  await page.getByText("Turned off (1)").click();
+  await page.getByRole("button", { name: "Turn on a new rotary fly-tying vise" }).click();
+  await expect(page.getByRole("region", { name: "Wants" }).getByText("a new rotary fly-tying vise")).toBeVisible();
+
+  // Edit (AC-6): the new words stick, and the buyer has now vouched for it.
+  await page.getByRole("button", { name: "Edit a new rotary fly-tying vise" }).click();
+  await page.getByLabel("Fact").fill("a rotary vise");
+  await page.getByRole("region", { name: "What we know" }).getByRole("button", { name: "Save" }).click();
+  await expect(page.getByRole("region", { name: "Wants" }).getByText("a rotary vise")).toBeVisible();
+  await expect(page.getByRole("region", { name: "Wants" }).getByText("From a capture")).toBeVisible();
+
+  // A duplicate gets a plain message (AC-6).
+  await page.getByRole("button", { name: "Edit a rotary vise" }).click();
+  await page.getByLabel("Fact").fill("Owala water bottle");
+  await page.getByLabel("Kind").selectOption("owns");
+  await page.getByRole("region", { name: "What we know" }).getByRole("button", { name: "Save" }).click();
+  await expect(page.getByText("That's already on their profile (it may be turned off).")).toBeVisible();
+
+  // Delete (AC-4): the row is really gone, and so is it from what ideas read.
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await page.getByRole("button", { name: "Delete for good" }).click();
+  await expect(page.getByRole("region", { name: "Wants" })).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByText("a rotary vise")).toHaveCount(0);
+  const rows = await rest(`profile_facts?id=eq.${vise}&select=id`, { profile: "concierge" });
+  expect(rows).toHaveLength(0);
+  const active = await rest(`profile_facts?person_id=eq.${personId}&active=is.true&select=value`, { profile: "concierge" });
+  expect(active).toEqual([{ value: "Owala water bottle" }]);
 });

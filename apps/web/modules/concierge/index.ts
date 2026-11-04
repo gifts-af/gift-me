@@ -26,8 +26,21 @@ export { createCookieCaptureStore, createSupabaseCaptureStore } from "./capture/
 // Reading captures into AI-suggested facts (ALL-25).
 export { CaptureNotFound, processCapture } from "./capture/extract";
 export type { Extraction, SavedFact } from "./capture/extract";
-export { getWhatWeKnow, readUnreadCaptures, removeFact } from "./capture/facts";
-export type { AiFact, WhatWeKnow } from "./capture/facts";
+export { readUnreadCaptures } from "./capture/facts";
+// The profile: what we know, guided questions, the readiness meter (ALL-26).
+export {
+  activeFacts,
+  answerQuestions,
+  deleteFact,
+  getOpenQuestions,
+  getProfile,
+  setFactActive,
+  skipQuestion,
+  updateFact,
+} from "./profile/profile";
+export type { ActiveFact, Db, Profile, ProfileFact, Readiness } from "./profile/profile";
+export { SENSITIVE_REFUSAL, parseAnswers, parseFactEdit } from "./profile/rules";
+export type { Answer } from "./profile/rules";
 
 // People, occasions and budgets (ALL-21). Birthday and other occasion rules
 // live in packages/core; parsing of the forms is in people/rules.ts.

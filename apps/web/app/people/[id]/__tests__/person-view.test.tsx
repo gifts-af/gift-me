@@ -2,8 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
 const getPerson = vi.hoisted(() => vi.fn());
-const getWhatWeKnow = vi.hoisted(() => vi.fn(async () => ({ told: [], ai: [], unread: 0 })));
-vi.mock("@/modules/concierge", () => ({ getPerson, getWhatWeKnow }));
+const getProfile = vi.hoisted(() =>
+  vi.fn(async (..._args: unknown[]) => ({ groups: [], off: [], unread: 0, openCount: 0, readiness: null as unknown })),
+);
+vi.mock("@/modules/concierge", () => ({ getPerson, getProfile }));
 vi.mock("@/lib/today", () => ({ todayForRequest: async () => "2026-11-01" }));
 vi.mock("@/lib/app-settings", () => ({ appSettingInt: async () => 1000 }));
 vi.mock("@/lib/supabase/server", () => ({
@@ -14,7 +16,7 @@ vi.mock("../../actions", () => {
   const action = async () => ({ ok: true });
   return {
     deletePersonAction: action, linkListAction: action, setBudgetAction: action, setOccasionEnabledAction: action,
-    setPhotoAction: action, unlinkListAction: action, updatePersonAction: action, removeFactAction: action,
+    setPhotoAction: action, unlinkListAction: action, updatePersonAction: action, editFactAction: action, setFactActiveAction: action, deleteFactAction: action,
     readCapturesAction: action, saveAddressAction: action, removeAddressAction: action,
   };
 });
@@ -60,7 +62,7 @@ describe("PersonView", () => {
     expect(screen.getByText("No list of their own, so we suggest ideas")).toBeInTheDocument();
     const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
     expect(headings).toEqual(["What we know", "Edit", "Occasions", "Your budget", "Shipping address", "Link to their list"]);
-    expect(getWhatWeKnow).toHaveBeenCalledWith("p1");
+    expect(getProfile.mock.calls[0].slice(1)).toEqual(["p1", false]);
     expect(screen.getByRole("button", { name: "Delete Dad" })).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });

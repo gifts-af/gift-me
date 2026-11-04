@@ -2,13 +2,23 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { parseDate, type OccasionKind } from "@gifts-af/core";
+import { GUIDED_QUESTIONS, parseDate, type OccasionKind } from "@gifts-af/core";
 import { createExtractor } from "@/lib/ai/extract";
 import { AI_MODELS } from "@/lib/ai/models";
+import { appSettingInt } from "@/lib/app-settings";
+import { createClient } from "@/lib/supabase/server";
 import { todayForRequest } from "@/lib/today";
 import {
   addPerson,
+  answerQuestions,
+  deleteFact,
   importPeople,
+  parseAnswers,
+  parseFactEdit,
+  setFactActive,
+  skipQuestion,
+  updateFact,
+  type Db,
   parseAddressForm,
   parseBudget,
   parseImportRows,
@@ -16,7 +26,6 @@ import {
   deletePerson,
   readUnreadCaptures,
   removeAddress,
-  removeFact,
   saveAddress,
   linkList,
   setBudget,
@@ -143,9 +152,47 @@ export async function importContactsAction(_previous: ImportResult | null, formD
   return { ...result, failed: result.failed + parsed.refused };
 }
 
-// "What we know" (ALL-25): remove an AI suggestion, or read unread captures.
-export async function removeFactAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
-  return refresh(await removeFact(text(formData, "id")), text(formData, "personId"));
+// "What we know" (ALL-26): edit, turn off or delete a fact; read unread captures.
+const db = async () => (await createClient()) as unknown as Db;
+
+export async function editFactAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
+  const parsed = parseFactEdit({ category: text(formData, "category"), value: text(formData, "value") });
+  if (!parsed.ok) return parsed;
+  const edit = { category: parsed.category, value: parsed.value };
+  return refresh(await updateFact(await db(), text(formData, "id"), edit), text(formData, "personId"));
+}
+
+export async function setFactActiveAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
+  const active = text(formData, "active") === "true";
+  return refresh(await setFactActive(await db(), text(formData, "id"), active), text(formData, "personId"));
+}
+
+export async function deleteFactAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
+  return refresh(await deleteFact(await db(), text(formData, "id")), text(formData, "personId"));
+}
+
+// Guided questions (ALL-26): fields are named after each question's key.
+export async function answerQuestionsAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
+  const personId = text(formData, "personId");
+  const fields = Object.fromEntries(GUIDED_QUESTIONS.map((q) => [q.key, text(formData, q.key)]));
+  const parsed = parseAnswers(fields, await appSettingInt("guided_answer_max_facts"));
+  if (!parsed.ok) return parsed;
+  const result = await answerQuestions(await db(), personId, parsed.answers);
+  if (!result.ok) return result;
+  revalidatePath(`/people/${personId}`);
+  redirect(`/people/${personId}`);
+}
+
+export async function skipQuestionAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
+  const personId = text(formData, "personId");
+  const question = GUIDED_QUESTIONS.find((q) => q.key === text(formData, "key"));
+  if (!question) return BAD_FORM;
+  const result = await skipQuestion(await db(), personId, question.key, question.prompt);
+  if (result.ok) {
+    revalidatePath(`/people/${personId}`);
+    revalidatePath(`/people/${personId}/questions`);
+  }
+  return result;
 }
 
 export async function readCapturesAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
