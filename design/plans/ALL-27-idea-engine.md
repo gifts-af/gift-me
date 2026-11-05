@@ -2,7 +2,7 @@
 
 **Goal:** given what we know about a person, the app produces 3–5 gifts that can really be bought, arrive on time and fit the budget, plus at most one clearly labeled over-budget gift, both in rounds and when a test or admin buyer asks for them.
 
-**Status:** Spec written, waiting for Jim's review. The Plan comes after that.
+**Status:** Spec approved by Jim, 2026-11-05, including the stop-and-email behaviour for rounds that can't produce ideas. The Plan comes next, after ALL-94.
 
 **Links:** [ALL-27](https://linear.app/allens-forever/issue/ALL-27). Design §4.2, §6.3, §7. PRD G-1, G-2, G-4, G-5. Spike: `design/spikes/ai.md`. Planning decisions 34, 48, 52, 53. Technical decisions T11, T17, T19, T23, T39, T42, T49.
 
@@ -44,11 +44,11 @@ flowchart LR
 | AC-6 | Totals around the budget | Filter runs | `est_total` comes from `estimatedTotalCents`, and `classifyTotal` decides within, over or dropped. With no budget, nothing is labeled over budget |
 | AC-7 | A product already given to this person, or an idea already rejected for them | Filter runs | It never appears, matched by retailer product id (G-4) |
 | AC-8 | Fewer than 3 survive | A run finishes its loop | Brainstorm, resolve and filter repeat up to `idea_retry_max` more times, telling the AI what to avoid. Then the survivors are saved and the shortfall is logged |
-| AC-9 | Zero survive after retries, or the run keeps failing, in a round | `idea_round_runs_max` runs have been used | **[Pending Jim]** No heads-up with empty ideas, and no more spending on this round. The buyer gets one "We couldn't find gifts for {name}" email with the guided questions link. New facts allow one more run on the next tick. Otherwise the round skips at the deadline, and the skip email goes out because we told them |
+| AC-9 | Zero survive after retries, or the run keeps failing, in a round | `idea_round_runs_max` runs have been used | No heads-up with empty ideas, and no more spending on this round. The buyer gets one "We couldn't find gifts for {name}" email with the guided questions link. New facts allow one more run on the next tick. Otherwise the round skips at the deadline, and the skip email goes out because we told them |
 | AC-10 | Zero survive, on demand | The run ends | The page says plainly that nothing suitable was found, and nothing is saved |
 | AC-11 | A retried round step | Ideas were already saved | No second set is saved, and no second AI or Zinc spend happens |
 | AC-12 | The AI or Zinc is down, times out, or returns something that fails its schema | A run hits it | Vendor shapes stop at their adapter (E4). A round's failed run counts toward `idea_round_runs_max` (AC-9) and is retried on the next tick. On demand shows "Couldn't get ideas. Try again." One bad candidate doesn't end the run |
-| AC-13 | A person with no active facts | A buyer asks on demand, or a round reaches the point of needing ideas | No money is spent. On demand: the page points to the guided questions. **[Pending Jim]** In a round: the same email as AC-9, sent once, and the next tick that finds facts runs the engine |
+| AC-13 | A person with no active facts | A buyer asks on demand, or a round reaches the point of needing ideas | No money is spent. On demand: the page points to the guided questions. In a round: the same email as AC-9, sent once, and the next tick that finds facts runs the engine |
 | AC-14 | A buyer with the flag, on the person's page | The page loads | "Suggest ideas for {name}" shows, with the alpha money notice next to it and always visible, including the rough cost from settings |
 | AC-15 | A buyer without the flag | The page loads, or they call the action directly | No button. The page says it isn't available yet. The action refuses before any AI or Zinc call |
 | AC-16 | A buyer without the flag | The tick runs, or their open round reaches the point of needing ideas (they may have lost the flag mid-round) | No round is created for them, and `generateIdeas` refuses before any AI or Zinc call. An open round spends nothing, sends nothing new, and skips at the deadline |
@@ -92,6 +92,7 @@ None block the Plan unless the builder check below raises one. **[Verify]** item
 | Does ALL-27 switch rounds on in production? | **No.** It moves to the end of ALL-29 | Jim, decision 53. Emails would otherwise ask people to choose on a screen that doesn't exist |
 | Who can use it? | Only users with the paid-features flag (ALL-94) | Jim, decision 53. Anything that costs money isn't free |
 | How clear is the cost? | A plain notice next to the action, always visible, with a rough cost | Jim, decision 53 |
+| What happens when a round can't produce ideas? | It spends on at most `idea_round_runs_max` runs, and never on a person with no facts. The buyer gets one email with the guided questions link. New facts allow one more run. Otherwise it skips at the deadline and they're told | Jim, 2026-11-05. Daily retries would waste money and the occasion would pass in silence |
 | Is the private list here? | No, it's ALL-93. It's a real list only its creator can see | Jim, decision 52 |
 | When are ideas made outside a round? | Only when the buyer asks | Jim, decision 52. Predictable spend, no new scheduled job (E1) |
 | Are on-demand ideas re-checked before a round uses them? | Rounds don't reuse them in this ticket: a round always runs the engine fresh. The re-check rule applies when ALL-93 lets saved ideas feed a round | Jim accepted re-checking through the live price step. Running fresh is that check, and it's the simplest version |
@@ -127,7 +128,7 @@ All in `concierge.app_settings`, with no fallback in code.
 | `idea_run_estimate_cents` | 40 | The usual cost shown in the money notice |
 | `idea_run_max_cents` | 100 | The most a run can cost, shown in the money notice |
 | `idea_retry_searches` | 1 | Web searches on a retry |
-| `idea_round_runs_max` | 2 | **[Pending Jim]** Runs a round may spend on before it stops and tells the buyer |
+| `idea_round_runs_max` | 2 | Runs a round may spend on before it stops and tells the buyer |
 | `idea_rounds_per_tick` | 3 | Most rounds that make ideas in one tick |
 | `zinc_lookup_cents` | 1 | Cost of one Zinc call, for logging |
 
@@ -151,4 +152,4 @@ The order fee (`zinc_order_fee_cents`) already exists in settings, and `over_bud
 
 ## Plan
 
-To be written after Jim reviews the Spec.
+To be written next, once ALL-94 has shipped.
