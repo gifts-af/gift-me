@@ -15,6 +15,7 @@ import {
   type ReadinessSettings,
 } from "@gifts-af/core";
 import { logEvent } from "@/lib/log";
+import { hasPaidFeatures } from "../paid-features";
 import type { SaveResult } from "../settings";
 import type { Answer } from "./rules";
 
@@ -45,6 +46,8 @@ export type Profile = {
   groups: { category: FactCategory; label: string; facts: ProfileFact[] }[];
   off: ProfileFact[];
   unread: number;
+  /** Null when this user can't have captures read (ALL-94). */
+  captureRead: { estimateCents: number } | null;
   openCount: number;
   /** Null when the meter is switched off. */
   readiness: Readiness | null;
@@ -124,15 +127,22 @@ async function readinessSettings(db: Db): Promise<ReadinessSettings> {
   return { points: { interests, wants, avoid, sizes, brands, owns }, ownList, readyPct };
 }
 
+async function captureReadOffer(db: Db): Promise<Profile["captureRead"]> {
+  const userId = await currentUserId(db);
+  if (!userId || !(await hasPaidFeatures(db, userId))) return null;
+  return { estimateCents: await setting(db, "capture_read_estimate_cents") };
+}
+
 /** Everything the person page shows about what we know (AC-1, AC-5, AC-7). */
 export async function getProfile(db: Db, personId: string, keepsList: boolean): Promise<Profile> {
   const concierge = db.schema("concierge");
-  const [facts, captures, skipped, max, meterOn] = await Promise.all([
+  const [facts, captures, skipped, max, meterOn, captureRead] = await Promise.all([
     concierge.from("profile_facts").select(`${FACT_COLUMNS}, active`).eq("person_id", personId).order("created_at"),
     concierge.from("captures").select("id, status, page_title, source_url").eq("person_id", personId),
     skippedKeys(db, personId),
     setting(db, "guided_questions_max"),
     setting(db, "readiness_meter_enabled"),
+    captureReadOffer(db),
   ]);
   if (facts.error) throw new Error(`Couldn't load facts: ${facts.error.message}`);
   if (captures.error) throw new Error(`Couldn't load captures: ${captures.error.message}`);
@@ -163,6 +173,7 @@ export async function getProfile(db: Db, personId: string, keepsList: boolean): 
     ),
     off: facts.data.filter((f) => !f.active).map(shown),
     unread: captures.data.filter((c) => c.status === "pending" || c.status === "failed").length,
+    captureRead,
     openCount: open.length,
     readiness,
   };

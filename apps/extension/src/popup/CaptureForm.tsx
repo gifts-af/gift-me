@@ -5,6 +5,7 @@ export function CaptureForm({
   note,
   onNoteChange,
   saveLabel,
+  moneyNotice,
   canSave,
   busy,
   error,
@@ -13,6 +14,8 @@ export function CaptureForm({
   note: string;
   onNoteChange: (note: string) => void;
   saveLabel: string;
+  /** The alpha money notice (ALL-94); null when saving won't spend anything. */
+  moneyNotice: string | null;
   canSave: boolean;
   busy: boolean;
   error: string | null;
@@ -35,6 +38,11 @@ export function CaptureForm({
           onChange={(e) => onNoteChange(e.target.value)}
         />
       </label>
+      {moneyNotice && (
+        <p role="note" className="m-0 rounded-md bg-warning-soft px-2.5 py-1.5 text-[13px] text-warning">
+          {moneyNotice}
+        </p>
+      )}
       {error && (
         <div role="alert" className="flex items-center justify-between gap-2 text-sm text-destructive">
           <span>{error}</span>

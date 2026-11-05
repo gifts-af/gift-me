@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { localSupabase } from "./local-supabase";
 import { phoneLayoutProblems } from "./phone-layout";
-import { TEST_USER } from "./test-user";
+import { SECOND_USER, TEST_USER } from "./test-user";
 
 // ALL-25: a person's page lists the AI's suggestions from captures apart from
 // anything else, and Remove takes one away for good. The facts are seeded
@@ -15,8 +15,8 @@ const service = {
   "Content-Type": "application/json",
 };
 
-async function rest(path: string, init: RequestInit & { profile?: string } = {}) {
-  const headers: Record<string, string> = { ...service, Prefer: "return=representation" };
+async function rest(path: string, init: RequestInit & { profile?: string; merge?: boolean } = {}) {
+  const headers: Record<string, string> = { ...service, Prefer: `return=representation${init.merge ? ",resolution=merge-duplicates" : ""}` };
   if (init.profile) {
     headers["Accept-Profile"] = init.profile;
     headers["Content-Profile"] = init.profile;
@@ -26,18 +26,26 @@ async function rest(path: string, init: RequestInit & { profile?: string } = {})
   return res.status === 204 ? [] : res.json();
 }
 
-async function testUserId(): Promise<string> {
+type User = typeof TEST_USER;
+
+async function userIdOf(user: User): Promise<string> {
   const res = await fetch(`${supabase.url}/auth/v1/token?grant_type=password`, {
     method: "POST",
     headers: { apikey: supabase.publishableKey, "Content-Type": "application/json" },
-    body: JSON.stringify({ email: TEST_USER.email, password: TEST_USER.password }),
+    body: JSON.stringify({ email: user.email, password: user.password }),
   });
   return ((await res.json()) as { user: { id: string } }).user.id;
 }
 
 /** A person with one read capture (two AI facts) and one capture that failed. */
-async function seed(name: string) {
-  const userId = await testUserId();
+async function seed(name: string, { user = TEST_USER, paidFeatures = true }: { user?: User; paidFeatures?: boolean } = {}) {
+  const userId = await userIdOf(user);
+  await rest("accounts?on_conflict=user_id", {
+    method: "POST",
+    profile: "concierge",
+    merge: true,
+    body: JSON.stringify({ user_id: userId, paid_features: paidFeatures }),
+  });
   await rest(`people?user_id=eq.${userId}&name=eq.${encodeURIComponent(name)}`, { method: "DELETE" });
   const [person] = await rest("people", {
     method: "POST",
@@ -63,10 +71,10 @@ async function seed(name: string) {
   return { personId: person.id as string, vise: facts[0].id as string };
 }
 
-async function signIn(page: Page) {
+async function signIn(page: Page, user: User = TEST_USER) {
   await page.goto("/auth/login");
-  await page.getByLabel("Email").fill(TEST_USER.email);
-  await page.getByLabel("Password").fill(TEST_USER.password);
+  await page.getByLabel("Email").fill(user.email);
+  await page.getByLabel("Password").fill(user.password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
 }
@@ -84,6 +92,7 @@ test("facts show by category with their source, and can be turned off, turned on
   await expect(page.getByRole("region", { name: "Already has" }).getByText("Owala water bottle")).toBeVisible();
   await expect(page.getByText("1 capture hasn't been read.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Read it now" })).toBeVisible();
+  await expect(page.getByRole("note")).toHaveText("Alpha: we read each capture with AI, which spends real money, about 2¢ each.");
   expect(await phoneLayoutProblems(page)).toEqual([]);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);
@@ -129,4 +138,15 @@ test("facts show by category with their source, and can be turned off, turned on
   expect(rows).toHaveLength(0);
   const active = await rest(`profile_facts?person_id=eq.${personId}&active=is.true&select=value`, { profile: "concierge" });
   expect(active).toEqual([{ value: "Owala water bottle" }]);
+});
+
+test("without paid features, the page doesn't offer reading and says why (ALL-94)", async ({ page }, testInfo) => {
+  const { personId } = await seed(`Dad ${testInfo.project.name}`, { user: SECOND_USER, paidFeatures: false });
+  await signIn(page, SECOND_USER);
+  await page.goto(`/people/${personId}`);
+
+  await expect(page.getByText("1 capture hasn't been read.")).toBeVisible();
+  await expect(page.getByText("Reading captures spends real money, so during alpha it's only on for test accounts.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Read it now" })).toHaveCount(0);
+  await expect(page.getByRole("note")).toHaveCount(0);
 });

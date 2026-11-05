@@ -37,7 +37,8 @@ select set_eq(
     'store_page_read_enabled', 'store_page_read_timeout_ms', 'store_page_read_max_bytes',
     'guided_questions_max', 'guided_answer_max_facts', 'readiness_points_interests', 'readiness_points_wants',
     'readiness_points_avoid', 'readiness_points_sizes', 'readiness_points_brands', 'readiness_points_owns',
-    'readiness_points_own_list', 'readiness_ready_pct', 'readiness_meter_enabled'
+    'readiness_points_own_list', 'readiness_ready_pct', 'readiness_meter_enabled',
+    'capture_read_estimate_cents'
   ],
   'every fee, limit, default and schedule setting is seeded'
 );

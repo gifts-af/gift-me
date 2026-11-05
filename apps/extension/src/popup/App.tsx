@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { captureReadNotice } from "@gifts-af/core";
 import { signOut } from "../lib/auth";
 import { config } from "../lib/config";
 import { getSupabase } from "../lib/supabase";
@@ -81,7 +82,7 @@ function Capture({
   onPeopleChange: (people: Person[]) => void;
   onSignedOut: () => void;
 }) {
-  const { people, textMax, screenshotMaxBytes, tabId, capturable } = loaded;
+  const { people, textMax, screenshotMaxBytes, paidFeatures, readEstimateCents, tabId, capturable } = loaded;
   const [selected, setSelected] = useState<Person | null>(null);
   const [adding, setAdding] = useState(false);
   const [note, setNote] = useState("");
@@ -174,6 +175,8 @@ function Capture({
         personId={saved.person.id}
         name={saved.person.name}
         extraction={saved.extraction}
+        paidFeatures={paidFeatures}
+        readEstimateCents={readEstimateCents}
         busy={busy}
         error={retryError}
         onRetry={() => void retry()}
@@ -203,6 +206,7 @@ function Capture({
         note={note}
         onNoteChange={changeNote}
         saveLabel={selected ? `Save to ${selected.name}` : "Save"}
+        moneyNotice={paidFeatures ? captureReadNotice(readEstimateCents) : null}
         canSave={selected !== null && capturable}
         busy={busy}
         error={error}

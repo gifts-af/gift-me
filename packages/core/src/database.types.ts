@@ -16,6 +16,7 @@ export type Database = {
           funding_mode: string;
           notification_prefs: NonNullable<Json>;
           over_budget_pct: number;
+          paid_features: boolean;
           updated_at: string;
           user_id: string;
           zinc_api_key_secret_id: string | null;
@@ -29,6 +30,7 @@ export type Database = {
           funding_mode?: string;
           notification_prefs?: NonNullable<Json>;
           over_budget_pct?: number;
+          paid_features?: boolean;
           updated_at?: string;
           user_id?: string;
           zinc_api_key_secret_id?: string | null;
@@ -41,6 +43,7 @@ export type Database = {
           funding_mode?: string;
           notification_prefs?: NonNullable<Json>;
           over_budget_pct?: number;
+          paid_features?: boolean;
           updated_at?: string;
           user_id?: string;
           zinc_api_key_secret_id?: string | null;
@@ -984,6 +987,7 @@ export type Database = {
         };
         Returns: boolean;
       };
+      has_paid_features: { Args: { p_user_id: string }; Returns: boolean };
       round_candidates: {
         Args: { p_today: string };
         Returns: {
