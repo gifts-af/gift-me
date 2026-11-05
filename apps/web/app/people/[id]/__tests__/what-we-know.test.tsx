@@ -35,6 +35,7 @@ const knowledge = (over: Partial<Knowledge> = {}): Knowledge => ({
   ],
   off: [],
   unread: 0,
+  captureRead: { estimateCents: 2 },
   ...over,
 });
 
@@ -161,6 +162,28 @@ describe("WhatWeKnow", () => {
     await user.click(screen.getByRole("button", { name: "Read them now" }));
     await waitFor(() => expect(readAction).toHaveBeenCalledOnce());
     expect(readAction.mock.calls[0][1].get("personId")).toBe("p1");
+  });
+
+  it("with paid features, shows the money notice next to Read it now (ALL-94)", () => {
+    setup(knowledge({ unread: 1 }));
+    expect(screen.getByRole("button", { name: "Read it now" })).toBeInTheDocument();
+    expect(screen.getByRole("note")).toHaveTextContent(
+      "Alpha: we read each capture with AI, which spends real money, about 2¢ each.",
+    );
+  });
+
+  it("without paid features, doesn't offer reading and says why (ALL-94)", () => {
+    setup(knowledge({ unread: 1, captureRead: null }));
+    expect(screen.getByText("1 capture hasn't been read.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Read it now" })).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Reading captures spends real money, so during alpha it's only on for test accounts."),
+    ).toBeInTheDocument();
+  });
+
+  it("says nothing about money when nothing is waiting to be read (ALL-94)", () => {
+    setup(knowledge({ unread: 0 }));
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
   });
 
   it("shows a failed action's message", async () => {

@@ -24,6 +24,8 @@ export class FakeCaptureStore implements CaptureStore {
   private n = 0;
   // Extraction (ALL-25).
   extraction = { enabled: true, minConfidencePct: 60, timeoutMs: 40000 };
+  paidFeatures = true;
+  failPaidCheck = false;
   captures = new Map<string, StoredCapture>();
   screenshots = new Map<string, Uint8Array>();
   facts: (SavedFact & { personId: string; captureId: string | null; active: boolean })[] = [];
@@ -60,6 +62,10 @@ export class FakeCaptureStore implements CaptureStore {
 
   async extractionSettings() {
     return this.extraction;
+  }
+  async hasPaidFeatures() {
+    if (this.failPaidCheck) throw new Error("check failed");
+    return this.paidFeatures;
   }
   async loadCapture(id: string) {
     return this.captures.get(id) ?? null;

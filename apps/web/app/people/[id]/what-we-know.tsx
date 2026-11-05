@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ChevronRight, ExternalLink, Pencil } from "lucide-react";
-import { CATEGORY_GROUPS } from "@gifts-af/core";
+import { CAPTURE_READ_OFF, CATEGORY_GROUPS, captureReadNotice } from "@gifts-af/core";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -13,7 +13,7 @@ import type { Profile, ProfileFact, SaveResult } from "@/modules/concierge";
 // "What we know" on a person's page (ALL-26, C-7, D51): one list by category,
 // each fact with its source and a pencil that opens Save, Turn off and Delete.
 
-export type Knowledge = Pick<Profile, "groups" | "off" | "unread">;
+export type Knowledge = Pick<Profile, "groups" | "off" | "unread" | "captureRead">;
 
 type Action = (previous: null, formData: FormData) => Promise<SaveResult>;
 
@@ -48,7 +48,7 @@ export function WhatWeKnow({
 } & Actions) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { groups, off, unread } = knowledge;
+  const { groups, off, unread, captureRead } = knowledge;
 
   const run: Run = async (action, fields, onError = setError) => {
     if (busy) return false;
@@ -125,9 +125,18 @@ export function WhatWeKnow({
           <p className="text-[13px] text-muted-foreground">
             {unread === 1 ? "1 capture hasn't been read." : `${unread} captures haven't been read.`}
           </p>
-          <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void run(readAction, {})}>
-            {unread === 1 ? "Read it now" : "Read them now"}
-          </Button>
+          {captureRead ? (
+            <>
+              <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void run(readAction, {})}>
+                {unread === 1 ? "Read it now" : "Read them now"}
+              </Button>
+              <p role="note" className="w-full rounded-md bg-warning-soft px-2.5 py-1.5 text-[13px] text-warning">
+                {captureReadNotice(captureRead.estimateCents)}
+              </p>
+            </>
+          ) : (
+            <p className="w-full text-[13px] text-muted-foreground">{CAPTURE_READ_OFF}</p>
+          )}
         </div>
       )}
 

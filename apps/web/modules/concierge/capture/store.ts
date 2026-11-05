@@ -38,6 +38,8 @@ export interface CaptureStore {
 
   // Extraction (ALL-25).
   extractionSettings(): Promise<{ enabled: boolean; minConfidencePct: number; timeoutMs: number }>;
+  /** Whether this user may spend money on reading (ALL-94). */
+  hasPaidFeatures(): Promise<boolean>;
   /** RLS-scoped: null for an unknown or someone else's capture. */
   loadCapture(id: string): Promise<StoredCapture | null>;
   downloadScreenshot(path: string): Promise<Uint8Array>;

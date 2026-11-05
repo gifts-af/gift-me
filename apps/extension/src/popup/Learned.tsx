@@ -1,4 +1,4 @@
-import { factLine } from "@gifts-af/core";
+import { CAPTURE_READ_OFF, factLine } from "@gifts-af/core";
 import { config } from "../lib/config";
 import type { Extraction } from "../lib/upload";
 
@@ -8,6 +8,7 @@ export function Learned({
   personId,
   name,
   extraction,
+  paidFeatures,
   busy,
   error,
   onRetry,
@@ -16,6 +17,7 @@ export function Learned({
   personId: string;
   name: string;
   extraction: Extraction | null;
+  paidFeatures: boolean;
   busy: boolean;
   error: string | null;
   onRetry: () => void;
@@ -31,6 +33,10 @@ export function Learned({
       ) : extraction === null ? (
         <p className="m-0" role="status">
           Saved to {name}. We'll show you what we learned.
+        </p>
+      ) : extraction.status === "pending" && !paidFeatures ? (
+        <p className="m-0" role="status">
+          Saved to {name}. {CAPTURE_READ_OFF}
         </p>
       ) : extraction.status === "pending" ? (
         <p className="m-0" role="status">

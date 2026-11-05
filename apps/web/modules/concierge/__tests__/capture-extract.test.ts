@@ -158,6 +158,26 @@ describe("processCapture", () => {
     expect(store.captures.get("cap-1")!.status).toBe("failed");
   });
 
+  it("without paid features, leaves the capture saved and makes no AI call (ALL-94)", async () => {
+    capture();
+    store.paidFeatures = false;
+    const result = await processCapture(store, extract, "cap-1");
+    expect(result).toEqual({ status: "pending", facts: [] });
+    expect(calls).toHaveLength(0);
+    expect(store.downloads).toHaveLength(0);
+    expect(store.captures.get("cap-1")!.status).toBe("pending");
+    const events = log.mock.calls.map(([line]) => JSON.parse(line as string));
+    expect(events).toContainEqual(expect.objectContaining({ event: "capture.read_needs_paid_features", capture_id: "cap-1" }));
+  });
+
+  it("makes no AI call when the paid-features check itself fails (ALL-94)", async () => {
+    capture();
+    store.failPaidCheck = true;
+    await expect(processCapture(store, extract, "cap-1")).rejects.toThrow("check failed");
+    expect(calls).toHaveLength(0);
+    expect(store.captures.get("cap-1")!.status).toBe("pending");
+  });
+
   it("leaves the capture pending and skips the model when extraction is off", async () => {
     capture();
     store.extraction.enabled = false;

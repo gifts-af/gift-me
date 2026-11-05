@@ -3,6 +3,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type { Database, FactCategory } from "@gifts-af/core";
 import { supabaseKey, supabaseUrl } from "@/lib/supabase/env";
 import { createClient as createCookieClient } from "@/lib/supabase/server";
+import { hasPaidFeatures } from "../paid-features";
 import type { CaptureStatus, CaptureStore } from "./store";
 
 /**
@@ -89,6 +90,9 @@ export function captureStoreFor(supabase: SupabaseClient<Database>, userId: stri
         minConfidencePct: await setting("capture_fact_min_confidence_pct"),
         timeoutMs: await setting("capture_extract_timeout_ms"),
       };
+    },
+    hasPaidFeatures() {
+      return hasPaidFeatures(supabase, userId);
     },
     async loadCapture(id) {
       const { data: c, error: err } = await concierge()

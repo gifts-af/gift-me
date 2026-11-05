@@ -16,11 +16,14 @@ vi.mock("../../lib/auth", () => ({ signOut: () => signOut() }));
 // A small stand-in for the supabase-js client: just the calls the popup makes.
 type Person = { id: string; name: string };
 const db = {
-  session: { access_token: "tok" } as { access_token: string } | null,
+  session: { access_token: "tok", user: { id: "u1" } } as { access_token: string; user: { id: string } } | null,
   people: [] as Person[],
   peopleError: null as { message: string } | null,
   textMax: 50_000 as number | null,
   screenshotMax: 2_500_000 as number | null,
+  readEstimate: 2 as number | null,
+  paidFeatures: true as boolean | null,
+  checkedUser: null as string | null,
   adds: [] as unknown[],
 };
 const client = {
@@ -31,7 +34,13 @@ const client = {
     }),
   })),
   schema: vi.fn(() => ({
-    rpc: vi.fn(async (fn: string, args: { p_key: string; p_name?: string }) => {
+    rpc: vi.fn(async (fn: string, args: { p_key: string; p_name?: string; p_user_id?: string }) => {
+      if (fn === "has_paid_features") {
+        db.checkedUser = args.p_user_id ?? null;
+        return db.paidFeatures === null
+          ? { data: null, error: { message: "failed" } }
+          : { data: db.paidFeatures, error: null };
+      }
       if (fn === "add_person") {
         db.adds.push(args);
         return { data: `new-${args.p_name}`, error: null };
@@ -41,7 +50,9 @@ const client = {
           ? db.textMax
           : args.p_key === "capture_screenshot_max_bytes"
             ? db.screenshotMax
-            : null;
+            : args.p_key === "capture_read_estimate_cents"
+              ? db.readEstimate
+              : null;
       return value === null ? { data: null, error: { message: "missing" } } : { data: value, error: null };
     }),
   })),
@@ -56,7 +67,7 @@ const json = (body: unknown, status: number) =>
 beforeEach(() => {
   vi.clearAllMocks();
   fake = installFakeChrome();
-  db.session = { access_token: "tok" };
+  db.session = { access_token: "tok", user: { id: "u1" } };
   db.people = [
     { id: "p-dad", name: "Dad" },
     { id: "p-mom", name: "Mom" },
@@ -64,6 +75,9 @@ beforeEach(() => {
   db.peopleError = null;
   db.textMax = 50_000;
   db.screenshotMax = 2_500_000;
+  db.readEstimate = 2;
+  db.paidFeatures = true;
+  db.checkedUser = null;
   db.adds = [];
   fetchMock = vi.fn(async () => json({ id: "c1" }, 201));
   vi.stubGlobal("fetch", fetchMock);
@@ -99,6 +113,37 @@ describe("Popup", () => {
     expect(mom).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Dad" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("button", { name: "Save to Mom" })).toBeEnabled();
+  });
+
+  const NOTICE = "Alpha: we read each capture with AI, which spends real money, about 2¢ each.";
+
+  it("with paid features, shows the money notice before saving (ALL-94)", async () => {
+    render(<App />);
+    expect(await screen.findByRole("note")).toHaveTextContent(NOTICE);
+    expect(db.checkedUser).toBe("u1");
+  });
+
+  it("without paid features, shows no notice and says why after saving (ALL-94)", async () => {
+    db.paidFeatures = false;
+    fetchMock.mockResolvedValueOnce(json({ id: "c1", extraction: { status: "pending", facts: [] } }, 201));
+    render(<App />);
+    await userEvent.click(await screen.findByRole("button", { name: "Mom" }));
+    expect(screen.queryByRole("note")).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Save to Mom" }));
+    expect(
+      await screen.findByText("Saved to Mom. Reading captures spends real money, so during alpha it's only on for test accounts."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/learn from it later/)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["the flag", () => (db.paidFeatures = null)],
+    ["the estimate", () => (db.readEstimate = null)],
+  ])("shows the load error when %s can't be read (ALL-94)", async (_what, breakIt) => {
+    breakIt();
+    render(<App />);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Something went wrong");
+    expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
   });
 
   it("search narrows the list by name", async () => {
