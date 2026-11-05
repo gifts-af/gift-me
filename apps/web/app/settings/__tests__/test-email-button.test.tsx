@@ -12,7 +12,8 @@ describe("TestEmailButton", () => {
     expect(await screen.findByRole("button", { name: "Sending…" })).toBeDisabled();
     finish({ ok: true });
     expect(await screen.findByRole("status")).toHaveTextContent("Sent. Check your inbox.");
-    expect(screen.getByRole("button", { name: "Send me a test email" })).toBeEnabled();
+    // The result arrives a render before the transition ends, so wait for the label.
+    expect(await screen.findByRole("button", { name: "Send me a test email" })).toBeEnabled();
   });
 
   it("shows the error when sending fails", async () => {
