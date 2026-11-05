@@ -176,6 +176,7 @@ function Capture({
         name={saved.person.name}
         extraction={saved.extraction}
         paidFeatures={paidFeatures}
+        readEstimateCents={readEstimateCents}
         busy={busy}
         error={retryError}
         onRetry={() => void retry()}

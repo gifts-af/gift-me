@@ -167,7 +167,7 @@ describe("processCapture", () => {
     expect(store.downloads).toHaveLength(0);
     expect(store.captures.get("cap-1")!.status).toBe("pending");
     const events = log.mock.calls.map(([line]) => JSON.parse(line as string));
-    expect(events).toContainEqual(expect.objectContaining({ event: "capture.read_needs_paid_features", capture_id: "cap-1" }));
+    expect(events).toContainEqual(expect.objectContaining({ event: "capture.read_needs_paid_features", capture_id: "cap-1", user_id: "user-1" }));
   });
 
   it("makes no AI call when the paid-features check itself fails (ALL-94)", async () => {

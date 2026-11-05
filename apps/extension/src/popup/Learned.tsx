@@ -1,4 +1,4 @@
-import { CAPTURE_READ_OFF, factLine } from "@gifts-af/core";
+import { CAPTURE_READ_OFF, captureReadNotice, factLine } from "@gifts-af/core";
 import { config } from "../lib/config";
 import type { Extraction } from "../lib/upload";
 
@@ -9,6 +9,7 @@ export function Learned({
   name,
   extraction,
   paidFeatures,
+  readEstimateCents,
   busy,
   error,
   onRetry,
@@ -18,6 +19,7 @@ export function Learned({
   name: string;
   extraction: Extraction | null;
   paidFeatures: boolean;
+  readEstimateCents: number;
   busy: boolean;
   error: string | null;
   onRetry: () => void;
@@ -43,12 +45,17 @@ export function Learned({
           Saved. We'll learn from it later.
         </p>
       ) : extraction.status === "failed" ? (
-        <div role="status" className="flex items-center justify-between gap-2 text-sm">
-          <span>Couldn't read this page. The capture is saved.</span>
-          <button className="btn-link shrink-0" type="button" onClick={onRetry}>
-            Try again
-          </button>
-        </div>
+        <>
+          <div role="status" className="flex items-center justify-between gap-2 text-sm">
+            <span>Couldn't read this page. The capture is saved.</span>
+            <button className="btn-link shrink-0" type="button" onClick={onRetry}>
+              Try again
+            </button>
+          </div>
+          <p role="note" className="m-0 rounded-md bg-warning-soft px-2.5 py-1.5 text-[13px] text-warning">
+            {captureReadNotice(readEstimateCents)}
+          </p>
+        </>
       ) : facts.length === 0 ? (
         <p className="m-0" role="status">
           Nothing new to learn from this page. The capture is saved.

@@ -61,7 +61,7 @@ export async function processCapture(store: CaptureStore, extract: Extract, capt
   const ids = { capture_id: capture.id, person_id: capture.personId };
   // The capture stays saved and unread (ALL-94, decision 53).
   if (!(await store.hasPaidFeatures())) {
-    logEvent("capture.read_needs_paid_features", ids);
+    logEvent("capture.read_needs_paid_features", { ...ids, user_id: store.userId });
     return { status: "pending", facts: [] };
   }
 

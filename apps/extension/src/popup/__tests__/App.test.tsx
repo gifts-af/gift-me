@@ -343,6 +343,7 @@ describe("Here's what I learned (ALL-25)", () => {
       .mockResolvedValueOnce(json({ extraction: { status: "extracted", facts } }, 200));
     await capture();
     expect(await screen.findByText("Couldn't read this page. The capture is saved.")).toBeInTheDocument();
+    expect(screen.getByRole("note")).toHaveTextContent("about 2¢ each"); // Trying again spends money too (ALL-94).
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("Wants: a ceramic pour-over set")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(2);

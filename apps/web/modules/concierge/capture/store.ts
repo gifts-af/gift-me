@@ -38,6 +38,8 @@ export interface CaptureStore {
 
   // Extraction (ALL-25).
   extractionSettings(): Promise<{ enabled: boolean; minConfidencePct: number; timeoutMs: number }>;
+  /** The signed-in user this store acts for. */
+  userId: string;
   /** Whether this user may spend money on reading (ALL-94). */
   hasPaidFeatures(): Promise<boolean>;
   /** RLS-scoped: null for an unknown or someone else's capture. */

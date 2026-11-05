@@ -91,6 +91,7 @@ export function captureStoreFor(supabase: SupabaseClient<Database>, userId: stri
         timeoutMs: await setting("capture_extract_timeout_ms"),
       };
     },
+    userId,
     hasPaidFeatures() {
       return hasPaidFeatures(supabase, userId);
     },
