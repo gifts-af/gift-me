@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import Link from "next/link";
 
 vi.mock("@/modules/lists/actions/lists", () => ({ saveList: vi.fn() }));
 vi.mock("@/modules/lists/actions/store-page", () => ({ readStorePage: vi.fn() }));
@@ -119,7 +120,7 @@ describe("GiftApp", () => {
       const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
       render(
         <>
-          <a href="/">Give</a>
+          <Link href="/">Give</Link>
           <GiftApp initial={member} />
         </>,
       );
@@ -132,7 +133,7 @@ describe("GiftApp", () => {
       vi.spyOn(window, "confirm").mockReturnValue(true);
       render(
         <>
-          <a href="/">Give</a>
+          <Link href="/">Give</Link>
           <GiftApp initial={member} />
         </>,
       );
@@ -145,7 +146,7 @@ describe("GiftApp", () => {
       const confirm = vi.spyOn(window, "confirm");
       render(
         <>
-          <a href="/">Give</a>
+          <Link href="/">Give</Link>
           <GiftApp initial={member} />
         </>,
       );

@@ -33,7 +33,7 @@ This doc is the source every screen ticket builds from (ALL-20 onward). The PRD 
 
 ### Colours
 
-Light is the default for the mock-ups; the app follows the phone's light or dark setting (light when there's no preference), with a manual switch in the account menu (ALL-20). Pages without an account menu (home, tour, sign-in, request access, shared lists, the list app) show a sun/moon button in the top bar instead (`ThemeToggle`, ALL-74): some phones report dark without the person choosing it, such as battery saver or a dark schedule. A choice from either place is the same setting, remembered on that device. Values are given as hex and as the HSL triples shadcn's CSS variables use.
+Light is the default for the mock-ups; the app follows the phone's light or dark setting (light when there's no preference), with a manual switch in the account menu (ALL-20). Pages without an account menu (home, tour, sign-in, request access, shared lists, the list when signed out) show a sun/moon button in the top bar instead (`ThemeToggle`, ALL-74): some phones report dark without the person choosing it, such as battery saver or a dark schedule. A choice from either place is the same setting, remembered on that device. Values are given as hex and as the HSL triples shadcn's CSS variables use.
 
 | Token | Use | Light | Dark |
 |---|---|---|---|
@@ -110,7 +110,7 @@ One responsive website, designed phone-first and installable to the home screen 
 |---|---|---|
 | Layout | One column | Content in a centred column, at most 640 px wide |
 | Main button | Fixed to the bottom, full width | Inline, under the content |
-| Top bar | Back arrow or name, plus an account menu | The same, with room for a few links that sit in the menu on a phone |
+| Top bar | Logo, Get, Give, account menu (fits 320 px, T58) | The same. Back links live in the page, not the bar |
 | Grids | One card per row | **Only home and the gift list** widen (up to 1024 px): 2 cards per row from 768 px, 3 from 1024 px |
 
 - **Approving** happens mostly on a phone, from the approval email, so the approval screen is designed for the phone first.
@@ -120,12 +120,12 @@ One responsive website, designed phone-first and installable to the home screen 
 
 The gift list and the concierge each **work on their own**, and are linked lightly so together they're better than either alone (owner, 2026-10-26; T19).
 
-- **Home** (`/`) is the one front door after sign-in. It shows a **"My list"** card at the top, then **"People"** (the concierge) below it.
-- **Each product stands alone.** Someone who only uses lists never has to set up the concierge: "People" shows a quiet one-line "Add someone you buy for" empty state, not a setup wizard. Someone who only uses the concierge sees "My list" as one small "Start your wish list" card.
+- **Get and Give** are the two sections, in the top bar on every signed-in page (T58). **Get** (`/lists`) is your list. **Give** (`/`) is where you land after sign-in: a **"You"** card first, then your **people** (the concierge).
+- **Each product stands alone.** Someone who only uses lists never has to set up the concierge: "People" shows a quiet one-line "Add someone you buy for" empty state, not a setup wizard. Someone who only uses the concierge sees one small "You" card inviting them to start a wish list.
 - **Links between them are low-key** and appear only where they help, never as prompts or pop-ups. For example, a person's profile can later show their own shared list when they've linked their account (T19's `people.linked_user_id`). These come with the screens that need them, not in the MVP mock-ups.
 - **People cards** show an avatar (their photo, or their initials on a tinted circle), their name, the next occasion, and where ideas come from: "Their own list" when you've linked their shared list, otherwise "We suggest ideas". Without a birthday the card offers "Add birthday" (ALL-21, T41).
-- **Products keep their own paths** (`/lists`, `/concierge`, design §2.2). Share links (`/share/…`) work signed out and don't show Home.
-- A list-only user who signs in later lands on Home and sees their list there.
+- **Products keep their own paths** (`/lists`, `/concierge`, design §2.2). Share links (`/share/…`) work signed out and don't show Get and Give.
+- A list-only user who signs in later lands on Give, one press from their list on the "You" card or the Get tab.
 
 ## UI kit
 
@@ -146,7 +146,7 @@ A clickable, phone-first prototype, published as a private shareable artifact pa
 
 | Screen | Shows | PRD |
 |---|---|---|
-| Home | The people you buy for, each with their next occasion and status. Someone who keeps their own list (Mom) is marked "Her own list" and is the ideal case; someone without one (Dad) is marked "we suggest ideas". An empty state for a new user | P-1, P-3, decision 37 |
+| Give (mock-up "home") | The people you buy for, each with their next occasion and status. Someone who keeps their own list (Mom) is marked "Her own list" and is the ideal case; someone without one (Dad) is marked "we suggest ideas". An empty state for a new user | P-1, P-3, decision 37 |
 | Person profile | What the app knows about them (facts, sizes, likes), with edit and delete, one readiness line, whether they keep a list, and your optional budget per occasion as its own section | C-6, C-7, decision 36 |
 | "Here's what I learned" | The facts pulled from a capture, each to keep or drop | C-3 |
 | Pick from their list (Mom) | Gifts from the person's own list, with when each was added and arrive-by date; one already claimed by someone else; pick one or several. **Your budget** is a separate, optional field: only when it's filled in do over-budget labels and the confirm step appear | A-1, B-4, decisions 36, 37 |
@@ -158,7 +158,7 @@ A clickable, phone-first prototype, published as a private shareable artifact pa
 | Sign-in | Google sign-in (email and password stays for existing list users) | ALL-20 |
 | Extension popup | "Capture for…" with a person picker | C-1 |
 | Heads-up email | Two kinds. **Reminder:** the options as small read-only rows and "Choose a gift"; nothing is bought until you choose. **Auto-buy on** (opt-in, A-7): says which gift will be bought and on what date, marks it, and offers "Review or change" and how to skip. Buttons are signed one-time links (design §6.4) to the phone page | N-1, A-7, decision 40 |
-| Computer width | Home and the gift list only | — |
+| Computer width | Give and the gift list only | — |
 
 **As built on the person page (ALL-26, D51):** facts are one list by category, each with its source and ✨ on unconfirmed AI suggestions, and a pencil that opens Save, Turn off and Delete. "Add a note" isn't built yet.
 

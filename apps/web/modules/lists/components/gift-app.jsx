@@ -140,7 +140,7 @@ export default function GiftApp({ initial }) {
     return () => window.removeEventListener('beforeunload', warn)
   }, [atRisk])
 
-  // In-app links (Home, the top bar) navigate without beforeunload, so ask
+  // In-app links (Get, Give, the logo) navigate without beforeunload, so ask
   // here. Capture on document runs before React's own listeners, so stopping
   // the click keeps <Link> from navigating. Guests are stashed on unmount.
   useEffect(() => {

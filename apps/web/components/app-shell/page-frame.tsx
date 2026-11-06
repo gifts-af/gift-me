@@ -3,7 +3,7 @@ import Link from "next/link";
 import { cn } from "@/lib/utils";
 
 // The content column: 16 px gutters on a phone, centred and at most 640 px
-// wide on a computer. Only Home and the gift list widen, to 1024 px
+// wide on a computer. Only Give and the gift list widen, to 1024 px
 // (design/ui.md > Phone and computer).
 export function PageFrame({
   wide = false,
