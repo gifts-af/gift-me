@@ -1,5 +1,5 @@
 import { expect, test, type Browser } from "@playwright/test";
-import { TEST_USER } from "./test-user";
+import { signIn } from "./sign-in";
 
 // ALL-57: the "Add GiftsAF to your Home Screen" tip on the signed-in home page.
 const IPHONE =
@@ -17,10 +17,8 @@ async function signedInHome(browser: Browser, options: { userAgent?: string; ins
     await context.addInitScript(() => Object.defineProperty(navigator, "standalone", { value: true }));
   }
   const page = await context.newPage();
-  await page.goto("/auth/login");
-  await page.getByLabel("Email").fill(TEST_USER.email);
-  await page.getByLabel("Password").fill(TEST_USER.password);
-  await page.getByRole("button", { name: "Sign in" }).click();
+  await signIn(page);
+  await page.goto("/");
   await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
   return { context, page };
 }

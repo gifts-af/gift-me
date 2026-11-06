@@ -1,4 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
+import { signIn } from "./sign-in";
 import { TEST_USER } from "./test-user";
 
 // ALL-46: the public home page and the guided tour.
@@ -147,10 +148,8 @@ for (const width of [390, 1280]) {
     expect(await spot("/tour")).toEqual(home);
     expect(await spot("/request-access")).toEqual(home);
 
-    await page.goto("/auth/login");
-    await page.getByLabel("Email").fill(TEST_USER.email);
-    await page.getByLabel("Password").fill(TEST_USER.password);
-    await page.getByRole("button", { name: "Sign in" }).click();
+    await signIn(page);
+    await page.goto("/");
     await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
     expect(await spot("/")).toEqual(home);
 
