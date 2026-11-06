@@ -1,3 +1,4 @@
+import { unstable_rethrow } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { errorFields, logEvent } from "@/lib/log";
@@ -19,14 +20,14 @@ const actions = {
 // failed load shows a short line instead of taking Settings down with it. Anyone with a
 // Zinc key still saved can always disconnect it (owner, S7).
 export async function PayingForGiftsSection() {
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getClaims();
-  const userId = auth?.claims?.sub;
-  if (!userId) return null;
-
+  let userId: string | undefined;
   let initial: PayingInitial;
   let walletUrl = "";
   try {
+    const supabase = await createClient();
+    const { data: auth } = await supabase.auth.getClaims();
+    userId = auth?.claims?.sub;
+    if (!userId) return null;
     const db = createAdminClient();
     const paid = await hasPaidFeatures(db, userId);
     const wiring = paid ? await zincWiring(db) : null;
@@ -42,7 +43,8 @@ export async function PayingForGiftsSection() {
       initial = await getPaymentStatus(userId, wiring.deps);
     }
   } catch (error) {
-    logEvent("zinc.settings_load_failed", { user_id: userId, ...errorFields(error) });
+    unstable_rethrow(error); // Next's end-of-prerender signal isn't a failure (ALL-87).
+    logEvent("zinc.settings_load_failed", { user_id: userId ?? null, ...errorFields(error) });
     initial = { kind: "message", text: "We couldn't load your payment settings. Reload the page to try again." };
   }
   return <PayingForGifts initial={initial} actions={actions} walletUrl={walletUrl} />;
