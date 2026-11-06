@@ -42,7 +42,7 @@ select set_eq(
     'order_price_margin_pct', 'funding_lookahead_days', 'funding_topup_suggest_cents', 'zinc_ordering_enabled',
     'zinc_timeout_ms', 'zinc_poll_claim_seconds', 'placing_stale_minutes', 'zinc_place_budget_ms',
     'zinc_retry_attempts', 'zinc_retry_base_ms', 'zinc_webhook_max_bytes',
-    'zinc_topup_fee_bps', 'zinc_topup_fee_fixed_cents'
+    'zinc_topup_fee_bps', 'zinc_topup_fee_fixed_cents', 'check_address_link_days'
   ],
   'every fee, limit, default and schedule setting is seeded'
 );
