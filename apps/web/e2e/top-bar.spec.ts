@@ -67,6 +67,75 @@ test.describe("My list", () => {
   });
 });
 
+test("Sign out with unsaved changes asks first, and staying keeps the gift and the session", async ({ page }) => {
+  await signIn(page, await createFreshUser());
+  await page.goto("/lists");
+  await addGiftByHand(page, "Unsaved socks");
+  let asked = "";
+  page.once("dialog", (dialog) => {
+    asked = dialog.message();
+    return dialog.dismiss();
+  });
+  await page.getByRole("button", { name: "Account" }).click();
+  await page.getByRole("menuitem", { name: "Sign out" }).click();
+  await expect.poll(() => asked).toMatch(/unsaved/i);
+  await expect(page).toHaveURL(/\/lists$/);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("heading", { name: "Unsaved socks" })).toBeVisible();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByText("Unsaved changes")).toHaveCount(0);
+});
+
+test.describe("which bar each page gets", () => {
+  for (const [path, current] of [
+    ["/", "Give"],
+    ["/lists", "Get"],
+    ["/people/new", "Give"],
+    ["/people/import", "Give"],
+    ["/settings", null],
+    ["/extension/connect", null],
+  ] as const) {
+    test(`${path} has the tabs and account menu`, async ({ page }) => {
+      await signIn(page);
+      await page.goto(path);
+      await expect(page.getByRole("button", { name: "Account" })).toBeVisible();
+      await expect(page.getByRole("button", { name: /Switch to/ })).toHaveCount(0);
+      for (const name of ["Get", "Give"]) {
+        const tab = page.getByRole("navigation", { name: "Main" }).getByRole("link", { name, exact: true });
+        await expect(tab).toBeVisible();
+        if (name === current) await expect(tab).toHaveAttribute("aria-current", "page");
+        else await expect(tab).not.toHaveAttribute("aria-current");
+      }
+    });
+  }
+
+  test("a shared list has no tabs or account menu, signed out or in", async ({ page }) => {
+    const owner = await createFreshUser();
+    await signIn(page, owner);
+    await page.goto("/lists");
+    await addGiftByHand(page, "Wool socks");
+    await page.getByRole("button", { name: "Save" }).click();
+    await expect(page.getByText("Unsaved changes")).toHaveCount(0);
+    // With no clipboard the app shows the link, on every browser.
+    await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { value: undefined }));
+    await page.getByRole("button", { name: /Share/ }).click();
+    const url = await page.getByLabel("Share link").inputValue();
+    const path = new URL(url).pathname;
+
+    const expectPlainBar = async () => {
+      await expect(page.getByRole("heading", { name: "Wool socks" })).toBeVisible();
+      await expect(page.getByRole("button", { name: /Switch to/ })).toBeVisible();
+      await expect(page.getByRole("link", { name: "Get", exact: true })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: "Account" })).toHaveCount(0);
+    };
+    await page.goto(path);
+    await expectPlainBar();
+    await page.context().clearCookies();
+    await page.goto(path);
+    await expectPlainBar();
+  });
+});
+
 test.describe("the You card on Give", () => {
   test("comes first and invites someone with no people and no list", async ({ page }) => {
     await signIn(page, await createFreshUser());
@@ -106,6 +175,13 @@ test.describe("at 320 px, the narrowest phone", () => {
     }
   });
 
+  test("the tabs and account menu fit their slot, even beside a reserved scrollbar", async ({ page }) => {
+    await signIn(page, await createFreshUser());
+    await expect(page.getByRole("button", { name: "Account" })).toBeVisible();
+    const slot = page.locator("[data-top-bar-row] > div");
+    expect(await slot.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+  });
+
   test("the tabs are big enough to press", async ({ page }) => {
     await signIn(page, await createFreshUser());
     for (const name of ["Get", "Give"]) {
@@ -113,6 +189,23 @@ test.describe("at 320 px, the narrowest phone", () => {
       expect(box!.height).toBeGreaterThanOrEqual(44);
       expect(box!.width).toBeGreaterThanOrEqual(68);
     }
+  });
+
+  test("a very long name in the back link stays on screen", async ({ page }) => {
+    await signIn(page, await createFreshUser());
+    const name = "Bartholomew".repeat(5);
+    await page.getByRole("link", { name: "Add someone you buy for" }).first().click();
+    await page.getByLabel("Name").fill(name);
+    await page.getByLabel("Who are they to you?").selectOption({ label: "Mother" });
+    await page.getByRole("button", { name: `Add ${name}` }).click();
+    await page.getByRole("link", { name, exact: true }).click();
+    await expect(page).toHaveURL(/\/people\/.+/);
+    await page.goto(`${page.url()}/questions`);
+    const back = page.getByRole("main").getByRole("link", { name, exact: true });
+    await expect(back).toBeVisible();
+    const box = await back.boundingBox();
+    expect(box!.x + box!.width).toBeLessThanOrEqual(320);
+    expect(await back.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
   });
 
   test("a person's page and their questions fit, with the back link in the page", async ({ page }) => {

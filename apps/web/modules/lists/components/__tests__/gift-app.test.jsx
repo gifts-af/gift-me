@@ -155,6 +155,33 @@ describe("GiftApp", () => {
     });
   });
 
+  it("asks before something that leaves the page without being a link, like Sign out", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const signOut = vi.fn();
+    render(
+      <>
+        <button data-leaves-page="" onClick={signOut}>
+          Sign out
+        </button>
+        <GiftApp initial={member} />
+      </>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Remove Novel/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/unsaved/i));
+    expect(signOut).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+  });
+
+  it("shows the share notice below the title, so Share doesn't move when it appears", async () => {
+    Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+    render(<GiftApp initial={{ ...member, shareToken: "abc" }} />);
+    await userEvent.click(screen.getByRole("button", { name: /Share/ }));
+    const notice = await screen.findByLabelText("Share link");
+    const title = screen.getByRole("heading", { level: 1, name: "My list" });
+    expect(title.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("stashes a guest's gifts when they leave for sign-in", () => {
     const guest = render(<GiftApp initial={null} />);
     // A guest starts empty; add one the way a stash would bring it back.

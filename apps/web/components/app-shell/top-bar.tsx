@@ -13,7 +13,7 @@ export function TopBar({ children }: { children?: React.ReactNode }) {
         <Link href="/" className="inline-flex min-h-11 flex-none items-center text-[19px]">
           <Logo />
         </Link>
-        <div className="flex min-w-0 flex-1 items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center">
           {children ?? (
             <div className="ml-auto">
               <ThemeToggle />

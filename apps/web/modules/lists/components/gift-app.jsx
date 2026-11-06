@@ -147,9 +147,12 @@ export default function GiftApp({ initial }) {
     if (isGuest || !dirty) return
     function confirmLeave(event) {
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-      const link = event.target instanceof Element ? event.target.closest('a[href]') : null
-      if (!link || link.target === '_blank' || link.origin !== window.location.origin) return
-      if (link.pathname === window.location.pathname) return
+      const leaving = event.target instanceof Element ? event.target.closest('a[href], [data-leaves-page]') : null
+      if (!leaving) return
+      if (leaving.matches('a[href]')) {
+        if (leaving.target === '_blank' || leaving.origin !== window.location.origin) return
+        if (leaving.pathname === window.location.pathname) return
+      }
       if (window.confirm('You have unsaved changes. Leave without saving?')) return
       event.preventDefault()
       event.stopPropagation()
@@ -242,6 +245,27 @@ export default function GiftApp({ initial }) {
             {notice}
           </Banner>
         )}
+        {saveError && (
+          <Banner tone="error" role="alert">
+            {saveError}
+          </Banner>
+        )}
+
+        <div className="flex flex-col gap-1">
+          <div className={TITLE_ROW}>
+            <h1
+              id="list-heading"
+              ref={headingRef}
+              tabIndex={-1}
+              className="text-[22px] font-bold leading-tight"
+            >
+              My list
+            </h1>
+            {!isGuest && <ShareButton blockedReason={shareBlockedReason} onShare={handleShare} />}
+          </div>
+          <GiftSummary gifts={gifts} />
+        </div>
+
         {shareNotice && (
           <Banner tone="accent" className="flex flex-col gap-2">
             <p role="status">{shareNotice.text}</p>
@@ -263,26 +287,6 @@ export default function GiftApp({ initial }) {
             )}
           </Banner>
         )}
-        {saveError && (
-          <Banner tone="error" role="alert">
-            {saveError}
-          </Banner>
-        )}
-
-        <div className="flex flex-col gap-1">
-          <div className={TITLE_ROW}>
-            <h1
-              id="list-heading"
-              ref={headingRef}
-              tabIndex={-1}
-              className="text-[22px] font-bold leading-tight"
-            >
-              My list
-            </h1>
-            {!isGuest && <ShareButton blockedReason={shareBlockedReason} onShare={handleShare} />}
-          </div>
-          <GiftSummary gifts={gifts} />
-        </div>
 
         {/* Only signed-in people can have our server read a store page (ALL-10). */}
         <AddGiftPanel onAdd={addGift} readStorePage={isGuest ? undefined : readStorePage} />

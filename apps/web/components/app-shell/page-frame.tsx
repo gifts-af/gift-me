@@ -39,7 +39,7 @@ export function PageTitle({ children, id }: { children: React.ReactNode; id?: st
 // bar is the same everywhere (ALL-95).
 export function BackLink({ href, label }: { href: string; label: string }) {
   return (
-    <Link href={href} className="-ml-1 -mb-4 inline-flex min-h-11 items-center gap-0.5 self-start pr-2 text-[15px]">
+    <Link href={href} className="-ml-1 -mb-4 inline-flex min-h-11 max-w-full items-center gap-0.5 self-start pr-2 text-[15px] [overflow-wrap:anywhere]">
       <ChevronLeft className="size-5 flex-none" aria-hidden="true" />
       {label}
     </Link>
