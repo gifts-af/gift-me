@@ -111,7 +111,8 @@ async function largestBudgetCents(userId: string, deps: ZincDeps): Promise<numbe
   return all.length ? Math.max(...all) : null;
 }
 
-async function lookahead(
+/** What the user's open rounds due within `days` need from the wallet (lookaheadCents). */
+export async function fundingLookahead(
   userId: string,
   deps: ZincDeps,
   feeCents: number,
@@ -153,7 +154,7 @@ export async function getPaymentStatus(userId: string, deps: ZincDeps): Promise<
       kind: "connected",
       balanceCents: wallet.balanceCents,
       autoTopUp: wallet.autoTopUp,
-      lookahead: await lookahead(userId, deps, feeCents, lookaheadDays),
+      lookahead: await fundingLookahead(userId, deps, feeCents, lookaheadDays),
       lookaheadDays,
       feeCents,
       topUpFeeBps,

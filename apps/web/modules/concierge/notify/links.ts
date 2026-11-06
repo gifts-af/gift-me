@@ -70,7 +70,7 @@ export async function confirmActionLink(
 
   const action = actionFor(claimed.action);
   if (!action) return { state: "invalid" };
-  const result = await runSafely(action, claimed.userId, claimed.roundId);
+  const result = await runSafely(action, claimed.userId, claimed.roundId, deps.store);
   if (!result.ok) {
     // [Claude's call] The link stays used: real actions must be safe to treat as
     // done or report their own failure. Never log the raw token.
@@ -88,9 +88,10 @@ async function runSafely(
   action: Action,
   userId: string,
   roundId: string | null,
+  store: NotifyStore,
 ): Promise<ActionResult> {
   try {
-    return await action.run({ userId, roundId });
+    return await action.run({ userId, roundId, store });
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }

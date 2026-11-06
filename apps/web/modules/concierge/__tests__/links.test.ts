@@ -122,7 +122,7 @@ describe("confirmActionLink", () => {
     expect(result).toEqual({ state: "done", done: ACTIONS.test.done });
     expect(ACTIONS.test.done.body).toBe("It works. Buttons in our emails will look like this.");
     expect(run).toHaveBeenCalledTimes(1);
-    expect(run).toHaveBeenCalledWith({ userId: OWNER, roundId: null });
+    expect(run).toHaveBeenCalledWith({ userId: OWNER, roundId: null, store });
     expect(store.links[0].usedAt).toEqual(NOW);
   });
 

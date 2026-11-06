@@ -1,4 +1,6 @@
 import "server-only";
+import type { Database, RoundStatus } from "@gifts-af/core";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { ActionName } from "./actions";
 import type { NotificationKind } from "./templates";
@@ -45,6 +47,11 @@ export interface NotifyStore {
   findLink(hash: string): Promise<LinkRow | null>;
   /** Marks the link used if it is this user's, unused and unexpired; null otherwise. */
   claimLink(hash: string, userId: string, now: Date): Promise<LinkRow | null>;
+  /**
+   * The cancel_held_gift action (ALL-32 AC-24): cancel_held(round, 'cancel') for this user's
+   * round. The round's status after, or null when it isn't theirs.
+   */
+  cancelHeldGift(roundId: string, userId: string): Promise<RoundStatus | null>;
 }
 
 const LINK_COLUMNS = "user_id, round_id, action, expires_at, used_at";
@@ -71,8 +78,8 @@ function fail(what: string, error: { message: string }): never {
   throw new Error(`${what}: ${error.message}`);
 }
 
-export function createSupabaseNotifyStore(): NotifyStore {
-  const db = createAdminClient();
+/** The service-role client; tests pass one for the local database (E3). */
+export function createSupabaseNotifyStore(db: SupabaseClient<Database> = createAdminClient()): NotifyStore {
   const concierge = db.schema("concierge");
 
   return {
@@ -175,6 +182,15 @@ export function createSupabaseNotifyStore(): NotifyStore {
         .maybeSingle();
       if (error) fail("Claiming the action link failed", error);
       return data ? toLinkRow(data) : null;
+    },
+
+    async cancelHeldGift(roundId, userId) {
+      const { data: round, error } = await concierge.from("gift_rounds").select("user_id").eq("id", roundId).maybeSingle();
+      if (error) fail("Loading the round failed", error);
+      if (round?.user_id !== userId) return null;
+      const cancelled = await concierge.rpc("cancel_held", { p_round_id: roundId, p_context: "cancel" });
+      if (cancelled.error) fail("Cancelling the held gift failed", cancelled.error);
+      return (cancelled.data as RoundStatus | null) ?? null;
     },
   };
 }

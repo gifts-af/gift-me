@@ -32,6 +32,7 @@ describe.skipIf(!dbUp)("Zinc webhooks (real local database, fake Zinc)", () => {
   let pg: Client;
   const users: string[] = [];
   const placeHeld = vi.fn<(userId: string) => Promise<void>>(async () => {});
+  const advanceRound = vi.fn<(roundId: string) => Promise<unknown>>(async () => "advanced");
   const zincGets: string[] = [];
   const zincOrders: Record<string, unknown> = {};
   const zincStatus: Record<string, number> = {};
@@ -82,6 +83,7 @@ describe.skipIf(!dbUp)("Zinc webhooks (real local database, fake Zinc)", () => {
     webhookBaseUrl: "https://giftsaf.test",
     now: new Date(),
     placeHeld,
+    advanceRound,
   });
 
   type Account = { userId: string; webhookId: string; secret: string };
@@ -211,6 +213,21 @@ describe.skipIf(!dbUp)("Zinc webhooks (real local database, fake Zinc)", () => {
     expect(await send(a, body)).toEqual({ status: 200 });
     expect(await orderRow(orderId)).toMatchObject({ status: "failed", failure_type: "price_up" });
     expect(await roundRow(roundId)).toMatchObject({ status: "needs_attention", attention_reason: "price_up" });
+  });
+
+  it("a failure is emailed at once: the engine takes the round straight away (ALL-32, owner rule)", async () => {
+    const a = await newAccount();
+    const zincId = randomUUID();
+    const { roundId } = await newOrder(a, { providerOrderId: zincId, funding: "zinc_wallet" });
+    advanceRound.mockClear();
+    await send(a, JSON.stringify({ event: "order.failed", order_id: zincId, data: { error_type: "out_of_stock" } }));
+    expect(advanceRound).toHaveBeenCalledWith(roundId);
+    // A placed order needs nothing from the buyer.
+    const other = randomUUID();
+    await newOrder(a, { providerOrderId: other });
+    advanceRound.mockClear();
+    await send(a, placedBody(other));
+    expect(advanceRound).not.toHaveBeenCalled();
   });
 
   it("a duplicate event is one write", async () => {

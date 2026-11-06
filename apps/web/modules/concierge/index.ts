@@ -67,15 +67,16 @@ export type { AddressSaveResult, ImportAddress, ImportRow, PersonInput } from ".
 // The round engine (ALL-28): the daily tick, advancing one round, and resuming
 // rounds that waited for an address. The idea stub stands in for ALL-27.
 export { advanceRound, resumeRoundsForPerson, runTick } from "./rounds/engine";
-export type { AdvanceResult, EngineDeps, GenerateIdeas, TickSummary } from "./rounds/engine";
+export type { AdvanceResult, EngineDeps, EngineZinc, GenerateIdeas, TickSummary } from "./rounds/engine";
 export { createSupabaseRoundStore } from "./rounds/store";
-export type { Candidate, ClaimedRound, NewRoundRow, RoundContext, RoundFinish, RoundStore } from "./rounds/store";
+export type { Candidate, ClaimedRound, NewRoundRow, RoundContext, RoundFinish, RoundOrder, RoundStore } from "./rounds/store";
 export { createStubGenerateIdeas } from "./rounds/ideas";
 
 // Paying for gifts from the user's own Zinc wallet (ALL-32): connect, phone, disconnect, Settings status.
 export {
   cancelConnect,
   disconnect as disconnectZinc,
+  fundingLookahead,
   getPaymentStatus,
   getZincWallet,
   pollConnect,
@@ -87,7 +88,7 @@ export type { PlaceHeld, ZincDeps } from "./zinc/types";
 export { handleZincWebhook } from "./zinc/events";
 export { hasPaidFeatures } from "./paid-features";
 // Approving and buying from the user's own Zinc wallet (ALL-30, ALL-32 Task 6). The tick, the
-// webhook route and Settings bind placeHeldForUser into a PlaceHeld (ALL-32 Task 7).
+// webhook route, Settings and the people actions bind these in app/settings/zinc-deps.ts.
 export { approveAndBuy } from "./purchase/approve";
 export type { ApproveError, ApproveInput, ApproveResult } from "./purchase/approve";
 export { placeHeldForUser, placeRound, sweepStalePlacing } from "./purchase/place";

@@ -4,12 +4,7 @@ import type { SaveResult } from "../settings";
 import type { PlaceHeld } from "../zinc/types";
 import type { ImportRow, PersonInput } from "./rules";
 import { logEvent } from "@/lib/log";
-import { siteUrl } from "@/lib/site-url";
-import { defaultChannels } from "../notify/channels";
-import { createSupabaseNotifyStore } from "../notify/store";
-import { resumeRoundsForPerson } from "../rounds/engine";
-import { createStubGenerateIdeas } from "../rounds/ideas";
-import { createSupabaseRoundStore } from "../rounds/store";
+import { resumeRoundsForPerson, type EngineDeps } from "../rounds/engine";
 import * as service from "./service";
 import { createSupabasePeopleStore } from "./store";
 
@@ -30,24 +25,21 @@ export function addPerson(input: PersonInput): Promise<service.AddResult> {
   return service.addPerson(createSupabasePeopleStore(), input);
 }
 
+/** The round engine's deps, built by the caller (app/settings/zinc-deps.ts, E3). */
+export type EngineWiring = () => Promise<EngineDeps>;
+
 // A new address can unpause a round waiting on one (ALL-28). Never affects the save.
-async function resumeWaitingRounds(id: string): Promise<void> {
+async function resumeWaitingRounds(id: string, engine: EngineWiring): Promise<void> {
   try {
-    const now = new Date();
-    await resumeRoundsForPerson(id, {
-      store: createSupabaseRoundStore(),
-      notify: { store: createSupabaseNotifyStore(), channels: defaultChannels(), baseUrl: siteUrl(), now },
-      now,
-      generateIdeas: createStubGenerateIdeas({ production: process.env.VERCEL_ENV === "production" }),
-    });
+    await resumeRoundsForPerson(id, await engine());
   } catch {
     logEvent("round_resume_failed", { person_id: id });
   }
 }
 
-export async function updatePerson(id: string, input: PersonInput): Promise<SaveResult> {
+export async function updatePerson(id: string, input: PersonInput, engine: EngineWiring): Promise<SaveResult> {
   const result = await service.updatePerson(createSupabasePeopleStore(), id, input);
-  if (result.ok) await resumeWaitingRounds(id);
+  if (result.ok) await resumeWaitingRounds(id, engine);
   return result;
 }
 
@@ -55,9 +47,13 @@ export async function updatePerson(id: string, input: PersonInput): Promise<Save
  * Saves a checked address (ALL-81); a round waiting in needs_address goes on at once, and
  * the buyer's held gifts are tried again through `placeHeld` (ALL-32), so an address hold ships.
  */
-export async function saveAddress(id: string, address: Address, placeHeld?: PlaceHeld): Promise<SaveResult> {
-  const result = await service.saveAddress(createSupabasePeopleStore(), id, address, new Date(), placeHeld);
-  if (result.ok) await resumeWaitingRounds(id);
+export async function saveAddress(
+  id: string,
+  address: Address,
+  wiring: { placeHeld: PlaceHeld; engine: EngineWiring },
+): Promise<SaveResult> {
+  const result = await service.saveAddress(createSupabasePeopleStore(), id, address, new Date(), wiring.placeHeld);
+  if (result.ok) await resumeWaitingRounds(id, wiring.engine);
   return result;
 }
 

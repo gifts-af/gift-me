@@ -102,6 +102,10 @@ export class FakeRoundStore implements RoundStore {
       late: r.late,
       attempts: r.attempts,
       lockedUntil: new Date(r.lockedUntil.getTime()),
+      attentionReason: null,
+      holdCount: 0,
+      seenBalanceCents: null,
+      emailedBalanceCents: null,
     };
   }
 
@@ -164,6 +168,8 @@ export class FakeRoundStore implements RoundStore {
       hasAddress: person.hasAddress,
       openQuestions: person.openQuestions ?? 0,
       ideas: this.ideas.get(roundId) ?? [],
+      orders: [],
+      failCount: 0,
     };
   }
 
@@ -174,5 +180,28 @@ export class FakeRoundStore implements RoundStore {
       r.nextActionAt = now;
     }
     return waiting.map((r) => r.id);
+  }
+
+  // The money path runs against the real database (round-engine-holds.test.ts, E5);
+  // rounds in this fake never reach needs_attention.
+  async refresh(round: ClaimedRound) {
+    return round;
+  }
+  async reconcile(): Promise<RoundStatus | null> {
+    throw new Error("The money path isn't in the fake store");
+  }
+  async release(): Promise<boolean> {
+    throw new Error("The money path isn't in the fake store");
+  }
+  async cancelHeld(): Promise<RoundStatus | null> {
+    throw new Error("The money path isn't in the fake store");
+  }
+  async markHoldEmailed(): Promise<void> {
+    throw new Error("The money path isn't in the fake store");
+  }
+  /** Paid features on and Zinc connected; off unless a test says so. */
+  canBuyResult = false;
+  async canBuy() {
+    return this.canBuyResult;
   }
 }

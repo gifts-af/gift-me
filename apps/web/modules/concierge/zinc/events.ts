@@ -9,7 +9,11 @@ import { call, ZincError } from "./client";
 import { parseEvent, verifySignature, type ZincEvent } from "./signature";
 import type { PlaceHeld, ZincDeps } from "./types";
 
-type Deps = ZincDeps & { placeHeld: PlaceHeld };
+type Deps = ZincDeps & {
+  placeHeld: PlaceHeld;
+  /** The round engine's advanceRound: a settlement that needs the buyer is emailed at once (ALL-32). */
+  advanceRound?: (roundId: string) => Promise<unknown>;
+};
 
 const uuid = z.string().uuid();
 const secretRow = z.object({ user_id: z.string(), webhook_secret: z.string() });
@@ -149,7 +153,7 @@ async function settle(userId: string, event: ZincEvent, deps: Deps): Promise<voi
       ...(c?.total !== undefined ? { total_cents: c.total } : {}),
     };
   }
-  const { error } = await concierge.rpc("settle_order", {
+  const { data: roundStatus, error } = await concierge.rpc("settle_order", {
     p_user_id: userId,
     p_order_id: order.id,
     p_status: placed ? "placed" : "failed",
@@ -158,4 +162,13 @@ async function settle(userId: string, event: ZincEvent, deps: Deps): Promise<voi
   });
   if (error) throw new Error(`Settling the order failed (${error.code}).`);
   logEvent("zinc.order_settled", { user_id: userId, order_id: order.id, status: placed ? "placed" : "failed" });
+  // A failure needs the buyer (reconcile made the round due now): tell them now, not at the next tick.
+  if (roundStatus === "needs_attention" && deps.advanceRound) {
+    try {
+      await deps.advanceRound(order.round_id);
+    } catch (e) {
+      // The tick tells them instead; Zinc mustn't retry a settlement that's done.
+      logEvent("order.hold_notice_deferred", { user_id: userId, round_id: order.round_id, name: e instanceof Error ? e.name : "unknown" });
+    }
+  }
 }

@@ -27,6 +27,14 @@ export class FakeStore implements NotifyStore {
     return this.roundPeople.get(roundId) ?? null;
   }
 
+  /** Rounds cancelled through cancel_held_gift, as "round:user". The real one is tested against the database. */
+  cancelled: string[] = [];
+
+  async cancelHeldGift(roundId: string, userId: string) {
+    this.cancelled.push(`${roundId}:${userId}`);
+    return "skipped" as const;
+  }
+
   async recipient(userId: string) {
     return this.recipients.get(userId) ?? { email: null, timezone: null };
   }

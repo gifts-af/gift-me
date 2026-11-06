@@ -8,7 +8,7 @@ import { AI_MODELS } from "@/lib/ai/models";
 import { appSettingInt } from "@/lib/app-settings";
 import { createClient } from "@/lib/supabase/server";
 import { todayForRequest } from "@/lib/today";
-import { placeHeld } from "@/app/settings/zinc-deps";
+import { buyingWiring, placeHeld } from "@/app/settings/zinc-deps";
 import {
   addPerson,
   answerQuestions,
@@ -77,12 +77,15 @@ export async function addPersonAction(_previous: AddResult | null, formData: For
   return result;
 }
 
+/** The round engine with the real buying side, for rounds that go on once an address arrives. */
+const engineNow = async () => (await buyingWiring(new Date())).engine;
+
 export async function updatePersonAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
   const currentYear = parseDate(await todayForRequest()).year;
   const parsed = parsePersonForm(formData, currentYear, { anyAnniversary: true });
   if (!parsed.ok) return parsed;
   const id = text(formData, "id");
-  return refresh(await updatePerson(id, parsed.value), id);
+  return refresh(await updatePerson(id, parsed.value, engineNow), id);
 }
 
 /** The Shipping address form (ALL-81): checked by format, then saved; a waiting round goes on. */
@@ -90,8 +93,8 @@ export async function saveAddressAction(_previous: AddressSaveResult | null, for
   const parsed = parseAddressForm(formData);
   if (!parsed.ok) return parsed;
   const id = text(formData, "id");
-  // Held gifts waiting on an address are tried again (ALL-32); placeHeld comes from the Zinc wiring.
-  return refresh(await saveAddress(id, parsed.value, placeHeld), id);
+  // Held gifts waiting on an address are tried again (ALL-32); both come from the Zinc wiring.
+  return refresh(await saveAddress(id, parsed.value, { placeHeld, engine: engineNow }), id);
 }
 
 export async function removeAddressAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
