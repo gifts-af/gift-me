@@ -122,7 +122,7 @@ Users connect their own Zinc account in Settings, and approved gifts are bought 
 | `zinc_timeout_ms` | 15000 | How long one Zinc call may take before it counts as timed out. |
 | `zinc_retry_attempts` | 3 | Quick retries of a Zinc call that failed with a network error or 5xx. |
 | `zinc_retry_base_ms` | 1000 | First retry delay; it doubles each time, with jitter. |
-| `zinc_place_budget_ms` | 45000 | Time one run may spend starting Zinc orders; later ones wait for the next run. |
+| `zinc_place_budget_ms` | 45000 | Time one run (a daily tick, a webhook, a settings or address save) may spend starting Zinc orders, shared by every round it places; later ones wait for the next run. Keep it well under the 300 s `maxDuration` of the routes and pages that place (a request in flight can add `zinc_timeout_ms` × `zinc_retry_attempts`). |
 | `zinc_poll_claim_seconds` | 30 | How long one browser tab holds the connect poll before another may poll. |
 | `placing_stale_minutes` | 30 | Minutes an order may stay "placing" before the sweep looks it up at Zinc. |
 

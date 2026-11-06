@@ -3,6 +3,11 @@ import { errorFields, logEvent } from "@/lib/log";
 import { handleZincWebhook } from "@/modules/concierge";
 import { placeHeld, webhookTellers, zincWiring } from "@/app/settings/zinc-deps";
 
+// An auto top-up places the user's held gifts here, which can run for a while: one zinc_place_budget_ms (45 s by default) for the
+// run, plus a request already in flight with its retries. 300 s is the most Vercel's Fluid
+// compute allows on our plan; keep zinc_place_budget_ms well under it. Next needs a literal here.
+export const maxDuration = 300;
+
 // Each user's own Zinc account posts here (ALL-32). The raw body is read first because the
 // signature is over exactly those bytes. Replies carry no body. With Zinc off in this
 // environment the answer is 404 before any signature check, deliberately.

@@ -56,6 +56,7 @@ function harness(opts: { hasAddress?: boolean; candidateFrom?: CalendarDate; zin
   store.settings.set("round_engine_enabled", 1);
   store.settings.set("round_lock_minutes", 10);
   store.settings.set("round_max_attempts", 3);
+  store.settings.set("zinc_place_budget_ms", 45_000);
   store.schedule = SCHEDULE;
   store.people.set(PERSON, { name: NAME, hasAddress: opts.hasAddress ?? true });
   store.occasionKinds.set(OCCASION, "birthday");
@@ -700,8 +701,9 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
   const dayAt = (n: number) => (n === 0 ? new Date(Date.now() + 1000) : new Date(`${addDays(today, n)}T12:00:00Z`));
 
   /** The engine and the buying side wired to each other, as the app's routes do it. */
-  function wiring(now: Date, o: { zinc?: boolean } = {}): { engine: EngineDeps; purchase: PurchaseDeps } {
+  function wiring(now: Date, o: { zinc?: boolean; engineClock?: () => number } = {}): { engine: EngineDeps; purchase: PurchaseDeps } {
     clockDay = now.toISOString().slice(0, 10);
+    const clock = () => 0;
     const db = client();
     const purchase: PurchaseDeps = {
       db,
@@ -712,9 +714,10 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
       settings: { feeCents: 100, marginPct: 10 },
       advanceRound: (roundId) => advanceRound(roundId, engine, { justPlaced: true }),
       sleep: async () => {},
-      clock: () => 0,
+      clock,
     };
     const engine: EngineDeps = {
+      clock: o.engineClock ?? clock,
       store: createSupabaseRoundStore(db),
       notify: { store: createSupabaseNotifyStore(db), channels: [channel], baseUrl: BASE, now },
       now,
@@ -723,7 +726,7 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
         o.zinc === false
           ? null
           : {
-              placeRound: (id, lock) => placeRound(id, lock, purchase),
+              placeRound: (id, lock, deadlineMs) => placeRound(id, lock, purchase, { deadlineMs }),
               sweep: () => sweepStalePlacing(purchase),
               wallet: async () => ({ balanceCents: zinc.balance, autoTopUp: false }),
               lookahead: async () => ({ cents: 0, atLeast: false }),
@@ -880,6 +883,26 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     expect(await roundRow(r.roundId)).toMatchObject({ locked_until: null });
     // The ordinary path stays off: nothing but the money path moves.
     expect(await advance(r.roundId, 23)).toBe("off");
+  });
+
+  // S3: one placing budget per run, set by the engine when the run (the tick) starts and shared
+  // by every round it places; once it's spent nothing more is sent to Zinc, and the round still
+  // gets what's due (the next tick tries placing again). Here the run's clock is already past it.
+  it("stops placing once the run's placing budget is spent", async () => {
+    const u = await newUser();
+    const r = await approvedRound(u);
+    let calls = 0;
+    // The budget is set on the run's first look at the clock; every later look is past it.
+    const engineClock = () => (calls++ === 0 ? 0 : 10_000_000);
+    const log = vi.spyOn(console, "log");
+    expect(await advanceRound(r.roundId, wiring(dayAt(1), { engineClock }).engine)).toBe("advanced");
+    expect(zinc.posts).toEqual([]);
+    const spent = log.mock.calls.map((c) => JSON.parse(String(c[0]))).filter((e) => e.event === "order.place_budget_spent");
+    expect(spent).toEqual([expect.objectContaining({ round_id: r.roundId })]);
+    expect(await roundRow(r.roundId)).toMatchObject({ status: "needs_attention", attention_reason: "retry", locked_until: null });
+    // Within the budget it places.
+    expect(await advanceRound(r.roundId, wiring(dayAt(2)).engine)).toBe("advanced");
+    expect(zinc.posts).toHaveLength(1);
   });
 
   it("names the amounts and carries the alpha line and cancel link in the hold email", async () => {

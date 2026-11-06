@@ -36,8 +36,11 @@ export type GenerateIdeas = (roundId: string) => Promise<void>;
 
 /** The buying side, bound by the caller from the Zinc wiring; null where Zinc is off (E3). */
 export type EngineZinc = {
-  /** placeRound with the round's lease held; it never writes round status. */
-  placeRound: (roundId: string, lock: Date) => Promise<unknown>;
+  /**
+   * placeRound with the round's lease held; it never writes round status. `deadlineMs` (on the
+   * engine's clock) is the run's one placing budget (zinc_place_budget_ms): no POST starts after it.
+   */
+  placeRound: (roundId: string, lock: Date, deadlineMs: number) => Promise<unknown>;
   /** Settles orders left placing (sweepStalePlacing); runs first on each tick. */
   sweep: () => Promise<unknown>;
   /** The user's wallet; only called for a user with paid features and Zinc connected (AC-11). */
@@ -54,6 +57,8 @@ export type EngineDeps = {
   now: Date;
   generateIdeas: GenerateIdeas;
   zinc: EngineZinc | null;
+  /** Milliseconds, for the placing budget; Date.now when left out. */
+  clock?: () => number;
 };
 
 export type TickSummary = { enabled: boolean; created: number; advanced: number; failed: number };
@@ -96,11 +101,13 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
   }
 
   const s = await store.scheduleSettings();
+  // One placing budget for the whole tick, shared by every round it places (zinc_place_budget_ms).
+  const placeBy = await placeDeadline(deps);
   if (!on) {
     let advanced = 0;
     let failed = 0;
     for (const round of await store.claimDueMoney(now)) {
-      if (await advanceClaimed(round, deps, s)) advanced++;
+      if (await advanceClaimed(round, deps, s, false, placeBy)) advanced++;
       else failed++;
     }
     const summary = { enabled: false, created: 0, advanced, failed };
@@ -115,7 +122,7 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
   let advanced = 0;
   let failed = createFailed;
   for (const round of await store.claimDue(now)) {
-    if (await advanceClaimed(round, deps, s)) advanced++;
+    if (await advanceClaimed(round, deps, s, false, placeBy)) advanced++;
     else failed++;
   }
 
@@ -145,7 +152,14 @@ export async function advanceRound(
     return "busy";
   }
   const s = await deps.store.scheduleSettings();
-  return (await advanceClaimed(round, deps, s, opts.justPlaced ?? false)) ? "advanced" : "failed";
+  const placeBy = opts.justPlaced ? 0 : await placeDeadline(deps);
+  return (await advanceClaimed(round, deps, s, opts.justPlaced ?? false, placeBy)) ? "advanced" : "failed";
+}
+
+/** When placing must stop: now plus zinc_place_budget_ms on the engine's clock (0 with Zinc off). */
+async function placeDeadline(deps: EngineDeps): Promise<number> {
+  if (!deps.zinc) return 0;
+  return (deps.clock ?? Date.now)() + (await deps.store.setting("zinc_place_budget_ms"));
 }
 
 /** After a person's address is saved: their rounds waiting for it go on at once (AC-9). */
@@ -190,14 +204,20 @@ async function createDueRounds(
 }
 
 /** Runs a claimed round's step; true if it finished. Never throws. */
-async function advanceClaimed(round: ClaimedRound, deps: EngineDeps, s: ScheduleSettings, justPlaced = false): Promise<boolean> {
+async function advanceClaimed(
+  round: ClaimedRound,
+  deps: EngineDeps,
+  s: ScheduleSettings,
+  justPlaced: boolean,
+  placeBy: number,
+): Promise<boolean> {
   const ids = { round_id: round.id, user_id: round.userId, status: round.status, attempts: round.attempts };
   try {
     // `attempts` counts this claim, so above the limit means that many claims
     // already ended without finishing (a throw or a killed process). Log it for
     // the owner and still try: the round recovers by itself once the fault is fixed.
     if (round.attempts > (await deps.store.setting("round_max_attempts"))) logEvent("round_stuck", ids);
-    if (round.status === "needs_attention") await runHeld(round, deps, s, justPlaced);
+    if (round.status === "needs_attention") await runHeld(round, deps, s, justPlaced, placeBy);
     else await runStep(round, deps, s);
     return true;
   } catch (err) {
@@ -261,7 +281,13 @@ async function runStep(claimed: ClaimedRound, deps: EngineDeps, s: ScheduleSetti
  * the round with cancel_held. reconcile_round sets the status and the next look; the lease
  * goes back with release_round. Never finish_round (plan, rule 6).
  */
-async function runHeld(claimed: ClaimedRound, deps: EngineDeps, s: ScheduleSettings, justPlaced: boolean): Promise<void> {
+async function runHeld(
+  claimed: ClaimedRound,
+  deps: EngineDeps,
+  s: ScheduleSettings,
+  justPlaced: boolean,
+  placeBy: number,
+): Promise<void> {
   const { store, now } = deps;
   const today = dayOf(now);
   const ids = { round_id: claimed.id, user_id: claimed.userId };
@@ -287,8 +313,10 @@ async function runHeld(claimed: ClaimedRound, deps: EngineDeps, s: ScheduleSetti
     if (action.do === "place") {
       placeTried = true;
       steps.push("place");
-      if (deps.zinc) await deps.zinc.placeRound(round.id, round.lockedUntil);
-      else logEvent("zinc.wiring_missing", ids);
+      if (!deps.zinc) logEvent("zinc.wiring_missing", ids);
+      // The run's placing budget is spent: the next tick tries it (the reminders still go today).
+      else if ((deps.clock ?? Date.now)() >= placeBy) logEvent("order.place_budget_spent", ids);
+      else await deps.zinc.placeRound(round.id, round.lockedUntil, placeBy);
     } else if (action.do === "send_hold") {
       await sendStep(round, ctx, action.send, sent, deps);
       emailed = true;

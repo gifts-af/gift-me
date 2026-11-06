@@ -90,7 +90,8 @@ export async function buyingWiring(
     orderPlaced: (roundId) => tellOrdered(roundId, engine),
   };
   engine.zinc = {
-    placeRound: (roundId, lock) => placeRound(roundId, lock, purchase),
+    // The tick's one placing deadline (engine and purchase both read Date.now).
+    placeRound: (roundId, lock, deadlineMs) => placeRound(roundId, lock, purchase, { deadlineMs }),
     sweep: () => sweepStalePlacing(purchase),
     wallet: (userId) => getZincWallet(userId, zinc),
     lookahead: (userId, days, fee) => fundingLookahead(userId, zinc, fee, days),
