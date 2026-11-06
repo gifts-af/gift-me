@@ -1206,6 +1206,10 @@ export type Database = {
         };
         Returns: boolean;
       };
+      gate_held_orders: {
+        Args: { p_reason: string; p_round_id: string };
+        Returns: Database["concierge"]["Enums"]["round_status"];
+      };
       has_paid_features: { Args: { p_user_id: string }; Returns: boolean };
       held_rounds_for_user: {
         Args: { p_user_id: string };

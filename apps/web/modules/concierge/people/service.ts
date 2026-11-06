@@ -20,6 +20,7 @@ import {
 } from "@gifts-af/core";
 import { logEvent } from "@/lib/log";
 import type { SaveResult } from "../settings";
+import type { PlaceHeld } from "../zinc/types";
 import { isUuid, parseShareToken, type ImportRow, type MonthDay, type PersonInput } from "./rules";
 import type { OccasionRow, PeopleStore, PersonRow, StoredAddress } from "./store";
 
@@ -264,9 +265,28 @@ function writeAddress(store: PeopleStore, id: string, a: (Address & { checkedAt:
   );
 }
 
-/** Saves a checked address as a US address, checked at `now` (T51). */
-export function saveAddress(store: PeopleStore, id: string, a: Address, now: Date): Promise<SaveResult> {
-  return writeAddress(store, id, { ...a, checkedAt: now.toISOString() });
+/**
+ * Saves a checked address as a US address, checked at `now` (T51). Then the
+ * buyer's held gifts are tried again (`placeHeld`), so an `address` hold ships
+ * to the new address (ALL-32 AC-21). That never affects the save.
+ */
+export async function saveAddress(
+  store: PeopleStore,
+  id: string,
+  a: Address,
+  now: Date,
+  placeHeld?: PlaceHeld,
+): Promise<SaveResult> {
+  const result = await writeAddress(store, id, { ...a, checkedAt: now.toISOString() });
+  if (result.ok && placeHeld) {
+    const userId = await store.userId();
+    try {
+      if (userId) await placeHeld(userId);
+    } catch (e) {
+      logEvent("person_address_place_failed", { person_id: id, user_id: userId, error: e instanceof Error ? e.name : "unknown" });
+    }
+  }
+  return result;
 }
 
 /** Clears every address column at once (AC-6). */

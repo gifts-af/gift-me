@@ -99,7 +99,7 @@ async function findOurOrder(userId: string, zincOrderId: string, deps: Deps): Pr
 }
 
 // Zinc's error_type to the failure types our SQL understands; anything else is a plain failure.
-function failureType(errorType: string | undefined): string {
+export function failureType(errorType: string | undefined): string {
   if (errorType === "max_price_exceeded") return "price_up";
   if (errorType === "out_of_stock" || errorType === "invalid_shipping_address") return errorType;
   return "failed";

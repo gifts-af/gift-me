@@ -8,6 +8,7 @@ import { AI_MODELS } from "@/lib/ai/models";
 import { appSettingInt } from "@/lib/app-settings";
 import { createClient } from "@/lib/supabase/server";
 import { todayForRequest } from "@/lib/today";
+import { placeHeld } from "@/app/settings/zinc-deps";
 import {
   addPerson,
   answerQuestions,
@@ -89,7 +90,8 @@ export async function saveAddressAction(_previous: AddressSaveResult | null, for
   const parsed = parseAddressForm(formData);
   if (!parsed.ok) return parsed;
   const id = text(formData, "id");
-  return refresh(await saveAddress(id, parsed.value), id);
+  // Held gifts waiting on an address are tried again (ALL-32); placeHeld comes from the Zinc wiring.
+  return refresh(await saveAddress(id, parsed.value, placeHeld), id);
 }
 
 export async function removeAddressAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {

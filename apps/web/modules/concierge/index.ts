@@ -86,3 +86,10 @@ export type { PaymentResult, PaymentStatus } from "./zinc/connect";
 export type { PlaceHeld, ZincDeps } from "./zinc/types";
 export { handleZincWebhook } from "./zinc/events";
 export { hasPaidFeatures } from "./paid-features";
+// Approving and buying from the user's own Zinc wallet (ALL-30, ALL-32 Task 6). The tick, the
+// webhook route and Settings bind placeHeldForUser into a PlaceHeld (ALL-32 Task 7).
+export { approveAndBuy } from "./purchase/approve";
+export type { ApproveError, ApproveInput, ApproveResult } from "./purchase/approve";
+export { placeHeldForUser, placeRound, sweepStalePlacing } from "./purchase/place";
+export type { PlaceOutcome } from "./purchase/place";
+export type { PurchaseDeps } from "./purchase/store";
