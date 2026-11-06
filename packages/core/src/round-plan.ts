@@ -83,6 +83,11 @@ export type RoundView = {
   emailedBalanceCents: number | null;
   /** This run already tried placing the round's held gifts; the reminders come after the try. */
   placeTried: boolean;
+  /**
+   * Ordering is switched off (zinc_ordering_enabled = 0). Pause outranks funds for emailing:
+   * topping up wouldn't buy anything, so a funds hold gets no emails while it's off.
+   */
+  orderingPaused?: boolean;
 };
 
 export type NextAction =
@@ -138,13 +143,15 @@ function holdAction(r: RoundView, today: CalendarDate, s: ScheduleSettings): Nex
 
   const n = r.holdCount;
   const emailed = EMAILED_HOLDS.includes(reason);
+  const silenced = reason === "funds" && r.orderingPaused === true;
   // A new hold is told before anything else.
-  if (emailed) {
+  if (emailed && !silenced) {
     const notice: StepKey = `hold:${n}:notice`;
     if (!r.sent.has(notice)) return { do: "send_hold", send: notice };
   }
   // Then one try at placing, so a gift that can now be bought never gets a "top up" email first.
   if (PLACEABLE_HOLDS.includes(reason) && !r.placeTried) return { do: "place" };
+  if (silenced) return wait;
 
   const finalDue = compareDates(addDays(r.shipByDeadline, -s.holdFinalDays), today) <= 0;
   if (reason === "retry") {

@@ -255,14 +255,16 @@ async function runHeld(claimed: ClaimedRound, deps: EngineDeps, s: ScheduleSetti
   // the deadline gets its notice today and the reminder tomorrow, not both at once).
   let emailed = false;
   const steps: string[] = [];
+  // Ordering switched off outranks a funds hold for emailing (round-plan, orderingPaused).
+  const orderingPaused = (await store.setting("zinc_ordering_enabled")) !== 1;
   // Each pass sends a new key or tries placing once, so this ends; the cap is a backstop.
   for (let pass = 0; pass < 5 && round.status === "needs_attention"; pass++) {
     const ctx = await store.roundContext(round.id);
     const sent = await store.sentSteps(round.id);
-    const action = nextAction(view(round, ctx, sent, placeTried), today, s);
+    const action = nextAction(view(round, ctx, sent, placeTried, orderingPaused), today, s);
     if (emailed && action.do !== "place") break;
     if (action.do === "skip") {
-      steps.push(await closeAtDeadline(round, ctx, sent, deps));
+      steps.push(await closeAtDeadline(round, ctx, sent, deps, orderingPaused));
       break;
     }
     if (action.do === "place") {
@@ -304,12 +306,20 @@ async function runHeld(claimed: ClaimedRound, deps: EngineDeps, s: ScheduleSetti
  * - still unconfirmed after closing: "still confirming". The round stays open, so a refusal is
  *   retried; when the cancel email went this run, it waits for the next look (one email a run).
  */
-async function closeAtDeadline(round: ClaimedRound, ctx: RoundContext, sent: Set<StepKey>, deps: EngineDeps): Promise<string> {
+async function closeAtDeadline(
+  round: ClaimedRound,
+  ctx: RoundContext,
+  sent: Set<StepKey>,
+  deps: EngineDeps,
+  orderingPaused: boolean,
+): Promise<string> {
   const ids = { round_id: round.id, user_id: round.userId };
   const held = ctx.orders.filter(LIVE_HELD);
   const placed = ctx.orders.filter((o) => ["placed", "shipped", "delivered", "refunded"].includes(o.status));
   const pending = ctx.orders.some((o) => o.status === "placing" || o.status === "unconfirmed");
-  const skipStep: StepKey = round.attentionReason === "paused" ? "missed_on_us" : "skipped";
+  // Our own switch kept it back: ordering is off now, whatever reason the hold was stored with
+  // (gate_held_orders never replaces funds with paused), or the hold says paused.
+  const skipStep: StepKey = round.attentionReason === "paused" || orderingPaused ? "missed_on_us" : "skipped";
 
   let emailed = false;
   // The email that decides what the buyer hears goes before closing; a refusal keeps the round
@@ -425,7 +435,7 @@ async function headsUpFunding(round: ClaimedRound, deps: EngineDeps): Promise<Fu
   }
 }
 
-function view(round: ClaimedRound, ctx: RoundContext, sent: Set<StepKey>, placeTried = false): RoundView {
+function view(round: ClaimedRound, ctx: RoundContext, sent: Set<StepKey>, placeTried = false, orderingPaused = false): RoundView {
   return {
     status: round.status,
     shipByDeadline: round.shipByDeadline,
@@ -438,6 +448,7 @@ function view(round: ClaimedRound, ctx: RoundContext, sent: Set<StepKey>, placeT
     seenBalanceCents: round.seenBalanceCents,
     emailedBalanceCents: round.emailedBalanceCents,
     placeTried,
+    orderingPaused,
   };
 }
 

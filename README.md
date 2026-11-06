@@ -140,7 +140,8 @@ Users connect their own Zinc account in Settings, and approved gifts are bought 
 update concierge.app_settings set value = '0' where key = 'zinc_ordering_enabled';
 ```
 
-- Approved gifts are held as `paused`, and nobody is emailed.
+- Approved gifts are held as `paused`, and nobody is emailed. A gift already waiting on the buyer's Zinc balance stops getting "top up" reminders (topping up wouldn't buy it while ordering is off).
+- A held gift that reaches its deadline while ordering is off gets the "that's on us" email (`missed_on_us`), never "skipped".
 - A run already in progress finishes the orders it has started; the switch is checked at the next order it begins.
 - Set the value back to `'1'` and the held gifts are placed on the next daily tick, with no user step.
 

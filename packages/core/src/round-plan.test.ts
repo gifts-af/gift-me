@@ -238,6 +238,22 @@ describe("nextAction: money holds (AC-20, AC-22, AC-23)", () => {
     expect(PLACEABLE_HOLDS).not.toContain("address");
   });
 
+  // S8: with ordering switched off, topping up wouldn't buy anything, so a funds hold gets no
+  // more emails (the deadline sends missed_on_us instead, in the engine).
+  it("sends no funds emails while ordering is switched off", () => {
+    const paused = { orderingPaused: true };
+    expect(nextAction(tried({ ...paused }), "2027-03-01", s)).toEqual(wait);
+    expect(nextAction(tried({ ...paused, sent: sent("hold:1:notice") }), "2027-03-15", s)).toEqual(wait);
+    expect(nextAction(tried({ ...paused, sent: sent("hold:1:notice") }), "2027-03-20", s)).toEqual(wait);
+    expect(nextAction(tried({ ...paused, sent: sent("hold:1:notice"), seenBalanceCents: 2000 }), "2027-03-01", s)).toEqual(wait);
+    // It still tries placing (the gate holds it as paused), and other holds still tell the buyer.
+    expect(nextAction(hold({ ...paused, sent: sent("hold:1:notice") }), "2027-03-01", s)).toEqual({ do: "place" });
+    expect(nextAction(tried({ ...paused, attentionReason: "setup", sent: sent("hold:1:notice") }), "2027-03-15", s)).toEqual({
+      do: "send_hold",
+      send: "hold:1:reminder",
+    });
+  });
+
   it("waits once it has tried placing and nothing is due", () => {
     expect(nextAction(tried({ sent: sent("hold:1:notice") }), "2027-03-01", s)).toEqual(wait);
   });

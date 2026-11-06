@@ -970,6 +970,22 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     expect(m.text).toContain("That's on us. Nothing was bought and nothing was charged.");
   });
 
+  // S8: ordering switched off while a gift waits on funds: no "top up" reminders (topping up
+  // wouldn't buy it), and the deadline says it was on us, not "skipped".
+  it("with ordering switched off, a funds hold gets no reminders and the deadline sends missed_on_us", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    zinc.balance = 1000;
+    expect(await approve(u, r)).toEqual({ ok: true, status: "held", reason: "funds" });
+    await pg.query("update concierge.app_settings set value = '0' where key = 'zinc_ordering_enabled'");
+    for (const day of [1, 23, 28]) expect(await advance(r.roundId, day)).toBe("advanced");
+    expect(await roundRow(r.roundId)).toMatchObject({ attention_reason: "funds" });
+    expect(await advance(r.roundId, 30)).toBe("advanced");
+    expect(await roundRow(r.roundId)).toMatchObject({ status: "skipped" });
+    expect(inbox(u)).toEqual(["Mary's gift is waiting on your Zinc balance@0", "We couldn't send Mary's gift in time@30"]);
+    expect(zinc.posts).toEqual([]);
+  });
+
   it("an unconfirmed order: told at once, again at the deadline, never skipped", async () => {
     const u = await newUser({ autoTopUp: null });
     const r = await newRound(u);
