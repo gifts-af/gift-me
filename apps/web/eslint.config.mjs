@@ -47,11 +47,17 @@ const eslintConfig = [
     rules: {
       "no-restricted-syntax": [
         "error",
-        {
-          selector: "CallExpression[callee.property.name='getByLabel'][arguments.0.value='Password']",
+        // Finding the password field by label, placeholder or role, as a string or a regex.
+        ...[
+          "CallExpression[callee.property.name=/^getBy(Label|Placeholder)$/][arguments.0.value=/password/i]",
+          "CallExpression[callee.property.name=/^getBy(Label|Placeholder)$/][arguments.0.regex.pattern=/password/i]",
+          "CallExpression[callee.property.name='getByRole'] > ObjectExpression > Property[key.name='name'][value.value=/password/i]",
+          "CallExpression[callee.property.name='getByRole'] > ObjectExpression > Property[key.name='name'][value.regex.pattern=/password/i]",
+        ].map((selector) => ({
+          selector,
           message:
             "Sign in with signIn(page) from e2e/sign-in.ts, not the login form (T62). Only a test of the form itself fills it in: disable this line with a reason.",
-        },
+        })),
       ],
     },
   },
