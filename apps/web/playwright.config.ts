@@ -28,15 +28,18 @@ export default defineConfig({
     baseURL: process.env.E2E_BASE_URL ?? `http://localhost:${port}`,
     trace: "retain-on-failure",
   },
-  // Every test runs on two phones (ALL-60): an Android phone in Chromium and
-  // an iPhone in WebKit, Safari's engine (iPhone Mail uses it too). Both at
-  // 375 px wide, because the acceptance criterion is "usable at 375 px".
-  // App tests also run in desktop Chrome; emails are only read on phones here, and
-  // round-engine.spec.ts (global tick, flips a global setting) runs on desktop only, hooks included.
+  // Which browsers run what (T62, ALL-103; revises ALL-60's "every test on two phones"):
+  // - Layout tests, tagged @layout (fits the screen, positions, tap sizes), run on all
+  //   three: an Android phone in Chromium, an iPhone in WebKit (Safari's engine, which
+  //   iPhone Mail uses too), both 375 px wide for "usable at 375 px", and desktop Chrome.
+  // - Every other test checks behavior, which is the same in any browser, so it runs
+  //   once, on the iPhone. That includes round-engine.spec.ts, whose global tick and
+  //   setting must only run in one worker.
+  // Emails are only read on phones, so desktop skips them.
   projects: [
-    { name: "android", use: { ...devices["Pixel 7"], viewport: { width: 375, height: 812 } }, testIgnore: /round-engine\.spec\.ts/ },
-    { name: "iphone", use: { ...devices["iPhone 13 Mini"], viewport: { width: 375, height: 812 } }, testIgnore: /round-engine\.spec\.ts/ },
-    { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } }, testIgnore: /emails\.spec\.ts/ },
+    { name: "android", use: { ...devices["Pixel 7"], viewport: { width: 375, height: 812 } }, grep: /@layout/ },
+    { name: "iphone", use: { ...devices["iPhone 13 Mini"], viewport: { width: 375, height: 812 } } },
+    { name: "desktop", use: { ...devices["Desktop Chrome"], viewport: { width: 1280, height: 800 } }, grep: /@layout/, testIgnore: /emails\.spec\.ts/ },
   ],
   webServer: process.env.E2E_BASE_URL
     ? undefined

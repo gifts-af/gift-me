@@ -1,17 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
 import { createFreshUser } from "./fresh-user";
 import { phoneLayoutProblems } from "./phone-layout";
-import { TEST_USER } from "./test-user";
+import { signIn } from "./sign-in";
 
 // ALL-95: one bar with Get and Give on every signed-in page.
-async function signIn(page: Page, user: { email: string; password: string } = TEST_USER) {
-  await page.goto("/auth/login");
-  await page.getByLabel("Email").fill(user.email);
-  await page.getByLabel("Password").fill(user.password);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
-}
-
 async function addGiftByHand(page: Page, name: string) {
   await page.getByRole("button", { name: "Add by hand" }).click();
   await page.getByLabel("Gift name").fill(name);
@@ -34,7 +26,7 @@ test.describe("My list", () => {
     await expect(page.getByRole("button", { name: "Account" })).toHaveCount(0);
   });
 
-  test("the bar is the same size and the logo in the same spot, signed out or in", async ({ page }) => {
+  test("the bar is the same size and the logo in the same spot, signed out or in", { tag: "@layout" }, async ({ page }) => {
     await page.goto("/lists");
     await expect(page.getByRole("button", { name: /Switch to/ })).toBeVisible();
     const signedOut = await barAndLogo(page);
@@ -137,8 +129,9 @@ test.describe("which bar each page gets", () => {
 });
 
 test.describe("the You card on Give", () => {
-  test("comes first and invites someone with no people and no list", async ({ page }) => {
+  test("comes first and invites someone with no people and no list", { tag: "@layout" }, async ({ page }) => {
     await signIn(page, await createFreshUser());
+    await page.goto("/");
     const you = page.getByRole("link", { name: /^You/ });
     await expect(you).toContainText("Start your wish list");
     await expect(you).toHaveAttribute("href", "/lists");
@@ -150,6 +143,7 @@ test.describe("the You card on Give", () => {
 
   test("shows the new count after saving and pressing Give", async ({ page }) => {
     await signIn(page, await createFreshUser());
+    await page.goto("/");
     await page.getByRole("link", { name: "Get" }).click();
     await addGiftByHand(page, "Wool socks");
     await page.getByRole("button", { name: "Save" }).click();
@@ -159,13 +153,14 @@ test.describe("the You card on Give", () => {
   });
 });
 
-test.describe("at 320 px, the narrowest phone", () => {
+test.describe("at 320 px, the narrowest phone", { tag: "@layout" }, () => {
   test.use({ viewport: { width: 320, height: 800 } });
 
   // No people on purpose: PersonCard's name link is short by itself (its tap
   // area is a ::after), which phoneLayoutProblems flags, and that's not the bar.
   test("every signed-in page fits", async ({ page }) => {
     await signIn(page, await createFreshUser());
+    await page.goto("/");
     await expect(page.getByRole("link", { name: /^You/ })).toBeVisible();
     expect(await phoneLayoutProblems(page)).toEqual([]);
     for (const path of ["/lists", "/settings"]) {
@@ -180,6 +175,7 @@ test.describe("at 320 px, the narrowest phone", () => {
     // space for a scrollbar. "Every signed-in page fits" still covers it for scrolling.
     test.skip(info.project.name === "desktop");
     await signIn(page, await createFreshUser());
+    await page.goto("/");
     await expect(page.getByRole("button", { name: "Account" })).toBeVisible();
     const slot = page.locator("[data-top-bar-row] > div");
     expect(await slot.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
@@ -187,6 +183,7 @@ test.describe("at 320 px, the narrowest phone", () => {
 
   test("the tabs are big enough to press", async ({ page }) => {
     await signIn(page, await createFreshUser());
+    await page.goto("/");
     for (const name of ["Get", "Give"]) {
       const box = await page.getByRole("link", { name }).boundingBox();
       expect(box!.height).toBeGreaterThanOrEqual(44);
@@ -196,6 +193,7 @@ test.describe("at 320 px, the narrowest phone", () => {
 
   test("a very long name in the back link stays on screen", async ({ page }) => {
     await signIn(page, await createFreshUser());
+    await page.goto("/");
     const name = "Bartholomew".repeat(5);
     await page.getByRole("link", { name: "Add someone you buy for" }).first().click();
     await page.getByLabel("Name").fill(name);
@@ -213,6 +211,7 @@ test.describe("at 320 px, the narrowest phone", () => {
 
   test("a person's page and their questions fit, with the back link in the page", async ({ page }) => {
     await signIn(page, await createFreshUser());
+    await page.goto("/");
     await page.getByRole("link", { name: "Add someone you buy for" }).first().click();
     await page.getByLabel("Name").fill("Ada");
     await page.getByLabel("Who are they to you?").selectOption({ label: "Mother" });

@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { localSupabase } from "./local-supabase";
 import { phoneLayoutProblems } from "./phone-layout";
 import { SECOND_USER, TEST_USER } from "./test-user";
+import { signIn } from "./sign-in";
 
 // ALL-26: guided questions and the readiness meter, on phones and desktop,
 // against the local Supabase. Each project uses its own people.
@@ -42,14 +43,6 @@ async function newPerson(name: string): Promise<string> {
     body: JSON.stringify({ user_id: owner, name, relationship: "friend" }),
   });
   return person.id as string;
-}
-
-async function signIn(page: Page, user = TEST_USER) {
-  await page.goto("/auth/login");
-  await page.getByLabel("Email").fill(user.email);
-  await page.getByLabel("Password").fill(user.password);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
 }
 
 const facts = (personId: string) =>

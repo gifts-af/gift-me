@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { localSupabase } from "./local-supabase";
 import { SECOND_USER, TEST_USER } from "./test-user";
+import { signIn } from "./sign-in";
 
 // ALL-21: add someone, see their card, switch occasions and budgets, link their
 // list, delete them. On a phone, as TEST_USER, against the local Supabase.
@@ -60,14 +61,6 @@ async function secondUserShareLink(): Promise<string> {
   return `/share/${rows[0].share_token}`;
 }
 
-async function signIn(page: Page) {
-  await page.goto("/auth/login");
-  await page.getByLabel("Email").fill(TEST_USER.email);
-  await page.getByLabel("Password").fill(TEST_USER.password);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
-}
-
 async function noSidewaysScroll(page: Page) {
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);
@@ -78,6 +71,7 @@ test("add Mom, set her occasions and budget, link her list, delete her", async (
   const mom = `Mom ${testInfo.project.name}`;
   await deleteLeftovers(mom);
   await signIn(page);
+  await page.goto("/");
 
   // 1. Add her with only a name and Mother.
   await page.getByRole("link", { name: "Add someone you buy for" }).first().click();
