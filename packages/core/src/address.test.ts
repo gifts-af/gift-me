@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ADDRESS_FIELD_MAX, checkAddress, isShippableAddress, splitRecipientName, US_STATES } from "./address";
+import { ADDRESS_FIELD_MAX, checkAddress, isShippableAddress, splitRecipientName, US_STATES, checkOwnAddress } from "./address";
 
 const good = {
   firstName: " Mary ",
@@ -118,5 +118,26 @@ describe("splitRecipientName", () => {
     ["", { firstName: "", lastName: "" }],
   ])("splits %j on the last space", (name, want) => {
     expect(splitRecipientName(name)).toEqual(want);
+  });
+});
+
+describe("checkOwnAddress", () => {
+  const GOOD = { firstName: "Sam", lastName: "Rivera", line1: "44 Elm St", city: "Columbus", state: "OH", zip: "43215" };
+
+  it("speaks to the owner when their names are missing", () => {
+    const result = checkOwnAddress({});
+    expect(result).toMatchObject({
+      ok: false,
+      errors: { firstName: "Add your first name.", lastName: "Add your last name." },
+    });
+  });
+
+  it("keeps every other message as it is", () => {
+    const own = checkOwnAddress({ ...GOOD, city: "", zip: "123" });
+    expect(own).toEqual(checkAddress({ ...GOOD, city: "", zip: "123" }));
+  });
+
+  it("returns the same value as checkAddress for a good address", () => {
+    expect(checkOwnAddress(GOOD)).toEqual(checkAddress(GOOD));
   });
 });

@@ -90,6 +90,16 @@ export function checkAddress(
   };
 }
 
+/** The same check for your own address (ALL-63), with the name messages speaking to you. */
+export function checkOwnAddress(d: AddressDraft): ReturnType<typeof checkAddress> {
+  const checked = checkAddress(d);
+  if (checked.ok) return checked;
+  const errors = { ...checked.errors };
+  if (errors.firstName === MISSING.firstName) errors.firstName = "Add your first name.";
+  if (errors.lastName === MISSING.lastName) errors.lastName = "Add your last name.";
+  return { ok: false, errors };
+}
+
 /** Ready to ship to: a US address that passes the check. */
 export function isShippableAddress(d: AddressDraft & { country?: string | null }): boolean {
   return d.country === "US" && checkAddress(d).ok;
