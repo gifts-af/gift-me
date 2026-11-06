@@ -1051,6 +1051,23 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     expect(zinc.posts).toEqual([]);
   });
 
+  // Re-review: the sweep marks an order unconfirmed and the buyer hears "still confirming" in the
+  // same run (owner: customers are always told), and the owner gets an alert (E8).
+  it("the sweep tells the buyer at once when Zinc can't find an order, and alerts the owner", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await newRound(u);
+    zinc.plan.set(`https://shop.test/p/${r.ideaIds[0]}`, ["timeout"]);
+    await approve(u, r);
+    const [o] = (await pg.query("select id from concierge.orders where round_id = $1", [r.roundId])).rows;
+    const log = vi.spyOn(console, "log");
+    await sweepStalePlacing(wiring(new Date(Date.now() + 31 * 60_000)).purchase);
+    expect((await pg.query("select status from concierge.orders where id = $1", [o.id])).rows[0].status).toBe("unconfirmed");
+    expect(await sends(r.roundId)).toContain("hold:1:notice");
+    expect(mail.filter((m) => m.to === u.email).map((m) => m.subject)).toEqual(["We're confirming Mary's gift with the store"]);
+    const alerts = log.mock.calls.map((c) => JSON.parse(String(c[0]))).filter((e) => e.event === "order.unconfirmed" && e.order_id === o.id);
+    expect(alerts).toEqual([expect.objectContaining({ round_id: r.roundId, user_id: u.userId, alert: true })]);
+  });
+
   it("an unconfirmed order: told at once, again at the deadline, never skipped", async () => {
     const u = await newUser({ autoTopUp: null });
     const r = await newRound(u);

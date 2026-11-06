@@ -457,8 +457,16 @@ export async function sweepStalePlacing(deps: PurchaseDeps): Promise<number> {
       const found = await findOrderByReference(deps.http, key.apiKey, o.id);
       if (!found) {
         await roundRpc(deps, "mark_unconfirmed", { p_order_id: o.id });
-        logEvent("order.unconfirmed", ids);
+        // The owner settles it by hand (README > Unconfirmed orders), so it alerts (E8).
+        logEvent("order.unconfirmed", { ...ids, alert: true });
         done++;
+        // The buyer hears "still confirming" now, not at the next tick (owner: always told).
+        // advanceRound is bound with justPlaced: it only tells, with a fresh claim (S1).
+        try {
+          await deps.advanceRound(o.round_id);
+        } catch (e) {
+          logEvent("order.sweep_tell_failed", { ...ids, ...errorFields(e) });
+        }
         continue;
       }
       if (found.status === "pending") continue; // still processing at Zinc: its webhook or a later sweep settles it

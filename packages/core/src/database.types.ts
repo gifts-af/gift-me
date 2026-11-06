@@ -1417,6 +1417,10 @@ export type Database = {
         }[];
       };
       round_fail_count: { Args: { p_round_id: string }; Returns: number };
+      rounds_missing_late_failure_email: {
+        Args: Record<PropertyKey, never>;
+        Returns: string[];
+      };
       set_emailed_balance: {
         Args: { p_cents: number; p_round_id: string };
         Returns: undefined;

@@ -474,23 +474,12 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
     },
 
     async roundsMissingOrderedEmail() {
-      // Orders that failed after their round closed and whose email hasn't gone. Rare, so unbounded.
+      // Rounds with an order that failed after the round closed and whose email isn't recorded
+      // (rounds_missing_late_failure_email: only the unsent ones, never every late failure ever).
       const lateFailures = async (): Promise<string[]> => {
-        const { data: failed, error: failedError } = await concierge
-          .from("orders")
-          .select("id, round_id")
-          .eq("status", "failed")
-          .eq("failed_after_close", true);
-        if (failedError) fail("Loading late failures failed", failedError);
-        if (!failed.length) return [];
-        const { data: sent, error: sentError } = await concierge
-          .from("round_sends")
-          .select("step")
-          .in("round_id", [...new Set(failed.map((o) => o.round_id))])
-          .like("step", "late_fail:%");
-        if (sentError) fail("Loading the late failure emails failed", sentError);
-        const told = new Set(sent.map((x) => x.step));
-        return [...new Set(failed.filter((o) => !told.has(`late_fail:${o.id}`)).map((o) => o.round_id))];
+        const { data, error: lateError } = await concierge.rpc("rounds_missing_late_failure_email");
+        if (lateError) fail("Loading late failures failed", lateError);
+        return (data ?? []) as string[];
       };
       // Bounded to rounds that aren't finished: ordered or still needing the buyer.
       // Follow-up (past MVP scale): one SQL query with NOT EXISTS on round_sends, or a recent window.
