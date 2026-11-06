@@ -69,7 +69,7 @@ test.describe("My list", () => {
 test.describe("the You card on Give", () => {
   test("comes first and invites someone with no people and no list", async ({ page }) => {
     await signIn(page, await createFreshUser());
-    const you = page.getByRole("link", { name: /^You/ });
+    const you = page.getByRole("link", { name: /^You/ });
     await expect(you).toContainText("Start your wish list");
     await expect(you).toHaveAttribute("href", "/lists");
     const card = await you.boundingBox();
@@ -85,6 +85,6 @@ test.describe("the You card on Give", () => {
     await page.getByRole("button", { name: "Save" }).click();
     await expect(page.getByText("Unsaved changes")).toHaveCount(0);
     await page.getByRole("link", { name: "Give" }).click();
-    await expect(page.getByRole("link", { name: /^You/ })).toContainText("1 gift on your list");
+    await expect(page.getByRole("link", { name: /^You/ })).toContainText("1 gift on your list");
   });
 });

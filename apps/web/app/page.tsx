@@ -1,16 +1,17 @@
-import { ChevronRight, Gift } from "lucide-react";
-import Link from "next/link";
 import { Suspense } from "react";
 import { AppNav } from "@/components/app-shell/app-nav";
 import { InstallTip } from "@/components/app-shell/install-tip";
-import { PageFrame } from "@/components/app-shell/page-frame";
+import { PageFrame, PageTitle } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
 import { PeopleSection } from "@/components/home/people-section";
+import { YouCard } from "@/components/home/you-card";
 import { appSettingInt } from "@/lib/app-settings";
 import { getMyListSummary } from "@/modules/lists";
 
-// Home: the one front door after sign-in (T29). "My list" first, then
-// "People" (the concierge). proxy.ts sends signed-out visitors to sign in.
+// Give: the page after sign-in, and the people you buy for (ALL-95, revising
+// T29). You come first, with the way to your own list. The card and the people
+// load separately, so a slow or failing concierge can't hold up the list (T19).
+// proxy.ts sends signed-out visitors to the public home page.
 export default function Home() {
   return (
     <>
@@ -21,16 +22,16 @@ export default function Home() {
         <Suspense fallback={null}>
           <HomeScreenTip />
         </Suspense>
-        <Suspense fallback={<ListCard title="My list" subtitle="Loading…" />}>
-          <MyListCard />
-        </Suspense>
         <section aria-labelledby="people-heading" className="flex flex-col gap-3">
-          <h2 id="people-heading" className="text-[17px] font-semibold">
-            People
-          </h2>
-          <Suspense fallback={<p className="text-[15px] text-muted-foreground">Loading…</p>}>
-            <PeopleSection />
-          </Suspense>
+          <PageTitle id="people-heading">People</PageTitle>
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            <Suspense fallback={<YouCard />}>
+              <YourCard />
+            </Suspense>
+            <Suspense fallback={<p className="col-span-full text-[15px] text-muted-foreground">Loading…</p>}>
+              <PeopleSection />
+            </Suspense>
+          </div>
         </section>
       </PageFrame>
     </>
@@ -48,29 +49,7 @@ async function HomeScreenTip() {
   }
 }
 
-async function MyListCard() {
+async function YourCard() {
   const summary = await getMyListSummary();
-  return summary ? (
-    <ListCard title="My list" subtitle={summary.count === 1 ? "1 gift" : `${summary.count} gifts`} />
-  ) : (
-    <ListCard title="Start your wish list" subtitle="Add gifts you'd like and share the link" />
-  );
-}
-
-function ListCard({ title, subtitle }: { title: string; subtitle: string }) {
-  return (
-    <Link
-      href="/lists"
-      className="flex w-full items-center gap-3 rounded-lg border bg-card p-3 hover:border-primary/40 sm:max-w-md"
-    >
-      <span className="grid size-14 flex-none place-items-center rounded-md bg-muted text-muted-foreground">
-        <Gift className="size-5" aria-hidden="true" />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block text-[15px] font-semibold">{title}</span>
-        <span className="mt-0.5 block text-[13px] text-muted-foreground">{subtitle}</span>
-      </span>
-      <ChevronRight className="size-5 text-muted-foreground" aria-hidden="true" />
-    </Link>
-  );
+  return <YouCard count={summary ? summary.count : null} />;
 }
