@@ -46,6 +46,7 @@ pnpm db:test           # run the database tests in supabase/tests/ (privacy rule
 pnpm db:types          # regenerate packages/core/src/database.types.ts after changing the schema
 pnpm db:push:dev       # apply new migrations to dev (CI does this on every merge to main; by hand only to recover)
 pnpm db:push:prod      # apply new migrations to prod (same; add --dry-run to see what would run)
+pnpm live-check        # signed-in checks on giftsaf.com with the shared test account (needs `pnpm supabase login`; see Production test account)
 pnpm ai:eval           # check capture extraction against the fixtures with the real model (~10¢, needs AI_GATEWAY_API_KEY; not in CI)
 ```
 
@@ -53,7 +54,7 @@ Write new migrations with `pnpm supabase migration new <name>` and test them loc
 
 **Before the first migration push to a hosted project (`dev` or `prod`):** `config.toml` only exposes the `concierge` and `lists` schemas locally. On each hosted project, add both under Project Settings > Data API > Exposed schemas (admin, as allensforever711), or the app's queries fail with `PGRST106`. Do it **right after** pushing the migration that creates the schema, never before. Exposing a schema that doesn't exist yet takes the whole Data API down (every request gets a 503; tested locally on 2026-10-25). That project also needs Postgres 15 or later; the migrations use `on delete set null (column)`.
 
-**Browser tests (Playwright):** with the local database running, `pnpm --filter @gifts-af/web e2e`. They sign in as a throwaway local account (created for you, email and password, since local Supabase has no Google) at phone width (375 px). If `pnpm dev` is already running on port 3100 it's reused; otherwise one is started. CI runs them against a production build (`e2e` job). CI keeps the downloaded browsers in a cache until `pnpm-lock.yaml` changes, so most runs install only the system packages the browsers need; both install steps time out after 5 minutes, so a stuck download fails fast and can be re-run (ALL-100).
+**Browser tests (Playwright):** with the local database running, `pnpm --filter @gifts-af/web e2e`. They sign in as a throwaway local account (created for you, email and password, since local Supabase has no Google) at phone width (375 px). They build the app first (about 30 seconds, and type errors stop the run) and test that production build, as CI's `e2e` job does. They need port 3100 free, so only one checkout can run them at a time; if the port is busy the run fails, rather than testing old code. To test a server that's already running, set `E2E_BASE_URL`. CI keeps the downloaded browsers in a cache until `pnpm-lock.yaml` changes, so most runs install only the system packages the browsers need; both install steps time out after 5 minutes, so a stuck download fails fast and can be re-run (ALL-100).
 
 **Running the web app:** follow [apps/web/README.md](apps/web/README.md) to link Vercel and pull the environment variables, then `pnpm dev`. Before a PR, `pnpm lint && pnpm typecheck && pnpm test && pnpm build` (CI runs the same).
 
@@ -67,7 +68,7 @@ Write new migrations with `pnpm supabase migration new <name>` and test them loc
 | `dev` | Supabase project `gift-me-dev` (ref `bcemtqvdbrrgiipzggyw`) | `pnpm dev` with pulled Vercel variables, and every PR preview |
 | `prod` | Supabase project `gift-me` (ref `pegtrucfuaaufqvsavpb`), GiftsAF's original project with real users | Production (`main`) only, at **https://giftsaf.com** (`www` redirects there; the old https://gift-me-beige.vercel.app still works) |
 
-- **How Vercel picks the database:** the Supabase integration provides `NEXT_PUBLIC_GIFT_SUPABASE_*` (prod) to every environment. Development and Preview also have `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` set to `dev`, and `apps/web/lib/supabase/env.ts` reads those first. The integration store (Vercel → Storage → gift-me) is connected to Production only, so prod's server-side keys stay off developer machines.
+- **How Vercel picks the database:** the Supabase integration provides `NEXT_PUBLIC_GIFT_SUPABASE_*` (prod) to every environment. Development and Preview also have `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` set to `dev`, and `apps/web/lib/supabase/env.ts` reads those first. The integration store (Vercel → Storage → gift-me) is connected to Production only, so `vercel env pull` keeps prod's server-side keys off developer machines. `pnpm live-check` reads prod's admin key through the Supabase CLI, in memory only, for the length of a run (T60).
 - **Migrations go local → `dev` → `prod`, automatically on merge (T50).** After every push to `main`, CI's `migrate` job runs `pnpm db:push:dev`, then `pnpm db:push:prod` only if `dev` succeeded. It uses the GitHub secret `SUPABASE_ACCESS_TOKEN` (a Supabase access token of allensforever711), and no database password. Because Vercel deploys the same merge at the same time, **every migration must be expand-then-contract** (E7): add the new thing first, and remove the old thing in a later migration once no live code uses it.
   - **New schemas** still need adding under Exposed schemas in each project's dashboard *after* the migration lands, never before. The job doesn't do this.
   - **Turning it off:** set the repo variable `MIGRATE_ON_MERGE` to `off` (GitHub → Settings → Secrets and variables → Actions → Variables). Delete the variable to turn it back on.
@@ -93,16 +94,21 @@ Where new docs go, how to write them, and when to push straight to `main` versus
 
 To check a change on giftsaf.com while signed in, use **`allensforever711+qa@gmail.com`** (T60). Don't create another account for this, and don't use a real person's.
 
-**How to sign in.** Nobody holds its password. The sign-in form won't work for a script, because the Turnstile bot check keeps its button disabled, so don't try to get around that. Instead, as allensforever711:
+**To run a check**, from the repo root:
 
-1. Get the `service_role` and `anon` keys with `pnpm supabase projects api-keys --project-ref pegtrucfuaaufqvsavpb -o json`. Keep them in memory; never print or commit them.
-2. POST `{ "type": "magiclink", "email": "allensforever711+qa@gmail.com" }` to `/auth/v1/admin/generate_link` with the `service_role` key, and read `hashed_token`.
-3. POST `{ "type": "magiclink", "token_hash": ... }` to `/auth/v1/verify` with the `anon` key to get a session.
-4. Use `createServerClient` from `@supabase/ssr` and `setSession` to turn that session into cookies, then add them to a Playwright browser context for `giftsaf.com`.
+```
+pnpm live-check                                 # the standing read-only check
+pnpm live-check e2e-live/my-ticket.spec.ts      # one spec
+pnpm live-check --headed                        # watch it in a browser
+```
+
+It signs in, runs the Playwright specs in `apps/web/e2e-live/` against giftsaf.com, then ends the session and deletes its file. Run one at a time, because everyone shares the account. For a ticket's own check, add a spec to that folder, with a line saying what it checks. CI doesn't run these.
+
+You need the Supabase CLI signed in as allensforever711 (`pnpm supabase login`, T25) and Playwright's Chromium (`pnpm --filter @gifts-af/web exec playwright install chromium`). The account has no known password, and the sign-in form won't work for a script, because the Turnstile bot check keeps its button disabled. The command gets a one-time login through the admin API instead, so don't try to get around Turnstile.
 
 **Rules:**
 
-- **Leave it as you found it.** Remove any gifts you added, and check the "You" card reads "Start your wish list". Tests can't assume it's empty if a check failed halfway.
+- **Leave it as you found it.** A spec that adds anything removes it in `test.afterEach`, so a failed check still cleans up. Specs that only read are best. A PR adding a spec here gets checked for this in review.
 - **No people, and nothing that buys or emails.** Adding a person can schedule real gift rounds on production, so test those paths locally. If a ticket truly needs them on production, ask the owner first.
 - **Post the result on the ticket**, as a live check (T44).
 

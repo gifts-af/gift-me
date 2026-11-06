@@ -12,8 +12,9 @@ import { TEST_USER } from "./test-user";
 // assertion is scoped to this person's round id. The spec switches the engine on
 // and always switches it back off.
 // One browser only: it has no @layout tag, so only the iphone project runs it
-// (playwright.config.ts), and the hooks below can't run in another worker and undo it. A reused local dev server must have
-// been started with CRON_SECRET=e2e-cron-secret and EMAIL_OUTBOX=log (reuseExistingServer).
+// (playwright.config.ts), and the hooks below can't run in another worker and undo it.
+// A server tested through E2E_BASE_URL must have been started with
+// CRON_SECRET=e2e-cron-secret and EMAIL_OUTBOX=log.
 test.describe.configure({ mode: "serial" });
 
 const supabase = localSupabase();
