@@ -107,10 +107,12 @@ export function committedSpendCents(orders: CommittedOrder[], excludeRoundOrderI
  *
  * Both `budgetCents` (`null` for no budget) and the pick's own approved
  * total `pickTotalCents` are required, so the cap below can't be skipped.
- * Within a set budget, a price rise may use the budget's room (D28). When
- * the ceiling is the sum of the picks instead (no budget, or a confirmed
- * over-budget round), the order never costs more than its own approved
- * total, even after other orders in the round came in cheaper or failed.
+ * Within a set budget, a price rise may use the budget's room only up to
+ * that estimate-plus-margin cap; a bigger rise stops and asks the buyer
+ * (T56, revising D28). When the ceiling is the sum of the picks instead (no
+ * budget, or a confirmed over-budget round), the order never costs more
+ * than its own approved total, even after other orders in the round came in
+ * cheaper or failed.
  */
 export function maxPriceCents(p: {
   ceilingCents: number;

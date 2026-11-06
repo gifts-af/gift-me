@@ -1375,6 +1375,7 @@ export type Database = {
           user_id: string;
         }[];
       };
+      round_fail_count: { Args: { p_round_id: string }; Returns: number };
       set_emailed_balance: {
         Args: { p_cents: number; p_round_id: string };
         Returns: undefined;

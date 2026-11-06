@@ -30,8 +30,14 @@ function checkDays(days: number, what: string): void {
   }
 }
 
-function checkSettings(s: Partial<ScheduleSettings>): void {
+export function checkSettings(s: Partial<ScheduleSettings>): void {
   for (const [what, days] of Object.entries(s)) checkDays(days, what);
+  // The final hold email comes after the reminder, so it's fewer days before the deadline.
+  if (s.holdReminderDays !== undefined && s.holdFinalDays !== undefined && s.holdFinalDays >= s.holdReminderDays) {
+    throw new RangeError(
+      `holdFinalDays (${s.holdFinalDays}) must be fewer than holdReminderDays (${s.holdReminderDays})`,
+    );
+  }
 }
 
 /**

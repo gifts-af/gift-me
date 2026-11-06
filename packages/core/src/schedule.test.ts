@@ -44,6 +44,14 @@ describe("ship-by deadline", () => {
     expect(() => shipByDeadline("2026-12-25", { ...s, safetyBufferDays: -1 })).toThrow(RangeError);
     expect(() => shipByDeadline("2026-12-25", { ...s, safetyBufferDays: 1.5 })).toThrow(RangeError);
   });
+
+  it("checks the hold email days like the others, and the final one must come after the reminder", () => {
+    expect(() => reminderSchedule("2026-12-16", "2026-11-18", { ...s, holdReminderDays: -1 })).toThrow(RangeError);
+    expect(() => reminderSchedule("2026-12-16", "2026-11-18", { ...s, holdFinalDays: 0.5 })).toThrow(RangeError);
+    expect(() => reminderSchedule("2026-12-16", "2026-11-18", { ...s, holdFinalDays: 7 })).toThrow(RangeError);
+    expect(() => reminderSchedule("2026-12-16", "2026-11-18", { ...s, holdFinalDays: 8 })).toThrow(RangeError);
+    expect(reminderSchedule("2026-12-16", "2026-11-18", { ...s, holdFinalDays: 6 })).toHaveLength(4);
+  });
 });
 
 describe("round start", () => {

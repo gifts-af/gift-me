@@ -138,6 +138,8 @@ The gift list and the concierge each **work on their own**, and are linked light
 
 No short leftover wraps: a line that would spill one or two words onto the next line is rewritten or split into whole lines on purpose, especially when centred. Text that changes in place (a countdown, a balance) uses tabular figures and a fixed line break so it doesn't jump. Example: the Zinc connect status is two fixed lines, "Waiting for you to click Allow…" and "Code expires in 14 min" (`mockups/ALL-32-settings.html`).
 
+Headings in the app and in emails use balanced wrapping (`text-wrap: balance`, Tailwind `text-balance`), and paragraphs avoid a lone last word (`text-wrap: pretty`, Tailwind `text-pretty`). The email shell (`apps/web/lib/email-layout.ts`) sets both as inline styles, so every email gets them; keep headings short too (owner, ALL-32 email review).
+
 ## Mock-ups
 
 A clickable, phone-first prototype, published as a private shareable artifact page that the owner and Jim can each open on their phones and comment on. **Link:** [GiftsAF mock-ups](https://claude.ai/artifact/BvdSVB6RPatUPRbBDyPRzW) (private; shared with Jim from the page's Share menu). **Source:** [`design/mockups/ALL-41.html`](mockups/ALL-41.html); republish it to the same link after changes.
