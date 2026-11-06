@@ -78,9 +78,8 @@ All controls use the app's `Button`, `Switch`, `Input` and `Dialog` components, 
 
 | What | Where it goes instead |
 |---|---|
-| Sharing withdrawn after approval: hold and ask (owner decision) | **ALL-30/ALL-32**, not built yet. **ALL-63 doesn't merge until this is on `main` with a test** (Task 8) |
-| Zinc rejects a shared address: no blind retry, honest wording, neutral email to the owner (owner decision) | **ALL-30/ALL-32**, not built yet, same gate |
-| Reading the address just before `begin_placing` | **ALL-30/ALL-32**, noted on ALL-32 |
+| Sharing withdrawn after approval, and Zinc rejecting a shared address | **[ALL-112](https://linear.app/allens-forever/issue/ALL-112)**: both end the order with nothing bought (owner decision, replacing "hold and ask"). **ALL-63 doesn't merge until ALL-112 is on `main`** (Task 8) |
+| Reading the address just before `begin_placing` | Not built (ALL-112: a withdrawal in those seconds is the same as one just after the POST) |
 | What the approval screen does when sharing is withdrawn during `awaiting_approval` | **ALL-29**, with a note on that ticket. `approveAndBuy` already refuses with `no_address` on the ALL-32 branch |
 | Moving off personal Zinc accounts | **ALL-98**, required before anyone outside friends can order (T61) |
 | Shipping a gift to "My address" (buy it to hand over yourself) | Not built: `approve.ts` sets `ship_to: "recipient"`. The wording doesn't promise it |
@@ -102,8 +101,8 @@ None left. The owner answered all six on 2026-11-06.
 |---|---|---|
 | Can a buyer see the street in their Zinc account? | Possibly, and that's accepted for friends and family, with plain wording on the switch. (Owner) **[Verify]** the dashboard during ALL-98 | Zinc's [order API](https://www.zinc.com/docs/v2/api-reference/orders/get-order.md) returns `shipping_address`. Only test and admin users can order today (decision 53). |
 | What protects strangers later? | Moving off personal Zinc accounts is required before anyone outside friends can order. (Owner, T61, ALL-98) | T16 had no date or launch link. Decision 42 lets anyone with the link connect. |
-| Sharing withdrawn after approval | Hold and ask. (Owner) To be built in ALL-32 | A purchase can't be undone (T18), and the fallback entry is hidden and may be an old import (T45). |
-| Zinc rejects a shared address | Email the owner neutrally, with no item or sender. (Owner) To be built in ALL-32 | The buyer can't fix it, and the surprise holds (decision 39). |
+| Sharing withdrawn after approval | The order ends, with nothing bought. (Owner, ALL-112) | A purchase can't be undone (T18), and the fallback entry is hidden and may be an old import (T45). |
+| Zinc rejects a shared address | The order ends, and the owner gets a neutral email. (Owner, ALL-112) | The buyer can't fix it, and the surprise holds (decision 39). |
 | The buyer's phone on a shipment to a list owner | Accepted for friends and family. (Owner) | Zinc needs a phone on every order. Re-checked in ALL-98. |
 | The reset-link criterion | A database test is enough, with no button, and the switch warns about earlier links. (Owner) | The rule exists and is tested in `link_revocation.test.sql`. |
 | Where does the switch go? | The list page, below the list. (Owner) | It's where the owner thinks about who has their list. |

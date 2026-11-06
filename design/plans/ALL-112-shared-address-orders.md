@@ -86,7 +86,10 @@ None.
 | Keeping the street on an ended order | Delete its snapshot and blank its city and state, on the two failure types here. **[Claude's call]** | It never shipped there, ALL-63 only promises that past orders keep the address they shipped to (T42), and a revoked buyer mustn't see the city (decision 43). |
 | Is email 3 tied to the round? | No: `round_id` is null, and `round_sends` on the buyer's round records that it went. **[Claude's call]** | Nothing on the owner's side should point at a gift (decision 39). |
 | How long does email 3's link last? | A new `app_settings` value, `check_address_link_days`, 30 days by default. **[Claude's call]** | The round's deadline may already be past (T23). |
-| Zinc's rejection code | Only the exact code `invalid_shipping_address` takes this path, as on `main`. **[Verify]** against the sandbox's invalid-address test product in Task 4 | Any other code becomes plain `failed`, with generic wording and no owner email. |
+| If email 3 keeps being refused | Stop after `check_address_retry_days`, 7 by default, delete the address, and raise an alert. The buyer was told we'd ask. (Owner, 2026-11-06) | Otherwise we'd keep the street and alert daily forever (T42, E8). |
+| Zinc's rejection code | `invalid_shipping_address`, sent at once on the POST as `code`, per [Zinc's sandbox docs](https://www.zinc.com/docs/v2/api-reference/introduction/sandbox.md). Our adapter reads that, with a test through the immediate path. **[Verify]** on a real sandbox order during ALL-32's live checks | Any other code would become plain `failed`, with generic wording and no owner email. |
+| When a rejection comes after the round closed, does the owner hear first? | No. `failed_late` goes at once, and the owner hears at the next tick. **[Claude's call]** | `failed_late` promises nothing about the owner. |
+| A buyer missing a failed gift when several picks fail around the same time | **[ALL-116](https://linear.app/allens-forever/issue/ALL-116)**, required before ALL-29 ships. (Owner, 2026-11-06) | It's on `main` for every failure type, and needs several picks, which ALL-29 adds. |
 
 ## Principles check
 
@@ -189,7 +192,7 @@ None.
 ### Task 4: Docs, review, ship, evidence
 
 - [ ] Re-read the ticket and its comments (T57). Rebase on `main`.
-- [ ] Update T61, `design/technical-design.md` §6.1, and the gate in `design/plans/ALL-63-my-address.md`.
+- [x] Update T61, `design/technical-design.md` §6.5, and the gate in `design/plans/ALL-63-my-address.md`.
 - [ ] Run `pnpm lint; pnpm typecheck; pnpm test; pnpm test:db; pnpm build`, checking each exit code, plus `pnpm --filter @gifts-af/web e2e emails` with no `EADDRINUSE` in the output.
 - [ ] Check Zinc's rejection code against the sandbox's invalid-address test product. Record the result, and fix `failureType` if the code differs.
 - [ ] Comment on ALL-29 (what choosing again needs) and ALL-37 (other ended orders' snapshots).
