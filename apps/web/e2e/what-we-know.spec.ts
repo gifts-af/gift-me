@@ -72,7 +72,7 @@ async function seed(name: string, { user = TEST_USER, paidFeatures = true }: { u
   return { personId: person.id as string, vise: facts[0].id as string };
 }
 
-test("facts show by category with their source, and can be turned off, turned on and deleted", async ({ page }, testInfo) => {
+test("facts show by category with their source, and can be turned off, turned on and deleted", { tag: "@layout" }, async ({ page }, testInfo) => {
   // The projects run at once as the same user, so each gets its own Dad.
   const { personId, vise } = await seed(`Dad ${testInfo.project.name}`);
   await signIn(page);

@@ -40,6 +40,27 @@ const eslintConfig = [
       ],
     },
   },
+  // Browser tests sign in with signIn() from e2e/sign-in.ts, not the login form
+  // (T62, ALL-107). Tests of the form itself disable this line and say why.
+  {
+    files: ["e2e/**/*.ts"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        // Finding the password field by label, placeholder or role, as a string or a regex.
+        ...[
+          "CallExpression[callee.property.name=/^getBy(Label|Placeholder)$/][arguments.0.value=/password/i]",
+          "CallExpression[callee.property.name=/^getBy(Label|Placeholder)$/][arguments.0.regex.pattern=/password/i]",
+          "CallExpression[callee.property.name='getByRole'] > ObjectExpression > Property[key.name='name'][value.value=/password/i]",
+          "CallExpression[callee.property.name='getByRole'] > ObjectExpression > Property[key.name='name'][value.regex.pattern=/password/i]",
+        ].map((selector) => ({
+          selector,
+          message:
+            "Sign in with signIn(page) from e2e/sign-in.ts, not the login form (T62). Only a test of the form itself fills it in: disable this line with a reason.",
+        })),
+      ],
+    },
+  },
 ];
 
 export default eslintConfig;

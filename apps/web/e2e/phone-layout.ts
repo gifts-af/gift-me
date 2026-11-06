@@ -1,4 +1,21 @@
-import type { Page } from "@playwright/test";
+import { test, type Page } from "@playwright/test";
+
+// Layout tests run on all three browsers only when tagged (T62, ALL-107), so
+// every layout check here refuses to run in an untagged test.
+function requireLayoutTag() {
+  if (!test.info().tags.includes("@layout")) {
+    throw new Error(
+      `"${test.info().title}" checks layout, so tag this test @layout (T62): ` +
+        `test("…", { tag: "@layout" }, async ({ page }) => …). Untagged tests run on the iPhone only.`,
+    );
+  }
+}
+
+/** How many pixels the page scrolls sideways; 0 means it fits the screen. */
+export async function scrollsSideways(page: Page): Promise<number> {
+  requireLayoutTag();
+  return page.evaluate(() => Math.max(0, document.documentElement.scrollWidth - window.innerWidth));
+}
 
 // The smallest comfortable tap target (Apple's Human Interface Guidelines).
 export const MIN_TAP_PX = 44;
@@ -9,6 +26,7 @@ export const MIN_TAP_PX = 44;
  * edge of the screen. An empty list means it's fine.
  */
 export async function phoneLayoutProblems(page: Page): Promise<string[]> {
+  requireLayoutTag();
   return page.evaluate((minTap) => {
     const problems: string[] = [];
     const width = document.documentElement.clientWidth;

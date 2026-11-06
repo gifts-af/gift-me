@@ -53,7 +53,7 @@ const box = (page: Page, name: string) => page.getByRole("textbox", { name });
 const INTERESTS = "What are they into right now?";
 const WANTS = "Anything they've said they want or need?";
 
-test("a new person gets questions, and answering raises the meter (AC-1, AC-2)", async ({ page }, info) => {
+test("a new person gets questions, and answering raises the meter (AC-1, AC-2)", { tag: "@layout" }, async ({ page }, info) => {
   const personId = await newPerson(`Sam Q ${info.project.name}`);
   await signIn(page);
   await page.goto(`/people/${personId}`);
@@ -203,6 +203,7 @@ test("the form works from a signed email link (AC-3)", async ({ page }, info) =>
   expect(await usedAt()).toBeNull();
   await page.getByRole("link", { name: "Sign in with email" }).click();
   await page.getByLabel("Email").fill(TEST_USER.email);
+  // eslint-disable-next-line no-restricted-syntax -- this tests signing in from an email link, through the form (AC-3)
   await page.getByLabel("Password").fill(TEST_USER.password);
   await page.getByRole("button", { name: "Sign in" }).click();
 

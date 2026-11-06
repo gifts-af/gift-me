@@ -56,7 +56,7 @@ for (const colorScheme of ["light", "dark"] as const) {
   }
 }
 
-test("the checks catch a broken email", async ({ page }) => {
+test("the checks catch a broken email", { tag: "@layout" }, async ({ page }) => {
   await page.setContent(
     `<meta name="viewport" content="width=device-width, initial-scale=1">` +
       `<body><table style="width:700px"><tr><td>Too wide for any phone</td></tr></table>` +
