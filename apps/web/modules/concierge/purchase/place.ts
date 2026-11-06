@@ -246,6 +246,17 @@ export async function placeRound(
   const fresh = new Set<string>();
   const saved = await savedSnapshots(deps, held.map((o) => o.id));
   const recipient = held.some((o) => o.ship_to === "recipient") ? await recipientAddress(deps, r.person_id) : null;
+  // A gift approved for a list owner's shared address never ships anywhere else. If that
+  // address can't be used now, every such order ends, with nothing bought (T61, T18).
+  if (!(recipient?.source === "shared" && isShippableAddress(recipient.draft))) {
+    let ended: string | null = null;
+    for (const o of held) {
+      if (o.ship_to !== "recipient" || o.address_source !== "shared") continue;
+      ended = await roundRpc(deps, "fail_order", { p_order_id: o.id, p_failure_type: "address_withdrawn" });
+      logEvent("order.address_withdrawn", { ...ids, order_id: o.id });
+    }
+    if (ended !== null) return outcomeOf(ended);
+  }
   for (const o of held) {
     if (o.ship_to === "recipient" && recipient && isShippableAddress(recipient.draft)) {
       addresses.set(o.id, recipient.snapshot);
@@ -296,7 +307,7 @@ export async function placeRound(
     p_orders: held.map((o, i) => ({
       id: o.id,
       max_price_cents: caps[i],
-      ...(fresh.has(o.id) ? { address: addresses.get(o.id) } : {}),
+      ...(fresh.has(o.id) ? { address: addresses.get(o.id), address_source: recipient?.source } : {}),
     })),
   });
   if (begin.error) fail("Beginning to place failed", begin.error);

@@ -144,7 +144,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
   const urlOf = (ideaId: string) => `https://shop.test/p/${ideaId}`;
 
   /** Approved the way approveAndBuy does it, then "crashed" before placing: held/retry, lease given back. */
-  async function approvedOnly(u: User, r: Round, cap = 4520): Promise<void> {
+  async function approvedOnly(u: User, r: Round, cap = 4520, source?: "shared" | "own"): Promise<void> {
     const claimed = await pg.query("select locked_until::text from concierge.claim_round_now($1, now())", [r.roundId]);
     const lock = claimed.rows[0].locked_until;
     const orders = r.ideaIds.map((id) => ({
@@ -152,6 +152,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
       max_price_cents: cap,
       fee_cents: 100,
       ship_to: "recipient",
+      ...(source ? { address_source: source } : {}),
       address: { recipient_first_name: "Mary", recipient_last_name: "Allen", address_line1: "12 Oak St", city: "Dayton", state: "OH", zip: "45402", country: "US" },
     }));
     await pg.query("select concierge.approve_round($1, $2, $3, $4)", [r.roundId, u.userId, lock, JSON.stringify(orders)]);
@@ -573,6 +574,191 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     expect(replacement.status).toBe("placing");
     expect(zinc.posts).toEqual([expect.objectContaining({ ref: replacement.id, idem: replacement.idem })]);
     expect(replacement.idem).not.toBe(first.idem);
+  });
+
+  // ─── a list owner's shared address (ALL-112, T61) ─────────────────────────
+
+  /** A list owner sharing `address`, and the round's person linked through their current share link. */
+  async function shareWith(r: Round, buyer: User, address: Record<string, string> = {}): Promise<string> {
+    const owner = await newUser();
+    await pg.query(
+      `insert into public.account_addresses (user_id, recipient_first_name, recipient_last_name, address_line1, city, state, zip, share_for_gifts)
+       values ($1, $2, $3, $4, $5, $6, $7, true)`,
+      [
+        owner.userId,
+        address.first ?? "Sam",
+        address.last ?? "Rivera",
+        address.line1 ?? "44 Shared St",
+        address.city ?? "Akron",
+        address.state ?? "OH",
+        address.zip ?? "44301",
+      ],
+    );
+    const list = await pg.query("insert into lists.lists (owner_id, title) values ($1, 'Birthday') returning id, share_token", [owner.userId]);
+    await pg.query("insert into lists.person_links (person_id, buyer_id, list_id, share_token) values ($1, $2, $3, $4)", [
+      r.personId,
+      buyer.userId,
+      list.rows[0].id,
+      list.rows[0].share_token,
+    ]);
+    await pg.query("update public.people set linked_user_id = $2 where id = $1", [r.personId, owner.userId]);
+    return owner.userId;
+  }
+  const stopSharing = (owner: string) => pg.query("update public.account_addresses set share_for_gifts = false where user_id = $1", [owner]);
+  const orderDetail = async (orderId: string) =>
+    (
+      await pg.query(
+        `select o.status, o.failure_type, o.resolved, o.ship_city, o.ship_state, o.address_source,
+                (select count(*)::int from concierge.order_addresses x where x.order_id = o.id) as snapshots
+           from concierge.orders o where o.id = $1`,
+        [orderId],
+      )
+    ).rows[0];
+
+  it("approving records whether the address was shared or the buyer's own (AC-1)", async () => {
+    const u = await newUser();
+    const shared = await newRound(u);
+    await shareWith(shared, u);
+    await approveAndBuy({ userId: u.userId, roundId: shared.roundId, ideaIds: shared.ideaIds }, deps());
+    expect(await orderDetail((await orders(shared.roundId))[0].id)).toMatchObject({ address_source: "shared", ship_city: "Akron" });
+
+    const own = await newRound(u);
+    await approveAndBuy({ userId: u.userId, roundId: own.roundId, ideaIds: own.ideaIds }, deps());
+    expect(await orderDetail((await orders(own.roundId))[0].id)).toMatchObject({ address_source: "own", ship_city: "Dayton" });
+  });
+
+  it("sharing stopped after approval: nothing ships to the buyer's hidden entry, and the order ends (AC-3)", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    const owner = await shareWith(r, u);
+    await approvedOnly(u, r, 4520, "shared");
+    await stopSharing(owner);
+
+    await placeHeldForUser(u.userId, deps());
+
+    expect(zinc.posts).toEqual([]);
+    expect(await orderDetail((await orders(r.roundId))[0].id)).toEqual({
+      status: "failed",
+      failure_type: "address_withdrawn",
+      resolved: false,
+      ship_city: "",
+      ship_state: "",
+      address_source: "shared",
+      snapshots: 0,
+    });
+    expect(await round(r.roundId)).toMatchObject({ status: "needs_attention", attention_reason: "failed" });
+    const own = await pg.query("select address_line1 from public.people where id = $1", [r.personId]);
+    expect(own.rows[0].address_line1).toBe("12 Oak St");
+  });
+
+  it("ends the order the same way when the buyer has no address of their own (AC-3)", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    const owner = await shareWith(r, u);
+    await approvedOnly(u, r, 4520, "shared");
+    await pg.query("update public.people set address_line1 = null, city = null where id = $1", [r.personId]);
+    await pg.query("delete from public.account_addresses where user_id = $1", [owner]);
+
+    await placeHeldForUser(u.userId, deps());
+
+    expect(zinc.posts).toEqual([]);
+    expect((await orders(r.roundId))[0]).toMatchObject({ status: "failed", failure_type: "address_withdrawn" });
+  });
+
+  it("ends every held pick together, so none is left waiting (AC-3)", async () => {
+    const u = await newUser();
+    const r = await newRound(u, { totals: [2000, 2000] });
+    const owner = await shareWith(r, u);
+    await approvedOnly(u, r, 2100, "shared");
+    await stopSharing(owner);
+
+    await placeHeldForUser(u.userId, deps());
+
+    expect(zinc.posts).toEqual([]);
+    const all = await orders(r.roundId);
+    expect(all.map((o) => o.failure_type)).toEqual(["address_withdrawn", "address_withdrawn"]);
+    for (const o of all) expect((await orderDetail(o.id)).snapshots).toBe(0);
+  });
+
+  it("a shared address that fails the format check ends the order, even with a good own entry (AC-4)", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    await shareWith(r, u, { state: "Ohio" });
+    await approvedOnly(u, r, 4520, "shared");
+
+    await placeHeldForUser(u.userId, deps());
+
+    expect(zinc.posts).toEqual([]);
+    expect((await orders(r.roundId))[0]).toMatchObject({ status: "failed", failure_type: "address_withdrawn" });
+  });
+
+  it("the owner changed their address while still sharing: it places to the new one (AC-6)", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    const owner = await shareWith(r, u);
+    await approvedOnly(u, r, 4520, "shared");
+    await pg.query("update public.account_addresses set city = 'Toledo' where user_id = $1", [owner]);
+
+    await placeHeldForUser(u.userId, deps());
+
+    expect(zinc.posts).toEqual([expect.objectContaining({ city: "Toledo" })]);
+    expect(await orderDetail((await orders(r.roundId))[0].id)).toMatchObject({ status: "placing", address_source: "shared" });
+  });
+
+  it("the owner started sharing after approval: it places there, and the source follows (AC-7)", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    await approvedOnly(u, r, 4520, "own");
+    await shareWith(r, u);
+
+    await placeHeldForUser(u.userId, deps());
+
+    expect(zinc.posts).toEqual([expect.objectContaining({ city: "Akron" })]);
+    expect(await orderDetail((await orders(r.roundId))[0].id)).toMatchObject({ status: "placing", address_source: "shared" });
+  });
+
+  it("a pick already placed is untouched when the other one ends (AC-16)", async () => {
+    const u = await newUser();
+    const r = await newRound(u, { totals: [2000, 2000] });
+    const owner = await shareWith(r, u);
+    await approvedOnly(u, r, 2100, "shared");
+    const [first, second] = await orders(r.roundId);
+    await pg.query("update concierge.orders set status = 'placed', hold_reason = null where id = $1", [first.id]);
+    await pg.query("select concierge.reconcile_round($1)", [r.roundId]);
+    await stopSharing(owner);
+
+    await placeHeldForUser(u.userId, deps());
+
+    expect(zinc.posts).toEqual([]);
+    expect(await orderDetail(first.id)).toMatchObject({ status: "placed", ship_city: "Dayton", snapshots: 1 });
+    expect(await orderDetail(second.id)).toMatchObject({ status: "failed", failure_type: "address_withdrawn" });
+  });
+
+  it("an order with no recorded source, and nothing shared, places to the buyer's address as before (AC-14)", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    await approvedOnly(u, r);
+
+    await placeHeldForUser(u.userId, deps());
+
+    expect(zinc.posts).toEqual([expect.objectContaining({ city: "Dayton" })]);
+  });
+
+  it("Zinc rejecting a shared address by webhook ends the order, with no replacement (AC-8)", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    await shareWith(r, u);
+    await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps());
+    const [first] = await orders(r.roundId);
+    const body = JSON.stringify({ event: "order.failed", order_id: first.provider_order_id, data: { error_type: "invalid_shipping_address" } });
+    const sig = createHmac("sha256", u.secret).update(body).digest("hex");
+
+    expect(await handleZincWebhook(u.webhookId, body, sig, { ...deps(), placeHeld: async () => {} })).toEqual({ status: 200 });
+
+    const all = await orders(r.roundId);
+    expect(all).toHaveLength(1);
+    expect(all[0]).toMatchObject({ status: "failed", failure_type: "address_rejected", resolved: false });
+    expect(await round(r.roundId)).toMatchObject({ status: "needs_attention", attention_reason: "failed" });
   });
 
   // S10: saving one person's address places only that person's address holds.

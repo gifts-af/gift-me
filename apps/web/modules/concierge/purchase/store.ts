@@ -101,6 +101,8 @@ export type OrderRow = {
   idempotency_key: string;
   gift_message: string | null;
   ship_to: string;
+  /** Which address it was approved against (ALL-112); null on older orders, which count as own. */
+  address_source: AddressSource | null;
   created_at: string;
 };
 
@@ -108,7 +110,7 @@ export type OrderRow = {
 export async function liveOrders(deps: ZincDeps, roundId: string): Promise<OrderRow[]> {
   const { data, error } = await concierge(deps)
     .from("orders")
-    .select("id, idea_id, status, hold_reason, max_price_cents, fee_cents, total_cents, idempotency_key, gift_message, ship_to, created_at, resolved")
+    .select("id, idea_id, status, hold_reason, max_price_cents, fee_cents, total_cents, idempotency_key, gift_message, ship_to, address_source, created_at, resolved")
     .eq("round_id", roundId)
     .neq("status", "cancelled")
     .order("created_at")
@@ -178,6 +180,9 @@ export type AddressSnapshot = {
 
 type AddressColumns = { [K in keyof AddressSnapshot]?: string | null };
 
+/** Whose address an order ships to: a list owner's shared one, or the buyer's own entry (T61). */
+export type AddressSource = "shared" | "own";
+
 function toDraft(a: AddressColumns): AddressDraft & { country?: string | null } {
   return {
     firstName: a.recipient_first_name,
@@ -213,12 +218,12 @@ function toSnapshot(a: AddressColumns): AddressSnapshot {
 export async function recipientAddress(
   deps: ZincDeps,
   personId: string,
-): Promise<{ snapshot: AddressSnapshot; draft: AddressDraft & { country?: string | null } } | null> {
+): Promise<{ snapshot: AddressSnapshot; draft: AddressDraft & { country?: string | null }; source: AddressSource } | null> {
   const shared = await deps.db.rpc("shared_address_for_person", { p_person_id: personId });
   if (shared.error) fail("Reading the shared address failed", shared.error);
   if (shared.data && typeof shared.data === "object") {
     const a = shared.data as AddressColumns;
-    return { snapshot: toSnapshot(a), draft: toDraft(a) };
+    return { snapshot: toSnapshot(a), draft: toDraft(a), source: "shared" };
   }
   const { data, error } = await deps.db
     .from("people")
@@ -228,7 +233,7 @@ export async function recipientAddress(
     .maybeSingle();
   if (error) fail("Reading the person's address failed", error);
   if (!data) return null;
-  return { snapshot: toSnapshot(data), draft: toDraft(data) };
+  return { snapshot: toSnapshot(data), draft: toDraft(data), source: "own" };
 }
 
 export async function savedSnapshots(deps: ZincDeps, orderIds: string[]): Promise<Map<string, AddressSnapshot>> {
