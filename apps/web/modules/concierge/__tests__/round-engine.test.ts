@@ -134,7 +134,7 @@ afterEach(() => {
 });
 
 describe("runTick", () => {
-  it("does nothing but log when the engine is off (AC-2)", async () => {
+  it("creates and moves on no ordinary round when the engine is off (AC-2)", async () => {
     const h = harness();
     h.store.settings.set("round_engine_enabled", 0);
 
@@ -144,6 +144,35 @@ describe("runTick", () => {
     expect(h.store.writes).toEqual([]);
     expect(h.notifyStore.notifications).toEqual([]);
     expect(events()).toEqual([expect.objectContaining({ event: "round_tick", enabled: false })]);
+  });
+
+  // S6 (owner): the money path never waits on round_engine_enabled.
+  it("still sweeps, retries ordered emails and claims money-path rounds when the engine is off", async () => {
+    const sweep = vi.fn(async () => 0);
+    const zinc: EngineZinc = {
+      placeRound: vi.fn(async () => {}),
+      sweep,
+      wallet: async () => ({ balanceCents: null, autoTopUp: null }),
+      lookahead: async () => ({ cents: 0, atLeast: false }),
+      walletUrl: "https://zinc.test/wallet",
+    };
+    const h = harness({ zinc });
+    await h.tick("2027-02-11"); // an ordinary round, awaiting approval
+    sweep.mockClear();
+    h.store.settings.set("round_engine_enabled", 0);
+    const missing = vi.spyOn(h.store, "roundsMissingOrderedEmail");
+    const money = vi.spyOn(h.store, "claimDueMoney");
+    const due = vi.spyOn(h.store, "claimDue");
+    const writes = h.store.writes.length;
+
+    await h.tick("2027-02-16"); // reminder_1 would be due
+
+    expect(sweep).toHaveBeenCalledTimes(1);
+    expect(missing).toHaveBeenCalledTimes(1);
+    expect(money).toHaveBeenCalledTimes(1);
+    expect(due).not.toHaveBeenCalled();
+    expect(h.store.writes).toHaveLength(writes);
+    expect(h.store.sends.get("round-1")!.has("reminder_1")).toBe(false);
   });
 
   it("creates a round on its start day, once, even across two ticks (AC-3, AC-4)", async () => {
@@ -838,6 +867,19 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     expect(await sends(r.roundId)).toContain("hold:1:notice");
     expect(inbox(u)).toEqual(["Mary's gift is waiting on your Zinc balance@0"]);
     expect(await roundRow(r.roundId)).toMatchObject({ locked_until: null });
+  });
+
+  // S6 (owner): the round engine switch doesn't stop a customer hearing about their purchase.
+  it("with the round engine switched off, a hold from approval is still emailed at once", async () => {
+    await pg.query("update concierge.app_settings set value = '0' where key = 'round_engine_enabled'");
+    const u = await newUser();
+    const r = await newRound(u);
+    zinc.balance = 1000;
+    expect(await approve(u, r)).toEqual({ ok: true, status: "held", reason: "funds" });
+    expect(inbox(u)).toEqual(["Mary's gift is waiting on your Zinc balance@0"]);
+    expect(await roundRow(r.roundId)).toMatchObject({ locked_until: null });
+    // The ordinary path stays off: nothing but the money path moves.
+    expect(await advance(r.roundId, 23)).toBe("off");
   });
 
   it("names the amounts and carries the alpha line and cancel link in the hold email", async () => {

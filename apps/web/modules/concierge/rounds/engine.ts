@@ -75,10 +75,10 @@ async function engineOn(store: RoundStore): Promise<boolean> {
 
 export async function runTick(deps: EngineDeps): Promise<TickSummary> {
   const { store, now } = deps;
-  if (!(await engineOn(store))) {
-    logEvent("round_tick", { enabled: false });
-    return { enabled: false, created: 0, advanced: 0, failed: 0 };
-  }
+  // The money path runs whatever round_engine_enabled says (owner): the sweep, the "ordered"
+  // retry and the rounds that need attention. The switch stops round creation, ideas and the
+  // approval reminders; ordering itself has its own switch (zinc_ordering_enabled).
+  const on = await engineOn(store);
 
   // Orders left placing are settled first, so their rounds below see the outcome.
   if (deps.zinc) {
@@ -96,6 +96,17 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
   }
 
   const s = await store.scheduleSettings();
+  if (!on) {
+    let advanced = 0;
+    let failed = 0;
+    for (const round of await store.claimDueMoney(now)) {
+      if (await advanceClaimed(round, deps, s)) advanced++;
+      else failed++;
+    }
+    const summary = { enabled: false, created: 0, advanced, failed };
+    logEvent("round_tick", summary);
+    return summary;
+  }
   const { created, failed: createFailed } = await createDueRounds(deps, s);
 
   // One after another, each on its own: one failing round can't stop the rest.
@@ -124,9 +135,15 @@ export async function advanceRound(
   deps: EngineDeps,
   opts: { justPlaced?: boolean } = {},
 ): Promise<AdvanceResult> {
-  if (!(await engineOn(deps.store))) return "off";
+  // A just-placed round is on the money path, which runs with the engine off too (owner).
+  if (!opts.justPlaced && !(await engineOn(deps.store))) return "off";
   const round = opts.justPlaced ? await deps.store.claimNow(roundId, deps.now) : await deps.store.claim(roundId, deps.now);
   if (!round) return "busy";
+  if (opts.justPlaced && round.status !== "needs_attention") {
+    // Nothing to tell (claimNow also takes rounds awaiting approval): give the lease back.
+    if (!(await deps.store.release(round.id, round.lockedUntil))) throw new Error("Lost the lease on the round");
+    return "busy";
+  }
   const s = await deps.store.scheduleSettings();
   return (await advanceClaimed(round, deps, s, opts.justPlaced ?? false)) ? "advanced" : "failed";
 }

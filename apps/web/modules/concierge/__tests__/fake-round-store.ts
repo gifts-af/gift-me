@@ -117,6 +117,14 @@ export class FakeRoundStore implements RoundStore {
       .map((r) => this.take(r, now, minutes));
   }
 
+  /** Like claim_due_money_rounds: only due needs_attention rounds (none reach it in this fake). */
+  async claimDueMoney(now: Date) {
+    const minutes = await this.setting("round_lock_minutes");
+    return this.rounds
+      .filter((r) => r.status === "needs_attention" && this.claimable(r, now))
+      .map((r) => this.take(r, now, minutes));
+  }
+
   async claim(roundId: string, now: Date) {
     const minutes = await this.setting("round_lock_minutes");
     const r = this.rounds.find((x) => x.id === roundId);

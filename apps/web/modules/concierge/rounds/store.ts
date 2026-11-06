@@ -108,6 +108,8 @@ export interface RoundStore {
   /** On conflict (person, occasion, year) does nothing; true if a row was inserted. */
   insertRound(r: NewRoundRow): Promise<boolean>;
   claimDue(now: Date): Promise<ClaimedRound[]>;
+  /** claim_due_money_rounds: only the due rounds that need attention (a hold or a failure). */
+  claimDueMoney(now: Date): Promise<ClaimedRound[]>;
   /** null when the round isn't due, is finished, or another run holds it. */
   claim(roundId: string, now: Date): Promise<ClaimedRound | null>;
   /**
@@ -267,6 +269,12 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
     async claimDue(now) {
       const { data, error } = await concierge.rpc("claim_due_rounds", { p_now: now.toISOString() });
       if (error) fail("Claiming due rounds failed", error);
+      return data.map(toClaimed).filter((r): r is ClaimedRound => r !== null);
+    },
+
+    async claimDueMoney(now) {
+      const { data, error } = await concierge.rpc("claim_due_money_rounds", { p_now: now.toISOString() });
+      if (error) fail("Claiming due money-path rounds failed", error);
       return data.map(toClaimed).filter((r): r is ClaimedRound => r !== null);
     },
 

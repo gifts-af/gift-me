@@ -1078,6 +1078,40 @@ export type Database = {
         Args: { p_context: string; p_round_id: string };
         Returns: Database["concierge"]["Enums"]["round_status"];
       };
+      claim_due_money_rounds: {
+        Args: { p_now: string };
+        Returns: {
+          approved_at: string | null;
+          attempts: number;
+          attention_reason: string | null;
+          budget_cents: number | null;
+          closed_at: string | null;
+          created_at: string;
+          emailed_balance_cents: number | null;
+          heads_up_on: string | null;
+          hold_count: number;
+          id: string;
+          last_emailed_reason: string | null;
+          late: boolean;
+          locked_until: string | null;
+          next_action_at: string | null;
+          occasion_date: string;
+          occasion_id: string;
+          occasion_year: number;
+          person_id: string;
+          seen_balance_cents: number | null;
+          ship_by_deadline: string;
+          status: Database["concierge"]["Enums"]["round_status"];
+          updated_at: string;
+          user_id: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "gift_rounds";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
       claim_due_rounds: {
         Args: { p_now: string };
         Returns: {
