@@ -665,6 +665,21 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     expect((await orders(r.roundId))[0]).toMatchObject({ status: "failed", failure_type: "address_withdrawn" });
   });
 
+  it("ends an order held for funds too, not only one waiting to retry (AC-3)", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    const owner = await shareWith(r, u);
+    await approvedOnly(u, r, 4520, "shared");
+    await pg.query("select concierge.hold_orders($1, 'funds')", [r.roundId]);
+    expect(await round(r.roundId)).toMatchObject({ attention_reason: "funds" });
+    await stopSharing(owner);
+
+    await placeHeldForUser(u.userId, deps());
+
+    expect(zinc.posts).toEqual([]);
+    expect((await orders(r.roundId))[0]).toMatchObject({ status: "failed", failure_type: "address_withdrawn" });
+  });
+
   it("ends every held pick together, so none is left waiting (AC-3)", async () => {
     const u = await newUser();
     const r = await newRound(u, { totals: [2000, 2000] });
@@ -742,6 +757,22 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     await placeHeldForUser(u.userId, deps());
 
     expect(zinc.posts).toEqual([expect.objectContaining({ city: "Dayton" })]);
+  });
+
+  // Zinc's docs: an invalid address fails at once on the POST, as `invalid_shipping_address`.
+  it("Zinc rejecting a shared address at once on the POST ends the order, with no replacement (AC-8)", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    await shareWith(r, u);
+    zinc.plan.set(urlOf(r.ideaIds[0]), [{ status: 400, code: "invalid_shipping_address" }]);
+
+    await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps());
+
+    expect(zinc.posts).toHaveLength(1);
+    const all = await orders(r.roundId);
+    expect(all).toHaveLength(1);
+    expect(all[0]).toMatchObject({ status: "failed", failure_type: "address_rejected", resolved: false });
+    expect(await round(r.roundId)).toMatchObject({ status: "needs_attention", attention_reason: "failed" });
   });
 
   it("Zinc rejecting a shared address by webhook ends the order, with no replacement (AC-8)", async () => {

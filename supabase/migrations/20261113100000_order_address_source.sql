@@ -14,8 +14,12 @@
 
 alter table concierge.orders add column address_source text check (address_source in ('shared', 'own'));
 
+-- The daily tick's to-do list stays cheap, as in 20261111130000_rounds_missing_late_failure_email.sql.
+create index orders_address_rejected on concierge.orders (round_id) where failure_type = 'address_rejected';
+
 insert into concierge.app_settings (key, value, description) values
-  ('check_address_link_days', '30', 'How long the "check your saved address" email''s link lasts, in days.')
+  ('check_address_link_days', '30', 'How long the "check your saved address" email''s link lasts, in days.'),
+  ('check_address_retry_days', '7', 'How many days to keep trying that email if it''s refused, before deleting the rejected address.')
 on conflict (key) do nothing;
 
 create or replace function concierge.approve_round(p_round_id uuid, p_user_id uuid, p_lock timestamptz, p_orders jsonb)

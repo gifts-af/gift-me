@@ -17,6 +17,7 @@ import {
   retryOrderedEmails,
   runTick,
   tellOrdered,
+  tellOwnerOfRejection,
   tellOwnersOfRejections,
   type EngineDeps,
   type EngineZinc,
@@ -146,6 +147,16 @@ describe("runTick", () => {
     expect(h.store.writes).toEqual([]);
     expect(h.notifyStore.notifications).toEqual([]);
     expect(events()).toEqual([expect.objectContaining({ event: "round_tick", enabled: false })]);
+  });
+
+  // ALL-112: closed and cancelled rounds are only reached this way, and it runs with the engine off.
+  it.each([1, 0])("deals with rejected shared addresses on every tick (round_engine_enabled %i)", async (on) => {
+    const h = harness();
+    h.store.settings.set("round_engine_enabled", on);
+    vi.spyOn(h.store, "roundsWithRejectedAddresses").mockResolvedValue(["round-x"]);
+    const clear = vi.spyOn(h.store, "clearRejectedAddresses");
+    await runTick(h.deps(at("2027-02-11")));
+    expect(clear).toHaveBeenCalledWith("round-x");
   });
 
   // S6 (owner): the money path never waits on round_engine_enabled.
@@ -939,7 +950,11 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     await advance(roundId, 1);
 
     expect(mail.filter((m) => m.to === owner.email)).toHaveLength(1);
-    expect(textFor(u)).toEqual([expect.stringContaining("didn't buy the Stoneware mug set and the Linen apron and you haven't been charged for them.")]);
+    const [text] = textFor(u);
+    expect(textFor(u)).toHaveLength(1);
+    expect(text).toContain("the Stoneware mug set");
+    expect(text).toContain("the Linen apron");
+    expect(text).toContain("you haven't been charged for them.");
   });
 
   it("the owner already changed the address: no email to them, and the buyer isn't promised one (AC-11, AC-13)", async () => {
@@ -1009,6 +1024,128 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     await advance(roundId, 1);
     expect(textFor(u)[0]).toContain("didn't buy the Linen apron and you haven't been charged for it.");
     expect(textFor(u)[0]).not.toContain("Stoneware");
+  });
+
+  it("sharing stopped with two picks: one email, naming both (AC-5)", async () => {
+    const u = await newUser();
+    const r = await newRound(u, { totals: [2000, 2000] });
+    const owner = await shareWith(r, u);
+    const lock = (await pg.query("select locked_until::text from concierge.claim_round_now($1, now())", [r.roundId])).rows[0].locked_until;
+    await pg.query("select concierge.approve_round($1, $2, $3, $4)", [
+      r.roundId,
+      u.userId,
+      lock,
+      JSON.stringify(
+        r.ideaIds.map((id) => ({
+          idea_id: id,
+          max_price_cents: 2100,
+          fee_cents: 100,
+          ship_to: "recipient",
+          address_source: "shared",
+          address: { recipient_first_name: "Sam", recipient_last_name: "Rivera", address_line1: "44 Shared St", city: "Akron", state: "OH", zip: "44301", country: "US" },
+        })),
+      ),
+    ]);
+    await pg.query("select concierge.release_round($1, $2)", [r.roundId, lock]);
+    await pg.query("update public.account_addresses set share_for_gifts = false where user_id = $1", [owner.userId]);
+    const log = vi.spyOn(console, "log");
+    try {
+      await advance(r.roundId, 1);
+      const lines = log.mock.calls.map((c) => String(c[0])).join("\n");
+      expect(lines).toContain("order.address_withdrawn");
+      for (const secret of ["44 Shared St", "Rivera", "Akron", owner.userId]) expect(lines).not.toContain(secret);
+    } finally {
+      log.mockRestore();
+    }
+    expect(zinc.posts).toEqual([]);
+    const [text] = textFor(u);
+    expect(textFor(u)).toHaveLength(1);
+    expect(text).toContain("the Stoneware mug set");
+    expect(text).toContain("the Linen apron");
+    expect(text).toContain("you haven't been charged for them.");
+  });
+
+  it("the person now links someone else: neither owner is emailed (AC-11)", async () => {
+    const u = await newUser();
+    const { roundId, orderIds, owner } = await placedToShared(u);
+    await zincRejects(u, orderIds[0]);
+    const person = (await pg.query("select person_id from concierge.gift_rounds where id = $1", [roundId])).rows[0].person_id;
+    await pg.query("delete from lists.person_links where person_id = $1", [person]);
+    const other = await shareWith({ roundId }, u);
+    await pg.query("update public.account_addresses set address_line1 = '9 Other Rd' where user_id = $1", [other.userId]);
+
+    await advance(roundId, 1);
+
+    expect(textFor(owner)).toEqual([]);
+    expect(textFor(other)).toEqual([]);
+    expect(textFor(u)[0]).not.toContain(ASKED);
+  });
+
+  it("an owner with no email address is ruled out (AC-11)", async () => {
+    const u = await newUser();
+    const { roundId, orderIds, owner } = await placedToShared(u);
+    await zincRejects(u, orderIds[0]);
+    await pg.query("update auth.users set email = null where id = $1", [owner.userId]);
+
+    await advance(roundId, 1);
+
+    expect(textFor(u)[0]).not.toContain(ASKED);
+    expect(await snapshots(roundId)).toBe(0);
+  });
+
+  it("a failed lookup isn't ruled out: nothing is cleared, and the buyer isn't promised an ask (AC-11)", async () => {
+    const u = await newUser();
+    const { roundId, orderIds } = await placedToShared(u);
+    await zincRejects(u, orderIds[0]);
+    const deps = engine(dayAt(1));
+    const broken = { ...deps, store: { ...deps.store, sharedAddressOwnerToTell: async () => { throw new Error("down"); } } };
+
+    expect(await tellOwnerOfRejection(roundId, broken)).toBe("retry");
+    expect(await snapshots(roundId)).toBe(1);
+  });
+
+  it("the buyer cancelled the round: the tick still tells the owner (AC-10)", async () => {
+    const u = await newUser();
+    const { roundId, orderIds, owner } = await placedToShared(u);
+    await zincRejects(u, orderIds[0]);
+    await pg.query("select concierge.cancel_held($1, 'cancel')", [roundId]);
+
+    await tellOwnersOfRejections(engine(dayAt(1)));
+
+    expect(textFor(owner)).toHaveLength(1);
+    expect(await snapshots(roundId)).toBe(0);
+  });
+
+  it("an email kept being refused: after the retry window it gives up and deletes the address (AC-10, AC-13)", async () => {
+    const u = await newUser();
+    const { roundId, orderIds, owner } = await placedToShared(u);
+    await zincRejects(u, orderIds[0]);
+    refuseTo.add(owner.email);
+
+    await tellOwnersOfRejections(engine(dayAt(2)));
+    expect(await snapshots(roundId)).toBe(1);
+
+    const log = vi.spyOn(console, "log");
+    try {
+      await tellOwnersOfRejections(engine(dayAt(8)));
+      expect(log.mock.calls.map((c) => String(c[0])).join("\n")).toContain("order.shared_address_notice_abandoned");
+    } finally {
+      log.mockRestore();
+    }
+    expect(await snapshots(roundId)).toBe(0);
+    expect(await sends(roundId)).not.toContain("shared_address");
+    expect(textFor(owner)).toEqual([]);
+  });
+
+  it("two runs racing: the one that loses leaves the address, so a refused send can be tried again (AC-10)", async () => {
+    const u = await newUser();
+    const { roundId, orderIds } = await placedToShared(u);
+    await zincRejects(u, orderIds[0]);
+    const deps = engine(dayAt(1));
+    const lost = { ...deps, store: { ...deps.store, recordSend: async () => false } };
+
+    expect(await tellOwnerOfRejection(roundId, lost)).toBe("asked");
+    expect(await snapshots(roundId)).toBe(1);
   });
 
   it("logs ids only, with no address, name or owner in the buyer's round events (AC-15)", async () => {

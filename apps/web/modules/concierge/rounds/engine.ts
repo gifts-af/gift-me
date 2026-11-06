@@ -323,7 +323,8 @@ async function runHeld(
     } else if (action.do === "send_hold") {
       // The owner of a rejected shared address hears first, so the buyer's email can say so.
       const rejected = action.send.startsWith("fail:") && ctx.orders.some((o) => o.status === "failed" && o.failureType === "address_rejected");
-      const extra: Extra = rejected ? { ownerAsked: (await tellOwnerOfRejection(round.id, deps)) !== "ruled_out" } : {};
+      const told = rejected ? await tellOwnerOfRejection(round.id, deps) : null;
+      const extra: Extra = told === "asked" || told === "refused" ? { ownerAsked: true } : {};
       await sendStep(round, ctx, action.send, sent, deps, extra);
       emailed = true;
       steps.push(action.send);
@@ -426,9 +427,11 @@ export async function retryOrderedEmails(deps: EngineDeps): Promise<void> {
 /**
  * Asks a list owner to check their shared address after a store couldn't use it (ALL-112), at
  * most once per round, then clears what's left of the rejected address. The email says nothing
- * of a gift (decision 39). `retry`: a refusal or a failed lookup, which the tick tries again.
+ * of a gift (decision 39). `refused`: there's an owner but the email didn't go; the tick tries
+ * again until check_address_retry_days, then gives up and clears the address (T42). `retry`: a
+ * failed lookup, which the tick also tries again.
  */
-export async function tellOwnerOfRejection(roundId: string, deps: EngineDeps): Promise<"asked" | "ruled_out" | "retry"> {
+export async function tellOwnerOfRejection(roundId: string, deps: EngineDeps): Promise<"asked" | "ruled_out" | "refused" | "retry"> {
   const { store, now } = deps;
   const ids = { round_id: roundId };
   try {
@@ -436,25 +439,32 @@ export async function tellOwnerOfRejection(roundId: string, deps: EngineDeps): P
     const alreadyAsked = (await store.sentSteps(roundId)).has("shared_address");
     const owner = alreadyAsked ? null : await store.sharedAddressOwnerToTell(roundId);
     if (owner) {
-      const { userId } = await store.roundContext(roundId);
-      if (await store.recordSend(roundId, userId, "shared_address")) {
-        const days = await store.setting("check_address_link_days");
-        const result = await notify(
-          {
-            userId: owner,
-            kind: "check_your_address",
-            data: {},
-            links: { open: { action: "check_my_address", expiresAt: new Date(now.getTime() + days * 86_400_000) } },
-          },
-          deps.notify,
-        );
-        if (!result.ok) {
-          await store.forgetSend(roundId, "shared_address");
+      const { userId, orders } = await store.roundContext(roundId);
+      // Read first: a blip after recording would lose the email for good.
+      const [days, retryDays] = await Promise.all([store.setting("check_address_link_days"), store.setting("check_address_retry_days")]);
+      // Another run has it, and may yet be refused: it stays on the to-do list, so nothing is cleared.
+      if (!(await store.recordSend(roundId, userId, "shared_address"))) return "asked";
+      const result = await notify(
+        {
+          userId: owner,
+          kind: "check_your_address",
+          data: {},
+          links: { open: { action: "check_my_address", expiresAt: new Date(now.getTime() + days * 86_400_000) } },
+        },
+        deps.notify,
+      );
+      if (!result.ok) {
+        await store.forgetSend(roundId, "shared_address");
+        const rejectedAt = orders.find((o) => o.failureType === "address_rejected")?.updatedAt;
+        if (rejectedAt && now.getTime() - Date.parse(rejectedAt) > retryDays * 86_400_000) {
+          await store.clearRejectedAddresses(roundId);
+          logEvent("order.shared_address_notice_abandoned", { ...ids, alert: true });
+        } else {
           logEvent("order.shared_address_notice_failed", { ...ids, alert: true });
-          return "retry";
         }
-        logEvent("order.shared_address_notice", ids);
+        return "refused";
       }
+      logEvent("order.shared_address_notice", ids);
     }
     await store.clearRejectedAddresses(roundId);
     return alreadyAsked || owner ? "asked" : "ruled_out";
