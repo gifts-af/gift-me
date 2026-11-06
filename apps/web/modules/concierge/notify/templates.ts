@@ -20,7 +20,8 @@ export type NotificationKind =
   | "out_of_stock"
   | "too_late"
   | "missed_on_us"
-  | "ordered";
+  | "ordered"
+  | "failed_late";
 
 export type RenderedEmail = { subject: string; html: string; text: string };
 
@@ -84,6 +85,8 @@ export type TemplateData = {
   missed_on_us: Gifts;
   /** City only, never the full address. */
   ordered: OneGift & { cityText?: string };
+  /** A gift that failed after its round closed (too late to choose again); `onItsWay`: the round's other gifts placed. */
+  failed_late: OneGift & { onItsWay?: string[] };
 };
 
 export type TemplateLinks = {
@@ -106,6 +109,7 @@ export type TemplateLinks = {
   too_late: { open: string };
   missed_on_us: { open: string };
   ordered: { open: string };
+  failed_late: { open: string };
 };
 
 const rowsOf = (ideas: IdeaRow[]) => ideas.map((i) => ({ title: `${i.title} · ${i.price}` }));
@@ -456,6 +460,22 @@ export const TEMPLATES: {
       button: { label: `Open ${d.personName}'s page`, url: links.open },
     }),
   }),
+
+  // A confirmed failure (Zinc said so, or the owner checked Zinc) after the deadline closed the round.
+  failed_late: (d, links) => ({
+    subject: `We couldn't buy ${d.personName}'s gift`,
+    ...renderEmail({
+      heading: `We couldn't buy ${d.personName}'s gift`,
+      paragraphs: [
+        `The store couldn't place the order for the ${d.giftTitle} for ${d.personName}'s ${d.occasion} on ${d.dateText}, so nothing was bought or charged for it.` +
+          (d.onItsWay && d.onItsWay.length > 0
+            ? ` ${capitalize(giftList(d.onItsWay))} ${d.onItsWay.length > 1 ? "are on their way" : "is on its way"}.`
+            : ""),
+        "It's too late to choose another gift through us this time, but you can still buy something yourself.",
+      ],
+      button: { label: `Open ${d.personName}'s page`, url: links.open },
+    }),
+  }),
 };
 
 const IDEAS: IdeaRow[] = [
@@ -522,4 +542,5 @@ export const SAMPLE_DATA: {
   too_late: { data: ONE_GIFT, links: { open: "https://example.com/a/open-token" } },
   missed_on_us: { data: GIFT, links: { open: "https://example.com/a/open-token" } },
   ordered: { data: { ...ONE_GIFT, cityText: "Dayton" }, links: { open: "https://example.com/a/open-token" } },
+  failed_late: { data: ONE_GIFT, links: { open: "https://example.com/a/open-token" } },
 };

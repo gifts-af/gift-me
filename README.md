@@ -157,7 +157,7 @@ update concierge.app_settings set value = '0' where key = 'zinc_ordering_enabled
    select concierge.settle_order('USER_ID', 'ORDER_ID', 'failed', 'failed', null);
    ```
 
-3. The customer is emailed automatically on the next tick.
+3. The customer is emailed automatically on the next tick ("ordered", or "we couldn't buy it" when the round has already closed).
 
 ### Alerts (events with `alert: true`)
 
@@ -165,9 +165,10 @@ update concierge.app_settings set value = '0' where key = 'zinc_ordering_enabled
 |---|---|---|
 | `order.sweep_skipped` | The sweep that looks up stuck "placing" orders couldn't run: `no_key` (the user's key is missing) or `env_mismatch` (`ZINC_ENV` differs from the environment the key was made in). | Fix `ZINC_ENV` for the environment, or ask the user to reconnect Zinc in Settings. The orders stay "placing" until then. |
 | `order.sweep_failed` | Looking up a stuck "placing" order at Zinc failed (Zinc down, an answer we couldn't read, or our database). `kind` and `code` say which. | Nothing if it clears on the next tick (the sweep runs every tick and never resends). If it repeats for the same `order_id`, check Zinc's status and the buyer's key; if Zinc can't find the order, follow **Unconfirmed orders**. |
-| `round_skip_email_failed` | A gift was skipped at its deadline but the "skipped" email failed to send. | Check Resend. The next tick retries. |
+| `round_skip_email_failed` | A held gift's round closed at its deadline and the "skipped" email that followed (a placing gift failed as the round closed) was refused. It is sent once, best effort: the round is already closed, so nothing retries it. | Check Resend. Then tell the buyer by hand that the gift wasn't bought and nothing was charged for it (`round_id` and `user_id` are in the event). |
 | `round_deadline_email_held_open` | The same, and the deadline has already passed, so the round stays open to keep retrying. | Fix the email problem (Resend status, key). It closes itself once the email goes. |
 | `order.ordered_email_failed` | The "your gift is ordered" email failed. | Check Resend. It is retried on the next tick. |
+| `order.failed_late_email_failed` | A gift failed after its round closed (it was still placing at the deadline, or an unconfirmed one was settled as failed) and the "we couldn't buy it" email failed. | Check Resend. It is retried on the next tick until it goes. |
 
 Where new docs go, how to write them, and when to push straight to `main` versus open a PR are in [CLAUDE.md](CLAUDE.md). Claude reads it automatically, and it's written for people too. Other AI tools read [AGENTS.md](AGENTS.md), which points them to it. The standing rule for everyone: no work without a Linear ticket, and no ticket done without its test evidence posted on it (T44).
 

@@ -16,7 +16,10 @@ type Deps = ZincDeps & {
    * places inside Zinc's request: a settlement that needs the buyer is emailed at once (ALL-32).
    */
   advanceRound?: (roundId: string) => Promise<unknown>;
-  /** The engine's tellOrdered: the "ordered" email for an order Zinc confirmed placed. */
+  /**
+   * The engine's tellOrdered: the "ordered" email for an order Zinc confirmed placed, and the
+   * "we couldn't buy it" email for one that failed after its round closed.
+   */
   orderPlaced?: (roundId: string) => Promise<unknown>;
 };
 
@@ -167,9 +170,13 @@ async function settle(userId: string, event: ZincEvent, deps: Deps): Promise<voi
   });
   if (error) throw new Error(`Settling the order failed (${error.code}).`);
   logEvent("zinc.order_settled", { user_id: userId, order_id: order.id, status: placed ? "placed" : "failed" });
-  // Tell the buyer now, not at the next tick: the gift is ordered, or a failure needs them.
-  const tell = placed ? deps.orderPlaced : roundStatus === "needs_attention" ? deps.advanceRound : undefined;
-  if (tell) {
+  // Tell the buyer now, not at the next tick: the gift is ordered, or a failure needs them. A
+  // failure on a round that already closed (any status) gets its own email through tellOrdered.
+  const tells = placed
+    ? [deps.orderPlaced]
+    : [roundStatus === "needs_attention" ? deps.advanceRound : undefined, deps.orderPlaced];
+  for (const tell of tells) {
+    if (!tell) continue;
     try {
       await tell(order.round_id);
     } catch (e) {

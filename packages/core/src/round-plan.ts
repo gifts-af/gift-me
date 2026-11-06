@@ -28,7 +28,9 @@ export type StepKey =
   // The deadline email when held gifts are cancelled next to one placed or placing.
   | "held_cancelled"
   // Once per order Zinc confirmed placed (the "ordered" email).
-  | `ordered:${string}`;
+  | `ordered:${string}`
+  // Once per order that failed after its round closed (the "we couldn't buy it" email).
+  | `late_fail:${string}`;
 
 /** Why an order is held; `unconfirmed` is a round reason only. */
 export type HoldReason = "funds" | "setup" | "address" | "paused" | "not_allowed" | "retry";

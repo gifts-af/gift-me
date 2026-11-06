@@ -478,11 +478,15 @@ export async function sweepStalePlacing(deps: PurchaseDeps): Promise<number> {
       if (settled.error) fail("Settling the order failed", settled.error);
       logEvent("order.swept", { ...ids, status: found.status });
       done++;
-      // Tell the buyer now, the way the webhook does: the gift is ordered, or a failure needs them.
-      // A failed email never undoes the settlement; the tick retries the "ordered" email.
+      // Tell the buyer now, the way the webhook does: the gift is ordered, or a failure needs them
+      // (a failure after the round closed through orderPlaced, S2). A failed email never undoes
+      // the settlement; the tick retries the "ordered" and late-failure emails.
       try {
         if (found.status === "placed") await deps.orderPlaced?.(o.round_id);
-        else if (settled.data === "needs_attention") await deps.advanceRound(o.round_id);
+        else {
+          if (settled.data === "needs_attention") await deps.advanceRound(o.round_id);
+          await deps.orderPlaced?.(o.round_id);
+        }
       } catch (e) {
         logEvent("order.sweep_tell_failed", { ...ids, ...errorFields(e) });
       }

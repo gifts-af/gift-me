@@ -390,9 +390,13 @@ export async function retryOrderedEmails(deps: EngineDeps): Promise<void> {
 }
 
 /**
- * The "ordered" email (PRD A-8, owner): once per order Zinc confirmed placed, keyed
- * `ordered:<order id>` in round_sends so it never goes twice. Called after a webhook or the
- * sweep settles an order as placed. A refusal is forgotten and logged for the owner.
+ * The emails for orders Zinc settled (owner: customers are always told), each once, keyed in
+ * round_sends so it never goes twice:
+ * - "ordered" (PRD A-8) for each order Zinc confirmed placed, `ordered:<order id>`;
+ * - "we couldn't buy it" (failed_late) for each order that failed after its round closed,
+ *   `late_fail:<order id>`: the engine never looks at a closed round again (S2).
+ * Called after a webhook or the sweep settles an order, and by the tick for any not yet sent.
+ * A refusal is forgotten and logged for the owner.
  */
 export async function tellOrdered(roundId: string, deps: EngineDeps): Promise<void> {
   const ctx = await deps.store.roundContext(roundId);
@@ -403,7 +407,8 @@ export async function tellOrdered(roundId: string, deps: EngineDeps): Promise<vo
     dateText: shortDate(ctx.occasionDate),
   };
   const open = { action: "open_person" as const, expiresAt: new Date(`${ctx.occasionDate}T23:59:00Z`) };
-  for (const o of ctx.orders.filter((x) => ["placed", "shipped", "delivered"].includes(x.status))) {
+  const placed = ctx.orders.filter((x) => ["placed", "shipped", "delivered"].includes(x.status));
+  for (const o of placed) {
     const step: StepKey = `ordered:${o.id}`;
     if (sent.has(step)) continue;
     if (!(await deps.store.recordSend(roundId, ctx.userId, step))) continue;
@@ -420,6 +425,28 @@ export async function tellOrdered(roundId: string, deps: EngineDeps): Promise<vo
     if (!result.ok) {
       await deps.store.forgetSend(roundId, step);
       logEvent("order.ordered_email_failed", { round_id: roundId, user_id: ctx.userId, order_id: o.id, alert: true });
+    }
+  }
+  for (const o of ctx.orders.filter((x) => x.status === "failed" && x.failedAfterClose)) {
+    const step: StepKey = `late_fail:${o.id}`;
+    if (sent.has(step)) continue;
+    if (!(await deps.store.recordSend(roundId, ctx.userId, step))) continue;
+    const onItsWay = placed.map((x) => x.title);
+    const result = await notify(
+      {
+        userId: ctx.userId,
+        roundId,
+        kind: "failed_late",
+        data: { ...occasion, giftTitle: o.title, ...(onItsWay.length > 0 ? { onItsWay } : {}) },
+        links: { open },
+      },
+      deps.notify,
+    );
+    if (!result.ok) {
+      await deps.store.forgetSend(roundId, step);
+      logEvent("order.failed_late_email_failed", { round_id: roundId, user_id: ctx.userId, order_id: o.id, alert: true });
+    } else {
+      logEvent("order.failed_late_told", { round_id: roundId, user_id: ctx.userId, order_id: o.id });
     }
   }
 }
@@ -549,7 +576,7 @@ function occasionWord(kind: OccasionKind): string {
   return kind === "birthday" || kind === "anniversary" ? OCCASION_NAMES[kind].toLowerCase() : OCCASION_NAMES[kind];
 }
 
-type PlainStep = Exclude<StepKey, `hold:${string}` | `fail:${string}` | `ordered:${string}`>;
+type PlainStep = Exclude<StepKey, `hold:${string}` | `fail:${string}` | `ordered:${string}` | `late_fail:${string}`>;
 /** Which email a step key sends; the numbered keys group by kind. */
 type EmailStep = PlainStep | "hold" | "hold_short" | "hold_deadline" | "fail" | "ordered";
 
@@ -559,7 +586,7 @@ function emailStep(step: StepKey): EmailStep {
     return step.endsWith(":deadline") ? "hold_deadline" : "hold";
   }
   if (step.startsWith("fail:")) return "fail";
-  if (step.startsWith("ordered:")) return "ordered";
+  if (step.startsWith("ordered:") || step.startsWith("late_fail:")) return "ordered";
   return step as PlainStep;
 }
 
@@ -664,8 +691,8 @@ async function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundContext, 
     case "fail":
       return sendFailure(reason);
     case "ordered":
-      // Sent by tellOrdered, which knows the order; never a round step.
-      throw new Error("The ordered email is sent by tellOrdered");
+      // Sent by tellOrdered, which knows the order (ordered and late_fail); never a round step.
+      throw new Error("The ordered and late failure emails are sent by tellOrdered");
     default: {
       const unknown: never = kind;
       throw new Error(`No email for step ${String(unknown)}`);

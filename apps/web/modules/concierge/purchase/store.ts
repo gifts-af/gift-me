@@ -11,7 +11,10 @@ export type PurchaseDeps = ZincDeps & {
   settings: { feeCents: number; marginPct: number };
   /** The round engine's advanceRound, bound by the caller (justPlaced): sends a new hold's or failure's notice. */
   advanceRound: (roundId: string) => Promise<unknown>;
-  /** The engine's tellOrdered, bound by the caller: the "ordered" email once the sweep finds an order placed. */
+  /**
+   * The engine's tellOrdered, bound by the caller: the "ordered" email once the sweep finds an order
+   * placed, and the "we couldn't buy it" email for one that failed after its round closed.
+   */
   orderPlaced?: (roundId: string) => Promise<unknown>;
   /** For the quick retries' backoff; real timers when left out. */
   sleep?: (ms: number) => Promise<void>;

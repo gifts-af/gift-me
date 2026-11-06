@@ -222,6 +222,21 @@ describe.skipIf(!dbUp)("Zinc webhooks (real local database, fake Zinc)", () => {
     expect(orderPlaced).toHaveBeenCalledWith(placed.roundId);
   });
 
+  // S2: the round closed (deadline) with the order still placing; its failure still reaches the buyer.
+  it("a failure on a round that already closed is told through tellOrdered (the late-failure email)", async () => {
+    const a = await newAccount();
+    const zincId = randomUUID();
+    const { orderId, roundId } = await newOrder(a, { providerOrderId: zincId });
+    await pg.query("select concierge.cancel_held($1, 'deadline')", [roundId]);
+    advanceRound.mockClear();
+    orderPlaced.mockClear();
+    await send(a, JSON.stringify({ event: "order.failed", order_id: zincId, data: { error_type: "out_of_stock" } }));
+    expect(await roundRow(roundId)).toMatchObject({ status: "skipped" });
+    expect((await pg.query("select failed_after_close from concierge.orders where id = $1", [orderId])).rows[0]).toEqual({ failed_after_close: true });
+    expect(advanceRound).not.toHaveBeenCalled();
+    expect(orderPlaced).toHaveBeenCalledWith(roundId);
+  });
+
   it("a duplicate event is one write", async () => {
     const a = await newAccount();
     const zincId = randomUUID();

@@ -612,6 +612,7 @@ export type Database = {
         Row: {
           created_at: string;
           est_delivery_date: string | null;
+          failed_after_close: boolean;
           failure_type: string | null;
           fee_cents: number;
           funding_mode: string;
@@ -643,6 +644,7 @@ export type Database = {
         Insert: {
           created_at?: string;
           est_delivery_date?: string | null;
+          failed_after_close?: boolean;
           failure_type?: string | null;
           fee_cents: number;
           funding_mode: string;
@@ -673,6 +675,7 @@ export type Database = {
         Update: {
           created_at?: string;
           est_delivery_date?: string | null;
+          failed_after_close?: boolean;
           failure_type?: string | null;
           fee_cents?: number;
           funding_mode?: string;
@@ -996,6 +999,7 @@ export type Database = {
         Returns: {
           created_at: string;
           est_delivery_date: string | null;
+          failed_after_close: boolean;
           failure_type: string | null;
           fee_cents: number;
           funding_mode: string;
@@ -1040,6 +1044,7 @@ export type Database = {
         Returns: {
           created_at: string;
           est_delivery_date: string | null;
+          failed_after_close: boolean;
           failure_type: string | null;
           fee_cents: number;
           funding_mode: string;
@@ -1302,6 +1307,7 @@ export type Database = {
         Returns: {
           created_at: string;
           est_delivery_date: string | null;
+          failed_after_close: boolean;
           failure_type: string | null;
           fee_cents: number;
           funding_mode: string;
@@ -1347,6 +1353,7 @@ export type Database = {
         Returns: {
           created_at: string;
           est_delivery_date: string | null;
+          failed_after_close: boolean;
           failure_type: string | null;
           fee_cents: number;
           funding_mode: string;
@@ -1442,6 +1449,7 @@ export type Database = {
         Returns: {
           created_at: string;
           est_delivery_date: string | null;
+          failed_after_close: boolean;
           failure_type: string | null;
           fee_cents: number;
           funding_mode: string;

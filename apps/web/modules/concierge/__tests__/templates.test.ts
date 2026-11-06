@@ -164,7 +164,25 @@ describe.each(HOLDS)("hold email %s", (kind) => {
   });
 });
 
-describe.each(["hold_unconfirmed", "price_up", "out_of_stock", "too_late", "missed_on_us", "ordered"] as const)("%s", (kind) => {
+describe("failed_late (S2: a failure after the round closed)", () => {
+  it("says the store couldn't place it, nothing was bought or charged for it, and it's too late to choose again", () => {
+    const mail = render("failed_late");
+    expect(mail.subject).toBe("We couldn't buy Mom's gift");
+    expect(mail.text).toContain(
+      "The store couldn't place the order for the Le Creuset mug set for Mom's birthday on Saturday, March 14, so nothing was bought or charged for it.",
+    );
+    expect(mail.text).toContain("It's too late to choose another gift through us this time, but you can still buy something yourself.");
+    expect(mail.text).toContain("Open Mom's page:");
+  });
+
+  it("names a gift of the round that is on its way", () => {
+    const s = SAMPLE_DATA.failed_late;
+    const mail = TEMPLATES.failed_late({ ...s.data, onItsWay: ["Linen apron"] }, s.links);
+    expect(mail.text).toContain("The Linen apron is on its way.");
+  });
+});
+
+describe.each(["hold_unconfirmed", "price_up", "out_of_stock", "too_late", "missed_on_us", "ordered", "failed_late"] as const)("%s", (kind) => {
   it("has no cancel link or alpha line", () => {
     const mail = render(kind);
     expect(mail.text).not.toContain("Cancel this gift");

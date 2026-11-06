@@ -70,6 +70,8 @@ export type RoundOrder = {
   holdReason: string | null;
   failureType: string | null;
   resolved: boolean;
+  /** It failed after the round closed: emailed once as `late_fail:<id>` (failed_late). */
+  failedAfterClose: boolean;
   maxPriceCents: number;
   feeCents: number;
 };
@@ -144,7 +146,11 @@ export interface RoundStore {
   markHoldEmailed(roundId: string, reason: AttentionReason, balanceCents: number | null): Promise<void>;
   /** Paid features on and Zinc connected: only then is the wallet read (AC-11). */
   canBuy(userId: string): Promise<boolean>;
-  /** Rounds still open or ordered with a placed order whose `ordered:<id>` email isn't recorded. */
+  /**
+   * Rounds still open or ordered with a placed order whose `ordered:<id>` email isn't recorded,
+   * and rounds (any status) with an order that failed after the round closed whose
+   * `late_fail:<id>` email isn't recorded.
+   */
   roundsMissingOrderedEmail(): Promise<string[]>;
 }
 
@@ -355,7 +361,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
           .order("rank"),
         concierge
           .from("orders")
-          .select("id, status, hold_reason, failure_type, resolved, max_price_cents, fee_cents, ship_city, created_at, gift_ideas(title)")
+          .select("id, status, hold_reason, failure_type, resolved, failed_after_close, max_price_cents, fee_cents, ship_city, created_at, gift_ideas(title)")
           .eq("round_id", roundId)
           .order("created_at")
           .order("id"),
@@ -403,6 +409,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
           holdReason: o.hold_reason,
           failureType: o.failure_type,
           resolved: o.resolved,
+          failedAfterClose: o.failed_after_close,
           maxPriceCents: o.max_price_cents,
           feeCents: o.fee_cents,
         })),
@@ -467,6 +474,24 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
     },
 
     async roundsMissingOrderedEmail() {
+      // Orders that failed after their round closed and whose email hasn't gone. Rare, so unbounded.
+      const lateFailures = async (): Promise<string[]> => {
+        const { data: failed, error: failedError } = await concierge
+          .from("orders")
+          .select("id, round_id")
+          .eq("status", "failed")
+          .eq("failed_after_close", true);
+        if (failedError) fail("Loading late failures failed", failedError);
+        if (!failed.length) return [];
+        const { data: sent, error: sentError } = await concierge
+          .from("round_sends")
+          .select("step")
+          .in("round_id", [...new Set(failed.map((o) => o.round_id))])
+          .like("step", "late_fail:%");
+        if (sentError) fail("Loading the late failure emails failed", sentError);
+        const told = new Set(sent.map((x) => x.step));
+        return [...new Set(failed.filter((o) => !told.has(`late_fail:${o.id}`)).map((o) => o.round_id))];
+      };
       // Bounded to rounds that aren't finished: ordered or still needing the buyer.
       // Follow-up (past MVP scale): one SQL query with NOT EXISTS on round_sends, or a recent window.
       const { data: orders, error } = await concierge
@@ -475,7 +500,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
         .in("status", ["placed", "shipped", "delivered"])
         .in("gift_rounds.status", ["ordered", "needs_attention"]);
       if (error) fail("Loading placed orders failed", error);
-      if (!orders.length) return [];
+      if (!orders.length) return lateFailures();
       const roundIds = [...new Set(orders.map((o) => o.round_id))];
       const { data: sends, error: sendsError } = await concierge
         .from("round_sends")
@@ -484,7 +509,8 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
         .like("step", "ordered:%");
       if (sendsError) fail("Loading the ordered emails failed", sendsError);
       const told = new Set(sends.map((s) => s.step));
-      return [...new Set(orders.filter((o) => !told.has(`ordered:${o.id}`)).map((o) => o.round_id))];
+      const late = await lateFailures();
+      return [...new Set([...orders.filter((o) => !told.has(`ordered:${o.id}`)).map((o) => o.round_id), ...late])];
     },
 
     async canBuy(userId) {

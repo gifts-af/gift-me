@@ -1139,6 +1139,61 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     expect(Object.keys(alerts[0]).sort()).toEqual(["alert", "at", "event", "round_id", "user_id"]);
   });
 
+  // S2 (owner: customers are always told): a gift still placing at the deadline fails afterwards,
+  // or the owner settles an unconfirmed one as failed. The round is closed, so the engine never
+  // looks at it again; the buyer still hears, once.
+  it("a failure settled after the round closed is emailed (at once, or on the next tick), and only once", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await newRound(u, { totals: [4200, 3000] });
+    // The first times out (placing); the second is never sent and stays held.
+    zinc.plan.set(`https://shop.test/p/${r.ideaIds[0]}`, ["timeout"]);
+    await approve(u, r);
+    const [first] = (
+      await pg.query("select o.id from concierge.orders o join concierge.gift_ideas i on i.id = o.idea_id where o.round_id = $1 order by i.rank", [r.roundId])
+    ).rows;
+    // The deadline cancels the held one (its own email) and closes the round with the first still placing.
+    await pg.query("update concierge.gift_rounds set locked_until = null where id = $1", [r.roundId]);
+    await advance(r.roundId, 30);
+    expect(await roundRow(r.roundId)).toMatchObject({ status: "ordered" });
+    const before = inbox(u).length;
+
+    // Zinc's webhook: it failed. The round ends skipped, and the engine never looks at it again.
+    await pg.query("select concierge.settle_order($1, $2, 'failed', 'out_of_stock', '{}')", [u.userId, first.id]);
+    expect(await roundRow(r.roundId)).toMatchObject({ status: "skipped" });
+    // The webhook tells the buyer at once (orderPlaced → tellOrdered); refused that time...
+    refuse = true;
+    await tellOrdered(r.roundId, engine(dayAt(31)));
+    expect(await sends(r.roundId)).not.toContain(`late_fail:${first.id}`);
+    refuse = false;
+    // ...so the tick sends it, once.
+    await retryOrderedEmails(engine(dayAt(32)));
+    await retryOrderedEmails(engine(dayAt(33)));
+    expect(inbox(u).slice(before)).toEqual(["We couldn't buy Mary's gift@32"]);
+    const text = mail.filter((m) => m.to === u.email && m.subject.startsWith("We couldn't buy")).map((m) => m.text)[0];
+    expect(text).toContain(
+      "The store couldn't place the order for the Stoneware mug set for Mary's Christmas on",
+    );
+    expect(text).toContain("so nothing was bought or charged for it.");
+    expect(text).not.toContain("on its way");
+  });
+
+  it("an unconfirmed order the owner settles as failed after the deadline is emailed, and the round ends skipped", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await newRound(u);
+    zinc.plan.set(`https://shop.test/p/${r.ideaIds[0]}`, ["timeout"]);
+    await approve(u, r);
+    const [o] = (await pg.query("select id from concierge.orders where round_id = $1", [r.roundId])).rows;
+    await pg.query("select concierge.mark_unconfirmed($1)", [o.id]);
+    await advance(r.roundId, 1);
+    await advance(r.roundId, 30);
+    // README runbook: Zinc has no such order, so the owner settles it as failed.
+    await pg.query("select concierge.settle_order($1, $2, 'failed', 'failed', null)", [u.userId, o.id]);
+    expect(await roundRow(r.roundId)).toMatchObject({ status: "skipped" });
+    await retryOrderedEmails(engine(dayAt(31)));
+    expect(inbox(u).at(-1)).toBe("We couldn't buy Mary's gift@31");
+    expect(await sends(r.roundId)).toContain(`late_fail:${o.id}`);
+  });
+
   it("a refused 'ordered' email goes out on the next tick, and never twice", async () => {
     const u = await newUser({ autoTopUp: null });
     const r = await newRound(u);

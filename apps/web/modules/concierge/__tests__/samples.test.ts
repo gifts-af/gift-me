@@ -30,6 +30,8 @@ describe("sampleEmails", () => {
       "too_late",
       "missed_on_us",
       "ordered",
+      "failed_late",
+      "failed_late-partial",
     ]);
   });
 
