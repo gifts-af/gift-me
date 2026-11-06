@@ -12,6 +12,7 @@ export type Database = {
       accounts: {
         Row: {
           auto_topup_on: boolean | null;
+          buyer_phone: string | null;
           created_at: string;
           funding_mode: string;
           notification_prefs: NonNullable<Json>;
@@ -21,11 +22,14 @@ export type Database = {
           user_id: string;
           zinc_api_key_secret_id: string | null;
           zinc_connected_at: string | null;
+          zinc_env: string | null;
+          zinc_webhook_id: string | null;
           zinc_webhook_secret_id: string | null;
         };
         ComputedFields: never;
         Insert: {
           auto_topup_on?: boolean | null;
+          buyer_phone?: string | null;
           created_at?: string;
           funding_mode?: string;
           notification_prefs?: NonNullable<Json>;
@@ -35,10 +39,13 @@ export type Database = {
           user_id?: string;
           zinc_api_key_secret_id?: string | null;
           zinc_connected_at?: string | null;
+          zinc_env?: string | null;
+          zinc_webhook_id?: string | null;
           zinc_webhook_secret_id?: string | null;
         };
         Update: {
           auto_topup_on?: boolean | null;
+          buyer_phone?: string | null;
           created_at?: string;
           funding_mode?: string;
           notification_prefs?: NonNullable<Json>;
@@ -48,6 +55,8 @@ export type Database = {
           user_id?: string;
           zinc_api_key_secret_id?: string | null;
           zinc_connected_at?: string | null;
+          zinc_env?: string | null;
+          zinc_webhook_id?: string | null;
           zinc_webhook_secret_id?: string | null;
         };
         Relationships: [];
@@ -331,10 +340,14 @@ export type Database = {
         Row: {
           approved_at: string | null;
           attempts: number;
+          attention_reason: string | null;
           budget_cents: number | null;
           created_at: string;
+          emailed_balance_cents: number | null;
           heads_up_on: string | null;
+          hold_count: number;
           id: string;
+          last_emailed_reason: string | null;
           late: boolean;
           locked_until: string | null;
           next_action_at: string | null;
@@ -342,6 +355,7 @@ export type Database = {
           occasion_id: string;
           occasion_year: number;
           person_id: string;
+          seen_balance_cents: number | null;
           ship_by_deadline: string;
           status: Database["concierge"]["Enums"]["round_status"];
           updated_at: string;
@@ -351,10 +365,14 @@ export type Database = {
         Insert: {
           approved_at?: string | null;
           attempts?: number;
+          attention_reason?: string | null;
           budget_cents?: number | null;
           created_at?: string;
+          emailed_balance_cents?: number | null;
           heads_up_on?: string | null;
+          hold_count?: number;
           id?: string;
+          last_emailed_reason?: string | null;
           late?: boolean;
           locked_until?: string | null;
           next_action_at?: string | null;
@@ -362,6 +380,7 @@ export type Database = {
           occasion_id: string;
           occasion_year: number;
           person_id: string;
+          seen_balance_cents?: number | null;
           ship_by_deadline: string;
           status?: Database["concierge"]["Enums"]["round_status"];
           updated_at?: string;
@@ -370,10 +389,14 @@ export type Database = {
         Update: {
           approved_at?: string | null;
           attempts?: number;
+          attention_reason?: string | null;
           budget_cents?: number | null;
           created_at?: string;
+          emailed_balance_cents?: number | null;
           heads_up_on?: string | null;
+          hold_count?: number;
           id?: string;
+          last_emailed_reason?: string | null;
           late?: boolean;
           locked_until?: string | null;
           next_action_at?: string | null;
@@ -381,6 +404,7 @@ export type Database = {
           occasion_id?: string;
           occasion_year?: number;
           person_id?: string;
+          seen_balance_cents?: number | null;
           ship_by_deadline?: string;
           status?: Database["concierge"]["Enums"]["round_status"];
           updated_at?: string;
@@ -589,6 +613,7 @@ export type Database = {
           fee_cents: number;
           funding_mode: string;
           gift_message: string | null;
+          hold_reason: string | null;
           id: string;
           idea_id: string;
           idempotency_key: string;
@@ -598,6 +623,7 @@ export type Database = {
           packages: NonNullable<Json>;
           provider: string;
           provider_order_id: string | null;
+          resolved: boolean;
           round_id: string;
           ship_city: string;
           ship_state: string;
@@ -618,6 +644,7 @@ export type Database = {
           fee_cents: number;
           funding_mode: string;
           gift_message?: string | null;
+          hold_reason?: string | null;
           id?: string;
           idea_id: string;
           idempotency_key?: string;
@@ -627,6 +654,7 @@ export type Database = {
           packages?: NonNullable<Json>;
           provider?: string;
           provider_order_id?: string | null;
+          resolved?: boolean;
           round_id: string;
           ship_city: string;
           ship_state: string;
@@ -646,6 +674,7 @@ export type Database = {
           fee_cents?: number;
           funding_mode?: string;
           gift_message?: string | null;
+          hold_reason?: string | null;
           id?: string;
           idea_id?: string;
           idempotency_key?: string;
@@ -655,6 +684,7 @@ export type Database = {
           packages?: NonNullable<Json>;
           provider?: string;
           provider_order_id?: string | null;
+          resolved?: boolean;
           round_id?: string;
           ship_city?: string;
           ship_state?: string;
@@ -888,6 +918,40 @@ export type Database = {
           },
         ];
       };
+      zinc_connect_attempts: {
+        Row: {
+          created_at: string;
+          device_code: string;
+          expires_at: string;
+          interval_sec: number;
+          polling_until: string | null;
+          user_code: string;
+          user_id: string;
+          verification_url: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          device_code: string;
+          expires_at: string;
+          interval_sec: number;
+          polling_until?: string | null;
+          user_code: string;
+          user_id: string;
+          verification_url: string;
+        };
+        Update: {
+          created_at?: string;
+          device_code?: string;
+          expires_at?: string;
+          interval_sec?: number;
+          polling_until?: string | null;
+          user_code?: string;
+          user_id?: string;
+          verification_url?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -919,15 +983,111 @@ export type Database = {
         Args: { p_answers: Json; p_person_id: string };
         Returns: number;
       };
+      approve_round: {
+        Args: {
+          p_lock: string;
+          p_orders: Json;
+          p_round_id: string;
+          p_user_id: string;
+        };
+        Returns: {
+          created_at: string;
+          est_delivery_date: string | null;
+          failure_type: string | null;
+          fee_cents: number;
+          funding_mode: string;
+          gift_message: string | null;
+          hold_reason: string | null;
+          id: string;
+          idea_id: string;
+          idempotency_key: string;
+          is_gift: boolean;
+          max_price_cents: number;
+          merchant_order_id: string | null;
+          packages: NonNullable<Json>;
+          provider: string;
+          provider_order_id: string | null;
+          resolved: boolean;
+          round_id: string;
+          ship_city: string;
+          ship_state: string;
+          ship_to: string;
+          shipping_cents: number | null;
+          status: string;
+          subtotal_cents: number | null;
+          tax_cents: number | null;
+          total_cents: number | null;
+          updated_at: string;
+          user_id: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "orders";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      begin_placing: {
+        Args: {
+          p_lock: string;
+          p_orders: Json;
+          p_round_id: string;
+          p_today: string;
+        };
+        Returns: {
+          created_at: string;
+          est_delivery_date: string | null;
+          failure_type: string | null;
+          fee_cents: number;
+          funding_mode: string;
+          gift_message: string | null;
+          hold_reason: string | null;
+          id: string;
+          idea_id: string;
+          idempotency_key: string;
+          is_gift: boolean;
+          max_price_cents: number;
+          merchant_order_id: string | null;
+          packages: NonNullable<Json>;
+          provider: string;
+          provider_order_id: string | null;
+          resolved: boolean;
+          round_id: string;
+          ship_city: string;
+          ship_state: string;
+          ship_to: string;
+          shipping_cents: number | null;
+          status: string;
+          subtotal_cents: number | null;
+          tax_cents: number | null;
+          total_cents: number | null;
+          updated_at: string;
+          user_id: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "orders";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      cancel_held: {
+        Args: { p_context: string; p_round_id: string };
+        Returns: Database["concierge"]["Enums"]["round_status"];
+      };
       claim_due_rounds: {
         Args: { p_now: string };
         Returns: {
           approved_at: string | null;
           attempts: number;
+          attention_reason: string | null;
           budget_cents: number | null;
           created_at: string;
+          emailed_balance_cents: number | null;
           heads_up_on: string | null;
+          hold_count: number;
           id: string;
+          last_emailed_reason: string | null;
           late: boolean;
           locked_until: string | null;
           next_action_at: string | null;
@@ -935,6 +1095,7 @@ export type Database = {
           occasion_id: string;
           occasion_year: number;
           person_id: string;
+          seen_balance_cents: number | null;
           ship_by_deadline: string;
           status: Database["concierge"]["Enums"]["round_status"];
           updated_at: string;
@@ -952,10 +1113,14 @@ export type Database = {
         Returns: {
           approved_at: string | null;
           attempts: number;
+          attention_reason: string | null;
           budget_cents: number | null;
           created_at: string;
+          emailed_balance_cents: number | null;
           heads_up_on: string | null;
+          hold_count: number;
           id: string;
+          last_emailed_reason: string | null;
           late: boolean;
           locked_until: string | null;
           next_action_at: string | null;
@@ -963,6 +1128,40 @@ export type Database = {
           occasion_id: string;
           occasion_year: number;
           person_id: string;
+          seen_balance_cents: number | null;
+          ship_by_deadline: string;
+          status: Database["concierge"]["Enums"]["round_status"];
+          updated_at: string;
+          user_id: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "gift_rounds";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      claim_round_now: {
+        Args: { p_now: string; p_round_id: string };
+        Returns: {
+          approved_at: string | null;
+          attempts: number;
+          attention_reason: string | null;
+          budget_cents: number | null;
+          created_at: string;
+          emailed_balance_cents: number | null;
+          heads_up_on: string | null;
+          hold_count: number;
+          id: string;
+          last_emailed_reason: string | null;
+          late: boolean;
+          locked_until: string | null;
+          next_action_at: string | null;
+          occasion_date: string;
+          occasion_id: string;
+          occasion_year: number;
+          person_id: string;
+          seen_balance_cents: number | null;
           ship_by_deadline: string;
           status: Database["concierge"]["Enums"]["round_status"];
           updated_at: string;
@@ -977,6 +1176,20 @@ export type Database = {
       };
       delete_occasion: { Args: { p_occasion_id: string }; Returns: undefined };
       enable_owner_rls: { Args: { p_table: unknown }; Returns: undefined };
+      fail_order: {
+        Args: { p_failure_type: string; p_order_id: string };
+        Returns: Database["concierge"]["Enums"]["round_status"];
+      };
+      fail_order_row: {
+        Args: {
+          p_failure_type: string;
+          p_order: Omit<
+            Database["concierge"]["Tables"]["orders"]["Row"],
+            Database["concierge"]["Tables"]["orders"]["ComputedFields"]
+          >;
+        };
+        Returns: undefined;
+      };
       finish_round: {
         Args: {
           p_heads_up_on: string;
@@ -988,6 +1201,157 @@ export type Database = {
         Returns: boolean;
       };
       has_paid_features: { Args: { p_user_id: string }; Returns: boolean };
+      held_rounds_for_user: {
+        Args: { p_user_id: string };
+        Returns: {
+          approved_at: string | null;
+          attempts: number;
+          attention_reason: string | null;
+          budget_cents: number | null;
+          created_at: string;
+          emailed_balance_cents: number | null;
+          heads_up_on: string | null;
+          hold_count: number;
+          id: string;
+          last_emailed_reason: string | null;
+          late: boolean;
+          locked_until: string | null;
+          next_action_at: string | null;
+          occasion_date: string;
+          occasion_id: string;
+          occasion_year: number;
+          person_id: string;
+          seen_balance_cents: number | null;
+          ship_by_deadline: string;
+          status: Database["concierge"]["Enums"]["round_status"];
+          updated_at: string;
+          user_id: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "gift_rounds";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      hold_orders: {
+        Args: { p_reason: string; p_round_id: string };
+        Returns: Database["concierge"]["Enums"]["round_status"];
+      };
+      lookahead_rounds: {
+        Args: { p_until: string; p_user_id: string };
+        Returns: {
+          budget_cents: number;
+          orders: Json;
+          round_id: string;
+          ship_by_deadline: string;
+          status: Database["concierge"]["Enums"]["round_status"];
+        }[];
+      };
+      mark_unconfirmed: {
+        Args: { p_order_id: string };
+        Returns: Database["concierge"]["Enums"]["round_status"];
+      };
+      order_by_reference: {
+        Args: { p_order_id: string; p_user_id: string };
+        Returns: {
+          created_at: string;
+          est_delivery_date: string | null;
+          failure_type: string | null;
+          fee_cents: number;
+          funding_mode: string;
+          gift_message: string | null;
+          hold_reason: string | null;
+          id: string;
+          idea_id: string;
+          idempotency_key: string;
+          is_gift: boolean;
+          max_price_cents: number;
+          merchant_order_id: string | null;
+          packages: NonNullable<Json>;
+          provider: string;
+          provider_order_id: string | null;
+          resolved: boolean;
+          round_id: string;
+          ship_city: string;
+          ship_state: string;
+          ship_to: string;
+          shipping_cents: number | null;
+          status: string;
+          subtotal_cents: number | null;
+          tax_cents: number | null;
+          total_cents: number | null;
+          updated_at: string;
+          user_id: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "orders";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      reapprove_order: {
+        Args: {
+          p_lock: string;
+          p_max_price_cents: number;
+          p_order_id: string;
+          p_round_id: string;
+          p_user_id: string;
+        };
+        Returns: {
+          created_at: string;
+          est_delivery_date: string | null;
+          failure_type: string | null;
+          fee_cents: number;
+          funding_mode: string;
+          gift_message: string | null;
+          hold_reason: string | null;
+          id: string;
+          idea_id: string;
+          idempotency_key: string;
+          is_gift: boolean;
+          max_price_cents: number;
+          merchant_order_id: string | null;
+          packages: NonNullable<Json>;
+          provider: string;
+          provider_order_id: string | null;
+          resolved: boolean;
+          round_id: string;
+          ship_city: string;
+          ship_state: string;
+          ship_to: string;
+          shipping_cents: number | null;
+          status: string;
+          subtotal_cents: number | null;
+          tax_cents: number | null;
+          total_cents: number | null;
+          updated_at: string;
+          user_id: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "orders";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      reconcile_round: {
+        Args: { p_context?: string; p_round_id: string };
+        Returns: Database["concierge"]["Enums"]["round_status"];
+      };
+      record_outcomes: {
+        Args: { p_results: Json; p_round_id: string };
+        Returns: Database["concierge"]["Enums"]["round_status"];
+      };
+      release_round: {
+        Args: { p_lock: string; p_round_id: string };
+        Returns: boolean;
+      };
+      remove_zinc_secrets: {
+        Args: { p_api_key_secret_id: string; p_webhook_secret_id: string };
+        Returns: undefined;
+      };
       round_candidates: {
         Args: { p_today: string };
         Returns: {
@@ -1000,9 +1364,117 @@ export type Database = {
           user_id: string;
         }[];
       };
+      set_emailed_balance: {
+        Args: { p_cents: number; p_round_id: string };
+        Returns: undefined;
+      };
+      set_last_emailed_reason: {
+        Args: { p_reason: string; p_round_id: string };
+        Returns: undefined;
+      };
+      set_seen_balance: {
+        Args: { p_cents: number; p_round_id: string };
+        Returns: undefined;
+      };
       setting_int: { Args: { p_key: string }; Returns: number };
+      settle_order: {
+        Args: {
+          p_failure_type: string;
+          p_order_id: string;
+          p_price: Json;
+          p_status: string;
+          p_user_id: string;
+        };
+        Returns: Database["concierge"]["Enums"]["round_status"];
+      };
       skip_open_rounds: {
         Args: { p_occasion_id: string; p_person_id: string };
+        Returns: undefined;
+      };
+      stale_placing_orders: {
+        Args: { p_now: string };
+        Returns: {
+          created_at: string;
+          est_delivery_date: string | null;
+          failure_type: string | null;
+          fee_cents: number;
+          funding_mode: string;
+          gift_message: string | null;
+          hold_reason: string | null;
+          id: string;
+          idea_id: string;
+          idempotency_key: string;
+          is_gift: boolean;
+          max_price_cents: number;
+          merchant_order_id: string | null;
+          packages: NonNullable<Json>;
+          provider: string;
+          provider_order_id: string | null;
+          resolved: boolean;
+          round_id: string;
+          ship_city: string;
+          ship_state: string;
+          ship_to: string;
+          shipping_cents: number | null;
+          status: string;
+          subtotal_cents: number | null;
+          tax_cents: number | null;
+          total_cents: number | null;
+          updated_at: string;
+          user_id: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "orders";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
+      zinc_claim_poll: {
+        Args: { p_now: string; p_user_id: string };
+        Returns: {
+          created_at: string;
+          device_code: string;
+          expires_at: string;
+          interval_sec: number;
+          polling_until: string | null;
+          user_code: string;
+          user_id: string;
+          verification_url: string;
+        };
+        SetofOptions: {
+          from: "*";
+          to: "zinc_connect_attempts";
+          isOneToOne: true;
+          isSetofReturn: false;
+        };
+      };
+      zinc_drop_attempt: { Args: { p_user_id: string }; Returns: undefined };
+      zinc_forget: { Args: { p_user_id: string }; Returns: string };
+      zinc_secret_by_webhook: {
+        Args: { p_webhook_id: string };
+        Returns: {
+          user_id: string;
+          webhook_secret: string;
+        }[];
+      };
+      zinc_secrets: {
+        Args: { p_user_id: string };
+        Returns: {
+          api_key: string;
+          webhook_id: string;
+          webhook_secret: string;
+          zinc_env: string;
+        }[];
+      };
+      zinc_store_secrets: {
+        Args: {
+          p_api_key: string;
+          p_user_id: string;
+          p_webhook_id: string;
+          p_webhook_secret: string;
+          p_zinc_env: string;
+        };
         Returns: undefined;
       };
     };
@@ -1029,6 +1501,7 @@ export type Database = {
           claimed_at: string;
           claimer_id: string | null;
           claimer_name: string;
+          for_order: boolean;
           item_id: string;
         };
         ComputedFields: never;
@@ -1036,12 +1509,14 @@ export type Database = {
           claimed_at?: string;
           claimer_id?: string | null;
           claimer_name: string;
+          for_order?: boolean;
           item_id: string;
         };
         Update: {
           claimed_at?: string;
           claimer_id?: string | null;
           claimer_name?: string;
+          for_order?: boolean;
           item_id?: string;
         };
         Relationships: [
@@ -1175,6 +1650,10 @@ export type Database = {
           owner_id: string;
         }[];
       };
+      claim_for_order: {
+        Args: { p_item_id: string; p_user_id: string };
+        Returns: boolean;
+      };
       claim_gift: {
         Args: { p_item_id: string; p_name: string; p_token: string };
         Returns: Json;
@@ -1185,6 +1664,10 @@ export type Database = {
         Returns: undefined;
       };
       person_list: { Args: { p_person_id: string }; Returns: Json };
+      release_for_order: {
+        Args: { p_item_id: string; p_user_id: string };
+        Returns: boolean;
+      };
       save_list: {
         Args: { p_items: Json; p_list_id: string; p_title: string };
         Returns: string;

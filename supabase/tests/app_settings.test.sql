@@ -38,7 +38,10 @@ select set_eq(
     'guided_questions_max', 'guided_answer_max_facts', 'readiness_points_interests', 'readiness_points_wants',
     'readiness_points_avoid', 'readiness_points_sizes', 'readiness_points_brands', 'readiness_points_owns',
     'readiness_points_own_list', 'readiness_ready_pct', 'readiness_meter_enabled',
-    'capture_read_estimate_cents', 'hold_reminder_days', 'hold_final_days'
+    'capture_read_estimate_cents', 'hold_reminder_days', 'hold_final_days',
+    'order_price_margin_pct', 'funding_lookahead_days', 'funding_topup_suggest_cents', 'zinc_ordering_enabled',
+    'zinc_timeout_ms', 'zinc_poll_claim_seconds', 'placing_stale_minutes', 'zinc_place_budget_ms',
+    'zinc_retry_attempts', 'zinc_retry_base_ms'
   ],
   'every fee, limit, default and schedule setting is seeded'
 );
