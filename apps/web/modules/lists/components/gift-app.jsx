@@ -143,6 +143,7 @@ export default function GiftApp({ initial }) {
   // In-app links (Get, Give, the logo) navigate without beforeunload, so ask
   // here. Capture on document runs before React's own listeners, so stopping
   // the click keeps <Link> from navigating. Guests are stashed on unmount.
+  // `data-leaves-page` marks anything else that leaves: Sign out in AccountMenu.
   useEffect(() => {
     if (isGuest || !dirty) return
     function confirmLeave(event) {
