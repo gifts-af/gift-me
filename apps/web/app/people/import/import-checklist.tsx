@@ -6,6 +6,7 @@ import { guessRelationship, RELATIONSHIPS, relationshipLabel, type GoogleContact
 import { PersonAvatar } from "@/components/person-avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useHydrated } from "@/lib/use-hydrated";
 import type { ImportResult } from "@/modules/concierge";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -34,6 +35,7 @@ export function ImportChecklist({
   /** Starts the checklist over after an import (ALL-72). */
   onAgain?: () => void;
 }) {
+  const hydrated = useHydrated();
   const [stage, setStage] = useState<Stage>({ kind: "start" });
   const [search, setSearch] = useState("");
   // Ticked contacts and the relationship picked for each ("" until picked).
@@ -75,7 +77,15 @@ export function ImportChecklist({
             We couldn&apos;t get your contacts from Google. Try again, and allow access when Google asks.
           </p>
         )}
-        <Button className="self-start" onClick={connect} disabled={stage.kind === "loading"}>
+        {/* Faded until the page can respond (ALL-104). aria-disabled, not disabled, so a
+            keyboard can still reach it; it isn't in a form, so an early tap can't do harm. */}
+        <Button
+          className="self-start"
+          onClick={connect}
+          disabled={stage.kind === "loading"}
+          aria-disabled={!hydrated}
+          aria-busy={stage.kind === "loading"}
+        >
           {stage.kind === "loading" ? "Getting your contacts…" : "Connect Google Contacts"}
         </Button>
       </div>
