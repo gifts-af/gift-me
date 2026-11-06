@@ -11,8 +11,8 @@ import { TEST_USER } from "./test-user";
 // assertion is scoped to this person's round id. The spec switches the engine on
 // and always switches it back off.
 // Desktop only, set in playwright.config.ts (testIgnore on the phones), so the hooks below
-// can't run in a phone worker and undo the desktop run. A reused local dev server must have
-// been started with CRON_SECRET=e2e-cron-secret and EMAIL_OUTBOX=log (reuseExistingServer).
+// can't run in a phone worker and undo the desktop run. A server tested through E2E_BASE_URL
+// must have been started with CRON_SECRET=e2e-cron-secret and EMAIL_OUTBOX=log.
 test.describe.configure({ mode: "serial" });
 
 const supabase = localSupabase();

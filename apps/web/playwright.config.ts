@@ -2,11 +2,12 @@ import { defineConfig, devices } from "@playwright/test";
 import { localSupabase } from "./e2e/local-supabase";
 
 // Browser tests (ALL-20). They need the local Supabase running
-// (`pnpm supabase start`). They run against a production build, locally as in
-// CI (E10): under `pnpm dev`, Next's overlay blocks clicks and slow compiling
-// lets clicks land before the page responds (ALL-99). CI builds in an earlier
-// step. A server already on this port is reused locally, so don't run
-// `pnpm dev --port 3100` while testing.
+// (`pnpm supabase start`). They run against a production build, as CI's do: under
+// `pnpm dev`, Next's overlay blocks clicks and slow compiling lets clicks land
+// before the page responds (ALL-99). Local runs build first; CI builds in an
+// earlier step. A server already on this port fails the run instead of being
+// reused, because it could be old code or another session's. To test a running
+// server on purpose, set E2E_BASE_URL.
 const supabase = localSupabase();
 const port = 3100;
 const CI = Boolean(process.env.CI);
@@ -42,8 +43,8 @@ export default defineConfig({
     : {
         command: CI ? `pnpm start --port ${port}` : `pnpm build && pnpm start --port ${port}`,
         url: `http://localhost:${port}/auth/login`,
-        reuseExistingServer: !CI,
-        timeout: 300_000,
+        reuseExistingServer: false,
+        timeout: 120_000,
         env: {
           NEXT_PUBLIC_SUPABASE_URL: supabase.url,
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: supabase.publishableKey,
@@ -54,7 +55,7 @@ export default defineConfig({
           // Any value: contacts-import.spec.ts replaces Google's sign-in script (ALL-24).
           NEXT_PUBLIC_GOOGLE_CLIENT_ID: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "e2e-fake-client-id",
           // round-engine.spec.ts (ALL-28): emails are logged, not sent, and the daily tick takes this secret.
-          // Neither applies in production; VERCEL_ENV is only set on Vercel, so CI's `pnpm start` is fine.
+          // Neither applies in production; VERCEL_ENV is only set on Vercel, so `pnpm start` is fine here.
           EMAIL_OUTBOX: "log",
           CRON_SECRET: "e2e-cron-secret",
         },
