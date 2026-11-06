@@ -6,7 +6,7 @@
 //                    nothing when all is well, otherwise tells Claude what to walk the person
 //                    through. Always exits 0 so a session is never blocked.
 //
-// When a new tool becomes required, add a check here and a row to "Local development" in README.md.
+// When a new tool becomes required, add a check here and a row to "Local development" in design/operations.md.
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
@@ -47,7 +47,7 @@ const checks = [
     ok: nodeMajor >= 22,
     fix: {
       windows: "winget install -e --id OpenJS.NodeJS.LTS",
-      mac: "brew install node@22 (or use nvm)",
+      mac: "brew install node@22 && brew link --overwrite node@22 (or use nvm)",
       linux: "Install Node 22+ from https://nodejs.org or with nvm",
     },
   },
@@ -105,7 +105,7 @@ if (hookMode) {
       [
         "LOCAL DEV SETUP IS INCOMPLETE on this machine (from scripts/dev-check.mjs).",
         "Before starting other work, tell the person what is missing and offer to walk them through it,",
-        "one step at a time, following README.md > Local development. Missing:",
+        "one step at a time, following design/operations.md > Local development. Missing:",
         ...required.map((c) => `- ${c.name}: ${fixFor(c)}`),
         "Re-run `pnpm dev:check` to confirm when done.",
       ].join("\n"),
@@ -123,7 +123,7 @@ for (const c of checks) {
 const blocking = failing.filter((c) => !c.optional).length;
 console.log(
   blocking
-    ? `\n${blocking} required item(s) missing. Details: README.md > Local development.`
+    ? `\n${blocking} required item(s) missing. Details: design/operations.md > Local development.`
     : "\nAll set. Start the local database with: pnpm supabase start",
 );
 process.exit(blocking ? 1 : 0);

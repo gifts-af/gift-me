@@ -41,16 +41,16 @@ Numbered E1–E10 (E for engineering), so they never get mixed up with the PRD's
 **E6. Emit structured events, derive everything else.** New server code logs through one small helper that writes one JSON event per line, which Vercel captures. Logs, metrics and traces all come from those events. Each event carries the ids needed to find it again: the request id and user id, plus the round, order or person id when there is one. **Ids only:** never names, emails, addresses, gift messages or keys (D31, T27).
 *Breaks it:* a new free-text `console.log`, or an event that contains personal data.
 
-**E7. Recovery over prevention, except where money moves.** Any deploy can be undone in under five minutes without a code change. Code goes back with Vercel's instant rollback, and a risky path is switched off with an `app_settings` row. Those rows double as feature flags, so we don't need a flag service (T23). Migrations are expand-then-contract: add the new thing, ship the code that uses it, and remove the old thing in a later migration. **Purchases can't be undone (T18)**, so ordering also prevents mistakes up front: price caps (PRD B-5), one live order per idea (T26), and a setting that stops all ordering. We rehearse a rollback once before the public launch and record how in the README.
+**E7. Recovery over prevention, except where money moves.** Any deploy can be undone in under five minutes without a code change. Code goes back with Vercel's instant rollback, and a risky path is switched off with an `app_settings` row. Those rows double as feature flags, so we don't need a flag service (T23). Migrations are expand-then-contract: add the new thing, ship the code that uses it, and remove the old thing in a later migration. **Purchases can't be undone (T18)**, so ordering also prevents mistakes up front: price caps (PRD B-5), one live order per idea (T26), and a setting that stops all ordering. We rehearse a rollback once before the public launch and record how in `design/operations.md`.
 *Breaks it:* a migration that drops or renames something live code still uses, or a risky new path with no off switch.
 
-**E8. Attention is finite.** An alert exists only if it matches something a user would notice and links to a runbook (a README section) that says what to do. Dashboards are saved queries we actually use, not decoration. Delete any alert that hasn't led to useful action in 90 days.
+**E8. Attention is finite.** An alert exists only if it matches something a user would notice and links to a runbook (a section of `design/operations.md`) that says what to do. Dashboards are saved queries we actually use, not decoration. Delete any alert that hasn't led to useful action in 90 days.
 *Breaks it:* an alert with no user-visible symptom or no runbook.
 
 **E9. Value is realized at the user, not at merge.** Merged isn't done. A ticket is done when the change is on production, its events show it working, and it can be rolled back or switched off (E7). Every PR answers two questions: *how will we see this working on production?* and *how do we turn it off?* After merging, the author checks it on production and notes the result on the ticket, reopening the ticket if the check fails. Until real users arrive, "in users' hands" means it works for us on production.
 *Breaks it:* a PR that can't answer those two questions.
 
-**E10. Commands are discoverable, and local matches CI.** Every repeatable action is a root `pnpm` script listed in one README table. CI runs those same scripts and nothing else: no CI-only shell logic, no hidden arguments. A new contributor should be able to list every command in 30 seconds.
+**E10. Commands are discoverable, and local matches CI.** Every repeatable action is a root `pnpm` script listed in one table in `design/operations.md`. CI runs those same scripts and nothing else: no CI-only shell logic, no hidden arguments. A new contributor should be able to list every command in 30 seconds.
 *Breaks it:* a CI step with inline shell, or a command that needs undocumented flags or env vars.
 
 ## Superpowers is required
@@ -90,10 +90,12 @@ Use this layout. It overrides any plugin or skill default (for example, Superpow
 
 | What | Where |
 |---|---|
+| What the product is, for anyone visiting the repo | `README.md`: a product pitch, with no setup or operations detail (T66) |
 | Product: PRD, research, product decisions | `planning/` (`PRD.md`, `research/`, `decisions.md`) |
 | Platform roadmap and go-to-market | `planning/strategy.md` (the shareable roadmap and go-to-market pages are built from it) |
 | Raw product ideas not yet planned | `planning/ideas.md` |
 | Technical design | `design/technical-design.md` |
+| Installing, running and operating: setup, commands, environments, runbooks | `design/operations.md` |
 | Technical decisions | `design/decisions.md`, next number in sequence (T16, T17, …) |
 | Spike write-ups | `design/spikes/<topic>.md` (e.g. `zinc.md`, `ai.md`, `email.md`) |
 | Look and feel, UI kit, mock-up links | `design/ui.md` |
@@ -102,7 +104,7 @@ Use this layout. It overrides any plugin or skill default (for example, Superpow
 - Don't create a new top-level folder or a second copy of a doc. Update the existing one.
 - **Nothing discussed gets lost.** When a conversation, chat or artifact produces a product or design direction, record it in the docs above (and the decisions log) before moving on. Shareable pages and Linear are views; the repo is the written source.
 - When a decision changes the design, update both `design/technical-design.md` and `design/decisions.md`, plus any affected Linear tickets.
-- Add new docs to the table in `README.md` so people can find them.
+- Add new docs to the table in `design/operations.md` > Workspace layout so people can find them.
 
 ## Updating the roadmap page
 
@@ -128,9 +130,9 @@ The owner's claude.ai account owns the page. To update it, a person needs **edit
 - **One app, products as modules (T19, T20):** `apps/web/modules/<product>/` with a public `index.ts`. Import another product only through its `index.ts`; lint fails otherwise. Shared code lives in `apps/web/components`, `apps/web/lib` and `packages/core`.
 - **Next.js 16 has breaking changes:** read `apps/web/AGENTS.md`, and check `apps/web/node_modules/next/dist/docs/` before writing Next-specific code.
 - **Catching errors in server components:** with `cacheComponents` on, a `catch` around request data (`cookies()`, `headers()` or anything that calls them) starts with `unstable_rethrow(error)`. Otherwise Next's end-of-prerender signal gets logged as a failure (ALL-87).
-- **Local setup:** if the session-start check reports missing tools, walk the person through `README.md` > Local development before other work. When a new tool becomes required, add a check to `scripts/dev-check.mjs` and a row to that README table.
+- **Local setup:** if the session-start check reports missing tools, walk the person through `design/operations.md` > Local development before other work. When someone asks to install the repo on a new machine, follow `design/operations.md` > Install instead. When a new tool becomes required, add a check to `scripts/dev-check.mjs` and a row to the table in `design/operations.md` > Local development.
 - **No hard-coded values (T23).** Fees, prices, rates, limits, timings and thresholds live outside the code: app-wide settings in `concierge.app_settings`, per-user ones in `concierge.accounts` (T26), and secrets or per-environment values in env vars. Code takes them as inputs and never falls back to a silent default constant. Only true constants (7 days in a week) stay in code.
-- **Browser tests (T62):** a test runs on the iPhone only unless it's tagged `@layout`, which runs it on all three browsers. Tag anything that checks how a page looks or fits, and check layout with `e2e/phone-layout.ts`, whose helpers fail an untagged test. Sign in with `signIn(page)` from `e2e/sign-in.ts`; `pnpm lint` fails a test that finds the login form's password field. Don't silence either check to get a test passing: tag the test, or switch to `signIn`. See `README.md` > Writing a browser test.
+- **Browser tests (T62):** a test runs on the iPhone only unless it's tagged `@layout`, which runs it on all three browsers. Tag anything that checks how a page looks or fits, and check layout with `e2e/phone-layout.ts`, whose helpers fail an untagged test. Sign in with `signIn(page)` from `e2e/sign-in.ts`; `pnpm lint` fails a test that finds the login form's password field. Don't silence either check to get a test passing: tag the test, or switch to `signIn`. See `design/operations.md` > Writing a browser test.
 - **Before a PR:** `pnpm lint && pnpm typecheck && pnpm test && pnpm build` from the repo root. CI runs the same.
 
 ## Git
@@ -163,7 +165,7 @@ The owner's claude.ai account owns the page. To update it, a person needs **edit
   - **Tests:** what was added, that it failed first, and the suite results (counts), plus lint, typecheck and the CI result for the PR.
   - **Screenshots** of anything a person sees, at phone and desktop width and in light and dark mode where it matters. Show before and after for a fix.
   - **Mock-ups** made for the ticket.
-  - **Live checks** after the deploy (what was checked on giftsaf.com or in the service, and the result). For anything that needs signing in, use `pnpm live-check` with the shared account (`README.md` > Production test account, T60).
+  - **Live checks** after the deploy (what was checked on giftsaf.com or in the service, and the result). For anything that needs signing in, use `pnpm live-check` with the shared account (`design/operations.md` > Production test account, T60).
   - **Ticked acceptance criteria:** as each criterion's evidence is posted, tick its box in the ticket description (`- [x]`) and add a short pointer to the evidence. All boxes are ticked before the ticket moves to Done; one that can't be ticked goes under **Still open**.
 
   Upload images into the comment (Linear MCP `prepare_file_upload`, then PUT, then embed the returned markdown), so they stay with the ticket rather than in chat or a scratch folder. Anything that couldn't be checked is listed as **Still open**, and the ticket stays open until it is. Docs-only pushes to `main` don't need a ticket. `AGENTS.md` repeats this rule for other AI tools and points them here.

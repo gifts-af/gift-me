@@ -468,7 +468,7 @@ export async function sweepStalePlacing(deps: PurchaseDeps): Promise<number> {
       const found = await findOrderByReference(deps.http, key.apiKey, o.id);
       if (!found) {
         await roundRpc(deps, "mark_unconfirmed", { p_order_id: o.id });
-        // The owner settles it by hand (README > Unconfirmed orders), so it alerts (E8).
+        // The owner settles it by hand (design/operations.md > Unconfirmed orders), so it alerts (E8).
         logEvent("order.unconfirmed", { ...ids, alert: true });
         done++;
         // The buyer hears "still confirming" now, not at the next tick (owner: always told).

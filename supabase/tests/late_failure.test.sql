@@ -38,7 +38,7 @@ select tests.lf_order(:'open_round', 'placing') as open_order \gset
 select tests.lf_round(:'u') as closed_round \gset
 select tests.lf_order(:'closed_round', 'placing') as closed_order \gset
 select concierge.cancel_held(:'closed_round', 'deadline');
--- Closed with the order unconfirmed; the owner settles it as failed (README runbook).
+-- Closed with the order unconfirmed; the owner settles it as failed (runbook in design/operations.md).
 select tests.lf_round(:'u') as unconf_round \gset
 select tests.lf_order(:'unconf_round', 'unconfirmed') as unconf_order \gset
 select concierge.cancel_held(:'unconf_round', 'deadline');

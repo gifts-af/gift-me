@@ -3,7 +3,7 @@
 // lib/ai/fixtures/expected.json. Costs about 10¢. Not run in CI.
 //
 // Needs AI_GATEWAY_API_KEY in apps/web/.env.development.local (`vercel env pull`,
-// README > Environments). The two real-page screenshots aren't committed (the
+// design/operations.md > Environments). The two real-page screenshots aren't committed (the
 // repo is public); `node spikes/ai/screens.mjs` recreates them, and missing
 // ones are skipped with a note.
 import { existsSync, readFileSync } from "node:fs";
@@ -17,7 +17,7 @@ const fixtures = path.join(web, "lib/ai/fixtures");
 const envFile = path.join(web, ".env.development.local");
 if (existsSync(envFile)) process.loadEnvFile(envFile);
 if (!process.env.AI_GATEWAY_API_KEY) {
-  console.error("AI_GATEWAY_API_KEY isn't set. Run `vercel env pull` in apps/web first (README > Environments).");
+  console.error("AI_GATEWAY_API_KEY isn't set. Run `vercel env pull` in apps/web first (design/operations.md > Environments).");
   process.exit(1);
 }
 

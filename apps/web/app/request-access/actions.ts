@@ -4,7 +4,7 @@ import { requestAccess, type RequestAccessResult } from "@/lib/access-request";
 import { verifyTurnstile } from "@/lib/turnstile";
 
 // The form's server action (ALL-47). The Resend key is per environment
-// (README > Environments); without it the visitor sees a friendly error.
+// (design/operations.md > Environments); without it the visitor sees a friendly error.
 export async function submitAccessRequest(
   _previous: RequestAccessResult | null,
   data: FormData,

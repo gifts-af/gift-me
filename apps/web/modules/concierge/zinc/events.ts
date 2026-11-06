@@ -149,7 +149,7 @@ async function settle(userId: string, event: ZincEvent, deps: Deps): Promise<voi
   const ourId = await findOurOrder(userId, event.orderId, deps);
   if (!ourId) {
     // Zinc answered definitively that it has no such order for this key, or the reference is
-    // missing: the owner settles it by hand (README > Alerts).
+    // missing: the owner settles it by hand (design/operations.md > Alerts).
     logEvent("zinc.webhook_unmatched", { user_id: userId, provider_order_id: event.orderId, alert: true });
     return;
   }

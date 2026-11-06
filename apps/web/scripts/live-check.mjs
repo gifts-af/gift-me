@@ -1,5 +1,5 @@
 // `pnpm live-check [playwright args]`: runs e2e-live/ on giftsaf.com, signed in
-// as the shared test account (README > Production test account, T60).
+// as the shared test account (design/operations.md > Production test account, T60).
 //
 // The sign-in form is closed to automated browsers by its bot check (ALL-68), so
 // this gets a one-time login through the admin API instead. That needs the
