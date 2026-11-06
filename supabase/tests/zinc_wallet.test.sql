@@ -4,7 +4,7 @@
 -- The two-connection races are in apps/web/modules/concierge/__tests__/placing-race.test.ts.
 begin;
 \ir _helpers.psql
-select plan(106);
+select plan(114);
 
 -- ─── fixtures ───────────────────────────────────────────────────────────────
 
@@ -105,7 +105,8 @@ select tests.act_as(:'a');
 select throws_ok('select * from concierge.zinc_connect_attempts', '42501', null, 'users can''t read connect attempts');
 select throws_ok('select buyer_phone from concierge.accounts', '42501', null, 'users can''t read buyer_phone');
 select throws_ok('select zinc_webhook_id from concierge.accounts', '42501', null, 'users can''t read the webhook id');
-select throws_ok('select attention_reason from concierge.gift_rounds', '42501', null, 'users can''t read attention_reason');
+select lives_ok('select attention_reason, hold_count from concierge.gift_rounds', 'users read why their round needs them');
+select throws_ok('select last_emailed_reason from concierge.gift_rounds', '42501', null, 'users can''t read the other new round columns');
 select throws_ok('select hold_reason from concierge.orders', '42501', null, 'users can''t read hold_reason');
 select lives_ok('select over_budget_pct, paid_features from concierge.accounts', 'users still read their own settings');
 select lives_ok('select id, status, budget_cents from concierge.gift_rounds', 'users still read their rounds');
@@ -332,7 +333,7 @@ select is(concierge.record_outcomes(:'r9', jsonb_build_array(
     jsonb_build_object('order_id', :'o_unknown', 'outcome', 'unknown'),
     jsonb_build_object('order_id', :'o_unsent', 'outcome', 'unsent'),
     jsonb_build_object('order_id', :'o_short', 'outcome', 'insufficient', 'available_cents', 1200)))::text,
-  'ordered', 'while an order is placing the round stays ordered (reconcile table, rule 1)');
+  'needs_attention', 'a hold next to a placing order needs attention at once');
 select is((select status || '/' || (idempotency_key = :'k_unknown') from concierge.orders where id = :'o_unknown'), 'placing/true',
   'unknown stays placing with its key');
 select is((select status || '/' || hold_reason || '/' || (idempotency_key = :'k_unsent') from concierge.orders where id = :'o_unsent'),
@@ -342,21 +343,40 @@ select is((select status || '/' || hold_reason || '/' || (idempotency_key = :'k_
 select is((select seen_balance_cents from concierge.gift_rounds where id = :'r9'), 1200, 'the balance Zinc reported is saved');
 select is((select status || '/' || provider_order_id from concierge.orders where id = :'o_sent'), 'placing/zn_1', 'sent saves the Zinc id');
 
--- one sent plus one insufficient → needs_attention/funds once the sent one is placed
+-- one sent plus one insufficient → needs_attention/funds at once, so the customer is told
 select tests.zw_round(:'a', 'ordered') as r10 \gset
 select tests.zw_order(:'r10', 'placing') as r10_sent \gset
 select tests.zw_order(:'r10', 'placing') as r10_short \gset
-select concierge.record_outcomes(:'r10', jsonb_build_array(
-  jsonb_build_object('order_id', :'r10_sent', 'outcome', 'sent', 'provider_order_id', 'zn_2'),
-  jsonb_build_object('order_id', :'r10_short', 'outcome', 'insufficient', 'available_cents', 0)));
+select is(concierge.record_outcomes(:'r10', jsonb_build_array(
+    jsonb_build_object('order_id', :'r10_sent', 'outcome', 'sent', 'provider_order_id', 'zn_2'),
+    jsonb_build_object('order_id', :'r10_short', 'outcome', 'insufficient', 'available_cents', 0)))::text,
+  'needs_attention', 'one sent plus one insufficient → needs_attention');
+select is(tests.zw_state(:'r10'), 'needs_attention/funds', '... with reason funds, before any webhook');
+select is((select next_action_at from concierge.gift_rounds where id = :'r10'), now(), '... and the hold email is due now');
+select is((select status from concierge.orders where id = :'r10_sent'), 'placing', 'the sent one is untouched');
 select is(concierge.settle_order(:'a', :'r10_sent', 'placed', null, '{"total_cents": 4300}')::text, 'needs_attention',
-  'one placed plus one insufficient → needs_attention');
-select is(tests.zw_state(:'r10'), 'needs_attention/funds', '... with reason funds');
+  'once the sent one is placed the round still waits on the funds hold');
 select is((select status || '/' || total_cents from concierge.orders where id = :'r10_sent'), 'placed/4300', 'the placed one is untouched');
 select is(concierge.record_outcomes(:'r10', jsonb_build_array(
     jsonb_build_object('order_id', :'r10_sent', 'outcome', 'insufficient'))) ::text, 'needs_attention',
   'record_outcomes only touches orders still placing');
 select is((select status from concierge.orders where id = :'r10_sent'), 'placed', '... so a placed order stays placed');
+
+-- placing + held/funds: begin_placing moves only the held one; all placed → ordered
+select tests.zw_round(:'a', 'ordered') as r17 \gset
+select tests.zw_order(:'r17', 'placing') as r17_placing \gset
+select tests.zw_order(:'r17', 'held', 'funds') as r17_held \gset
+select concierge.reconcile_round(:'r17');
+select is(tests.zw_state(:'r17'), 'needs_attention/funds', 'placing + held/funds → needs_attention/funds');
+select tests.zw_lease(:'r17') as r17_lock \gset
+select results_eq(
+  format($q$select id from concierge.begin_placing(%L, %L, current_date, %L)$q$, :'r17', :'r17_lock',
+         format('[{"id": "%s", "max_price_cents": 4500}]', :'r17_held')),
+  format($q$values (%L::uuid)$q$, :'r17_held'),
+  'begin_placing moves only the held order');
+select is(tests.zw_state(:'r17'), 'ordered/-', '... and with both placing the round is ordered');
+select concierge.settle_order(:'a', :'r17_placing', 'placed', null, null);
+select is(concierge.settle_order(:'a', :'r17_held', 'placed', null, null)::text, 'ordered', 'all placed → ordered');
 
 -- rejected → failed with its failure type
 select tests.zw_round(:'a', 'ordered') as r11 \gset

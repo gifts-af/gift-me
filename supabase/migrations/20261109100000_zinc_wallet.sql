@@ -76,9 +76,10 @@ alter table concierge.accounts
   add column zinc_env text check (zinc_env in ('test', 'live'));
 
 -- ─── what signed-in users can read ──────────────────────────────────────────
--- The new columns are server-only. Signed-in users keep reading exactly the
--- columns they could before; select is now granted column by column, so a
--- column added later is hidden until a migration grants it.
+-- The new columns are server-only, except a round's attention_reason and
+-- hold_count. Signed-in users keep reading the columns they could before;
+-- select is now granted column by column, so a column added later is hidden
+-- until a migration grants it.
 
 revoke select on concierge.accounts from authenticated;
 grant select (user_id, over_budget_pct, notification_prefs, funding_mode, zinc_api_key_secret_id, zinc_webhook_secret_id,
@@ -87,7 +88,9 @@ grant select (user_id, over_budget_pct, notification_prefs, funding_mode, zinc_a
 
 revoke select on concierge.gift_rounds from authenticated;
 grant select (id, user_id, person_id, occasion_id, occasion_year, occasion_date, ship_by_deadline, budget_cents, status, late,
-              next_action_at, locked_until, attempts, approved_at, created_at, updated_at, heads_up_on)
+              next_action_at, locked_until, attempts, approved_at, created_at, updated_at, heads_up_on,
+              -- Why a round needs the buyer, for ALL-29's screen; not sensitive.
+              attention_reason, hold_count)
   on concierge.gift_rounds to authenticated;
 
 revoke select on concierge.orders from authenticated;
@@ -169,9 +172,9 @@ $$;
 --    unresolved failures resolved first; placing, unconfirmed and placed
 --    orders are left alone, and released list picks are released.
 -- 3. First match wins among live orders (not cancelled, not failed-and-resolved):
---    placing → ordered; unconfirmed → needs_attention/unconfirmed;
---    unresolved failed → needs_attention/<failure>; held →
---    needs_attention/<highest hold>; placed or later → ordered;
+--    unconfirmed → needs_attention/unconfirmed; unresolved failed →
+--    needs_attention/<failure>; held → needs_attention/<highest hold>;
+--    placing → ordered; placed or later → ordered;
 --    none → unchanged, or skipped with a context.
 -- 4. hold_count goes up when an emailed reason (funds, setup, address,
 --    unconfirmed) is new: not the reason last emailed, and not already the
@@ -255,14 +258,16 @@ begin
      and o.status <> 'cancelled'
      and not (o.status = 'failed' and o.resolved);
 
-  if v_placing then
-    v_status := 'ordered';
-  elsif v_unconfirmed then
+  -- Anything the customer must hear about comes before a gift on its way,
+  -- so a hold next to a placing order is emailed at once (owner rule).
+  if v_unconfirmed then
     v_status := 'needs_attention'; v_reason := 'unconfirmed';
   elsif v_failed is not null then
     v_status := 'needs_attention'; v_reason := v_failed;
   elsif v_held is not null then
     v_status := 'needs_attention'; v_reason := v_held;
+  elsif v_placing then
+    v_status := 'ordered';
   elsif v_placed then
     v_status := 'ordered';
   elsif p_context is not null then

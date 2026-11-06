@@ -199,14 +199,14 @@ Order holds are kept per order in `orders.hold_reason`:
 `unconfirmed` is an **order status**, not a hold. It's live. It's never cancelled by `cancel_held`, `settle_order` accepts it, it blocks `zinc_forget`, and it flags the round for the owner.
 
 1. **Final statuses don't move.** `skipped`, `delivered` and `complete` are never changed; it returns as is.
-2. **First match wins**, among live orders (not cancelled, and not failed-and-resolved):
+2. **First match wins**, among live orders (not cancelled, and not failed-and-resolved). Anything the customer must hear about comes before a gift on its way, so customers are always told at once: one order `placing` and another `held/funds` is `needs_attention/funds` right away, and the hold email goes out. `begin_placing` moves only `held` orders, so placing the held one while the other is still `placing` is fine (controller ruling, 2026-11-06).
 
 | Live orders in the round | Round status | `attention_reason` |
 |---|---|---|
-| Any `placing` | `ordered` | null |
 | Any `unconfirmed` | `needs_attention` | `unconfirmed` (emailed: "we're confirming it with the store"; owner alerted) |
-| Any `failed`, not resolved | `needs_attention` | that failure (`price_up`, `out_of_stock`, `failed`) |
+| Any `failed`, not resolved | `needs_attention` | that failure (`price_up`, `out_of_stock`, `too_late`, `failed`) |
 | Any `held` | `needs_attention` | the highest-priority hold: `address` > `setup` > `funds` > `not_allowed` > `paused` > `retry` |
+| Any `placing` | `ordered` | null |
 | Any `placed` or later | `ordered` | null |
 | None | unchanged, or `skipped` when called with the `cancel` or `deadline` context | null |
 
@@ -520,7 +520,7 @@ These failure modes need their own tests:
    - kill switch off → `hold_orders(paused)`
    - no paid features → `not_allowed`
    - not connected or no phone → `setup`
-2. **Still on time:** for each held order, `canArriveInTime({ occasionDate, orderDate: today, handlingDaysMax, deliveryDaysMax })` with the idea's saved delivery range. If it can't arrive in time → `fail_order(too_late)`. The order is resolved, the round gets reason `too_late`, and the customer is emailed `too_late` (owner).
+2. **Still on time:** for each held order, `canArriveInTime({ occasionDate, orderDate: today, handlingDaysMax, deliveryDaysMax })` with the idea's saved delivery range. If it can't arrive in time → `fail_order(too_late)`. `fail_order(too_late)` leaves the order unresolved, so the round gets reason `too_late` and the customer is emailed `too_late` (owner); the deadline resolves it, and the round is skipped.
 3. **Address:** for a recipient address, re-read it with `isShippableAddress`. If it fails → `hold_orders(address)`.
 4. **Re-checked cap:** `min(saved, recomputed with this round's orders excluded)`.
 5. **Known short:** if auto top-up is known off, read `/wallet/me` and `set_seen_balance`. If short → `hold_orders(funds)`.
