@@ -93,12 +93,17 @@ Where new docs go, how to write them, and when to push straight to `main` versus
 
 To check a change on giftsaf.com while signed in, use **`allensforever711+qa@gmail.com`** (T60). Don't create another account for this, and don't use a real person's.
 
-**How to sign in.** Nobody holds its password. The sign-in form won't work for a script, because the Turnstile bot check keeps its button disabled, so don't try to get around that. Instead, as allensforever711:
+**To run a check**, from the repo root:
 
-1. Get the `service_role` and `anon` keys with `pnpm supabase projects api-keys --project-ref pegtrucfuaaufqvsavpb -o json`. Keep them in memory; never print or commit them.
-2. POST `{ "type": "magiclink", "email": "allensforever711+qa@gmail.com" }` to `/auth/v1/admin/generate_link` with the `service_role` key, and read `hashed_token`.
-3. POST `{ "type": "magiclink", "token_hash": ... }` to `/auth/v1/verify` with the `anon` key to get a session.
-4. Use `createServerClient` from `@supabase/ssr` and `setSession` to turn that session into cookies, then add them to a Playwright browser context for `giftsaf.com`.
+```
+pnpm live-check                                 # the standing read-only check
+pnpm live-check e2e-live/my-ticket.spec.ts      # one spec
+pnpm live-check --headed                        # watch it in a browser
+```
+
+It signs in, runs the Playwright specs in `apps/web/e2e-live/` against giftsaf.com, and deletes the session afterwards. For a ticket's own check, add a spec to that folder, with a line saying what it checks. CI doesn't run these.
+
+You need the Supabase CLI signed in as allensforever711 (`pnpm supabase login`, T25). That's the only setup. The account has no known password, and the sign-in form won't work for a script, because the Turnstile bot check keeps its button disabled. The command gets a one-time login through the admin API instead, so don't try to get around Turnstile.
 
 **Rules:**
 

@@ -16,7 +16,8 @@
     "db:push:dev": "supabase db push --project-ref bcemtqvdbrrgiipzggyw --yes",
     "db:push:prod": "supabase db push --project-ref pegtrucfuaaufqvsavpb --yes",
     "db:types": "supabase gen types typescript --local --schema public --schema concierge --schema lists > packages/core/src/database.types.ts && prettier --write --log-level warn packages/core/src/database.types.ts",
-    "ai:eval": "pnpm --filter @gifts-af/web ai:eval"
+    "ai:eval": "pnpm --filter @gifts-af/web ai:eval",
+    "live-check": "pnpm --filter @gifts-af/web live-check"
   },
   "devDependencies": {
     "prettier": "^3.9.10",
