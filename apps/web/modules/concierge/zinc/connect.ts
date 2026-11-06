@@ -13,8 +13,6 @@ import type { PlaceHeld, ZincDeps } from "./types";
 
 /** The name Zinc shows next to the code the user is asked to Allow. */
 const APP_NAME = "GiftsAF";
-/** Where a Zinc user manages their wallet and auto top-up. */
-export const ZINC_WALLET_URL = "https://app.zinc.com/wallet";
 
 export type PaymentStatus =
   | { kind: "not_allowed" }
@@ -27,7 +25,8 @@ export type PaymentStatus =
       lookahead: { cents: number; atLeast: boolean };
       lookaheadDays: number;
       feeCents: number;
-      walletUrl: string;
+      topUpFeeBps: number;
+      topUpFeeFixedCents: number;
       suggestedMinimumCents: number | null;
       topUpSuggestCents: number;
       phone: string | null;
@@ -140,9 +139,11 @@ export async function getPaymentStatus(userId: string, deps: ZincDeps): Promise<
   const account = await readAccount(userId, deps);
 
   if (account.zinc_connected_at) {
-    const [wallet, lookaheadDays, topUp, largest, placingCount, onTheWayCount] = await Promise.all([
+    const [wallet, lookaheadDays, topUpFeeBps, topUpFeeFixedCents, topUp, largest, placingCount, onTheWayCount] = await Promise.all([
       getZincWallet(userId, deps),
       setting(deps, "funding_lookahead_days"),
+      setting(deps, "zinc_topup_fee_bps"),
+      setting(deps, "zinc_topup_fee_fixed_cents"),
       setting(deps, "funding_topup_suggest_cents"),
       largestBudgetCents(userId, deps),
       countOrders(userId, deps, ["placing", "unconfirmed"]),
@@ -155,7 +156,8 @@ export async function getPaymentStatus(userId: string, deps: ZincDeps): Promise<
       lookahead: await lookahead(userId, deps, feeCents, lookaheadDays),
       lookaheadDays,
       feeCents,
-      walletUrl: ZINC_WALLET_URL,
+      topUpFeeBps,
+      topUpFeeFixedCents,
       suggestedMinimumCents: suggestedMinimumCents(largest, feeCents),
       topUpSuggestCents: topUp,
       phone: account.buyer_phone,
@@ -230,8 +232,9 @@ function zincProblem(userId: string, event: string, error: unknown): { error: st
 
 export async function startConnect(userId: string, deps: ZincDeps, placeHeld: PlaceHeld): Promise<PaymentResult> {
   if (!(await hasPaidFeatures(deps.db, userId))) return NOT_ALLOWED;
-  const account = await readAccount(userId, deps);
-  if (account.zinc_connected_at) return getPaymentStatus(userId, deps);
+  // Already connected, or a code is still good (a second tap or tab): show that, don't issue another.
+  const current = await getPaymentStatus(userId, deps);
+  if (current.kind === "connected" || current.kind === "waiting") return current;
 
   try {
     if (deps.env === "test") {
@@ -298,13 +301,12 @@ export async function pollConnect(userId: string, deps: ZincDeps, placeHeld: Pla
       return notConnected(userId, deps, "That code expired. Connect again to get a new one.");
     case "pending":
     case "slow_down": {
-      // Hold the claim for one Zinc interval so no tab polls early; "slow down" adds 5 s (RFC 8628).
+      // Hold the next poll for one Zinc interval, counted from now that Zinc has answered ("slow down"
+      // adds 5 s, RFC 8628). Only this attempt's device code is touched.
       const intervalSec = attempt.interval_sec + (result.status === "slow_down" ? 5 : 0);
       const { error } = await deps.db
         .schema("concierge")
-        .from("zinc_connect_attempts")
-        .update({ interval_sec: intervalSec, polling_until: new Date(deps.now.getTime() + intervalSec * 1000).toISOString() })
-        .eq("user_id", userId);
+        .rpc("zinc_release_poll", { p_user_id: userId, p_device_code: attempt.device_code, p_interval_sec: intervalSec });
       if (error) fail("Saving the poll interval failed", error);
       return getPaymentStatus(userId, deps);
     }

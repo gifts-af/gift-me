@@ -2,6 +2,7 @@
 
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { logEvent } from "@/lib/log";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   cancelConnect,
@@ -18,7 +19,7 @@ import {
   type ZincDeps,
 } from "@/modules/concierge";
 import { baseUrlFrom } from "./base-url";
-import { placeHeld, zincDeps } from "./zinc-deps";
+import { placeHeld, zincWiring } from "./zinc-deps";
 
 // Time zone lives on the shared profile; the over-budget allowance is the
 // concierge's (T26).
@@ -79,12 +80,11 @@ async function withZinc(run: (userId: string, deps: ZincDeps) => Promise<Payment
   const userId = auth?.claims?.sub;
   if (!userId) return { error: "Your session ended. Sign in again." };
   try {
-    const baseUrl = baseUrlFrom(await headers());
-    const deps = baseUrl ? await zincDeps(createAdminClient(), baseUrl) : null;
-    if (!deps) return { error: "Paying for gifts isn't switched on here yet." };
-    return await run(userId, deps);
+    const wiring = await zincWiring(createAdminClient());
+    if (!wiring) return { error: "Paying for gifts isn't switched on here yet." };
+    return await run(userId, wiring.deps);
   } catch (error) {
-    console.error("a Zinc settings action failed", { userId, name: error instanceof Error ? error.name : "unknown" });
+    logEvent("zinc.action_failed", { user_id: userId, name: error instanceof Error ? error.name : "unknown" });
     return { error: "That didn't work. Try again in a minute." };
   }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CAPTURE_READ_OFF, captureReadNotice, centsLabel, dollarsLabel, zincFeeNotice } from "./paid-features";
+import { CAPTURE_READ_OFF, captureReadNotice, centsLabel, dollarsLabel, topUpFeeLabel, zincFeeNotice } from "./paid-features";
 
 describe("centsLabel", () => {
   it("shows cents under a dollar and dollars from there", () => {
@@ -30,5 +30,12 @@ describe("the Zinc wallet wording (ALL-32)", () => {
 
   it("says each gift costs its price plus Zinc's fee", () => {
     expect(zincFeeNotice(100)).toBe("Alpha: each gift costs its price plus Zinc's $1 order fee, taken from your Zinc balance.");
+  });
+});
+
+describe("topUpFeeLabel", () => {
+  it("joins the percent and the fixed part", () => {
+    expect(topUpFeeLabel(290, 30)).toBe("2.9% + 30¢");
+    expect(topUpFeeLabel(300, 100)).toBe("3% + $1.00");
   });
 });

@@ -76,7 +76,7 @@ async function shoot(page: Page, state: string) {
   mkdirSync(SHOTS, { recursive: true });
   for (const view of VIEWS) {
     await page.setViewportSize({ width: view.width, height: view.height });
-    await expect(page.getByText("Loading your settings�")).toHaveCount(0);
+    await expect(page.getByText("Loading your settings…")).toHaveCount(0);
     await expect(section(page)).toBeVisible();
     for (const scheme of ["light", "dark"] as const) {
       await page.evaluate((dark) => document.documentElement.classList.toggle("dark", dark), scheme === "dark");
@@ -127,6 +127,9 @@ test("states 2 to 4: connect with Allow, save a phone, then disconnect", async (
   await expect(section(page).getByRole("note")).toHaveText(
     "Alpha: each gift costs its price plus Zinc's $1 order fee, taken from your Zinc balance.",
   );
+  // One teal main button on the page (Save): Zinc's buttons are outline buttons (owner, 2026-11-06).
+  await expect(page.getByRole("button", { name: "Connect Zinc" })).toHaveClass(/border-input/);
+  await expect(page.locator("button.bg-primary")).toHaveCount(1);
   await shoot(page, "2-ready-to-connect");
 
   // State 3: waiting for Allow. Cancel goes back; connecting again gives a fresh code.
@@ -153,9 +156,11 @@ test("states 2 to 4: connect with Allow, save a phone, then disconnect", async (
   await expect(page.getByText("Not known yet")).toBeVisible();
   await expect(section(page).getByText("$101", { exact: true })).toBeVisible();
   await expect(section(page).getByText("$100", { exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Open Zinc wallet" })).toHaveAttribute("href", /^https:\/\//);
+  await expect(page.getByRole("link", { name: "Open Zinc wallet" })).toHaveAttribute("href", `${FAKE_ZINC_URL}/wallet`);
   const registered = (await (await fetch(`${FAKE_ZINC_URL}/__state`)).json()) as { webhook: string | null };
-  expect(registered.webhook).toMatch(/\/api\/zinc\/webhook\/[0-9a-f-]{36}$/);
+  // Built from the site address (siteUrl), not from this request's host (the app runs on E2E_PORT).
+  expect(registered.webhook).toMatch(/^http:\/\/localhost:3000\/api\/zinc\/webhook\/[0-9a-f-]{36}$/);
+  await expect(page.getByText("Each top-up costs 2.9% + 30¢.")).toBeVisible();
 
   await page.getByLabel("Your phone").fill("12");
   await page.getByRole("button", { name: "Save phone" }).click();

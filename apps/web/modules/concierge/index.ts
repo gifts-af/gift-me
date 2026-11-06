@@ -74,7 +74,6 @@ export { createStubGenerateIdeas } from "./rounds/ideas";
 
 // Paying for gifts from the user's own Zinc wallet (ALL-32): connect, phone, disconnect, Settings status.
 export {
-  ZINC_WALLET_URL,
   cancelConnect,
   disconnect as disconnectZinc,
   getPaymentStatus,

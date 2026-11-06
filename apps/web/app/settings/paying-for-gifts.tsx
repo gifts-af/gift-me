@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { centsLabel, dollarsLabel, zincFeeNotice } from "@gifts-af/core";
+import { centsLabel, dollarsLabel, topUpFeeLabel, zincFeeNotice } from "@gifts-af/core";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,9 @@ export type PayingActions = {
   savePhone: (raw: string) => Promise<PaymentResult>;
 };
 
+/** What the server could load: a status, or a plain line when it couldn't or Zinc is off here. */
+export type PayingInitial = PaymentStatus | { kind: "message"; text: string };
+
 /** "(555) 123-4567" from the 10 digits we keep. */
 function phoneLabel(digits: string | null): string {
   return digits && digits.length === 10 ? `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}` : (digits ?? "");
@@ -29,11 +32,19 @@ const box = "flex flex-col gap-1.5 rounded-xl border border-border p-3.5";
 
 /**
  * Settings > Paying for gifts (ALL-32). One of four states at a time, from the
- * mock-up design/mockups/ALL-32-settings.html. `initial` is null when Zinc isn't
- * switched on in this environment.
+ * mock-up design/mockups/ALL-32-settings.html. Every Zinc button is an outline button:
+ * the page's one teal button is Save (owner, 2026-11-06).
  */
-export function PayingForGifts({ initial, actions }: { initial: PaymentStatus | null; actions: PayingActions }) {
-  const [status, setStatus] = useState<PaymentStatus | null>(initial);
+export function PayingForGifts({
+  initial,
+  actions,
+  walletUrl,
+}: {
+  initial: PayingInitial;
+  actions: PayingActions;
+  walletUrl: string;
+}) {
+  const [status, setStatus] = useState<PayingInitial>(initial);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -45,13 +56,16 @@ export function PayingForGifts({ initial, actions }: { initial: PaymentStatus | 
       else setStatus(result);
     });
   }
+  const connected = status.kind === "connected" ? status : null;
 
   // While waiting for Allow, ask at the interval Zinc gave us. Another tab may be
   // polling too; the server lets only one of us reach Zinc.
-  const waiting = status?.kind === "waiting" ? status : null;
+  const waiting = status.kind === "waiting" ? status : null;
   const waitingKey = waiting ? `${waiting.userCode}:${waiting.intervalSec}` : null;
   const poll = useRef(actions.poll);
   poll.current = actions.poll;
+  // Counts finished polls, so the next one is scheduled even when a poll fails and the status is unchanged.
+  const [polls, setPolls] = useState(0);
   useEffect(() => {
     if (!waitingKey) return;
     const interval = Number(waitingKey.split(":")[1]);
@@ -59,17 +73,22 @@ export function PayingForGifts({ initial, actions }: { initial: PaymentStatus | 
     const timer = setTimeout(async () => {
       try {
         const result = await poll.current();
-        if (live && !("error" in result)) setStatus(result);
+        if (!live) return;
+        if ("error" in result) setError(result.error);
+        else {
+          setError(null);
+          setStatus(result);
+        }
       } catch {
-        // A dropped connection: the next status change schedules another poll.
-        if (live) setStatus((s) => (s?.kind === "waiting" ? { ...s } : s));
+        if (live) setError("We couldn't check with Zinc. Trying again.");
       }
+      if (live) setPolls((n) => n + 1);
     }, interval * 1000);
     return () => {
       live = false;
       clearTimeout(timer);
     };
-  }, [waitingKey, status]);
+  }, [waitingKey, polls]);
 
   return (
     <section aria-labelledby="paying-heading" className="flex flex-col gap-3">
@@ -77,15 +96,15 @@ export function PayingForGifts({ initial, actions }: { initial: PaymentStatus | 
         {waiting ? "Connect Zinc" : "Paying for gifts"}
       </h2>
 
-      {status === null && <p className="text-[15px] text-muted-foreground [text-wrap:balance]">Paying for gifts isn&apos;t switched on here yet.</p>}
+      {status.kind === "message" && <p className="text-[15px] text-muted-foreground [text-wrap:balance]">{status.text}</p>}
 
-      {status?.kind === "not_allowed" && (
+      {status.kind === "not_allowed" && (
         <p className="text-[15px] text-muted-foreground [text-wrap:balance]">
           Buying gifts is open to test accounts during the alpha. We&apos;ll tell you when it opens up.
         </p>
       )}
 
-      {status?.kind === "not_connected" && (
+      {status.kind === "not_connected" && (
         <>
           {status.notice && (
             <p role="status" className="text-[15px]">
@@ -99,7 +118,7 @@ export function PayingForGifts({ initial, actions }: { initial: PaymentStatus | 
           <div role="note" className="rounded-lg bg-warning-soft px-2.5 py-2 text-[13px] text-warning">
             {zincFeeNotice(status.feeCents)}
           </div>
-          <Button type="button" disabled={pending} aria-busy={pending} onClick={() => run(actions.start)} className="w-full">
+          <Button type="button" variant="outline" disabled={pending} aria-busy={pending} onClick={() => run(actions.start)} className="w-full">
             {pending ? "Connecting…" : "Connect Zinc"}
           </Button>
         </>
@@ -107,9 +126,10 @@ export function PayingForGifts({ initial, actions }: { initial: PaymentStatus | 
 
       {waiting && <WaitingForAllow status={waiting} pending={pending} onCancel={() => run(actions.cancel)} />}
 
-      {status?.kind === "connected" && (
+      {connected && (
         <ConnectedView
-          status={status}
+          status={connected}
+          walletUrl={walletUrl}
           actions={actions}
           pending={pending}
           onStatus={setStatus}
@@ -155,7 +175,7 @@ function WaitingForAllow({ status, pending, onCancel }: { status: Waiting; pendi
       >
         {status.userCode}
       </p>
-      <Button asChild className="w-full">
+      <Button asChild variant="outline" className="w-full">
         <a href={status.verificationUrl} target="_blank" rel="noopener noreferrer">
           Open Zinc
         </a>
@@ -173,6 +193,7 @@ function WaitingForAllow({ status, pending, onCancel }: { status: Waiting; pendi
 
 function ConnectedView({
   status,
+  walletUrl,
   actions,
   pending,
   onStatus,
@@ -180,6 +201,7 @@ function ConnectedView({
   onDisconnect,
 }: {
   status: Connected;
+  walletUrl: string;
   actions: PayingActions;
   pending: boolean;
   onStatus: (s: PaymentStatus) => void;
@@ -253,9 +275,9 @@ function ConnectedView({
               , top up by <b className="tabular-nums">{dollarsLabel(status.topUpSuggestCents)}</b>.
             </li>
           </ol>
-          <p className="text-sm text-muted-foreground">Each top-up costs 2.9% + 30¢.</p>
-          <Button asChild className="w-full">
-            <a href={status.walletUrl} target="_blank" rel="noopener noreferrer">
+          <p className="text-sm text-muted-foreground">Each top-up costs {topUpFeeLabel(status.topUpFeeBps, status.topUpFeeFixedCents)}.</p>
+          <Button asChild variant="outline" className="w-full">
+            <a href={walletUrl} target="_blank" rel="noopener noreferrer">
               Open Zinc wallet
             </a>
           </Button>
@@ -296,9 +318,20 @@ function ConnectedView({
         {!status.phone && !saved && <p className="text-[13px] text-muted-foreground">Gifts can&apos;t be ordered until a phone is saved.</p>}
       </div>
 
+      {status.placingCount > 0 && (
+        <p id="disconnect-blocked" className="text-center text-[13px] text-muted-foreground [text-wrap:balance]">
+          A gift is being ordered right now. You can disconnect once it has gone through.
+        </p>
+      )}
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogTrigger asChild>
-          <Button type="button" variant="ghost" className="self-center font-semibold text-destructive">
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={status.placingCount > 0}
+            aria-describedby={status.placingCount > 0 ? "disconnect-blocked" : undefined}
+            className="self-center font-semibold text-destructive"
+          >
             Disconnect Zinc
           </Button>
         </DialogTrigger>

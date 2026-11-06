@@ -186,6 +186,9 @@ describe.skipIf(!dbUp)("Zinc connect (real local database, fake Zinc)", () => {
     // Reading the page while waiting shows the same code and calls nothing.
     expect(await getPaymentStatus(userId, z.deps)).toMatchObject({ kind: "waiting", userCode: "K7QX-4M2P" });
     expect(z.calls).toHaveLength(1);
+    // A second tap or tab shows the same code instead of issuing another.
+    expect(await startConnect(userId, z.deps, placeHeld)).toMatchObject({ kind: "waiting", userCode: "K7QX-4M2P" });
+    expect(z.calls.filter((c) => c.path === "/device/code")).toHaveLength(1);
   });
 
   it("on Allow, stores the secrets and registers our webhook URL (AC-3)", async () => {
@@ -227,9 +230,11 @@ describe.skipIf(!dbUp)("Zinc connect (real local database, fake Zinc)", () => {
     expect(z.calls.filter((c) => c.path === "/device/token")).toHaveLength(1);
     expect(a).toMatchObject({ kind: "waiting" });
     expect(b).toMatchObject({ kind: "waiting" });
-    // The claim lasts one Zinc interval, so an early extra poll is not sent either.
+    // The claim lasts one Zinc interval, counted from when Zinc answered, so an early extra poll is not sent either.
     await pollConnect(userId, z.deps, placeHeld);
     expect(z.calls.filter((c) => c.path === "/device/token")).toHaveLength(1);
+    const held = await pg.query("select polling_until > now() as held from concierge.zinc_connect_attempts where user_id = $1", [userId]);
+    expect(held.rows[0].held).toBe(true);
   });
 
   it("an expired, denied or cancelled code returns to not connected and deletes the row (AC-4)", async () => {
@@ -289,6 +294,7 @@ describe.skipIf(!dbUp)("Zinc connect (real local database, fake Zinc)", () => {
     expect(status.suggestedMinimumCents).toBeNull();
     expect(status.lookahead).toEqual({ cents: 0, atLeast: false });
     expect(status.topUpSuggestCents).toBe(10000);
+    expect([status.topUpFeeBps, status.topUpFeeFixedCents, status.lookaheadDays, status.feeCents]).toEqual([290, 30, 21, 100]);
 
     const person = await pg.query("insert into public.people (user_id, name, relationship) values ($1, 'P', 'friend') returning id", [userId]);
     const personId = person.rows[0].id;

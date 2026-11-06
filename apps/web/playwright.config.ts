@@ -66,6 +66,7 @@ export default defineConfig({
           // paying-for-gifts.spec.ts (ALL-32): "live" so the Allow sign-in runs, against the fake Zinc.
           ZINC_ENV: "live",
           ZINC_API_BASE: FAKE_ZINC_URL,
+          ZINC_WALLET_URL: `${FAKE_ZINC_URL}/wallet`,
         },
       },
 });

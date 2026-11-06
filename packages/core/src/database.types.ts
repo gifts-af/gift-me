@@ -1458,6 +1458,14 @@ export type Database = {
       };
       zinc_drop_attempt: { Args: { p_user_id: string }; Returns: undefined };
       zinc_forget: { Args: { p_user_id: string }; Returns: string };
+      zinc_release_poll: {
+        Args: {
+          p_device_code: string;
+          p_interval_sec: number;
+          p_user_id: string;
+        };
+        Returns: undefined;
+      };
       zinc_secret_by_webhook: {
         Args: { p_webhook_id: string };
         Returns: {

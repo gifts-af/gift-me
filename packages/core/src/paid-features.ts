@@ -19,3 +19,8 @@ export function dollarsLabel(cents: number): string {
 export function zincFeeNotice(feeCents: number): string {
   return `Alpha: each gift costs its price plus Zinc's ${dollarsLabel(feeCents)} order fee, taken from your Zinc balance.`;
 }
+
+/** "2.9% + 30¢", from the basis points and fixed cents in app_settings (T23). */
+export function topUpFeeLabel(bps: number, fixedCents: number): string {
+  return `${bps / 100}% + ${centsLabel(fixedCents)}`;
+}
