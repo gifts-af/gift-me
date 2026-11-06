@@ -8,7 +8,6 @@ import GiftList from './gift-list.jsx'
 import GiftSummary from './gift-summary.jsx'
 import Link from 'next/link'
 import { PageFrame } from '@/components/app-shell/page-frame'
-import { TopBar } from '@/components/app-shell/top-bar'
 import SaveButton from './save-button.jsx'
 import ShareButton from './share-button.jsx'
 import { Banner, inputClass } from './ui.jsx'
@@ -55,19 +54,19 @@ function putGuestStash(items) {
   }
 }
 
+// The same while loading and loaded, so Share arriving doesn't move the page.
+const TITLE_ROW = 'flex min-h-11 items-center justify-between gap-3'
+
 export function GiftAppSkeleton() {
   return (
-    <>
-      {/* Matches the signed-in bar below, so the header doesn't jump from the
-          logo to "Home" when the list loads on a phone (ALL-60). */}
-      <TopBar back={{ href: '/', label: 'Home' }} links current="list" />
-      <PageFrame wide>
+    <PageFrame wide>
+      <div className={TITLE_ROW}>
         <h1 className="text-[22px] font-bold leading-tight">My list</h1>
-        <p className="text-[15px] text-muted-foreground" aria-busy="true">
-          Loading your list…
-        </p>
-      </PageFrame>
-    </>
+      </div>
+      <p className="text-[15px] text-muted-foreground" aria-busy="true">
+        Loading your list…
+      </p>
+    </PageFrame>
   )
 }
 
@@ -223,13 +222,6 @@ export default function GiftApp({ initial }) {
 
   return (
     <>
-      <TopBar
-        back={isGuest ? undefined : { href: '/', label: 'Home' }}
-        links={!isGuest}
-        current="list"
-        actions={isGuest ? null : <ShareButton blockedReason={shareBlockedReason} onShare={handleShare} />}
-      />
-
       <PageFrame wide className="gap-4">
         {isGuest && (
           <Banner>
@@ -278,14 +270,17 @@ export default function GiftApp({ initial }) {
         )}
 
         <div className="flex flex-col gap-1">
-          <h1
-            id="list-heading"
-            ref={headingRef}
-            tabIndex={-1}
-            className="text-[22px] font-bold leading-tight"
-          >
-            My list
-          </h1>
+          <div className={TITLE_ROW}>
+            <h1
+              id="list-heading"
+              ref={headingRef}
+              tabIndex={-1}
+              className="text-[22px] font-bold leading-tight"
+            >
+              My list
+            </h1>
+            {!isGuest && <ShareButton blockedReason={shareBlockedReason} onShare={handleShare} />}
+          </div>
           <GiftSummary gifts={gifts} />
         </div>
 

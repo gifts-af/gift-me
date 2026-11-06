@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 vi.mock("@/modules/lists/actions/lists", () => ({ saveList: vi.fn() }));
 vi.mock("@/modules/lists/actions/store-page", () => ({ readStorePage: vi.fn() }));
 const { saveList } = await import("@/modules/lists/actions/lists");
-const { default: GiftApp } = await import("../gift-app.jsx");
+const { default: GiftApp, GiftAppSkeleton } = await import("../gift-app.jsx");
 
 const gift = (id, name) => ({
   id,
@@ -36,6 +36,29 @@ describe("GiftApp", () => {
     await userEvent.click(screen.getByRole("button", { name: /Remove Kettle/ }));
     expect(screen.getByRole("heading", { level: 1, name: "My list" })).toHaveFocus();
     expect(screen.queryByText("Kettle")).not.toBeInTheDocument();
+  });
+
+  it("puts Share in the title row for a member", () => {
+    render(<GiftApp initial={member} />);
+    const row = screen.getByRole("heading", { level: 1, name: "My list" }).parentElement;
+    expect(within(row).getByRole("button", { name: /Share/ })).toBeInTheDocument();
+  });
+
+  it("has no Share for a guest", () => {
+    render(<GiftApp initial={null} />);
+    expect(screen.queryByRole("button", { name: /Share/ })).not.toBeInTheDocument();
+  });
+
+  // /lists doesn't know who's signed in while this shows (ALL-95), and the
+  // title row mustn't change height when Share arrives with the list.
+  it("shows no bar while loading, and the same title row as the loaded list", () => {
+    const { unmount } = render(<GiftAppSkeleton />);
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    const loading = screen.getByRole("heading", { level: 1, name: "My list" }).parentElement.className;
+    unmount();
+    render(<GiftApp initial={member} />);
+    expect(screen.getByRole("heading", { level: 1, name: "My list" }).parentElement.className).toBe(loading);
   });
 
   it("shows the save bar only when there are unsaved changes", async () => {
