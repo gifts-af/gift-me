@@ -56,6 +56,11 @@ Write new migrations with `pnpm supabase migration new <name>` and test them loc
 
 **Browser tests (Playwright):** with the local database running, `pnpm --filter @gifts-af/web e2e`. They sign in as a throwaway local account (created for you, email and password, since local Supabase has no Google) at phone width (375 px). They build the app first (about 30 seconds, and type errors stop the run) and test that production build, as CI's `e2e` job does. They need port 3100 free, so only one checkout can run them at a time; if the port is busy the run fails, rather than testing old code. To test a server that's already running, set `E2E_BASE_URL`. CI keeps the downloaded browsers in a cache until `pnpm-lock.yaml` changes, so most runs install only the system packages the browsers need; both install steps time out after 15 minutes (the system packages come from Ubuntu's mirror, which can take 7 minutes or more), so a stuck download fails well short of the hour-long hangs we used to see and can be re-run (ALL-100).
 
+**Writing a browser test** (T62, ALL-103):
+
+- **Which browsers run it.** A test runs on the iPhone (WebKit) only, unless it's tagged `@layout`: `test("…", { tag: "@layout" }, async ({ page }) => …)`. Tagged tests run on the Android phone, the iPhone and desktop Chrome. Tag a test when it checks how something looks or fits: no sideways scrolling, positions, tap sizes, dark mode. Behavior (what happens when you press things, what's saved) is the same in every browser, so it runs once.
+- **Signing in.** Call `signIn(page)` from `e2e/sign-in.ts` (or `signIn(page, user)` for `SECOND_USER` or an account from `createFreshUser()`), then open the page you're testing. It signs in through Supabase's API, without the login form, so it's fast. Only tests of the login form itself fill in the form.
+
 **Running the web app:** follow [apps/web/README.md](apps/web/README.md) to link Vercel and pull the environment variables, then `pnpm dev`. Before a PR, `pnpm lint && pnpm typecheck && pnpm test && pnpm build` (CI runs the same).
 
 **Deploys:** Vercel project `gift-me` (team GiftsAF, slug `gift-me3`) builds `apps/web` from this repo. Every push to `main` deploys to production; every other branch gets a preview URL.
