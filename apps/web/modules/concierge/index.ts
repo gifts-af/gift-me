@@ -71,3 +71,18 @@ export type { AdvanceResult, EngineDeps, GenerateIdeas, TickSummary } from "./ro
 export { createSupabaseRoundStore } from "./rounds/store";
 export type { Candidate, ClaimedRound, NewRoundRow, RoundContext, RoundFinish, RoundStore } from "./rounds/store";
 export { createStubGenerateIdeas } from "./rounds/ideas";
+
+// Paying for gifts from the user's own Zinc wallet (ALL-32): connect, phone, disconnect, Settings status.
+export {
+  ZINC_WALLET_URL,
+  cancelConnect,
+  disconnect as disconnectZinc,
+  getPaymentStatus,
+  getZincWallet,
+  pollConnect,
+  savePhone,
+  startConnect,
+} from "./zinc/connect";
+export type { PaymentResult, PaymentStatus } from "./zinc/connect";
+export type { PlaceHeld, ZincDeps } from "./zinc/types";
+export { hasPaidFeatures } from "./paid-features";

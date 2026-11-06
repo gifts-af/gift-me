@@ -5,6 +5,7 @@ import { TopBar } from "@/components/app-shell/top-bar";
 import { createClient } from "@/lib/supabase/server";
 import { getConciergeSettings } from "@/modules/concierge";
 import { saveSettings, sendTestEmail } from "./actions";
+import { PayingForGiftsSection } from "./paying-for-gifts-section";
 import { SettingsForm } from "./settings-form";
 import { TestEmailButton } from "./test-email-button";
 
@@ -21,6 +22,7 @@ async function LoadedForm() {
         action={saveSettings}
       />
       <TestEmailButton action={sendTestEmail} />
+      <PayingForGiftsSection />
     </div>
   );
 }

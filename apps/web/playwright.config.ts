@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { FAKE_ZINC_URL } from "./e2e/fake-zinc";
 import { localSupabase } from "./e2e/local-supabase";
 
 // Browser tests (ALL-20). They need the local Supabase running
@@ -9,7 +10,8 @@ import { localSupabase } from "./e2e/local-supabase";
 // reused, because it could be old code or another session's. To test a running
 // server on purpose, set E2E_BASE_URL.
 const supabase = localSupabase();
-const port = 3100;
+// E2E_PORT lets several worktrees run the browser tests at once.
+const port = Number(process.env.E2E_PORT ?? 3100);
 const CI = Boolean(process.env.CI);
 // Cloudflare's published Turnstile test keys (ALL-68): the widget always
 // passes and its dummy token always verifies. CI's build gets the site key
@@ -61,6 +63,9 @@ export default defineConfig({
           // Neither applies in production; VERCEL_ENV is only set on Vercel, so `pnpm start` is fine here.
           EMAIL_OUTBOX: "log",
           CRON_SECRET: "e2e-cron-secret",
+          // paying-for-gifts.spec.ts (ALL-32): "live" so the Allow sign-in runs, against the fake Zinc.
+          ZINC_ENV: "live",
+          ZINC_API_BASE: FAKE_ZINC_URL,
         },
       },
 });

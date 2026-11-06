@@ -10,3 +10,12 @@ export function captureReadNotice(estimateCents: number): string {
 }
 
 export const CAPTURE_READ_OFF = "Reading captures spends real money, so during alpha it's only on for test accounts.";
+
+/** Whole dollars without cents ("$101"), else with them ("$40.50"). For the Zinc guide. */
+export function dollarsLabel(cents: number): string {
+  return cents % 100 === 0 ? `$${cents / 100}` : `$${(cents / 100).toFixed(2)}`;
+}
+
+export function zincFeeNotice(feeCents: number): string {
+  return `Alpha: each gift costs its price plus Zinc's ${dollarsLabel(feeCents)} order fee, taken from your Zinc balance.`;
+}

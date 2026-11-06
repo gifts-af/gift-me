@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CAPTURE_READ_OFF, captureReadNotice, centsLabel } from "./paid-features";
+import { CAPTURE_READ_OFF, captureReadNotice, centsLabel, dollarsLabel, zincFeeNotice } from "./paid-features";
 
 describe("centsLabel", () => {
   it("shows cents under a dollar and dollars from there", () => {
@@ -17,5 +17,18 @@ describe("the alpha wording", () => {
 
   it("says why reading is off", () => {
     expect(CAPTURE_READ_OFF).toBe("Reading captures spends real money, so during alpha it's only on for test accounts.");
+  });
+});
+
+describe("the Zinc wallet wording (ALL-32)", () => {
+  it("drops the cents from whole-dollar amounts", () => {
+    expect(dollarsLabel(100)).toBe("$1");
+    expect(dollarsLabel(10100)).toBe("$101");
+    expect(dollarsLabel(4050)).toBe("$40.50");
+    expect(dollarsLabel(0)).toBe("$0");
+  });
+
+  it("says each gift costs its price plus Zinc's fee", () => {
+    expect(zincFeeNotice(100)).toBe("Alpha: each gift costs its price plus Zinc's $1 order fee, taken from your Zinc balance.");
   });
 });
