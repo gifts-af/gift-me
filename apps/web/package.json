@@ -10,6 +10,7 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test:watch": "vitest",
     "e2e": "playwright test",
+    "live-check": "node scripts/live-check.mjs",
     "email:samples": "tsx --conditions=react-server scripts/email-samples.ts",
     "email:html": "tsx --conditions=react-server scripts/email-html.ts",
     "ai:eval": "tsx scripts/ai-eval.ts"
