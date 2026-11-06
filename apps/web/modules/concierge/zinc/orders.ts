@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { call, parseBody, send, type ZincHttp } from "./client";
+import { call, parseBody, send, ZincError, type ZincHttp } from "./client";
 import type { FoundOrder, ZincOrderInput } from "./types";
 
 export type CreateOrderResult =
@@ -7,11 +7,15 @@ export type CreateOrderResult =
   | { insufficient: { requiredCents: number; availableCents: number } }
   | { exists: true };
 
+const idempotencyKey = z.string().min(1).max(36);
 const created = z.object({ id: z.string() });
 const shortfall = z.object({ required: z.number(), available: z.number() });
 
 export async function createOrder(h: ZincHttp, key: string, o: ZincOrderInput): Promise<CreateOrderResult> {
   const path = "/orders";
+  if (!idempotencyKey.safeParse(o.idempotencyKey).success) {
+    throw new ZincError("rejected", 0, "Zinc POST /orders not sent (invalid idempotency key)", "invalid_idempotency_key");
+  }
   const body = {
     products: [{ url: o.productUrl, quantity: 1 }],
     max_price: o.maxPriceCents,
@@ -39,7 +43,13 @@ export async function createOrder(h: ZincHttp, key: string, o: ZincOrderInput): 
     return { insufficient: { requiredCents: d.required, availableCents: d.available } };
   }
   if (r.status === 409) parseBody(z.never(), undefined, "POST", path, r.status);
-  return { providerOrderId: parseBody(created, r.json, "POST", path, r.status).id };
+  const c = created.safeParse(r.json);
+  // A 2xx we cannot read may still be a placed order: report it as ambiguous so the
+  // caller looks it up by reference before any resend.
+  if (!c.success) {
+    throw new ZincError("unavailable", r.status, `Zinc POST /orders failed (${r.status} malformed_response)`, "malformed_response");
+  }
+  return { providerOrderId: c.data.id };
 }
 
 const list = z.object({

@@ -37,6 +37,7 @@ export async function pollDevice(h: ZincHttp, deviceCode: string): Promise<PollR
     if (!apiKey) parseBody(z.never(), r.json, "POST", path, r.status);
     return { status: "approved", apiKey: apiKey as string };
   }
+  if (r.status === 429) return { status: "slow_down" };
   switch (r.code) {
     case "authorization_pending":
       return { status: "pending" };

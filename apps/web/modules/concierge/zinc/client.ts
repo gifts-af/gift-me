@@ -60,7 +60,14 @@ export async function send(h: ZincHttp, method: string, path: string, o: SendOpt
     throw fail("unavailable", 0, method, path);
   }
 
-  const text = await res.text().catch(() => "");
+  const ok = res.status >= 200 && res.status < 300;
+  let text = "";
+  try {
+    text = await res.text();
+  } catch {
+    // A 2xx whose body is lost is ambiguous: Zinc may have acted. Callers look it up.
+    if (ok) throw fail("unavailable", res.status, method, path, "unreadable_response");
+  }
   let json: unknown;
   try {
     json = text ? JSON.parse(text) : undefined;
@@ -68,7 +75,7 @@ export async function send(h: ZincHttp, method: string, path: string, o: SendOpt
     json = undefined;
   }
 
-  if (res.status >= 200 && res.status < 300) return { status: res.status, json };
+  if (ok) return { status: res.status, json };
 
   const parsed = errorBody.safeParse(json);
   const code = parsed.success ? parsed.data.error.code : undefined;

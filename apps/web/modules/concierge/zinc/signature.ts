@@ -9,16 +9,45 @@ export function verifySignature(rawBody: string, header: string | null | undefin
   return got.length === want.length && timingSafeEqual(got, want);
 }
 
+// order_id is top level; error_type and the wallet fields live in `data`.
+const eventData = z
+  .object({
+    error_type: z.string(),
+    error: z.string(),
+    amount_cents: z.number(),
+    status: z.string(),
+  })
+  .partial();
+
 const event = z.object({
   event: z.string(),
   order_id: z.string().optional(),
-  error_type: z.string().optional(),
+  data: eventData.optional(),
 });
 
-export type ZincEvent = { event: string; orderId?: string; errorType?: string; raw: unknown };
+export type ZincEvent = {
+  event: string;
+  orderId?: string;
+  /** order.failed */
+  errorType?: string;
+  /** order.failed, wallet.auto_topup.failed */
+  error?: string;
+  /** wallet.auto_topup.* */
+  amountCents?: number;
+  status?: string;
+  raw: unknown;
+};
 
 /** Throws a ZodError on a body that is not an event. */
 export function parseEvent(json: unknown): ZincEvent {
   const e = event.parse(json);
-  return { event: e.event, orderId: e.order_id, errorType: e.error_type, raw: json };
+  return {
+    event: e.event,
+    orderId: e.order_id,
+    errorType: e.data?.error_type,
+    error: e.data?.error,
+    amountCents: e.data?.amount_cents,
+    status: e.data?.status,
+    raw: json,
+  };
 }

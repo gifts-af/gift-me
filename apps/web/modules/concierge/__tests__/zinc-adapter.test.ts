@@ -70,6 +70,11 @@ describe("account", () => {
     expect(await pollDevice(h, "dc")).toEqual({ status: "expired" });
   });
 
+  it("maps a 429 on the token poll to slow_down", async () => {
+    const { h } = fake([nestedErr(429, "rate_limit_exceeded")]);
+    expect(await pollDevice(h, "dc")).toEqual({ status: "slow_down" });
+  });
+
   it("mints a sandbox key with no auth", async () => {
     const { h, calls } = fake([{ status: 201, body: { api_key: KEY, claim_url: "x" } }]);
     expect(await mintSandboxKey(h)).toEqual({ apiKey: KEY });
@@ -146,6 +151,12 @@ describe("orders", () => {
     });
   });
 
+  it("rejects an idempotency key over 36 characters without sending", async () => {
+    const { h, calls } = fake([]);
+    await expect(createOrder(h, KEY, { ...order, idempotencyKey: "x".repeat(37) })).rejects.toMatchObject({ kind: "rejected" });
+    expect(calls).toHaveLength(0);
+  });
+
   it("402 becomes insufficient", async () => {
     const { h } = fake([nestedErr(402, "insufficient_funds", { required: 5100, available: 300, short_by: 4800 })]);
     expect(await createOrder(h, KEY, order)).toEqual({ insufficient: { requiredCents: 5100, availableCents: 300 } });
@@ -215,6 +226,12 @@ describe("placeWithRetry", () => {
     expect(calls).toHaveLength(1);
   });
 
+  it("a 201 with an unreadable body is looked up, not resent", async () => {
+    const { h, calls } = fake([{ status: 201, raw: '{"id": "zo_' }, { status: 200, body: { orders: [{ id: "zo_5", status: "pending", job_result: null }] } }]);
+    expect(await placeWithRetry(h, KEY, order, r())).toMatchObject({ providerOrderId: "zo_5" });
+    expect(calls.filter((c) => c.method === "POST")).toHaveLength(1);
+  });
+
   it("gives up as unavailable after the last attempt", async () => {
     const { h, calls } = fake([timeout, empty, timeout, empty, timeout]);
     await expect(placeWithRetry(h, KEY, order, r())).rejects.toMatchObject({ kind: "unavailable" });
@@ -233,6 +250,17 @@ describe("signature", () => {
     expect(verifySignature(body, sig.slice(0, -1) + (sig.endsWith("0") ? "1" : "0"), secret)).toBe(false);
     expect(verifySignature(body, "", secret)).toBe(false);
     expect(verifySignature(body, null, secret)).toBe(false);
+  });
+
+  it("reads error_type from data on order.failed", () => {
+    const e = parseEvent({ event: "order.failed", order_id: "zo_1", data: { error_type: "product_not_found", error: "x" } });
+    expect(e).toMatchObject({ event: "order.failed", orderId: "zo_1", errorType: "product_not_found", error: "x" });
+  });
+
+  it("reads wallet event fields from data", () => {
+    const e = parseEvent({ event: "wallet.auto_topup.succeeded", data: { amount_cents: 10000, status: "succeeded" } });
+    expect(e).toMatchObject({ event: "wallet.auto_topup.succeeded", amountCents: 10000, status: "succeeded" });
+    expect(e.orderId).toBeUndefined();
   });
 
   it("parses events and rejects junk", () => {
