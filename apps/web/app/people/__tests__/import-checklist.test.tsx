@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { GoogleContact } from "@gifts-af/core";
-import { describe, expect, it, vi } from "vitest";
+import { renderToString } from "react-dom/server";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import type { ImportResult } from "@/modules/concierge";
 import { ImportChecklist } from "../import/import-checklist";
 
@@ -47,6 +48,27 @@ async function connect() {
 const row = (name: string) => screen.getByRole("checkbox", { name: new RegExp(name) }).closest("li")!;
 
 describe("the Google Contacts import checklist", () => {
+  // ALL-104: the button is in the server's HTML, and a tap before the page's
+  // JavaScript has loaded does nothing, so it stays off until then.
+  it("keeps Connect off in the server's HTML, then the first tap after loading works", async () => {
+    const load = vi.fn(async () => CONTACTS);
+    const ui = <ImportChecklist action={vi.fn()} imported={[]} load={load} />;
+    const container = document.body.appendChild(document.createElement("div"));
+    onTestFinished(() => container.remove());
+    container.innerHTML = renderToString(ui);
+    const button = () => within(container).getByRole("button", { name: "Connect Google Contacts" });
+    expect(button()).toBeDisabled();
+
+    await act(async () => {
+      render(ui, { container, hydrate: true });
+    });
+    expect(button()).toBeEnabled();
+
+    await connect();
+    expect(load).toHaveBeenCalledOnce();
+    expect(screen.getByRole("checkbox", { name: /Alex Kim/ })).toBeInTheDocument();
+  });
+
   it("asks Google for nothing until the buyer chooses to connect (AC-1)", async () => {
     const { load } = setup();
     expect(load).not.toHaveBeenCalled();
