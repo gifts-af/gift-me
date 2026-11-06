@@ -43,6 +43,8 @@ We're early and opening up to friends and family first. [Request access](https:/
 
 Made by [Jim](https://www.linkedin.com/in/ja-james-allen/) and [Aaron](https://www.linkedin.com/in/aarontallen/).
 
+**The product:** [pitch deck](https://claude.ai/artifact/9aUauzPty1VKRSKgrZhmHT) · [roadmap](https://claude.ai/artifact/6D9ycNqhN2yGwvHwsWAaiW)
+
 **How it's built:** [technical design](design/technical-design.md) · [decisions log](design/decisions.md) · [engineering docs](design/operations.md)
 
 **Joining the team?** Open [Claude Code](https://claude.com/claude-code) and paste this. It takes it from there.
