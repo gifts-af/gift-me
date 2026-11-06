@@ -194,6 +194,7 @@ export class FakeRoundStore implements RoundStore {
       occasionDate: r.occasionDate,
       shipByDeadline: r.shipByDeadline,
       hasAddress: person.hasAddress,
+      hasSharedAddress: false,
       openQuestions: person.openQuestions ?? 0,
       ideas: this.ideas.get(roundId) ?? [],
       orders: [],

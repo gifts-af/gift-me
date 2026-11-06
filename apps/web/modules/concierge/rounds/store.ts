@@ -87,6 +87,8 @@ export type RoundContext = {
   occasionDate: CalendarDate;
   shipByDeadline: CalendarDate;
   hasAddress: boolean;
+  /** A list owner shares a usable address for this person; false when it isn't read. */
+  hasSharedAddress: boolean;
   /** Guided questions open for the person (ALL-26); the emails link them when above 0. */
   openQuestions: number;
   /** Proposed ideas, best first. */
@@ -102,6 +104,18 @@ export type RoundFinish = {
   nextActionAt: Date | null;
   /** Left as it was when omitted. */
   headsUpOn?: CalendarDate;
+};
+
+/** Address columns, as `people` and `shared_address_for_person` both name them. */
+type AddressColumns = {
+  recipient_first_name?: string | null;
+  recipient_last_name?: string | null;
+  address_line1?: string | null;
+  address_line2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  zip?: string | null;
+  country?: string | null;
 };
 
 export interface RoundStore {
@@ -349,7 +363,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
     async roundContext(roundId) {
       const { data: round, error } = await concierge
         .from("gift_rounds")
-        .select("user_id, person_id, occasion_id, occasion_date, ship_by_deadline")
+        .select("user_id, person_id, occasion_id, occasion_date, ship_by_deadline, status, attention_reason")
         .eq("id", roundId)
         .single();
       if (error) fail("Loading the round failed", error);
@@ -389,6 +403,30 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
       });
 
       const p = person.data;
+      // A list owner's shared address decides when there is one, as it does for the order and
+      // the person's page. Only the answer is kept, never the address (ALL-63, T61). It's read
+      // only when it matters, so a failed read can't hold up emails that don't use it.
+      const needsIt =
+        round.status === "scheduled" ||
+        round.status === "needs_address" ||
+        (round.status === "needs_attention" && round.attention_reason === "address");
+      let shared: AddressColumns | null = null;
+      if (needsIt) {
+        const read = await db.rpc("shared_address_for_person", { p_person_id: round.person_id });
+        if (read.error) fail("Reading the shared address failed", read.error);
+        if (read.data && typeof read.data === "object") shared = read.data as AddressColumns;
+      }
+      const a: AddressColumns = shared ?? p;
+      const draftOf = (x: AddressColumns) => ({
+        firstName: x.recipient_first_name,
+        lastName: x.recipient_last_name,
+        line1: x.address_line1,
+        line2: x.address_line2,
+        city: x.city,
+        state: x.state,
+        zip: x.zip,
+        country: x.country,
+      });
       return {
         userId: round.user_id,
         personId: round.person_id,
@@ -397,16 +435,8 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
         occasionDate: round.occasion_date,
         shipByDeadline: round.ship_by_deadline,
         // The same format check as the address form (T51): an incomplete import still asks.
-        hasAddress: isShippableAddress({
-          firstName: p.recipient_first_name,
-          lastName: p.recipient_last_name,
-          line1: p.address_line1,
-          line2: p.address_line2,
-          city: p.city,
-          state: p.state,
-          zip: p.zip,
-          country: p.country,
-        }),
+        hasAddress: isShippableAddress(draftOf(a)),
+        hasSharedAddress: shared !== null && isShippableAddress(draftOf(shared)),
         openQuestions: open.length,
         ideas: ideas.data.map((i) => ({ title: i.title, totalCents: i.est_total_cents })),
         orders: orders.data.map((o) => ({

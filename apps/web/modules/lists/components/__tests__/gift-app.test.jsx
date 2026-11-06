@@ -32,6 +32,46 @@ describe("GiftApp", () => {
   beforeEach(() => localStorage.clear());
   afterEach(() => vi.mocked(saveList).mockReset());
 
+  describe("the footer (ALL-63)", () => {
+    const FOOTER = <p>The footer</p>;
+
+    it("shows below a saved list", () => {
+      render(<GiftApp initial={member} footer={FOOTER} />);
+      expect(screen.getByText("The footer")).toBeInTheDocument();
+    });
+
+    it("stays hidden for a guest", () => {
+      render(<GiftApp initial={null} footer={FOOTER} />);
+      expect(screen.queryByText("The footer")).not.toBeInTheDocument();
+    });
+
+    it("stays hidden when the list couldn't load", () => {
+      render(<GiftApp initial={{ ...member, list: null, loadError: "Couldn't load" }} footer={FOOTER} />);
+      expect(screen.queryByText("The footer")).not.toBeInTheDocument();
+    });
+
+    it("goes away if a later refresh can't load the list", () => {
+      const { rerender } = render(<GiftApp initial={member} footer={FOOTER} />);
+      expect(screen.getByText("The footer")).toBeInTheDocument();
+      rerender(<GiftApp initial={{ ...member, list: null, loadError: "Couldn't load" }} footer={FOOTER} />);
+      expect(screen.queryByText("The footer")).not.toBeInTheDocument();
+    });
+
+    it("appears once a first save creates the list, with no reload (AC-11)", async () => {
+      vi.mocked(saveList).mockResolvedValue({
+        ok: true,
+        listId: "new-list",
+        shareToken: "tok",
+        items: [gift("a", "Kettle")],
+      });
+      render(<GiftApp initial={{ ...member, list: null, items: [gift("a", "Kettle")] }} footer={FOOTER} />);
+      expect(screen.queryByText("The footer")).not.toBeInTheDocument();
+      await userEvent.click(screen.getByRole("button", { name: /Remove Kettle/ }));
+      await userEvent.click(screen.getAllByRole("button", { name: /^Save/ })[0]);
+      expect(await screen.findByText("The footer")).toBeInTheDocument();
+    });
+  });
+
   it("moves focus to the list heading after removing a gift", async () => {
     render(<GiftApp initial={member} />);
     await userEvent.click(screen.getByRole("button", { name: /Remove Kettle/ }));

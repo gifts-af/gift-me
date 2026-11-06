@@ -5,7 +5,7 @@
 -- order is placed.
 begin;
 \ir _helpers.psql
-select plan(12);
+select plan(14);
 
 select tests.create_user('mom@example.com') as mom \gset
 select tests.create_user('buyer@example.com') as buyer \gset
@@ -31,6 +31,19 @@ select throws_ok(
 -- Nobody else reads it.
 select tests.act_as(:'buyer');
 select is((select count(*)::int from public.account_addresses), 0, 'the buyer reads none of Mom''s address');
+update public.account_addresses set city = 'Elsewhere', share_for_gifts = true;
+delete from public.account_addresses;
+reset role;
+select is(
+  (select city from public.account_addresses where user_id = :'mom'),
+  'Dayton',
+  'the buyer can''t change Mom''s address'
+);
+select is(
+  (select share_for_gifts from public.account_addresses where user_id = :'mom'),
+  false,
+  'or turn her sharing on, and her row is still there'
+);
 select tests.act_as_anon();
 select throws_ok('select * from public.account_addresses', '42501', null, 'signed-out visitors can''t read addresses');
 

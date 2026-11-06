@@ -2,9 +2,13 @@ import { Suspense } from "react";
 import { AppNav } from "@/components/app-shell/app-nav";
 import { BackLink, PageFrame, PageTitle } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
+import { getMyAddress, type MyAddress } from "@/lib/account-address";
 import { createClient } from "@/lib/supabase/server";
 import { getConciergeSettings } from "@/modules/concierge";
+import { getMyList } from "@/modules/lists";
 import { saveSettings, sendTestEmail } from "./actions";
+import { removeMyAddressAction, saveMyAddressAction } from "./address-actions";
+import { MyAddressSection } from "./my-address";
 import { PayingForGiftsSection } from "./paying-for-gifts-section";
 import { SettingsForm } from "./settings-form";
 import { TestEmailButton } from "./test-email-button";
@@ -17,10 +21,17 @@ export const maxDuration = 300;
 
 async function LoadedForm() {
   const supabase = await createClient();
-  const [{ data: profile }, concierge] = await Promise.all([
+  const { data: auth } = await supabase.auth.getClaims();
+  const userId = auth?.claims?.sub;
+  const [{ data: profile }, concierge, myList, address] = await Promise.all([
     supabase.from("profiles").select("timezone").maybeSingle(),
     getConciergeSettings(),
+    getMyList(),
+    userId ? getMyAddress(supabase, userId) : Promise.resolve<MyAddress>({ kind: "unavailable" }),
   ]);
+  // Your address does nothing for you until you have a list (principle 10). A
+  // failed read still shows the section, so it can't look like a missing address.
+  const showAddress = address.kind !== "none" || myList?.list != null || myList?.loadError != null;
   return (
     <div className="flex flex-col gap-6">
       <SettingsForm
@@ -28,6 +39,7 @@ async function LoadedForm() {
         action={saveSettings}
       />
       <TestEmailButton action={sendTestEmail} />
+      {showAddress && <MyAddressSection address={address} saveAction={saveMyAddressAction} removeAction={removeMyAddressAction} />}
       <PayingForGiftsSection />
     </div>
   );

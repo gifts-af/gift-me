@@ -59,7 +59,7 @@ All controls use the app's `Button`, `Switch`, `Input` and `Dialog` components, 
 | AC-7 | A saved address, switch off | I turn the switch on | `share_for_gifts` is true, and the wording shows my city and state |
 | AC-8 | Switch on | I turn it off | `share_for_gifts` is false, and the address is still saved |
 | AC-9 | No address | I turn the switch on, fill the dialog and save | One write creates the row with `share_for_gifts` true. A bad field keeps the dialog open with nothing saved. Cancel saves nothing and leaves the switch off |
-| AC-10 | A stale page: no row now | The sharing action is called | It writes nothing and returns a message telling me to add my address |
+| AC-10 | A stale page: no row now | The sharing action is called | It writes nothing. Turning on returns a message telling me to add my address; turning off just shows the switch off, because that's already true. **[Claude's call]** |
 | AC-11 | A signed-in person with no saved list, or a guest | They open the list page | There's no switch. Saving a first list shows it without a reload |
 | AC-12 | Any signed-in person on the list page | The page loads | The street and recipient names aren't in the page's HTML or data. It reads only `city`, `state` and `share_for_gifts` |
 | AC-13 | A buyer's person linked through my current share link, sharing on | The buyer opens the person's page | They see "Gifts ship to {name}'s own address in {City, ST}…", and the page's HTML has no street |
@@ -69,7 +69,8 @@ All controls use the app's `Button`, `Switch`, `Input` and `Dialog` components, 
 | AC-17 | The same, sharing off or the link revoked | A round starts or is advanced | It goes to, or stays in, `needs_address` |
 | AC-18 | A shared row exists but fails `isShippableAddress`, and the buyer has a good entry of their own | A round is advanced | `hasAddress` is false. The shared row alone decides, the same as `recipientAddress` on the ALL-32 branch |
 | AC-19 | A round waits in `needs_address`, with its next reminder days away | Sharing is turned on, and the next daily tick runs | The round moves on with no address email. On days with no reminder due and no address, it stays silent |
-| AC-20 | A round waits in `needs_address`, sharing already on | The buyer links that person's list | The same thing happens as when the buyer saves an address: the same hook runs, and any address hold is tried again. Whether that's in the request or the next tick is T54's and ALL-27's call |
+| AC-20 | A round waits in `needs_address`, sharing already on | The buyer links that person's list | At the next daily tick the round moves on, with no address email. Linking runs nothing in the request (T54) |
+| AC-24 | A gift is held for an address, and a usable shared address now exists, because the owner started sharing or the buyer linked their list | The next daily tick runs | It's placed to the shared address, with no "fix the address" email. A rejection then ends the order (ALL-112). The link field always says "If a gift for them is waiting on an address, it will ship to this list's owner." (Owner, 2026-11-06) |
 | AC-21 | Sharing is turned on after the last tick before the deadline | The deadline tick runs | The round is skipped and the buyer gets the usual skip email. The deadline skip still comes first |
 | AC-22 | A failed read, save, remove or sharing change | The log output is captured in a test | It holds `user_id`, an outcome and an error code. No address field or name appears (E6, T42) |
 | AC-23 | Reading my address fails | I open Settings or the list page | It never looks like "no address". Settings says it couldn't load, the switch is hidden, and nothing can overwrite my real address |
@@ -319,7 +320,7 @@ The result is written out as a local type. `AddressSaveResult` and `AccountAddre
 ### Task 8: Verify, review, ship, evidence
 
 - [ ] Re-read the ticket and its comments (T57). Rebase on `main`.
-- [ ] **Gate, before merging:** ALL-32 is on `main`, with failing-then-passing tests for sharing withdrawn after approval (hold and ask) and a rejected shared address (no blind retry, neutral owner email). If either is missing, don't merge. Tell the owner.
+- [x] **Gate, before merging:** ALL-32 and ALL-112 are on `main`, covering a withdrawn share and a rejected shared address (both end the order).
 - [ ] Run `pnpm lint && pnpm typecheck && pnpm test && pnpm build`, plus the Task 7 e2e. Note the counts.
 - [ ] Get an adversarial code review through superpowers:requesting-code-review, and fix what it finds.
 - [ ] Open the PR: `feat: my address, and let people with my list ship gifts to me (ALL-63)`, with **`Part of ALL-63`**, since the live check comes after merge. The body answers E9: how we see it on production (the events and the QA account check) and how to turn it off (the spec's SQL, with the owner's approval). It also says real shipping to a shared address waits on ALL-32's fixes. Read PR feedback while CI runs (T59).

@@ -74,6 +74,8 @@ export type RoundView = {
   shipByDeadline: CalendarDate;
   headsUpOn: CalendarDate | null;
   hasAddress: boolean;
+  /** A list owner shares a usable address for this person now (ALL-63); only read when it matters. */
+  hasSharedAddress?: boolean;
   sent: ReadonlySet<StepKey>;
   /** Why a `needs_attention` round needs attention; null for other statuses. */
   attentionReason: AttentionReason | null;
@@ -145,6 +147,10 @@ function holdAction(r: RoundView, today: CalendarDate, s: ScheduleSettings): Nex
     return r.sent.has(notice) ? wait : { do: "send_hold", send: notice };
   }
 
+  // A gift waiting on an address, and now one the buyer can't edit has arrived: place it rather
+  // than ask them to fix it (ALL-63). One try a run; a rejection ends the order (ALL-112).
+  if (reason === "address" && r.hasSharedAddress && !r.placeTried) return { do: "place" };
+
   const n = r.holdCount;
   const emailed = EMAILED_HOLDS.includes(reason);
   const silenced = reason === "funds" && r.orderingPaused === true;
@@ -199,8 +205,13 @@ export function nextAction(r: RoundView, today: CalendarDate, s: ScheduleSetting
       return { do: "generate" };
     case "awaiting_approval":
       return dueFromSchedule(r, today, s, APPROVAL_KEYS);
-    case "needs_address":
-      return r.hasAddress ? { do: "generate" } : dueFromSchedule(r, today, s, ADDRESS_KEYS);
+    case "needs_address": {
+      if (r.hasAddress) return { do: "generate" };
+      // A list owner can start sharing on any day, and the deadline comes first, so look
+      // again tomorrow (ALL-63). It's silent unless a reminder is due.
+      const due = dueFromSchedule(r, today, s, ADDRESS_KEYS);
+      return due.do === "wait" ? { do: "wait", until: addDays(today, 1) } : due;
+    }
     case "needs_attention":
       return holdAction(r, today, s);
     default: // the statuses we never act on

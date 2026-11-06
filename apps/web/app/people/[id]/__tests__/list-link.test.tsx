@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { ListLink } from "../list-link";
 
@@ -20,6 +20,20 @@ describe("ListLink", () => {
     await waitFor(() => expect(link).toHaveBeenCalled());
     const form = link.mock.calls[0][1];
     expect([form.get("id"), form.get("link")]).toEqual(["p1", "https://x.test/share/abc"]);
+  });
+
+  it("says where a waiting gift will go, next to the field (decision 53)", () => {
+    setup(false);
+    expect(screen.getByText("If a gift for them is waiting on an address, it will ship to this list's owner.")).toBeInTheDocument();
+  });
+
+  it("sends a link pasted before the page was ready, which React never saw typed", async () => {
+    const { link } = setup(false);
+    const input = screen.getByLabelText("Their list link") as HTMLInputElement;
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, "https://x.test/share/abc");
+    fireEvent.submit(input.closest("form")!);
+    await waitFor(() => expect(link).toHaveBeenCalled());
+    expect(link.mock.calls[0][1].get("link")).toBe("https://x.test/share/abc");
   });
 
   it.each([

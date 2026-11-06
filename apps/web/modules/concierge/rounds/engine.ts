@@ -41,7 +41,7 @@ export type EngineZinc = {
    * placeRound with the round's lease held; it never writes round status. `deadlineMs` (on the
    * engine's clock) is the run's one placing budget (zinc_place_budget_ms): no POST starts after it.
    */
-  placeRound: (roundId: string, lock: Date, deadlineMs: number) => Promise<unknown>;
+  placeRound: (roundId: string, lock: Date, deadlineMs: number, opts?: { address?: boolean }) => Promise<unknown>;
   /** Settles orders left placing (sweepStalePlacing); runs first on each tick. */
   sweep: () => Promise<unknown>;
   /** The user's wallet; only called for a user with paid features and Zinc connected (AC-11). */
@@ -319,7 +319,7 @@ async function runHeld(
       if (!deps.zinc) logEvent("zinc.wiring_missing", ids);
       // The run's placing budget is spent: the next tick tries it (the reminders still go today).
       else if ((deps.clock ?? Date.now)() >= placeBy) logEvent("order.place_budget_spent", ids);
-      else await deps.zinc.placeRound(round.id, round.lockedUntil, placeBy);
+      else await deps.zinc.placeRound(round.id, round.lockedUntil, placeBy, { address: round.attentionReason === "address" });
     } else if (action.do === "send_hold") {
       // The owner of a rejected shared address hears first, so the buyer's email can say so.
       const rejected = action.send.startsWith("fail:") && ctx.orders.some((o) => o.status === "failed" && o.failureType === "address_rejected");
@@ -579,6 +579,7 @@ function view(round: ClaimedRound, ctx: RoundContext, sent: Set<StepKey>, placeT
     shipByDeadline: round.shipByDeadline,
     headsUpOn: round.headsUpOn,
     hasAddress: ctx.hasAddress,
+    hasSharedAddress: ctx.hasSharedAddress,
     sent,
     attentionReason: round.status === "needs_attention" ? round.attentionReason : null,
     holdCount: round.holdCount,
