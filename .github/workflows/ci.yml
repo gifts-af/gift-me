@@ -115,7 +115,9 @@ jobs:
             echo "NEXT_PUBLIC_GOOGLE_CLIENT_ID=e2e-fake-client-id"
           } >> "$GITHUB_ENV"
       # Browsers are cached until the lockfile changes; the download sometimes
-      # hung for an hour (ALL-100). Timeouts make a hang fail fast so it can be re-run.
+      # hung for an hour (ALL-100). The system packages still come from apt, whose
+      # mirror can be slow (7+ min seen), so the 15-minute timeouts (about 2x that) stop
+      # a stall, not a slow run.
       - uses: actions/cache@v4
         id: playwright-cache
         with:
@@ -123,11 +125,11 @@ jobs:
           key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
       - name: Install Playwright browsers
         if: steps.playwright-cache.outputs.cache-hit != 'true'
-        timeout-minutes: 5
+        timeout-minutes: 15
         run: pnpm --filter @gifts-af/web exec playwright install --with-deps chromium webkit
       - name: Install Playwright system packages
         if: steps.playwright-cache.outputs.cache-hit == 'true'
-        timeout-minutes: 5
+        timeout-minutes: 15
         run: pnpm --filter @gifts-af/web exec playwright install-deps chromium webkit
       - run: pnpm --filter @gifts-af/web build
       - run: pnpm --filter @gifts-af/web e2e
