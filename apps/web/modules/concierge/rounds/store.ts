@@ -444,6 +444,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
 
     async roundsMissingOrderedEmail() {
       // Bounded to rounds that aren't finished: ordered or still needing the buyer.
+      // Follow-up (past MVP scale): one SQL query with NOT EXISTS on round_sends, or a recent window.
       const { data: orders, error } = await concierge
         .from("orders")
         .select("id, round_id, gift_rounds!inner(status)")

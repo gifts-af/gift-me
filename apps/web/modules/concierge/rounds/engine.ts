@@ -310,19 +310,31 @@ async function closeAtDeadline(round: ClaimedRound, ctx: RoundContext, sent: Set
   const skipStep: StepKey = round.attentionReason === "paused" ? "missed_on_us" : "skipped";
 
   let emailed = false;
+  // The email that decides what the buyer hears goes before closing; a refusal keeps the round
+  // open for the next look. Past the deadline that means a gift held open: alert the owner (once
+  // a look, so once a day).
+  const before = async (step: StepKey, extra: Extra = {}) => {
+    try {
+      await sendStep(round, ctx, step, sent, deps, extra);
+    } catch (err) {
+      if (dayOf(deps.now) > round.shipByDeadline) logEvent("round_deadline_email_held_open", { ...ids, alert: true });
+      throw err;
+    }
+  };
   if (held.length > 0 && (placed.length > 0 || pending)) {
     const partial = { cancelled: held.map((o) => o.title), onItsWay: placed.map((o) => o.title) };
-    await sendStep(round, ctx, "held_cancelled", sent, deps, { partial });
+    await before("held_cancelled", { partial });
     emailed = true;
   } else if (placed.length === 0 && !pending) {
-    await sendStep(round, ctx, skipStep, sent, deps);
+    await before(skipStep);
     emailed = true;
   }
 
   const status = await deps.store.cancelHeld(round.id);
-  if (status === "skipped" && !emailed) {
-    // A placing order failed while we closed (rare): best effort, the round is closed now.
-    if (!(await trySend(round, ctx, skipStep, sent, deps))) logEvent("round_skip_email_failed", ids);
+  // A placing order failed while we closed (rare), so the round ended skipped after all: the
+  // skipped email still goes (its own key, so never twice), best effort now the round is closed.
+  if (status === "skipped" && (!emailed || pending)) {
+    if (!(await trySend(round, ctx, skipStep, sent, deps))) logEvent("round_skip_email_failed", { ...ids, alert: true });
   } else if (status === "needs_attention" && !emailed) {
     const after = await deps.store.refresh(round);
     if (after.attentionReason === "unconfirmed") {

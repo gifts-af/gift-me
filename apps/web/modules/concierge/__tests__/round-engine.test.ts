@@ -1032,6 +1032,45 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     expect((await sends(r.roundId)).filter((s: string) => s.startsWith("ordered:"))).toHaveLength(2);
   });
 
+  it("if the placing gift fails while the round closes, the skipped email still goes (once)", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await newRound(u, { totals: [4200, 3000] });
+    zinc.plan.set(`https://shop.test/p/${r.ideaIds[0]}`, ["timeout"]);
+    zinc.plan.set(`https://shop.test/p/${r.ideaIds[1]}`, ["402"]);
+    await approve(u, r);
+    const [first] = (await pg.query("select o.id from concierge.orders o join concierge.gift_ideas i on i.id = o.idea_id where o.round_id = $1 order by i.rank", [r.roundId])).rows;
+    const deps = engine(dayAt(30));
+    const real = deps.store;
+    // Zinc reports the placing one failed just as the deadline closes the round.
+    deps.store = {
+      ...real,
+      cancelHeld: async (roundId) => {
+        await pg.query("select concierge.settle_order($1, $2, 'failed', 'out_of_stock', '{}')", [u.userId, first.id]);
+        return real.cancelHeld(roundId);
+      },
+    };
+    const before = inbox(u).length;
+    await advanceRound(r.roundId, deps);
+    expect(await roundRow(r.roundId)).toMatchObject({ status: "skipped" });
+    expect(inbox(u).slice(before)).toEqual(["One of Mary's gifts couldn't be bought in time@30", "No gift for Mary's Christmas this time@30"]);
+  });
+
+  it("alerts the owner when a refused deadline email keeps a round open past its deadline", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    zinc.balance = 1000;
+    await approve(u, r);
+    refuse = true;
+    const log = vi.spyOn(console, "log");
+    await advance(r.roundId, 30);
+    expect(log.mock.calls.map((c) => JSON.parse(String(c[0]))).filter((e) => e.event === "round_deadline_email_held_open")).toEqual([]);
+    await pg.query("update concierge.gift_rounds set locked_until = null where id = $1", [r.roundId]);
+    await advance(r.roundId, 31);
+    const alerts = log.mock.calls.map((c) => JSON.parse(String(c[0]))).filter((e) => e.event === "round_deadline_email_held_open");
+    expect(alerts).toEqual([expect.objectContaining({ round_id: r.roundId, user_id: u.userId, alert: true })]);
+    expect(Object.keys(alerts[0]).sort()).toEqual(["alert", "at", "event", "round_id", "user_id"]);
+  });
+
   it("a refused 'ordered' email goes out on the next tick, and never twice", async () => {
     const u = await newUser({ autoTopUp: null });
     const r = await newRound(u);
