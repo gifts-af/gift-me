@@ -414,6 +414,16 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     expect(await round(r.roundId)).toMatchObject({ status: "needs_attention", attention_reason: "funds" });
   });
 
+  it("a re-try that still holds tells the buyer through the engine at once (Settings, address saved, top-up)", async () => {
+    const u = await newUser({ autoTopUp: false });
+    zinc.balance = 100;
+    const r = await newRound(u);
+    await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps());
+    advanceRound.mockClear();
+    await placeHeldForUser(u.userId, deps());
+    expect(advanceRound).toHaveBeenCalledWith(r.roundId);
+  });
+
   // ─── timeouts and the sweep ───────────────────────────────────────────────
 
   it("a timeout keeps the order placing, the next pick unsent; the sweep settles it and the retry reuses the key (review focus 5)", async () => {
@@ -441,7 +451,10 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     expect(zinc.posts).toEqual([expect.objectContaining({ ref: b.id, idem: b.idem })]);
 
     const later = new Date(Date.now() + 31 * 60_000);
-    expect(await sweepStalePlacing(deps({ now: later }))).toBeGreaterThanOrEqual(1);
+    const orderPlaced = vi.fn(async () => {});
+    expect(await sweepStalePlacing(deps({ now: later, orderPlaced }))).toBeGreaterThanOrEqual(1);
+    // The buyer gets the "ordered" email (ALL-32 Task 7).
+    expect(orderPlaced).toHaveBeenCalledWith(r.roundId);
     const [a2] = await orders(r.roundId);
     // The price Zinc reports comes along, so the real total isn't lost.
     expect(a2).toMatchObject({ status: "placed", provider_order_id: "zn_late", total_cents: 4320 });

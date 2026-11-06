@@ -62,7 +62,10 @@ export type ClaimedRound = {
 
 /** One of the round's orders, for the hold and failure emails (ALL-32). */
 export type RoundOrder = {
+  id: string;
   title: string;
+  /** Where it ships, city only (never the full address); null when unknown. */
+  shipCity: string | null;
   status: string;
   holdReason: string | null;
   failureType: string | null;
@@ -73,6 +76,7 @@ export type RoundOrder = {
 
 /** What the round's emails say. Read with the service role; never logged. */
 export type RoundContext = {
+  userId: string;
   personId: string;
   personName: string;
   occasionKind: OccasionKind;
@@ -305,7 +309,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
     async roundContext(roundId) {
       const { data: round, error } = await concierge
         .from("gift_rounds")
-        .select("person_id, occasion_id, occasion_date, ship_by_deadline")
+        .select("user_id, person_id, occasion_id, occasion_date, ship_by_deadline")
         .eq("id", roundId)
         .single();
       if (error) fail("Loading the round failed", error);
@@ -325,7 +329,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
           .order("rank"),
         concierge
           .from("orders")
-          .select("status, hold_reason, failure_type, resolved, max_price_cents, fee_cents, created_at, gift_ideas(title)")
+          .select("id, status, hold_reason, failure_type, resolved, max_price_cents, fee_cents, ship_city, created_at, gift_ideas(title)")
           .eq("round_id", roundId)
           .order("created_at")
           .order("id"),
@@ -346,6 +350,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
 
       const p = person.data;
       return {
+        userId: round.user_id,
         personId: round.person_id,
         personName: p.name,
         occasionKind: occasion.data.kind as OccasionKind,
@@ -365,7 +370,9 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
         openQuestions: open.length,
         ideas: ideas.data.map((i) => ({ title: i.title, totalCents: i.est_total_cents })),
         orders: orders.data.map((o) => ({
+          id: o.id,
           title: (o.gift_ideas as { title: string } | null)?.title ?? "gift",
+          shipCity: o.ship_city,
           status: o.status,
           holdReason: o.hold_reason,
           failureType: o.failure_type,

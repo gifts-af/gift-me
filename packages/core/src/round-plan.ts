@@ -24,7 +24,9 @@ export type StepKey =
   // The n-th failed order in the round (price_up, out_of_stock, too_late, failed), told at once.
   | `fail:${number}:notice`
   // The deadline email when our own switch (paused) kept the gift from going out.
-  | "missed_on_us";
+  | "missed_on_us"
+  // Once per order Zinc confirmed placed (the "ordered" email).
+  | `ordered:${string}`;
 
 /** Why an order is held; `unconfirmed` is a round reason only. */
 export type HoldReason = "funds" | "setup" | "address" | "paused" | "not_allowed" | "retry";

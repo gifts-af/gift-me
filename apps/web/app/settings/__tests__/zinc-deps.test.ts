@@ -7,7 +7,10 @@ vi.mock("server-only", () => ({}));
 // Only settings are read while wiring (every one answers 15000 here); this stands in for those rpc calls.
 const db = vi.hoisted(() => ({ schema: () => ({ rpc: async () => ({ data: 15000, error: null }) }) })) as unknown as SupabaseClient<Database>;
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: () => db }));
-import { buyingWiring, placeHeld, zincWiring } from "../zinc-deps";
+// Spies on the engine's entry points; the engine itself is tested against the real database.
+const engine = vi.hoisted(() => ({ advanceRound: vi.fn(async () => "advanced"), tellOrdered: vi.fn(async () => {}) }));
+vi.mock("@/modules/concierge", async (original) => ({ ...(await original<object>()), ...engine }));
+import { buyingWiring, placeHeld, webhookTellers, zincWiring } from "../zinc-deps";
 const base = { ZINC_ENV: "live", ZINC_API_BASE: "https://api.zinc.test", ZINC_WALLET_URL: "https://app.zinc.test/wallet" };
 
 describe("zincWiring", () => {
@@ -52,13 +55,29 @@ describe("buyingWiring (ALL-32 Task 7)", () => {
     log.mockRestore();
   });
 
-  it("placeHeld places nothing and says so when Zinc is off here", async () => {
+  it("the webhook only tells the buyer: advanceRound with justPlaced, never a place inside Zinc's request", async () => {
+    const tellers = webhookTellers();
+    await tellers.advanceRound("round-1");
+    expect(engine.advanceRound).toHaveBeenCalledWith("round-1", expect.anything(), { justPlaced: true });
+    await tellers.orderPlaced("round-2");
+    expect(engine.tellOrdered).toHaveBeenCalledWith("round-2", expect.anything());
+  });
+
+  it("an approval or a re-try tells the buyer the same way (justPlaced)", async () => {
+    const { purchase } = await buyingWiring(new Date(), { ...base, EMAIL_OUTBOX: "log" });
+    engine.advanceRound.mockClear();
+    await purchase!.advanceRound("round-3");
+    expect(engine.advanceRound).toHaveBeenCalledWith("round-3", expect.anything(), { justPlaced: true });
+  });
+
+  it("placeHeld places nothing and says so once, with the user id, when Zinc is off here", async () => {
     const before = { ...process.env };
     delete process.env.ZINC_ENV;
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     await placeHeld("user-1");
     const missing = log.mock.calls.map((c) => JSON.parse(String(c[0]))).filter((e) => e.event === "zinc.wiring_missing");
-    expect(missing.at(-1)).toMatchObject({ user_id: "user-1" });
+    expect(missing).toHaveLength(1);
+    expect(missing[0]).toMatchObject({ user_id: "user-1" });
     log.mockRestore();
     process.env = before;
   });

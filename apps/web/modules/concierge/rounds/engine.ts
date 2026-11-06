@@ -242,12 +242,17 @@ async function runHeld(claimed: ClaimedRound, deps: EngineDeps, s: ScheduleSetti
   const ids = { round_id: claimed.id, user_id: claimed.userId };
   let round = claimed;
   let placeTried = justPlaced;
+  // At most one email to the buyer per run: after one goes out, only a try at placing may
+  // follow, and anything else due waits for the next look (a hold starting a few days before
+  // the deadline gets its notice today and the reminder tomorrow, not both at once).
+  let emailed = false;
   const steps: string[] = [];
   // Each pass sends a new key or tries placing once, so this ends; the cap is a backstop.
   for (let pass = 0; pass < 5 && round.status === "needs_attention"; pass++) {
     const ctx = await store.roundContext(round.id);
     const sent = await store.sentSteps(round.id);
     const action = nextAction(view(round, ctx, sent, placeTried), today, s);
+    if (emailed && action.do !== "place") break;
     if (action.do === "skip") {
       steps.push(await closeAtDeadline(round, ctx, sent, deps));
       break;
@@ -259,6 +264,7 @@ async function runHeld(claimed: ClaimedRound, deps: EngineDeps, s: ScheduleSetti
       else logEvent("zinc.wiring_missing", ids);
     } else if (action.do === "send_hold") {
       await sendStep(round, ctx, action.send, sent, deps);
+      emailed = true;
       steps.push(action.send);
       const reason = round.attentionReason;
       if (action.send.startsWith("hold:") && reason && EMAILED_HOLDS.includes(reason)) {
@@ -278,29 +284,83 @@ async function runHeld(claimed: ClaimedRound, deps: EngineDeps, s: ScheduleSetti
 }
 
 /**
- * The deadline for a held round (AC-23 to AC-25): cancel_held cancels what was never sent
- * and says where the round ends up. Skipped → the skipped email, or missed_on_us when our
- * own switch kept it back. Ordered → nothing to say. Still unconfirmed → "still confirming".
+ * The deadline for a held round (AC-23 to AC-25). cancel_held cancels what was never sent and
+ * says where the round ends up:
+ * - skipped: the skipped email, or missed_on_us when our own switch kept it back;
+ * - ordered: nothing to say, unless a held gift was cancelled next to one on its way; then
+ *   one short email says so (owner);
+ * - still unconfirmed: "still confirming".
+ * When the outcome is already certain from the orders (nothing placing or unconfirmed), the
+ * email goes first and a refusal fails the run, so the next tick tries again before closing
+ * (owner: the buyer is always told). Otherwise the round is closed first and the email is
+ * best effort; an unconfirmed round stays open, so its email is retried anyway.
  */
 async function closeAtDeadline(round: ClaimedRound, ctx: RoundContext, sent: Set<StepKey>, deps: EngineDeps): Promise<string> {
   const ids = { round_id: round.id, user_id: round.userId };
+  const held = ctx.orders.filter(LIVE_HELD);
+  const placed = ctx.orders.filter((o) => ["placed", "shipped", "delivered", "refunded"].includes(o.status));
+  const pending = ctx.orders.some((o) => o.status === "placing" || o.status === "unconfirmed");
+  const skipStep: StepKey = round.attentionReason === "paused" ? "missed_on_us" : "skipped";
+  const partial = (coming: RoundOrder[]): Extra => ({
+    partial: { cancelled: held.map((o) => o.title), onItsWay: coming.map((o) => o.title) },
+  });
+
+  if (!pending) {
+    if (placed.length === 0) await sendStep(round, ctx, skipStep, sent, deps);
+    else if (held.length > 0) await sendStep(round, ctx, "skipped", sent, deps, partial(placed));
+    return `deadline:${await deps.store.cancelHeld(round.id)}`;
+  }
+
   const status = await deps.store.cancelHeld(round.id);
   if (status === "skipped") {
-    const step: StepKey = round.attentionReason === "paused" ? "missed_on_us" : "skipped";
-    // The deadline never waits on its email (ruling 12).
-    if (!(await trySend(round, ctx, step, sent, deps))) logEvent("round_skip_email_failed", ids);
-    return step;
-  }
-  if (status === "needs_attention") {
+    if (!(await trySend(round, ctx, skipStep, sent, deps))) logEvent("round_skip_email_failed", ids);
+  } else if (status === "ordered" && held.length > 0) {
+    const coming = ctx.orders.filter((o) => ON_ITS_WAY(o) || o.status === "unconfirmed");
+    if (!(await trySend(round, ctx, "skipped", sent, deps, partial(coming)))) logEvent("round_skip_email_failed", ids);
+  } else if (status === "needs_attention") {
     const after = await deps.store.refresh(round);
     if (after.attentionReason === "unconfirmed") {
       const step: StepKey = `hold:${after.holdCount}:deadline`;
-      // A refusal is forgotten, so the next day's look tries again.
+      // A refusal is forgotten, and the round stays open, so the next day's look tries again.
       if (!(await trySend(after, ctx, step, sent, deps))) logEvent("round_hold_email_failed", ids);
-      return step;
     }
   }
   return `deadline:${status}`;
+}
+
+/**
+ * The "ordered" email (PRD A-8, owner): once per order Zinc confirmed placed, keyed
+ * `ordered:<order id>` in round_sends so it never goes twice. Called after a webhook or the
+ * sweep settles an order as placed. A refusal is forgotten and logged for the owner.
+ */
+export async function tellOrdered(roundId: string, deps: EngineDeps): Promise<void> {
+  const ctx = await deps.store.roundContext(roundId);
+  const sent = await deps.store.sentSteps(roundId);
+  const occasion = {
+    personName: ctx.personName,
+    occasion: occasionWord(ctx.occasionKind),
+    dateText: shortDate(ctx.occasionDate),
+  };
+  const open = { action: "open_person" as const, expiresAt: new Date(`${ctx.occasionDate}T23:59:00Z`) };
+  for (const o of ctx.orders.filter((x) => ["placed", "shipped", "delivered"].includes(x.status))) {
+    const step: StepKey = `ordered:${o.id}`;
+    if (sent.has(step)) continue;
+    if (!(await deps.store.recordSend(roundId, ctx.userId, step))) continue;
+    const result = await notify(
+      {
+        userId: ctx.userId,
+        roundId,
+        kind: "ordered",
+        data: { ...occasion, giftTitle: o.title, ...(o.shipCity ? { cityText: o.shipCity } : {}) },
+        links: { open },
+      },
+      deps.notify,
+    );
+    if (!result.ok) {
+      await deps.store.forgetSend(roundId, step);
+      logEvent("order.ordered_email_failed", { round_id: roundId, user_id: ctx.userId, order_id: o.id, alert: true });
+    }
+  }
 }
 
 /**
@@ -356,7 +416,7 @@ async function moveToGenerating(round: ClaimedRound, { store, now }: EngineDeps)
 }
 
 /** What some emails add to the round's own data. */
-type Extra = { funding?: Funding };
+type Extra = { funding?: Funding; partial?: { cancelled: string[]; onItsWay: string[] } };
 
 /** Records the step, then sends it; fails on a clean refusal, so the next tick tries again. */
 async function sendStep(
@@ -427,9 +487,9 @@ function occasionWord(kind: OccasionKind): string {
   return kind === "birthday" || kind === "anniversary" ? OCCASION_NAMES[kind].toLowerCase() : OCCASION_NAMES[kind];
 }
 
-type PlainStep = Exclude<StepKey, `hold:${string}` | `fail:${string}`>;
+type PlainStep = Exclude<StepKey, `hold:${string}` | `fail:${string}` | `ordered:${string}`>;
 /** Which email a step key sends; the numbered keys group by kind. */
-type EmailStep = PlainStep | "hold" | "hold_short" | "hold_deadline" | "fail";
+type EmailStep = PlainStep | "hold" | "hold_short" | "hold_deadline" | "fail" | "ordered";
 
 function emailStep(step: StepKey): EmailStep {
   if (step.startsWith("hold:")) {
@@ -437,6 +497,7 @@ function emailStep(step: StepKey): EmailStep {
     return step.endsWith(":deadline") ? "hold_deadline" : "hold";
   }
   if (step.startsWith("fail:")) return "fail";
+  if (step.startsWith("ordered:")) return "ordered";
   return step as PlainStep;
 }
 
@@ -501,7 +562,16 @@ async function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundContext, 
     case "skipped":
       // A money-path round at its deadline: the buyer had chosen a gift (ALL-32).
       return notify(
-        { ...base, kind: "skipped", data: { ...occasion, ...(round.status === "needs_attention" ? { held: true } : {}) }, links: { open: link } },
+        {
+          ...base,
+          kind: "skipped",
+          data: {
+            ...occasion,
+            ...(round.status === "needs_attention" ? { held: true } : {}),
+            ...(extra.partial ? { partial: extra.partial } : {}),
+          },
+          links: { open: link },
+        },
         notifyDeps,
       );
     case "address_request":
@@ -530,6 +600,9 @@ async function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundContext, 
       return sendHold(reason, kind === "hold_short");
     case "fail":
       return sendFailure(reason);
+    case "ordered":
+      // Sent by tellOrdered, which knows the order; never a round step.
+      throw new Error("The ordered email is sent by tellOrdered");
     default: {
       const unknown: never = kind;
       throw new Error(`No email for step ${String(unknown)}`);

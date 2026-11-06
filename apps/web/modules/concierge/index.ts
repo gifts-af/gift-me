@@ -66,7 +66,7 @@ export type { AddressSaveResult, ImportAddress, ImportRow, PersonInput } from ".
 
 // The round engine (ALL-28): the daily tick, advancing one round, and resuming
 // rounds that waited for an address. The idea stub stands in for ALL-27.
-export { advanceRound, resumeRoundsForPerson, runTick } from "./rounds/engine";
+export { advanceRound, resumeRoundsForPerson, runTick, tellOrdered } from "./rounds/engine";
 export type { AdvanceResult, EngineDeps, EngineZinc, GenerateIdeas, TickSummary } from "./rounds/engine";
 export { createSupabaseRoundStore } from "./rounds/store";
 export type { Candidate, ClaimedRound, NewRoundRow, RoundContext, RoundFinish, RoundOrder, RoundStore } from "./rounds/store";

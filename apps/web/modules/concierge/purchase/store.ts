@@ -9,8 +9,10 @@ import type { ZincDeps } from "../zinc/types";
 export type PurchaseDeps = ZincDeps & {
   /** zinc_order_fee_cents and order_price_margin_pct, read by the caller (T23). */
   settings: { feeCents: number; marginPct: number };
-  /** The round engine's advanceRound, bound by the caller: sends an emailed hold's notice. */
+  /** The round engine's advanceRound, bound by the caller (justPlaced): sends a new hold's or failure's notice. */
   advanceRound: (roundId: string) => Promise<unknown>;
+  /** The engine's tellOrdered, bound by the caller: the "ordered" email once the sweep finds an order placed. */
+  orderPlaced?: (roundId: string) => Promise<unknown>;
   /** For the quick retries' backoff; real timers when left out. */
   sleep?: (ms: number) => Promise<void>;
   /** Milliseconds, for the placing time budget; Date.now when left out. */

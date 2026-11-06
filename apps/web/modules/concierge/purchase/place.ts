@@ -402,6 +402,8 @@ export async function placeHeldForUser(userId: string, deps: PurchaseDeps): Prom
       if (!lock) continue;
       const outcome = await withLease(deps, round.id, lock, () => placeRound(round.id, lock, deps, { deadlineMs }));
       logEvent("order.place_held", { ...ids, outcome });
+      // A new hold or failure is told at once, as after approval; nothing due means "busy".
+      if (outcome === "held") await deps.advanceRound(round.id);
     } catch (e) {
       logEvent("order.place_failed", { ...ids, name: e instanceof Error ? e.name : "unknown" });
     }
@@ -452,6 +454,7 @@ export async function sweepStalePlacing(deps: PurchaseDeps): Promise<number> {
       if (settled.error) fail("Settling the order failed", settled.error);
       logEvent("order.swept", { ...ids, status: found.status });
       done++;
+      if (found.status === "placed" && deps.orderPlaced) await deps.orderPlaced(o.round_id);
     } catch (e) {
       // One order can't stop the rest; the next sweep tries again.
       logEvent("order.sweep_failed", { ...ids, name: e instanceof Error ? e.name : "unknown" });

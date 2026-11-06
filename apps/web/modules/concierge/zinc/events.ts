@@ -11,8 +11,13 @@ import type { PlaceHeld, ZincDeps } from "./types";
 
 type Deps = ZincDeps & {
   placeHeld: PlaceHeld;
-  /** The round engine's advanceRound: a settlement that needs the buyer is emailed at once (ALL-32). */
+  /**
+   * The round engine's advanceRound, bound with justPlaced so it only tells the buyer and never
+   * places inside Zinc's request: a settlement that needs the buyer is emailed at once (ALL-32).
+   */
   advanceRound?: (roundId: string) => Promise<unknown>;
+  /** The engine's tellOrdered: the "ordered" email for an order Zinc confirmed placed. */
+  orderPlaced?: (roundId: string) => Promise<unknown>;
 };
 
 const uuid = z.string().uuid();
@@ -162,10 +167,11 @@ async function settle(userId: string, event: ZincEvent, deps: Deps): Promise<voi
   });
   if (error) throw new Error(`Settling the order failed (${error.code}).`);
   logEvent("zinc.order_settled", { user_id: userId, order_id: order.id, status: placed ? "placed" : "failed" });
-  // A failure needs the buyer (reconcile made the round due now): tell them now, not at the next tick.
-  if (roundStatus === "needs_attention" && deps.advanceRound) {
+  // Tell the buyer now, not at the next tick: the gift is ordered, or a failure needs them.
+  const tell = placed ? deps.orderPlaced : roundStatus === "needs_attention" ? deps.advanceRound : undefined;
+  if (tell) {
     try {
-      await deps.advanceRound(order.round_id);
+      await tell(order.round_id);
     } catch (e) {
       // The tick tells them instead; Zinc mustn't retry a settlement that's done.
       logEvent("order.hold_notice_deferred", { user_id: userId, round_id: order.round_id, name: e instanceof Error ? e.name : "unknown" });

@@ -11,6 +11,7 @@ import {
   createSupabaseRoundStore,
   defaultChannels,
   fundingLookahead,
+  tellOrdered,
   getZincWallet,
   placeHeldForUser,
   placeRound,
@@ -59,6 +60,7 @@ async function settingInt(db: SupabaseClient<Database>, key: string): Promise<nu
 export async function buyingWiring(
   now: Date,
   env: Env = process.env,
+  ids: { user_id?: string } = {},
 ): Promise<{ engine: EngineDeps; purchase: PurchaseDeps | null }> {
   const db = createAdminClient();
   const engine: EngineDeps = {
@@ -70,7 +72,7 @@ export async function buyingWiring(
   };
   const wiring = await zincWiring(db, env);
   if (!wiring) {
-    logEvent("zinc.wiring_missing", {});
+    logEvent("zinc.wiring_missing", ids);
     return { engine, purchase: null };
   }
   const zinc: ZincDeps = { ...wiring.deps, now };
@@ -81,8 +83,9 @@ export async function buyingWiring(
   const purchase: PurchaseDeps = {
     ...zinc,
     settings: { feeCents, marginPct },
-    // Approval has just tried placing; the engine only tells the buyer.
+    // The caller has just tried placing; the engine only tells the buyer.
     advanceRound: (roundId) => advanceRound(roundId, engine, { justPlaced: true }),
+    orderPlaced: (roundId) => tellOrdered(roundId, engine),
   };
   engine.zinc = {
     placeRound: (roundId, lock) => placeRound(roundId, lock, purchase),
@@ -95,14 +98,23 @@ export async function buyingWiring(
 }
 
 /**
+ * How a webhook tells the buyer at once (owner: customers are always told): a settlement that
+ * needs them through advanceRound with justPlaced, so the engine only emails and never places
+ * inside Zinc's request; an order Zinc placed through tellOrdered.
+ */
+export function webhookTellers(): { advanceRound: (roundId: string) => Promise<unknown>; orderPlaced: (roundId: string) => Promise<unknown> } {
+  return {
+    advanceRound: async (roundId) => advanceRound(roundId, (await buyingWiring(new Date())).engine, { justPlaced: true }),
+    orderPlaced: async (roundId) => tellOrdered(roundId, (await buyingWiring(new Date())).engine),
+  };
+}
+
+/**
  * Tries a user's held gifts again: after setup is finished, the phone saved, an address saved,
  * or Zinc's auto top-up worked. With Zinc off here, nothing is placed and it's logged.
  */
 export const placeHeld: PlaceHeld = async (userId) => {
-  const { purchase } = await buyingWiring(new Date());
-  if (!purchase) {
-    logEvent("zinc.wiring_missing", { user_id: userId });
-    return;
-  }
-  await placeHeldForUser(userId, purchase);
+  // buyingWiring logs zinc.wiring_missing (with the user id) when Zinc is off here.
+  const { purchase } = await buyingWiring(new Date(), process.env, { user_id: userId });
+  if (purchase) await placeHeldForUser(userId, purchase);
 };

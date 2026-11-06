@@ -19,7 +19,8 @@ export type NotificationKind =
   | "price_up"
   | "out_of_stock"
   | "too_late"
-  | "missed_on_us";
+  | "missed_on_us"
+  | "ordered";
 
 export type RenderedEmail = { subject: string; html: string; text: string };
 
@@ -56,8 +57,11 @@ export type TemplateData = {
   needs_attention: Occasion & { reason: string };
   reaction_prompt: { personName: string; occasion: string; giftTitle: string };
   needs_address: Occasion & { reminder?: boolean };
-  /** `held`: the buyer chose a gift, but it couldn't be bought before the deadline. */
-  skipped: Occasion & { held?: boolean };
+  /**
+   * `held`: the buyer chose a gift, but it couldn't be bought before the deadline. `partial`:
+   * some of the chosen gifts were cancelled at the deadline while others are on their way.
+   */
+  skipped: Occasion & { held?: boolean; partial?: { cancelled: string[]; onItsWay: string[] } };
   hold_funds: Gifts & {
     neededText: string;
     /** The balance and shortfall, when the balance is known. */
@@ -78,6 +82,8 @@ export type TemplateData = {
   out_of_stock: OneGift;
   too_late: OneGift;
   missed_on_us: Gifts;
+  /** City only, never the full address. */
+  ordered: OneGift & { cityText?: string };
 };
 
 export type TemplateLinks = {
@@ -99,11 +105,30 @@ export type TemplateLinks = {
   out_of_stock: { open: string };
   too_late: { open: string };
   missed_on_us: { open: string };
+  ordered: { open: string };
 };
 
 const rowsOf = (ideas: IdeaRow[]) => ideas.map((i) => ({ title: `${i.title} · ${i.price}` }));
 
 const PRICES_NOTE = "Prices include shipping and tax.";
+
+function skippedEmail(d: TemplateData["skipped"], links: TemplateLinks["skipped"]): RenderedEmail {
+  return {
+    subject: `No gift for ${d.personName}'s ${d.occasion} this time`,
+    ...renderEmail({
+      heading: `No gift for ${d.personName}'s ${d.occasion}`,
+      paragraphs: [
+        d.held
+          ? `The gift you chose for ${d.personName}'s ${d.occasion} (${d.dateText}) couldn't be bought in time, so nothing was bought or charged.`
+          : `No gift was chosen for ${d.personName}'s ${d.occasion} (${d.dateText}), so nothing was bought.`,
+        "You can still buy something yourself. We'll be back for the next occasion.",
+      ],
+      button: { label: `Open ${APP_NAME}`, url: links.open },
+    }),
+  };
+}
+
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** "the Mug", "the Mug and the Apron", "the Mug, the Apron and the Vase". */
 function giftList(titles: string[]): string {
@@ -261,19 +286,19 @@ export const TEMPLATES: {
     }),
   }),
 
-  skipped: (d, links) => ({
-    subject: `No gift for ${d.personName}'s ${d.occasion} this time`,
-    ...renderEmail({
-      heading: `No gift for ${d.personName}'s ${d.occasion}`,
-      paragraphs: [
-        d.held
-          ? `The gift you chose for ${d.personName}'s ${d.occasion} (${d.dateText}) couldn't be bought in time, so nothing was bought or charged.`
-          : `No gift was chosen for ${d.personName}'s ${d.occasion} (${d.dateText}), so nothing was bought.`,
-        "You can still buy something yourself. We'll be back for the next occasion.",
-      ],
-      button: { label: `Open ${APP_NAME}`, url: links.open },
-    }),
-  }),
+  skipped: (d, links) =>
+    d.partial
+      ? {
+          subject: `One of ${d.personName}'s gifts couldn't be bought in time`,
+          ...renderEmail({
+            heading: `${d.personName}'s other gift is on its way`,
+            paragraphs: [
+              `We couldn't buy ${giftList(d.partial.cancelled)} for ${d.personName} in time, so we cancelled ${itOrThem(d.partial.cancelled)}. Nothing was charged for ${itOrThem(d.partial.cancelled)}. ${capitalize(giftList(d.partial.onItsWay))} ${d.partial.onItsWay.length > 1 ? "are on their way" : "is on its way"}.`,
+            ],
+            button: { label: `Open ${d.personName}'s page`, url: links.open },
+          }),
+        }
+      : skippedEmail(d, links),
 
   // ─── ALL-32: approved mock-ups, design/mockups/ALL-32-emails.html and ALL-32-emails-2.html ───
 
@@ -372,7 +397,7 @@ export const TEMPLATES: {
     ...renderEmail({
       heading: `${d.personName}'s gift went up in price`,
       paragraphs: [
-        `The price of the ${d.giftTitle} went up by more than the room you approved, so we didn't buy it and nothing was charged.`,
+        `The price of the ${d.giftTitle} went up more than we allowed for, so we didn't buy it and nothing was charged.`,
         `Approve the new price, or choose a different gift for ${d.personName}'s ${d.occasion} on ${d.dateText}.`,
       ],
       button: { label: "Review the gift", url: links.open },
@@ -409,7 +434,21 @@ export const TEMPLATES: {
     ...renderEmail({
       heading: `We couldn't send ${d.personName}'s gift in time`,
       paragraphs: [
-        `You chose ${giftList(d.giftTitles)} for ${d.personName}'s ${d.occasion} on ${d.dateText}. A problem on our side stopped us placing the order before it was too late to arrive. That's on us. Nothing was bought and nothing was charged.`,
+        `You chose ${giftList(d.giftTitles)} for ${d.personName}'s ${d.occasion} on ${d.dateText}. A problem on our side stopped us placing the order before it was too late to arrive.`,
+        "That's on us. Nothing was bought and nothing was charged.",
+      ],
+      button: { label: `Open ${d.personName}'s page`, url: links.open },
+    }),
+  }),
+
+  ordered: (d, links) => ({
+    subject: `${d.personName}'s gift is ordered`,
+    ...renderEmail({
+      heading: `${d.personName}'s gift is ordered`,
+      paragraphs: [
+        `We ordered the ${d.giftTitle} for ${d.personName}'s ${d.occasion} on ${d.dateText}.` +
+          (d.cityText ? ` It's on its way to ${d.cityText}.` : " It's on its way.") +
+          " We'll let you know when it ships.",
       ],
       button: { label: `Open ${d.personName}'s page`, url: links.open },
     }),
@@ -479,4 +518,5 @@ export const SAMPLE_DATA: {
   out_of_stock: { data: ONE_GIFT, links: { open: "https://example.com/a/open-token" } },
   too_late: { data: ONE_GIFT, links: { open: "https://example.com/a/open-token" } },
   missed_on_us: { data: GIFT, links: { open: "https://example.com/a/open-token" } },
+  ordered: { data: { ...ONE_GIFT, cityText: "Dayton" }, links: { open: "https://example.com/a/open-token" } },
 };

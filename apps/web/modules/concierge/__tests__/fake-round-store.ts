@@ -160,6 +160,7 @@ export class FakeRoundStore implements RoundStore {
     const kind = this.occasionKinds.get(r.occasionId);
     if (!person || !kind) throw new Error(`Round ${roundId} has no person or occasion`);
     return {
+      userId: r.userId,
       personId: r.personId,
       personName: person.name,
       occasionKind: kind,

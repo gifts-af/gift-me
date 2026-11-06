@@ -30,7 +30,11 @@ export function sampleEmails(link: string): SampleEmail[] {
     }
     add(kind, kind, data, links);
     if (kind === "reminder") add("reminder-questions", kind, { ...SAMPLE_DATA.reminder.data, questions: 3 }, { ...links, questions: link });
-    if (kind === "skipped") add("skipped-held", kind, { ...SAMPLE_DATA.skipped.data, held: true }, links);
+    if (kind === "skipped") {
+      add("skipped-held", kind, { ...SAMPLE_DATA.skipped.data, held: true }, links);
+      const partial = { cancelled: ["Linen apron"], onItsWay: ["Le Creuset mug set"] };
+      add("skipped-partial", kind, { ...SAMPLE_DATA.skipped.data, held: true, partial }, links);
+    }
     if (kind === "hold_funds") {
       add("hold_funds-still", kind, { ...SAMPLE_DATA.hold_funds.data, still: true, placedTitle: "Linen apron" }, links);
     }

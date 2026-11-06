@@ -33,6 +33,7 @@ describe.skipIf(!dbUp)("Zinc webhooks (real local database, fake Zinc)", () => {
   const users: string[] = [];
   const placeHeld = vi.fn<(userId: string) => Promise<void>>(async () => {});
   const advanceRound = vi.fn<(roundId: string) => Promise<unknown>>(async () => "advanced");
+  const orderPlaced = vi.fn<(roundId: string) => Promise<unknown>>(async () => {});
   const zincGets: string[] = [];
   const zincOrders: Record<string, unknown> = {};
   const zincStatus: Record<string, number> = {};
@@ -84,6 +85,7 @@ describe.skipIf(!dbUp)("Zinc webhooks (real local database, fake Zinc)", () => {
     now: new Date(),
     placeHeld,
     advanceRound,
+    orderPlaced,
   });
 
   type Account = { userId: string; webhookId: string; secret: string };
@@ -222,12 +224,14 @@ describe.skipIf(!dbUp)("Zinc webhooks (real local database, fake Zinc)", () => {
     advanceRound.mockClear();
     await send(a, JSON.stringify({ event: "order.failed", order_id: zincId, data: { error_type: "out_of_stock" } }));
     expect(advanceRound).toHaveBeenCalledWith(roundId);
-    // A placed order needs nothing from the buyer.
+    // A placed order gets the "ordered" email instead.
     const other = randomUUID();
-    await newOrder(a, { providerOrderId: other });
+    const placed = await newOrder(a, { providerOrderId: other });
     advanceRound.mockClear();
+    orderPlaced.mockClear();
     await send(a, placedBody(other));
     expect(advanceRound).not.toHaveBeenCalled();
+    expect(orderPlaced).toHaveBeenCalledWith(placed.roundId);
   });
 
   it("a duplicate event is one write", async () => {

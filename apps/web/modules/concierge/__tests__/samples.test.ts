@@ -18,6 +18,7 @@ describe("sampleEmails", () => {
       "needs_address",
       "skipped",
       "skipped-held",
+      "skipped-partial",
       "hold_funds",
       "hold_funds-still",
       "hold_setup",
@@ -28,6 +29,7 @@ describe("sampleEmails", () => {
       "out_of_stock",
       "too_late",
       "missed_on_us",
+      "ordered",
     ]);
   });
 

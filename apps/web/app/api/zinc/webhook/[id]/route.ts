@@ -1,7 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logEvent } from "@/lib/log";
-import { advanceRound, handleZincWebhook } from "@/modules/concierge";
-import { buyingWiring, placeHeld, zincWiring } from "@/app/settings/zinc-deps";
+import { handleZincWebhook } from "@/modules/concierge";
+import { placeHeld, webhookTellers, zincWiring } from "@/app/settings/zinc-deps";
 
 // Each user's own Zinc account posts here (ALL-32). The raw body is read first because the
 // signature is over exactly those bytes. Replies carry no body. With Zinc off in this
@@ -15,8 +15,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { status } = await handleZincWebhook(id, rawBody, request.headers.get("x-webhook-signature"), {
       ...wiring.deps,
       placeHeld,
-      // A failed order is emailed at once (owner: customers are always told).
-      advanceRound: async (roundId) => advanceRound(roundId, (await buyingWiring(new Date())).engine),
+      ...webhookTellers(),
     });
     return new Response(null, { status });
   } catch (error) {

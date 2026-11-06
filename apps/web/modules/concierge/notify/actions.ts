@@ -124,8 +124,8 @@ export const ACTIONS: Record<ActionName, Action> = {
     straight: true,
   },
 
-  // "Cancel this gift" in the hold emails (ALL-32 AC-24): the held gifts are cancelled
-  // under the round's lock and their list picks released (cancel_held). A gift already
+  // "Cancel this gift" in the hold emails (ALL-32 AC-24): cancel_held cancels the held gifts
+  // under the round row lock (not the engine's lease) and releases their list picks. A gift already
   // on its way isn't touched, and the round is never skipped while one is (T27).
   cancel_held_gift: {
     confirm: {

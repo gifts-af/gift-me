@@ -164,7 +164,7 @@ describe.each(HOLDS)("hold email %s", (kind) => {
   });
 });
 
-describe.each(["hold_unconfirmed", "price_up", "out_of_stock", "too_late", "missed_on_us"] as const)("%s", (kind) => {
+describe.each(["hold_unconfirmed", "price_up", "out_of_stock", "too_late", "missed_on_us", "ordered"] as const)("%s", (kind) => {
   it("has no cancel link or alpha line", () => {
     const mail = render(kind);
     expect(mail.text).not.toContain("Cancel this gift");
@@ -223,6 +223,7 @@ describe("the other gift emails match the mock-ups", () => {
     const mail = render("price_up");
     expect(mail.subject).toBe("The price of Mom's gift went up");
     expect(mail.text).toContain("Mom's gift went up in price");
+    expect(mail.text).toContain("The price of the Le Creuset mug set went up more than we allowed for, so we didn't buy it and nothing was charged.");
     expect(mail.text).toContain("Review the gift:");
     expect(mail.text).toContain("Nothing is bought until you choose.");
   });
@@ -257,8 +258,9 @@ describe("the other gift emails match the mock-ups", () => {
     const mail = render("missed_on_us");
     expect(mail.subject).toBe("We couldn't send Mom's gift in time");
     expect(mail.text).toContain("We couldn't send Mom's gift in time");
+    // Two paragraphs, as in the mock-up.
     expect(mail.text).toContain(
-      "A problem on our side stopped us placing the order before it was too late to arrive. That's on us. Nothing was bought and nothing was charged.",
+      "A problem on our side stopped us placing the order before it was too late to arrive.\n\nThat's on us. Nothing was bought and nothing was charged.",
     );
     expect(mail.text).toContain("Open Mom's page:");
   });
@@ -270,6 +272,34 @@ describe("the other gift emails match the mock-ups", () => {
     expect(mail.text).toContain(
       "The gift you chose for Mom's birthday (Saturday, March 14) couldn't be bought in time, so nothing was bought or charged.",
     );
+  });
+});
+
+describe("ordered (PRD A-8, owner)", () => {
+  it("says it's ordered and where it's going, city only, with one button", () => {
+    const mail = render("ordered");
+    expect(mail.subject).toBe("Mom's gift is ordered");
+    expect(mail.text).toContain(
+      "We ordered the Le Creuset mug set for Mom's birthday on Saturday, March 14. It's on its way to Dayton. We'll let you know when it ships.",
+    );
+    expect(mail.text).toContain("Open Mom's page:");
+    expect(mail.html.match(/<a[\s>]/g)).toHaveLength(1);
+  });
+
+  it("leaves the place out when the city isn't known", () => {
+    const s = SAMPLE_DATA.ordered;
+    expect(TEMPLATES.ordered({ ...s.data, cityText: undefined }, s.links).text).toContain("It's on its way. We'll let you know");
+  });
+});
+
+describe("skipped, partly (a held gift cancelled at the deadline next to one on its way)", () => {
+  it("says which was cancelled, that nothing was charged for it, and which is on its way", () => {
+    const s = SAMPLE_DATA.skipped;
+    const mail = TEMPLATES.skipped({ ...s.data, held: true, partial: { cancelled: ["Linen apron"], onItsWay: ["Le Creuset mug set"] } }, s.links);
+    expect(mail.text).toContain(
+      "We couldn't buy the Linen apron for Mom in time, so we cancelled it. Nothing was charged for it. The Le Creuset mug set is on its way.",
+    );
+    expect(mail.text).not.toContain("No gift");
   });
 });
 
