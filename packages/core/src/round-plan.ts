@@ -30,7 +30,9 @@ export type StepKey =
   // Once per order Zinc confirmed placed (the "ordered" email).
   | `ordered:${string}`
   // Once per order that failed after its round closed (the "we couldn't buy it" email).
-  | `late_fail:${string}`;
+  | `late_fail:${string}`
+  // Once per round: the list owner was asked to check their shared address (ALL-112).
+  | "shared_address";
 
 /** Why an order is held; `unconfirmed` is a round reason only. */
 export type HoldReason = "funds" | "setup" | "address" | "paused" | "not_allowed" | "retry";

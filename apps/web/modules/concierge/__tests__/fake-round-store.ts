@@ -166,6 +166,16 @@ export class FakeRoundStore implements RoundStore {
     return true;
   }
 
+  async roundsWithRejectedAddresses(): Promise<string[]> {
+    return [];
+  }
+
+  async sharedAddressOwnerToTell(): Promise<string | null> {
+    return null;
+  }
+
+  async clearRejectedAddresses(): Promise<void> {}
+
   async forgetSend(roundId: string, step: StepKey) {
     this.writes.push(`forgetSend:${roundId}:${step}`);
     this.sends.get(roundId)?.delete(step);

@@ -13,6 +13,7 @@ import {
 import { OCCASION_NAMES, shortDate } from "@/components/occasion-format";
 import { errorFields, logEvent } from "@/lib/log";
 import { notify, type NotifyDeps, type NotifyResult } from "../notify/notify";
+import { endedAddressReason } from "../notify/templates";
 import type { Funding } from "../notify/templates";
 import type { ClaimedRound, RoundContext, RoundFinish, RoundOrder, RoundStore } from "./store";
 
@@ -110,6 +111,7 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
       if (await advanceClaimed(round, deps, s, false, placeBy)) advanced++;
       else failed++;
     }
+    await tellOwnersOfRejections(deps);
     const summary = { enabled: false, created: 0, advanced, failed };
     logEvent("round_tick", summary);
     return summary;
@@ -125,6 +127,7 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
     if (await advanceClaimed(round, deps, s, false, placeBy)) advanced++;
     else failed++;
   }
+  await tellOwnersOfRejections(deps);
 
   const summary = { enabled: true, created, advanced, failed };
   logEvent("round_tick", summary);
@@ -318,7 +321,10 @@ async function runHeld(
       else if ((deps.clock ?? Date.now)() >= placeBy) logEvent("order.place_budget_spent", ids);
       else await deps.zinc.placeRound(round.id, round.lockedUntil, placeBy);
     } else if (action.do === "send_hold") {
-      await sendStep(round, ctx, action.send, sent, deps);
+      // The owner of a rejected shared address hears first, so the buyer's email can say so.
+      const rejected = action.send.startsWith("fail:") && ctx.orders.some((o) => o.status === "failed" && o.failureType === "address_rejected");
+      const extra: Extra = rejected ? { ownerAsked: (await tellOwnerOfRejection(round.id, deps)) !== "ruled_out" } : {};
+      await sendStep(round, ctx, action.send, sent, deps, extra);
       emailed = true;
       steps.push(action.send);
       const reason = round.attentionReason;
@@ -414,6 +420,56 @@ export async function retryOrderedEmails(deps: EngineDeps): Promise<void> {
     } catch (err) {
       logEvent("order.ordered_email_failed", { round_id: roundId, ...errorFields(err), alert: true });
     }
+  }
+}
+
+/**
+ * Asks a list owner to check their shared address after a store couldn't use it (ALL-112), at
+ * most once per round, then clears what's left of the rejected address. The email says nothing
+ * of a gift (decision 39). `retry`: a refusal or a failed lookup, which the tick tries again.
+ */
+export async function tellOwnerOfRejection(roundId: string, deps: EngineDeps): Promise<"asked" | "ruled_out" | "retry"> {
+  const { store, now } = deps;
+  const ids = { round_id: roundId };
+  try {
+    // First, because clearing the rejected address means there's no owner to find later on.
+    const alreadyAsked = (await store.sentSteps(roundId)).has("shared_address");
+    const owner = alreadyAsked ? null : await store.sharedAddressOwnerToTell(roundId);
+    if (owner) {
+      const { userId } = await store.roundContext(roundId);
+      if (await store.recordSend(roundId, userId, "shared_address")) {
+        const days = await store.setting("check_address_link_days");
+        const result = await notify(
+          {
+            userId: owner,
+            kind: "check_your_address",
+            data: {},
+            links: { open: { action: "check_my_address", expiresAt: new Date(now.getTime() + days * 86_400_000) } },
+          },
+          deps.notify,
+        );
+        if (!result.ok) {
+          await store.forgetSend(roundId, "shared_address");
+          logEvent("order.shared_address_notice_failed", { ...ids, alert: true });
+          return "retry";
+        }
+        logEvent("order.shared_address_notice", ids);
+      }
+    }
+    await store.clearRejectedAddresses(roundId);
+    return alreadyAsked || owner ? "asked" : "ruled_out";
+  } catch (err) {
+    logEvent("order.shared_address_notice_failed", { ...ids, ...errorFields(err), alert: true });
+    return "retry";
+  }
+}
+
+/** For the tick: any round a run hasn't dealt with, including closed and cancelled ones. */
+export async function tellOwnersOfRejections(deps: EngineDeps): Promise<void> {
+  try {
+    for (const roundId of await deps.store.roundsWithRejectedAddresses()) await tellOwnerOfRejection(roundId, deps);
+  } catch (err) {
+    logEvent("order.shared_address_notice_failed", { ...errorFields(err), alert: true });
   }
 }
 
@@ -533,7 +589,7 @@ async function moveToGenerating(round: ClaimedRound, { store, now }: EngineDeps)
 }
 
 /** What some emails add to the round's own data. */
-type Extra = { funding?: Funding; partial?: { cancelled: string[]; onItsWay: string[] } };
+type Extra = { funding?: Funding; partial?: { cancelled: string[]; onItsWay: string[] }; ownerAsked?: boolean };
 
 /** Records the step, then sends it; fails on a clean refusal, so the next tick tries again. */
 async function sendStep(
@@ -604,7 +660,7 @@ function occasionWord(kind: OccasionKind): string {
   return kind === "birthday" || kind === "anniversary" ? OCCASION_NAMES[kind].toLowerCase() : OCCASION_NAMES[kind];
 }
 
-type PlainStep = Exclude<StepKey, `hold:${string}` | `fail:${string}` | `ordered:${string}` | `late_fail:${string}`>;
+type PlainStep = Exclude<StepKey, `hold:${string}` | `fail:${string}` | `ordered:${string}` | `late_fail:${string}` | "shared_address">;
 /** Which email a step key sends; the numbered keys group by kind. */
 type EmailStep = PlainStep | "hold" | "hold_short" | "hold_deadline" | "fail" | "ordered";
 
@@ -622,7 +678,10 @@ const LIVE_HELD = (o: RoundOrder) => o.status === "held";
 const ON_ITS_WAY = (o: RoundOrder) => ["placing", "placed", "shipped", "delivered"].includes(o.status);
 /** The failure the buyer is being told about: the newest one still needing them. */
 const lastFailure = (orders: RoundOrder[]) =>
-  [...orders].reverse().find((o) => o.status === "failed" && !o.resolved && o.failureType !== "invalid_shipping_address");
+  [...orders]
+    .reverse()
+    .filter((o) => o.status === "failed" && !o.resolved && o.failureType !== "invalid_shipping_address")
+    .reduce<RoundOrder | undefined>((newest, o) => (!newest || o.updatedAt > newest.updatedAt ? o : newest), undefined);
 
 async function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundContext, deps: EngineDeps, extra: Extra): Promise<NotifyResult> {
   const notifyDeps: NotifyDeps = deps.notify;
@@ -784,6 +843,14 @@ async function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundContext, 
   async function sendFailure(r: AttentionReason | null): Promise<NotifyResult> {
     const failed = lastFailure(ctx.orders);
     const one = { ...occasion, giftTitle: failed?.title ?? "gift" };
+    // A shared address that can't be used (ALL-112): named from the failures themselves, because
+    // a price or stock failure also open outranks the round's reason.
+    const ended = failed?.failureType;
+    if (ended === "address_withdrawn" || ended === "address_rejected") {
+      const titles = ctx.orders.filter((o) => o.status === "failed" && !o.resolved && o.failureType === ended).map((o) => o.title);
+      const why = endedAddressReason(ended, ctx.personName, titles, extra.ownerAsked ?? false);
+      return notify({ ...base, kind: "needs_attention", data: { ...occasion, reason: why }, links: { open: link } }, notifyDeps);
+    }
     switch (r) {
       case "price_up":
         return notify({ ...base, kind: "price_up", data: one, links: { open: link } }, notifyDeps);
