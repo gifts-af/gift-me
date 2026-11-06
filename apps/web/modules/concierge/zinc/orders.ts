@@ -52,12 +52,18 @@ export async function createOrder(h: ZincHttp, key: string, o: ZincOrderInput): 
   return { providerOrderId: c.data.id };
 }
 
+// Whole cents that fit the database's integer columns; a bad price block is left out, the status still counts.
+const cents = z.number().int().nonnegative().max(2_147_483_647);
+const priceParts = z.object({ subtotal: cents, shipping: cents, tax: cents, total: cents }).partial();
+
 const list = z.object({
   orders: z.array(
     z.object({
       id: z.string(),
       status: z.string(),
-      job_result: z.object({ success: z.boolean().optional(), error_type: z.string().optional() }).nullish(),
+      job_result: z
+        .object({ success: z.boolean().optional(), error_type: z.string().optional(), price_components: z.unknown().optional() })
+        .nullish(),
     }),
   ),
 });
@@ -74,6 +80,16 @@ export async function findOrderByReference(h: ZincHttp, key: string, reference: 
   if (o.status === "order_failed" || jr?.success === false) {
     return { providerOrderId: o.id, status: "failed", ...(jr?.error_type ? { errorType: jr.error_type } : {}) };
   }
-  if (o.status === "order_placed" || jr?.success === true) return { providerOrderId: o.id, status: "placed" };
+  if (o.status === "order_placed" || jr?.success === true) {
+    const p = priceParts.safeParse(jr?.price_components);
+    if (!p.success || Object.keys(p.data).length === 0) return { providerOrderId: o.id, status: "placed" };
+    const price = {
+      ...(p.data.subtotal !== undefined ? { subtotalCents: p.data.subtotal } : {}),
+      ...(p.data.shipping !== undefined ? { shippingCents: p.data.shipping } : {}),
+      ...(p.data.tax !== undefined ? { taxCents: p.data.tax } : {}),
+      ...(p.data.total !== undefined ? { totalCents: p.data.total } : {}),
+    };
+    return { providerOrderId: o.id, status: "placed", price };
+  }
   return { providerOrderId: o.id, status: "pending" };
 }

@@ -3,6 +3,7 @@
 // goes through the money-path SQL functions (migration 20261109100000), which
 // lock the round row and leave its status to reconcile_round.
 import type { AddressDraft, CalendarDate, ScheduleSettings } from "@gifts-af/core";
+import { logEvent } from "@/lib/log";
 import type { ZincDeps } from "../zinc/types";
 
 export type PurchaseDeps = ZincDeps & {
@@ -249,6 +250,25 @@ export async function roundRpc(
 export async function releaseRound(deps: ZincDeps, roundId: string, lock: string): Promise<void> {
   const { error } = await concierge(deps).rpc("release_round", { p_round_id: roundId, p_lock: lock });
   if (error) fail("Releasing the round failed", error);
+}
+
+/**
+ * Runs `run` with the lease held, then gives it back. A release that fails is logged and
+ * never masks run's own error or result: the lease runs out by itself (round_lock_minutes).
+ */
+export async function withLease<T>(deps: ZincDeps, roundId: string, lock: string, run: () => Promise<T>): Promise<T> {
+  const release = async () => {
+    try {
+      await releaseRound(deps, roundId, lock);
+    } catch (e) {
+      logEvent("round.release_failed", { round_id: roundId, name: e instanceof Error ? e.name : "unknown" });
+    }
+  };
+  try {
+    return await run();
+  } finally {
+    await release();
+  }
 }
 
 /** Takes the round's lease now (ignores next_action_at); the lock value, or null when busy or not claimable. */

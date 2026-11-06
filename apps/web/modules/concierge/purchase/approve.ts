@@ -6,7 +6,7 @@
 import { classifyTotal, isShippableAddress } from "@gifts-af/core";
 import { logEvent } from "@/lib/log";
 import { hasPaidFeatures } from "../paid-features";
-import { EMAILED_REASONS, placeRound, sequentialCaps } from "./place";
+import { EMAILED_REASONS, FAILURE_REASONS, placeRound, sequentialCaps } from "./place";
 import {
   claimRoundNow,
   concierge,
@@ -14,9 +14,9 @@ import {
   readIdeas,
   readRound,
   recipientAddress,
-  releaseRound,
   setting,
   type PurchaseDeps,
+  withLease,
 } from "./store";
 
 export type ApproveInput = {
@@ -40,7 +40,13 @@ export type ApproveError =
   | "claimed"
   | "not_open";
 
-export type ApproveResult = { ok: true; status: "ordered" | "held" } | { ok: false; error: ApproveError };
+/**
+ * `held`: waiting (on funds, setup, an address, our switch, or a retry); `failed`: it needs
+ * the buyer (price_up, out_of_stock, too_late, failed). `reason` is the round's attention_reason.
+ */
+export type ApproveResult =
+  | { ok: true; status: "ordered" | "held" | "failed"; reason: string | null }
+  | { ok: false; error: ApproveError };
 
 export async function approveAndBuy(input: ApproveInput, deps: PurchaseDeps): Promise<ApproveResult> {
   const { userId, roundId, ideaIds } = input;
@@ -59,8 +65,7 @@ export async function approveAndBuy(input: ApproveInput, deps: PurchaseDeps): Pr
   const lock = await claimRoundNow(deps, roundId);
   if (!lock) return { ok: false, error: "busy" };
 
-  let status: "ordered" | "held";
-  try {
+  const refused = await withLease(deps, roundId, lock, async (): Promise<ApproveResult | null> => {
     // 2. Paid features and the over-budget confirmation.
     if (!(await hasPaidFeatures(deps.db, userId))) return { ok: false, error: "not_allowed" };
     if (round.status !== "awaiting_approval") return { ok: false, error: "not_open" };
@@ -121,21 +126,25 @@ export async function approveAndBuy(input: ApproveInput, deps: PurchaseDeps): Pr
     logEvent("order.approved", { ...ids, orders: picks.length });
 
     // 4. Place them now.
-    status = (await placeRound(roundId, lock, deps)) === "ordered" ? "ordered" : "held";
-  } finally {
-    await releaseRound(deps, roundId, lock);
-  }
+    await placeRound(roundId, lock, deps);
+    return null;
+  });
+  if (refused) return refused;
 
-  // 5. An emailed hold's notice is unsent (next_action_at = now), so the engine claims the
-  //    round and tells the buyer straight away. A retry hold waits for the tick.
+  // 5. The customer is always told: an emailed hold's notice is unsent (next_action_at = now)
+  //    and a failure needs them, so the engine takes the round straight away. A paused,
+  //    not_allowed or retry hold waits for the tick, with no email.
   const after = await readRound(deps, roundId);
-  if (after?.status === "needs_attention" && after.attention_reason && EMAILED_REASONS.includes(after.attention_reason)) {
+  const reason = after?.attention_reason ?? null;
+  const failed = after?.status === "needs_attention" && reason !== null && FAILURE_REASONS.includes(reason);
+  if (after?.status === "needs_attention" && reason !== null && (failed || EMAILED_REASONS.includes(reason))) {
     try {
       await deps.advanceRound(roundId);
     } catch (e) {
-      // The tick sends it instead: next_action_at is already now.
+      // The tick tells them instead.
       logEvent("order.hold_notice_deferred", { ...ids, name: e instanceof Error ? e.name : "unknown" });
     }
   }
-  return { ok: true, status };
+  const status = after?.status === "ordered" ? "ordered" : failed ? "failed" : "held";
+  return { ok: true, status, reason: status === "ordered" ? null : reason };
 }

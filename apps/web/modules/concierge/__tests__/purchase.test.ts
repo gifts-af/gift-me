@@ -38,7 +38,7 @@ type Post = { ref: string; idem: string; maxPrice: number; url: string; city: st
 class FakeZinc {
   balance = 100_000;
   /** Zinc's orders, by our reference (metadata.order_id). */
-  orders = new Map<string, { id: string; status: string; error_type?: string }>();
+  orders = new Map<string, { id: string; status: string; job_result?: unknown }>();
   /** Behaviors by product URL, used in turn; the last one repeats. */
   plan = new Map<string, Behavior[]>();
   posts: Post[] = [];
@@ -131,6 +131,28 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     ...over,
   });
 
+  /** Our real database, with one named function failing for one round, like a dropped connection would. */
+  function failingRpc(name: string, roundId: string) {
+    const real = createClient<Database>(supabase!.url, supabase!.serviceRoleKey, { auth: { persistSession: false } });
+    return new Proxy(real, {
+      get(target, prop, receiver) {
+        if (prop !== "schema") return Reflect.get(target, prop, receiver);
+        return (schema: "concierge") => {
+          const s = target.schema(schema);
+          return new Proxy(s, {
+            get(t, p, r) {
+              if (p !== "rpc") return Reflect.get(t, p, r);
+              return (fn: string, args: Record<string, unknown>) =>
+                fn === name && args?.p_round_id === roundId
+                  ? Promise.resolve({ data: null, error: { code: "XX000", message: "down" } })
+                  : (t.rpc as (f: string, a: unknown) => unknown).call(t, fn, args);
+            },
+          });
+        };
+      },
+    });
+  }
+
   // ─── fixtures ─────────────────────────────────────────────────────────────
 
   type User = { userId: string; webhookId: string; secret: string };
@@ -210,7 +232,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
   const orders = async (roundId: string) =>
     (
       await pg.query(
-        `select o.id, o.idea_id, o.status, o.hold_reason, o.failure_type, o.resolved, o.max_price_cents, o.provider_order_id,
+        `select o.id, o.idea_id, o.status, o.hold_reason, o.failure_type, o.resolved, o.max_price_cents, o.provider_order_id, o.total_cents,
                 o.idempotency_key::text as idem
            from concierge.orders o join concierge.gift_ideas i on i.id = o.idea_id
           where o.round_id = $1 order by i.rank, o.created_at, o.id`,
@@ -231,7 +253,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     const u = await newUser();
     const r = await newRound(u);
     const result = await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds, giftMessage: "Happy holidays" }, deps());
-    expect(result).toEqual({ ok: true, status: "ordered" });
+    expect(result).toEqual({ ok: true, status: "ordered", reason: null });
     const [o] = await orders(r.roundId);
     expect(o).toMatchObject({ status: "placing", max_price_cents: 4520 });
     expect(o.provider_order_id).toMatch(/^zn_/);
@@ -270,6 +292,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds, overBudgetConfirmed: true }, deps())).toEqual({
       ok: true,
       status: "ordered",
+      reason: null,
     });
 
     const v = await newUser({ paid: false });
@@ -290,7 +313,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     const second = await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps());
     open();
     expect(second).toEqual({ ok: false, error: "busy" });
-    expect(await first).toEqual({ ok: true, status: "ordered" });
+    expect(await first).toEqual({ ok: true, status: "ordered", reason: null });
     expect(await orders(r.roundId)).toHaveLength(1);
     expect(zinc.posts).toHaveLength(1);
     // Approving again once it's done is refused, not a second order.
@@ -307,7 +330,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     await pg.query("insert into lists.gift_claims (item_id, claimer_id, claimer_name) values ($1, $2, 'Bea')", [taken.rows[0].id, owner.userId]);
 
     const r = await newRound(u, { listItems: [item.rows[0].id] });
-    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps())).toEqual({ ok: true, status: "ordered" });
+    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps())).toEqual({ ok: true, status: "ordered", reason: null });
     const claim = await pg.query("select claimer_id, for_order from lists.gift_claims where item_id = $1", [item.rows[0].id]);
     expect(claim.rows[0]).toEqual({ claimer_id: u.userId, for_order: true });
 
@@ -324,7 +347,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     const r = await newRound(u);
     await setSwitch(false);
     try {
-      expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps())).toEqual({ ok: true, status: "held" });
+      expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps())).toEqual({ ok: true, status: "held", reason: "paused" });
       expect(zinc.calls).toEqual([]);
       expect(advanceRound).not.toHaveBeenCalled();
       expect(await round(r.roundId)).toMatchObject({ status: "needs_attention", attention_reason: "paused", locked_until: null, due: false });
@@ -339,7 +362,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
   it("a key saved for the other Zinc environment is setup not finished: no Zinc call, and the buyer is told", async () => {
     const u = await newUser({ env: "live" });
     const r = await newRound(u);
-    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps())).toEqual({ ok: true, status: "held" });
+    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps())).toEqual({ ok: true, status: "held", reason: "setup" });
     expect(zinc.calls).toEqual([]);
     expect(await round(r.roundId)).toMatchObject({ status: "needs_attention", attention_reason: "setup", due: true });
     expect(advanceRound).toHaveBeenCalledWith(r.roundId);
@@ -348,7 +371,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
   it("not connected is a setup hold, emailed through the engine", async () => {
     const u = await newUser({ connected: false });
     const r = await newRound(u);
-    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps())).toEqual({ ok: true, status: "held" });
+    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps())).toEqual({ ok: true, status: "held", reason: "setup" });
     expect(zinc.calls).toEqual([]);
     expect((await round(r.roundId)).attention_reason).toBe("setup");
     expect(advanceRound).toHaveBeenCalledWith(r.roundId);
@@ -411,7 +434,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     const r = await newRound(u);
     zinc.balance = 1500;
     zinc.plan.set(urlOf(r.ideaIds[0]), ["402"]);
-    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps())).toEqual({ ok: true, status: "held" });
+    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps())).toEqual({ ok: true, status: "held", reason: "funds" });
     expect(zinc.calls).not.toContain("GET /wallet/me");
     const [o] = await orders(r.roundId);
     expect(o).toMatchObject({ status: "held", hold_reason: "funds" });
@@ -428,7 +451,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     const u = await newUser({ autoTopUp: false });
     const r = await newRound(u);
     zinc.balance = 4619;
-    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps())).toEqual({ ok: true, status: "held" });
+    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps())).toEqual({ ok: true, status: "held", reason: "funds" });
     expect(zinc.calls).toEqual(["GET /wallet/me"]);
     expect(await round(r.roundId)).toMatchObject({ attention_reason: "funds", seen_balance_cents: 4619 });
 
@@ -442,7 +465,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     const u = await newUser();
     const r = await newRound(u, { totals: [4200, 5000] });
     zinc.plan.set(urlOf(r.ideaIds[1]), ["402"]);
-    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps())).toEqual({ ok: true, status: "held" });
+    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps())).toEqual({ ok: true, status: "held", reason: "funds" });
     const [a, b] = await orders(r.roundId);
     expect(a).toMatchObject({ status: "placing" });
     expect(a.provider_order_id).toMatch(/^zn_/);
@@ -456,7 +479,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     const u = await newUser();
     const r = await newRound(u, { totals: [4200, 5000] });
     zinc.plan.set(urlOf(r.ideaIds[0]), ["timeout"]);
-    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps())).toEqual({ ok: true, status: "held" });
+    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps())).toEqual({ ok: true, status: "held", reason: "retry" });
     const [a, b] = await orders(r.roundId);
     // Every quick retry used the same key; the second pick was never sent.
     expect(zinc.posts.map((p) => p.ref)).toEqual([a.id, a.id, a.id]);
@@ -467,7 +490,11 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     expect(advanceRound).not.toHaveBeenCalled();
 
     // Zinc did create it after all.
-    zinc.orders.set(a.id, { id: "zn_late", status: "order_placed" });
+    zinc.orders.set(a.id, {
+      id: "zn_late",
+      status: "order_placed",
+      job_result: { success: true, price_components: { subtotal: 4000, shipping: 0, tax: 320, total: 4320, currency: "USD" } },
+    });
     zinc.posts = [];
     await placeHeldForUser(u.userId, deps());
     expect(zinc.posts).toEqual([expect.objectContaining({ ref: b.id, idem: b.idem })]);
@@ -475,7 +502,8 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     const later = new Date(Date.now() + 31 * 60_000);
     expect(await sweepStalePlacing(deps({ now: later }))).toBeGreaterThanOrEqual(1);
     const [a2] = await orders(r.roundId);
-    expect(a2).toMatchObject({ status: "placed", provider_order_id: "zn_late" });
+    // The price Zinc reports comes along, so the real total isn't lost.
+    expect(a2).toMatchObject({ status: "placed", provider_order_id: "zn_late", total_cents: 4320 });
     expect(zinc.posts).toHaveLength(1);
   });
 
@@ -559,10 +587,72 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     const u = await newUser();
     const r = await newRound(u);
     zinc.plan.set(urlOf(r.ideaIds[0]), [{ status: 400, code: "invalid_product" }]);
-    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps())).toEqual({ ok: true, status: "held" });
+    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps())).toEqual({ ok: true, status: "failed", reason: "failed" });
     expect(zinc.posts).toHaveLength(1);
     expect((await orders(r.roundId))[0]).toMatchObject({ status: "failed", failure_type: "failed" });
     expect(await round(r.roundId)).toMatchObject({ status: "needs_attention", attention_reason: "failed" });
+    // The customer is always told about a failure too.
+    expect(advanceRound).toHaveBeenCalledWith(r.roundId);
+  });
+
+  it("a gift that can't arrive in time at approval is too_late, not sent, and the buyer is told", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    await pg.query("update concierge.gift_ideas set delivery_days_max = 60 where id = $1", [r.ideaIds[0]]);
+    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps())).toEqual({
+      ok: true,
+      status: "failed",
+      reason: "too_late",
+    });
+    expect(zinc.calls).toEqual([]);
+    expect(advanceRound).toHaveBeenCalledWith(r.roundId);
+  });
+
+  it("with no delivery range saved, the schedule's worst case decides: too late near the date is never sent", async () => {
+    const u = await newUser();
+    const r = await newRound(u, { deadlineIn: 1 });
+    // The occasion is two days out; nothing saved says how fast the gift ships.
+    await pg.query("update concierge.gift_rounds set occasion_date = current_date + 2 where id = $1", [r.roundId]);
+    await pg.query("update concierge.gift_ideas set handling_days_max = null, delivery_days_max = null where id = $1", [r.ideaIds[0]]);
+    await approvedOnly(u, r);
+    await placeHeldForUser(u.userId, deps());
+    expect(zinc.calls).toEqual([]);
+    expect((await orders(r.roundId))[0]).toMatchObject({ status: "failed", failure_type: "too_late" });
+
+    // Far enough out, the same null range is fine.
+    const far = await newRound(u);
+    await pg.query("update concierge.gift_ideas set handling_days_max = null, delivery_days_max = null where id = $1", [far.ideaIds[0]]);
+    await approvedOnly(u, far);
+    await placeHeldForUser(u.userId, deps());
+    expect(zinc.posts).toHaveLength(1);
+  });
+
+  it("placeHeldForUser: one round failing doesn't stop the next", async () => {
+    const u = await newUser();
+    const first = await newRound(u, { deadlineIn: 20 });
+    const second = await newRound(u, { deadlineIn: 25 });
+    await approvedOnly(u, first);
+    await approvedOnly(u, second);
+    await placeHeldForUser(u.userId, deps({ db: failingRpc("begin_placing", first.roundId) }));
+    expect(zinc.posts.map((p) => p.ref)).toEqual([(await orders(second.roundId))[0].id]);
+    // The failed round's lease was given back.
+    expect((await round(first.roundId)).locked_until).toBeNull();
+  });
+
+  it("placeHeldForUser: one time budget across rounds; once spent, no new round is claimed", async () => {
+    const u = await newUser();
+    const first = await newRound(u, { deadlineIn: 20 });
+    const second = await newRound(u, { deadlineIn: 25 });
+    await approvedOnly(u, first);
+    await approvedOnly(u, second);
+    let t = 0;
+    zinc.onPost = () => {
+      t += 60_000;
+    };
+    await placeHeldForUser(u.userId, deps({ clock: () => t }));
+    expect(zinc.posts.map((p) => p.ref)).toEqual([(await orders(first.roundId))[0].id]);
+    expect(await round(second.roundId)).toMatchObject({ attention_reason: "retry", locked_until: null });
+    expect((await orders(second.roundId))[0].status).toBe("held");
   });
 
   it("stops starting POSTs once the time budget is spent; the rest wait unsent", async () => {

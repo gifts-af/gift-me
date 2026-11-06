@@ -186,6 +186,21 @@ describe("orders", () => {
     expect(await findOrderByReference(h, KEY, "order-1")).toBeNull();
     expect(calls[0].url).toBe("https://zinc.test/orders?metadata_key=order_id&metadata_value=order-1");
   });
+
+  it("carries a placed order's price components, and drops a malformed block", async () => {
+    const list = (o: unknown[]) => ({ status: 200, body: { orders: o, total: o.length, limit: 10, offset: 0 } });
+    const pc = { subtotal: 3955, tax: 346, shipping: 599, total: 4900, discount: 0, fees: 0, currency: "USD" };
+    const { h } = fake([
+      list([{ id: "zo_1", status: "order_placed", job_result: { success: true, price_components: pc } }]),
+      list([{ id: "zo_1", status: "order_placed", job_result: { success: true, price_components: { total: "49.00" } } }]),
+    ]);
+    expect(await findOrderByReference(h, KEY, "order-1")).toEqual({
+      providerOrderId: "zo_1",
+      status: "placed",
+      price: { subtotalCents: 3955, shippingCents: 599, taxCents: 346, totalCents: 4900 },
+    });
+    expect(await findOrderByReference(h, KEY, "order-1")).toEqual({ providerOrderId: "zo_1", status: "placed" });
+  });
 });
 
 describe("placeWithRetry", () => {

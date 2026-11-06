@@ -39,4 +39,6 @@ export type FoundOrder = {
   providerOrderId: string;
   status: "pending" | "placed" | "failed";
   errorType?: string;
+  /** From job_result.price_components on a placed order, when Zinc gives whole cents. */
+  price?: { subtotalCents?: number; shippingCents?: number; taxCents?: number; totalCents?: number };
 };

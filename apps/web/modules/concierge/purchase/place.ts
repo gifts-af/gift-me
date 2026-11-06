@@ -39,7 +39,6 @@ import {
   readKey,
   readRound,
   recipientAddress,
-  releaseRound,
   roundRpc,
   roundStillWanted,
   savedSnapshots,
@@ -49,12 +48,15 @@ import {
   type OrderRow,
   type PurchaseDeps,
   type RoundRow,
+  withLease,
 } from "./store";
 
 export type PlaceOutcome = "ordered" | "held" | "not_ready";
 
 /** Hold reasons the customer is emailed about at once (reconcile_round rule 5). */
 export const EMAILED_REASONS: readonly string[] = ["funds", "setup", "address", "unconfirmed"];
+/** Failures that need the buyer (reconcile_round's failed row); the customer is always told. */
+export const FAILURE_REASONS: readonly string[] = ["price_up", "out_of_stock", "too_late", "failed"];
 
 const dayOf = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -160,7 +162,12 @@ type Result = {
  * Places a round's held orders. The caller holds the lease (`lock`) and releases it.
  * "not_ready" when the round isn't one to place now (nothing is written then).
  */
-export async function placeRound(roundId: string, lock: Date | string, deps: PurchaseDeps): Promise<PlaceOutcome> {
+export async function placeRound(
+  roundId: string,
+  lock: Date | string,
+  deps: PurchaseDeps,
+  opts: { deadlineMs?: number } = {},
+): Promise<PlaceOutcome> {
   const lockIso = typeof lock === "string" ? lock : lock.toISOString();
   const today = dayOf(deps.now);
   const r = await readRound(deps, roundId);
@@ -211,10 +218,15 @@ export async function placeRound(roundId: string, lock: Date | string, deps: Pur
     let failure: string | null = null;
     if (!idea?.product_url) failure = "failed";
     else if (
-      idea.handling_days_max !== null &&
-      idea.delivery_days_max !== null &&
+      // No delivery range saved (ideas don't carry one until ALL-27): fail closed with the
+      // worst case the round schedule plans for (planning_delivery_days, no handling).
       !canArriveInTime(
-        { occasionDate: r.occasion_date, orderDate: today, handlingDaysMax: idea.handling_days_max, deliveryDaysMax: idea.delivery_days_max },
+        {
+          occasionDate: r.occasion_date,
+          orderDate: today,
+          handlingDaysMax: idea.delivery_days_max === null ? 0 : (idea.handling_days_max ?? 0),
+          deliveryDaysMax: idea.delivery_days_max ?? schedule.planningDeliveryDays,
+        },
         schedule,
       )
     ) {
@@ -297,13 +309,14 @@ export async function placeRound(roundId: string, lock: Date | string, deps: Pur
   // 7. POST each one, within the time budget.
   const retry = { attempts, baseMs, sleep: deps.sleep ?? realSleep, random: Math.random };
   const clock = deps.clock ?? Date.now;
-  const started = clock();
+  // One budget for the whole run: placeHeldForUser passes its own deadline across rounds.
+  const deadline = opts.deadlineMs ?? clock() + budgetMs;
   const results: Result[] = [];
   let rest: "unsent" | "insufficient" | null = null;
   let unauthorized = false;
 
   for (const o of placing) {
-    if (rest === null && clock() - started >= budgetMs) {
+    if (rest === null && clock() >= deadline) {
       logEvent("order.place_budget_spent", ids);
       rest = "unsent";
     }
@@ -368,18 +381,29 @@ export async function placeRound(roundId: string, lock: Date | string, deps: Pur
 /**
  * Tries the user's held rounds again (AC-21): claim, place, release, earliest deadline
  * first. Matches PlaceHeld once `deps` is bound. No held rounds means no Zinc call.
+ * One zinc_place_budget_ms covers every round: once it's spent no new round is claimed
+ * (the tick tries them). One round failing never stops the rest.
  */
 export async function placeHeldForUser(userId: string, deps: PurchaseDeps): Promise<void> {
   const { data, error } = await concierge(deps).rpc("held_rounds_for_user", { p_user_id: userId });
   if (error) fail("Loading held rounds failed", error);
-  for (const round of data ?? []) {
-    const lock = await claimRoundNow(deps, round.id);
-    if (!lock) continue;
+  const rounds = data ?? [];
+  if (rounds.length === 0) return;
+  const clock = deps.clock ?? Date.now;
+  const deadlineMs = clock() + (await setting(deps, "zinc_place_budget_ms"));
+  for (const round of rounds) {
+    const ids = { round_id: round.id, user_id: userId };
+    if (clock() >= deadlineMs) {
+      logEvent("order.place_budget_spent", ids);
+      return;
+    }
     try {
-      const outcome = await placeRound(round.id, lock, deps);
-      logEvent("order.place_held", { round_id: round.id, user_id: userId, outcome });
-    } finally {
-      await releaseRound(deps, round.id, lock);
+      const lock = await claimRoundNow(deps, round.id);
+      if (!lock) continue;
+      const outcome = await withLease(deps, round.id, lock, () => placeRound(round.id, lock, deps, { deadlineMs }));
+      logEvent("order.place_held", { ...ids, outcome });
+    } catch (e) {
+      logEvent("order.place_failed", { ...ids, name: e instanceof Error ? e.name : "unknown" });
     }
   }
 }
@@ -400,7 +424,8 @@ export async function sweepStalePlacing(deps: PurchaseDeps): Promise<number> {
       const key = await readKey(deps, o.user_id);
       if (!key || key.env !== deps.env) {
         // Looking it up with no key, or the other environment's, would wrongly find nothing.
-        logEvent("order.sweep_skipped", { ...ids, reason: key ? "env_mismatch" : "no_key" });
+        // An order stuck placing that we can't look up needs the owner (health email, W5-3).
+        logEvent("order.sweep_skipped", { ...ids, reason: key ? "env_mismatch" : "no_key", alert: true });
         continue;
       }
       const found = await findOrderByReference(deps.http, key.apiKey, o.id);
@@ -416,7 +441,13 @@ export async function sweepStalePlacing(deps: PurchaseDeps): Promise<number> {
         p_order_id: o.id,
         p_status: found.status,
         p_failure_type: found.status === "failed" ? failureType(found.errorType) : "failed",
-        p_price: { provider_order_id: found.providerOrderId },
+        p_price: {
+          provider_order_id: found.providerOrderId,
+          ...(found.price?.subtotalCents !== undefined ? { subtotal_cents: found.price.subtotalCents } : {}),
+          ...(found.price?.shippingCents !== undefined ? { shipping_cents: found.price.shippingCents } : {}),
+          ...(found.price?.taxCents !== undefined ? { tax_cents: found.price.taxCents } : {}),
+          ...(found.price?.totalCents !== undefined ? { total_cents: found.price.totalCents } : {}),
+        },
       });
       if (settled.error) fail("Settling the order failed", settled.error);
       logEvent("order.swept", { ...ids, status: found.status });
