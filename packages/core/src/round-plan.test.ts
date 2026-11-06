@@ -11,7 +11,11 @@ const s: ScheduleSettings = {
   reminder2BeforeDeadlineDays: 7,
   finalNoticeBeforeDeadlineDays: 2,
   fastestDaysToArrive: 1,
+  holdReminderDays: 7,
+  holdFinalDays: 2,
 };
+
+const NO_HOLD = { attentionReason: null, holdCount: 0, seenBalanceCents: null, emailedBalanceCents: null } as const;
 
 const rule = { kind: "birthday", month: 3, day: 31 } as const;
 
@@ -59,6 +63,7 @@ const approval = (headsUpOn: CalendarDate): RoundView => ({
   headsUpOn,
   hasAddress: true,
   sent: new Set(),
+  ...NO_HOLD,
 });
 
 describe("nextAction: awaiting approval", () => {
@@ -112,6 +117,7 @@ describe("nextAction: address path", () => {
     headsUpOn: "2027-02-22",
     hasAddress: false,
     sent: new Set(),
+    ...NO_HOLD,
     ...over,
   });
 
@@ -140,6 +146,7 @@ describe("nextAction: other statuses", () => {
     headsUpOn: null,
     hasAddress: false,
     sent: new Set(),
+    ...NO_HOLD,
     ...over,
   });
 
@@ -171,5 +178,109 @@ describe("nextAction: other statuses", () => {
     for (const status of ["ordered", "delivered", "complete", "skipped"] as const) {
       expect(nextAction(view(status), "2027-03-25", s)).toEqual({ do: "wait", until: "2027-03-22" });
     }
+  });
+});
+
+describe("nextAction: money holds (AC-20, AC-22, AC-23)", () => {
+  // Deadline 2027-03-22: reminder at -7 is 03-15, final at -2 is 03-20.
+  const hold = (over: Partial<RoundView> = {}): RoundView => ({
+    status: "needs_attention",
+    shipByDeadline: "2027-03-22",
+    headsUpOn: "2027-02-22",
+    hasAddress: true,
+    sent: new Set(),
+    attentionReason: "funds",
+    holdCount: 1,
+    seenBalanceCents: 1000,
+    emailedBalanceCents: 1000,
+    ...over,
+  });
+  const sent = (...keys: StepKey[]) => new Set<StepKey>(keys);
+
+  it("sends the notice first for a funds hold", () => {
+    expect(nextAction(hold(), "2027-03-01", s)).toEqual({ do: "send_hold", send: "hold:1:notice" });
+  });
+
+  it("sends the notice for setup, address and unconfirmed holds too", () => {
+    for (const attentionReason of ["setup", "address", "unconfirmed"] as const) {
+      expect(nextAction(hold({ attentionReason }), "2027-03-01", s)).toEqual({ do: "send_hold", send: "hold:1:notice" });
+    }
+  });
+
+  it("tries to place after the notice", () => {
+    expect(nextAction(hold({ sent: sent("hold:1:notice") }), "2027-03-01", s)).toEqual({ do: "place" });
+  });
+
+  it("sends a short notice with today's key when the balance rose but is still short", () => {
+    const r = hold({ sent: sent("hold:1:notice"), seenBalanceCents: 2000 });
+    expect(nextAction(r, "2027-03-01", s)).toEqual({ do: "send_hold", send: "hold:1:short:2027-03-01", shortfall: true });
+  });
+
+  it("does not send the short notice twice the same day, but can on another", () => {
+    const r = hold({ sent: sent("hold:1:notice", "hold:1:short:2027-03-01"), seenBalanceCents: 2000 });
+    expect(nextAction(r, "2027-03-01", s)).toEqual({ do: "place" });
+    expect(nextAction(r, "2027-03-02", s)).toEqual({ do: "send_hold", send: "hold:1:short:2027-03-02", shortfall: true });
+  });
+
+  it("sends no short notice when a balance is unknown or not higher", () => {
+    const base = { sent: sent("hold:1:notice") };
+    expect(nextAction(hold({ ...base, seenBalanceCents: null }), "2027-03-01", s)).toEqual({ do: "place" });
+    expect(nextAction(hold({ ...base, emailedBalanceCents: null }), "2027-03-01", s)).toEqual({ do: "place" });
+    expect(nextAction(hold({ ...base, seenBalanceCents: 500 }), "2027-03-01", s)).toEqual({ do: "place" });
+  });
+
+  it("sends no short notice for other reasons", () => {
+    const r = hold({ attentionReason: "setup", sent: sent("hold:1:notice"), seenBalanceCents: 2000 });
+    expect(nextAction(r, "2027-03-01", s)).toEqual({ do: "place" });
+  });
+
+  it("sends the reminder 7 days before the deadline and the final notice 2 days before", () => {
+    const base = { sent: sent("hold:1:notice") };
+    expect(nextAction(hold(base), "2027-03-14", s)).toEqual({ do: "place" });
+    expect(nextAction(hold(base), "2027-03-15", s)).toEqual({ do: "send_hold", send: "hold:1:reminder" });
+    expect(nextAction(hold({ sent: sent("hold:1:notice", "hold:1:reminder") }), "2027-03-16", s)).toEqual({ do: "place" });
+    expect(nextAction(hold({ sent: sent("hold:1:notice", "hold:1:reminder") }), "2027-03-20", s)).toEqual({
+      do: "send_hold",
+      send: "hold:1:final",
+    });
+    expect(nextAction(hold({ sent: sent("hold:1:notice", "hold:1:final") }), "2027-03-21", s)).toEqual({ do: "place" });
+  });
+
+  it("sends only the final notice, not a missed reminder, when both are overdue", () => {
+    expect(nextAction(hold({ sent: sent("hold:1:notice") }), "2027-03-21", s)).toEqual({ do: "send_hold", send: "hold:1:final" });
+  });
+
+  it("uses the round's hold count in every key", () => {
+    expect(nextAction(hold({ holdCount: 2 }), "2027-03-01", s)).toEqual({ do: "send_hold", send: "hold:2:notice" });
+    expect(nextAction(hold({ holdCount: 2, sent: sent("hold:1:notice") }), "2027-03-01", s)).toEqual({
+      do: "send_hold",
+      send: "hold:2:notice",
+    });
+  });
+
+  it("places for paused, not_allowed and retry without ever emailing", () => {
+    for (const attentionReason of ["paused", "not_allowed", "retry"] as const) {
+      for (const day of ["2027-03-01", "2027-03-15", "2027-03-20"] as const) {
+        expect(nextAction(hold({ attentionReason }), day, s)).toEqual({ do: "place" });
+      }
+    }
+  });
+
+  it("waits until the deadline for an unconfirmed round once it was told", () => {
+    expect(nextAction(hold({ attentionReason: "unconfirmed", sent: sent("hold:1:notice") }), "2027-03-01", s)).toEqual({
+      do: "wait",
+      until: "2027-03-22",
+    });
+  });
+
+  it("waits for price_up, out_of_stock, too_late, failed and no reason", () => {
+    for (const attentionReason of ["price_up", "out_of_stock", "too_late", "failed", null] as const) {
+      expect(nextAction(hold({ attentionReason }), "2027-03-01", s)).toEqual({ do: "wait", until: "2027-03-22" });
+    }
+  });
+
+  it("skips on the deadline day whatever the hold", () => {
+    expect(nextAction(hold(), "2027-03-22", s)).toEqual({ do: "skip", send: "skipped" });
+    expect(nextAction(hold({ attentionReason: "paused" }), "2027-03-22", s)).toEqual({ do: "skip", send: "skipped" });
   });
 });

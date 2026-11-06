@@ -185,6 +185,11 @@ function view(round: ClaimedRound, ctx: RoundContext, sent: Set<StepKey>): Round
     headsUpOn: round.headsUpOn,
     hasAddress: ctx.hasAddress,
     sent,
+    // Hold fields arrive with the Zinc purchasing tasks (ALL-32).
+    attentionReason: null,
+    holdCount: 0,
+    seenBalanceCents: null,
+    emailedBalanceCents: null,
   };
 }
 
@@ -318,5 +323,8 @@ function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundContext, deps: 
         { ...base, kind: "needs_address", data: { ...occasion, reminder: true }, links: { addAddress: addressLink } },
         deps,
       );
+    default:
+      // Hold emails are wired in a later ALL-32 task; nothing can ask for one yet.
+      throw new Error(`No email for step ${step}`);
   }
 }

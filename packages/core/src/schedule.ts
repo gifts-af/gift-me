@@ -16,6 +16,10 @@ export type ScheduleSettings = {
   finalNoticeBeforeDeadlineDays: number;
   /** The fastest shipping a late round still hopes to find. */
   fastestDaysToArrive: number;
+  /** A held order's reminder email goes this many days before the deadline. */
+  holdReminderDays: number;
+  /** A held order's final email goes this many days before the deadline. */
+  holdFinalDays: number;
 };
 
 export type ReminderKind = "reminder_1" | "reminder_2" | "final_notice" | "skip";

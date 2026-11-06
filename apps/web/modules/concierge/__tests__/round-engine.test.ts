@@ -15,6 +15,8 @@ const SCHEDULE: ScheduleSettings = {
   reminder2BeforeDeadlineDays: 7,
   finalNoticeBeforeDeadlineDays: 2,
   fastestDaysToArrive: 1,
+  holdReminderDays: 7,
+  holdFinalDays: 2,
 };
 const USER = "user-1";
 const PERSON = "person-1";

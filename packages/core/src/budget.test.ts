@@ -104,7 +104,7 @@ describe("committed spend", () => {
 
 describe("max_price for an order", () => {
   // A round with a $100 budget; this order's pick was estimated at $58.
-  const order = { ceilingCents: 10000, budgetCents: 10000, committedCents: 0, reservedCents: 0, feeCents: 100, pickTotalCents: 5800 };
+  const order = { ceilingCents: 10000, budgetCents: 10000, committedCents: 0, reservedCents: 0, feeCents: 100, pickTotalCents: 5800, marginPct: 10 };
 
   it("leaves room for the other picks and the order fee", () => {
     expect(maxPriceCents({ ...order, reservedCents: 4000 })).toBe(5900);
@@ -115,11 +115,12 @@ describe("max_price for an order", () => {
   });
 
   it("subtracts whatever fee is configured", () => {
-    expect(maxPriceCents({ ...order, feeCents: 250 })).toBe(9750);
+    expect(maxPriceCents({ ...order, feeCents: 250, marginPct: 1000 })).toBe(9750);
   });
 
-  it("with a budget, lets a price rise use the budget's room (D28)", () => {
-    expect(maxPriceCents(order)).toBe(9900);
+  it("with a budget, lets a price rise use the budget's room (D28), up to the margin", () => {
+    expect(maxPriceCents({ ...order, marginPct: 1000 })).toBe(9900);
+    expect(maxPriceCents(order)).toBe(6280);
   });
 
   it("refuses when nothing is left, rather than placing a $0 order", () => {
@@ -142,7 +143,7 @@ describe("bad input", () => {
     expect(() => estimatedTotalCents({ priceCents: 1, shippingCents: -1, taxCents: 0, feeCents: 100 })).toThrow(RangeError);
     expect(() => walletRequiredCents(0.5, 100)).toThrow(RangeError);
     expect(() => walletRequiredCents(5900, -1)).toThrow(RangeError);
-    const order = { ceilingCents: 10000, budgetCents: 10000, committedCents: 0, reservedCents: 0, feeCents: 100, pickTotalCents: 5800 };
+    const order = { ceilingCents: 10000, budgetCents: 10000, committedCents: 0, reservedCents: 0, feeCents: 100, pickTotalCents: 5800, marginPct: 10 };
     expect(() => maxPriceCents({ ...order, feeCents: -1 })).toThrow(RangeError);
     expect(() => maxPriceCents({ ...order, pickTotalCents: -1 })).toThrow(RangeError);
     expect(() => maxPriceCents({ ...order, budgetCents: 0.5 })).toThrow(RangeError);
@@ -163,12 +164,12 @@ describe("no budget", () => {
   });
 
   it("caps each order at its own estimated total", () => {
-    expect(maxPriceCents({ ceilingCents: 11000, budgetCents: null, committedCents: 0, reservedCents: 6800, feeCents: 100, pickTotalCents: 4200 })).toBe(4100);
+    expect(maxPriceCents({ ceilingCents: 11000, budgetCents: null, committedCents: 0, reservedCents: 6800, feeCents: 100, pickTotalCents: 4200, marginPct: 10 })).toBe(4100);
   });
 });
 
 // Picks of $42 and $68 (each including the $1 fee), approved together.
-const noBudget = { ceilingCents: 11000, budgetCents: null, feeCents: 100, pickTotalCents: 6800 };
+const noBudget = { ceilingCents: 11000, budgetCents: null, feeCents: 100, pickTotalCents: 6800, marginPct: 10 };
 
 describe("no budget, once other orders in the round settle", () => {
   it("never lets an order cost more than its own approved total when an earlier one came in cheaper", () => {
@@ -208,5 +209,38 @@ describe("a confirmed over-budget round, once other orders in the round settle",
 
   it("never lets an order cost more than its own approved total when an earlier one came in cheaper", () => {
     expect(maxPriceCents({ ...over, committedCents: 3100, reservedCents: 0 })).toBe(6700);
+  });
+});
+
+describe("margin cap on one order (AC-10)", () => {
+  const base = { ceilingCents: 10000, budgetCents: 10000, committedCents: 0, reservedCents: 0, feeCents: 100, pickTotalCents: 4200 };
+
+  it("allows the pick plus the margin, less the fee", () => {
+    expect(maxPriceCents({ ...base, marginPct: 10 })).toBe(4520);
+  });
+
+  it("with no margin, is the pick less the fee", () => {
+    expect(maxPriceCents({ ...base, marginPct: 0 })).toBe(4100);
+  });
+
+  it("lets the smaller limit win when there is no budget", () => {
+    expect(maxPriceCents({ ...base, budgetCents: null, ceilingCents: 4200, marginPct: 10 })).toBe(4100);
+  });
+
+  it("refuses a negative margin", () => {
+    expect(() => maxPriceCents({ ...base, marginPct: -1 })).toThrow(RangeError);
+  });
+});
+
+describe("held orders (AC-15)", () => {
+  const held: CommittedOrder = { id: "o1", status: "held", maxPriceCents: 4520, finalTotalCents: null, feeCents: 100 };
+
+  it("count like an order being placed", () => {
+    expect(committedSpendCents([held])).toBe(4620);
+  });
+
+  it("leave out the orders named in excludeRoundOrderIds", () => {
+    expect(committedSpendCents([held], ["o1"])).toBe(0);
+    expect(committedSpendCents([held, { ...held, id: "o2" }], ["o1"])).toBe(4620);
   });
 });

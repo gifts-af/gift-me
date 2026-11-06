@@ -20,7 +20,7 @@ export type RoundStatus = (typeof ROUND_STATUSES)[number];
 const NEXT: Record<RoundStatus, readonly RoundStatus[]> = {
   scheduled: ["generating", "needs_address", "skipped"],
   generating: ["awaiting_approval", "needs_attention", "skipped"],
-  awaiting_approval: ["ordered", "generating", "skipped"],
+  awaiting_approval: ["ordered", "generating", "needs_attention", "skipped"],
   ordered: ["delivered", "needs_attention"],
   delivered: ["complete"],
   complete: [],

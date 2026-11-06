@@ -19,6 +19,8 @@ const s: ScheduleSettings = {
   reminder2BeforeDeadlineDays: 7,
   finalNoticeBeforeDeadlineDays: 2,
   fastestDaysToArrive: 1,
+  holdReminderDays: 7,
+  holdFinalDays: 2,
 };
 
 describe("ship-by deadline", () => {
