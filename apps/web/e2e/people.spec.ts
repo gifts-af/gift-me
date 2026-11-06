@@ -1,6 +1,7 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { localSupabase } from "./local-supabase";
 import { SECOND_USER, TEST_USER } from "./test-user";
+import { scrollsSideways } from "./phone-layout";
 import { signIn } from "./sign-in";
 
 // ALL-21: add someone, see their card, switch occasions and budgets, link their
@@ -61,12 +62,7 @@ async function secondUserShareLink(): Promise<string> {
   return `/share/${rows[0].share_token}`;
 }
 
-async function noSidewaysScroll(page: Page) {
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-  expect(overflow).toBeLessThanOrEqual(0);
-}
-
-test("add Mom, set her occasions and budget, link her list, delete her", async ({ page }, testInfo) => {
+test("add Mom, set her occasions and budget, link her list, delete her", { tag: "@layout" }, async ({ page }, testInfo) => {
   // The three projects run at once as the same user, so each gets its own Mom.
   const mom = `Mom ${testInfo.project.name}`;
   await deleteLeftovers(mom);
@@ -77,7 +73,7 @@ test("add Mom, set her occasions and budget, link her list, delete her", async (
   await page.getByRole("link", { name: "Add someone you buy for" }).first().click();
   await page.getByLabel("Name").fill(mom);
   await page.getByLabel("Who are they to you?").selectOption({ label: "Mother" });
-  await noSidewaysScroll(page);
+  expect(await scrollsSideways(page)).toBe(0);
   await page.getByRole("button", { name: `Add ${mom}` }).click();
 
   // 2. Her card: Add birthday, a next occasion, and "We suggest ideas".
@@ -88,7 +84,7 @@ test("add Mom, set her occasions and budget, link her list, delete her", async (
   await expect(card.getByRole("link", { name: "Add birthday" })).toBeVisible();
   await expect(card).toContainText(/Christmas|Mother's Day/);
   await expect(card).toContainText("We suggest ideas");
-  await noSidewaysScroll(page);
+  expect(await scrollsSideways(page)).toBe(0);
 
   // 3. Her page: Christmas off, a $75 Mother's Day budget, then cleared.
   await momLink.click();
@@ -109,7 +105,7 @@ test("add Mom, set her occasions and budget, link her list, delete her", async (
   await budgets.getByRole("button", { name: "Save", exact: true }).click();
   await expect(budgets.getByRole("listitem").filter({ hasText: "Mother's Day" }).getByText("Not set")).toBeVisible();
   await expect(budgets.getByRole("button", { name: "Set Mother's Day budget" })).toBeVisible();
-  await noSidewaysScroll(page);
+  expect(await scrollsSideways(page)).toBe(0);
 
   // 4. SECOND_USER's list, linked by its share link: "Their own list".
   const sharePath = await secondUserShareLink();

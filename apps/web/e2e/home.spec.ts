@@ -85,6 +85,7 @@ test("take the tour, then sign in with an invite", async ({ page }) => {
   await expect(page.getByText("Step 7 of 7")).toBeVisible();
   await page.getByRole("link", { name: "Have an invite? Sign in" }).click();
   await page.getByLabel("Email").fill(TEST_USER.email);
+  // eslint-disable-next-line no-restricted-syntax -- this tests the tour's "Have an invite? Sign in" form
   await page.getByLabel("Password").fill(TEST_USER.password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "People" })).toBeVisible();

@@ -12,6 +12,7 @@ test("sign in, see Home, stay signed in, sign out", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Continue with Google" })).toBeVisible();
 
   await page.getByLabel("Email").fill(TEST_USER.email);
+  // eslint-disable-next-line no-restricted-syntax -- this is the test of the login form itself
   await page.getByLabel("Password").fill(TEST_USER.password);
   await page.getByRole("button", { name: "Sign in" }).click();
 
@@ -38,6 +39,7 @@ test("a deep link survives sign-in", async ({ page }) => {
   await page.goto("/settings");
   await expect(page).toHaveURL(/\/auth\/login\?next=%2Fsettings$/);
   await page.getByLabel("Email").fill(TEST_USER.email);
+  // eslint-disable-next-line no-restricted-syntax -- this tests that a deep link survives signing in through the form
   await page.getByLabel("Password").fill(TEST_USER.password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
