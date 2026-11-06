@@ -99,8 +99,9 @@ export async function getMyList(): Promise<MyList | null> {
 }
 
 /**
- * How many gifts are on the signed-in user's list, for the "My list" card on
- * Home; null when they haven't saved one yet.
+ * How many gifts are on the signed-in user's list, for the "You" card on Give.
+ * 0 with no list yet; null only when it can't be read, so a failed read never
+ * looks like an empty list.
  */
 export async function getMyListSummary(): Promise<{ count: number } | null> {
   const supabase = await createClient();
@@ -115,7 +116,7 @@ export async function getMyListSummary(): Promise<{ count: number } | null> {
     console.error("loading the list summary failed", error);
     return null;
   }
-  if (!list) return null;
+  if (!list) return { count: 0 };
   const counted = list.list_items as unknown as { count: number }[];
   return { count: counted[0]?.count ?? 0 };
 }

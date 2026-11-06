@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
-import { Account } from "@/components/app-shell/account";
+import { AppNav } from "@/components/app-shell/app-nav";
 import { PageFrame, PageTitle } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
 import { appSettingInt } from "@/lib/app-settings";
@@ -12,7 +12,9 @@ import { PersonForm } from "../person-form";
 export default function NewPersonPage() {
   return (
     <>
-      <TopBar links current="people" account={<Account />} />
+      <TopBar>
+        <AppNav current="give" />
+      </TopBar>
       <PageFrame>
         <PageTitle>Add someone you buy for</PageTitle>
         <Suspense fallback={null}>

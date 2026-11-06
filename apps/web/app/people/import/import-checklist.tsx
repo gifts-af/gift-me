@@ -242,7 +242,7 @@ function Finished({ result, onAgain }: { result: Extract<ImportResult, { ok: tru
       {notes.length > 0 && <p className="text-[15px]">{notes.join(". ")}.</p>}
       <p className="text-[15px]">Their birthdays and holidays are set up. Check each one&apos;s page to fine-tune.</p>
       <Link href="/" className="self-start font-semibold underline underline-offset-[3px]">
-        See them on Home
+        See them on Give
       </Link>
       {onAgain && (
         <Button variant="outline" className="self-start" onClick={onAgain}>

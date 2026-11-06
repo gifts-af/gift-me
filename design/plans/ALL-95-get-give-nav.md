@@ -84,7 +84,7 @@ None left to research. The owner signed off on the mock-up on 2026-11-06. One ch
 
 Work from `origin/main` in a worktree, on branch `aarontallen/all-95-get-give-nav`.
 
-**320 px budget:** 288 px after padding. Logo 81 + 12 gap + tabs 136 + 8 gap + menu 44 = 281.
+**320 px budget:** 288 px after padding on a phone. Logo 81 + 12 gap + tabs 136 + menu 44 = 273. The check runs on the phone profiles, because a desktop browser also reserves 15 px for a scrollbar.
 
 ### Task 1: The bar (AC-1, AC-3, AC-7)
 

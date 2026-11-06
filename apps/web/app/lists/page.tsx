@@ -1,4 +1,8 @@
 import { Suspense } from "react";
+import { AppNav } from "@/components/app-shell/app-nav";
+import { TopBar } from "@/components/app-shell/top-bar";
+import { ThemeToggle } from "@/components/theme-toggle";
+import { createClient } from "@/lib/supabase/server";
 import { GiftApp, GiftAppSkeleton, getMyList } from "@/modules/lists";
 
 // Reads the session cookie, so it has to render inside <Suspense> under
@@ -8,10 +12,30 @@ async function ListLoader() {
   return <GiftApp initial={initial} />;
 }
 
+// This page works signed out, so what fills the bar waits for the session.
+// Until then the logo shows alone; the row keeps its height (ALL-95).
+async function ListsBarEnd() {
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getClaims();
+  if (data?.claims?.sub) return <AppNav current="get" />;
+  return (
+    <div className="ml-auto">
+      <ThemeToggle />
+    </div>
+  );
+}
+
 export default function ListsPage() {
   return (
-    <Suspense fallback={<GiftAppSkeleton />}>
-      <ListLoader />
-    </Suspense>
+    <>
+      <TopBar>
+        <Suspense fallback={null}>
+          <ListsBarEnd />
+        </Suspense>
+      </TopBar>
+      <Suspense fallback={<GiftAppSkeleton />}>
+        <ListLoader />
+      </Suspense>
+    </>
   );
 }

@@ -61,7 +61,8 @@ export function AccountMenu({ email }: { email?: string | null }) {
           </DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={signOut} className="min-h-11">
+        {/* Leaves the page without being a link, so the list's unsaved-changes check needs telling (ALL-95). */}
+        <DropdownMenuItem data-leaves-page="" onSelect={signOut} className="min-h-11">
           <LogOut aria-hidden="true" />
           Sign out
         </DropdownMenuItem>

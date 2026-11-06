@@ -1,5 +1,5 @@
-import { Account } from "@/components/app-shell/account";
-import { PageFrame, PageTitle } from "@/components/app-shell/page-frame";
+import { AppNav } from "@/components/app-shell/app-nav";
+import { BackLink, PageFrame, PageTitle } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
 import { createExtensionToken } from "./actions";
 import { ConnectClient } from "./connect-client";
@@ -8,8 +8,11 @@ import { ConnectClient } from "./connect-client";
 export default function ExtensionConnectPage() {
   return (
     <>
-      <TopBar back={{ href: "/", label: "Home" }} account={<Account />} />
+      <TopBar>
+        <AppNav />
+      </TopBar>
       <PageFrame>
+        <BackLink href="/" label="Give" />
         <PageTitle>Connect the extension</PageTitle>
         <ConnectClient action={createExtensionToken} />
       </PageFrame>

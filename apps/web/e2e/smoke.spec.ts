@@ -18,9 +18,7 @@ test("sign in, see Home, stay signed in, sign out", async ({ page }) => {
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("link", { name: "GiftsAF" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
-  // The list card (its name includes the subtitle), not the "My list" link in
-  // the top bar that computers also show.
-  await expect(page.getByRole("link", { name: /^(My list .+|Start your wish list)/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^You/ })).toBeVisible();
   // Usable at any width, 375 px included: nothing wider than the screen.
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);

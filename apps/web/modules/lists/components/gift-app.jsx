@@ -8,7 +8,6 @@ import GiftList from './gift-list.jsx'
 import GiftSummary from './gift-summary.jsx'
 import Link from 'next/link'
 import { PageFrame } from '@/components/app-shell/page-frame'
-import { TopBar } from '@/components/app-shell/top-bar'
 import SaveButton from './save-button.jsx'
 import ShareButton from './share-button.jsx'
 import { Banner, inputClass } from './ui.jsx'
@@ -55,19 +54,19 @@ function putGuestStash(items) {
   }
 }
 
+// The same while loading and loaded, so Share arriving doesn't move the page.
+const TITLE_ROW = 'flex min-h-11 items-center justify-between gap-3'
+
 export function GiftAppSkeleton() {
   return (
-    <>
-      {/* Matches the signed-in bar below, so the header doesn't jump from the
-          logo to "Home" when the list loads on a phone (ALL-60). */}
-      <TopBar back={{ href: '/', label: 'Home' }} links current="list" />
-      <PageFrame wide>
+    <PageFrame wide>
+      <div className={TITLE_ROW}>
         <h1 className="text-[22px] font-bold leading-tight">My list</h1>
-        <p className="text-[15px] text-muted-foreground" aria-busy="true">
-          Loading your list…
-        </p>
-      </PageFrame>
-    </>
+      </div>
+      <p className="text-[15px] text-muted-foreground" aria-busy="true">
+        Loading your list…
+      </p>
+    </PageFrame>
   )
 }
 
@@ -141,16 +140,20 @@ export default function GiftApp({ initial }) {
     return () => window.removeEventListener('beforeunload', warn)
   }, [atRisk])
 
-  // In-app links (Home, the top bar) navigate without beforeunload, so ask
+  // In-app links (Get, Give, the logo) navigate without beforeunload, so ask
   // here. Capture on document runs before React's own listeners, so stopping
   // the click keeps <Link> from navigating. Guests are stashed on unmount.
+  // `data-leaves-page` marks anything else that leaves: Sign out in AccountMenu.
   useEffect(() => {
     if (isGuest || !dirty) return
     function confirmLeave(event) {
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-      const link = event.target instanceof Element ? event.target.closest('a[href]') : null
-      if (!link || link.target === '_blank' || link.origin !== window.location.origin) return
-      if (link.pathname === window.location.pathname) return
+      const leaving = event.target instanceof Element ? event.target.closest('a[href], [data-leaves-page]') : null
+      if (!leaving) return
+      if (leaving.matches('a[href]')) {
+        if (leaving.target === '_blank' || leaving.origin !== window.location.origin) return
+        if (leaving.pathname === window.location.pathname) return
+      }
       if (window.confirm('You have unsaved changes. Leave without saving?')) return
       event.preventDefault()
       event.stopPropagation()
@@ -223,13 +226,6 @@ export default function GiftApp({ initial }) {
 
   return (
     <>
-      <TopBar
-        back={isGuest ? undefined : { href: '/', label: 'Home' }}
-        links={!isGuest}
-        current="list"
-        actions={isGuest ? null : <ShareButton blockedReason={shareBlockedReason} onShare={handleShare} />}
-      />
-
       <PageFrame wide className="gap-4">
         {isGuest && (
           <Banner>
@@ -250,6 +246,27 @@ export default function GiftApp({ initial }) {
             {notice}
           </Banner>
         )}
+        {saveError && (
+          <Banner tone="error" role="alert">
+            {saveError}
+          </Banner>
+        )}
+
+        <div className="flex flex-col gap-1">
+          <div className={TITLE_ROW}>
+            <h1
+              id="list-heading"
+              ref={headingRef}
+              tabIndex={-1}
+              className="text-[22px] font-bold leading-tight"
+            >
+              My list
+            </h1>
+            {!isGuest && <ShareButton blockedReason={shareBlockedReason} onShare={handleShare} />}
+          </div>
+          <GiftSummary gifts={gifts} />
+        </div>
+
         {shareNotice && (
           <Banner tone="accent" className="flex flex-col gap-2">
             <p role="status">{shareNotice.text}</p>
@@ -271,23 +288,6 @@ export default function GiftApp({ initial }) {
             )}
           </Banner>
         )}
-        {saveError && (
-          <Banner tone="error" role="alert">
-            {saveError}
-          </Banner>
-        )}
-
-        <div className="flex flex-col gap-1">
-          <h1
-            id="list-heading"
-            ref={headingRef}
-            tabIndex={-1}
-            className="text-[22px] font-bold leading-tight"
-          >
-            My list
-          </h1>
-          <GiftSummary gifts={gifts} />
-        </div>
 
         {/* Only signed-in people can have our server read a store page (ALL-10). */}
         <AddGiftPanel onAdd={addGift} readStorePage={isGuest ? undefined : readStorePage} />

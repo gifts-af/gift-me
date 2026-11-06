@@ -4,7 +4,7 @@ import { OCCASION_NAMES, shortDate } from "@/components/occasion-format";
 import { PersonAvatar } from "@/components/person-avatar";
 import type { PersonCard as Card } from "@/modules/concierge";
 
-/** One person on Home: who, what's next, and where their ideas come from. */
+/** One person on Give: who, what's next, and where their ideas come from. */
 export function PersonCard({ person }: { person: Card }) {
   const Source = person.keepsList ? ListChecks : Sparkles;
   return (

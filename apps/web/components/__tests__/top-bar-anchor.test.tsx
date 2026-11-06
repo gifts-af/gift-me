@@ -19,7 +19,7 @@ describe("logo anchoring", () => {
     const home = logoRowClasses(<HomeTopBar />);
     expect(home).toBeTruthy();
     expect(logoRowClasses(<TopBar />)).toBe(home);
-    expect(logoRowClasses(<TopBar links current="list" />)).toBe(home);
+    expect(logoRowClasses(<TopBar><span>tabs</span></TopBar>)).toBe(home);
   });
 
   it("reserves the scrollbar's space so long and short pages line up", () => {

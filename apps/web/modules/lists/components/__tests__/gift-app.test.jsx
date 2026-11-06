@@ -1,11 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import Link from "next/link";
 
 vi.mock("@/modules/lists/actions/lists", () => ({ saveList: vi.fn() }));
 vi.mock("@/modules/lists/actions/store-page", () => ({ readStorePage: vi.fn() }));
 const { saveList } = await import("@/modules/lists/actions/lists");
-const { default: GiftApp } = await import("../gift-app.jsx");
+const { default: GiftApp, GiftAppSkeleton } = await import("../gift-app.jsx");
 
 const gift = (id, name) => ({
   id,
@@ -36,6 +37,29 @@ describe("GiftApp", () => {
     await userEvent.click(screen.getByRole("button", { name: /Remove Kettle/ }));
     expect(screen.getByRole("heading", { level: 1, name: "My list" })).toHaveFocus();
     expect(screen.queryByText("Kettle")).not.toBeInTheDocument();
+  });
+
+  it("puts Share in the title row for a member", () => {
+    render(<GiftApp initial={member} />);
+    const row = screen.getByRole("heading", { level: 1, name: "My list" }).parentElement;
+    expect(within(row).getByRole("button", { name: /Share/ })).toBeInTheDocument();
+  });
+
+  it("has no Share for a guest", () => {
+    render(<GiftApp initial={null} />);
+    expect(screen.queryByRole("button", { name: /Share/ })).not.toBeInTheDocument();
+  });
+
+  // /lists doesn't know who's signed in while this shows (ALL-95), and the
+  // title row mustn't change height when Share arrives with the list.
+  it("shows no bar while loading, and the same title row as the loaded list", () => {
+    const { unmount } = render(<GiftAppSkeleton />);
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    const loading = screen.getByRole("heading", { level: 1, name: "My list" }).parentElement.className;
+    unmount();
+    render(<GiftApp initial={member} />);
+    expect(screen.getByRole("heading", { level: 1, name: "My list" }).parentElement.className).toBe(loading);
   });
 
   it("shows the save bar only when there are unsaved changes", async () => {
@@ -84,7 +108,7 @@ describe("GiftApp", () => {
     // Reports whether the click reached the link, where Next's <Link>
     // handler would start the client-side navigation.
     function clickHome() {
-      const link = screen.getByRole("link", { name: /Home/ });
+      const link = screen.getByRole("link", { name: "Give" });
       let reached = false;
       link.addEventListener("click", () => (reached = true));
       const click = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 });
@@ -94,7 +118,12 @@ describe("GiftApp", () => {
 
     it("stays on the page when the member cancels", async () => {
       const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
-      render(<GiftApp initial={member} />);
+      render(
+        <>
+          <Link href="/">Give</Link>
+          <GiftApp initial={member} />
+        </>,
+      );
       await userEvent.click(screen.getByRole("button", { name: /Remove Novel/ }));
       expect(clickHome()).toEqual({ reached: false, prevented: true });
       expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/unsaved/i));
@@ -102,7 +131,12 @@ describe("GiftApp", () => {
 
     it("lets the member go when they confirm", async () => {
       vi.spyOn(window, "confirm").mockReturnValue(true);
-      render(<GiftApp initial={member} />);
+      render(
+        <>
+          <Link href="/">Give</Link>
+          <GiftApp initial={member} />
+        </>,
+      );
       await userEvent.click(screen.getByRole("button", { name: /Remove Novel/ }));
       expect(clickHome().reached).toBe(true);
       expect(window.confirm).toHaveBeenCalled();
@@ -110,10 +144,42 @@ describe("GiftApp", () => {
 
     it("doesn't ask when everything is saved", () => {
       const confirm = vi.spyOn(window, "confirm");
-      render(<GiftApp initial={member} />);
+      render(
+        <>
+          <Link href="/">Give</Link>
+          <GiftApp initial={member} />
+        </>,
+      );
       expect(clickHome().reached).toBe(true);
       expect(confirm).not.toHaveBeenCalled();
     });
+  });
+
+  it("asks before something that leaves the page without being a link, like Sign out", async () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const signOut = vi.fn();
+    render(
+      <>
+        <button data-leaves-page="" onClick={signOut}>
+          Sign out
+        </button>
+        <GiftApp initial={member} />
+      </>,
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Remove Novel/ }));
+    await userEvent.click(screen.getByRole("button", { name: "Sign out" }));
+    expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/unsaved/i));
+    expect(signOut).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+  });
+
+  it("shows the share notice below the title, so Share doesn't move when it appears", async () => {
+    Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+    render(<GiftApp initial={{ ...member, shareToken: "abc" }} />);
+    await userEvent.click(screen.getByRole("button", { name: /Share/ }));
+    const notice = await screen.findByLabelText("Share link");
+    const title = screen.getByRole("heading", { level: 1, name: "My list" });
+    expect(title.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("stashes a guest's gifts when they leave for sign-in", () => {

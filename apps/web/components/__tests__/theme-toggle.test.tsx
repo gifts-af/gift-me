@@ -54,7 +54,7 @@ describe("where it shows", () => {
     expect(await screen.findByRole("button", { name: /Switch to/ })).toBeInTheDocument();
     unmount();
     await act(async () => {
-      render(<TopBar account={<span>account</span>} />);
+      render(<TopBar><span>account</span></TopBar>);
     });
     expect(screen.queryByRole("button", { name: /Switch to/ })).not.toBeInTheDocument();
   });
