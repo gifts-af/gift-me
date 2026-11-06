@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { unstable_rethrow } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { logEvent } from "@/lib/log";
 import { todayForRequest } from "@/lib/today";
 import { listPeople } from "@/modules/concierge";
 import { PersonCard } from "./person-card";
@@ -11,7 +13,8 @@ export async function PeopleSection() {
   try {
     people = await listPeople(await todayForRequest());
   } catch (error) {
-    console.error("people not loaded", error);
+    unstable_rethrow(error); // Next's end-of-prerender signal isn't a failure (ALL-87).
+    logEvent("people_load_failed", { error: error instanceof Error ? error.name : "unknown" });
     return <p className="col-span-full text-[15px] text-muted-foreground">We couldn&apos;t load your people. Refresh to try again.</p>;
   }
   // Adding by hand, or bringing them in from Google Contacts (ALL-24).
