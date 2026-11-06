@@ -84,4 +84,5 @@ export {
 } from "./zinc/connect";
 export type { PaymentResult, PaymentStatus } from "./zinc/connect";
 export type { PlaceHeld, ZincDeps } from "./zinc/types";
+export { handleZincWebhook } from "./zinc/events";
 export { hasPaidFeatures } from "./paid-features";
