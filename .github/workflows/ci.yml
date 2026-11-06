@@ -38,6 +38,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test
       - run: pnpm build
+      - run: pnpm check:bundle
 
   # Database: apply every migration to a fresh local Supabase, run the SQL
   # tests (privacy rules, keys, cascades), and check the generated types are
@@ -54,6 +55,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm supabase db start
       - run: pnpm db:test
+      - run: pnpm test:db
       - name: Generated database types are up to date
         run: |
           pnpm db:types
