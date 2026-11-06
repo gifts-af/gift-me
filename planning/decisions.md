@@ -67,7 +67,7 @@ The two open questions in ALL-44 (schema v1.1). Build details in `../design/plan
 
 | # | Decision | Source |
 |---|---|---|
-| 41 | **Your own address is one record for every product** (follows decision 38; narrows D31). One address per account, readable only by you. It's both where gifts to you ship when you keep a list and "My address" when you buy. You can turn on sharing it with gift givers; they then see only your city and state, and the full address is used only by the server to place an order. Addresses you enter for the people you buy for stay private to you. | Owner, on Claude's recommendation |
+| 41 | **Your own address is one record for every product** (follows decision 38; narrows D31). One address per account, readable only by you. It's both where gifts to you ship when you keep a list and "My address" when you buy. You can turn on sharing it with gift givers; they then see only your city and state, and the full address is used only by the server to place an order. Addresses you enter for the people you buy for stay private to you. **Narrowed by T61:** until buyers leave personal Zinc accounts (ALL-98), the person ordering may be able to see the street in their own Zinc account. | Owner, on Claude's recommendation |
 | 42 | **Linking someone's list to your "person" needs no consent.** A buyer holding a list's share link can link it to one of their people right away, and the concierge then offers picks from that list. Consequence **[Claude's call]**: when the list's owner turns address sharing on, anyone who has linked through their share link can ship to them (city and state shown, never the street), the way Amazon wish lists work. | Owner (Claude had recommended an accept step) |
 
 ## 2026-10-30
