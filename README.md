@@ -173,7 +173,7 @@ update concierge.app_settings set value = '0' where key = 'zinc_ordering_enabled
 | `order.ordered_email_failed` | The "your gift is ordered" email failed. | Check Resend. It is retried on the next tick. |
 | `order.failed_late_email_failed` | A gift failed after its round closed (it was still placing at the deadline, or an unconfirmed one was settled as failed) and the "we couldn't buy it" email failed. | Check Resend. It is retried on the next tick until it goes. |
 
-Where new docs go, how to write them, and when to push straight to `main` versus open a PR are in [CLAUDE.md](CLAUDE.md). Claude reads it automatically, and it's written for people too. Other AI tools read [AGENTS.md](AGENTS.md), which points them to it. The standing rule for everyone: no work without a Linear ticket, and no ticket done without its test evidence posted on it (T44).
+Where new docs go, how to write them, and when to push straight to `main` versus open a PR are in [CLAUDE.md](CLAUDE.md). Claude reads it automatically, and it's written for people too. Other AI tools read [AGENTS.md](AGENTS.md), which points them to it. The standing rule for everyone: no work without a Linear ticket, except quick touch-ups, and no ticket done without its test evidence posted on it (T44, T64).
 
 ## Production test account
 

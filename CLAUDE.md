@@ -16,7 +16,7 @@ Every plan is checked against these (`design/plans/TEMPLATE.md` > Principles che
 6. **Privacy by default.** Every user-owned row is protected by its owner; money and sensitive data stay inside the concierge (D31, T26).
 7. **The repo is the written source.** Every direction we settle gets recorded in the docs and decisions log; Linear and shared pages are views of it.
 8. **Written for a person.** Answer first, plain words, one place for each doc.
-9. **No work without a ticket; no ticket done without evidence** (T44). Every change starts from a Linear ticket, and a ticket isn't Done until its test evidence is posted on it (see Git > Evidence on the ticket).
+9. **No work without a ticket, except quick touch-ups; no ticket done without evidence** (T44, T64). Every change starts from a Linear ticket unless it's a quick touch-up (see Git > When a change needs no ticket), and a ticket isn't Done until its test evidence is posted on it (see Git > Evidence on the ticket).
 10. **Collect the minimum, as late as possible** (T42). Ask for a piece of personal data only when a feature the person is using right now can't work without it, keep it only while it's needed, and send outside services IDs, not names or emails.
 
 ### How we build
@@ -152,7 +152,7 @@ The owner's claude.ai account owns the page. To update it, a person needs **edit
 
   An optional scope names the area: `feat(lists): …`, `fix(db): …`. Add `!` for a breaking change (`feat!: …`).
 - **Re-read the ticket before significant work (T57).** Before writing a spec, before writing a plan, before the first line of code, before opening a PR, and whenever you pick work back up after a break, re-fetch the Linear ticket: its description, status, assignee, **every comment**, and its blocking and related tickets (their latest comments too). Others, and other agent sessions, change tickets while you work. If anything changed (new decisions, scope, a blocker, someone else already on it), reconcile it before going on and say what changed. Never work from a copy of the ticket read earlier in the session.
-- **Evidence on the ticket (T44), standard operating procedure.** No work starts without a Linear ticket: if there isn't one, create it first, with acceptance criteria. No ticket is Done until its test evidence is posted on the ticket as a comment, before the PR merges or right after. Evidence means:
+- **Evidence on the ticket (T44), standard operating procedure.** Work that needs a ticket (see When a change needs no ticket, below) starts from one: if there isn't one, create it first, with acceptance criteria. No ticket is Done until its test evidence is posted on the ticket as a comment, before the PR merges or right after. Evidence means:
   - **Tests:** what was added, that it failed first, and the suite results (counts), plus lint, typecheck and the CI result for the PR.
   - **Screenshots** of anything a person sees, at phone and desktop width and in light and dark mode where it matters. Show before and after for a fix.
   - **Mock-ups** made for the ticket.
@@ -160,7 +160,18 @@ The owner's claude.ai account owns the page. To update it, a person needs **edit
   - **Ticked acceptance criteria:** as each criterion's evidence is posted, tick its box in the ticket description (`- [x]`) and add a short pointer to the evidence. All boxes are ticked before the ticket moves to Done; one that can't be ticked goes under **Still open**.
 
   Upload images into the comment (Linear MCP `prepare_file_upload`, then PUT, then embed the returned markdown), so they stay with the ticket rather than in chat or a scratch folder. Anything that couldn't be checked is listed as **Still open**, and the ticket stays open until it is. Docs-only pushes to `main` don't need a ticket. `AGENTS.md` repeats this rule for other AI tools and points them here.
-- **`ALL-000` means we agreed no ticket was needed (T63).** When the owner agrees a change doesn't need a ticket, its PR title ends with `(ALL-000)`, which passes the title check and leaves a trail of the choice. `git log --grep ALL-000` lists them all. Claude never decides this alone: the owner has to agree for that change. No ticket means no evidence comment, so the PR body says why it needs no ticket, plus E9's two answers.
+- **When a change needs no ticket (T63, T64).** The test: if it's being finished now and nobody needs to track it, it doesn't need a ticket.
+
+| Situation | What to do |
+|---|---|
+| Small fix made while working on a ticket | Include it in that PR and mention it in the PR body |
+| Standalone touch-up with no real behavior change (copy, styling, typo, small config) | PR title ends with `(ALL-000)` |
+| Docs-only change | Push straight to `main` |
+| Changes behavior, or touches money, auth, data or schema | Ticket |
+| Too big to finish in one sitting, or needs a decision | Ticket |
+| Found now but not being fixed now | Ticket, so it doesn't get lost |
+
+  Agents can use `ALL-000` for touch-ups without asking, and the owner can agree to it for any other change. It passes the title check and leaves a trail: `git log --grep ALL-000` lists every use. No ticket means no evidence comment, so the PR body says why it needs no ticket, plus E9's two answers. If a change fits more than one row, a ticket row wins.
 - **Every PR is attached to its Linear ticket.** Linear's GitHub app links a PR when the branch name or title has the ticket ID. Linear also moves the ticket to In Progress when the PR opens (tested on PR #6).
 - **Read PR feedback before merging (T59).** Everyone does this, people and agents. As soon as a PR is opened or pushed to, read its review comments while CI runs (`gh pr view <n> --json reviews,comments`, and `gh api repos/gifts-af/gift-me/pulls/<n>/comments` for inline ones), so review comments and CI failures get fixed together in one push. Automated reviews count, and they can arrive a minute or two after a push. Read again right before merging. A comment gets a fix, or a reply saying why not; it never just gets ignored.
 - **`Closes` or `Part of`: say `Closes` only if merging finishes the ticket.** `Closes ALL-<n>` makes Linear mark the ticket Done the moment the PR merges. Use it when the PR covers every acceptance criterion and nothing is left but the routine check on production. Write `Part of ALL-<n>` when you already know something will be open after the merge: another PR, a migration still to apply to prod, a check only the owner can do (ALL-71 said `Closes` while the owner still had to test the forms in Gmail, so it closed itself early). `Part of` links the PR without moving the ticket, even with the ID in the branch name (ALL-39's PRs #5, #6, #8). The agent finishing the work moves a `Part of` ticket to Done through Linear once the evidence is posted and nothing is Still open. If a ticket closes and something turns out to be open, the agent moves it back to In Progress and comments why.
