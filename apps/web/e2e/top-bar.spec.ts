@@ -1,7 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { createFreshUser } from "./fresh-user";
 import { phoneLayoutProblems } from "./phone-layout";
-import { TEST_USER } from "./test-user";
 import { signIn } from "./sign-in";
 
 // ALL-95: one bar with Get and Give on every signed-in page.

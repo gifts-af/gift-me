@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import { localSupabase } from "./local-supabase";
 import { SECOND_USER, TEST_USER } from "./test-user";
 import { signIn } from "./sign-in";
