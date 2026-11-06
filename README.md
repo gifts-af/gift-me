@@ -89,6 +89,23 @@ Write new migrations with `pnpm supabase migration new <name>` and test them loc
 
 Where new docs go, how to write them, and when to push straight to `main` versus open a PR are in [CLAUDE.md](CLAUDE.md). Claude reads it automatically, and it's written for people too. Other AI tools read [AGENTS.md](AGENTS.md), which points them to it. The standing rule for everyone: no work without a Linear ticket, and no ticket done without its test evidence posted on it (T44).
 
+## Production test account
+
+To check a change on giftsaf.com while signed in, use **`allensforever711+qa@gmail.com`** (T60). Don't create another account for this, and don't use a real person's.
+
+**How to sign in.** Nobody holds its password. The sign-in form won't work for a script, because the Turnstile bot check keeps its button disabled, so don't try to get around that. Instead, as allensforever711:
+
+1. Get the `service_role` and `anon` keys with `pnpm supabase projects api-keys --project-ref pegtrucfuaaufqvsavpb -o json`. Keep them in memory; never print or commit them.
+2. POST `{ "type": "magiclink", "email": "allensforever711+qa@gmail.com" }` to `/auth/v1/admin/generate_link` with the `service_role` key, and read `hashed_token`.
+3. POST `{ "type": "magiclink", "token_hash": ... }` to `/auth/v1/verify` with the `anon` key to get a session.
+4. Use `createServerClient` from `@supabase/ssr` and `setSession` to turn that session into cookies, then add them to a Playwright browser context for `giftsaf.com`.
+
+**Rules:**
+
+- **Leave it as you found it.** Remove any gifts you added, and check the "You" card reads "Start your wish list". Tests can't assume it's empty if a check failed halfway.
+- **No people, and nothing that buys or emails.** Adding a person can schedule real gift rounds on production, so test those paths locally. If a ticket truly needs them on production, ask the owner first.
+- **Post the result on the ticket**, as a live check (T44).
+
 ## Shared material
 
 - [Roadmap](https://claude.ai/artifact/6D9ycNqhN2yGwvHwsWAaiW): all three products (Gift Concierge, gift lists, scan-to-gift) by now, next and later. Live status is in [Linear projects](https://linear.app/allens-forever/projects).
