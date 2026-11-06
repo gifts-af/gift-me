@@ -151,6 +151,13 @@ The owner's claude.ai account owns the page. To update it, a person needs **edit
 | `perf` | Faster or cheaper, same behavior |
 
   An optional scope names the area: `feat(lists): …`, `fix(db): …`. Add `!` for a breaking change (`feat!: …`).
+- **Start of the day: check Linear first (T65).** In the first session of a person's working day, before any new work, review Linear and tell that person what needs them, as one short list, most important first:
+  - Their tickets that are In Progress, or merged but not Done: tick any acceptance-criteria box whose evidence is already posted, and list the open **Still open** items.
+  - Comments addressed to them since their last session.
+  - Decisions waiting on them (for the owner, any T# still marked pending in `design/decisions.md`).
+  - Urgent tickets that nobody owns.
+
+  Raise anything nobody owns; don't quietly pick it up. Once per person per day, not in every session.
 - **Re-read the ticket before significant work (T57).** Before writing a spec, before writing a plan, before the first line of code, before opening a PR, and whenever you pick work back up after a break, re-fetch the Linear ticket: its description, status, assignee, **every comment**, and its blocking and related tickets (their latest comments too). Others, and other agent sessions, change tickets while you work. If anything changed (new decisions, scope, a blocker, someone else already on it), reconcile it before going on and say what changed. Never work from a copy of the ticket read earlier in the session.
 - **Evidence on the ticket (T44), standard operating procedure.** Work that needs a ticket (see When a change needs no ticket, below) starts from one: if there isn't one, create it first, with acceptance criteria. No ticket is Done until its test evidence is posted on the ticket as a comment, before the PR merges or right after. Evidence means:
   - **Tests:** what was added, that it failed first, and the suite results (counts), plus lint, typecheck and the CI result for the PR.
