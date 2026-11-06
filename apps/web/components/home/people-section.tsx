@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { unstable_rethrow } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { todayForRequest } from "@/lib/today";
 import { listPeople } from "@/modules/concierge";
@@ -11,6 +12,7 @@ export async function PeopleSection() {
   try {
     people = await listPeople(await todayForRequest());
   } catch (error) {
+    unstable_rethrow(error); // Next's end-of-prerender signal isn't a failure (ALL-87).
     console.error("people not loaded", error);
     return <p className="col-span-full text-[15px] text-muted-foreground">We couldn&apos;t load your people. Refresh to try again.</p>;
   }
