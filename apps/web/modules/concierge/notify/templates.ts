@@ -291,9 +291,12 @@ export const TEMPLATES: {
       ? {
           subject: `One of ${d.personName}'s gifts couldn't be bought in time`,
           ...renderEmail({
-            heading: `${d.personName}'s other gift is on its way`,
+            heading: d.partial.onItsWay.length > 0 ? `${d.personName}'s other gift is on its way` : `We cancelled one of ${d.personName}'s gifts`,
             paragraphs: [
-              `We couldn't buy ${giftList(d.partial.cancelled)} for ${d.personName} in time, so we cancelled ${itOrThem(d.partial.cancelled)}. Nothing was charged for ${itOrThem(d.partial.cancelled)}. ${capitalize(giftList(d.partial.onItsWay))} ${d.partial.onItsWay.length > 1 ? "are on their way" : "is on its way"}.`,
+              `We couldn't buy ${giftList(d.partial.cancelled)} for ${d.personName} in time, so we cancelled ${itOrThem(d.partial.cancelled)}. Nothing was charged for ${itOrThem(d.partial.cancelled)}.` +
+                (d.partial.onItsWay.length > 0
+                  ? ` ${capitalize(giftList(d.partial.onItsWay))} ${d.partial.onItsWay.length > 1 ? "are on their way" : "is on its way"}.`
+                  : ""),
             ],
             button: { label: `Open ${d.personName}'s page`, url: links.open },
           }),

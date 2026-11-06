@@ -25,6 +25,8 @@ export type StepKey =
   | `fail:${number}:notice`
   // The deadline email when our own switch (paused) kept the gift from going out.
   | "missed_on_us"
+  // The deadline email when held gifts are cancelled next to one placed or placing.
+  | "held_cancelled"
   // Once per order Zinc confirmed placed (the "ordered" email).
   | `ordered:${string}`;
 

@@ -88,6 +88,12 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
       logEvent("order.sweep_run_failed", { name: err instanceof Error ? err.name : "unknown" });
     }
   }
+  // "Ordered" emails the service refused before (or orders settled by hand) go out now.
+  try {
+    await retryOrderedEmails(deps);
+  } catch (err) {
+    logEvent("order.ordered_retry_failed", { name: err instanceof Error ? err.name : "unknown" });
+  }
 
   const s = await store.scheduleSettings();
   const { created, failed: createFailed } = await createDueRounds(deps, s);
@@ -285,15 +291,16 @@ async function runHeld(claimed: ClaimedRound, deps: EngineDeps, s: ScheduleSetti
 
 /**
  * The deadline for a held round (AC-23 to AC-25). cancel_held cancels what was never sent and
- * says where the round ends up:
- * - skipped: the skipped email, or missed_on_us when our own switch kept it back;
- * - ordered: nothing to say, unless a held gift was cancelled next to one on its way; then
- *   one short email says so (owner);
- * - still unconfirmed: "still confirming".
- * When the outcome is already certain from the orders (nothing placing or unconfirmed), the
- * email goes first and a refusal fails the run, so the next tick tries again before closing
- * (owner: the buyer is always told). Otherwise the round is closed first and the email is
- * best effort; an unconfirmed round stays open, so its email is retried anyway.
+ * says where the round ends up. The buyer is always told, and an email the service refuses is
+ * tried again on the next look, so the round isn't closed until the email that decides what
+ * they hear has gone (owner):
+ * - held gifts next to one placed, placing or unconfirmed: "we cancelled <gift>, nothing was
+ *   charged" goes first, naming the other gift as on its way only once it's placed (a placing
+ *   or unconfirmed one has its own emails);
+ * - nothing placed, placing or unconfirmed: the skipped email (or missed_on_us when our own
+ *   switch kept it back) goes first;
+ * - still unconfirmed after closing: "still confirming". The round stays open, so a refusal is
+ *   retried; when the cancel email went this run, it waits for the next look (one email a run).
  */
 async function closeAtDeadline(round: ClaimedRound, ctx: RoundContext, sent: Set<StepKey>, deps: EngineDeps): Promise<string> {
   const ids = { round_id: round.id, user_id: round.userId };
@@ -301,23 +308,22 @@ async function closeAtDeadline(round: ClaimedRound, ctx: RoundContext, sent: Set
   const placed = ctx.orders.filter((o) => ["placed", "shipped", "delivered", "refunded"].includes(o.status));
   const pending = ctx.orders.some((o) => o.status === "placing" || o.status === "unconfirmed");
   const skipStep: StepKey = round.attentionReason === "paused" ? "missed_on_us" : "skipped";
-  const partial = (coming: RoundOrder[]): Extra => ({
-    partial: { cancelled: held.map((o) => o.title), onItsWay: coming.map((o) => o.title) },
-  });
 
-  if (!pending) {
-    if (placed.length === 0) await sendStep(round, ctx, skipStep, sent, deps);
-    else if (held.length > 0) await sendStep(round, ctx, "skipped", sent, deps, partial(placed));
-    return `deadline:${await deps.store.cancelHeld(round.id)}`;
+  let emailed = false;
+  if (held.length > 0 && (placed.length > 0 || pending)) {
+    const partial = { cancelled: held.map((o) => o.title), onItsWay: placed.map((o) => o.title) };
+    await sendStep(round, ctx, "held_cancelled", sent, deps, { partial });
+    emailed = true;
+  } else if (placed.length === 0 && !pending) {
+    await sendStep(round, ctx, skipStep, sent, deps);
+    emailed = true;
   }
 
   const status = await deps.store.cancelHeld(round.id);
-  if (status === "skipped") {
+  if (status === "skipped" && !emailed) {
+    // A placing order failed while we closed (rare): best effort, the round is closed now.
     if (!(await trySend(round, ctx, skipStep, sent, deps))) logEvent("round_skip_email_failed", ids);
-  } else if (status === "ordered" && held.length > 0) {
-    const coming = ctx.orders.filter((o) => ON_ITS_WAY(o) || o.status === "unconfirmed");
-    if (!(await trySend(round, ctx, "skipped", sent, deps, partial(coming)))) logEvent("round_skip_email_failed", ids);
-  } else if (status === "needs_attention") {
+  } else if (status === "needs_attention" && !emailed) {
     const after = await deps.store.refresh(round);
     if (after.attentionReason === "unconfirmed") {
       const step: StepKey = `hold:${after.holdCount}:deadline`;
@@ -326,6 +332,20 @@ async function closeAtDeadline(round: ClaimedRound, ctx: RoundContext, sent: Set
     }
   }
   return `deadline:${status}`;
+}
+
+/**
+ * The rounds with an order Zinc placed whose "ordered" email hasn't gone (a refused send is
+ * forgotten): the tick sends them again, so the buyer is always told (owner).
+ */
+export async function retryOrderedEmails(deps: EngineDeps): Promise<void> {
+  for (const roundId of await deps.store.roundsMissingOrderedEmail()) {
+    try {
+      await tellOrdered(roundId, deps);
+    } catch (err) {
+      logEvent("order.ordered_email_failed", { round_id: roundId, error: err instanceof Error ? err.name : "unknown", alert: true });
+    }
+  }
 }
 
 /**
@@ -559,6 +579,7 @@ async function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundContext, 
         },
         notifyDeps,
       );
+    case "held_cancelled":
     case "skipped":
       // A money-path round at its deadline: the buyer had chosen a gift (ALL-32).
       return notify(

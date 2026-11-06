@@ -135,6 +135,8 @@ export interface RoundStore {
   markHoldEmailed(roundId: string, reason: AttentionReason, balanceCents: number | null): Promise<void>;
   /** Paid features on and Zinc connected: only then is the wallet read (AC-11). */
   canBuy(userId: string): Promise<boolean>;
+  /** Rounds still open or ordered with a placed order whose `ordered:<id>` email isn't recorded. */
+  roundsMissingOrderedEmail(): Promise<string[]>;
 }
 
 const SCHEDULE_KEYS: Record<keyof ScheduleSettings, string> = {
@@ -438,6 +440,26 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
       if (balanceCents === null) return;
       const balance = await concierge.rpc("set_emailed_balance", { p_round_id: roundId, p_cents: balanceCents });
       if (balance.error) fail("Saving the emailed balance failed", balance.error);
+    },
+
+    async roundsMissingOrderedEmail() {
+      // Bounded to rounds that aren't finished: ordered or still needing the buyer.
+      const { data: orders, error } = await concierge
+        .from("orders")
+        .select("id, round_id, gift_rounds!inner(status)")
+        .in("status", ["placed", "shipped", "delivered"])
+        .in("gift_rounds.status", ["ordered", "needs_attention"]);
+      if (error) fail("Loading placed orders failed", error);
+      if (!orders.length) return [];
+      const roundIds = [...new Set(orders.map((o) => o.round_id))];
+      const { data: sends, error: sendsError } = await concierge
+        .from("round_sends")
+        .select("step")
+        .in("round_id", roundIds)
+        .like("step", "ordered:%");
+      if (sendsError) fail("Loading the ordered emails failed", sendsError);
+      const told = new Set(sends.map((s) => s.step));
+      return [...new Set(orders.filter((o) => !told.has(`ordered:${o.id}`)).map((o) => o.round_id))];
     },
 
     async canBuy(userId) {

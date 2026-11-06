@@ -301,6 +301,14 @@ describe("skipped, partly (a held gift cancelled at the deadline next to one on 
     );
     expect(mail.text).not.toContain("No gift");
   });
+
+  it("says nothing about a gift that isn't confirmed yet", () => {
+    const s = SAMPLE_DATA.skipped;
+    const mail = TEMPLATES.skipped({ ...s.data, held: true, partial: { cancelled: ["Linen apron"], onItsWay: [] } }, s.links);
+    expect(mail.text).toContain("We cancelled one of Mom's gifts");
+    expect(mail.text).toContain("so we cancelled it. Nothing was charged for it.");
+    expect(mail.text).not.toContain("on its way");
+  });
 });
 
 describe("heads_up funding warning (AC-11)", () => {

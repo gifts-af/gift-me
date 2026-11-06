@@ -205,4 +205,7 @@ export class FakeRoundStore implements RoundStore {
   async canBuy() {
     return this.canBuyResult;
   }
+  async roundsMissingOrderedEmail() {
+    return [];
+  }
 }

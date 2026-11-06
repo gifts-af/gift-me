@@ -461,6 +461,28 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     expect(zinc.posts).toHaveLength(1);
   });
 
+  it("the sweep tells the buyer about a failure at once, and a failing email never undoes a settlement", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    zinc.plan.set(urlOf(r.ideaIds[0]), ["timeout"]);
+    await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps());
+    const [a] = await orders(r.roundId);
+    zinc.orders.set(a.id, { id: "zn_gone", status: "failed", job_result: { success: false, error_type: "out_of_stock" } } as never);
+    advanceRound.mockClear();
+    const later = new Date(Date.now() + 31 * 60_000);
+    await sweepStalePlacing(deps({ now: later }));
+    expect(advanceRound).toHaveBeenCalledWith(r.roundId);
+
+    const v = await newRound(u);
+    zinc.plan.set(urlOf(v.ideaIds[0]), ["timeout"]);
+    await approveAndBuy({ userId: u.userId, roundId: v.roundId, ideaIds: v.ideaIds }, deps());
+    const [b] = await orders(v.roundId);
+    zinc.orders.set(b.id, { id: "zn_ok", status: "order_placed", job_result: { success: true } });
+    const orderPlaced = vi.fn(async () => Promise.reject(new Error("email down")));
+    expect(await sweepStalePlacing(deps({ now: later, orderPlaced }))).toBeGreaterThanOrEqual(1);
+    expect((await orders(v.roundId))[0]).toMatchObject({ status: "placed" });
+  });
+
   it("the sweep never resends: an order Zinc doesn't know is unconfirmed; one still processing is left alone", async () => {
     const u = await newUser();
     const r = await newRound(u, { totals: [4200, 5000] });
