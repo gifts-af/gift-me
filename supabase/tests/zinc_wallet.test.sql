@@ -4,7 +4,7 @@
 -- The two-connection races are in apps/web/modules/concierge/__tests__/placing-race.test.ts.
 begin;
 \ir _helpers.psql
-select plan(114);
+select plan(131);
 
 -- ─── fixtures ───────────────────────────────────────────────────────────────
 
@@ -111,6 +111,7 @@ select throws_ok('select hold_reason from concierge.orders', '42501', null, 'use
 select lives_ok('select over_budget_pct, paid_features from concierge.accounts', 'users still read their own settings');
 select lives_ok('select id, status, budget_cents from concierge.gift_rounds', 'users still read their rounds');
 select throws_ok($q$update concierge.accounts set buyer_phone = '5555550199'$q$, '42501', null, 'users can''t set buyer_phone');
+select throws_ok('delete from concierge.accounts', '42501', null, 'users can''t delete their account row (it would drop the Vault secrets)');
 select tests.reset_role();
 
 select is(
@@ -432,6 +433,103 @@ select person_id as p16 from concierge.gift_rounds where id = :'r16' \gset
 select concierge.skip_open_rounds(:'p16', null);
 select is(tests.zw_state(:'r16'), 'ordered/-', 'skip_open_rounds with one placed and one held → ordered');
 select is((select status from concierge.orders where id = :'r16_held'), 'cancelled', '... the held one is cancelled');
+
+-- ─── a closed round stays closed ───────────────────────────────────────────
+
+-- The buyer cancels while some orders are in flight; their outcomes then come back.
+select tests.zw_round(:'a', 'needs_attention') as r18 \gset
+select tests.zw_order(:'r18', 'placing') as r18_short \gset
+select tests.zw_order(:'r18', 'placing') as r18_unsent \gset
+select tests.zw_order(:'r18', 'placing') as r18_badaddr \gset
+select tests.zw_order(:'r18', 'held', 'funds') as r18_held \gset
+select is(concierge.cancel_held(:'r18', 'cancel')::text, 'ordered', 'a cancel with orders in flight → ordered');
+select concierge.record_outcomes(:'r18', jsonb_build_array(
+  jsonb_build_object('order_id', :'r18_short', 'outcome', 'insufficient', 'available_cents', 0),
+  jsonb_build_object('order_id', :'r18_unsent', 'outcome', 'unsent')));
+select concierge.settle_order(:'a', :'r18_badaddr', 'failed', 'invalid_shipping_address', null);
+select is((select count(*)::int from concierge.orders where round_id = :'r18' and status = 'held'), 0,
+  'after a cancel, a 402, an unsent order or a bad address never re-holds anything');
+select is((select count(*)::int from concierge.orders where round_id = :'r18'), 4, '... and no replacement order is added');
+select results_eq(
+  format($q$select failure_type from concierge.orders where id in (%L, %L)$q$, :'r18_short', :'r18_unsent'),
+  $q$values ('round_closed'::text), ('round_closed')$q$,
+  'the late 402 and the unsent order are cancelled as round_closed');
+select is(tests.zw_state(:'r18'), 'skipped/-', 'nothing got past held, so the round is skipped with no hold reason');
+
+-- The person is deleted while an order is placing; then Zinc answers 402.
+select tests.zw_round(:'a', 'ordered') as r19 \gset
+select tests.zw_order(:'r19', 'placing') as r19_o \gset
+select person_id as p19 from concierge.gift_rounds where id = :'r19' \gset
+select tests.reset_role();
+update public.people set deleted_at = now() where id = :'p19';
+select tests.act_as_server();
+select is(tests.zw_state(:'r19'), 'ordered/-', 'deleting the person leaves an in-flight round ordered');
+select isnt((select closed_at from concierge.gift_rounds where id = :'r19'), null, '... but closes it');
+select concierge.record_outcomes(:'r19', jsonb_build_array(
+  jsonb_build_object('order_id', :'r19_o', 'outcome', 'insufficient', 'available_cents', 0)));
+select is((select status || '/' || failure_type from concierge.orders where id = :'r19_o'), 'cancelled/round_closed',
+  'person deleted, then a 402 → cancelled, not held');
+select is(tests.zw_state(:'r19'), 'skipped/-', '... and the round is skipped with no hold');
+
+-- Nothing places, approves or re-approves on a closed round.
+select tests.zw_round(:'a', 'needs_attention') as r20 \gset
+select tests.zw_order(:'r20', 'held', 'retry') as r20_o \gset
+select concierge.reconcile_round(:'r20');
+select tests.zw_lease(:'r20') as r20_lock \gset
+select tests.reset_role();
+update concierge.gift_rounds set closed_at = now() where id = :'r20';
+select tests.act_as_server();
+select is((select count(*)::int from concierge.begin_placing(:'r20', :'r20_lock', current_date,
+    format('[{"id": "%s", "max_price_cents": 4500}]', :'r20_o')::jsonb)), 0, 'begin_placing refuses a closed round');
+select tests.zw_round(:'a', 'awaiting_approval') as r21 \gset
+select tests.zw_idea(:'r21') as r21_idea \gset
+select tests.zw_lease(:'r21') as r21_lock \gset
+select tests.reset_role();
+update concierge.gift_rounds set closed_at = now() where id = :'r21';
+select tests.act_as_server();
+select throws_ok(
+  format($q$select * from concierge.approve_round(%L, %L, %L, %L)$q$, :'r21', :'a', :'r21_lock',
+    format('[{"idea_id": "%s", "max_price_cents": 1, "fee_cents": 100, "ship_to": "buyer", "address": {}}]', :'r21_idea')),
+  'P0001', null, 'approve_round refuses a closed round');
+
+-- ─── gate precedence and claimed list picks ────────────────────────────────
+
+select tests.zw_round(:'a', 'needs_attention') as r22 \gset
+select tests.zw_order(:'r22', 'held', 'address') as r22_o \gset
+select concierge.reconcile_round(:'r22');
+select tests.zw_lease(:'r22') as r22_lock \gset
+select tests.reset_role();
+update concierge.app_settings set value = '0' where key = 'zinc_ordering_enabled';
+select tests.act_as_server();
+select is((select count(*)::int from concierge.begin_placing(:'r22', :'r22_lock', current_date,
+    format('[{"id": "%s", "max_price_cents": 4500}]', :'r22_o')::jsonb)), 0, 'the kill switch places nothing');
+select is(tests.zw_state(:'r22'), 'needs_attention/address', 'an address hold stays address when the kill switch is off');
+select tests.reset_role();
+update concierge.app_settings set value = '1' where key = 'zinc_ordering_enabled';
+
+insert into lists.list_items (list_id, position, name, price_cents) values (:'list_id', 1, 'Lamp', 3000) returning id as item2 \gset
+insert into lists.gift_claims (item_id, claimer_id, claimer_name) values (:'item2', :'b', 'Bea');
+select tests.zw_round(:'a', 'awaiting_approval') as r23 \gset
+select tests.zw_idea(:'r23', :'item2') as r23_idea \gset
+select tests.zw_lease(:'r23') as r23_lock \gset
+select tests.act_as_server();
+select throws_ok(
+  format($q$select * from concierge.approve_round(%L, %L, %L, %L)$q$, :'r23', :'a', :'r23_lock',
+    format('[{"idea_id": "%s", "max_price_cents": 3000, "fee_cents": 100, "ship_to": "buyer",
+              "address": {"recipient_first_name": "A", "recipient_last_name": "B", "address_line1": "1 Elm",
+                          "city": "Akron", "state": "OH", "zip": "44301", "country": "US"}}]', :'r23_idea')),
+  'P0001', 'approve_round: claimed', 'approve_round refuses a list pick someone else claimed');
+
+-- List claims are written only through the definer functions.
+select tests.reset_role();
+select is(
+  (select count(*)::int from (values ('anon'), ('authenticated')) r(role),
+          (values ('INSERT'), ('UPDATE'), ('DELETE'), ('TRUNCATE')) p(priv)
+    where has_table_privilege(r.role, 'lists.gift_claims', p.priv)),
+  0, 'visitors and signed-in users can''t write list claims (or set for_order)');
+select ok(not has_column_privilege('authenticated', 'lists.gift_claims', 'for_order', 'UPDATE')
+          and not has_column_privilege('anon', 'lists.gift_claims', 'for_order', 'INSERT'), '... column by column either');
+select tests.act_as_server();
 
 -- ─── lookups ───────────────────────────────────────────────────────────────
 

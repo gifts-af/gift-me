@@ -342,6 +342,7 @@ export type Database = {
           attempts: number;
           attention_reason: string | null;
           budget_cents: number | null;
+          closed_at: string | null;
           created_at: string;
           emailed_balance_cents: number | null;
           heads_up_on: string | null;
@@ -367,6 +368,7 @@ export type Database = {
           attempts?: number;
           attention_reason?: string | null;
           budget_cents?: number | null;
+          closed_at?: string | null;
           created_at?: string;
           emailed_balance_cents?: number | null;
           heads_up_on?: string | null;
@@ -391,6 +393,7 @@ export type Database = {
           attempts?: number;
           attention_reason?: string | null;
           budget_cents?: number | null;
+          closed_at?: string | null;
           created_at?: string;
           emailed_balance_cents?: number | null;
           heads_up_on?: string | null;
@@ -1082,6 +1085,7 @@ export type Database = {
           attempts: number;
           attention_reason: string | null;
           budget_cents: number | null;
+          closed_at: string | null;
           created_at: string;
           emailed_balance_cents: number | null;
           heads_up_on: string | null;
@@ -1115,6 +1119,7 @@ export type Database = {
           attempts: number;
           attention_reason: string | null;
           budget_cents: number | null;
+          closed_at: string | null;
           created_at: string;
           emailed_balance_cents: number | null;
           heads_up_on: string | null;
@@ -1148,6 +1153,7 @@ export type Database = {
           attempts: number;
           attention_reason: string | null;
           budget_cents: number | null;
+          closed_at: string | null;
           created_at: string;
           emailed_balance_cents: number | null;
           heads_up_on: string | null;
@@ -1208,6 +1214,7 @@ export type Database = {
           attempts: number;
           attention_reason: string | null;
           budget_cents: number | null;
+          closed_at: string | null;
           created_at: string;
           emailed_balance_cents: number | null;
           heads_up_on: string | null;

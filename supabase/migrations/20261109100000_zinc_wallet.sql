@@ -63,7 +63,11 @@ alter table concierge.gift_rounds
   add column last_emailed_reason text check (last_emailed_reason in ('funds', 'setup', 'address', 'unconfirmed')),
   -- The wallet balance the last check saw, and the one the user was last emailed about.
   add column seen_balance_cents integer check (seen_balance_cents >= 0),
-  add column emailed_balance_cents integer check (emailed_balance_cents >= 0);
+  add column emailed_balance_cents integer check (emailed_balance_cents >= 0),
+  -- Set when the buyer cancels, the deadline passes, or the person or occasion
+  -- goes away. From then on nothing in the round is held, re-held, replaced
+  -- or placed again; only what may already be at Zinc still settles.
+  add column closed_at timestamptz;
 
 -- ─── accounts ───────────────────────────────────────────────────────────────
 
@@ -80,6 +84,12 @@ alter table concierge.accounts
 -- hold_count. Signed-in users keep reading the columns they could before;
 -- select is now granted column by column, so a column added later is hidden
 -- until a migration grants it.
+
+-- Users never delete their account row: that would drop the Vault secrets
+-- (on_account_deleted) and strand placing orders, going round zinc_forget's
+-- refusal. Disconnect is zinc_forget; deleting the user cascades as the server.
+revoke delete on concierge.accounts from authenticated;
+drop policy "Owner can delete" on concierge.accounts;
 
 revoke select on concierge.accounts from authenticated;
 grant select (user_id, over_budget_pct, notification_prefs, funding_mode, zinc_api_key_secret_id, zinc_webhook_secret_id,
@@ -125,6 +135,12 @@ grant all on concierge.zinc_connect_attempts to service_role;
 -- release never removes a claim someone made by hand.
 
 alter table lists.gift_claims add column for_order boolean not null default false;
+
+-- Claims are written only through definer functions (claim_gift,
+-- unclaim_gift, and the two below). RLS has no policies, but the table still
+-- carried full write grants for anon and authenticated, including TRUNCATE,
+-- which RLS doesn't stop. Take the writes away.
+revoke insert, update, delete, truncate on lists.gift_claims from anon, authenticated;
 
 create function lists.claim_for_order(p_item_id uuid, p_user_id uuid)
 returns boolean
@@ -202,6 +218,7 @@ declare
   v_failed text;
   v_held text;
   v_placed boolean;
+  v_ctx text;
 begin
   if p_context is not null and p_context not in ('cancel', 'deadline') then
     raise exception 'Unknown reconcile context %', p_context using errcode = '22023';
@@ -215,10 +232,14 @@ begin
     return r.status;
   end if;
 
-  if p_context is not null then
+  -- A closed round is always reconciled as closing: a hold that turns up
+  -- after the close (it shouldn't) is cancelled, never emailed or placed.
+  v_ctx := coalesce(p_context, case when r.closed_at is not null then 'closed' end);
+
+  if v_ctx is not null then
     update concierge.orders
        set status = 'cancelled',
-           failure_type = case p_context when 'deadline' then 'held_expired' else 'cancelled' end
+           failure_type = case v_ctx when 'deadline' then 'held_expired' when 'cancel' then 'cancelled' else 'round_closed' end
      where round_id = p_round_id and status = 'held';
     update concierge.orders
        set resolved = true
@@ -270,7 +291,7 @@ begin
     v_status := 'ordered';
   elsif v_placed then
     v_status := 'ordered';
-  elsif p_context is not null then
+  elsif v_ctx is not null then
     v_status := 'skipped';
   else
     -- Nothing on the money path yet (or any more): leave the round as it is.
@@ -300,7 +321,8 @@ begin
      set status = v_status,
          attention_reason = v_reason,
          hold_count = v_hold_count,
-         next_action_at = v_next
+         next_action_at = v_next,
+         closed_at = case when p_context is not null then coalesce(closed_at, now()) else closed_at end
    where id = p_round_id;
   return v_status;
 end;
@@ -411,8 +433,8 @@ begin
   if r.locked_until is distinct from p_lock then
     raise exception 'approve_round: lease not held' using errcode = 'P0001';
   end if;
-  if r.status <> 'awaiting_approval' then
-    raise exception 'approve_round: round is %', r.status using errcode = 'P0001';
+  if r.status <> 'awaiting_approval' or r.closed_at is not null then
+    raise exception 'approve_round: round is % (closed: %)', r.status, r.closed_at is not null using errcode = 'P0001';
   end if;
   if jsonb_typeof(p_orders) <> 'array' or jsonb_array_length(p_orders) = 0 then
     raise exception 'approve_round: no orders' using errcode = 'P0001';
@@ -427,6 +449,14 @@ begin
                            where i.id = (e ->> 'idea_id')::uuid and i.round_id = p_round_id and i.user_id = p_user_id))
      or (select count(distinct e ->> 'idea_id') from jsonb_array_elements(p_orders) e) <> jsonb_array_length(p_orders) then
     raise exception 'approve_round: an idea isn''t this round''s' using errcode = 'P0001';
+  end if;
+  -- A list pick someone else already claimed isn't bought too (AC-28).
+  if exists (select 1
+               from jsonb_array_elements(p_orders) e
+               join concierge.gift_ideas i on i.id = (e ->> 'idea_id')::uuid
+               join lists.gift_claims c on c.item_id = i.list_item_id
+              where c.claimer_id is distinct from p_user_id) then
+    raise exception 'approve_round: claimed' using errcode = 'P0001';
   end if;
 
   for v_el in select * from jsonb_array_elements(p_orders) loop
@@ -488,7 +518,8 @@ begin
      or not exists (select 1 from concierge.orders where round_id = p_round_id and status = 'held')
      or exists (select 1 from public.people where id = r.person_id and deleted_at is not null)
      or not exists (select 1 from concierge.occasions where id = r.occasion_id and enabled and deleted_at is null)
-     or not (p_today < r.ship_by_deadline) then
+     or not (p_today < r.ship_by_deadline)
+     or r.closed_at is not null then
     return;
   end if;
 
@@ -518,7 +549,13 @@ begin
     v_gate := 'setup';
   end if;
   if v_gate is not null then
-    update concierge.orders set hold_reason = v_gate where round_id = p_round_id and status = 'held';
+    -- Only a reason the gate outranks is replaced: an address or funds hold
+    -- keeps telling the buyer what to fix (reconcile's hold order).
+    update concierge.orders
+       set hold_reason = v_gate
+     where round_id = p_round_id and status = 'held'
+       and array_position(array['address', 'setup', 'funds', 'not_allowed', 'paused', 'retry'], hold_reason)
+         > array_position(array['address', 'setup', 'funds', 'not_allowed', 'paused', 'retry'], v_gate);
     perform concierge.reconcile_round(p_round_id);
     return;
   end if;
@@ -576,6 +613,7 @@ begin
    where id = p_order.id;
 
   if p_failure_type = 'invalid_shipping_address'
+     and not exists (select 1 from concierge.gift_rounds where id = p_order.round_id and closed_at is not null)
      and not exists (select 1 from concierge.orders
                       where idea_id = p_order.idea_id and status not in ('failed', 'cancelled', 'refunded')) then
     insert into concierge.orders (user_id, round_id, idea_id, provider, funding_mode, max_price_cents, is_gift, gift_message,
@@ -627,8 +665,9 @@ as $$
 declare
   v_el jsonb;
   v_order concierge.orders;
+  v_closed boolean;
 begin
-  perform 1 from concierge.gift_rounds where id = p_round_id for update;
+  select closed_at is not null into v_closed from concierge.gift_rounds where id = p_round_id for update;
   if not found then
     return null;
   end if;
@@ -644,7 +683,18 @@ begin
         update concierge.orders
            set provider_order_id = coalesce(v_el ->> 'provider_order_id', provider_order_id)
          where id = v_order.id;
-      when 'insufficient' then
+      when 'insufficient', 'unsent' then
+        if v_closed then
+          -- Nothing was bought, and the round was cancelled or closed meanwhile:
+          -- the order is never held again.
+          update concierge.orders set status = 'cancelled', failure_type = 'round_closed' where id = v_order.id;
+          continue;
+        end if;
+        if v_el ->> 'outcome' = 'unsent' then
+          -- Never POSTed, so it keeps its key.
+          update concierge.orders set status = 'held', hold_reason = 'retry' where id = v_order.id;
+          continue;
+        end if;
         -- A 402 created nothing at Zinc, so a fresh key keeps a cached 402 from blocking the retry.
         update concierge.orders
            set status = 'held', hold_reason = 'funds', idempotency_key = gen_random_uuid()
@@ -652,9 +702,6 @@ begin
         if v_el ? 'available_cents' then
           update concierge.gift_rounds set seen_balance_cents = (v_el ->> 'available_cents')::integer where id = p_round_id;
         end if;
-      when 'unsent' then
-        -- Never POSTed, so it keeps its key.
-        update concierge.orders set status = 'held', hold_reason = 'retry' where id = v_order.id;
       when 'rejected' then
         perform concierge.fail_order_row(v_order, coalesce(v_el ->> 'failure_type', 'failed'));
       when 'unknown' then
@@ -789,6 +836,9 @@ begin
   if not found or r.user_id is distinct from p_user_id or r.locked_until is distinct from p_lock then
     raise exception 'reapprove_order: lease not held' using errcode = 'P0001';
   end if;
+  if r.closed_at is not null then
+    raise exception 'reapprove_order: round is closed' using errcode = 'P0001';
+  end if;
   select * into v_old from concierge.orders
    where id = p_order_id and round_id = p_round_id and user_id = p_user_id
      and status = 'failed' and failure_type = 'price_up' and not resolved
@@ -814,12 +864,13 @@ begin
 end;
 $$;
 
--- Same signature as before; now runs each open round through the money-path
--- rule, by id, under its lock. Held orders are cancelled; a round with a gift
--- on its way becomes ordered instead of skipped. An ordered round is only
--- looked at when it still has held orders (one sent, one waiting), and is
--- otherwise left as it was. A skipped round's lease is cleared as before, so
--- an engine run that held it can't finish over the skip.
+-- Same signature as before; now runs each open or ordered round through the
+-- money-path rule, by id, under its lock, and closes it. Held orders are
+-- cancelled; a round with a gift on its way becomes ordered instead of
+-- skipped, and stays closed, so a late 402 can't re-hold anything. An ordered
+-- round with no held orders keeps its status and is only marked closed. A
+-- skipped round's lease is cleared as before, so an engine run that held it
+-- can't finish over the skip.
 create or replace function concierge.skip_open_rounds(p_person_id uuid, p_occasion_id uuid)
 returns void
 language plpgsql
@@ -828,16 +879,19 @@ set search_path = ''
 as $$
 declare
   v_id uuid;
+  v_status concierge.round_status;
 begin
   for v_id in
     select id from concierge.gift_rounds
      where (person_id = p_person_id or occasion_id = p_occasion_id)
-       and (status in ('scheduled', 'generating', 'awaiting_approval', 'needs_address', 'needs_attention')
-            or (status = 'ordered'
-                and exists (select 1 from concierge.orders o where o.round_id = gift_rounds.id and o.status = 'held')))
+       and status in ('scheduled', 'generating', 'awaiting_approval', 'needs_address', 'needs_attention', 'ordered')
      order by id
   loop
-    if concierge.cancel_held(v_id, 'deadline') = 'skipped' then
+    select status into v_status from concierge.gift_rounds where id = v_id for update;
+    if v_status = 'ordered'
+       and not exists (select 1 from concierge.orders where round_id = v_id and status = 'held') then
+      update concierge.gift_rounds set closed_at = coalesce(closed_at, now()) where id = v_id;
+    elsif concierge.cancel_held(v_id, 'deadline') = 'skipped' then
       update concierge.gift_rounds set locked_until = null where id = v_id;
     end if;
   end loop;
