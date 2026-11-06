@@ -54,14 +54,10 @@ export function lookaheadCents(rounds: LookaheadRound[], feeCents: number): { ce
 
 /**
  * A wallet balance worth suggesting: enough for the largest budget and one
- * fee. An order never costs more than the budget, so the margin can't push
- * past it; it is checked here so a bad setting shows up early. `null` with
- * no budget to go on.
+ * fee. An order never costs more than the budget, so no margin is needed.
+ * `null` with no budget to go on.
  */
-export function suggestedMinimumCents(largestBudgetCents: number | null, marginPct: number, feeCents: number): number | null {
-  if (!Number.isFinite(marginPct) || marginPct < 0) {
-    throw new RangeError(`Margin percent must be 0 or more; got ${marginPct}`);
-  }
+export function suggestedMinimumCents(largestBudgetCents: number | null, feeCents: number): number | null {
   checkCents(feeCents, "Fee");
   if (largestBudgetCents === null) return null;
   checkCents(largestBudgetCents, "Budget");

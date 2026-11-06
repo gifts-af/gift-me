@@ -38,7 +38,7 @@ select set_eq(
     'guided_questions_max', 'guided_answer_max_facts', 'readiness_points_interests', 'readiness_points_wants',
     'readiness_points_avoid', 'readiness_points_sizes', 'readiness_points_brands', 'readiness_points_owns',
     'readiness_points_own_list', 'readiness_ready_pct', 'readiness_meter_enabled',
-    'capture_read_estimate_cents'
+    'capture_read_estimate_cents', 'hold_reminder_days', 'hold_final_days'
   ],
   'every fee, limit, default and schedule setting is seeded'
 );

@@ -104,6 +104,8 @@ const SCHEDULE_KEYS: Record<keyof ScheduleSettings, string> = {
   reminder2BeforeDeadlineDays: "reminder_2_before_deadline_days",
   finalNoticeBeforeDeadlineDays: "final_notice_before_deadline_days",
   fastestDaysToArrive: "fastest_days_to_arrive",
+  holdReminderDays: "hold_reminder_days",
+  holdFinalDays: "hold_final_days",
 };
 
 type RoundDbRow = {

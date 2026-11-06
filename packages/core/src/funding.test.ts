@@ -49,10 +49,10 @@ describe("lookaheadCents", () => {
 
 describe("suggestedMinimumCents", () => {
   it("is the largest budget plus one fee", () => {
-    expect(suggestedMinimumCents(10000, 10, 100)).toBe(10100);
+    expect(suggestedMinimumCents(10000, 100)).toBe(10100);
   });
 
   it("is null with no budget to go on", () => {
-    expect(suggestedMinimumCents(null, 10, 100)).toBeNull();
+    expect(suggestedMinimumCents(null, 100)).toBeNull();
   });
 });
