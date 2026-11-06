@@ -50,7 +50,7 @@ Numbered E1–E10 (E for engineering), so they never get mixed up with the PRD's
 **E9. Value is realized at the user, not at merge.** Merged isn't done. A ticket is done when the change is on production, its events show it working, and it can be rolled back or switched off (E7). Every PR answers two questions: *how will we see this working on production?* and *how do we turn it off?* After merging, the author checks it on production and notes the result on the ticket, reopening the ticket if the check fails. Until real users arrive, "in users' hands" means it works for us on production.
 *Breaks it:* a PR that can't answer those two questions.
 
-**E10. Commands are discoverable, and local matches CI.** Every repeatable action is a root `pnpm` script listed in one table in `design/operations.md`. CI runs those same scripts and nothing else: no CI-only shell logic, no hidden arguments. A new contributor should be able to list every command in 30 seconds.
+**E10. Commands are discoverable, and local matches CI.** Every repeatable action is a root `pnpm` script listed in one place, `design/operations.md`. CI runs those same scripts and nothing else: no CI-only shell logic, no hidden arguments. A new contributor should be able to list every command in 30 seconds.
 *Breaks it:* a CI step with inline shell, or a command that needs undocumented flags or env vars.
 
 ## Superpowers is required

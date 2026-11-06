@@ -43,6 +43,8 @@ We're early and opening up to friends and family first. [Request access](https:/
 
 Made by Jim and Aaron.
 
+**How it's built:** [technical design](design/technical-design.md) · [decisions log](design/decisions.md) · [engineering docs](design/operations.md)
+
 **Joining the team?** Open [Claude Code](https://claude.com/claude-code) and paste this. It takes it from there.
 
 ```
