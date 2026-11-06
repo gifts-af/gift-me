@@ -41,7 +41,7 @@ We're early and opening up to friends and family first. [Request access](https:/
 
 ---
 
-Made by Jim and Aaron.
+Made by [Jim](https://www.linkedin.com/in/ja-james-allen/) and [Aaron](https://www.linkedin.com/in/aarontallen/).
 
 **How it's built:** [technical design](design/technical-design.md) · [decisions log](design/decisions.md) · [engineering docs](design/operations.md)
 
