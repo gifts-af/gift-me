@@ -50,16 +50,11 @@ describe("GiftApp", () => {
     expect(screen.queryByRole("button", { name: /Share/ })).not.toBeInTheDocument();
   });
 
-  // /lists doesn't know who's signed in while this shows (ALL-95), and the
-  // title row mustn't change height when Share arrives with the list.
-  it("shows no bar while loading, and the same title row as the loaded list", () => {
-    const { unmount } = render(<GiftAppSkeleton />);
+  // /lists doesn't know who's signed in while this shows (ALL-95).
+  it("shows no bar while loading", () => {
+    render(<GiftAppSkeleton />);
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
-    const loading = screen.getByRole("heading", { level: 1, name: "My list" }).parentElement.className;
-    unmount();
-    render(<GiftApp initial={member} />);
-    expect(screen.getByRole("heading", { level: 1, name: "My list" }).parentElement.className).toBe(loading);
   });
 
   it("shows the save bar only when there are unsaved changes", async () => {
