@@ -118,7 +118,10 @@ None for the owner. Facts to check while building are marked **[Verify]**, inclu
 | Alpha money notice in hold emails | **[Claude's call]** Yes, one line | Planning 53: adding funds now triggers a purchase |
 | Email look | Today's shell | Owner chose A |
 | List pick claimed when? | At approval; released if cancelled or it expires | Owner, 2026-11-06: stops a friend claiming it while yours waits for funds |
-| Order we can't confirm with Zinc | Flagged for the owner (`unconfirmed`), never resent automatically, and the user isn't told "nothing bought" | Owner, 2026-11-06 |
+| Order we can't confirm with Zinc | Never resent automatically. The owner is alerted (`order.unconfirmed` event, for the health email and a future support dashboard), **and the customer is emailed** that we're confirming the gift with the store, then again at the deadline if it's still unsettled. Never a "nothing bought" email while it's unknown | Owner, 2026-11-06: customers always get the information about their purchase |
+| Re-approve after "price went up" | ALL-30 provides `reapprove_order`; ALL-29 builds the button | Owner, 2026-11-06 |
+| Gifts held because paid features were off | Bought automatically if the flag comes back on, **only if they can still arrive in time** | Owner, 2026-11-06 |
+| Every held gift, before placing | Re-checked with `canArriveInTime` (its delivery range from today against the occasion and the safety buffer). If it can't arrive in time, it isn't bought: the round gets `too_late` and the customer is emailed | Owner, 2026-11-06 ("as long as the recipient gets it on time") |
 | Zinc down when buying | Quick retries with backoff (3 tries, about 1 s, 2 s, then 4 s, looking up the order before each resend with the same key), then daily retries; the user is told only if it's still failing at the final reminder | Owner, 2026-11-06 (backoff asked for by the owner) |
 | How it's built | A fresh agent per task, then a fresh adversarial reviewer per task | Owner, 2026-11-06 |
 | Card declined on the 2nd of two gifts (auto top-up on) | Keep the first, hold the second | Owner, 2026-11-06. Zinc tops up per order, so "hold all" can't be enforced there |
@@ -185,12 +188,12 @@ None for the owner. Facts to check while building are marked **[Verify]**, inclu
 - **Lock order:** every function first looks up the `round_id` and locks the round row, then orders, then the account. Rounds are locked by id when there are several. `settle_order` too. No function locks person or occasion rows; it only reads them.
 - **Products:** all code is in `modules/concierge`, except one new function exported from `modules/lists/index.ts` (T19).
 - **Migrations are expand-only (E7).** `finish_round` and `claim_round` are left exactly as they are.
-- **Copy:** from the approved mock-ups. No short leftover wraps (`design/ui.md`). New email kinds not yet mocked up (`hold_address`, `hold_trouble`) are shown to the owner as mock-ups before Task 7 merges.
+- **Copy:** from the approved mock-ups. No short leftover wraps (`design/ui.md`). New email kinds not yet mocked up (`hold_address`, `hold_trouble`, `hold_unconfirmed`, `too_late`) are shown to the owner as mock-ups before Task 7 merges.
 
 ### How `reconcile_round` decides
 
 Order holds are kept per order in `orders.hold_reason`:
-- `funds`, `setup` and `address` are emailed.
+- `funds`, `setup` and `address` are emailed, and so is the round reason `unconfirmed`.
 - `paused`, `not_allowed` and `retry` are retried without an email. `retry` also covers "just approved".
 
 `unconfirmed` is an **order status**, not a hold. It's live. It's never cancelled by `cancel_held`, `settle_order` accepts it, it blocks `zinc_forget`, and it flags the round for the owner.
@@ -201,7 +204,7 @@ Order holds are kept per order in `orders.hold_reason`:
 | Live orders in the round | Round status | `attention_reason` |
 |---|---|---|
 | Any `placing` | `ordered` | null |
-| Any `unconfirmed` | `needs_attention` | `unconfirmed` (owner only, no user email) |
+| Any `unconfirmed` | `needs_attention` | `unconfirmed` (emailed: "we're confirming it with the store"; owner alerted) |
 | Any `failed`, not resolved | `needs_attention` | that failure (`price_up`, `out_of_stock`, `failed`) |
 | Any `held` | `needs_attention` | the highest-priority hold: `address` > `setup` > `funds` > `not_allowed` > `paused` > `retry` |
 | Any `placed` or later | `ordered` | null |
@@ -209,7 +212,7 @@ Order holds are kept per order in `orders.hold_reason`:
 
 3. **The `cancel` and `deadline` contexts** first cancel `held` orders and mark unresolved `failed` orders `resolved`. They leave `placing`, `unconfirmed` and placed orders alone. The table then decides:
    - anything placed → `ordered`;
-   - `placing` or `unconfirmed` → `ordered` or `needs_attention/unconfirmed`, so the owner settles it and the user isn't told "nothing bought";
+   - `placing` or `unconfirmed` → `ordered` or `needs_attention/unconfirmed`. The owner settles it, and the customer gets the `hold_unconfirmed` email ("still confirming"), never "nothing bought";
    - otherwise → `skipped`.
 
    They also call `lists.release_for_order` for released list picks, and set `next_action_at = null` for `skipped`.
@@ -246,9 +249,9 @@ These failure modes need their own tests:
   - `suggestedMinimumCents(largestBudgetCents: number | null, marginPct: number, feeCents: number): number | null`
 - `round-plan.ts`:
   - `RoundView` gains `attentionReason: AttentionReason | null`, `holdCount: number`, `seenBalanceCents: number | null` and `emailedBalanceCents: number | null`.
-  - `AttentionReason = HoldReason | "price_up" | "out_of_stock" | "failed"`.
+  - `AttentionReason = HoldReason | "price_up" | "out_of_stock" | "too_late" | "failed" | "unconfirmed"`.
   - `HoldReason = "funds" | "setup" | "address" | "paused" | "not_allowed" | "retry"`, plus `"unconfirmed"` as a round reason only.
-  - `EMAILED_HOLDS = ["funds", "setup", "address"]` and `PLACEABLE_HOLDS = ["funds", "setup", "address", "paused", "not_allowed", "retry"]` (`not_allowed` recovers by itself if paid features come back on; owner).
+  - `EMAILED_HOLDS = ["funds", "setup", "address", "unconfirmed"]` and `PLACEABLE_HOLDS = ["funds", "setup", "address", "paused", "not_allowed", "retry"]` (`not_allowed` recovers by itself if paid features come back on; owner).
   - `StepKey` adds `` `hold:${number}:${"notice" | "reminder" | "final"}` `` and `` `hold:${number}:short:${string}` ``.
   - `NextAction` adds `{ do: "place" }` and `{ do: "send_hold"; send: StepKey; shortfall?: true }`.
   - `nextAction` for `needs_attention`:
@@ -517,15 +520,16 @@ These failure modes need their own tests:
    - kill switch off → `hold_orders(paused)`
    - no paid features → `not_allowed`
    - not connected or no phone → `setup`
-2. **Address:** for a recipient address, re-read it with `isShippableAddress`. If it fails → `hold_orders(address)`.
-3. **Re-checked cap:** `min(saved, recomputed with this round's orders excluded)`.
-4. **Known short:** if auto top-up is known off, read `/wallet/me` and `set_seen_balance`. If short → `hold_orders(funds)`.
-5. **Begin:** `begin_placing` with the caps and snapshots. If it returns nothing → stop.
-6. **POST each order** with `placeWithRetry`:
+2. **Still on time:** for each held order, `canArriveInTime({ occasionDate, orderDate: today, handlingDaysMax, deliveryDaysMax })` with the idea's saved delivery range. If it can't arrive in time → `fail_order(too_late)`. The order is resolved, the round gets reason `too_late`, and the customer is emailed `too_late` (owner).
+3. **Address:** for a recipient address, re-read it with `isShippableAddress`. If it fails → `hold_orders(address)`.
+4. **Re-checked cap:** `min(saved, recomputed with this round's orders excluded)`.
+5. **Known short:** if auto top-up is known off, read `/wallet/me` and `set_seen_balance`. If short → `hold_orders(funds)`.
+6. **Begin:** `begin_placing` with the caps and snapshots. If it returns nothing → stop.
+7. **POST each order** with `placeWithRetry`:
    - the first `unavailable` after the quick retries → that one is `unknown`, and later ones are `unsent`, with the loop stopped;
    - a 402 → `insufficient` for it and every later one;
    - a 4xx → `rejected`.
-7. **Record:** `record_outcomes`.
+8. **Record:** `record_outcomes`.
 
 **`sweepStalePlacing`:** for each `stale_placing_orders`, `findOrderByReference`:
 - found → `settle_order`;
@@ -553,6 +557,7 @@ These failure modes need their own tests:
   - address removed → `address`; saving a valid one places it
   - `fix_address` from a webhook, then the address saved → the replacement is placed
   - a list pick claimed
+  - a `not_allowed` hold whose gift can no longer arrive in time, once paid features are back on → `too_late`, no POST, customer emailed
   - a synchronous 4xx → `rejected`
 - [ ] **Step 2:** FAIL. **Step 3:** implement. **Step 4:** PASS.
 - [ ] **Step 5:** commit `feat(concierge): approve and place orders from the Zinc wallet (ALL-30, ALL-32)`.
@@ -571,7 +576,7 @@ These failure modes need their own tests:
   - `wallet(userId): Promise<{ balanceCents; autoTopUp } | null>`, called only for paid-features, connected users.
 - **On the tick:** run `sweep()` first, then the rounds (held ones first).
 - **For `place`:** call `placeRound`, then `release_round`. No `finishStep`.
-- **`unconfirmed` rounds:** no user email. The `order.unconfirmed` event feeds the owner's health email (W5-3), and the README runbook says how to settle one by hand.
+- **`unconfirmed` rounds:** the customer gets `hold_unconfirmed` (notice, then at the deadline if still unsettled): "We're confirming Mom's gift with the store. You won't be charged twice. We'll email you as soon as we know." The `order.unconfirmed` event feeds the owner's health email (W5-3) and a future support dashboard. The README runbook says how to settle one by hand. Settling it sends the normal outcome.
 - **For `send_hold`:** send the email, then `set_emailed_balance` and set `last_emailed_reason`, then `reconcile_round` and `release_round`. Never `finishStep` or `finish_round`.
 - **The deadline skip for `needs_attention`:** `cancel_held(id, 'deadline')`, then use the status it returns:
   - `skipped` → the `skipped` email, or `missed_on_us` when the last reason was `paused`;
@@ -582,6 +587,8 @@ These failure modes need their own tests:
   - `hold_setup`
   - `hold_address`
   - `hold_trouble`
+  - `hold_unconfirmed`
+  - `too_late`
   - `missed_on_us`
   - `heads_up` gains `funding?: { dueText, haveText, atLeast }`
 
@@ -594,6 +601,7 @@ These failure modes need their own tests:
     - the deadline goes through `cancel_held`
     - one placed and one held at the deadline → `ordered`, with no skipped email
   - `paused` at the deadline → `missed_on_us`
+  - `unconfirmed` → the `hold_unconfirmed` notice, and again at the deadline; never `skipped`
   - a partial top-up → one `short` email per day
   - a reason change `setup` → `funds` → a new notice
   - templates: the logo, one button and the alpha line on each; the heads-up warning only with `funding`
