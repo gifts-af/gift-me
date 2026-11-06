@@ -1,7 +1,7 @@
 import { ChevronRight, Gift } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
-import { Account } from "@/components/app-shell/account";
+import { AppNav } from "@/components/app-shell/app-nav";
 import { InstallTip } from "@/components/app-shell/install-tip";
 import { PageFrame } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
@@ -14,7 +14,9 @@ import { getMyListSummary } from "@/modules/lists";
 export default function Home() {
   return (
     <>
-      <TopBar links current="people" account={<Account />} />
+      <TopBar>
+        <AppNav current="give" />
+      </TopBar>
       <PageFrame wide>
         <Suspense fallback={null}>
           <HomeScreenTip />

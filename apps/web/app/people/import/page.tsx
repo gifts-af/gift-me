@@ -1,5 +1,5 @@
 import { Suspense } from "react";
-import { Account } from "@/components/app-shell/account";
+import { AppNav } from "@/components/app-shell/app-nav";
 import { PageFrame, PageTitle } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
 import { listImportedContactIds } from "@/modules/concierge";
@@ -11,7 +11,9 @@ import { ImportFromGoogle } from "./import-from-google";
 export default function ImportPage() {
   return (
     <>
-      <TopBar links current="people" account={<Account />} />
+      <TopBar>
+        <AppNav current="give" />
+      </TopBar>
       <PageFrame>
         <PageTitle>Who do you buy gifts for?</PageTitle>
         <Suspense fallback={null}>

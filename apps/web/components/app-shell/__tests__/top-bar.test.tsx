@@ -1,30 +1,54 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { ProductTabs } from "../product-tabs";
+import { BackLink } from "../page-frame";
 import { TopBar } from "../top-bar";
 
 describe("TopBar", () => {
-  it("shows the name linking Home when there's no back link", () => {
+  it("shows the logo linking to / and, with nothing else, the sun/moon", async () => {
     render(<TopBar />);
     expect(screen.getByRole("link", { name: "GiftsAF" })).toHaveAttribute("href", "/");
+    expect(await screen.findByRole("button", { name: /Switch to/ })).toBeInTheDocument();
   });
 
-  it("shows a back link with its label instead of the name", () => {
-    render(<TopBar back={{ href: "/", label: "Home" }} />);
-    expect(screen.getByRole("link", { name: "Home" })).toHaveAttribute("href", "/");
-    expect(screen.queryByRole("link", { name: "GiftsAF" })).not.toBeInTheDocument();
-  });
-
-  it("marks the current product in the links", () => {
-    render(<TopBar links current="list" />);
-    const nav = screen.getByRole("navigation", { name: "Main" });
-    expect(nav).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "My list" })).toHaveAttribute("aria-current", "page");
-    expect(screen.getByRole("link", { name: "People" })).not.toHaveAttribute("aria-current");
-  });
-
-  it("renders the actions and account slots", () => {
-    render(<TopBar actions={<button>Share</button>} account={<button>Account</button>} />);
-    expect(screen.getByRole("button", { name: "Share" })).toBeInTheDocument();
+  it("keeps the logo when something fills the slot", () => {
+    render(
+      <TopBar>
+        <button>Account</button>
+      </TopBar>,
+    );
+    expect(screen.getByRole("link", { name: "GiftsAF" })).toHaveAttribute("href", "/");
     expect(screen.getByRole("button", { name: "Account" })).toBeInTheDocument();
+  });
+});
+
+describe("ProductTabs", () => {
+  it("links Get to the list and Give to people", () => {
+    render(<ProductTabs />);
+    expect(screen.getByRole("navigation", { name: "Main" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Get" })).toHaveAttribute("href", "/lists");
+    expect(screen.getByRole("link", { name: "Give" })).toHaveAttribute("href", "/");
+  });
+
+  it.each([
+    ["get", "Get", "Give"],
+    ["give", "Give", "Get"],
+  ] as const)("marks only the current one on %s", (current, on, off) => {
+    render(<ProductTabs current={current} />);
+    expect(screen.getByRole("link", { name: on })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: off })).not.toHaveAttribute("aria-current");
+  });
+
+  it("marks neither on a page outside both", () => {
+    render(<ProductTabs />);
+    expect(screen.getByRole("link", { name: "Get" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: "Give" })).not.toHaveAttribute("aria-current");
+  });
+});
+
+describe("BackLink", () => {
+  it("links to where it says", () => {
+    render(<BackLink href="/people/1" label="Jim" />);
+    expect(screen.getByRole("link", { name: "Jim" })).toHaveAttribute("href", "/people/1");
   });
 });

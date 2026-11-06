@@ -120,7 +120,7 @@ describe("the Google Contacts import checklist", () => {
     expect(status).toHaveTextContent("Added 2 people");
     expect(status).toHaveTextContent("1 was already added");
     expect(status).toHaveTextContent("1 photo couldn't be copied");
-    expect(screen.getByRole("link", { name: "See them on Home" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "See them on Give" })).toHaveAttribute("href", "/");
   });
 
   it("says so plainly when Google says no, and can try again (AC-11)", async () => {

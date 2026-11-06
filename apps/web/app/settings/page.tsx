@@ -1,6 +1,6 @@
 import { Suspense } from "react";
-import { Account } from "@/components/app-shell/account";
-import { PageFrame, PageTitle } from "@/components/app-shell/page-frame";
+import { AppNav } from "@/components/app-shell/app-nav";
+import { BackLink, PageFrame, PageTitle } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
 import { createClient } from "@/lib/supabase/server";
 import { getConciergeSettings } from "@/modules/concierge";
@@ -28,8 +28,11 @@ async function LoadedForm() {
 export default function SettingsPage() {
   return (
     <>
-      <TopBar back={{ href: "/", label: "Home" }} account={<Account />} />
+      <TopBar>
+        <AppNav />
+      </TopBar>
       <PageFrame>
+        <BackLink href="/" label="Give" />
         <PageTitle>Settings</PageTitle>
         <Suspense fallback={<p className="text-[15px] text-muted-foreground">Loading your settings…</p>}>
           <LoadedForm />

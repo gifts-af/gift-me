@@ -96,7 +96,7 @@ test("import Grandma and a friend from Google Contacts, then see them as already
   expect(sentRows.join("")).toContain(grandma);
   expect(sentRows.join("")).not.toContain(stranger);
 
-  await page.getByRole("link", { name: "See them on Home" }).click();
+  await page.getByRole("link", { name: "See them on Give" }).click();
   await expect(page.getByRole("link", { name: grandma, exact: true })).toBeVisible();
   await expect(page.getByRole("link", { name: chris, exact: true })).toBeVisible();
 

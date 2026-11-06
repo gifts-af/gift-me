@@ -84,7 +84,7 @@ describe("GiftApp", () => {
     // Reports whether the click reached the link, where Next's <Link>
     // handler would start the client-side navigation.
     function clickHome() {
-      const link = screen.getByRole("link", { name: /Home/ });
+      const link = screen.getByRole("link", { name: "Give" });
       let reached = false;
       link.addEventListener("click", () => (reached = true));
       const click = new MouseEvent("click", { bubbles: true, cancelable: true, button: 0 });
@@ -94,7 +94,12 @@ describe("GiftApp", () => {
 
     it("stays on the page when the member cancels", async () => {
       const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
-      render(<GiftApp initial={member} />);
+      render(
+        <>
+          <a href="/">Give</a>
+          <GiftApp initial={member} />
+        </>,
+      );
       await userEvent.click(screen.getByRole("button", { name: /Remove Novel/ }));
       expect(clickHome()).toEqual({ reached: false, prevented: true });
       expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/unsaved/i));
@@ -102,7 +107,12 @@ describe("GiftApp", () => {
 
     it("lets the member go when they confirm", async () => {
       vi.spyOn(window, "confirm").mockReturnValue(true);
-      render(<GiftApp initial={member} />);
+      render(
+        <>
+          <a href="/">Give</a>
+          <GiftApp initial={member} />
+        </>,
+      );
       await userEvent.click(screen.getByRole("button", { name: /Remove Novel/ }));
       expect(clickHome().reached).toBe(true);
       expect(window.confirm).toHaveBeenCalled();
@@ -110,7 +120,12 @@ describe("GiftApp", () => {
 
     it("doesn't ask when everything is saved", () => {
       const confirm = vi.spyOn(window, "confirm");
-      render(<GiftApp initial={member} />);
+      render(
+        <>
+          <a href="/">Give</a>
+          <GiftApp initial={member} />
+        </>,
+      );
       expect(clickHome().reached).toBe(true);
       expect(confirm).not.toHaveBeenCalled();
     });
