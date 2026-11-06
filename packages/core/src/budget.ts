@@ -73,7 +73,10 @@ export function approvalCeilingCents(
 }
 
 export type CommittedOrder = {
-  status: "placing" | "placed" | "failed" | "shipped" | "delivered" | "cancelled" | "refunded";
+  /** Only needed to leave an order out of the sum (`excludeRoundOrderIds`). */
+  id?: string;
+  /** `held` is an order waiting on the wallet or setup; it keeps its cap like `placing`. */
+  status: "placing" | "held" | "placed" | "failed" | "shipped" | "delivered" | "cancelled" | "refunded";
   maxPriceCents: number;
   finalTotalCents: number | null;
   feeCents: number;
@@ -84,25 +87,32 @@ const RELEASED: ReadonlySet<CommittedOrder["status"]> = new Set(["failed", "canc
 /**
  * Spend already used up in a round. An order holds its full cap until its
  * real total is known; failed, cancelled and refunded orders release theirs.
+ * `excludeRoundOrderIds` leaves orders out, so a re-check of a round's own
+ * orders doesn't count them against themselves.
  */
-export function committedSpendCents(orders: CommittedOrder[]): number {
+export function committedSpendCents(orders: CommittedOrder[], excludeRoundOrderIds: string[] = []): number {
+  const excluded = new Set(excludeRoundOrderIds);
   return orders
-    .filter((o) => !RELEASED.has(o.status))
+    .filter((o) => !RELEASED.has(o.status) && !(o.id !== undefined && excluded.has(o.id)))
     .reduce((sum, o) => sum + (o.finalTotalCents ?? o.maxPriceCents) + o.feeCents, 0);
 }
 
 /**
  * The `max_price` to send Zinc for one order. It covers item, shipping and
- * tax, but not the order fee. `reservedCents` holds back room for the round's
+ * tax, but not the order fee. It is also capped at the pick's approved total
+ * plus `marginPct` percent (rounded down), less the fee, so a price rise
+ * beyond that margin stops the order even when the budget has room. `reservedCents` holds back room for the round's
  * other picks that haven't been ordered yet, so the first order can't use
  * up the whole budget.
  *
  * Both `budgetCents` (`null` for no budget) and the pick's own approved
  * total `pickTotalCents` are required, so the cap below can't be skipped.
- * Within a set budget, a price rise may use the budget's room (D28). When
- * the ceiling is the sum of the picks instead (no budget, or a confirmed
- * over-budget round), the order never costs more than its own approved
- * total, even after other orders in the round came in cheaper or failed.
+ * Within a set budget, a price rise may use the budget's room only up to
+ * that estimate-plus-margin cap; a bigger rise stops and asks the buyer
+ * (T56, revising D28). When the ceiling is the sum of the picks instead (no
+ * budget, or a confirmed over-budget round), the order never costs more
+ * than its own approved total, even after other orders in the round came in
+ * cheaper or failed.
  */
 export function maxPriceCents(p: {
   ceilingCents: number;
@@ -111,6 +121,7 @@ export function maxPriceCents(p: {
   reservedCents: number;
   feeCents: number;
   pickTotalCents: number;
+  marginPct: number;
 }): number {
   checkCents(p.ceilingCents, "Ceiling");
   if (p.budgetCents !== null) checkCents(p.budgetCents, "Budget");
@@ -118,9 +129,13 @@ export function maxPriceCents(p: {
   checkCents(p.reservedCents, "Reserved spend");
   checkCents(p.feeCents, "Fee");
   checkCents(p.pickTotalCents, "Pick total");
+  if (!Number.isFinite(p.marginPct) || p.marginPct < 0) {
+    throw new RangeError(`Margin percent must be 0 or more; got ${p.marginPct}`);
+  }
   let max = p.ceilingCents - p.committedCents - p.reservedCents - p.feeCents;
   const ceilingIsPickSum = p.budgetCents === null || p.ceilingCents > p.budgetCents;
   if (ceilingIsPickSum) max = Math.min(max, p.pickTotalCents - p.feeCents);
+  max = Math.min(max, Math.floor((p.pickTotalCents * (100 + p.marginPct)) / 100) - p.feeCents);
   if (max <= 0) {
     // A budget bug, never an order: there's no room left in this round.
     throw new RangeError(`No budget left for this order (max_price would be ${max} cents)`);

@@ -1,15 +1,19 @@
 import "server-only";
 import type {
+  AttentionReason,
   CalendarDate,
+  Database,
   OccasionKind,
   OccasionRule,
   RoundStatus,
   ScheduleSettings,
   StepKey,
 } from "@gifts-af/core";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { isShippableAddress } from "@gifts-af/core";
 import { logEvent } from "@/lib/log";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { hasPaidFeatures } from "../paid-features";
 import { getOpenQuestions } from "../profile/profile";
 
 // Everything the round engine needs from the database (ALL-28). The interface
@@ -49,10 +53,32 @@ export type ClaimedRound = {
   late: boolean;
   attempts: number;
   lockedUntil: Date;
+  /** The money-path fields reconcile_round keeps (ALL-32); null and 0 off the money path. */
+  attentionReason: AttentionReason | null;
+  holdCount: number;
+  seenBalanceCents: number | null;
+  emailedBalanceCents: number | null;
+};
+
+/** One of the round's orders, for the hold and failure emails (ALL-32). */
+export type RoundOrder = {
+  id: string;
+  title: string;
+  /** Where it ships, city only (never the full address); null when unknown. */
+  shipCity: string | null;
+  status: string;
+  holdReason: string | null;
+  failureType: string | null;
+  resolved: boolean;
+  /** It failed after the round closed: emailed once as `late_fail:<id>` (failed_late). */
+  failedAfterClose: boolean;
+  maxPriceCents: number;
+  feeCents: number;
 };
 
 /** What the round's emails say. Read with the service role; never logged. */
 export type RoundContext = {
+  userId: string;
   personId: string;
   personName: string;
   occasionKind: OccasionKind;
@@ -63,6 +89,10 @@ export type RoundContext = {
   openQuestions: number;
   /** Proposed ideas, best first. */
   ideas: { title: string; totalCents: number }[];
+  /** The round's orders, oldest first, with their idea's title (ALL-32). */
+  orders: RoundOrder[];
+  /** round_fail_count: numbers the failure emails (fail:<n>:notice). */
+  failCount: number;
 };
 
 export type RoundFinish = {
@@ -80,8 +110,17 @@ export interface RoundStore {
   /** On conflict (person, occasion, year) does nothing; true if a row was inserted. */
   insertRound(r: NewRoundRow): Promise<boolean>;
   claimDue(now: Date): Promise<ClaimedRound[]>;
+  /** claim_due_money_rounds: only the due rounds that need attention (a hold or a failure). */
+  claimDueMoney(now: Date): Promise<ClaimedRound[]>;
   /** null when the round isn't due, is finished, or another run holds it. */
   claim(roundId: string, now: Date): Promise<ClaimedRound | null>;
+  /**
+   * claim_round_now: claims an awaiting_approval or needs_attention round whatever its
+   * next_action_at (null when another run holds it). For telling the buyer at once after
+   * placing: reconcile_round makes the round due at the database's now(), which is later
+   * than the caller's `now`, so `claim` would say "not due yet".
+   */
+  claimNow(roundId: string, now: Date): Promise<ClaimedRound | null>;
   /** Writes the result and releases the lease; false if the lease was lost. */
   finish(roundId: string, lock: Date, next: RoundFinish): Promise<boolean>;
   sentSteps(roundId: string): Promise<Set<StepKey>>;
@@ -94,6 +133,25 @@ export interface RoundStore {
    * claimed straight away (their next reminder may be days ahead).
    */
   waitingRoundsForPerson(personId: string, now: Date): Promise<string[]>;
+
+  // ─── The money path (ALL-32): reconcile_round owns these rounds' status, never finish. ───
+  /** The round's fields as they are now, keeping the lease. */
+  refresh(round: ClaimedRound): Promise<ClaimedRound>;
+  reconcile(roundId: string): Promise<RoundStatus | null>;
+  /** Gives the lease back; false if it was lost. */
+  release(roundId: string, lock: Date): Promise<boolean>;
+  /** The deadline: held orders cancelled, failures resolved; returns the status it settles on. */
+  cancelHeld(roundId: string): Promise<RoundStatus | null>;
+  /** After a hold email: the reason it told (reconcile rule 4) and the balance it named (AC-22). */
+  markHoldEmailed(roundId: string, reason: AttentionReason, balanceCents: number | null): Promise<void>;
+  /** Paid features on and Zinc connected: only then is the wallet read (AC-11). */
+  canBuy(userId: string): Promise<boolean>;
+  /**
+   * Rounds still open or ordered with a placed order whose `ordered:<id>` email isn't recorded,
+   * and rounds (any status) with an order that failed after the round closed whose
+   * `late_fail:<id>` email isn't recorded.
+   */
+  roundsMissingOrderedEmail(): Promise<string[]>;
 }
 
 const SCHEDULE_KEYS: Record<keyof ScheduleSettings, string> = {
@@ -104,6 +162,8 @@ const SCHEDULE_KEYS: Record<keyof ScheduleSettings, string> = {
   reminder2BeforeDeadlineDays: "reminder_2_before_deadline_days",
   finalNoticeBeforeDeadlineDays: "final_notice_before_deadline_days",
   fastestDaysToArrive: "fastest_days_to_arrive",
+  holdReminderDays: "hold_reminder_days",
+  holdFinalDays: "hold_final_days",
 };
 
 type RoundDbRow = {
@@ -116,6 +176,10 @@ type RoundDbRow = {
   late: boolean;
   attempts: number;
   locked_until: string | null;
+  attention_reason?: string | null;
+  hold_count?: number | null;
+  seen_balance_cents?: number | null;
+  emailed_balance_cents?: number | null;
 };
 
 // claim_round returns NULL as a row of nulls through PostgREST: no id means not claimed.
@@ -133,6 +197,10 @@ function toClaimed(r: RoundDbRow | null): ClaimedRound | null {
     // Postgres returns the lease with millisecond precision (it is now + whole
     // minutes, and now came from a JS Date), so this Date round-trips exactly.
     lockedUntil: new Date(r.locked_until),
+    attentionReason: (r.attention_reason ?? null) as AttentionReason | null,
+    holdCount: r.hold_count ?? 0,
+    seenBalanceCents: r.seen_balance_cents ?? null,
+    emailedBalanceCents: r.emailed_balance_cents ?? null,
   };
 }
 
@@ -149,8 +217,8 @@ function fail(what: string, error: { message: string }): never {
 }
 
 
-export function createSupabaseRoundStore(): RoundStore {
-  const db = createAdminClient();
+/** The service-role client; tests pass one for the local database (E3). */
+export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAdminClient()): RoundStore {
   const concierge = db.schema("concierge");
 
   async function setting(key: string): Promise<number> {
@@ -210,8 +278,23 @@ export function createSupabaseRoundStore(): RoundStore {
       return data.map(toClaimed).filter((r): r is ClaimedRound => r !== null);
     },
 
+    async claimDueMoney(now) {
+      const { data, error } = await concierge.rpc("claim_due_money_rounds", { p_now: now.toISOString() });
+      if (error) fail("Claiming due money-path rounds failed", error);
+      return data.map(toClaimed).filter((r): r is ClaimedRound => r !== null);
+    },
+
     async claim(roundId, now) {
       const { data, error } = await concierge.rpc("claim_round", {
+        p_round_id: roundId,
+        p_now: now.toISOString(),
+      });
+      if (error) fail("Claiming the round failed", error);
+      return toClaimed(data as RoundDbRow | null);
+    },
+
+    async claimNow(roundId, now) {
+      const { data, error } = await concierge.rpc("claim_round_now", {
         p_round_id: roundId,
         p_now: now.toISOString(),
       });
@@ -258,12 +341,12 @@ export function createSupabaseRoundStore(): RoundStore {
     async roundContext(roundId) {
       const { data: round, error } = await concierge
         .from("gift_rounds")
-        .select("person_id, occasion_id, occasion_date, ship_by_deadline")
+        .select("user_id, person_id, occasion_id, occasion_date, ship_by_deadline")
         .eq("id", roundId)
         .single();
       if (error) fail("Loading the round failed", error);
 
-      const [person, occasion, ideas] = await Promise.all([
+      const [person, occasion, ideas, orders, failCount] = await Promise.all([
         db
           .from("people")
           .select("name, recipient_first_name, recipient_last_name, address_line1, address_line2, city, state, zip, country")
@@ -276,10 +359,19 @@ export function createSupabaseRoundStore(): RoundStore {
           .eq("round_id", roundId)
           .eq("status", "proposed")
           .order("rank"),
+        concierge
+          .from("orders")
+          .select("id, status, hold_reason, failure_type, resolved, failed_after_close, max_price_cents, fee_cents, ship_city, created_at, gift_ideas(title)")
+          .eq("round_id", roundId)
+          .order("created_at")
+          .order("id"),
+        concierge.rpc("round_fail_count", { p_round_id: roundId }),
       ]);
       if (person.error) fail("Loading the round's person failed", person.error);
       if (occasion.error) fail("Loading the round's occasion failed", occasion.error);
       if (ideas.error) fail("Loading the round's ideas failed", ideas.error);
+      if (orders.error) fail("Loading the round's orders failed", orders.error);
+      if (failCount.error) fail("Counting the round's failures failed", failCount.error);
 
       // A bonus in the email: failing to count them mustn't hold up a gift reminder.
       const open = await getOpenQuestions(db, round.person_id).catch((err: unknown) => {
@@ -290,6 +382,7 @@ export function createSupabaseRoundStore(): RoundStore {
 
       const p = person.data;
       return {
+        userId: round.user_id,
         personId: round.person_id,
         personName: p.name,
         occasionKind: occasion.data.kind as OccasionKind,
@@ -308,6 +401,19 @@ export function createSupabaseRoundStore(): RoundStore {
         }),
         openQuestions: open.length,
         ideas: ideas.data.map((i) => ({ title: i.title, totalCents: i.est_total_cents })),
+        orders: orders.data.map((o) => ({
+          id: o.id,
+          title: (o.gift_ideas as { title: string } | null)?.title ?? "gift",
+          shipCity: o.ship_city,
+          status: o.status,
+          holdReason: o.hold_reason,
+          failureType: o.failure_type,
+          resolved: o.resolved,
+          failedAfterClose: o.failed_after_close,
+          maxPriceCents: o.max_price_cents,
+          feeCents: o.fee_cents,
+        })),
+        failCount: failCount.data ?? 0,
       };
     },
 
@@ -320,6 +426,87 @@ export function createSupabaseRoundStore(): RoundStore {
         .select("id");
       if (error) fail("Loading the person's waiting rounds failed", error);
       return data.map((r) => r.id);
+    },
+
+    async refresh(round) {
+      const { data, error } = await concierge
+        .from("gift_rounds")
+        .select("status, ship_by_deadline, heads_up_on, attention_reason, hold_count, seen_balance_cents, emailed_balance_cents")
+        .eq("id", round.id)
+        .single();
+      if (error) fail("Reloading the round failed", error);
+      return {
+        ...round,
+        status: data.status,
+        shipByDeadline: data.ship_by_deadline,
+        headsUpOn: data.heads_up_on,
+        attentionReason: (data.attention_reason ?? null) as AttentionReason | null,
+        holdCount: data.hold_count,
+        seenBalanceCents: data.seen_balance_cents,
+        emailedBalanceCents: data.emailed_balance_cents,
+      };
+    },
+
+    async reconcile(roundId) {
+      const { data, error } = await concierge.rpc("reconcile_round", { p_round_id: roundId });
+      if (error) fail("Reconciling the round failed", error);
+      return (data as RoundStatus | null) ?? null;
+    },
+
+    async release(roundId, lock) {
+      const { data, error } = await concierge.rpc("release_round", { p_round_id: roundId, p_lock: lock.toISOString() });
+      if (error) fail("Releasing the round failed", error);
+      return data === true;
+    },
+
+    async cancelHeld(roundId) {
+      const { data, error } = await concierge.rpc("cancel_held", { p_round_id: roundId, p_context: "deadline" });
+      if (error) fail("Closing the round at its deadline failed", error);
+      return (data as RoundStatus | null) ?? null;
+    },
+
+    async markHoldEmailed(roundId, reason, balanceCents) {
+      const told = await concierge.rpc("set_last_emailed_reason", { p_round_id: roundId, p_reason: reason });
+      if (told.error) fail("Saving the emailed reason failed", told.error);
+      if (balanceCents === null) return;
+      const balance = await concierge.rpc("set_emailed_balance", { p_round_id: roundId, p_cents: balanceCents });
+      if (balance.error) fail("Saving the emailed balance failed", balance.error);
+    },
+
+    async roundsMissingOrderedEmail() {
+      // Rounds with an order that failed after the round closed and whose email isn't recorded
+      // (rounds_missing_late_failure_email: only the unsent ones, never every late failure ever).
+      const lateFailures = async (): Promise<string[]> => {
+        const { data, error: lateError } = await concierge.rpc("rounds_missing_late_failure_email");
+        if (lateError) fail("Loading late failures failed", lateError);
+        return (data ?? []) as string[];
+      };
+      // Bounded to rounds that aren't finished: ordered or still needing the buyer.
+      // Follow-up (past MVP scale): one SQL query with NOT EXISTS on round_sends, or a recent window.
+      const { data: orders, error } = await concierge
+        .from("orders")
+        .select("id, round_id, gift_rounds!inner(status)")
+        .in("status", ["placed", "shipped", "delivered"])
+        .in("gift_rounds.status", ["ordered", "needs_attention"]);
+      if (error) fail("Loading placed orders failed", error);
+      if (!orders.length) return lateFailures();
+      const roundIds = [...new Set(orders.map((o) => o.round_id))];
+      const { data: sends, error: sendsError } = await concierge
+        .from("round_sends")
+        .select("step")
+        .in("round_id", roundIds)
+        .like("step", "ordered:%");
+      if (sendsError) fail("Loading the ordered emails failed", sendsError);
+      const told = new Set(sends.map((s) => s.step));
+      const late = await lateFailures();
+      return [...new Set([...orders.filter((o) => !told.has(`ordered:${o.id}`)).map((o) => o.round_id), ...late])];
+    },
+
+    async canBuy(userId) {
+      if (!(await hasPaidFeatures(db, userId))) return false;
+      const { data, error } = await concierge.from("accounts").select("zinc_connected_at").eq("user_id", userId).maybeSingle();
+      if (error) fail("Reading the account failed", error);
+      return Boolean(data?.zinc_connected_at);
     },
   };
 }

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>More gift emails</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;padding:24px;background:#f4f4f5;color:#18181b;font:16px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif}
+  h1{font-size:22px;margin:0 0 4px}
+  .intro{color:#52525b;margin:0 0 24px;max-width:960px}
+  .row{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start}
+  .state{width:380px}
+  .label{font:600 13px system-ui;color:#0f766e;text-transform:uppercase;letter-spacing:.04em;margin:0 0 4px}
+  .when{font-size:14px;color:#52525b;margin:0 0 10px;min-height:66px}
+  .mail{background:#fff;border:1px solid #d4d4d8;border-radius:12px;overflow:hidden}
+  .subj{background:#fafafa;border-bottom:1px solid #e4e4e7;padding:10px 16px;font-size:14px;color:#52525b}
+  .subj b{display:block;font-size:15px;color:#18181b}
+  .in{padding:22px 20px}
+  .logo{display:block;width:120px;height:40px;margin:0 0 18px}
+  .h{margin:0 0 14px;font-size:22px;line-height:1.3;font-weight:700;text-wrap:balance}
+  p{margin:0 0 14px;text-wrap:pretty}
+  .btn{display:inline-block;background:#0f766e;color:#fff;font-weight:600;padding:14px 20px;border-radius:8px;margin:2px 0 18px}
+  .foot{font-size:14px;color:#52525b}
+  .plain{color:#18181b;text-decoration:underline}
+  .note{background:#fffbeb;color:#92400e;font-size:13px;border-radius:6px;padding:8px 10px;margin:0 0 14px}
+</style></head><body>
+
+<h1>More gift emails (ALL-32, Task 7)</h1>
+<p class="intro">Same plain shell as the approved ones: logo, text, one teal button. Headings are short and use balanced wrapping (no lone word on a second line); paragraphs avoid a lone last word. These cover what the customer is told when a gift can't go ahead as planned. Mom's birthday on March 14 and the Le Creuset mug set are sample data.</p>
+
+<div class="row">
+
+<div class="state">
+  <p class="label">1 · Fix the address</p>
+  <p class="when">The address was removed, doesn't pass our check, or the store rejected it. The approval is kept; the gift is bought once the address is fixed.</p>
+  <div class="mail"><div class="subj"><b>Mom's gift needs an address</b>GiftsAF</div><div class="in">
+    <img class="logo" src="https://giftsaf.com/email-logo.png" alt="GiftsAF">
+    <p class="h">Mom's gift needs an address</p>
+    <p>You chose the <b>Le Creuset mug set</b> for Mom's birthday on March 14, but we don't have an address we can ship to.</p>
+    <p>Add or fix it and we'll send the gift straight away. There's nothing else to do.</p>
+    <span class="btn">Fix the address</span>
+    <p class="foot">Changed your mind? <span class="plain">Cancel this gift</span></p>
+  </div></div>
+</div>
+
+<div class="state">
+  <p class="label">2 · Price went up</p>
+  <p class="when">The store's price rose more than 10% over our estimate. Nothing was bought. One tap re-approves at the new price, or pick another gift.</p>
+  <div class="mail"><div class="subj"><b>The price of Mom's gift went up</b>GiftsAF</div><div class="in">
+    <img class="logo" src="https://giftsaf.com/email-logo.png" alt="GiftsAF">
+    <p class="h">Mom's gift went up in price</p>
+    <p>The <b>Le Creuset mug set</b> is now <b>$51</b> with shipping and tax, more than the <b>$46</b> you approved. We didn't buy it.</p>
+    <p>Approve the new price, or choose a different gift for Mom's birthday on March 14.</p>
+    <span class="btn">Review the gift</span>
+    <p class="foot">Nothing is bought until you choose.</p>
+  </div></div>
+</div>
+
+<div class="state">
+  <p class="label">3 · Out of stock</p>
+  <p class="when">The store couldn't sell it. Nothing was bought.</p>
+  <div class="mail"><div class="subj"><b>Mom's gift is out of stock</b>GiftsAF</div><div class="in">
+    <img class="logo" src="https://giftsaf.com/email-logo.png" alt="GiftsAF">
+    <p class="h">Mom's gift is out of stock</p>
+    <p>The store ran out of the <b>Le Creuset mug set</b>, so we didn't buy it and nothing was charged.</p>
+    <p>Choose another gift and we'll send it in time for Mom's birthday on March 14.</p>
+    <span class="btn">Choose another gift</span>
+  </div></div>
+</div>
+
+<div class="state">
+  <p class="label">4 · Too late to arrive</p>
+  <p class="when">A held gift can no longer arrive by the occasion (with our safety buffer). Nothing was bought.</p>
+  <div class="mail"><div class="subj"><b>Mom's gift can't arrive in time</b>GiftsAF</div><div class="in">
+    <img class="logo" src="https://giftsaf.com/email-logo.png" alt="GiftsAF">
+    <p class="h">Too late for Mom's gift</p>
+    <p>The <b>Le Creuset mug set</b> wouldn't reach Mom by her birthday on March 14 anymore, so we didn't buy it and nothing was charged.</p>
+    <p>You can still pick something that ships faster.</p>
+    <span class="btn">See faster gifts</span>
+  </div></div>
+</div>
+
+<div class="state">
+  <p class="label">5 · Still confirming with the store</p>
+  <p class="when">We sent the order but couldn't confirm it went through. We never resend; we're checking and you'll hear from us.</p>
+  <div class="mail"><div class="subj"><b>We're confirming Mom's gift with the store</b>GiftsAF</div><div class="in">
+    <img class="logo" src="https://giftsaf.com/email-logo.png" alt="GiftsAF">
+    <p class="h">Confirming Mom's gift</p>
+    <p>We sent the order for the <b>Le Creuset mug set</b>, but haven't had confirmation from the store yet.</p>
+    <p>We're checking on it now. You won't be charged twice, and we'll email you as soon as we know.</p>
+    <span class="btn">Open Mom's page</span>
+  </div></div>
+</div>
+
+<div class="state">
+  <p class="label">6 · Trouble reaching the store</p>
+  <p class="when">Zinc has been down since the gift was approved and it's now 2 days before the deadline. We keep trying.</p>
+  <div class="mail"><div class="subj"><b>We're having trouble ordering Mom's gift</b>GiftsAF</div><div class="in">
+    <img class="logo" src="https://giftsaf.com/email-logo.png" alt="GiftsAF">
+    <p class="h">Still trying to order Mom's gift</p>
+    <p>Our ordering service has been having trouble since you chose the <b>Le Creuset mug set</b>. Nothing has been charged.</p>
+    <p>We'll keep trying and email you when it's placed. If you'd rather not wait, you can cancel it or choose another gift.</p>
+    <span class="btn">Open Mom's page</span>
+    <p class="foot">Changed your mind? <span class="plain">Cancel this gift</span></p>
+  </div></div>
+</div>
+
+</div>
+</body></html>

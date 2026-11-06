@@ -1,3 +1,4 @@
+import { startFakeZinc } from "./fake-zinc";
 import { localSupabase } from "./local-supabase";
 import { SECOND_USER, TEST_USER } from "./test-user";
 
@@ -7,6 +8,10 @@ type User = { email: string; password: string; displayName: string };
 // password (local Supabase has no Google). Safe to run again.
 export default async function globalSetup() {
   for (const user of [TEST_USER, SECOND_USER]) await createUser(user);
+  // Zinc's stand-in for paying-for-gifts.spec.ts (ALL-32). Not needed against a deployed site.
+  if (process.env.E2E_BASE_URL) return;
+  const zinc = await startFakeZinc();
+  return () => new Promise<void>((done) => zinc.close(() => done()));
 }
 
 async function createUser(user: User) {

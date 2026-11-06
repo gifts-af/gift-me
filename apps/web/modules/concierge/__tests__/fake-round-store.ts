@@ -102,6 +102,10 @@ export class FakeRoundStore implements RoundStore {
       late: r.late,
       attempts: r.attempts,
       lockedUntil: new Date(r.lockedUntil.getTime()),
+      attentionReason: null,
+      holdCount: 0,
+      seenBalanceCents: null,
+      emailedBalanceCents: null,
     };
   }
 
@@ -113,10 +117,27 @@ export class FakeRoundStore implements RoundStore {
       .map((r) => this.take(r, now, minutes));
   }
 
+  /** Like claim_due_money_rounds: only due needs_attention rounds (none reach it in this fake). */
+  async claimDueMoney(now: Date) {
+    const minutes = await this.setting("round_lock_minutes");
+    return this.rounds
+      .filter((r) => r.status === "needs_attention" && this.claimable(r, now))
+      .map((r) => this.take(r, now, minutes));
+  }
+
   async claim(roundId: string, now: Date) {
     const minutes = await this.setting("round_lock_minutes");
     const r = this.rounds.find((x) => x.id === roundId);
     return r && this.claimable(r, now) ? this.take(r, now, minutes) : null;
+  }
+
+  /** Like claim_round_now: ignores nextActionAt, only awaiting_approval or needs_attention. */
+  async claimNow(roundId: string, now: Date) {
+    const minutes = await this.setting("round_lock_minutes");
+    const r = this.rounds.find((x) => x.id === roundId);
+    const open = r && ["awaiting_approval", "needs_attention"].includes(r.status);
+    const free = r && (r.lockedUntil === null || r.lockedUntil.getTime() < now.getTime());
+    return r && open && free ? this.take(r, now, minutes) : null;
   }
 
   async finish(roundId: string, lock: Date, next: RoundFinish) {
@@ -156,6 +177,7 @@ export class FakeRoundStore implements RoundStore {
     const kind = this.occasionKinds.get(r.occasionId);
     if (!person || !kind) throw new Error(`Round ${roundId} has no person or occasion`);
     return {
+      userId: r.userId,
       personId: r.personId,
       personName: person.name,
       occasionKind: kind,
@@ -164,6 +186,8 @@ export class FakeRoundStore implements RoundStore {
       hasAddress: person.hasAddress,
       openQuestions: person.openQuestions ?? 0,
       ideas: this.ideas.get(roundId) ?? [],
+      orders: [],
+      failCount: 0,
     };
   }
 
@@ -174,5 +198,31 @@ export class FakeRoundStore implements RoundStore {
       r.nextActionAt = now;
     }
     return waiting.map((r) => r.id);
+  }
+
+  // The money path runs against the real database (round-engine-holds.test.ts, E5);
+  // rounds in this fake never reach needs_attention.
+  async refresh(round: ClaimedRound) {
+    return round;
+  }
+  async reconcile(): Promise<RoundStatus | null> {
+    throw new Error("The money path isn't in the fake store");
+  }
+  async release(): Promise<boolean> {
+    throw new Error("The money path isn't in the fake store");
+  }
+  async cancelHeld(): Promise<RoundStatus | null> {
+    throw new Error("The money path isn't in the fake store");
+  }
+  async markHoldEmailed(): Promise<void> {
+    throw new Error("The money path isn't in the fake store");
+  }
+  /** Paid features on and Zinc connected; off unless a test says so. */
+  canBuyResult = false;
+  async canBuy() {
+    return this.canBuyResult;
+  }
+  async roundsMissingOrderedEmail() {
+    return [];
   }
 }

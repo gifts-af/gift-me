@@ -39,7 +39,7 @@ ALL-30 (placing the order) is built here too (owner, 2026-11-06): without it, th
 
 | # | Given | When | Then |
 |---|---|---|---|
-| AC-1 | A user without paid features | They open Settings, or call any Zinc action directly | State 1 is shown; every Zinc server action refuses; no call reaches Zinc |
+| AC-1 | A user without paid features | They open Settings, or call any Zinc action directly | State 1 is shown; every Zinc server action refuses; no call reaches Zinc. **Exception: disconnect** needs only sign-in, works without paid features and with Zinc switched off in the environment (then our webhook isn't cleared at Zinc, and that's logged), so a user can always remove their key; Settings offers it whenever a key is still saved. It's still refused while an order is placing or unconfirmed (AC-5) (owner, final review S7) |
 | AC-2 | A paid-features user, not connected | They tap Connect Zinc | The server calls `POST /device/code` and stores the `device_code` with its expiry in a server-only row tied to the user (no grants to `authenticated`). The page shows the user code and an **Open Zinc** link to `verification_uri_complete` |
 | AC-3 | Waiting for Allow | The user clicks Allow at Zinc | A poll (server action, paid features re-checked) calls `POST /device/token`. Polls first claim the attempt (`zinc_claim_poll`), so only one tab calls Zinc at a time and none sees an error. The key and the webhook secret go to Supabase Vault; our webhook URL with a fresh opaque per-account id is registered on the account (stored on `concierge.accounts`; it only routes the request, the HMAC is the real check); `zinc_connected_at` is set. The page moves to state 4 |
 | AC-4 | Waiting for Allow | The code expires, Zinc denies, or the user taps Cancel | The page returns to state 2 with a short reason; the pending row is deleted; nothing else is stored |
@@ -80,7 +80,7 @@ ALL-30 (placing the order) is built here too (owner, 2026-11-06): without it, th
 | AC-24 | A held gift | The buyer taps "Cancel this gift" (a signed one-time link on `action_links`, action `cancel_held_gift`, with the usual confirm POST) | Under the round row lock, the held orders are cancelled. If no order in the round got past `held`, the round is skipped; if one did, the round goes to `ordered` (never `skipped` while a gift is on its way, T27) |
 | AC-25 | A person or occasion is deleted or switched off while orders are held | `skip_open_rounds` or the deadline skip runs | Same rule as AC-24, in the same SQL and under the same lock, so a later top-up can't buy them |
 | AC-26 | Order webhooks | `order.placed` / `order.failed` arrive | The price breakdown, `provider_order_id` and status are saved. `order.failed` maps `error_type` to a reason stored in `gift_rounds.attention_reason` (`price_up`, `out_of_stock`, `fix_address`, …; holds use `funds`, `setup`, `paused`). `invalid_shipping_address` keeps the approval: reason `fix_address`, and saving a valid address re-places the same pick (not `needs_address`, which would discard the approval and regenerate). Shipping and delivery events are ALL-33 |
-| AC-28 | An order for a list pick (`gift_ideas.source = 'list'`) | It's approved | The item is claimed on the list at approval, and released if the gift is cancelled or expires, through new functions exported from the lists module's `index.ts` (T19: the concierge never writes list tables), so friends don't double up (ALL-30 note from ALL-44; owner) |
+| AC-28 | An order for a list pick (`gift_ideas.source = 'list'`) | It's approved | The item is claimed on the list at approval, and released if the gift is cancelled or expires, through the SQL functions `lists.claim_for_order` and `lists.release_for_order`, which `approve_round` and `reconcile_round` call under the round lock (the ledger ruling: the concierge never writes list tables itself, T19), so friends don't double up. A friend's claim that lands during approval refuses it (`approve_round: claimed`) (ALL-30 note from ALL-44; owner; final review S5) |
 | AC-27 | Real money | Sandbox on dev, then one real order on the owner's account | A shortfall with auto top-up on is covered and the order goes ahead (ALL-32 criterion 4, ALL-30 criterion 4; the owner does the live one) |
 
 ### Out of scope
@@ -199,14 +199,14 @@ Order holds are kept per order in `orders.hold_reason`:
 `unconfirmed` is an **order status**, not a hold. It's live. It's never cancelled by `cancel_held`, `settle_order` accepts it, it blocks `zinc_forget`, and it flags the round for the owner.
 
 1. **Final statuses don't move.** `skipped`, `delivered` and `complete` are never changed; it returns as is.
-2. **First match wins**, among live orders (not cancelled, and not failed-and-resolved):
+2. **First match wins**, among live orders (not cancelled, and not failed-and-resolved). Anything the customer must hear about comes before a gift on its way, so customers are always told at once: one order `placing` and another `held/funds` is `needs_attention/funds` right away, and the hold email goes out. `begin_placing` moves only `held` orders, so placing the held one while the other is still `placing` is fine (controller ruling, 2026-11-06).
 
 | Live orders in the round | Round status | `attention_reason` |
 |---|---|---|
-| Any `placing` | `ordered` | null |
 | Any `unconfirmed` | `needs_attention` | `unconfirmed` (emailed: "we're confirming it with the store"; owner alerted) |
-| Any `failed`, not resolved | `needs_attention` | that failure (`price_up`, `out_of_stock`, `failed`) |
+| Any `failed`, not resolved | `needs_attention` | that failure (`price_up`, `out_of_stock`, `too_late`, `failed`) |
 | Any `held` | `needs_attention` | the highest-priority hold: `address` > `setup` > `funds` > `not_allowed` > `paused` > `retry` |
+| Any `placing` | `ordered` | null |
 | Any `placed` or later | `ordered` | null |
 | None | unchanged, or `skipped` when called with the `cancel` or `deadline` context | null |
 
@@ -520,7 +520,7 @@ These failure modes need their own tests:
    - kill switch off → `hold_orders(paused)`
    - no paid features → `not_allowed`
    - not connected or no phone → `setup`
-2. **Still on time:** for each held order, `canArriveInTime({ occasionDate, orderDate: today, handlingDaysMax, deliveryDaysMax })` with the idea's saved delivery range. If it can't arrive in time → `fail_order(too_late)`. The order is resolved, the round gets reason `too_late`, and the customer is emailed `too_late` (owner).
+2. **Still on time:** for each held order, `canArriveInTime({ occasionDate, orderDate: today, handlingDaysMax, deliveryDaysMax })` with the idea's saved delivery range. If it can't arrive in time → `fail_order(too_late)`. `fail_order(too_late)` leaves the order unresolved, so the round gets reason `too_late` and the customer is emailed `too_late` (owner); the deadline resolves it, and the round is skipped.
 3. **Address:** for a recipient address, re-read it with `isShippableAddress`. If it fails → `hold_orders(address)`.
 4. **Re-checked cap:** `min(saved, recomputed with this round's orders excluded)`.
 5. **Known short:** if auto top-up is known off, read `/wallet/me` and `set_seen_balance`. If short → `hold_orders(funds)`.

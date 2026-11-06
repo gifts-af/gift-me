@@ -1,6 +1,8 @@
 import {
+  EMAILED_HOLDS,
   nextAction,
   roundToCreate,
+  type AttentionReason,
   type CalendarDate,
   type OccasionKind,
   type RoundStatus,
@@ -9,9 +11,10 @@ import {
   type StepKey,
 } from "@gifts-af/core";
 import { OCCASION_NAMES, shortDate } from "@/components/occasion-format";
-import { logEvent } from "@/lib/log";
+import { errorFields, logEvent } from "@/lib/log";
 import { notify, type NotifyDeps, type NotifyResult } from "../notify/notify";
-import type { ClaimedRound, RoundContext, RoundFinish, RoundStore } from "./store";
+import type { Funding } from "../notify/templates";
+import type { ClaimedRound, RoundContext, RoundFinish, RoundOrder, RoundStore } from "./store";
 
 // The round engine (ALL-28, design §5.1). The daily tick creates rounds that
 // are due, then claims each due round with a lease and runs its next step:
@@ -22,10 +25,41 @@ import type { ClaimedRound, RoundContext, RoundFinish, RoundStore } from "./stor
 // the send and fail; the deadline skip finishes anyway) → finish. A step that dies after recording keeps the
 // record, so a retry never sends the same email twice (AC-11). A step that
 // fails leaves its lease to expire and is retried by the next tick (AC-12).
+//
+// Money-path rounds (needs_attention, ALL-32) never use finish: their status
+// belongs to reconcile_round, which every money-path SQL function calls. The
+// engine sends the hold and failure emails, retries placing, closes the round
+// at its deadline through cancel_held, and gives the lease back with
+// release_round (plan, "How reconcile_round decides").
 
 export type GenerateIdeas = (roundId: string) => Promise<void>;
 
-export type EngineDeps = { store: RoundStore; notify: NotifyDeps; now: Date; generateIdeas: GenerateIdeas };
+/** The buying side, bound by the caller from the Zinc wiring; null where Zinc is off (E3). */
+export type EngineZinc = {
+  /**
+   * placeRound with the round's lease held; it never writes round status. `deadlineMs` (on the
+   * engine's clock) is the run's one placing budget (zinc_place_budget_ms): no POST starts after it.
+   */
+  placeRound: (roundId: string, lock: Date, deadlineMs: number) => Promise<unknown>;
+  /** Settles orders left placing (sweepStalePlacing); runs first on each tick. */
+  sweep: () => Promise<unknown>;
+  /** The user's wallet; only called for a user with paid features and Zinc connected (AC-11). */
+  wallet: (userId: string) => Promise<{ balanceCents: number | null; autoTopUp: boolean | null }>;
+  /** What the user's rounds due within `days` will need (lookaheadCents). */
+  lookahead: (userId: string, days: number, feeCents: number) => Promise<{ cents: number; atLeast: boolean }>;
+  /** The user's Zinc wallet page, for "Top up your Zinc balance". */
+  walletUrl: string;
+};
+
+export type EngineDeps = {
+  store: RoundStore;
+  notify: NotifyDeps;
+  now: Date;
+  generateIdeas: GenerateIdeas;
+  zinc: EngineZinc | null;
+  /** Milliseconds, for the placing budget; Date.now when left out. */
+  clock?: () => number;
+};
 
 export type TickSummary = { enabled: boolean; created: number; advanced: number; failed: number };
 
@@ -46,20 +80,49 @@ async function engineOn(store: RoundStore): Promise<boolean> {
 
 export async function runTick(deps: EngineDeps): Promise<TickSummary> {
   const { store, now } = deps;
-  if (!(await engineOn(store))) {
-    logEvent("round_tick", { enabled: false });
-    return { enabled: false, created: 0, advanced: 0, failed: 0 };
+  // The money path runs whatever round_engine_enabled says (owner): the sweep, the "ordered"
+  // retry and the rounds that need attention. The switch stops round creation, ideas and the
+  // approval reminders; ordering itself has its own switch (zinc_ordering_enabled).
+  const on = await engineOn(store);
+
+  // Orders left placing are settled first, so their rounds below see the outcome.
+  if (deps.zinc) {
+    try {
+      await deps.zinc.sweep();
+    } catch (err) {
+      logEvent("order.sweep_run_failed", { ...errorFields(err) });
+    }
+  }
+  // "Ordered" emails the service refused before (or orders settled by hand) go out now.
+  try {
+    await retryOrderedEmails(deps);
+  } catch (err) {
+    logEvent("order.ordered_retry_failed", { ...errorFields(err) });
   }
 
   const s = await store.scheduleSettings();
+  // One placing budget for the whole tick, shared by every round it places (zinc_place_budget_ms).
+  const placeBy = await placeDeadline(deps);
+  if (!on) {
+    let advanced = 0;
+    let failed = 0;
+    for (const round of await store.claimDueMoney(now)) {
+      if (await advanceClaimed(round, deps, s, false, placeBy)) advanced++;
+      else failed++;
+    }
+    const summary = { enabled: false, created: 0, advanced, failed };
+    logEvent("round_tick", summary);
+    return summary;
+  }
   const { created, failed: createFailed } = await createDueRounds(deps, s);
 
   // One after another, each on its own: one failing round can't stop the rest.
   // `failed` counts occasions that couldn't be created and rounds that failed.
+  // claim_due_rounds hands back held rounds first, earliest deadline first (AC-21).
   let advanced = 0;
   let failed = createFailed;
   for (const round of await store.claimDue(now)) {
-    if (await advanceClaimed(round, deps, s)) advanced++;
+    if (await advanceClaimed(round, deps, s, false, placeBy)) advanced++;
     else failed++;
   }
 
@@ -68,13 +131,35 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
   return summary;
 }
 
-/** Moves one round on now, if it's due and no one else holds it (AC-10). */
-export async function advanceRound(roundId: string, deps: EngineDeps): Promise<AdvanceResult> {
-  if (!(await engineOn(deps.store))) return "off";
-  const round = await deps.store.claim(roundId, deps.now);
+/**
+ * Moves one round on now, if it's due and no one else holds it (AC-10). `justPlaced`: the
+ * caller (approval, a webhook, the sweep, placing held gifts) has just tried placing it, so
+ * the engine only tells the buyer, and claims it whatever its next_action_at (claimNow):
+ * reconcile_round set that from the database's clock, after the caller's `now` was taken.
+ */
+export async function advanceRound(
+  roundId: string,
+  deps: EngineDeps,
+  opts: { justPlaced?: boolean } = {},
+): Promise<AdvanceResult> {
+  // A just-placed round is on the money path, which runs with the engine off too (owner).
+  if (!opts.justPlaced && !(await engineOn(deps.store))) return "off";
+  const round = opts.justPlaced ? await deps.store.claimNow(roundId, deps.now) : await deps.store.claim(roundId, deps.now);
   if (!round) return "busy";
+  if (opts.justPlaced && round.status !== "needs_attention") {
+    // Nothing to tell (claimNow also takes rounds awaiting approval): give the lease back.
+    if (!(await deps.store.release(round.id, round.lockedUntil))) throw new Error("Lost the lease on the round");
+    return "busy";
+  }
   const s = await deps.store.scheduleSettings();
-  return (await advanceClaimed(round, deps, s)) ? "advanced" : "failed";
+  const placeBy = opts.justPlaced ? 0 : await placeDeadline(deps);
+  return (await advanceClaimed(round, deps, s, opts.justPlaced ?? false, placeBy)) ? "advanced" : "failed";
+}
+
+/** When placing must stop: now plus zinc_place_budget_ms on the engine's clock (0 with Zinc off). */
+async function placeDeadline(deps: EngineDeps): Promise<number> {
+  if (!deps.zinc) return 0;
+  return (deps.clock ?? Date.now)() + (await deps.store.setting("zinc_place_budget_ms"));
 }
 
 /** After a person's address is saved: their rounds waiting for it go on at once (AC-9). */
@@ -119,17 +204,24 @@ async function createDueRounds(
 }
 
 /** Runs a claimed round's step; true if it finished. Never throws. */
-async function advanceClaimed(round: ClaimedRound, deps: EngineDeps, s: ScheduleSettings): Promise<boolean> {
+async function advanceClaimed(
+  round: ClaimedRound,
+  deps: EngineDeps,
+  s: ScheduleSettings,
+  justPlaced: boolean,
+  placeBy: number,
+): Promise<boolean> {
   const ids = { round_id: round.id, user_id: round.userId, status: round.status, attempts: round.attempts };
   try {
     // `attempts` counts this claim, so above the limit means that many claims
     // already ended without finishing (a throw or a killed process). Log it for
     // the owner and still try: the round recovers by itself once the fault is fixed.
     if (round.attempts > (await deps.store.setting("round_max_attempts"))) logEvent("round_stuck", ids);
-    await runStep(round, deps, s);
+    if (round.status === "needs_attention") await runHeld(round, deps, s, justPlaced, placeBy);
+    else await runStep(round, deps, s);
     return true;
   } catch (err) {
-    logEvent("round_failed", { ...ids, error: err instanceof Error ? err.name : "unknown" });
+    logEvent("round_failed", { ...ids, ...errorFields(err) });
     return false;
   }
 }
@@ -172,19 +264,263 @@ async function runStep(claimed: ClaimedRound, deps: EngineDeps, s: ScheduleSetti
       }
       await generateIdeas(round.id);
       ctx = await store.roundContext(round.id);
-      await sendStep(round, ctx, "heads_up", sent, deps);
+      const funding = await headsUpFunding(round, deps);
+      await sendStep(round, ctx, "heads_up", sent, deps, { funding });
       return finishStep(round, ctx, sent, { status: "awaiting_approval", headsUpOn: today }, deps, s, "heads_up");
+    }
+    case "place":
+    case "send_hold":
+      // Only needs_attention rounds get these, and they run in runHeld.
+      throw new Error(`${action.do} for a ${round.status} round`);
+  }
+}
+
+/**
+ * A round on the money path (ALL-32). Tells the buyer about a new hold or failure first,
+ * then tries placing once, then sends whatever reminder is due; at the deadline it closes
+ * the round with cancel_held. reconcile_round sets the status and the next look; the lease
+ * goes back with release_round. Never finish_round (plan, rule 6).
+ */
+async function runHeld(
+  claimed: ClaimedRound,
+  deps: EngineDeps,
+  s: ScheduleSettings,
+  justPlaced: boolean,
+  placeBy: number,
+): Promise<void> {
+  const { store, now } = deps;
+  const today = dayOf(now);
+  const ids = { round_id: claimed.id, user_id: claimed.userId };
+  let round = claimed;
+  let placeTried = justPlaced;
+  // At most one email to the buyer per run: after one goes out, only a try at placing may
+  // follow, and anything else due waits for the next look (a hold starting a few days before
+  // the deadline gets its notice today and the reminder tomorrow, not both at once).
+  let emailed = false;
+  const steps: string[] = [];
+  // Ordering switched off outranks a funds hold for emailing (round-plan, orderingPaused).
+  const orderingPaused = (await store.setting("zinc_ordering_enabled")) !== 1;
+  // Each pass sends a new key or tries placing once, so this ends; the cap is a backstop.
+  for (let pass = 0; pass < 5 && round.status === "needs_attention"; pass++) {
+    const ctx = await store.roundContext(round.id);
+    const sent = await store.sentSteps(round.id);
+    const action = nextAction(view(round, ctx, sent, placeTried, orderingPaused), today, s);
+    if (emailed && action.do !== "place") break;
+    if (action.do === "skip") {
+      steps.push(await closeAtDeadline(round, ctx, sent, deps, orderingPaused));
+      break;
+    }
+    if (action.do === "place") {
+      placeTried = true;
+      steps.push("place");
+      if (!deps.zinc) logEvent("zinc.wiring_missing", ids);
+      // The run's placing budget is spent: the next tick tries it (the reminders still go today).
+      else if ((deps.clock ?? Date.now)() >= placeBy) logEvent("order.place_budget_spent", ids);
+      else await deps.zinc.placeRound(round.id, round.lockedUntil, placeBy);
+    } else if (action.do === "send_hold") {
+      await sendStep(round, ctx, action.send, sent, deps);
+      emailed = true;
+      steps.push(action.send);
+      const reason = round.attentionReason;
+      if (action.send.startsWith("hold:") && reason && EMAILED_HOLDS.includes(reason)) {
+        // What the buyer was told (reconcile rule 4), and the balance named in a funds email (AC-22).
+        await store.markHoldEmailed(round.id, reason, reason === "funds" ? round.seenBalanceCents : null);
+      }
+      await store.reconcile(round.id);
+    } else {
+      break;
+    }
+    round = await store.refresh(round);
+  }
+  // Sets next_action_at for what's left (tomorrow, or the deadline once ordered).
+  const status = await store.reconcile(round.id);
+  if (!(await store.release(round.id, round.lockedUntil))) throw new Error("Lost the lease on the round");
+  logEvent("round_step", { ...ids, status: claimed.status, next_status: status, step: steps.join(",") || null });
+}
+
+/**
+ * The deadline for a held round (AC-23 to AC-25). cancel_held cancels what was never sent and
+ * says where the round ends up. The buyer is always told, and an email the service refuses is
+ * tried again on the next look, so the round isn't closed until the email that decides what
+ * they hear has gone (owner):
+ * - held gifts next to one placed, placing or unconfirmed: "we cancelled <gift>, nothing was
+ *   charged" goes first, naming the other gift as on its way only once it's placed (a placing
+ *   or unconfirmed one has its own emails);
+ * - nothing placed, placing or unconfirmed: the skipped email (or missed_on_us when our own
+ *   switch kept it back) goes first;
+ * - still unconfirmed after closing: "still confirming". The round stays open, so a refusal is
+ *   retried; when the cancel email went this run, it waits for the next look (one email a run).
+ */
+async function closeAtDeadline(
+  round: ClaimedRound,
+  ctx: RoundContext,
+  sent: Set<StepKey>,
+  deps: EngineDeps,
+  orderingPaused: boolean,
+): Promise<string> {
+  const ids = { round_id: round.id, user_id: round.userId };
+  const held = ctx.orders.filter(LIVE_HELD);
+  const placed = ctx.orders.filter((o) => ["placed", "shipped", "delivered", "refunded"].includes(o.status));
+  const pending = ctx.orders.some((o) => o.status === "placing" || o.status === "unconfirmed");
+  // Our own switch kept it back: ordering is off now, whatever reason the hold was stored with
+  // (gate_held_orders never replaces funds with paused), or the hold says paused.
+  const skipStep: StepKey = round.attentionReason === "paused" || orderingPaused ? "missed_on_us" : "skipped";
+
+  let emailed = false;
+  // The email that decides what the buyer hears goes before closing; a refusal keeps the round
+  // open for the next look. Past the deadline that means a gift held open: alert the owner (once
+  // a look, so once a day).
+  const before = async (step: StepKey, extra: Extra = {}) => {
+    try {
+      await sendStep(round, ctx, step, sent, deps, extra);
+    } catch (err) {
+      if (dayOf(deps.now) > round.shipByDeadline) logEvent("round_deadline_email_held_open", { ...ids, alert: true });
+      throw err;
+    }
+  };
+  if (held.length > 0 && (placed.length > 0 || pending)) {
+    const partial = { cancelled: held.map((o) => o.title), onItsWay: placed.map((o) => o.title) };
+    await before("held_cancelled", { partial });
+    emailed = true;
+  } else if (placed.length === 0 && !pending) {
+    await before(skipStep);
+    emailed = true;
+  }
+
+  const status = await deps.store.cancelHeld(round.id);
+  // A placing order failed while we closed (rare), so the round ended skipped after all: the
+  // skipped email still goes (its own key, so never twice), best effort now the round is closed.
+  if (status === "skipped" && (!emailed || pending)) {
+    if (!(await trySend(round, ctx, skipStep, sent, deps))) logEvent("round_skip_email_failed", { ...ids, alert: true });
+  } else if (status === "needs_attention" && !emailed) {
+    const after = await deps.store.refresh(round);
+    if (after.attentionReason === "unconfirmed") {
+      const step: StepKey = `hold:${after.holdCount}:deadline`;
+      // A refusal is forgotten, and the round stays open, so the next day's look tries again.
+      if (!(await trySend(after, ctx, step, sent, deps))) logEvent("round_hold_email_failed", ids);
+    }
+  }
+  return `deadline:${status}`;
+}
+
+/**
+ * The rounds with an order Zinc placed whose "ordered" email hasn't gone (a refused send is
+ * forgotten): the tick sends them again, so the buyer is always told (owner).
+ */
+export async function retryOrderedEmails(deps: EngineDeps): Promise<void> {
+  for (const roundId of await deps.store.roundsMissingOrderedEmail()) {
+    try {
+      await tellOrdered(roundId, deps);
+    } catch (err) {
+      logEvent("order.ordered_email_failed", { round_id: roundId, ...errorFields(err), alert: true });
     }
   }
 }
 
-function view(round: ClaimedRound, ctx: RoundContext, sent: Set<StepKey>): RoundView {
+/**
+ * The emails for orders Zinc settled (owner: customers are always told), each once, keyed in
+ * round_sends so it never goes twice:
+ * - "ordered" (PRD A-8) for each order Zinc confirmed placed, `ordered:<order id>`;
+ * - "we couldn't buy it" (failed_late) for each order that failed after its round closed,
+ *   `late_fail:<order id>`: the engine never looks at a closed round again (S2).
+ * Called after a webhook or the sweep settles an order, and by the tick for any not yet sent.
+ * A refusal is forgotten and logged for the owner.
+ */
+export async function tellOrdered(roundId: string, deps: EngineDeps): Promise<void> {
+  const ctx = await deps.store.roundContext(roundId);
+  const sent = await deps.store.sentSteps(roundId);
+  const occasion = {
+    personName: ctx.personName,
+    occasion: occasionWord(ctx.occasionKind),
+    dateText: shortDate(ctx.occasionDate),
+  };
+  const open = { action: "open_person" as const, expiresAt: new Date(`${ctx.occasionDate}T23:59:00Z`) };
+  const placed = ctx.orders.filter((x) => ["placed", "shipped", "delivered"].includes(x.status));
+  for (const o of placed) {
+    const step: StepKey = `ordered:${o.id}`;
+    if (sent.has(step)) continue;
+    if (!(await deps.store.recordSend(roundId, ctx.userId, step))) continue;
+    const result = await notify(
+      {
+        userId: ctx.userId,
+        roundId,
+        kind: "ordered",
+        data: { ...occasion, giftTitle: o.title, ...(o.shipCity ? { cityText: o.shipCity } : {}) },
+        links: { open },
+      },
+      deps.notify,
+    );
+    if (!result.ok) {
+      await deps.store.forgetSend(roundId, step);
+      logEvent("order.ordered_email_failed", { round_id: roundId, user_id: ctx.userId, order_id: o.id, alert: true });
+    }
+  }
+  for (const o of ctx.orders.filter((x) => x.status === "failed" && x.failedAfterClose)) {
+    const step: StepKey = `late_fail:${o.id}`;
+    if (sent.has(step)) continue;
+    if (!(await deps.store.recordSend(roundId, ctx.userId, step))) continue;
+    const onItsWay = placed.map((x) => x.title);
+    const result = await notify(
+      {
+        userId: ctx.userId,
+        roundId,
+        kind: "failed_late",
+        data: { ...occasion, giftTitle: o.title, ...(onItsWay.length > 0 ? { onItsWay } : {}) },
+        links: { open },
+      },
+      deps.notify,
+    );
+    if (!result.ok) {
+      await deps.store.forgetSend(roundId, step);
+      logEvent("order.failed_late_email_failed", { round_id: roundId, user_id: ctx.userId, order_id: o.id, alert: true });
+    } else {
+      logEvent("order.failed_late_told", { round_id: roundId, user_id: ctx.userId, order_id: o.id });
+    }
+  }
+}
+
+/**
+ * The heads-up's low-balance warning (AC-11): what the next few weeks need against the
+ * wallet, when auto top-up isn't known to be on. Only for a user with paid features and
+ * Zinc connected; any Zinc error leaves it out rather than holding up the email.
+ */
+async function headsUpFunding(round: ClaimedRound, deps: EngineDeps): Promise<Funding | undefined> {
+  const { zinc, store } = deps;
+  if (!zinc) return undefined;
+  try {
+    if (!(await store.canBuy(round.userId))) return undefined;
+    const wallet = await zinc.wallet(round.userId);
+    if (wallet.balanceCents === null || wallet.autoTopUp === true) return undefined;
+    const [days, feeCents] = await Promise.all([store.setting("funding_lookahead_days"), store.setting("zinc_order_fee_cents")]);
+    const due = await zinc.lookahead(round.userId, days, feeCents);
+    if (due.cents <= wallet.balanceCents) return undefined;
+    return {
+      dueText: money(due.cents),
+      haveText: money(wallet.balanceCents),
+      atLeast: due.atLeast,
+      windowText: days % 7 === 0 ? `the next ${days / 7 === 1 ? "week" : `${days / 7} weeks`}` : `the next ${days} days`,
+      walletUrl: zinc.walletUrl,
+    };
+  } catch (err) {
+    logEvent("heads_up_funding_failed", { round_id: round.id, user_id: round.userId, ...errorFields(err) });
+    return undefined;
+  }
+}
+
+function view(round: ClaimedRound, ctx: RoundContext, sent: Set<StepKey>, placeTried = false, orderingPaused = false): RoundView {
   return {
     status: round.status,
     shipByDeadline: round.shipByDeadline,
     headsUpOn: round.headsUpOn,
     hasAddress: ctx.hasAddress,
     sent,
+    attentionReason: round.status === "needs_attention" ? round.attentionReason : null,
+    holdCount: round.holdCount,
+    failCount: ctx.failCount,
+    seenBalanceCents: round.seenBalanceCents,
+    emailedBalanceCents: round.emailedBalanceCents,
+    placeTried,
+    orderingPaused,
   };
 }
 
@@ -196,6 +532,9 @@ async function moveToGenerating(round: ClaimedRound, { store, now }: EngineDeps)
   return store.claim(round.id, now);
 }
 
+/** What some emails add to the round's own data. */
+type Extra = { funding?: Funding; partial?: { cancelled: string[]; onItsWay: string[] } };
+
 /** Records the step, then sends it; fails on a clean refusal, so the next tick tries again. */
 async function sendStep(
   round: ClaimedRound,
@@ -203,8 +542,9 @@ async function sendStep(
   step: StepKey,
   sent: Set<StepKey>,
   deps: EngineDeps,
+  extra: Extra = {},
 ): Promise<void> {
-  if (!(await trySend(round, ctx, step, sent, deps))) throw new Error(`Sending ${step} failed`);
+  if (!(await trySend(round, ctx, step, sent, deps, extra))) throw new Error(`Sending ${step} failed`);
 }
 
 /**
@@ -217,11 +557,12 @@ async function trySend(
   step: StepKey,
   sent: Set<StepKey>,
   deps: EngineDeps,
+  extra: Extra = {},
 ): Promise<boolean> {
   const fresh = await deps.store.recordSend(round.id, round.userId, step);
   sent.add(step);
   if (!fresh) return true;
-  const result = await sendEmail(step, round, ctx, deps.notify);
+  const result = await sendEmail(step, round, ctx, deps, extra);
   if (result.ok) return true;
   sent.delete(step);
   await deps.store.forgetSend(round.id, step);
@@ -263,7 +604,28 @@ function occasionWord(kind: OccasionKind): string {
   return kind === "birthday" || kind === "anniversary" ? OCCASION_NAMES[kind].toLowerCase() : OCCASION_NAMES[kind];
 }
 
-function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundContext, deps: NotifyDeps): Promise<NotifyResult> {
+type PlainStep = Exclude<StepKey, `hold:${string}` | `fail:${string}` | `ordered:${string}` | `late_fail:${string}`>;
+/** Which email a step key sends; the numbered keys group by kind. */
+type EmailStep = PlainStep | "hold" | "hold_short" | "hold_deadline" | "fail" | "ordered";
+
+function emailStep(step: StepKey): EmailStep {
+  if (step.startsWith("hold:")) {
+    if (step.includes(":short:")) return "hold_short";
+    return step.endsWith(":deadline") ? "hold_deadline" : "hold";
+  }
+  if (step.startsWith("fail:")) return "fail";
+  if (step.startsWith("ordered:") || step.startsWith("late_fail:")) return "ordered";
+  return step as PlainStep;
+}
+
+const LIVE_HELD = (o: RoundOrder) => o.status === "held";
+const ON_ITS_WAY = (o: RoundOrder) => ["placing", "placed", "shipped", "delivered"].includes(o.status);
+/** The failure the buyer is being told about: the newest one still needing them. */
+const lastFailure = (orders: RoundOrder[]) =>
+  [...orders].reverse().find((o) => o.status === "failed" && !o.resolved && o.failureType !== "invalid_shipping_address");
+
+async function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundContext, deps: EngineDeps, extra: Extra): Promise<NotifyResult> {
+  const notifyDeps: NotifyDeps = deps.notify;
   const base = { userId: round.userId, roundId: round.id };
   const occasion = {
     personName: ctx.personName,
@@ -279,23 +641,30 @@ function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundContext, deps: 
   // Open guided questions, when there are any (ALL-26, design §6.7).
   const asks = ctx.openQuestions > 0 ? { questions: ctx.openQuestions } : {};
   const questionsLink = ctx.openQuestions > 0 ? { questions: { ...link, action: "answer_questions" as const } } : {};
+  // The hold emails (ALL-32): the gifts waiting, and a plain "Cancel this gift" link.
+  const cancelLink = { ...link, action: "cancel_held_gift" as const };
+  const held = ctx.orders.filter(LIVE_HELD);
+  const gifts = { ...occasion, giftTitles: held.map((o) => o.title) };
+  const feeText = async () => money(await deps.store.setting("zinc_order_fee_cents"));
+  const reason: AttentionReason | null = round.attentionReason;
 
-  switch (step) {
+  const kind = emailStep(step);
+  switch (kind) {
     case "heads_up":
       return notify(
         {
           ...base,
           kind: "heads_up",
-          data: { ...occasion, ...asks, mode: "reminder", ideas, late: round.late },
+          data: { ...occasion, ...asks, mode: "reminder", ideas, late: round.late, ...(extra.funding ? { funding: extra.funding } : {}) },
           links: { choose: link, ...questionsLink },
         },
-        deps,
+        notifyDeps,
       );
     case "reminder_1":
     case "reminder_2":
       return notify(
         { ...base, kind: "reminder", data: { ...occasion, ...asks, ideas }, links: { choose: link, ...questionsLink } },
-        deps,
+        notifyDeps,
       );
     case "final_notice":
       return notify(
@@ -305,18 +674,139 @@ function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundContext, deps: 
           data: { ...occasion, ideas, orderByText: shortDate(round.shipByDeadline) },
           links: { choose: link },
         },
-        deps,
+        notifyDeps,
       );
+    case "held_cancelled":
     case "skipped":
-      return notify({ ...base, kind: "skipped", data: occasion, links: { open: link } }, deps);
+      // A money-path round at its deadline: the buyer had chosen a gift (ALL-32).
+      return notify(
+        {
+          ...base,
+          kind: "skipped",
+          data: {
+            ...occasion,
+            ...(round.status === "needs_attention" ? { held: true } : {}),
+            ...(extra.partial ? { partial: extra.partial } : {}),
+          },
+          links: { open: link },
+        },
+        notifyDeps,
+      );
     case "address_request":
-      return notify({ ...base, kind: "needs_address", data: occasion, links: { addAddress: addressLink } }, deps);
+      return notify({ ...base, kind: "needs_address", data: occasion, links: { addAddress: addressLink } }, notifyDeps);
     case "address_reminder_1":
     case "address_reminder_2":
     case "address_final_notice":
       return notify(
         { ...base, kind: "needs_address", data: { ...occasion, reminder: true }, links: { addAddress: addressLink } },
-        deps,
+        notifyDeps,
       );
+    case "missed_on_us":
+      return notify({ ...base, kind: "missed_on_us", data: gifts, links: { open: link } }, notifyDeps);
+    case "hold_trouble":
+      return notify(
+        { ...base, kind: "hold_trouble", data: { ...gifts, feeText: await feeText() }, links: { open: link, cancel: cancelLink } },
+        notifyDeps,
+      );
+    case "hold_deadline":
+      return notify(
+        { ...base, kind: "hold_unconfirmed", data: { ...gifts, giftTitles: unconfirmedTitles(ctx) }, links: { open: link } },
+        notifyDeps,
+      );
+    case "hold":
+    case "hold_short":
+      return sendHold(reason, kind === "hold_short");
+    case "fail":
+      return sendFailure(reason);
+    case "ordered":
+      // Sent by tellOrdered, which knows the order (ordered and late_fail); never a round step.
+      throw new Error("The ordered and late failure emails are sent by tellOrdered");
+    default: {
+      const unknown: never = kind;
+      throw new Error(`No email for step ${String(unknown)}`);
+    }
   }
+
+  async function sendHold(r: AttentionReason | null, still: boolean): Promise<NotifyResult> {
+    switch (r) {
+      case "funds": {
+        const needed = held.reduce((sum, o) => sum + o.maxPriceCents + o.feeCents, 0);
+        const have = round.seenBalanceCents;
+        const placed = ctx.orders.find(ON_ITS_WAY);
+        return notify(
+          {
+            ...base,
+            kind: "hold_funds",
+            data: {
+              ...gifts,
+              neededText: money(needed),
+              ...(have !== null ? { haveText: money(have), shortText: money(Math.max(0, needed - have)) } : {}),
+              feeText: await feeText(),
+              walletUrl: deps.zinc?.walletUrl ?? `${notifyDeps.baseUrl}/settings`,
+              ...(placed ? { placedTitle: placed.title } : {}),
+              ...(still ? { still: true } : {}),
+            },
+            links: { cancel: cancelLink },
+          },
+          notifyDeps,
+        );
+      }
+      case "setup":
+        return notify(
+          {
+            ...base,
+            kind: "hold_setup",
+            data: { ...gifts, feeText: await feeText() },
+            links: { setup: { ...link, action: "open_settings" }, cancel: cancelLink },
+          },
+          notifyDeps,
+        );
+      case "address":
+        return notify(
+          {
+            ...base,
+            kind: "hold_address",
+            data: { ...gifts, feeText: await feeText() },
+            links: { addAddress: addressLink, cancel: cancelLink },
+          },
+          notifyDeps,
+        );
+      case "unconfirmed":
+        return notify(
+          { ...base, kind: "hold_unconfirmed", data: { ...gifts, giftTitles: unconfirmedTitles(ctx) }, links: { open: link } },
+          notifyDeps,
+        );
+      default:
+        throw new Error(`No hold email for reason ${r}`);
+    }
+  }
+
+  async function sendFailure(r: AttentionReason | null): Promise<NotifyResult> {
+    const failed = lastFailure(ctx.orders);
+    const one = { ...occasion, giftTitle: failed?.title ?? "gift" };
+    switch (r) {
+      case "price_up":
+        return notify({ ...base, kind: "price_up", data: one, links: { open: link } }, notifyDeps);
+      case "out_of_stock":
+        return notify({ ...base, kind: "out_of_stock", data: one, links: { open: link } }, notifyDeps);
+      case "too_late":
+        return notify({ ...base, kind: "too_late", data: one, links: { open: link } }, notifyDeps);
+      case "failed":
+        return notify(
+          {
+            ...base,
+            kind: "needs_attention",
+            data: { ...occasion, reason: `the store couldn't place the order for the ${one.giftTitle}, and nothing was charged.` },
+            links: { open: link },
+          },
+          notifyDeps,
+        );
+      default:
+        throw new Error(`No failure email for reason ${r}`);
+    }
+  }
+}
+
+function unconfirmedTitles(ctx: RoundContext): string[] {
+  return ctx.orders.filter((o) => o.status === "unconfirmed").map((o) => o.title);
 }

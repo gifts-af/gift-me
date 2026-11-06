@@ -12,6 +12,7 @@ const allowed: [RoundStatus, RoundStatus][] = [
   ["awaiting_approval", "ordered"],
   ["awaiting_approval", "generating"],
   ["awaiting_approval", "skipped"],
+  ["awaiting_approval", "needs_attention"],
   ["ordered", "delivered"],
   ["ordered", "needs_attention"],
   ["delivered", "complete"],

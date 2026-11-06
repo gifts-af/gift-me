@@ -7,7 +7,7 @@ One app for three products (T19): **gift lists** (live, formerly the GiftsAF rep
 | Folder | Purpose | Status |
 |---|---|---|
 | `planning/` | Product discovery: [PRD](planning/PRD.md) (approved 2026-10-17), [decisions log](planning/decisions.md), [research](planning/research/), [platform strategy](planning/strategy.md) (roadmap and go-to-market), [longer-term ideas](planning/ideas.md) | Complete |
-| `design/` | [Technical design](design/technical-design.md) (approved 2026-10-17), [decisions log](design/decisions.md). Spike write-ups go in `design/spikes/`, look and feel in `design/ui.md` (mock-ups in `design/mockups/`), and ticket specs and build plans in `design/plans/` (start from [the template](design/plans/TEMPLATE.md)). | Complete |
+| `design/` | [Technical design](design/technical-design.md) (approved 2026-10-17), [decisions log](design/decisions.md). Spike write-ups go in `design/spikes/`, look and feel in `design/ui.md` (mock-ups in `design/mockups/`), and ticket specs and build plans in `design/plans/` (start from [the template](design/plans/TEMPLATE.md)), such as [Zinc wallet connection and buying, ALL-32](design/plans/ALL-32-zinc-connection.md). | Complete |
 | `.claude/` | Shared Claude Code settings (turns on the Superpowers plugin; runs the local setup check at session start) | Done |
 | `apps/web/` | The one web app (Next.js). Products live in `modules/lists` and `modules/concierge`; see its [README](apps/web/README.md) | Lists live; concierge from Wave 2 |
 | `apps/extension/` | Chrome capture extension: save what's on screen to a person. How to build and load it is in its [README](apps/extension/README.md) | MVP built (ALL-22), loaded unpacked |
@@ -43,6 +43,8 @@ pnpm supabase status   # local URLs and keys; Studio (the database UI) is at htt
 pnpm supabase db reset # rebuild the local database from the migrations, e.g. after pulling new ones
 pnpm supabase stop     # stop the containers; your local data is kept
 pnpm db:test           # run the database tests in supabase/tests/ (privacy rules, keys, cascades)
+pnpm test:db           # run the Vitest files that use the real local database and its API (order races, buying, Zinc connect and events; `pnpm test` leaves them out). Needs `pnpm supabase start`; skips when it isn't running, but fails in CI, whose db job starts it
+pnpm check:bundle      # after pnpm build: fail if a Zinc key prefix or a Vault function name is in the browser code (CI runs it)
 pnpm db:types          # regenerate packages/core/src/database.types.ts after changing the schema
 pnpm db:push:dev       # apply new migrations to dev (CI does this on every merge to main; by hand only to recover)
 pnpm db:push:prod      # apply new migrations to prod (same; add --dry-run to see what would run)
@@ -54,14 +56,14 @@ Write new migrations with `pnpm supabase migration new <name>` and test them loc
 
 **Before the first migration push to a hosted project (`dev` or `prod`):** `config.toml` only exposes the `concierge` and `lists` schemas locally. On each hosted project, add both under Project Settings > Data API > Exposed schemas (admin, as allensforever711), or the app's queries fail with `PGRST106`. Do it **right after** pushing the migration that creates the schema, never before. Exposing a schema that doesn't exist yet takes the whole Data API down (every request gets a 503; tested locally on 2026-10-25). That project also needs Postgres 15 or later; the migrations use `on delete set null (column)`.
 
-**Browser tests (Playwright):** with the local database running, `pnpm --filter @gifts-af/web e2e`. They sign in as a throwaway local account (created for you, email and password, since local Supabase has no Google) at phone width (375 px). They build the app first (about 30 seconds, and type errors stop the run) and test that production build, as CI's `e2e` job does. They need port 3100 free, so only one checkout can run them at a time; if the port is busy the run fails, rather than testing old code. To test a server that's already running, set `E2E_BASE_URL`. CI keeps the downloaded browsers in a cache until `pnpm-lock.yaml` changes, so most runs install only the system packages the browsers need; both install steps time out after 15 minutes (the system packages come from Ubuntu's mirror, which can take 7 minutes or more), so a stuck download fails well short of the hour-long hangs we used to see and can be re-run (ALL-100).
+**Browser tests (Playwright):** with the local database running, `pnpm --filter @gifts-af/web e2e`. They sign in as a throwaway local account (created for you, email and password, since local Supabase has no Google) at phone width (375 px). They build the app first (about 30 seconds, and type errors stop the run) and test that production build, as CI's `e2e` job does. They need port 3100 free; if the port is busy the run fails, rather than testing old code. Set `E2E_PORT` to use another port, so several worktrees can run them at once. To test a server that's already running, set `E2E_BASE_URL`. CI keeps the downloaded browsers in a cache until `pnpm-lock.yaml` changes, so most runs install only the system packages the browsers need; both install steps time out after 15 minutes (the system packages come from Ubuntu's mirror, which can take 7 minutes or more), so a stuck download fails well short of the hour-long hangs we used to see and can be re-run (ALL-100).
 
 **Writing a browser test** (T62, ALL-103):
 
 - **Which browsers run it.** A test runs on the iPhone (WebKit) only, unless it's tagged `@layout`: `test("…", { tag: "@layout" }, async ({ page }) => …)`. Tagged tests run on the Android phone, the iPhone and desktop Chrome. Tag a test when it checks how something looks or fits: no sideways scrolling, positions, tap sizes, dark mode. Behavior (what happens when you press things, what's saved) is the same in every browser, so it runs once. Check layout with the helpers in `e2e/phone-layout.ts` (`phoneLayoutProblems`, `scrollsSideways`): they fail an untagged test with "tag this test @layout" (ALL-107). Don't write "@layout" in a test's title, because Playwright reads any `@word` in a title as a tag.
 - **Signing in.** Call `signIn(page)` from `e2e/sign-in.ts` (or `signIn(page, user)` for `SECOND_USER` or an account from `createFreshUser()`), then open the page you're testing. It signs in through Supabase's API, without the login form, so it's fast. Only tests of the login form itself fill in the form: `pnpm lint` fails any other test that finds the password field (by label, placeholder or role), and those tests disable the rule on that line with a comment saying why (ALL-107).
 
-**Running the web app:** follow [apps/web/README.md](apps/web/README.md) to link Vercel and pull the environment variables, then `pnpm dev`. Before a PR, `pnpm lint && pnpm typecheck && pnpm test && pnpm build` (CI runs the same).
+**Running the web app:** follow [apps/web/README.md](apps/web/README.md) to link Vercel and pull the environment variables, then `pnpm dev`. Before a PR, `pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm check:bundle` (CI runs the same).
 
 **Deploys:** Vercel project `gift-me` (team GiftsAF, slug `gift-me3`) builds `apps/web` from this repo. Every push to `main` deploys to production; every other branch gets a preview URL.
 
@@ -81,7 +83,7 @@ Write new migrations with `pnpm supabase migration new <name>` and test them loc
 - **Google sign-in** is on in `dev` and `prod` (2026-10-25). Since ALL-14 (2026-11-01) the consent screen shows **GiftsAF** with `giftsaf.com` as an authorized domain, and `prod`'s Auth Site URL is `https://giftsaf.com` (redirect URLs: `https://giftsaf.com/**` plus the old `gift-me-beige.vercel.app`). One OAuth client, "Supabase (dev + prod)", in the Google Cloud project **gift-me** (allensforever711), redirects to both projects' `/auth/v1/callback`. The consent screen is in **testing** mode, so only listed test users can sign in. Add people under Google Auth Platform → Audience → Test users. The secret lives only in Google Cloud and the Supabase dashboards. Local Docker Supabase stays email-only, so nobody needs the secret; test Google sign-in on `dev` or a PR preview. `dev`'s redirect URLs allow `http://localhost:3000/**` and every preview (`https://*-gift-me3.vercel.app/**`).
 - **Calling previews from the database:** previews sit behind Vercel's login. A Vercel "protection bypass for automation" secret is stored in `dev`'s Vault as `vercel_preview_bypass`. Send it as the `x-vercel-protection-bypass` header, e.g. from `pg_net`, which was tested on 2026-10-25. It never opens production.
 - **Keys and secrets live in Vercel's environment variables, nowhere else.** Every app key (Resend, Zinc, cron secrets…) is a variable on the `gift-me` project, set per environment (Development, Preview, Production). Anyone signed in as allensforever711 (T25) gets them with `vercel env pull` (see [apps/web/README.md](apps/web/README.md)), and each one is listed, without its value, in `apps/web/.env.example`. **Development values (dev or test keys) stay normal** so `vercel env pull` works for everyone; normal variables are still encrypted. **Production secrets are marked "Sensitive"**: nobody can read them back, only the running app uses them, and if one is needed it's reissued from the vendor. Today the pull gives you the dev Supabase URL and key, the AI Gateway token, `RESEND_API_KEY`, `HOLIDAY_LOGO_DATES` (when the logo wears its Christmas hat, T35), the Turnstile bot-check keys `NEXT_PUBLIC_TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` (Cloudflare's always-pass test keys outside production, T43), `NEXT_PUBLIC_GOOGLE_CLIENT_ID` (the Google client for the Contacts import, T45), and `ZINC_API_KEY` (Zinc's test-mode key in development, live key in production). `EMAIL_OUTBOX` is not on Vercel: set it to `log` in your local `.env.local` to log emails instead of sending them (Playwright sets it itself; ignored in production, ALL-28). `SUPABASE_SECRET_KEY` is the server-only Supabase key that lets server code write tables users can't (action links, notifications, later the round engine): the `dev` project's key in Development and Preview, while production uses the integration's `GIFT_SUPABASE_SECRET_KEY`. It is never sent to the browser (ALL-23, T38). GitHub secrets are only for CI, since nobody can read them back. **Set keys up once, properly:** when a ticket needs a new vendor, create its dev and prod keys and add them here first, then build against the pulled dev key. Spikes use the same keys; there are no throwaway spike keys (owner, 2026-11-01: we work in a full-trust team, so a key seen in a session isn't rotated). Never commit a key to git.
-- **Round engine on/off:** `round_engine_enabled` in `concierge.app_settings` (0 = off, 1 = on). It ships off everywhere; ALL-29 turns it on in production (decision 53). Vercel Cron calls `GET /api/rounds/tick` daily at 12:00 UTC (T49); with the switch off the tick only logs `round_tick {enabled:false}`. To stop a misbehaving engine, set the row to 0, no deploy needed. A round that keeps failing logs `round_stuck` at claim time on each retry, visible in the Vercel logs.
+- **Round engine on/off:** `round_engine_enabled` in `concierge.app_settings` (0 = off, 1 = on). It ships off everywhere; ALL-29 turns it on in production (decision 53). Vercel Cron calls `GET /api/rounds/tick` daily at 12:00 UTC (T49); with the switch off the tick creates no rounds and sends no ideas or approval reminders, but the money path still runs, so a customer is always told what is happening with a purchase (owner): it settles orders left placing, retries "ordered" emails, and moves on rounds that need attention (holds, failures, the deadline), logging `round_tick {enabled:false}` with what it did. To stop a misbehaving engine, set the row to 0, no deploy needed. To stop buying, use `zinc_ordering_enabled` (**Stop all ordering** below). A round that keeps failing logs `round_stuck` at claim time on each retry, visible in the Vercel logs.
 - **Paid features on/off for a user (ALL-94, decision 53):** anything that spends money runs only for users with `concierge.accounts.paid_features` on. Until premium is scoped, that means test and admin users. Users can't set it themselves. An admin sets it in the Supabase SQL editor (signed in as allensforever711), using the person's email from `auth.users`:
 
   ```sql
@@ -92,6 +94,83 @@ Write new migrations with `pnpm supabase migration new <name>` and test them loc
 
   To turn it off, run the same statement with `false`. Check it with `select email, paid_features from concierge.accounts a join auth.users u on u.id = a.user_id where paid_features;`. Without the flag, captures still save but aren't read, and the person page and extension say why. To stop reading for everyone instead, set `capture_extraction_enabled` to 0.
 - `pg_cron` and `pg_net` are on in `dev` only and aren't used: Vercel Cron runs the round tick (T49).
+
+## Zinc wallet ordering (ALL-32, ALL-30)
+
+Users connect their own Zinc account in Settings, and approved gifts are bought from their Zinc wallet. Spec and plan: [design/plans/ALL-32-zinc-connection.md](design/plans/ALL-32-zinc-connection.md). **Production ships with ordering off** (`zinc_ordering_enabled` = 0) until the owner's live test.
+
+**Environment variables** (listed in `apps/web/.env.example`; set per environment in Vercel):
+
+| Variable | What it does |
+|---|---|
+| `ZINC_ENV` | `test` (Zinc's sandbox: the key is issued without the Allow step) or `live` (the real sign-in and Allow). Anything else, or unset, turns connecting and buying off in that environment. |
+| `ZINC_API_BASE` | Zinc's API address. No fallback. |
+| `ZINC_WALLET_URL` | Where the Settings guide sends a user to add a card and turn on auto top-up. **[Verify]** the address with a real Zinc login. |
+
+**Settings** (rows in `concierge.app_settings`; change them in the Supabase SQL editor as allensforever711, no deploy needed):
+
+| Key | Default | What it does |
+|---|---|---|
+| `zinc_ordering_enabled` | 0 | Kill switch for buying. 1 lets orders go to Zinc, 0 holds them as paused. See "Stop all ordering". |
+| `order_price_margin_pct` | 10 | Percent above an idea's estimated total that an order's max price may reach. |
+| `funding_lookahead_days` | 21 | Days ahead that the Settings look-ahead and the heads-up warning count upcoming gifts. |
+| `funding_topup_suggest_cents` | 10000 | Auto top-up amount the Settings guide suggests, in cents. |
+| `zinc_topup_fee_bps` | 290 | Zinc's card top-up fee, in basis points (290 = 2.9%), shown in the guide. |
+| `zinc_topup_fee_fixed_cents` | 30 | Fixed part of Zinc's top-up fee, in cents, shown in the guide. |
+| `hold_reminder_days` | 7 | Days before the ship-by deadline that a held gift gets its reminder email. |
+| `hold_final_days` | 2 | Days before the deadline that a held gift gets its final email. |
+| `zinc_timeout_ms` | 15000 | How long one Zinc call may take before it counts as timed out. |
+| `zinc_retry_attempts` | 3 | Quick retries of a Zinc call that failed with a network error or 5xx. |
+| `zinc_retry_base_ms` | 1000 | First retry delay; it doubles each time, with jitter. |
+| `zinc_place_budget_ms` | 45000 | Time one run (a daily tick, a webhook, a settings or address save) may spend starting Zinc orders, shared by every round it places; later ones wait for the next run. Keep it well under the 300 s `maxDuration` of the routes and pages that place (a request in flight can add `zinc_timeout_ms` × `zinc_retry_attempts`). |
+| `zinc_poll_claim_seconds` | 30 | How long one browser tab holds the connect poll before another may poll. |
+| `placing_stale_minutes` | 30 | Minutes an order may stay "placing" before the sweep looks it up at Zinc. |
+
+### Connecting Zinc on each environment
+
+- **Local, `dev` and previews:** set `ZINC_ENV=test` with a Zinc sandbox key. Connecting skips the Allow step, and sandbox orders cost nothing. Local `supabase/seed.sql` turns ordering on; on `dev` switch it on by hand.
+- **Production:** set `ZINC_ENV=live`. Connecting sends the user to Zinc to sign in and click Allow; their key and webhook secret go to Vault, never to the browser. Leave `zinc_ordering_enabled` at 0 until the owner's live order has worked.
+- **How we see it working:** the events `zinc.connected`, `order.place_result` and `zinc.order_settled` in the Vercel logs, and the order in the user's Zinc dashboard.
+
+### Stop all ordering
+
+**You see:** something is buying wrongly, or Zinc is having a bad day. **Do this** in the Supabase SQL editor (as allensforever711):
+
+```sql
+update concierge.app_settings set value = '0' where key = 'zinc_ordering_enabled';
+```
+
+- Approved gifts are held as `paused`, and nobody is emailed. A gift already waiting on the buyer's Zinc balance stops getting "top up" reminders (topping up wouldn't buy it while ordering is off).
+- A held gift that reaches its deadline while ordering is off gets the "that's on us" email (`missed_on_us`), never "skipped".
+- A run already in progress finishes the orders it has started; the switch is checked at the next order it begins.
+- Set the value back to `'1'` and the held gifts are placed on the next daily tick, with no user step.
+
+### Unconfirmed orders
+
+**You see:** the event `order.unconfirmed`. We sent an order to Zinc and Zinc has no record of it, so we don't know if it was bought. The gift stays live (it can't be bought twice).
+
+1. Open Zinc's dashboard for the buyer's account and find the order by our `order_id` in its metadata (the id in the event).
+2. If it exists, settle it as placed. If it doesn't, settle it as failed:
+
+   ```sql
+   select concierge.settle_order('USER_ID', 'ORDER_ID', 'placed', null, '{"provider_order_id": "ZINC_ORDER_ID"}');
+   select concierge.settle_order('USER_ID', 'ORDER_ID', 'failed', 'failed', null);
+   ```
+
+3. The customer is emailed automatically on the next tick ("ordered", or "we couldn't buy it" when the round has already closed).
+
+### Alerts (events with `alert: true`)
+
+| Event | What it means | What to do |
+|---|---|---|
+| `order.sweep_skipped` | The sweep that looks up stuck "placing" orders couldn't run: `no_key` (the user's key is missing) or `env_mismatch` (`ZINC_ENV` differs from the environment the key was made in). | Fix `ZINC_ENV` for the environment, or ask the user to reconnect Zinc in Settings. The orders stay "placing" until then. |
+| `order.sweep_failed` | Looking up a stuck "placing" order at Zinc failed (Zinc down, an answer we couldn't read, or our database). `kind` and `code` say which. | Nothing if it clears on the next tick (the sweep runs every tick and never resends). If it repeats for the same `order_id`, check Zinc's status and the buyer's key; if Zinc can't find the order, follow **Unconfirmed orders**. |
+| `order.unconfirmed` | The sweep looked up an order stuck "placing" and Zinc has no record of it, so we don't know if it was bought. The buyer has been told "we're confirming your gift". | Open the buyer's Zinc dashboard, find the order by our `order_id` in its metadata (the `order_id` in the event), and settle it with `concierge.settle_order` as placed or failed (**Unconfirmed orders** above). The buyer is emailed on the next tick. |
+| `zinc.webhook_unmatched` | Zinc sent an order event (placed or failed) we can't tie to any order of ours, and Zinc says it has no such order for that buyer's key (or the order carries no reference). The buyer's order may be stuck "placing" or "unconfirmed". | Check the order in the buyer's Zinc dashboard, then settle ours with `concierge.settle_order` as placed or failed (**Unconfirmed orders** above). |
+| `round_skip_email_failed` | A held gift's round closed at its deadline and the "skipped" email that followed (a placing gift failed as the round closed) was refused. It is sent once, best effort: the round is already closed, so nothing retries it. | Check Resend. Then tell the buyer by hand that the gift wasn't bought and nothing was charged for it (`round_id` and `user_id` are in the event). |
+| `round_deadline_email_held_open` | The same, and the deadline has already passed, so the round stays open to keep retrying. | Fix the email problem (Resend status, key). It closes itself once the email goes. |
+| `order.ordered_email_failed` | The "your gift is ordered" email failed. | Check Resend. It is retried on the next tick. |
+| `order.failed_late_email_failed` | A gift failed after its round closed (it was still placing at the deadline, or an unconfirmed one was settled as failed) and the "we couldn't buy it" email failed. | Check Resend. It is retried on the next tick until it goes. |
 
 Where new docs go, how to write them, and when to push straight to `main` versus open a PR are in [CLAUDE.md](CLAUDE.md). Claude reads it automatically, and it's written for people too. Other AI tools read [AGENTS.md](AGENTS.md), which points them to it. The standing rule for everyone: no work without a Linear ticket, and no ticket done without its test evidence posted on it (T44).
 

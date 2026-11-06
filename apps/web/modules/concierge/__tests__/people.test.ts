@@ -606,6 +606,22 @@ describe("a person's shipping address (ALL-81)", () => {
     expect(store.addressRows.get(mine)).toEqual({ ...address, country: "US", checkedAt: "2026-11-03T15:00:00.000Z" });
   });
 
+  it("re-places this person's address holds after a save, and a failure there never fails the save (ALL-32 AC-21)", async () => {
+    const { store, mine, theirs } = setup();
+    const placeHeld = vi.fn(async () => {});
+    expect(await saveAddress(store, mine, address, NOW, placeHeld)).toEqual({ ok: true });
+    expect(placeHeld).toHaveBeenCalledWith(ME, mine);
+
+    const broken = vi.fn(async () => {
+      throw new Error("Zinc down");
+    });
+    expect(await saveAddress(store, mine, address, NOW, broken)).toEqual({ ok: true });
+
+    placeHeld.mockClear();
+    await saveAddress(store, theirs, address, NOW, placeHeld);
+    expect(placeHeld).not.toHaveBeenCalled();
+  });
+
   it("removes the address in one write (AC-6)", async () => {
     const { store, mine } = setup();
     await saveAddress(store, mine, address, NOW);

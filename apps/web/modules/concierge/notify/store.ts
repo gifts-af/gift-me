@@ -1,6 +1,8 @@
 import "server-only";
+import type { Database } from "@gifts-af/core";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
-import type { ActionName } from "./actions";
+import type { ActionName, CancelOutcome } from "./actions";
 import type { NotificationKind } from "./templates";
 
 // Everything notify() and the action links need from the database (ALL-23).
@@ -45,6 +47,11 @@ export interface NotifyStore {
   findLink(hash: string): Promise<LinkRow | null>;
   /** Marks the link used if it is this user's, unused and unexpired; null otherwise. */
   claimLink(hash: string, userId: string, now: Date): Promise<LinkRow | null>;
+  /**
+   * The cancel_held_gift action (ALL-32 AC-24): cancel_held(round, 'cancel') for this user's
+   * round. What it did (for the done page), or null when the round isn't theirs.
+   */
+  cancelHeldGift(roundId: string, userId: string): Promise<CancelOutcome | null>;
 }
 
 const LINK_COLUMNS = "user_id, round_id, action, expires_at, used_at";
@@ -71,8 +78,8 @@ function fail(what: string, error: { message: string }): never {
   throw new Error(`${what}: ${error.message}`);
 }
 
-export function createSupabaseNotifyStore(): NotifyStore {
-  const db = createAdminClient();
+/** The service-role client; tests pass one for the local database (E3). */
+export function createSupabaseNotifyStore(db: SupabaseClient<Database> = createAdminClient()): NotifyStore {
   const concierge = db.schema("concierge");
 
   return {
@@ -175,6 +182,27 @@ export function createSupabaseNotifyStore(): NotifyStore {
         .maybeSingle();
       if (error) fail("Claiming the action link failed", error);
       return data ? toLinkRow(data) : null;
+    },
+
+    async cancelHeldGift(roundId, userId) {
+      const { data: round, error } = await concierge.from("gift_rounds").select("user_id").eq("id", roundId).maybeSingle();
+      if (error) fail("Loading the round failed", error);
+      if (round?.user_id !== userId) return null;
+      // The gifts waiting now; after cancel_held, the ones it cancelled are among them. One that
+      // placing took in between is counted as being ordered instead.
+      const before = await concierge.from("orders").select("id").eq("round_id", roundId).eq("status", "held");
+      if (before.error) fail("Loading the held gifts failed", before.error);
+      const cancelled = await concierge.rpc("cancel_held", { p_round_id: roundId, p_context: "cancel" });
+      if (cancelled.error) fail("Cancelling the held gift failed", cancelled.error);
+      if (!cancelled.data) return null;
+      const after = await concierge.from("orders").select("id, status").eq("round_id", roundId);
+      if (after.error) fail("Loading the round's gifts failed", after.error);
+      const held = new Set(before.data.map((o) => o.id));
+      return {
+        cancelled: after.data.filter((o) => held.has(o.id) && o.status === "cancelled").length,
+        ordering: after.data.filter((o) => o.status === "placing" || o.status === "unconfirmed").length,
+        onItsWay: after.data.filter((o) => ["placed", "shipped", "delivered"].includes(o.status)).length,
+      };
     },
   };
 }

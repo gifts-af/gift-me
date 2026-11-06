@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // ones; the save is faked.
 const importPeople = vi.hoisted(() => vi.fn());
 const revalidatePath = vi.hoisted(() => vi.fn());
+// The Zinc wiring is server-only glue; these tests never place an order.
+vi.mock("@/app/settings/zinc-deps", () => ({ placeHeld: async () => {} }));
 vi.mock("@/lib/app-settings", () => ({ appSettingInt: async () => 20 }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({}) }));
 vi.mock("next/cache", () => ({ revalidatePath }));
