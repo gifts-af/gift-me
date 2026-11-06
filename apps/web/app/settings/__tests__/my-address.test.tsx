@@ -39,6 +39,7 @@ describe("MyAddressSection", () => {
 
   it("saved, not shared: the card and a link to the list", () => {
     setup(saved(false));
+    expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
     expect(screen.getByText("Sam Rivera")).toBeInTheDocument();
     expect(screen.getByText("44 Elm St, Apt 2")).toBeInTheDocument();
     expect(screen.getByText("Columbus, OH 43215")).toBeInTheDocument();
@@ -48,6 +49,7 @@ describe("MyAddressSection", () => {
 
   it("saved, shared: says so", () => {
     setup(saved(true));
+    expect(screen.queryByText(NOTE)).not.toBeInTheDocument();
     expect(screen.getByText(/^Shared with people who have your list\./)).toBeInTheDocument();
   });
 

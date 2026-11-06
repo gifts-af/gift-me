@@ -50,6 +50,13 @@ describe("GiftApp", () => {
       expect(screen.queryByText("The footer")).not.toBeInTheDocument();
     });
 
+    it("goes away if a later refresh can't load the list", () => {
+      const { rerender } = render(<GiftApp initial={member} footer={FOOTER} />);
+      expect(screen.getByText("The footer")).toBeInTheDocument();
+      rerender(<GiftApp initial={{ ...member, list: null, loadError: "Couldn't load" }} footer={FOOTER} />);
+      expect(screen.queryByText("The footer")).not.toBeInTheDocument();
+    });
+
     it("appears once a first save creates the list, with no reload (AC-11)", async () => {
       vi.mocked(saveList).mockResolvedValue({
         ok: true,

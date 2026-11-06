@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import { US_STATES, type AddressField } from "@gifts-af/core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,6 +41,8 @@ export function AddressForm({
   save: (form: FormData) => Promise<SaveResult>;
   onDone: () => void;
 }) {
+  // Unique per form: Next keeps visited routes in the page, hidden, so two forms can coexist.
+  const formId = useId();
   const [values, setValues] = useState(start);
   const [errors, setErrors] = useState<Errors>(startErrors);
   const [error, setError] = useState<string | null>(null);
@@ -72,6 +74,7 @@ export function AddressForm({
   return (
     <form
       className="flex flex-col gap-3"
+      method="post"
       noValidate
       onSubmit={(e) => {
         e.preventDefault();
@@ -79,7 +82,7 @@ export function AddressForm({
       }}
     >
       {FIELDS.map((f) => {
-        const id = `address-${f.key}`;
+        const id = `${formId}-${f.key}`;
         const message = errors[f.key];
         const described = message ? `${id}-error` : undefined;
         return (

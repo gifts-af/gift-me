@@ -299,7 +299,7 @@ export default function GiftApp({ initial, footer = null }) {
           <GiftList gifts={gifts} onRemove={removeGift} />
         </section>
 
-        {listId && footer}
+        {listId && !loadError && footer}
       </PageFrame>
 
       {/* The main button sits at the bottom, in thumb reach, on a phone;

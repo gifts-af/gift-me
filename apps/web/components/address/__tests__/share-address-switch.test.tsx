@@ -1,5 +1,6 @@
+import { Activity } from "react";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { AccountAddressResult, Sharing } from "@/lib/account-address";
 import { ShareAddressSwitch } from "../share-address-switch";
@@ -51,6 +52,36 @@ describe("ShareAddressSwitch", () => {
     await userEvent.click(toggle());
     expect(await screen.findByRole("alert")).toHaveTextContent("Add your address first.");
     expect(toggle()).not.toBeChecked();
+  });
+
+  it("clears a message when the page is hidden, so it isn't there on coming back", async () => {
+    const props = {
+      sharing: { kind: "off", city: "Columbus", state: "OH" } as const,
+      saveAction: vi.fn(),
+      setSharingAction: vi.fn(async () => ({ ok: false as const, error: "Add your address first." })),
+    };
+    const { rerender } = render(
+      <Activity mode="visible">
+        <ShareAddressSwitch {...props} />
+      </Activity>,
+    );
+    await userEvent.click(toggle());
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    await act(async () =>
+      rerender(
+        <Activity mode="hidden">
+          <ShareAddressSwitch {...props} />
+        </Activity>,
+      ),
+    );
+    await act(async () =>
+      rerender(
+        <Activity mode="visible">
+          <ShareAddressSwitch {...props} />
+        </Activity>,
+      ),
+    );
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("the switch's state comes from what's saved, including when the page returns", () => {

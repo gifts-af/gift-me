@@ -49,8 +49,9 @@ export async function setSharingAction(on: boolean): Promise<AccountAddressResul
   if (!s) return SIGN_IN_AGAIN;
   const result = await setSharing(s.db, s.userId, on === true);
   if (result === "no_address") {
-    refresh();
-    return { ok: false, error: "Add your address first." };
+    // Turning off with no address already got what it asked for.
+    const refreshed = refresh();
+    return on === true ? { ok: false, error: "Add your address first." } : refreshed;
   }
   return result === "ok" ? refresh() : TRY_AGAIN;
 }

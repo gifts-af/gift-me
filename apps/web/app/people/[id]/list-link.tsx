@@ -62,13 +62,17 @@ export function ListLink({
           noValidate
           onSubmit={(e) => {
             e.preventDefault();
-            void run(linkAction, ["link", link]);
+            // From the field itself: a paste before hydration never reached state.
+            const value = String(new FormData(e.currentTarget).get("link") ?? "");
+            setLink(value);
+            void run(linkAction, ["link", value]);
           }}
         >
           <Label htmlFor="list-link">Their list link</Label>
           <div className="flex items-center gap-2">
             <Input
               id="list-link"
+              name="link"
               placeholder="Paste the link they shared"
               autoComplete="off"
               value={link}

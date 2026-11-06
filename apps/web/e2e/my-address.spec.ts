@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { createFreshUser } from "./fresh-user";
 import { localSupabase } from "./local-supabase";
 
@@ -82,6 +82,15 @@ async function fillAddress(page: Page) {
   await page.getByLabel("ZIP code").fill("43215");
 }
 
+// A tap before React attaches to the page does nothing, so wait for that rather
+// than retrying, which could hide a tap that really failed.
+async function tap(target: Locator) {
+  await expect
+    .poll(() => target.evaluate((el) => Object.keys(el).some((k) => k.startsWith("__reactProps"))))
+    .toBe(true);
+  await target.click();
+}
+
 const shareSwitch = (page: Page) => page.getByRole("switch", { name: "Let people with my list ship gifts to me" });
 
 test("My address waits for a list, then adds, changes and removes (AC-1 to AC-5)", async ({ page }) => {
@@ -96,7 +105,7 @@ test("My address waits for a list, then adds, changes and removes (AC-1 to AC-5)
 
   await saveFirstList(page);
   await page.goto("/settings");
-  await page.getByRole("button", { name: "Add my address" }).click();
+  await tap(page.getByRole("button", { name: "Add my address" }));
   await expect(page.getByLabel("First name")).toHaveValue("");
 
   await page.getByLabel("ZIP code").fill("123");
@@ -134,13 +143,25 @@ test("changing an address keeps sharing on (AC-3)", async ({ page }) => {
   const id = await userId(user);
   await seedAddress(id, true);
   await signIn(page, user);
+  await saveFirstList(page);
   await page.goto("/settings");
   await expect(page.getByText(/^Shared with people who have your list\./)).toBeVisible();
-  await page.getByRole("button", { name: "Change address" }).click();
+  await tap(page.getByRole("button", { name: "Change address" }));
   await page.getByLabel("City").fill("Dayton");
   await page.getByRole("button", { name: "Save address" }).click();
   await expect(page.getByText("Dayton, OH 43215")).toBeVisible();
-  expect(await row(id)).toMatchObject({ city: "Dayton", share_for_gifts: true });
+  const changed = await row(id);
+  expect(changed).toMatchObject({ city: "Dayton", share_for_gifts: true });
+  expect(changed?.address_checked_at).not.toBeNull();
+
+  // Removing it and adding it again starts with sharing off (AC-5).
+  await page.getByRole("button", { name: "Remove", exact: true }).click();
+  await page.getByRole("button", { name: "Remove address" }).click();
+  await page.getByRole("button", { name: "Add my address" }).click();
+  await fillAddress(page);
+  await page.getByRole("button", { name: "Save address" }).click();
+  await expect(page.getByText(/^Not shared\./)).toBeVisible();
+  expect(await row(id)).toMatchObject({ share_for_gifts: false });
 });
 
 test("the switch appears with a first list, asks once, then turns off and on (AC-7, AC-8, AC-9, AC-11)", async ({ page }) => {
@@ -194,9 +215,25 @@ test("a stale switch gets a plain message and writes nothing (AC-10)", async ({ 
   await page.reload();
   await expect(shareSwitch(page)).not.toBeChecked();
   await deleteAddress(id);
-  await shareSwitch(page).click();
+  await tap(shareSwitch(page));
   await expect(page.getByText("Add your address first.")).toBeVisible();
   expect(await row(id)).toBeNull();
+});
+
+test("turning a stale switch off, with the address already removed, isn't an error", async ({ page }) => {
+  const user = await createFreshUser();
+  const id = await userId(user);
+  await signIn(page, user);
+  await saveFirstList(page);
+  await seedAddress(id, true);
+  await page.reload();
+  await expect(shareSwitch(page)).toBeChecked();
+  await deleteAddress(id);
+  await tap(shareSwitch(page));
+  await expect(shareSwitch(page)).not.toBeChecked();
+  await expect(page.getByText("Add your address first.")).toHaveCount(0);
+  await shareSwitch(page).click();
+  await expect(page.getByRole("dialog").getByRole("heading", { name: "Where should gifts ship?" })).toBeVisible();
 });
 
 test("the list page never carries the street or name (AC-12)", async ({ page }) => {
@@ -217,7 +254,7 @@ test("Settings shows the new address after sharing from the list, with the form 
   await signIn(page, user);
   await saveFirstList(page);
   await page.goto("/settings");
-  await page.getByRole("button", { name: "Add my address" }).click();
+  await tap(page.getByRole("button", { name: "Add my address" }));
   await expect(page.getByLabel("First name")).toBeVisible();
 
   await page.getByRole("link", { name: "Get", exact: true }).click();
@@ -258,19 +295,17 @@ test("a linked buyer sees only the city, and nothing once sharing stops (AC-13, 
   const buyerPage = await context.newPage();
   await signIn(buyerPage, buyer);
   await buyerPage.goto(`/people/${personId}`);
-  // Typing before the page hydrates isn't seen by React, so try until it links.
-  await expect(async () => {
-    await buyerPage.getByLabel("Their list link").fill(`${new URL(page.url()).origin}/share/${share_token}`);
-    await buyerPage.getByLabel("Their list link").press("Enter");
-    await expect(buyerPage.getByText("Linked.", { exact: false })).toBeVisible({ timeout: 2000 });
-  }).toPass();
+  const linkField = buyerPage.getByLabel("Their list link");
+  await linkField.fill(`${new URL(page.url()).origin}/share/${share_token}`);
+  await expect.poll(() => linkField.evaluate((el) => Object.keys(el).some((k) => k.startsWith("__reactProps")))).toBe(true);
+  await linkField.press("Enter");
 
   const line = "Gifts ship to Sam's own address in Columbus, OH. They keep it up to date.";
   await expect(buyerPage.getByText(line)).toBeVisible();
   expect(await (await buyerPage.request.get(`/people/${personId}`)).text()).not.toContain(STREET);
 
   await page.goto("/lists");
-  await shareSwitch(page).click();
+  await tap(shareSwitch(page));
   await expect(shareSwitch(page)).not.toBeChecked();
   await buyerPage.reload();
   await expect(buyerPage.getByRole("button", { name: "Add an address" })).toBeVisible();

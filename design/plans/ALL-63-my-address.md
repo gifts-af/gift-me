@@ -59,7 +59,7 @@ All controls use the app's `Button`, `Switch`, `Input` and `Dialog` components, 
 | AC-7 | A saved address, switch off | I turn the switch on | `share_for_gifts` is true, and the wording shows my city and state |
 | AC-8 | Switch on | I turn it off | `share_for_gifts` is false, and the address is still saved |
 | AC-9 | No address | I turn the switch on, fill the dialog and save | One write creates the row with `share_for_gifts` true. A bad field keeps the dialog open with nothing saved. Cancel saves nothing and leaves the switch off |
-| AC-10 | A stale page: no row now | The sharing action is called | It writes nothing and returns a message telling me to add my address |
+| AC-10 | A stale page: no row now | The sharing action is called | It writes nothing. Turning on returns a message telling me to add my address; turning off just shows the switch off, because that's already true. **[Claude's call]** |
 | AC-11 | A signed-in person with no saved list, or a guest | They open the list page | There's no switch. Saving a first list shows it without a reload |
 | AC-12 | Any signed-in person on the list page | The page loads | The street and recipient names aren't in the page's HTML or data. It reads only `city`, `state` and `share_for_gifts` |
 | AC-13 | A buyer's person linked through my current share link, sharing on | The buyer opens the person's page | They see "Gifts ship to {name}'s own address in {City, ST}…", and the page's HTML has no street |

@@ -101,7 +101,6 @@ function SavedAddress({
 
   return (
     <>
-      <Note />
       <div className="rounded-xl border border-border p-3 text-[15px]">
         <p>
           {address.firstName} {address.lastName}

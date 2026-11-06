@@ -48,6 +48,25 @@ describe("AddressForm", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("That didn't save. Try again.");
   });
 
+  it("keeps each form's labels on its own fields when two are in the page, as with a hidden route", () => {
+    const { container } = render(
+      <>
+        <AddressForm start={EMPTY} submitLabel="One" save={vi.fn()} onDone={vi.fn()} />
+        <AddressForm start={EMPTY} submitLabel="Two" save={vi.fn()} onDone={vi.fn()} />
+      </>,
+    );
+    const [first, second] = Array.from(container.querySelectorAll("form"));
+    for (const form of [first, second]) {
+      const label = Array.from(form.querySelectorAll("label")).find((l) => l.textContent === "City");
+      expect(form.contains(label?.control ?? null)).toBe(true);
+    }
+  });
+
+  it("posts if submitted before the page is ready, so an address never lands in a URL", () => {
+    const { container } = render(<AddressForm start={EMPTY} submitLabel="One" save={vi.fn()} onDone={vi.fn()} />);
+    expect(container.querySelector("form")).toHaveAttribute("method", "post");
+  });
+
   it("shows starting errors, for an address that needs fixing", () => {
     render(
       <AddressForm start={EMPTY} startErrors={{ state: "Pick a state." }} submitLabel="Save address" save={vi.fn()} onDone={vi.fn()} />,

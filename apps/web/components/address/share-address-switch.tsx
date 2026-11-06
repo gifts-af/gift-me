@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useLayoutEffect, useState, useTransition } from "react";
 import { AddressForm, type AddressValues } from "@/components/address/address-form";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -29,6 +29,16 @@ export function ShareAddressSwitch({
   const [asking, setAsking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
+
+  // Next keeps visited routes in the page, hidden, with their state: leave no
+  // old message or open dialog for coming back to.
+  useLayoutEffect(
+    () => () => {
+      setError(null);
+      setAsking(false);
+    },
+    [],
+  );
 
   if (sharing.kind === "unavailable") return null;
 

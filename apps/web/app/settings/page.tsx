@@ -27,7 +27,7 @@ async function LoadedForm() {
     supabase.from("profiles").select("timezone").maybeSingle(),
     getConciergeSettings(),
     getMyList(),
-    userId ? getMyAddress(supabase, userId) : Promise.resolve<MyAddress>({ kind: "none" }),
+    userId ? getMyAddress(supabase, userId) : Promise.resolve<MyAddress>({ kind: "unavailable" }),
   ]);
   // Your address does nothing for you until you have a list (principle 10). A
   // failed read still shows the section, so it can't look like a missing address.
