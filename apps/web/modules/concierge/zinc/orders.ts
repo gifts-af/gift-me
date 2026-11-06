@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { call, parseBody, send, ZincError, type ZincHttp } from "./client";
+import { parseBody, send, ZincError, type ZincHttp } from "./client";
 import type { FoundOrder, ZincOrderInput } from "./types";
 
 export type CreateOrderResult =
@@ -70,11 +70,16 @@ const list = z.object({
 
 /** Looks the order up by our reference (metadata.order_id). Null if Zinc has none. */
 export async function findOrderByReference(h: ZincHttp, key: string, reference: string): Promise<FoundOrder | null> {
-  const r = await call(h, "GET", "/orders", list, {
+  const reply = await send(h, "GET", "/orders", {
     key,
     query: { metadata_key: "order_id", metadata_value: reference },
   });
-  const o = r.orders[0];
+  // A 2xx we can't read says nothing about the order: unavailable (look again later), never rejected.
+  const parsed = list.safeParse(reply.json);
+  if (!parsed.success) {
+    throw new ZincError("unavailable", reply.status, `Zinc GET /orders failed (${reply.status} malformed_response)`, "malformed_response");
+  }
+  const o = parsed.data.orders[0];
   if (!o) return null;
   const jr = o.job_result;
   if (o.status === "order_failed" || jr?.success === false) {

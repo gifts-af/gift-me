@@ -345,7 +345,8 @@ export async function placeRound(
       }
     } catch (e) {
       if (e instanceof ZincError && e.kind === "rejected") {
-        // A synchronous 4xx: nothing was created at Zinc.
+        // A synchronous 4xx on the first try: nothing was created at Zinc. After any ambiguous
+        // try placeWithRetry only throws `unavailable`, so this never follows a timeout.
         results.push({ order_id: o.id, outcome: "rejected", failure_type: failureType(e.code) });
       } else if (e instanceof ZincError && e.kind === "unauthorized") {
         // The key was revoked: nothing was created, and setup needs the buyer.

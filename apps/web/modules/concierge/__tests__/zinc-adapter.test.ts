@@ -201,6 +201,12 @@ describe("orders", () => {
     });
     expect(await findOrderByReference(h, KEY, "order-1")).toEqual({ providerOrderId: "zo_1", status: "placed" });
   });
+
+  it("a lookup's unreadable 2xx is unavailable (we can't tell), not rejected", async () => {
+    const { h } = fake([{ status: 200, body: { orders: "nope" } }, { status: 200, raw: "<html>" }]);
+    await expect(findOrderByReference(h, KEY, "order-1")).rejects.toMatchObject({ kind: "unavailable" });
+    await expect(findOrderByReference(h, KEY, "order-1")).rejects.toMatchObject({ kind: "unavailable" });
+  });
 });
 
 describe("placeWithRetry", () => {
@@ -245,6 +251,36 @@ describe("placeWithRetry", () => {
     const { h, calls } = fake([{ status: 201, raw: '{"id": "zo_' }, { status: 200, body: { orders: [{ id: "zo_5", status: "pending", job_result: null }] } }]);
     expect(await placeWithRetry(h, KEY, order, r())).toMatchObject({ providerOrderId: "zo_5" });
     expect(calls.filter((c) => c.method === "POST")).toHaveLength(1);
+  });
+
+  // B1: once an attempt may have created the order, no later error may read as "nothing created".
+  it("after a timeout, a lookup's garbage 2xx is unavailable, never rejected", async () => {
+    const { h, calls } = fake([timeout, { status: 200, body: { nope: true } }, nestedErr(422, "invalid_address")]);
+    await expect(placeWithRetry(h, KEY, order, r())).rejects.toMatchObject({ kind: "unavailable" });
+    // Resends reuse the same idempotency key, so they can never make a second order.
+    expect(new Set(calls.filter((c) => c.method === "POST").map((c) => (c.body as { idempotency_key: string }).idempotency_key))).toEqual(new Set(["idem-1"]));
+  });
+
+  it("after a timeout, a lookup's 4xx is unavailable, never rejected", async () => {
+    const { h } = fake([timeout, nestedErr(400, "bad_request")]);
+    await expect(placeWithRetry(h, KEY, order, r())).rejects.toMatchObject({ kind: "unavailable" });
+  });
+
+  it("after a timeout, a resend's 4xx or 401 is unavailable", async () => {
+    const a = fake([timeout, empty, nestedErr(422, "invalid_address")]);
+    await expect(placeWithRetry(a.h, KEY, order, r())).rejects.toMatchObject({ kind: "unavailable" });
+    const b = fake([timeout, empty, nestedErr(401, "unauthorized")]);
+    await expect(placeWithRetry(b.h, KEY, order, r())).rejects.toMatchObject({ kind: "unavailable" });
+  });
+
+  it("after a timeout, a resend's 402 is unavailable (the first try may exist)", async () => {
+    const { h } = fake([timeout, empty, nestedErr(402, "insufficient_funds", { required: 1, available: 0 })]);
+    await expect(placeWithRetry(h, KEY, order, r())).rejects.toMatchObject({ kind: "unavailable" });
+  });
+
+  it("after a 409, a lookup's 4xx is unavailable", async () => {
+    const { h } = fake([nestedErr(409, "already_exists"), nestedErr(400, "bad_request")]);
+    await expect(placeWithRetry(h, KEY, order, r())).rejects.toMatchObject({ kind: "unavailable" });
   });
 
   it("gives up as unavailable after the last attempt", async () => {
