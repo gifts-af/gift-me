@@ -818,6 +818,24 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     expect(last.text).toContain("couldn't be bought in time, so nothing was bought or charged");
   }, 60_000);
 
+  // S1: the app builds its wiring (and its `now`) when the request starts; reconcile_round then
+  // makes the round due at the database's later now(). The hold notice must still go out in the
+  // same request, not wait for the next tick.
+  it("approving into a funds hold emails the buyer in the same request, with the wiring's clock behind the database's", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    zinc.balance = 1000;
+    const { purchase } = wiring(new Date(Date.now() - 5000));
+    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, purchase)).toEqual({
+      ok: true,
+      status: "held",
+      reason: "funds",
+    });
+    expect(await sends(r.roundId)).toContain("hold:1:notice");
+    expect(inbox(u)).toEqual(["Mary's gift is waiting on your Zinc balance@0"]);
+    expect(await roundRow(r.roundId)).toMatchObject({ locked_until: null });
+  });
+
   it("names the amounts and carries the alpha line and cancel link in the hold email", async () => {
     const u = await newUser();
     const r = await newRound(u);

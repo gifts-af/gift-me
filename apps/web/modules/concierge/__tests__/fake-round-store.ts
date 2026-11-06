@@ -123,6 +123,15 @@ export class FakeRoundStore implements RoundStore {
     return r && this.claimable(r, now) ? this.take(r, now, minutes) : null;
   }
 
+  /** Like claim_round_now: ignores nextActionAt, only awaiting_approval or needs_attention. */
+  async claimNow(roundId: string, now: Date) {
+    const minutes = await this.setting("round_lock_minutes");
+    const r = this.rounds.find((x) => x.id === roundId);
+    const open = r && ["awaiting_approval", "needs_attention"].includes(r.status);
+    const free = r && (r.lockedUntil === null || r.lockedUntil.getTime() < now.getTime());
+    return r && open && free ? this.take(r, now, minutes) : null;
+  }
+
   async finish(roundId: string, lock: Date, next: RoundFinish) {
     const r = this.round(roundId);
     if (r.lockedUntil?.getTime() !== lock.getTime()) return false;

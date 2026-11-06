@@ -110,6 +110,13 @@ export interface RoundStore {
   claimDue(now: Date): Promise<ClaimedRound[]>;
   /** null when the round isn't due, is finished, or another run holds it. */
   claim(roundId: string, now: Date): Promise<ClaimedRound | null>;
+  /**
+   * claim_round_now: claims an awaiting_approval or needs_attention round whatever its
+   * next_action_at (null when another run holds it). For telling the buyer at once after
+   * placing: reconcile_round makes the round due at the database's now(), which is later
+   * than the caller's `now`, so `claim` would say "not due yet".
+   */
+  claimNow(roundId: string, now: Date): Promise<ClaimedRound | null>;
   /** Writes the result and releases the lease; false if the lease was lost. */
   finish(roundId: string, lock: Date, next: RoundFinish): Promise<boolean>;
   sentSteps(roundId: string): Promise<Set<StepKey>>;
@@ -265,6 +272,15 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
 
     async claim(roundId, now) {
       const { data, error } = await concierge.rpc("claim_round", {
+        p_round_id: roundId,
+        p_now: now.toISOString(),
+      });
+      if (error) fail("Claiming the round failed", error);
+      return toClaimed(data as RoundDbRow | null);
+    },
+
+    async claimNow(roundId, now) {
+      const { data, error } = await concierge.rpc("claim_round_now", {
         p_round_id: roundId,
         p_now: now.toISOString(),
       });

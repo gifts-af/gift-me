@@ -115,7 +115,9 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
 
 /**
  * Moves one round on now, if it's due and no one else holds it (AC-10). `justPlaced`: the
- * caller (approval) has just tried placing it, so the engine only tells the buyer.
+ * caller (approval, a webhook, the sweep, placing held gifts) has just tried placing it, so
+ * the engine only tells the buyer, and claims it whatever its next_action_at (claimNow):
+ * reconcile_round set that from the database's clock, after the caller's `now` was taken.
  */
 export async function advanceRound(
   roundId: string,
@@ -123,7 +125,7 @@ export async function advanceRound(
   opts: { justPlaced?: boolean } = {},
 ): Promise<AdvanceResult> {
   if (!(await engineOn(deps.store))) return "off";
-  const round = await deps.store.claim(roundId, deps.now);
+  const round = opts.justPlaced ? await deps.store.claimNow(roundId, deps.now) : await deps.store.claim(roundId, deps.now);
   if (!round) return "busy";
   const s = await deps.store.scheduleSettings();
   return (await advanceClaimed(round, deps, s, opts.justPlaced ?? false)) ? "advanced" : "failed";
