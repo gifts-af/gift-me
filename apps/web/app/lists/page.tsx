@@ -1,7 +1,10 @@
 import { Suspense } from "react";
+import { saveMyAddressAction, setSharingAction } from "@/app/settings/address-actions";
+import { ShareAddressSwitch } from "@/components/address/share-address-switch";
 import { AppNav } from "@/components/app-shell/app-nav";
 import { TopBar } from "@/components/app-shell/top-bar";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { getSharing, type Sharing } from "@/lib/account-address";
 import { createClient } from "@/lib/supabase/server";
 import { GiftApp, GiftAppSkeleton, getMyList } from "@/modules/lists";
 
@@ -9,7 +12,17 @@ import { GiftApp, GiftAppSkeleton, getMyList } from "@/modules/lists";
 // cacheComponents. Works signed in or out; a guest's list isn't saved.
 async function ListLoader() {
   const initial = await getMyList();
-  return <GiftApp initial={initial} />;
+  if (!initial) return <GiftApp initial={initial} />;
+  const supabase = await createClient();
+  const { data } = await supabase.auth.getClaims();
+  const userId = data?.claims?.sub;
+  const sharing: Sharing = userId ? await getSharing(supabase, userId) : { kind: "unavailable" };
+  return (
+    <GiftApp
+      initial={initial}
+      footer={<ShareAddressSwitch sharing={sharing} saveAction={saveMyAddressAction} setSharingAction={setSharingAction} />}
+    />
+  );
 }
 
 // This page works signed out, so what fills the bar waits for the session.

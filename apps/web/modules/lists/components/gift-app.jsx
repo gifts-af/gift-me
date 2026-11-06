@@ -70,8 +70,11 @@ export function GiftAppSkeleton() {
   )
 }
 
-/** @param {{ initial: import('@/modules/lists/lib/lists').MyList | null }} props -- null for a guest */
-export default function GiftApp({ initial }) {
+/**
+ * @param {{ initial: import('@/modules/lists/lib/lists').MyList | null, footer?: import('react').ReactNode }} props
+ * `initial` is null for a guest. `footer` shows below the list once a saved list exists.
+ */
+export default function GiftApp({ initial, footer = null }) {
   const isGuest = initial === null
   const loadError = initial?.loadError ?? null
   const saveBlockedReason = isGuest
@@ -295,6 +298,8 @@ export default function GiftApp({ initial }) {
         <section aria-labelledby="list-heading" className="pt-2">
           <GiftList gifts={gifts} onRemove={removeGift} />
         </section>
+
+        {listId && footer}
       </PageFrame>
 
       {/* The main button sits at the bottom, in thumb reach, on a phone;
