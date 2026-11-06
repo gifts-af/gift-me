@@ -4,7 +4,7 @@
 // only ever settle that user's own order, and only while it is placing or
 // unconfirmed, so a duplicate or late event changes nothing. Logs carry ids only (E6).
 import { z } from "zod";
-import { logEvent } from "@/lib/log";
+import { errorFields, logEvent } from "@/lib/log";
 import { call, ZincError } from "./client";
 import { parseEvent, verifySignature, type ZincEvent } from "./signature";
 import type { PlaceHeld, ZincDeps } from "./types";
@@ -67,7 +67,7 @@ export async function handleZincWebhook(
     }
   } catch (error) {
     // The route answers 500 so Zinc retries; the user id is only known here.
-    logEvent("zinc.webhook_failed", { user_id: userId, name: error instanceof Error ? error.name : "unknown" });
+    logEvent("zinc.webhook_failed", { user_id: userId, ...errorFields(error) });
     throw error;
   }
   return { status: 200 };
@@ -174,7 +174,7 @@ async function settle(userId: string, event: ZincEvent, deps: Deps): Promise<voi
       await tell(order.round_id);
     } catch (e) {
       // The tick tells them instead; Zinc mustn't retry a settlement that's done.
-      logEvent("order.hold_notice_deferred", { user_id: userId, round_id: order.round_id, name: e instanceof Error ? e.name : "unknown" });
+      logEvent("order.hold_notice_deferred", { user_id: userId, round_id: order.round_id, ...errorFields(e) });
     }
   }
 }

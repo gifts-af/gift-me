@@ -3,7 +3,7 @@
 // goes through the money-path SQL functions (migration 20261109100000), which
 // lock the round row and leave its status to reconcile_round.
 import type { AddressDraft, CalendarDate, ScheduleSettings } from "@gifts-af/core";
-import { logEvent } from "@/lib/log";
+import { errorFields, logEvent } from "@/lib/log";
 import type { ZincDeps } from "../zinc/types";
 
 export type PurchaseDeps = ZincDeps & {
@@ -263,7 +263,7 @@ export async function withLease<T>(deps: ZincDeps, roundId: string, lock: string
     try {
       await releaseRound(deps, roundId, lock);
     } catch (e) {
-      logEvent("round.release_failed", { round_id: roundId, name: e instanceof Error ? e.name : "unknown" });
+      logEvent("round.release_failed", { round_id: roundId, ...errorFields(e) });
     }
   };
   try {

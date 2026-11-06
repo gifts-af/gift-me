@@ -36,8 +36,12 @@ export type AttentionReason = HoldReason | "price_up" | "out_of_stock" | "too_la
 
 /** Holds the user is emailed about. */
 export const EMAILED_HOLDS: readonly AttentionReason[] = ["funds", "setup", "address", "unconfirmed"];
-/** Holds the engine keeps trying to place. `not_allowed` recovers by itself if paid features come back on. */
-export const PLACEABLE_HOLDS: readonly AttentionReason[] = ["funds", "setup", "address", "paused", "not_allowed", "retry"];
+/**
+ * Holds the engine keeps trying to place. `not_allowed` recovers by itself if paid features come back on.
+ * Not `address`: the address is missing or Zinc rejected it, so trying again daily would only
+ * resend the same address. Saving that person's address places it (placeAddressHeld).
+ */
+export const PLACEABLE_HOLDS: readonly AttentionReason[] = ["funds", "setup", "paused", "not_allowed", "retry"];
 /** Failed orders that need the buyer; each new one is emailed at once (`fail:<n>:notice`). */
 export const FAILURE_REASONS: readonly AttentionReason[] = ["price_up", "out_of_stock", "too_late", "failed"];
 

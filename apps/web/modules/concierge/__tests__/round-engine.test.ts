@@ -546,6 +546,10 @@ describe("events (AC-14)", () => {
       "step",
       "attempts",
       "error",
+      // errorFields (N3): the error's name, and its kind and code when they are plain tokens.
+      "name",
+      "kind",
+      "code",
     ]);
     expect(named("round_tick").length).toBeGreaterThan(0);
     expect(named("round_stuck").length).toBeGreaterThan(0);

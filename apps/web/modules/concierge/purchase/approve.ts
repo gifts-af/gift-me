@@ -4,7 +4,7 @@
 // approve_round, then tries to place them. A crash anywhere after approve_round
 // leaves the round needs_attention/retry for the next tick (review focus 6).
 import { classifyTotal, isShippableAddress } from "@gifts-af/core";
-import { logEvent } from "@/lib/log";
+import { errorFields, logEvent } from "@/lib/log";
 import { hasPaidFeatures } from "../paid-features";
 import { EMAILED_REASONS, FAILURE_REASONS, placeRound, sequentialCaps } from "./place";
 import {
@@ -142,7 +142,7 @@ export async function approveAndBuy(input: ApproveInput, deps: PurchaseDeps): Pr
       await deps.advanceRound(roundId);
     } catch (e) {
       // The tick tells them instead.
-      logEvent("order.hold_notice_deferred", { ...ids, name: e instanceof Error ? e.name : "unknown" });
+      logEvent("order.hold_notice_deferred", { ...ids, ...errorFields(e) });
     }
   }
   const status = after?.status === "ordered" ? "ordered" : failed ? "failed" : "held";

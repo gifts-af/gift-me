@@ -13,10 +13,12 @@ import {
   fundingLookahead,
   tellOrdered,
   getZincWallet,
+  placeAddressHeldFor,
   placeHeldForUser,
   placeRound,
   sweepStalePlacing,
   type EngineDeps,
+  type PlaceAddressHeld,
   type PlaceHeld,
   type PurchaseDeps,
   type ZincDeps,
@@ -117,4 +119,10 @@ export const placeHeld: PlaceHeld = async (userId) => {
   // buyingWiring logs zinc.wiring_missing (with the user id) when Zinc is off here.
   const { purchase } = await buyingWiring(new Date(), process.env, { user_id: userId });
   if (purchase) await placeHeldForUser(userId, purchase);
+};
+
+/** After a person's address is saved: places that person's gifts held for an address (ALL-32 S10). */
+export const placeAddressHeld: PlaceAddressHeld = async (userId, personId) => {
+  const { purchase } = await buyingWiring(new Date(), process.env, { user_id: userId });
+  if (purchase) await placeAddressHeldFor(userId, personId, purchase);
 };

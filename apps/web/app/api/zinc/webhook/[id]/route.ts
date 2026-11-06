@@ -1,5 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
-import { logEvent } from "@/lib/log";
+import { errorFields, logEvent } from "@/lib/log";
 import { handleZincWebhook } from "@/modules/concierge";
 import { placeHeld, webhookTellers, zincWiring } from "@/app/settings/zinc-deps";
 
@@ -21,7 +21,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   } catch (error) {
     // A 500 makes Zinc retry; the handlers are safe to run again.
     // Failures after the user is known are logged with their user id inside handleZincWebhook.
-    logEvent("zinc.webhook_failed", { name: error instanceof Error ? error.name : "unknown" });
+    logEvent("zinc.webhook_failed", { ...errorFields(error) });
     return new Response(null, { status: 500 });
   }
 }

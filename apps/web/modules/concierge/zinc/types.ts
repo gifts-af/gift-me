@@ -12,6 +12,9 @@ export type ZincDeps = {
 
 export type PlaceHeld = (userId: string) => Promise<void>;
 
+/** After a person's address is saved: places that person's rounds held for an address. */
+export type PlaceAddressHeld = (userId: string, personId: string) => Promise<void>;
+
 export type ZincAddress = {
   firstName: string;
   lastName: string;

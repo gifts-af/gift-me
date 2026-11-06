@@ -9,7 +9,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import type { Database } from "@gifts-af/core";
 import { LOCAL_DB, localStack } from "./local-db";
 import { approveAndBuy } from "../purchase/approve";
-import { placeHeldForUser, placeRound, sweepStalePlacing } from "../purchase/place";
+import { placeAddressHeld, placeHeldForUser, placeRound, sweepStalePlacing } from "../purchase/place";
 import type { PurchaseDeps } from "../purchase/store";
 import { handleZincWebhook } from "../zinc/events";
 import { FakeZinc } from "./fake-zinc";
@@ -471,6 +471,30 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     expect((await orders(v.roundId))[0]).toMatchObject({ status: "placed" });
   });
 
+  // B1 + N5: a look-up we can't read leaves the order placing (never failed, never resent) and
+  // alerts the owner, with the error's kind and code (N3).
+  it("a sweep look-up Zinc answers with garbage keeps the order placing and alerts", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    zinc.plan.set(urlOf(r.ideaIds[0]), ["timeout"]);
+    await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps());
+    const [a] = await orders(r.roundId);
+    zinc.orders.set(a.id, { id: 42 } as never);
+    zinc.posts = [];
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      await sweepStalePlacing(deps({ now: new Date(Date.now() + 31 * 60_000) }));
+      const events = log.mock.calls.map((c) => JSON.parse(String(c[0]))).filter((e) => e.order_id === a.id);
+      expect(events).toEqual([
+        expect.objectContaining({ event: "order.sweep_failed", alert: true, name: "ZincError", kind: "unavailable", code: "malformed_response" }),
+      ]);
+    } finally {
+      log.mockRestore();
+    }
+    expect((await orders(r.roundId))[0]).toMatchObject({ status: "placing" });
+    expect(zinc.posts).toEqual([]);
+  });
+
   it("the sweep never resends: an order Zinc doesn't know is unconfirmed; one still processing is left alone", async () => {
     const u = await newUser();
     const r = await newRound(u, { totals: [4200, 5000] });
@@ -522,7 +546,11 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     expect(await round(r.roundId)).toMatchObject({ status: "needs_attention", attention_reason: "address", due: true });
 
     await pg.query("update public.people set address_line1 = '9 Elm St', city = 'Columbus' where id = $1", [r.personId]);
+    // S4: neither the daily retry nor another way in places an address hold...
     await placeHeldForUser(u.userId, deps());
+    expect(zinc.calls).toEqual([]);
+    // ...only saving that person's address does.
+    await placeAddressHeld(u.userId, r.personId, deps());
     expect(zinc.posts).toEqual([expect.objectContaining({ city: "Columbus" })]);
     const snap = await pg.query("select address_line1, city from concierge.order_addresses where order_id = $1", [(await orders(r.roundId))[0].id]);
     expect(snap.rows[0]).toEqual({ address_line1: "9 Elm St", city: "Columbus" });
@@ -540,11 +568,34 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
 
     await pg.query("update public.people set address_line1 = '9 Elm St' where id = $1", [r.personId]);
     zinc.posts = [];
-    await placeHeldForUser(u.userId, deps());
+    await placeAddressHeld(u.userId, r.personId, deps());
     const [, replacement] = await orders(r.roundId);
     expect(replacement.status).toBe("placing");
     expect(zinc.posts).toEqual([expect.objectContaining({ ref: replacement.id, idem: replacement.idem })]);
     expect(replacement.idem).not.toBe(first.idem);
+  });
+
+  // S10: saving one person's address places only that person's address holds.
+  it("saving an address places only that person's address holds, nothing else the buyer has held", async () => {
+    const u = await newUser();
+    const mine = await newRound(u);
+    const other = await newRound(u);
+    const ready = await newRound(u);
+    for (const r of [mine, other, ready]) await approvedOnly(u, r);
+    for (const r of [mine, other]) await pg.query("update public.people set address_line1 = null where id = $1", [r.personId]);
+    await placeHeldForUser(u.userId, deps());
+    expect(zinc.posts).toEqual([expect.objectContaining({ ref: (await orders(ready.roundId))[0].id })]);
+    for (const r of [mine, other]) expect(await round(r.roundId)).toMatchObject({ attention_reason: "address" });
+    // Another gift held for a retry, to show saving an address doesn't place it.
+    const third = await newRound(u);
+    await approvedOnly(u, third);
+    zinc.posts = [];
+
+    for (const r of [mine, other]) await pg.query("update public.people set address_line1 = '9 Elm St' where id = $1", [r.personId]);
+    await placeAddressHeld(u.userId, mine.personId, deps());
+    expect(zinc.posts).toEqual([expect.objectContaining({ ref: (await orders(mine.roundId))[0].id })]);
+    expect(await round(other.roundId)).toMatchObject({ attention_reason: "address" });
+    expect(await round(third.roundId)).toMatchObject({ status: "needs_attention", attention_reason: "retry" });
   });
 
   it("a synchronous 4xx fails the order as rejected", async () => {

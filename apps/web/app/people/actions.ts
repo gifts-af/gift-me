@@ -8,7 +8,7 @@ import { AI_MODELS } from "@/lib/ai/models";
 import { appSettingInt } from "@/lib/app-settings";
 import { createClient } from "@/lib/supabase/server";
 import { todayForRequest } from "@/lib/today";
-import { buyingWiring, placeHeld } from "@/app/settings/zinc-deps";
+import { buyingWiring, placeAddressHeld } from "@/app/settings/zinc-deps";
 import {
   addPerson,
   answerQuestions,
@@ -93,8 +93,8 @@ export async function saveAddressAction(_previous: AddressSaveResult | null, for
   const parsed = parseAddressForm(formData);
   if (!parsed.ok) return parsed;
   const id = text(formData, "id");
-  // Held gifts waiting on an address are tried again (ALL-32); both come from the Zinc wiring.
-  return refresh(await saveAddress(id, parsed.value, { placeHeld, engine: engineNow }), id);
+  // This person's gifts held for an address are tried again (ALL-32); both come from the Zinc wiring.
+  return refresh(await saveAddress(id, parsed.value, { placeAddressHeld, engine: engineNow }), id);
 }
 
 export async function removeAddressAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {

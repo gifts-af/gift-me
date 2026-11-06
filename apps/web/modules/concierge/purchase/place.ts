@@ -21,7 +21,7 @@ import {
   type AttentionReason,
   type CommittedOrder,
 } from "@gifts-af/core";
-import { logEvent } from "@/lib/log";
+import { errorFields, logEvent } from "@/lib/log";
 import { hasPaidFeatures } from "../paid-features";
 import { getWallet } from "../zinc/account";
 import { ZincError } from "../zinc/client";
@@ -166,7 +166,7 @@ export async function placeRound(
   roundId: string,
   lock: Date | string,
   deps: PurchaseDeps,
-  opts: { deadlineMs?: number } = {},
+  opts: { deadlineMs?: number; address?: boolean } = {},
 ): Promise<PlaceOutcome> {
   const lockIso = typeof lock === "string" ? lock : lock.toISOString();
   const today = dayOf(deps.now);
@@ -176,7 +176,8 @@ export async function placeRound(
     !r.locked_until ||
     new Date(r.locked_until).getTime() !== new Date(lockIso).getTime() ||
     r.status !== "needs_attention" ||
-    !PLACEABLE_HOLDS.includes(r.attention_reason as AttentionReason) ||
+    // An address hold is placed only when that person's address was just saved (`address`).
+    !(PLACEABLE_HOLDS.includes(r.attention_reason as AttentionReason) || (opts.address === true && r.attention_reason === "address")) ||
     r.closed_at !== null ||
     !(today < r.ship_by_deadline) ||
     !(await roundStillWanted(deps, r))
@@ -382,13 +383,35 @@ export async function placeRound(
 /**
  * Tries the user's held rounds again (AC-21): claim, place, release, earliest deadline
  * first. Matches PlaceHeld once `deps` is bound. No held rounds means no Zinc call.
+ * Address holds are left out (PLACEABLE_HOLDS): only saving that person's address places
+ * them (placeAddressHeld).
+ */
+export async function placeHeldForUser(userId: string, deps: PurchaseDeps): Promise<void> {
+  const rounds = (await heldRounds(deps, userId)).filter((r) => PLACEABLE_HOLDS.includes(r.attention_reason as AttentionReason));
+  await placeEach(rounds, userId, deps, {});
+}
+
+/**
+ * After a person's address is saved: places that person's rounds held for an address (a
+ * missing one, or one Zinc rejected, whose replacement order waits on it, AC-26). Nothing
+ * else the user has held is touched.
+ */
+export async function placeAddressHeld(userId: string, personId: string, deps: PurchaseDeps): Promise<void> {
+  const rounds = (await heldRounds(deps, userId)).filter((r) => r.person_id === personId && r.attention_reason === "address");
+  await placeEach(rounds, userId, deps, { address: true });
+}
+
+async function heldRounds(deps: PurchaseDeps, userId: string) {
+  const { data, error } = await concierge(deps).rpc("held_rounds_for_user", { p_user_id: userId });
+  if (error) fail("Loading held rounds failed", error);
+  return data ?? [];
+}
+
+/**
  * One zinc_place_budget_ms covers every round: once it's spent no new round is claimed
  * (the tick tries them). One round failing never stops the rest.
  */
-export async function placeHeldForUser(userId: string, deps: PurchaseDeps): Promise<void> {
-  const { data, error } = await concierge(deps).rpc("held_rounds_for_user", { p_user_id: userId });
-  if (error) fail("Loading held rounds failed", error);
-  const rounds = data ?? [];
+async function placeEach(rounds: { id: string }[], userId: string, deps: PurchaseDeps, opts: { address?: boolean }): Promise<void> {
   if (rounds.length === 0) return;
   const clock = deps.clock ?? Date.now;
   const deadlineMs = clock() + (await setting(deps, "zinc_place_budget_ms"));
@@ -401,12 +424,12 @@ export async function placeHeldForUser(userId: string, deps: PurchaseDeps): Prom
     try {
       const lock = await claimRoundNow(deps, round.id);
       if (!lock) continue;
-      const outcome = await withLease(deps, round.id, lock, () => placeRound(round.id, lock, deps, { deadlineMs }));
+      const outcome = await withLease(deps, round.id, lock, () => placeRound(round.id, lock, deps, { deadlineMs, ...opts }));
       logEvent("order.place_held", { ...ids, outcome });
       // A new hold or failure is told at once, as after approval; nothing due means "busy".
       if (outcome === "held") await deps.advanceRound(round.id);
     } catch (e) {
-      logEvent("order.place_failed", { ...ids, name: e instanceof Error ? e.name : "unknown" });
+      logEvent("order.place_failed", { ...ids, ...errorFields(e) });
     }
   }
 }
@@ -461,11 +484,12 @@ export async function sweepStalePlacing(deps: PurchaseDeps): Promise<number> {
         if (found.status === "placed") await deps.orderPlaced?.(o.round_id);
         else if (settled.data === "needs_attention") await deps.advanceRound(o.round_id);
       } catch (e) {
-        logEvent("order.sweep_tell_failed", { ...ids, name: e instanceof Error ? e.name : "unknown" });
+        logEvent("order.sweep_tell_failed", { ...ids, ...errorFields(e) });
       }
     } catch (e) {
       // One order can't stop the rest; the next sweep tries again.
-      logEvent("order.sweep_failed", { ...ids, name: e instanceof Error ? e.name : "unknown" });
+      // An order stuck placing that we couldn't look up: the buyer hasn't been told yet (W5-3).
+      logEvent("order.sweep_failed", { ...ids, ...errorFields(e), alert: true });
     }
   }
   return done;

@@ -1,7 +1,7 @@
 import "server-only";
 import type { Address, CalendarDate, OccasionKind } from "@gifts-af/core";
 import type { SaveResult } from "../settings";
-import type { PlaceHeld } from "../zinc/types";
+import type { PlaceAddressHeld } from "../zinc/types";
 import type { ImportRow, PersonInput } from "./rules";
 import { logEvent } from "@/lib/log";
 import { resumeRoundsForPerson, type EngineDeps } from "../rounds/engine";
@@ -45,14 +45,14 @@ export async function updatePerson(id: string, input: PersonInput, engine: Engin
 
 /**
  * Saves a checked address (ALL-81); a round waiting in needs_address goes on at once, and
- * the buyer's held gifts are tried again through `placeHeld` (ALL-32), so an address hold ships.
+ * this person's gifts held for an address are placed through `placeAddressHeld` (ALL-32).
  */
 export async function saveAddress(
   id: string,
   address: Address,
-  wiring: { placeHeld: PlaceHeld; engine: EngineWiring },
+  wiring: { placeAddressHeld: PlaceAddressHeld; engine: EngineWiring },
 ): Promise<SaveResult> {
-  const result = await service.saveAddress(createSupabasePeopleStore(), id, address, new Date(), wiring.placeHeld);
+  const result = await service.saveAddress(createSupabasePeopleStore(), id, address, new Date(), wiring.placeAddressHeld);
   if (result.ok) await resumeWaitingRounds(id, wiring.engine);
   return result;
 }

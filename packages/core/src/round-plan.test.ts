@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { addDays, compareDates, type CalendarDate } from "./dates";
-import { nextAction, roundToCreate, type RoundView, type StepKey } from "./round-plan";
+import { nextAction, PLACEABLE_HOLDS, roundToCreate, type RoundView, type StepKey } from "./round-plan";
 import type { ScheduleSettings } from "./schedule";
 
 const s: ScheduleSettings = {
@@ -223,6 +223,19 @@ describe("nextAction: money holds (AC-20, AC-22, AC-23)", () => {
   it("tries to place after the notice, before any reminder", () => {
     expect(nextAction(hold({ sent: sent("hold:1:notice") }), "2027-03-01", s)).toEqual({ do: "place" });
     expect(nextAction(hold({ sent: sent("hold:1:notice") }), "2027-03-20", s)).toEqual({ do: "place" });
+  });
+
+  // S4: Zinc already rejected the address, or there is none; only saving the person's
+  // address places it again, never the tick.
+  it("never places an address hold: its notice, then the reminders on schedule", () => {
+    const addr = (over: Partial<RoundView> = {}) => hold({ attentionReason: "address", ...over });
+    expect(nextAction(addr({ sent: sent("hold:1:notice") }), "2027-03-01", s)).toEqual(wait);
+    expect(nextAction(addr({ sent: sent("hold:1:notice") }), "2027-03-15", s)).toEqual({ do: "send_hold", send: "hold:1:reminder" });
+    expect(nextAction(addr({ sent: sent("hold:1:notice", "hold:1:reminder") }), "2027-03-20", s)).toEqual({
+      do: "send_hold",
+      send: "hold:1:final",
+    });
+    expect(PLACEABLE_HOLDS).not.toContain("address");
   });
 
   it("waits once it has tried placing and nothing is due", () => {

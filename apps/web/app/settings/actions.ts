@@ -2,7 +2,7 @@
 
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
-import { logEvent } from "@/lib/log";
+import { errorFields, logEvent } from "@/lib/log";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   cancelConnect,
@@ -84,7 +84,7 @@ async function withZinc(run: (userId: string, deps: ZincDeps) => Promise<Payment
     if (!wiring) return { error: "Paying for gifts isn't switched on here yet." };
     return await run(userId, wiring.deps);
   } catch (error) {
-    logEvent("zinc.action_failed", { user_id: userId, name: error instanceof Error ? error.name : "unknown" });
+    logEvent("zinc.action_failed", { user_id: userId, ...errorFields(error) });
     return { error: "That didn't work. Try again in a minute." };
   }
 }

@@ -11,7 +11,7 @@ import {
   type StepKey,
 } from "@gifts-af/core";
 import { OCCASION_NAMES, shortDate } from "@/components/occasion-format";
-import { logEvent } from "@/lib/log";
+import { errorFields, logEvent } from "@/lib/log";
 import { notify, type NotifyDeps, type NotifyResult } from "../notify/notify";
 import type { Funding } from "../notify/templates";
 import type { ClaimedRound, RoundContext, RoundFinish, RoundOrder, RoundStore } from "./store";
@@ -85,14 +85,14 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
     try {
       await deps.zinc.sweep();
     } catch (err) {
-      logEvent("order.sweep_run_failed", { name: err instanceof Error ? err.name : "unknown" });
+      logEvent("order.sweep_run_failed", { ...errorFields(err) });
     }
   }
   // "Ordered" emails the service refused before (or orders settled by hand) go out now.
   try {
     await retryOrderedEmails(deps);
   } catch (err) {
-    logEvent("order.ordered_retry_failed", { name: err instanceof Error ? err.name : "unknown" });
+    logEvent("order.ordered_retry_failed", { ...errorFields(err) });
   }
 
   const s = await store.scheduleSettings();
@@ -184,7 +184,7 @@ async function advanceClaimed(round: ClaimedRound, deps: EngineDeps, s: Schedule
     else await runStep(round, deps, s);
     return true;
   } catch (err) {
-    logEvent("round_failed", { ...ids, error: err instanceof Error ? err.name : "unknown" });
+    logEvent("round_failed", { ...ids, ...errorFields(err) });
     return false;
   }
 }
@@ -357,7 +357,7 @@ export async function retryOrderedEmails(deps: EngineDeps): Promise<void> {
     try {
       await tellOrdered(roundId, deps);
     } catch (err) {
-      logEvent("order.ordered_email_failed", { round_id: roundId, error: err instanceof Error ? err.name : "unknown", alert: true });
+      logEvent("order.ordered_email_failed", { round_id: roundId, ...errorFields(err), alert: true });
     }
   }
 }
@@ -420,7 +420,7 @@ async function headsUpFunding(round: ClaimedRound, deps: EngineDeps): Promise<Fu
       walletUrl: zinc.walletUrl,
     };
   } catch (err) {
-    logEvent("heads_up_funding_failed", { round_id: round.id, user_id: round.userId, error: err instanceof Error ? err.name : "unknown" });
+    logEvent("heads_up_funding_failed", { round_id: round.id, user_id: round.userId, ...errorFields(err) });
     return undefined;
   }
 }

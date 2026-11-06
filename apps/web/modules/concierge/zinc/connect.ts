@@ -5,7 +5,7 @@
 // log. Logs carry ids only (E6).
 import { randomUUID } from "node:crypto";
 import { lookaheadCents, suggestedMinimumCents, type LookaheadRound } from "@gifts-af/core";
-import { logEvent } from "@/lib/log";
+import { errorFields, logEvent } from "@/lib/log";
 import { hasPaidFeatures } from "../paid-features";
 import { clearWebhook, getWallet, mintSandboxKey, pollDevice, setWebhook, startDevice } from "./account";
 import { ZincError } from "./client";
@@ -203,7 +203,7 @@ async function maybePlaceHeld(userId: string, phone: string | null, placeHeld: P
     await placeHeld(userId);
   } catch (error) {
     // The daily tick retries held orders, so this is not the user's problem.
-    logEvent("zinc.place_held_failed", { user_id: userId, message: error instanceof Error ? error.name : "unknown" });
+    logEvent("zinc.place_held_failed", { user_id: userId, ...errorFields(error) });
   }
 }
 

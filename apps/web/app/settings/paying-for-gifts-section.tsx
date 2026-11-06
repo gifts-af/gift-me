@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { logEvent } from "@/lib/log";
+import { errorFields, logEvent } from "@/lib/log";
 import { getPaymentStatus, hasPaidFeatures } from "@/modules/concierge";
 import { cancelZincConnect, disconnectZincAccount, pollZincConnect, saveBuyerPhone, startZincConnect } from "./actions";
 import { PayingForGifts, type PayingInitial } from "./paying-for-gifts";
@@ -39,7 +39,7 @@ export async function PayingForGiftsSection() {
       }
     }
   } catch (error) {
-    logEvent("zinc.settings_load_failed", { user_id: userId, name: error instanceof Error ? error.name : "unknown" });
+    logEvent("zinc.settings_load_failed", { user_id: userId, ...errorFields(error) });
     initial = { kind: "message", text: "We couldn't load your payment settings. Reload the page to try again." };
   }
   return <PayingForGifts initial={initial} actions={actions} walletUrl={walletUrl} />;
