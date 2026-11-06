@@ -2,9 +2,11 @@ import { defineConfig, devices } from "@playwright/test";
 import { localSupabase } from "./e2e/local-supabase";
 
 // Browser tests (ALL-20). They need the local Supabase running
-// (`pnpm supabase start`). CI builds the app first and serves the build;
-// locally an already running `pnpm dev` is reused (stop it first if it wasn't
-// started with SUPABASE_SECRET_KEY set to the local service key).
+// (`pnpm supabase start`). They run against a production build, locally as in
+// CI (E10): under `pnpm dev`, Next's overlay blocks clicks and slow compiling
+// lets clicks land before the page responds (ALL-99). CI builds in an earlier
+// step. A server already on this port is reused locally, so don't run
+// `pnpm dev --port 3100` while testing.
 const supabase = localSupabase();
 const port = 3100;
 const CI = Boolean(process.env.CI);
@@ -38,10 +40,10 @@ export default defineConfig({
   webServer: process.env.E2E_BASE_URL
     ? undefined
     : {
-        command: CI ? `pnpm start --port ${port}` : `pnpm dev --port ${port}`,
+        command: CI ? `pnpm start --port ${port}` : `pnpm build && pnpm start --port ${port}`,
         url: `http://localhost:${port}/auth/login`,
         reuseExistingServer: !CI,
-        timeout: 120_000,
+        timeout: 300_000,
         env: {
           NEXT_PUBLIC_SUPABASE_URL: supabase.url,
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: supabase.publishableKey,
