@@ -33,7 +33,7 @@ Running record of product decisions made during discovery. Each entry notes whet
 | 25 | **MVP success criteria:** after the first holiday season, every chosen recipient got their gift **on time and within budget**. Recipient happiness matters too, but is expected to improve over time and isn't a pass/fail bar for the MVP. | Owner |
 | 26 | **No target date for the MVP.** It's done when it's done. | Owner |
 | 27 | **MVP payment:** each user pays with their own card through the checkout service, with a price limit on every order. The app doesn't front money. A business entity (for capped single-use virtual cards) waits for the public launch. | Owner, on Claude's recommendation |
-| 28 | **After approval:** if checkout comes in at a different price but the full cost is still within budget, buy it and notify the user. Over budget means stop and ask. | Owner, on Claude's recommendation |
+| 28 | **After approval:** if checkout comes in at a different price but the full cost is still within budget, buy it and notify the user. Over budget means stop and ask. **Revised by T56 (2026-11-06):** each order is capped at its estimate plus a margin (`order_price_margin_pct`, 10%), so a price above that stops and asks even within budget. | Owner, on Claude's recommendation |
 | 29 | **Failed or late orders:** ask the user to approve a replacement (next-best idea ready in one tap). Never buy a replacement automatically. The replacement must fit the original budget, and a refunded order doesn't count against it. | Owner, on Claude's recommendation |
 | 30 | **Rounds skipped for no reply don't count as MVP failures.** The success measure covers approved gifts only, and skipped rounds are tracked separately. | Owner, on Claude's recommendation |
 

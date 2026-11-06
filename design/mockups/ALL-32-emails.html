@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Funding emails</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;padding:24px;background:#f4f4f5;color:#18181b;font:16px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  h1{font-size:22px;margin:0 0 4px}
+  .intro{color:#52525b;margin:0 0 24px;max-width:960px}
+  .row{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start}
+  .state{width:380px}
+  .label{font:600 13px system-ui;color:#0f766e;text-transform:uppercase;letter-spacing:.04em;margin:0 0 4px}
+  .when{font-size:14px;color:#52525b;margin:0 0 10px;min-height:60px}
+  .mail{background:#fff;border:1px solid #d4d4d8;border-radius:12px;overflow:hidden}
+  .subj{background:#fafafa;border-bottom:1px solid #e4e4e7;padding:10px 16px;font-size:14px}
+  .subj b{display:block;font-size:15px}
+  .body{padding:20px 20px 18px}
+  .h{font-size:20px;font-weight:700;margin:0 0 10px}
+  p{margin:8px 0}
+  .rows{border-top:1px solid #e4e4e7;margin:12px 0}
+  .rows div{border-bottom:1px solid #e4e4e7;padding:8px 0;font-size:15px}
+  .btn{display:block;text-align:center;background:#0f766e;color:#fff;border-radius:10px;padding:12px;font-weight:600;margin:14px 0 8px}
+  .plain{font-size:14px;color:#0f766e;text-decoration:underline}
+  .warn{border-left:3px solid #b45309;background:#fffbeb;padding:10px 12px;border-radius:6px;font-size:15px;margin:12px 0}
+  .warn b{color:#92400e}
+  .foot{font-size:13px;color:#71717a;margin-top:12px}
+  .new{outline:2px dashed #b45309;outline-offset:3px;border-radius:6px}
+</style></head><body>
+
+<h1>Emails: running low, and a gift on hold</h1>
+<p class="intro">Plain emails, same look as today's (one teal button each). The <span style="outline:2px dashed #b45309;padding:0 4px;border-radius:4px">dashed box</span> marks what's new in an email that already exists.</p>
+
+<div class="row">
+
+<div class="state">
+  <p class="label">1 · Heads-up, balance running low</p>
+  <p class="when">The normal heads-up email. The warning only appears when gifts due in the next 3 weeks (cap + $1 each) add up to more than the Zinc balance, and auto top-up isn't known to be on.</p>
+  <div class="mail">
+    <div class="subj"><b>Mom's birthday: 3 gifts from her list</b>GiftsAF</div>
+    <div class="body"><img src="https://giftsaf.com/email-logo.png" width="120" height="40" alt="GiftsAF" style="display:block;margin:0 0 16px">
+      <p class="h">Mom's birthday is coming up</p>
+      <p>Mom's birthday is on March 14. These gifts can still arrive in time.</p>
+      <div class="rows"><div>Le Creuset mug set · $42</div><div>Linen apron · $38</div><div>Herb garden kit · $29</div></div>
+      <div class="warn new"><b>Your Zinc balance is low.</b> $160 in gifts are due in the next 3 weeks, and you have $40. Add funds or turn on auto top-up in Zinc so nothing waits.</div>
+      <span class="btn">Choose a gift</span>
+      <span class="plain">Top up your Zinc balance</span>
+      <p class="foot">Nothing is bought until you choose. Prices include shipping and tax.</p>
+    </div>
+  </div>
+</div>
+
+<div class="state">
+  <p class="label">2 · Gift on hold: not enough funds</p>
+  <p class="when">They approved a gift, but the balance can't cover it (Zinc refused, or auto top-up switched itself off). Nothing is bought. Repeats on the normal reminder schedule until it's sorted.</p>
+  <div class="mail">
+    <div class="subj"><b>Mom's gift is waiting on your Zinc balance</b>GiftsAF</div>
+    <div class="body"><img src="https://giftsaf.com/email-logo.png" width="120" height="40" alt="GiftsAF" style="display:block;margin:0 0 16px">
+      <p class="h">Top up to send Mom's gift</p>
+      <p>You chose the <b>Le Creuset mug set</b> for Mom's birthday on March 14. Zinc needs <b>$46.20</b> in your balance to buy it (the gift with room for a small price change, plus Zinc's $1 fee). You have <b>$12.00</b>, so you're <b>$34.20</b> short.</p>
+      <p>Add funds in Zinc and we'll buy it as soon as we see them, usually within a day. There's no need to come back.</p>
+      <span class="btn">Top up your Zinc balance</span>
+      <div class="warn" style="border-left-color:#b45309;font-size:13px">Alpha: topping up means we'll buy this gift, its price plus Zinc's $1 fee.</div><p class="foot">To avoid this next time, turn on auto top-up in Zinc. Changed your mind? <span class="plain">Cancel this gift</span></p>
+    </div>
+  </div>
+</div>
+
+<div class="state">
+  <p class="label">3 · Gift on hold: setup not finished</p>
+  <p class="when">They approved a gift but never connected Zinc, or disconnected it. Same hold and reminders; the button goes to Settings instead.</p>
+  <div class="mail">
+    <div class="subj"><b>Finish setting up payment to send Mom's gift</b>GiftsAF</div>
+    <div class="body"><img src="https://giftsaf.com/email-logo.png" width="120" height="40" alt="GiftsAF" style="display:block;margin:0 0 16px">
+      <p class="h">Finish setting up payment</p>
+      <p>You chose the <b>Le Creuset mug set</b> for Mom's birthday on March 14. Gifts are paid from your own Zinc balance. Connect Zinc and add your phone in Settings.</p>
+      <p>It takes about a minute. Once it's connected and funded, we'll buy it.</p>
+      <span class="btn">Finish setup</span>
+      <p class="foot">Changed your mind? <span class="plain">Cancel this gift</span></p>
+    </div>
+  </div>
+</div>
+
+
+<div class="state">
+  <p class="label">4 · Couldn't send in time (our side)</p>
+  <p class="when">Only if we had ordering switched off on our side and the gift's deadline passed. Nothing was bought.</p>
+  <div class="mail">
+    <div class="subj"><b>We couldn't send Mom's gift in time</b>GiftsAF</div>
+    <div class="body"><img src="https://giftsaf.com/email-logo.png" width="120" height="40" alt="GiftsAF" style="display:block;margin:0 0 16px">
+      <p class="h">We couldn't send Mom's gift in time</p>
+      <p>You chose the <b>Le Creuset mug set</b> for Mom's birthday on March 14. A problem on our side stopped us placing the order before it was too late to arrive.</p>
+      <p>That's on us. Nothing was bought and nothing was charged.</p>
+      <span class="btn">Open Mom's page</span>
+    </div>
+  </div>
+</div>
+
+</div>
+</body></html>

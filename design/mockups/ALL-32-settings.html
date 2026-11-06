@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Paying for gifts</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;padding:24px;background:#f4f4f5;color:#18181b;font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  h1{font-size:22px;margin:0 0 4px}
+  .intro{color:#52525b;margin:0 0 24px;max-width:900px}
+  .row{display:flex;flex-wrap:wrap;gap:24px;align-items:flex-start}
+  .state{width:340px}
+  .label{font:600 13px system-ui;color:#0f766e;text-transform:uppercase;letter-spacing:.04em;margin:0 0 4px}
+  .when{font-size:14px;color:#52525b;margin:0 0 10px;min-height:40px}
+  .screen{background:#fff;border:1px solid #d4d4d8;border-radius:24px;padding:20px 16px}
+  .title{font-size:22px;font-weight:700;margin:0 0 6px}
+  .others{font-size:13px;color:#a1a1aa;border-bottom:1px solid #e4e4e7;padding-bottom:12px;margin:0 0 16px}
+  .sec{font-size:17px;font-weight:600;margin:0 0 6px}
+  .box{border:1px solid #e4e4e7;border-radius:12px;padding:14px;margin-bottom:12px}
+  p{margin:6px 0}
+  .muted{font-size:14px;color:#71717a}
+  .main{display:block;text-align:center;background:#0f766e;color:#fff;border-radius:12px;padding:12px;font-weight:600;margin-top:12px}
+  .textlink{display:block;text-align:center;color:#0f766e;font-weight:600;font-size:15px;margin-top:10px}
+  .red{color:#b91c1c}
+  .note{background:#fef3c7;color:#92400e;font-size:13px;border-radius:8px;padding:8px 10px;margin-top:10px}
+  .money{font-size:30px;font-weight:700;font-variant-numeric:tabular-nums;margin:0}
+  .pill{display:inline-block;font:600 12px system-ui;border-radius:999px;padding:2px 10px;background:#fef3c7;color:#92400e}
+  .warnline{font-size:14px;color:#b45309;margin-top:8px}
+  .code{font:700 24px ui-monospace,Consolas,monospace;letter-spacing:.12em;text-align:center;background:#f4f4f5;border-radius:8px;padding:10px;margin:10px 0}
+  ol{padding-left:20px;margin:8px 0;font-size:15px} li{margin:4px 0}
+</style></head><body>
+
+<h1>Settings → new "Paying for gifts" section</h1>
+<p class="intro">One section on the Settings page. A person only ever sees <b>one</b> of these four versions, depending on where they are. Read left to right, the way someone sets it up for the first time.</p>
+
+<div class="row">
+
+<div class="state">
+  <p class="label">1 · Not allowed yet</p>
+  <p class="when">Anyone without paid features (decision 53). Nothing to do.</p>
+  <div class="screen">
+    <p class="title">Settings</p>
+    <p class="others">Time zone · Over budget by · Send a test email</p>
+    <p class="sec">Paying for gifts</p>
+    <p class="muted">Buying gifts is open to test accounts during the alpha. We'll tell you when it opens up.</p>
+  </div>
+</div>
+
+<div class="state">
+  <p class="label">2 · Ready to connect</p>
+  <p class="when">Allowed, but hasn't linked a Zinc account.</p>
+  <div class="screen">
+    <p class="title">Settings</p>
+    <p class="others">Time zone · Over budget by · Send a test email</p>
+    <p class="sec">Paying for gifts</p>
+    <p>Gifts are paid from your own <b>Zinc</b> balance. Zinc buys from the store for us. We never see your card.</p>
+    <p class="muted">Takes about a minute: sign in to Zinc (or make an account) and click Allow.</p>
+    <div class="note" role="note">Alpha: each gift costs its price plus Zinc's $1 order fee, taken from your Zinc balance.</div>
+    <span class="main">Connect Zinc</span>
+  </div>
+</div>
+
+<div class="state">
+  <p class="label">3 · Waiting for "Allow"</p>
+  <p class="when">After tapping Connect. Zinc opens in a new tab; this updates by itself when they click Allow.</p>
+  <div class="screen">
+    <p class="title">Settings</p>
+    <p class="others">Time zone · Over budget by · Send a test email</p>
+    <p class="sec">Connect Zinc</p>
+    <ol>
+      <li>Tap <b>Open Zinc</b>.</li>
+      <li>Sign in, or make an account.</li>
+      <li>Check Zinc shows this code, then click <b>Allow</b>.</li>
+    </ol>
+    <div class="code">K7QX-4M2P</div>
+    <span class="main">Open Zinc</span>
+    <p class="muted" style="text-align:center;margin-top:10px">Waiting for you to click Allow…<br><span style="font-variant-numeric:tabular-nums">Code expires in 14 min</span></p>
+    <span class="textlink">Cancel</span>
+  </div>
+</div>
+
+<div class="state">
+  <p class="label">4 · Connected</p>
+  <p class="when">Shows the balance, then a short guide until auto top-up is on.</p>
+  <div class="screen">
+    <p class="title">Settings</p>
+    <p class="others">Time zone · Over budget by · Send a test email</p>
+    <p class="sec">Paying for gifts</p>
+    <div class="box">
+      <p class="muted" style="margin:0">Zinc balance</p>
+      <p class="money">$40.00</p>
+      <p class="muted">Auto top-up <span class="pill">Off</span></p>
+      <p class="warnline">$160 in gifts are due in the next 3 weeks.</p>
+    </div>
+    <div class="box">
+      <p class="sec">Turn on auto top-up</p>
+      <p class="muted">Zinc refills your balance from your card, so a gift never stalls.</p>
+      <ol>
+        <li>Open your Zinc wallet.</li>
+        <li>Add a card.</li>
+        <li>Turn on auto top-up: keep at least <b>$101</b> (your biggest budget + $1), top up by <b>$100</b>.</li>
+      </ol>
+      <p class="muted">Each top-up costs 2.9% + 30¢.</p>
+      <span class="main">Open Zinc wallet</span>
+    </div>
+    <div class="box">
+      <p class="sec">Your phone</p>
+      <p class="muted">Stores need one on every order. Only used for delivery.</p>
+      <p style="border:1px solid #e4e4e7;border-radius:12px;padding:10px 12px;color:#a1a1aa">(555) 123-4567</p>
+    </div>
+    <span class="textlink red">Disconnect Zinc</span>
+  </div>
+</div>
+
+</div>
+</body></html>
