@@ -18,7 +18,7 @@ export async function phoneLayoutProblems(page: Page): Promise<string[]> {
     for (const link of document.querySelectorAll("a")) {
       const { height } = link.getBoundingClientRect();
       // A hidden link can't be tapped, such as a page kept in the background.
-      if (link.checkVisibility() && height < minTap) {
+      if (link.checkVisibility({ checkVisibilityCSS: true }) && height < minTap) {
         problems.push(`"${link.textContent?.trim()}" is ${height.toFixed(1)}px tall, under ${minTap}px to tap`);
       }
     }

@@ -6,7 +6,9 @@ test("flags a visible link that's too short to tap, even at zero height", async 
   expect(await phoneLayoutProblems(page)).toEqual(['"Collapsed" is 0.0px tall, under 44px to tap']);
 });
 
-test("ignores a link that's really hidden", async ({ page }) => {
-  await page.setContent(`<a href="#" style="display:none">Hidden</a>`);
-  expect(await phoneLayoutProblems(page)).toEqual([]);
-});
+for (const style of ["display:none", "visibility:hidden"]) {
+  test(`ignores a link hidden with ${style}`, async ({ page }) => {
+    await page.setContent(`<a href="#" style="${style}">Hidden</a>`);
+    expect(await phoneLayoutProblems(page)).toEqual([]);
+  });
+}
