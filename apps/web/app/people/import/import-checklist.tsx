@@ -77,7 +77,15 @@ export function ImportChecklist({
             We couldn&apos;t get your contacts from Google. Try again, and allow access when Google asks.
           </p>
         )}
-        <Button className="self-start" onClick={connect} disabled={!hydrated || stage.kind === "loading"}>
+        {/* Faded until the page can respond (ALL-104). aria-disabled, not disabled, so a
+            keyboard can still reach it; it isn't in a form, so an early tap can't do harm. */}
+        <Button
+          className="self-start"
+          onClick={connect}
+          disabled={stage.kind === "loading"}
+          aria-disabled={!hydrated}
+          aria-busy={stage.kind === "loading"}
+        >
           {stage.kind === "loading" ? "Getting your contacts…" : "Connect Google Contacts"}
         </Button>
       </div>
