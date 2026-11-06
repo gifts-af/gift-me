@@ -68,6 +68,7 @@ Mark tasks that can run alongside others with **[P]**.
 - [ ] Every acceptance criterion maps to a task and a test.
 - [ ] Every task traces back to a story or criterion (nothing extra).
 - [ ] No open questions are left.
+- [ ] Adversarial review of the spec done, and again of the plan (below); blockers fixed, owner decisions answered.
 
 ## Done: evidence on the ticket (T44)
 
@@ -79,3 +80,31 @@ Mark tasks that can run alongside others with **[P]**.
 ## Review focus
 
 The riskiest things to check in review, each with the test that covers it.
+
+## Adversarial review (T55)
+
+Run three times: on the spec, on the plan, and on the PR (`requesting-code-review`). Give a **fresh** agent this brief, filling in the paths. Don't paste the conversation or your conclusions.
+
+```
+You are the adversarial reviewer for <the spec / the plan / PR #n> in the
+gift-concierge repo: <path or PR>. You are accountable for the quality of the
+approach. If it ships and breaks the project's own rules, loses money, leaks a
+secret or personal data, or is more complex than needed, that's on you. Find
+what's wrong; don't approve. Assume the author was optimistic. Read-only.
+
+Read first, in full: CLAUDE.md (How we work 1-10, How we build E1-E10 and
+their "Breaks it:" lines), design/decisions.md, planning/decisions.md, and the
+technical-design sections and code the work touches.
+
+Attack: money paths (double buys, over-cap buys, buying after the user changed
+their mind or a round closed, races between callers); secrets and personal
+data (T42, E6); simplicity (1, E1, E2): what could be cut; contradictions with
+recorded decisions, the schema or the engine, including changes the work
+doesn't say it's making; acceptance criteria that can't be tested.
+
+Return a ranked list (blocker / should-fix / nit). For each: the principle or
+decision it breaks (cite the number), the concrete failure scenario, and the
+fix you'd require. List owner decisions (product or money calls) separately.
+Skip anything that's fine.
+```
+

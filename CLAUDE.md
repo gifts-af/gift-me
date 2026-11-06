@@ -62,14 +62,27 @@ All development in this repo uses the **Superpowers** plugin. `.claude/settings.
 
 | Situation | Skill |
 |---|---|
-| New feature, screen or change in behavior | `brainstorming` to write the **Spec** (stories, acceptance criteria, open questions) from `design/plans/TEMPLATE.md`; settle the open questions; then `writing-plans` for the **Plan**, ending with its consistency check |
+| New feature, screen or change in behavior | `brainstorming` to write the **Spec** (stories, acceptance criteria, open questions) from `design/plans/TEMPLATE.md`; settle the open questions; an **adversarial review** of the spec (below); then `writing-plans` for the **Plan**, ending with its consistency check and another adversarial review |
 | Writing code | `test-driven-development` |
 | A bug or failing test | `systematic-debugging` |
 | Before saying something is done | `verification-before-completion` |
-| Before merging a PR | `requesting-code-review` |
+| Before merging a PR | `requesting-code-review`, briefed as an adversarial review (below) |
 | Wrapping up a ticket branch | `finishing-a-development-branch` |
 
 - Superpowers' own folder defaults don't apply here. Plans and specs follow the layout below.
+
+### Adversarial review (T55)
+
+Every spec, plan and PR gets a reviewer whose job is to find what's wrong, not to approve. Their findings are fixed, or brought to the owner, before the next step. This applies to every agent and person working here.
+
+- **Fresh context.** A new agent (or a person who wasn't in the conversation). It reads the work and the repo, never the chat that produced it, so it doesn't inherit the author's assumptions.
+- **It owns the quality of the approach.** If the design ships and breaks a rule, loses money, leaks data, or is more complex than needed, that's on the reviewer. It assumes the author was optimistic.
+- **Judged against our constitution.** The yardstick is this file's principles (How we work 1–10, How we build E1–E10, each with its "Breaks it:" line) and the decisions logs (`design/decisions.md`, `planning/decisions.md`). Findings cite the principle or decision they break, and flag any change to a recorded decision the work doesn't say it's revising.
+- **What it attacks:** money paths (double buys, over-cap buys, buying after the user changed their mind, races), secrets and personal data (T42, E6), simplicity (1, E1, E2), contradictions with the schema or engine, and acceptance criteria that can't be tested.
+- **What comes back:** a ranked list (blocker, should-fix, nit), each with the failure scenario, the rule it breaks and the fix, plus a separate list of owner decisions. The author fixes the technical ones and brings the owner decisions in one message.
+- A "builder check" (what would you need answered to plan this?) is useful too, but it finds gaps, not flaws, so it never replaces this review.
+
+The brief to give the reviewer is in `design/plans/TEMPLATE.md` > Adversarial review.
 
 ## Where docs go
 
