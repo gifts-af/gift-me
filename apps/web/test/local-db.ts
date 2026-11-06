@@ -3,7 +3,7 @@
 // stack isn't running; in CI (`CI` set) it must be running, so a missing stack fails loudly
 // instead of every money-path test quietly skipping.
 import { Client } from "pg";
-import { localSupabase, type LocalSupabase } from "../../../e2e/local-supabase";
+import { localSupabase, type LocalSupabase } from "../e2e/local-supabase";
 
 // Supabase's fixed local database (supabase/config.toml, db.port).
 export const LOCAL_DB = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";

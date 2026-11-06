@@ -8,7 +8,7 @@
 import { randomUUID } from "node:crypto";
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { LOCAL_DB, localStack } from "./local-db";
+import { LOCAL_DB, localStack } from "../../../test/local-db";
 
 
 

@@ -7,7 +7,7 @@ import { createClient } from "@supabase/supabase-js";
 import { Client } from "pg";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Database } from "@gifts-af/core";
-import { LOCAL_DB, localStack } from "./local-db";
+import { LOCAL_DB, localStack } from "../../../test/local-db";
 import {
   cancelConnect,
   disconnect,

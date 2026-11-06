@@ -7,6 +7,7 @@ import path from "node:path";
 // run one file at a time, after the rest, so one file's switch can't change
 // another's run (ALL-32).
 const LOCAL_DB_TESTS = [
+  "app/settings/__tests__/zinc-deps.test.ts",
   "modules/concierge/__tests__/placing-race.test.ts",
   "modules/concierge/__tests__/purchase.test.ts",
   "modules/concierge/__tests__/round-engine.test.ts",

@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { Client } from "pg";
 import { addDays, compareDates, type CalendarDate, type Database, type ScheduleSettings } from "@gifts-af/core";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
-import { LOCAL_DB, localStack } from "./local-db";
+import { LOCAL_DB, localStack } from "../../../test/local-db";
 import type { Channel } from "../notify/channels";
 import { confirmActionLink } from "../notify/links";
 import { createSupabaseNotifyStore } from "../notify/store";
