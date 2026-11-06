@@ -32,6 +32,7 @@ describe("sampleEmails", () => {
       "ordered",
       "failed_late",
       "failed_late-partial",
+      "check_your_address",
     ]);
   });
 

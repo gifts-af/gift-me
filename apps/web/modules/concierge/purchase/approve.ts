@@ -112,6 +112,7 @@ export async function approveAndBuy(input: ApproveInput, deps: PurchaseDeps): Pr
         fee_cents: deps.settings.feeCents,
         gift_message: giftMessage,
         ship_to: "recipient",
+        address_source: address.source,
         address: address.snapshot,
       })),
     });

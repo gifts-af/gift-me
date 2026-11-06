@@ -9,6 +9,7 @@ export type ActionName =
   | "add_address"
   | "answer_questions"
   | "open_settings"
+  | "check_my_address"
   | "cancel_held_gift";
 
 /** `done`: the done page's words when they depend on what happened (else the action's own). */
@@ -150,6 +151,26 @@ export const ACTIONS: Record<ActionName, Action> = {
     },
     async next() {
       return "/settings";
+    },
+    straight: true,
+  },
+
+  // The list owner's "Check my address" (ALL-112): no round, nothing about a gift.
+  check_my_address: {
+    confirm: {
+      title: "Check your address",
+      body: "Confirm to open your saved address.",
+      button: "Open Settings",
+    },
+    done: {
+      title: "Done",
+      body: "Open Settings to check your saved address.",
+    },
+    async run() {
+      return { ok: true };
+    },
+    async next() {
+      return "/settings#my-address";
     },
     straight: true,
   },

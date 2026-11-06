@@ -70,6 +70,8 @@ export type RoundOrder = {
   holdReason: string | null;
   failureType: string | null;
   resolved: boolean;
+  /** Last changed; for a failed order, about when it failed. */
+  updatedAt: string;
   /** It failed after the round closed: emailed once as `late_fail:<id>` (failed_late). */
   failedAfterClose: boolean;
   maxPriceCents: number;
@@ -127,6 +129,12 @@ export interface RoundStore {
   /** false = already recorded, so the email must not go out again. */
   recordSend(roundId: string, userId: string, step: StepKey): Promise<boolean>;
   forgetSend(roundId: string, step: StepKey): Promise<void>;
+  /** Rounds with a rejected shared address still to deal with (ALL-112). */
+  roundsWithRejectedAddresses(): Promise<string[]>;
+  /** Who to ask to check their address: only while the rejected address is still what they share. */
+  sharedAddressOwnerToTell(roundId: string): Promise<string | null>;
+  /** Removes what's left of the round's rejected addresses (T42, decision 43). */
+  clearRejectedAddresses(roundId: string): Promise<void>;
   roundContext(roundId: string): Promise<RoundContext>;
   /**
    * The person's `needs_address` rounds, made due at `now` so they can be
@@ -361,7 +369,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
           .order("rank"),
         concierge
           .from("orders")
-          .select("id, status, hold_reason, failure_type, resolved, failed_after_close, max_price_cents, fee_cents, ship_city, created_at, gift_ideas(title)")
+          .select("id, status, hold_reason, failure_type, resolved, updated_at, failed_after_close, max_price_cents, fee_cents, ship_city, created_at, gift_ideas(title)")
           .eq("round_id", roundId)
           .order("created_at")
           .order("id"),
@@ -409,12 +417,30 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
           holdReason: o.hold_reason,
           failureType: o.failure_type,
           resolved: o.resolved,
+          updatedAt: o.updated_at,
           failedAfterClose: o.failed_after_close,
           maxPriceCents: o.max_price_cents,
           feeCents: o.fee_cents,
         })),
         failCount: failCount.data ?? 0,
       };
+    },
+
+    async roundsWithRejectedAddresses() {
+      const { data, error } = await concierge.rpc("rounds_with_rejected_addresses");
+      if (error) fail("Loading rounds with rejected addresses failed", error);
+      return (data ?? []) as string[];
+    },
+
+    async sharedAddressOwnerToTell(roundId) {
+      const { data, error } = await concierge.rpc("shared_address_owner_to_tell", { p_round_id: roundId });
+      if (error) fail("Finding the address's owner failed", error);
+      return (data as string | null) ?? null;
+    },
+
+    async clearRejectedAddresses(roundId) {
+      const { error } = await concierge.rpc("clear_rejected_addresses", { p_round_id: roundId });
+      if (error) fail("Clearing rejected addresses failed", error);
     },
 
     async waitingRoundsForPerson(personId, now) {

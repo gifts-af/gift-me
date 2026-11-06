@@ -613,6 +613,7 @@ export type Database = {
       };
       orders: {
         Row: {
+          address_source: string | null;
           created_at: string;
           est_delivery_date: string | null;
           failed_after_close: boolean;
@@ -645,6 +646,7 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
+          address_source?: string | null;
           created_at?: string;
           est_delivery_date?: string | null;
           failed_after_close?: boolean;
@@ -676,6 +678,7 @@ export type Database = {
           user_id?: string;
         };
         Update: {
+          address_source?: string | null;
           created_at?: string;
           est_delivery_date?: string | null;
           failed_after_close?: boolean;
@@ -1000,6 +1003,7 @@ export type Database = {
           p_user_id: string;
         };
         Returns: {
+          address_source: string | null;
           created_at: string;
           est_delivery_date: string | null;
           failed_after_close: boolean;
@@ -1045,6 +1049,7 @@ export type Database = {
           p_today: string;
         };
         Returns: {
+          address_source: string | null;
           created_at: string;
           est_delivery_date: string | null;
           failed_after_close: boolean;
@@ -1222,6 +1227,10 @@ export type Database = {
           isSetofReturn: false;
         };
       };
+      clear_rejected_addresses: {
+        Args: { p_round_id: string };
+        Returns: undefined;
+      };
       delete_occasion: { Args: { p_occasion_id: string }; Returns: undefined };
       enable_owner_rls: { Args: { p_table: unknown }; Returns: undefined };
       fail_order: {
@@ -1308,6 +1317,7 @@ export type Database = {
       order_by_reference: {
         Args: { p_order_id: string; p_user_id: string };
         Returns: {
+          address_source: string | null;
           created_at: string;
           est_delivery_date: string | null;
           failed_after_close: boolean;
@@ -1354,6 +1364,7 @@ export type Database = {
           p_user_id: string;
         };
         Returns: {
+          address_source: string | null;
           created_at: string;
           est_delivery_date: string | null;
           failed_after_close: boolean;
@@ -1424,6 +1435,10 @@ export type Database = {
         Args: Record<PropertyKey, never>;
         Returns: string[];
       };
+      rounds_with_rejected_addresses: {
+        Args: Record<PropertyKey, never>;
+        Returns: string[];
+      };
       set_emailed_balance: {
         Args: { p_cents: number; p_round_id: string };
         Returns: undefined;
@@ -1447,6 +1462,10 @@ export type Database = {
         };
         Returns: Database["concierge"]["Enums"]["round_status"];
       };
+      shared_address_owner_to_tell: {
+        Args: { p_round_id: string };
+        Returns: string;
+      };
       skip_open_rounds: {
         Args: { p_occasion_id: string; p_person_id: string };
         Returns: undefined;
@@ -1454,6 +1473,7 @@ export type Database = {
       stale_placing_orders: {
         Args: { p_now: string };
         Returns: {
+          address_source: string | null;
           created_at: string;
           est_delivery_date: string | null;
           failed_after_close: boolean;

@@ -21,7 +21,9 @@ export type NotificationKind =
   | "too_late"
   | "missed_on_us"
   | "ordered"
-  | "failed_late";
+  | "failed_late"
+  // ALL-112: to a list owner, whose shared address a store couldn't use. Says nothing of a gift.
+  | "check_your_address";
 
 export type RenderedEmail = { subject: string; html: string; text: string };
 
@@ -87,6 +89,7 @@ export type TemplateData = {
   ordered: OneGift & { cityText?: string };
   /** A gift that failed after its round closed (too late to choose again); `onItsWay`: the round's other gifts placed. */
   failed_late: OneGift & { onItsWay?: string[] };
+  check_your_address: Record<string, never>;
 };
 
 export type TemplateLinks = {
@@ -110,6 +113,7 @@ export type TemplateLinks = {
   missed_on_us: { open: string };
   ordered: { open: string };
   failed_late: { open: string };
+  check_your_address: { open: string };
 };
 
 const rowsOf = (ideas: IdeaRow[]) => ideas.map((i) => ({ title: `${i.title} · ${i.price}` }));
@@ -141,6 +145,22 @@ function giftList(titles: string[]): string {
 }
 
 const itOrThem = (titles: string[]) => (titles.length > 1 ? "them" : "it");
+
+/**
+ * Why a gift for a list owner's shared address ended (ALL-112), for the needs_attention email.
+ * `ownerAsked`: the owner has been or will be asked to check it, so the buyer can be told so.
+ */
+export function endedAddressReason(
+  type: "address_withdrawn" | "address_rejected",
+  personName: string,
+  titles: string[],
+  ownerAsked: boolean,
+): string {
+  const what = `so we didn't buy ${giftList(titles)} and you haven't been charged for ${itOrThem(titles)}.`;
+  if (type === "address_withdrawn") return `we can't use the address ${personName} was sharing, ${what}`;
+  const ended = `the store couldn't use the address ${personName} saved, ${what}`;
+  return ownerAsked ? `${ended} We'll ask ${personName} to check it, without mentioning a gift.` : ended;
+}
 
 /** Every hold email ends the same way (owner): what topping up or fixing it means, and how to back out. */
 function holdEnd(cancel: string, alpha: string) {
@@ -476,6 +496,15 @@ export const TEMPLATES: {
       button: { label: `Open ${d.personName}'s page`, url: links.open },
     }),
   }),
+
+  check_your_address: (_d, links) => ({
+    subject: "Please check your saved address",
+    ...renderEmail({
+      heading: "Please check your saved address",
+      paragraphs: ["Please check your saved address is current. It's used if someone sends you a gift through your list."],
+      button: { label: "Check my address", url: links.open },
+    }),
+  }),
 };
 
 const IDEAS: IdeaRow[] = [
@@ -543,4 +572,5 @@ export const SAMPLE_DATA: {
   missed_on_us: { data: GIFT, links: { open: "https://example.com/a/open-token" } },
   ordered: { data: { ...ONE_GIFT, cityText: "Dayton" }, links: { open: "https://example.com/a/open-token" } },
   failed_late: { data: ONE_GIFT, links: { open: "https://example.com/a/open-token" } },
+  check_your_address: { data: {}, links: { open: "https://example.com/a/open-token" } },
 };

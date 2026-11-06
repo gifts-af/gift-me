@@ -245,6 +245,16 @@ describe("confirmActionLink", () => {
     });
   });
 
+  it("check_my_address: goes straight to your saved address, with no round (ALL-112 AC-12)", async () => {
+    const store = await storeWithLink({ action: "check_my_address" });
+    expect(await confirmActionLink(TOKEN, OWNER, { store, now: NOW })).toEqual({
+      state: "done",
+      done: ACTIONS.check_my_address.done,
+      next: "/settings#my-address",
+      straight: true,
+    });
+  });
+
   it("answer_questions: goes straight to the person's question form (ALL-26 AC-3)", async () => {
     const store = await storeWithLink({ action: "answer_questions" });
     store.links[0].roundId = "round-1";
