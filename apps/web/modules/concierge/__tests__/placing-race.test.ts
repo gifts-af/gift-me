@@ -8,24 +8,11 @@
 import { randomUUID } from "node:crypto";
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { LOCAL_DB, localStack } from "./local-db";
 
-// Supabase's fixed local database (supabase/config.toml, db.port).
-const LOCAL_DB = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 
-async function localDbUp(): Promise<boolean> {
-  const c = new Client({ connectionString: LOCAL_DB, connectionTimeoutMillis: 1000 });
-  try {
-    await c.connect();
-    await c.query("select 1");
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await c.end().catch(() => {});
-  }
-}
 
-const dbUp = await localDbUp();
+const dbUp = (await localStack({ api: false })) !== null;
 
 async function connect(role: "service_role" | "postgres" = "service_role"): Promise<Client> {
   const c = new Client({ connectionString: LOCAL_DB });

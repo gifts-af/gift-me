@@ -7,7 +7,7 @@ import { createClient } from "@supabase/supabase-js";
 import { Client } from "pg";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Database } from "@gifts-af/core";
-import { localSupabase } from "../../../e2e/local-supabase";
+import { LOCAL_DB, localStack } from "./local-db";
 import {
   cancelConnect,
   disconnect,
@@ -19,25 +19,13 @@ import {
 } from "../zinc/connect";
 import type { ZincDeps } from "../zinc/types";
 
-const LOCAL_DB = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 const KEY = "zn_live_SECRETKEY123";
 const WEBHOOK_SECRET = "zn_whsec_SECRET456";
 const DEVICE_CODE = "DEVICE-CODE-SECRET-789";
 
-async function localDbUp(): Promise<boolean> {
-  const c = new Client({ connectionString: LOCAL_DB, connectionTimeoutMillis: 1000 });
-  try {
-    await c.connect();
-    await c.query("select 1");
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await c.end().catch(() => {});
-  }
-}
-const dbUp = await localDbUp();
-const supabase = dbUp ? localSupabase() : null;
+const stack = await localStack({ api: true });
+const dbUp = stack !== null;
+const supabase = stack?.supabase ?? null;
 
 type Call = { method: string; path: string; auth: string | null; body: unknown };
 type Handler = (call: Call) => Response | Promise<Response>;

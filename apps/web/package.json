@@ -6,7 +6,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "vitest run",
+    "test": "vitest run --project unit",
     "typecheck": "next typegen && tsc --noEmit",
     "test:db": "vitest run --project local-db",
     "check:bundle": "node scripts/check-bundle-secrets.mjs",

@@ -4,7 +4,7 @@ import { createClient } from "@supabase/supabase-js";
 import { Client } from "pg";
 import { addDays, compareDates, type CalendarDate, type Database, type ScheduleSettings } from "@gifts-af/core";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
-import { localSupabase } from "../../../e2e/local-supabase";
+import { LOCAL_DB, localStack } from "./local-db";
 import type { Channel } from "../notify/channels";
 import { confirmActionLink } from "../notify/links";
 import { createSupabaseNotifyStore } from "../notify/store";
@@ -614,22 +614,10 @@ describe("heads-up funding warning (AC-11)", () => {
 
 // ─── ALL-32: held rounds, against the real local database (E5); only Zinc is faked ───
 
-const LOCAL_DB = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 
-async function localDbUp(): Promise<boolean> {
-  const c = new Client({ connectionString: LOCAL_DB, connectionTimeoutMillis: 1000 });
-  try {
-    await c.connect();
-    await c.query("select 1");
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await c.end().catch(() => {});
-  }
-}
-const dbUp = await localDbUp();
-const local = dbUp ? localSupabase() : null;
+const stack = await localStack({ api: true });
+const dbUp = stack !== null;
+const local = stack?.supabase ?? null;
 
 describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-19, AC-22 to AC-24)", () => {
   let pg: Client;

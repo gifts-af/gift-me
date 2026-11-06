@@ -6,25 +6,13 @@ import { createClient } from "@supabase/supabase-js";
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Database } from "@gifts-af/core";
-import { localSupabase } from "../../../e2e/local-supabase";
+import { LOCAL_DB, localStack } from "./local-db";
 import { handleZincWebhook } from "../zinc/events";
 
-const LOCAL_DB = "postgresql://postgres:postgres@127.0.0.1:54322/postgres";
 
-async function localDbUp(): Promise<boolean> {
-  const c = new Client({ connectionString: LOCAL_DB, connectionTimeoutMillis: 1000 });
-  try {
-    await c.connect();
-    await c.query("select 1");
-    return true;
-  } catch {
-    return false;
-  } finally {
-    await c.end().catch(() => {});
-  }
-}
-const dbUp = await localDbUp();
-const supabase = dbUp ? localSupabase() : null;
+const stack = await localStack({ api: true });
+const dbUp = stack !== null;
+const supabase = stack?.supabase ?? null;
 
 const sign = (body: string, secret: string) => createHmac("sha256", secret).update(body).digest("hex");
 

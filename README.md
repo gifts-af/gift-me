@@ -43,7 +43,7 @@ pnpm supabase status   # local URLs and keys; Studio (the database UI) is at htt
 pnpm supabase db reset # rebuild the local database from the migrations, e.g. after pulling new ones
 pnpm supabase stop     # stop the containers; your local data is kept
 pnpm db:test           # run the database tests in supabase/tests/ (privacy rules, keys, cascades)
-pnpm test:db           # run the Vitest files that use the real local database (order races, Zinc connect and events); CI's db job runs it too
+pnpm test:db           # run the Vitest files that use the real local database and its API (order races, buying, Zinc connect and events; `pnpm test` leaves them out). Needs `pnpm supabase start`; skips when it isn't running, but fails in CI, whose db job starts it
 pnpm check:bundle      # after pnpm build: fail if a Zinc key prefix or a Vault function name is in the browser code (CI runs it)
 pnpm db:types          # regenerate packages/core/src/database.types.ts after changing the schema
 pnpm db:push:dev       # apply new migrations to dev (CI does this on every merge to main; by hand only to recover)

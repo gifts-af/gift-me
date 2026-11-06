@@ -41,8 +41,11 @@ jobs:
       - run: pnpm check:bundle
 
   # Database: apply every migration to a fresh local Supabase, run the SQL
-  # tests (privacy rules, keys, cascades), and check the generated types are
-  # current. The runner has Docker, which the Supabase CLI needs.
+  # tests (privacy rules, keys, cascades) and the Vitest local-db tests, and
+  # check the generated types are current. The runner has Docker, which the
+  # Supabase CLI needs. The local-db tests call the Supabase API (PostgREST
+  # through Kong, and auth), so the stack starts with them, like e2e; in CI a
+  # missing stack fails those tests instead of skipping them.
   db:
     runs-on: ubuntu-latest
     steps:
@@ -53,7 +56,7 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      - run: pnpm supabase db start
+      - run: pnpm supabase start -x studio,imgproxy,mailpit,edge-runtime,logflare,vector,supavisor,realtime,storage-api,postgres-meta
       - run: pnpm db:test
       - run: pnpm test:db
       - name: Generated database types are up to date
