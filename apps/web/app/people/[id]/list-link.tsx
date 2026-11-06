@@ -82,6 +82,8 @@ export function ListLink({
               Link
             </Button>
           </div>
+          {/* Decision 53: what spends money says so. It goes at the next tick, leaving time to unlink. */}
+          <p className="text-[13px] text-muted-foreground">If a gift for them is waiting on an address, it will ship to this list&apos;s owner.</p>
         </form>
       )}
       {error && (

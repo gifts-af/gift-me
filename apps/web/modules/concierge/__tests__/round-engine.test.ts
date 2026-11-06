@@ -321,6 +321,17 @@ describe("runTick", () => {
 });
 
 describe("resumeRoundsForPerson", () => {
+  it("a share arriving after the last tick before the deadline still skips, with the skip email (ALL-63 AC-21)", async () => {
+    const h = harness({ hasAddress: false });
+    await h.runDays("2027-02-11", "2027-03-10");
+    h.store.people.get(PERSON)!.hasAddress = true;
+    await h.tick("2027-03-11");
+
+    expect(h.store.rounds[0].status).toBe("skipped");
+    expect(h.sent()).not.toContain("heads_up@2027-03-11");
+    expect(h.sent()).toContain("skipped@2027-03-11");
+  });
+
   it("a waiting round notices an address at the next daily tick, with no resume and no extra email (ALL-63 AC-19)", async () => {
     const h = harness({ hasAddress: false });
     await h.tick("2027-02-11");
@@ -755,7 +766,7 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
         o.zinc === false
           ? null
           : {
-              placeRound: (id, lock, deadlineMs) => placeRound(id, lock, purchase, { deadlineMs }),
+              placeRound: (id, lock, deadlineMs, opts) => placeRound(id, lock, purchase, { deadlineMs, ...opts }),
               sweep: () => sweepStalePlacing(purchase),
               wallet: async () => ({ balanceCents: zinc.balance, autoTopUp: false }),
               lookahead: async () => ({ cents: 0, atLeast: false }),
@@ -863,7 +874,10 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
   // ─── a list owner's shared address (ALL-112, T61) ─────────────────────────
 
   describe("whether a round has an address (ALL-63)", () => {
-    const hasAddress = async (roundId: string) => (await createSupabaseRoundStore(client()).roundContext(roundId)).hasAddress;
+    const hasAddress = async (roundId: string) => {
+      await pg.query("update concierge.gift_rounds set status = 'needs_address' where id = $1", [roundId]);
+      return (await createSupabaseRoundStore(client()).roundContext(roundId)).hasAddress;
+    };
     const personOf = async (roundId: string) =>
       (await pg.query("select person_id from concierge.gift_rounds where id = $1", [roundId])).rows[0].person_id as string;
     const clearOwnEntry = async (roundId: string) =>
@@ -898,6 +912,20 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
       const owner = await shareWith(r, u);
       await pg.query("update public.account_addresses set state = 'Ohio' where user_id = $1", [owner.userId]);
       expect(await hasAddress(r.roundId)).toBe(false);
+    });
+
+    it("a failed read of the shared address can't hold up a round that doesn't need it", async () => {
+      const u = await newUser();
+      const r = await newRound(u);
+      await pg.query("update concierge.gift_rounds set status = 'needs_attention', attention_reason = 'funds' where id = $1", [r.roundId]);
+      const real = client();
+      const broken = new Proxy(real, {
+        get(target, prop, receiver) {
+          if (prop !== "rpc") return Reflect.get(target, prop, receiver);
+          return () => Promise.resolve({ data: null, error: { code: "XX000", message: "down" } });
+        },
+      });
+      await expect(createSupabaseRoundStore(broken).roundContext(r.roundId)).resolves.toMatchObject({ hasAddress: true, hasSharedAddress: false });
     });
 
     it("with nothing shared, the buyer's own entry counts as before", async () => {
@@ -948,6 +976,24 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
         [roundId],
       )
     ).rows[0].n;
+
+  it("a gift held for an address goes to a shared address that arrives, with no email to fix it (ALL-63 AC-7)", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    await approve(u, r);
+    const [first] = (await pg.query("select id from concierge.orders where round_id = $1", [r.roundId])).rows;
+    await zincRejects(u, first.id);
+    expect((await orderRows(r.roundId)).map((o) => o.hold_reason)).toContain("address");
+    await shareWith(r, u);
+    zinc.posts = [];
+
+    await advance(r.roundId, 1);
+
+    expect(zinc.posts).toEqual([expect.objectContaining({ city: "Akron" })]);
+    expect(mail.filter((m) => m.to === u.email && /address/i.test(m.subject))).toEqual([]);
+    const source = await pg.query("select address_source from concierge.orders where round_id = $1 and status = 'placing'", [r.roundId]);
+    expect(source.rows).toEqual([{ address_source: "shared" }]);
+  });
 
   it("sharing stopped after approval: the buyer is told once, and nothing is bought (AC-5)", async () => {
     const u = await newUser();

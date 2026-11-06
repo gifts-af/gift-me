@@ -74,7 +74,7 @@ export function ShareAddressSwitch({
         {sharing.kind === "on" ? (
           <p className="text-[13px] text-muted-foreground">
             They see {sharing.city}, {sharing.state} in GiftsAF. {ZINC}{" "}
-            <Link href="/settings#my-address" className="text-primary underline underline-offset-[3px]">
+            <Link href="/settings#my-address" className="inline-flex min-h-11 items-center text-primary underline underline-offset-[3px]">
               Change my address
             </Link>
           </p>

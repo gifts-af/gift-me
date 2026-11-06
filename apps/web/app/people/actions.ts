@@ -120,7 +120,7 @@ export async function setBudgetAction(_previous: SaveResult | null, formData: Fo
 
 export async function linkListAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
   const id = text(formData, "id");
-  return refresh(await linkList(id, text(formData, "link"), { placeAddressHeld, engine: engineNow }), id);
+  return refresh(await linkList(id, text(formData, "link")), id);
 }
 
 export async function unlinkListAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {

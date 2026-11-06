@@ -280,27 +280,6 @@ describe("linking a list", () => {
     expect((await listPeople(store, TODAY)).find((c) => c.id === mine)!.keepsList).toBe(true);
   });
 
-  it("linking does what saving an address does: this person's address holds are tried again (ALL-63 AC-20)", async () => {
-    const { store, mine } = setup();
-    store.lists.set(TOKEN, "list-owner");
-    const placeHeld = vi.fn(async () => {});
-    expect(await linkList(store, mine, TOKEN, placeHeld)).toEqual({ ok: true });
-    expect(placeHeld).toHaveBeenCalledWith(ME, mine);
-  });
-
-  it("a failure placing them never fails the link, and a refused link places nothing (ALL-63 AC-20)", async () => {
-    const { store, mine } = setup();
-    store.lists.set(TOKEN, "list-owner");
-    const broken = vi.fn(async () => {
-      throw new Error("Zinc down");
-    });
-    expect(await linkList(store, mine, TOKEN, broken)).toEqual({ ok: true });
-
-    const placeHeld = vi.fn(async () => {});
-    await linkList(store, mine, "hello", placeHeld);
-    expect(placeHeld).not.toHaveBeenCalled();
-  });
-
   it("explains an unknown link", async () => {
     const { store, mine } = setup();
     expect(await linkList(store, mine, TOKEN)).toEqual({

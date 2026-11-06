@@ -139,6 +139,10 @@ describe("nextAction: address path", () => {
     expect(nextAction(needs({ sent }), "2027-03-21", s)).toEqual({ do: "wait", until: "2027-03-22" });
   });
 
+  it("an address that arrives on the deadline day still skips: the deadline comes first (ALL-63 AC-21)", () => {
+    expect(nextAction(needs({ hasAddress: true }), "2027-03-22", s)).toEqual({ do: "skip", send: "skipped" });
+  });
+
   it("fires the address_* steps on the same days (AC-8)", () => {
     expect(walk(needs(), "2027-02-22", "2027-03-25")).toEqual([
       ["2027-02-27", "address_reminder_1"],
@@ -185,6 +189,27 @@ describe("nextAction: other statuses", () => {
     expect(nextAction(view("scheduled"), "2027-03-22", s)).toEqual({ do: "skip", send: "skipped" });
     expect(nextAction(view("awaiting_approval"), "2027-03-22", s)).toEqual({ do: "skip", send: "skipped" });
     expect(nextAction(view("needs_address"), "2027-03-22", s)).toEqual({ do: "skip", send: "skipped" });
+  });
+
+  describe("a gift held for an address, when a shared address arrives (ALL-63)", () => {
+    const held = (over: Partial<RoundView> = {}) =>
+      ({ ...view("needs_attention"), attentionReason: "address", holdCount: 1, ...over }) as RoundView;
+
+    it("places it, ahead of asking the buyer to fix an address they can't edit", () => {
+      expect(nextAction(held({ hasSharedAddress: true }), "2027-03-01", s)).toEqual({ do: "place" });
+    });
+
+    it("tries once a run, then carries on as any address hold does", () => {
+      expect(nextAction(held({ hasSharedAddress: true, placeTried: true }), "2027-03-01", s)).toEqual({ do: "send_hold", send: "hold:1:notice" });
+    });
+
+    it("with nothing usable shared, it still asks the buyer", () => {
+      expect(nextAction(held(), "2027-03-01", s)).toEqual({ do: "send_hold", send: "hold:1:notice" });
+    });
+
+    it("the deadline still comes first", () => {
+      expect(nextAction(held({ hasSharedAddress: true }), "2027-03-22", s).do).toBe("skip");
+    });
   });
 
   it("skips a needs_attention round only at the deadline", () => {

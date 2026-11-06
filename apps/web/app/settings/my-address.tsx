@@ -147,7 +147,7 @@ function SavedAddress({
       </div>
       <p className="text-[13px] text-muted-foreground">
         {shared ? "Shared with people who have your list." : "Not shared."}{" "}
-        <Link href="/lists" className="text-primary underline underline-offset-[3px]">
+        <Link href="/lists" className="inline-flex min-h-11 items-center text-primary underline underline-offset-[3px]">
           Change this on your list.
         </Link>
       </p>

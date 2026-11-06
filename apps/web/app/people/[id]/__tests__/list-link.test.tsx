@@ -22,6 +22,11 @@ describe("ListLink", () => {
     expect([form.get("id"), form.get("link")]).toEqual(["p1", "https://x.test/share/abc"]);
   });
 
+  it("says where a waiting gift will go, next to the field (decision 53)", () => {
+    setup(false);
+    expect(screen.getByText("If a gift for them is waiting on an address, it will ship to this list's owner.")).toBeInTheDocument();
+  });
+
   it("sends a link pasted before the page was ready, which React never saw typed", async () => {
     const { link } = setup(false);
     const input = screen.getByLabelText("Their list link") as HTMLInputElement;

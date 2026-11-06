@@ -1,6 +1,7 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { createFreshUser } from "./fresh-user";
 import { localSupabase } from "./local-supabase";
+import { phoneLayoutProblems } from "./phone-layout";
 import { signIn } from "./sign-in";
 
 // ALL-63: your own address and sharing it, against the local Supabase. Every
@@ -99,8 +100,10 @@ test("My address waits for a list, then adds, changes and removes (AC-1 to AC-5)
 
   await saveFirstList(page);
   await page.goto("/settings");
+  expect(await phoneLayoutProblems(page)).toEqual([]);
   await tap(page.getByRole("button", { name: "Add my address" }));
   await expect(page.getByLabel("First name")).toHaveValue("");
+  expect(await phoneLayoutProblems(page)).toEqual([]);
 
   await page.getByLabel("ZIP code").fill("123");
   await page.getByRole("button", { name: "Save address" }).click();
@@ -113,6 +116,7 @@ test("My address waits for a list, then adds, changes and removes (AC-1 to AC-5)
   await page.getByRole("button", { name: "Save address" }).click();
   await expect(page.getByText(`${STREET}`)).toBeVisible();
   await expect(page.getByText(/^Not shared\./)).toBeVisible();
+  expect(await phoneLayoutProblems(page)).toEqual([]);
   const saved = await row(id);
   expect(saved).toMatchObject({ share_for_gifts: false, country: "US", phone: null });
   expect(saved?.address_checked_at).not.toBeNull();
@@ -170,6 +174,7 @@ test("the switch appears with a first list, asks once, then turns off and on (AC
   await saveFirstList(page);
   await expect(shareSwitch(page)).toBeVisible();
   await expect(shareSwitch(page)).not.toBeChecked();
+  expect(await phoneLayoutProblems(page)).toEqual([]);
 
   await shareSwitch(page).click();
   const dialog = page.getByRole("dialog");
@@ -182,6 +187,7 @@ test("the switch appears with a first list, asks once, then turns off and on (AC
   await dialog.getByLabel("ZIP code").fill("1");
   await dialog.getByRole("button", { name: "Save and share" }).click();
   await expect(dialog.getByText("Enter a 5-digit ZIP code.")).toBeVisible();
+  expect(await phoneLayoutProblems(page)).toEqual([]);
   expect(await row(id)).toBeNull();
 
   await fillAddress(page);
@@ -189,6 +195,7 @@ test("the switch appears with a first list, asks once, then turns off and on (AC
   await expect(dialog).toHaveCount(0);
   await expect(shareSwitch(page)).toBeChecked();
   await expect(page.getByText(/^They see Columbus, OH in GiftsAF\./)).toBeVisible();
+  expect(await phoneLayoutProblems(page)).toEqual([]);
   expect(await row(id)).toMatchObject({ share_for_gifts: true, address_line1: STREET });
 
   await shareSwitch(page).click();

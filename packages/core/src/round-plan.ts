@@ -74,6 +74,8 @@ export type RoundView = {
   shipByDeadline: CalendarDate;
   headsUpOn: CalendarDate | null;
   hasAddress: boolean;
+  /** A list owner shares a usable address for this person now (ALL-63); only read when it matters. */
+  hasSharedAddress?: boolean;
   sent: ReadonlySet<StepKey>;
   /** Why a `needs_attention` round needs attention; null for other statuses. */
   attentionReason: AttentionReason | null;
@@ -144,6 +146,10 @@ function holdAction(r: RoundView, today: CalendarDate, s: ScheduleSettings): Nex
     const notice: StepKey = `fail:${r.failCount}:notice`;
     return r.sent.has(notice) ? wait : { do: "send_hold", send: notice };
   }
+
+  // A gift waiting on an address, and now one the buyer can't edit has arrived: place it rather
+  // than ask them to fix it (ALL-63). One try a run; a rejection ends the order (ALL-112).
+  if (reason === "address" && r.hasSharedAddress && !r.placeTried) return { do: "place" };
 
   const n = r.holdCount;
   const emailed = EMAILED_HOLDS.includes(reason);

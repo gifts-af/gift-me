@@ -1,5 +1,5 @@
 import { createHash, randomBytes } from "node:crypto";
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { createFreshUser } from "./fresh-user";
 import { localSupabase } from "./local-supabase";
 import { signIn } from "./sign-in";
@@ -144,64 +144,6 @@ const setSharing = async (ownerId: string, on: boolean) => {
   if (!res.ok) throw new Error(`Couldn't change sharing: ${res.status} ${await res.text()}`);
 };
 
-test("a round waiting for an address goes on once its person's list shares one (ALL-63 AC-16, AC-17, AC-19, AC-20)", async ({
-  page,
-  baseURL,
-}) => {
-  const base = baseURL ?? "http://localhost:3100";
-  const today = new Date().toISOString().slice(0, 10);
-  const tomorrow = new Date(Date.now() + DAY_MS).toISOString().slice(0, 10);
-  const later = new Date(Date.now() + 2 * DAY_MS).toISOString().slice(0, 10);
-  const birthday = new Date(Date.now() + 35 * DAY_MS);
-
-  const buyer = await freshUser();
-  const owner = await freshUser();
-  const token = await shareFrom(owner.id);
-  await setSharing(owner.id, false);
-
-  const person = await fetch(`${supabase.url}/rest/v1/people`, {
-    method: "POST",
-    headers: { ...serviceHeaders, Prefer: "return=representation" },
-    body: JSON.stringify({ user_id: buyer.id, name: "Shared Sam", relationship: "friend" }),
-  });
-  if (!person.ok) throw new Error(`Couldn't add a person: ${person.status} ${await person.text()}`);
-  const personId = ((await person.json()) as { id: string }[])[0].id;
-  const occasion = await fetch(`${supabase.url}/rest/v1/occasions`, {
-    method: "POST",
-    headers: concierge,
-    body: JSON.stringify({ user_id: buyer.id, person_id: personId, kind: "birthday", month: birthday.getUTCMonth() + 1, day: birthday.getUTCDate() }),
-  });
-  if (!occasion.ok) throw new Error(`Couldn't add an occasion: ${occasion.status} ${await occasion.text()}`);
-
-  await setEngine(true);
-
-  // Nothing's shared yet: the round asks for an address (AC-17).
-  await tick(base, today);
-  const [round] = await roundsFor(personId);
-  expect(round.status).toBe("needs_address");
-  const asked = () => notificationsFor(round.id).then((n) => n.filter((x) => x.kind === "needs_address").length);
-  expect(await asked()).toBe(1);
-
-  // The buyer links the list while it shares nothing: still waiting, with no new email (AC-17).
-  await signIn(page, buyer);
-  await page.goto(`/people/${personId}`);
-  const linkField = page.getByLabel("Their list link");
-  await linkField.fill(`${base}/share/${token}`);
-  await expect.poll(() => linkField.evaluate((el) => Object.keys(el).some((k) => k.startsWith("__reactProps")))).toBe(true);
-  await linkField.press("Enter");
-  await expect(page.getByText("Linked.", { exact: false })).toBeVisible();
-  await tick(base, tomorrow);
-  expect((await roundsFor(personId))[0].status).toBe("needs_address");
-  expect(await asked()).toBe(1);
-
-  // The owner starts sharing: the next day's tick moves it on, with no address email (AC-16, AC-19).
-  await setSharing(owner.id, true);
-  await tick(base, later);
-  expect((await roundsFor(personId))[0].status).toBe("awaiting_approval");
-  expect(await asked()).toBe(1);
-  expect((await notificationsFor(round.id)).filter((n) => n.kind === "heads_up")).toHaveLength(1);
-});
-
 test("a round starts without an address, resumes when one is saved, and is skipped at the deadline", async ({
   page,
   baseURL,
@@ -305,4 +247,89 @@ test("a round starts without an address, resumes when one is saved, and is skipp
   await tick(base, deadline);
   expect(await notificationsFor(round.id)).toHaveLength(afterSkip.length);
   expect((await roundsFor(personId))[0].status).toBe("skipped");
+});
+
+/** A person for a fresh buyer, with a birthday that starts a late round on today's tick. */
+async function personFor(buyerId: string): Promise<string> {
+  const birthday = new Date(Date.now() + 35 * DAY_MS);
+  const person = await fetch(`${supabase.url}/rest/v1/people`, {
+    method: "POST",
+    headers: { ...serviceHeaders, Prefer: "return=representation" },
+    body: JSON.stringify({ user_id: buyerId, name: "Shared Sam", relationship: "friend" }),
+  });
+  if (!person.ok) throw new Error(`Couldn't add a person: ${person.status} ${await person.text()}`);
+  const personId = ((await person.json()) as { id: string }[])[0].id;
+  const occasion = await fetch(`${supabase.url}/rest/v1/occasions`, {
+    method: "POST",
+    headers: concierge,
+    body: JSON.stringify({ user_id: buyerId, person_id: personId, kind: "birthday", month: birthday.getUTCMonth() + 1, day: birthday.getUTCDate() }),
+  });
+  if (!occasion.ok) throw new Error(`Couldn't add an occasion: ${occasion.status} ${await occasion.text()}`);
+  return personId;
+}
+
+async function linkOnPage(page: Page, personId: string, base: string, token: string) {
+  await page.goto(`/people/${personId}`);
+  const linkField = page.getByLabel("Their list link");
+  await linkField.fill(`${base}/share/${token}`);
+  await expect.poll(() => linkField.evaluate((el) => Object.keys(el).some((k) => k.startsWith("__reactProps")))).toBe(true);
+  await linkField.press("Enter");
+  await expect(page.getByText("Linked.", { exact: false })).toBeVisible();
+}
+
+const dayFromNow = (n: number) => new Date(Date.now() + n * DAY_MS).toISOString().slice(0, 10);
+
+test("a waiting round goes on once its person's list shares an address (ALL-63 AC-16, AC-17, AC-19)", async ({ page, baseURL }) => {
+  const base = baseURL ?? "http://localhost:3100";
+  const buyer = await freshUser();
+  const owner = await freshUser();
+  const token = await shareFrom(owner.id);
+  await setSharing(owner.id, false);
+  const personId = await personFor(buyer.id);
+  await setEngine(true);
+
+  // Nothing's shared yet: the round asks for an address (AC-17).
+  await tick(base, dayFromNow(0));
+  const [round] = await roundsFor(personId);
+  expect(round.status).toBe("needs_address");
+  const asked = () => notificationsFor(round.id).then((n) => n.filter((x) => x.kind === "needs_address").length);
+  expect(await asked()).toBe(1);
+
+  // The buyer links the list while it shares nothing: still waiting, with no new email (AC-17).
+  await signIn(page, buyer);
+  await linkOnPage(page, personId, base, token);
+  await tick(base, dayFromNow(1));
+  expect((await roundsFor(personId))[0].status).toBe("needs_address");
+  expect(await asked()).toBe(1);
+
+  // The owner starts sharing: the next day's tick moves it on, with no address email (AC-16, AC-19).
+  await setSharing(owner.id, true);
+  await tick(base, dayFromNow(2));
+  expect((await roundsFor(personId))[0].status).toBe("awaiting_approval");
+  expect(await asked()).toBe(1);
+  expect((await notificationsFor(round.id)).filter((n) => n.kind === "heads_up")).toHaveLength(1);
+});
+
+test("linking a list that already shares an address moves a waiting round on at the next tick (ALL-63 AC-20)", async ({ page, baseURL }) => {
+  const base = baseURL ?? "http://localhost:3100";
+  const buyer = await freshUser();
+  const owner = await freshUser();
+  const token = await shareFrom(owner.id);
+  const personId = await personFor(buyer.id);
+  await setEngine(true);
+
+  await tick(base, dayFromNow(0));
+  const [round] = await roundsFor(personId);
+  expect(round.status).toBe("needs_address");
+
+  await signIn(page, buyer);
+  await linkOnPage(page, personId, base, token);
+  // Linking alone doesn't run the engine in the request (T54).
+  expect((await roundsFor(personId))[0].status).toBe("needs_address");
+
+  await tick(base, dayFromNow(1));
+  expect((await roundsFor(personId))[0].status).toBe("awaiting_approval");
+  const sent = await notificationsFor(round.id);
+  expect(sent.filter((n) => n.kind === "needs_address")).toHaveLength(1);
+  expect(sent.filter((n) => n.kind === "heads_up")).toHaveLength(1);
 });
