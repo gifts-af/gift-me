@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { PaymentResult } from "@/modules/concierge";
 import { PayingForGifts, type PayingActions } from "../paying-for-gifts";
@@ -85,5 +85,32 @@ describe("PayingForGifts connected", () => {
       <PayingForGifts initial={{ kind: "message", text: "We couldn't load your payment settings." }} actions={actionsWith(vi.fn())} walletUrl="" />,
     );
     expect(screen.getByText("We couldn't load your payment settings.")).toBeInTheDocument();
+  });
+});
+
+// S7 (owner): a saved Zinc key can always be removed, even where buying is off for the user.
+describe("PayingForGifts disconnect-only line", () => {
+  it("offers Disconnect next to the line when a key is still saved, and shows what comes back", async () => {
+    const disconnect = vi.fn(async (): Promise<PaymentResult> => ({ kind: "message", text: "Disconnected. To finish, revoke the key in your Zinc account too." }));
+    const actions = { ...actionsWith(vi.fn()), disconnect };
+    render(
+      <PayingForGifts
+        initial={{ kind: "message", text: "Paying for gifts isn't switched on here yet.", canDisconnect: true }}
+        actions={actions}
+        walletUrl=""
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Disconnect Zinc" }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
+    });
+    expect(disconnect).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText("Disconnected. To finish, revoke the key in your Zinc account too.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Disconnect Zinc" })).not.toBeInTheDocument();
+  });
+
+  it("offers no Disconnect on a plain line without a saved key", () => {
+    render(<PayingForGifts initial={{ kind: "message", text: "Paying for gifts isn't switched on here yet." }} actions={actionsWith(vi.fn())} walletUrl="" />);
+    expect(screen.queryByRole("button", { name: "Disconnect Zinc" })).not.toBeInTheDocument();
   });
 });

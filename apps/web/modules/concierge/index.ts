@@ -79,11 +79,12 @@ export {
   fundingLookahead,
   getPaymentStatus,
   getZincWallet,
+  hasZincConnection,
   pollConnect,
   savePhone,
   startConnect,
 } from "./zinc/connect";
-export type { PaymentResult, PaymentStatus } from "./zinc/connect";
+export type { DisconnectDeps, PaymentResult, PaymentStatus } from "./zinc/connect";
 export type { PlaceAddressHeld, PlaceHeld, ZincDeps } from "./zinc/types";
 export { handleZincWebhook } from "./zinc/events";
 export { hasPaidFeatures } from "./paid-features";

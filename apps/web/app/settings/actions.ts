@@ -101,8 +101,21 @@ export async function cancelZincConnect(): Promise<PaymentResult> {
   return withZinc((userId, deps) => cancelConnect(userId, deps));
 }
 
+// Disconnecting needs only sign-in (owner, S7): no paid features, and it works with Zinc
+// switched off here (the key is still removed; clearing the webhook at Zinc is skipped).
 export async function disconnectZincAccount(): Promise<PaymentResult> {
-  return withZinc((userId, deps) => disconnectZinc(userId, deps));
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getClaims();
+  const userId = auth?.claims?.sub;
+  if (!userId) return { error: "Your session ended. Sign in again." };
+  try {
+    const db = createAdminClient();
+    const wiring = await zincWiring(db);
+    return await disconnectZinc(userId, { db, http: wiring?.deps.http ?? null });
+  } catch (error) {
+    logEvent("zinc.action_failed", { user_id: userId, ...errorFields(error) });
+    return { error: "That didn't work. Try again in a minute." };
+  }
 }
 
 export async function saveBuyerPhone(raw: string): Promise<PaymentResult> {

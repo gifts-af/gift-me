@@ -19,8 +19,11 @@ export type PayingActions = {
   savePhone: (raw: string) => Promise<PaymentResult>;
 };
 
-/** What the server could load: a status, or a plain line when it couldn't or Zinc is off here. */
-export type PayingInitial = PaymentStatus | { kind: "message"; text: string };
+/**
+ * What the server could load: a status, or a plain line when it couldn't or Zinc is off here.
+ * `canDisconnect`: a Zinc key is still saved, so the line comes with "Disconnect Zinc" (S7).
+ */
+export type PayingInitial = PaymentStatus | { kind: "message"; text: string; canDisconnect?: boolean };
 
 /** "(555) 123-4567" from the 10 digits we keep. */
 function phoneLabel(digits: string | null): string {
@@ -96,7 +99,16 @@ export function PayingForGifts({
         {waiting ? "Connect Zinc" : "Paying for gifts"}
       </h2>
 
-      {status.kind === "message" && <p className="text-[15px] text-muted-foreground [text-wrap:balance]">{status.text}</p>}
+      {status.kind === "message" && (
+        <>
+          <p role="status" className="text-[15px] text-muted-foreground [text-wrap:balance]">
+            {status.text}
+          </p>
+          {"canDisconnect" in status && status.canDisconnect && (
+            <DisconnectDialog pending={pending} blocked={false} onTheWayCount={0} onDisconnect={() => run(actions.disconnect)} />
+          )}
+        </>
+      )}
 
       {status.kind === "not_allowed" && (
         <p className="text-[15px] text-muted-foreground [text-wrap:balance]">
@@ -204,14 +216,13 @@ function ConnectedView({
   walletUrl: string;
   actions: PayingActions;
   pending: boolean;
-  onStatus: (s: PaymentStatus) => void;
+  onStatus: (s: PayingInitial) => void;
   onError: (e: string | null) => void;
   onDisconnect: () => void;
 }) {
   const [phone, setPhone] = useState(phoneLabel(status.phone));
   const [saved, setSaved] = useState(false);
   const [saving, startSaving] = useTransition();
-  const [open, setOpen] = useState(false);
 
   function save() {
     onError(null);
@@ -323,46 +334,69 @@ function ConnectedView({
           A gift is being ordered right now. You can disconnect once it has gone through.
         </p>
       )}
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger asChild>
+      <DisconnectDialog
+        pending={pending}
+        blocked={status.placingCount > 0}
+        onTheWayCount={status.onTheWayCount}
+        onDisconnect={onDisconnect}
+      />
+    </>
+  );
+}
+
+/** "Disconnect Zinc" and its confirmation. Also shown on its own where only disconnecting is left (S7). */
+function DisconnectDialog({
+  pending,
+  blocked,
+  onTheWayCount,
+  onDisconnect,
+}: {
+  pending: boolean;
+  blocked: boolean;
+  onTheWayCount: number;
+  onDisconnect: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={blocked}
+          aria-describedby={blocked ? "disconnect-blocked" : undefined}
+          className="self-center font-semibold text-destructive"
+        >
+          Disconnect Zinc
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Disconnect Zinc?</DialogTitle>
+          <DialogDescription>
+            {onTheWayCount > 0
+              ? `${onTheWayCount} ${onTheWayCount === 1 ? "gift is" : "gifts are"} on the way. We'll stop tracking ${onTheWayCount === 1 ? "it" : "them"}. `
+              : ""}
+            Gifts waiting to be ordered will wait until you connect again.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-2">
           <Button
             type="button"
-            variant="ghost"
-            disabled={status.placingCount > 0}
-            aria-describedby={status.placingCount > 0 ? "disconnect-blocked" : undefined}
-            className="self-center font-semibold text-destructive"
+            variant="destructive"
+            disabled={pending}
+            onClick={() => {
+              setOpen(false);
+              onDisconnect();
+            }}
           >
-            Disconnect Zinc
+            Disconnect
           </Button>
-        </DialogTrigger>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Disconnect Zinc?</DialogTitle>
-            <DialogDescription>
-              {status.onTheWayCount > 0
-                ? `${status.onTheWayCount} ${status.onTheWayCount === 1 ? "gift is" : "gifts are"} on the way. We'll stop tracking ${status.onTheWayCount === 1 ? "it" : "them"}. `
-                : ""}
-              Gifts waiting to be ordered will wait until you connect again.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-2">
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={pending}
-              onClick={() => {
-                setOpen(false);
-                onDisconnect();
-              }}
-            >
-              Disconnect
-            </Button>
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
+          <Button type="button" variant="outline" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

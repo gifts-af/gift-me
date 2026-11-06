@@ -150,11 +150,36 @@ describe.skipIf(!dbUp)("Zinc connect (real local database, fake Zinc)", () => {
       await startConnect(userId, z.deps, placeHeld),
       await pollConnect(userId, z.deps, placeHeld),
       await cancelConnect(userId, z.deps),
-      await disconnect(userId, z.deps),
       await savePhone(userId, "5551234567", z.deps, placeHeld),
     ];
     for (const r of results) expect(r).toEqual({ kind: "not_allowed" });
     expect(z.calls).toEqual([]);
+  });
+
+  // S7 (owner): disconnecting needs only sign-in, so a user can always remove their key.
+  it("disconnects without paid features: the key goes, and the webhook is cleared", async () => {
+    const userId = await newUser(true);
+    await connected(userId);
+    await pg.query("update concierge.accounts set paid_features = false where user_id = $1", [userId]);
+    const z = zinc();
+    const status = await disconnect(userId, z.deps);
+    expect(status).toEqual({ kind: "message", text: expect.stringContaining("revoke") });
+    expect((await pg.query("select count(*)::int as n from concierge.zinc_secrets($1)", [userId])).rows[0].n).toBe(0);
+    expect(z.calls.filter((c) => c.method === "DELETE")).toHaveLength(1);
+  });
+
+  it("disconnects with Zinc switched off here: the key goes, and skipping the webhook is logged", async () => {
+    const userId = await newUser(true);
+    await connected(userId);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const { deps } = zinc();
+    const status = await disconnect(userId, { db: deps.db, http: null });
+    expect(status).toEqual({ kind: "message", text: expect.stringContaining("revoke") });
+    expect((await pg.query("select count(*)::int as n from concierge.zinc_secrets($1)", [userId])).rows[0].n).toBe(0);
+    const acct = await pg.query("select zinc_connected_at, zinc_api_key_secret_id from concierge.accounts where user_id = $1", [userId]);
+    expect(acct.rows[0]).toEqual({ zinc_connected_at: null, zinc_api_key_secret_id: null });
+    const events = log.mock.calls.map((c) => JSON.parse(String(c[0])));
+    expect(events).toContainEqual(expect.objectContaining({ event: "zinc.webhook_clear_skipped", user_id: userId, reason: "zinc_off" }));
   });
 
   it("starts a connection: keeps the device code server-side, shows only the user code (AC-2)", async () => {

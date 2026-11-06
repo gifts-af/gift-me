@@ -9,6 +9,7 @@ import { errorFields, logEvent } from "@/lib/log";
 import { hasPaidFeatures } from "../paid-features";
 import { clearWebhook, getWallet, mintSandboxKey, pollDevice, setWebhook, startDevice } from "./account";
 import { ZincError } from "./client";
+import type { ZincHttp } from "./client";
 import type { PlaceHeld, ZincDeps } from "./types";
 
 /** The name Zinc shows next to the code the user is asked to Allow. */
@@ -33,7 +34,8 @@ export type PaymentStatus =
       placingCount: number;
       onTheWayCount: number;
     };
-export type PaymentResult = PaymentStatus | { error: string };
+/** A plain line instead of a status: after disconnecting where the user can't connect again. */
+export type PaymentResult = PaymentStatus | { kind: "message"; text: string } | { error: string };
 
 const NOT_ALLOWED: PaymentStatus = { kind: "not_allowed" };
 const TRY_AGAIN = "We couldn't reach Zinc. Try again in a minute.";
@@ -44,7 +46,10 @@ function fail(what: string, error: { message: string }): never {
   throw new Error(`${what}: ${error.message}`);
 }
 
-async function setting(deps: ZincDeps, key: string): Promise<number> {
+/** Only the database: what disconnecting needs, so it works with Zinc off here. */
+type DbDeps = Pick<ZincDeps, "db">;
+
+async function setting(deps: DbDeps, key: string): Promise<number> {
   const { data, error } = await deps.db.schema("concierge").rpc("setting_int", { p_key: key });
   if (error) fail(`Reading setting ${key} failed`, error);
   if (typeof data !== "number") throw new Error(`Setting ${key} is missing.`);
@@ -53,7 +58,7 @@ async function setting(deps: ZincDeps, key: string): Promise<number> {
 
 type Account = { zinc_connected_at: string | null; buyer_phone: string | null; auto_topup_on: boolean | null };
 
-async function readAccount(userId: string, deps: ZincDeps): Promise<Account> {
+async function readAccount(userId: string, deps: DbDeps): Promise<Account> {
   const { data, error } = await deps.db
     .schema("concierge")
     .from("accounts")
@@ -64,7 +69,7 @@ async function readAccount(userId: string, deps: ZincDeps): Promise<Account> {
   return data ?? { zinc_connected_at: null, buyer_phone: null, auto_topup_on: null };
 }
 
-async function readKey(userId: string, deps: ZincDeps): Promise<string | null> {
+async function readKey(userId: string, deps: DbDeps): Promise<string | null> {
   const { data, error } = await deps.db.schema("concierge").rpc("zinc_secrets", { p_user_id: userId });
   if (error) fail("Reading the Zinc key failed", error);
   return data?.[0]?.api_key ?? null;
@@ -320,24 +325,48 @@ export async function cancelConnect(userId: string, deps: ZincDeps): Promise<Pay
   return getPaymentStatus(userId, deps);
 }
 
-export async function disconnect(userId: string, deps: ZincDeps): Promise<PaymentResult> {
-  if (!(await hasPaidFeatures(deps.db, userId))) return NOT_ALLOWED;
+/** `http` is null where Zinc isn't switched on in this environment. */
+export type DisconnectDeps = DbDeps & { http: ZincHttp | null };
+
+/**
+ * Removes the user's Zinc key (AC-5). Always allowed to a signed-in user (owner, S7): no paid
+ * features and no Zinc environment needed, so anyone can take their key back. Refused only
+ * while an order is placing or unconfirmed (zinc_forget). Without Zinc here, the key and our
+ * columns still go and clearing the webhook at Zinc is skipped (logged): revoking the key in
+ * Zinc stops it anyway, which the notice asks the user to do.
+ */
+export async function disconnect(userId: string, deps: DisconnectDeps): Promise<PaymentResult> {
   // The key is read before it is forgotten: it is needed to clear our webhook at Zinc.
   const key = await readKey(userId, deps);
-  if (!key) return getPaymentStatus(userId, deps);
+  const account = await readAccount(userId, deps);
+  if (key || account.zinc_connected_at) {
+    const forgot = await deps.db.schema("concierge").rpc("zinc_forget", { p_user_id: userId });
+    if (forgot.error) fail("Disconnecting failed", forgot.error);
+    if (forgot.data === "placing") {
+      return { error: "A gift is being ordered right now. Try again in a few hours, once it has gone through." };
+    }
+    if (key && deps.http) {
+      try {
+        await clearWebhook(deps.http, key);
+      } catch (error) {
+        logEvent("zinc.webhook_clear_failed", { user_id: userId, kind: error instanceof ZincError ? error.kind : "unknown" });
+      }
+    } else if (key) {
+      logEvent("zinc.webhook_clear_skipped", { user_id: userId, reason: "zinc_off" });
+    }
+    logEvent("zinc.disconnected", { user_id: userId });
+  }
+  // What Settings shows next: connect again where the user can, otherwise a plain line.
+  if (deps.http && (await hasPaidFeatures(deps.db, userId))) {
+    return { kind: "not_connected", feeCents: await setting(deps, "zinc_order_fee_cents"), notice: REVOKE_NOTICE };
+  }
+  return { kind: "message", text: REVOKE_NOTICE };
+}
 
-  const forgot = await deps.db.schema("concierge").rpc("zinc_forget", { p_user_id: userId });
-  if (forgot.error) fail("Disconnecting failed", forgot.error);
-  if (forgot.data === "placing") {
-    return { error: "A gift is being ordered right now. Try again in a few hours, once it has gone through." };
-  }
-  try {
-    await clearWebhook(deps.http, key);
-  } catch (error) {
-    logEvent("zinc.webhook_clear_failed", { user_id: userId, kind: error instanceof ZincError ? error.kind : "unknown" });
-  }
-  logEvent("zinc.disconnected", { user_id: userId });
-  return notConnected(userId, deps, REVOKE_NOTICE);
+/** Whether the user still has a Zinc key or account link saved (for Settings' disconnect-only view). */
+export async function hasZincConnection(userId: string, db: ZincDeps["db"]): Promise<boolean> {
+  const account = await readAccount(userId, { db });
+  return account.zinc_connected_at !== null || (await readKey(userId, { db })) !== null;
 }
 
 /** Digits only, a leading US country code dropped. Null when it isn't 10 digits. */
