@@ -60,10 +60,9 @@ export async function handleZincWebhook(
     if (event.event === "order.placed" || event.event === "order.failed") {
       await settle(userId, event, deps);
     } else if (event.event === "wallet.auto_topup.succeeded") {
-      await setAutoTopup(userId, true, deps);
-      await deps.placeHeld(userId);
+      if (await setAutoTopup(userId, true, event, deps)) await deps.placeHeld(userId);
     } else if (event.event === "wallet.auto_topup.disabled") {
-      await setAutoTopup(userId, false, deps);
+      await setAutoTopup(userId, false, event, deps);
     } else if (event.event === "wallet.auto_topup.failed") {
       // The user's own Zinc account tried and could not; the setting stays as it was.
       logEvent("zinc.auto_topup_failed", { user_id: userId });
@@ -76,9 +75,34 @@ export async function handleZincWebhook(
   return { status: 200 };
 }
 
-async function setAutoTopup(userId: string, on: boolean, deps: Deps): Promise<void> {
-  const { error } = await deps.db.schema("concierge").from("accounts").update({ auto_topup_on: on }).eq("user_id", userId);
+/** Zinc's timestamps are UTC and may lack the Z. Null when absent or unreadable. */
+function eventTime(timestamp: string | undefined): string | null {
+  if (!timestamp) return null;
+  const t = new Date(/(Z|[+-]\d\d:?\d\d)$/i.test(timestamp) ? timestamp : `${timestamp}Z`);
+  return Number.isNaN(t.getTime()) ? null : t.toISOString();
+}
+
+/**
+ * Saves the auto top-up setting unless a newer wallet event was already applied (zinc retries
+ * and out-of-order delivery). Returns whether it applied. Wallet events carry a timestamp; if one
+ * has none (or an unreadable one) there is no way to order it, so it applies as it always did.
+ * An event with the same time as the stored one is the same event again: harmless, so it applies.
+ */
+async function setAutoTopup(userId: string, on: boolean, event: ZincEvent, deps: Deps): Promise<boolean> {
+  const at = eventTime(event.timestamp);
+  let query = deps.db
+    .schema("concierge")
+    .from("accounts")
+    .update({ auto_topup_on: on, ...(at ? { zinc_wallet_event_at: at } : {}) })
+    .eq("user_id", userId);
+  if (at) query = query.or(`zinc_wallet_event_at.is.null,zinc_wallet_event_at.lte.${at}`);
+  const { data, error } = await query.select("user_id");
   if (error) throw new Error("Saving the auto top-up setting failed.");
+  if (at && !data?.length) {
+    logEvent("zinc.webhook_stale_wallet_event", { user_id: userId });
+    return false;
+  }
+  return true;
 }
 
 /** Our order id for a Zinc order id: the row that holds it, else the reference we sent Zinc in metadata. */
@@ -124,8 +148,9 @@ async function settle(userId: string, event: ZincEvent, deps: Deps): Promise<voi
   }
   const ourId = await findOurOrder(userId, event.orderId, deps);
   if (!ourId) {
-    // The tick's stale sweep settles it later.
-    logEvent("zinc.webhook_unmatched", { user_id: userId, provider_order_id: event.orderId });
+    // Zinc answered definitively that it has no such order for this key, or the reference is
+    // missing: the owner settles it by hand (README > Alerts).
+    logEvent("zinc.webhook_unmatched", { user_id: userId, provider_order_id: event.orderId, alert: true });
     return;
   }
   const concierge = deps.db.schema("concierge");

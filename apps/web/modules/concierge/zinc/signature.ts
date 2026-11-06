@@ -22,12 +22,15 @@ const eventData = z
 const event = z.object({
   event: z.string(),
   order_id: z.string().optional(),
+  timestamp: z.string().optional(),
   data: eventData.optional(),
 });
 
 export type ZincEvent = {
   event: string;
   orderId?: string;
+  /** When Zinc says the event happened (ISO 8601, sometimes without a Z; it is UTC). */
+  timestamp?: string;
   /** order.failed */
   errorType?: string;
   /** order.failed, wallet.auto_topup.failed */
@@ -44,6 +47,7 @@ export function parseEvent(json: unknown): ZincEvent {
   return {
     event: e.event,
     orderId: e.order_id,
+    timestamp: e.timestamp,
     errorType: e.data?.error_type,
     error: e.data?.error,
     amountCents: e.data?.amount_cents,

@@ -1,6 +1,6 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { errorFields, logEvent } from "@/lib/log";
-import { handleZincWebhook } from "@/modules/concierge";
+import { handleZincWebhook, readWebhookBody } from "@/modules/concierge";
 import { placeHeld, webhookTellers, zincWiring } from "@/app/settings/zinc-deps";
 
 // An auto top-up places the user's held gifts here, which can run for a while: one zinc_place_budget_ms (45 s by default) for the
@@ -13,9 +13,17 @@ export const maxDuration = 300;
 // environment the answer is 404 before any signature check, deliberately.
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const rawBody = await request.text();
   try {
-    const wiring = await zincWiring(createAdminClient());
+    const db = createAdminClient();
+    // A malformed id is 404 with no database call; a body over zinc_webhook_max_bytes is 413.
+    const read = await readWebhookBody(id, request, async () => {
+      const { data, error } = await db.schema("concierge").rpc("setting_int", { p_key: "zinc_webhook_max_bytes" });
+      if (error || typeof data !== "number") throw new Error("Reading setting zinc_webhook_max_bytes failed.");
+      return data;
+    });
+    if (!read.ok) return new Response(null, { status: read.status });
+    const rawBody = read.body;
+    const wiring = await zincWiring(db);
     if (!wiring) return new Response(null, { status: 404 });
     const { status } = await handleZincWebhook(id, rawBody, request.headers.get("x-webhook-signature"), {
       ...wiring.deps,

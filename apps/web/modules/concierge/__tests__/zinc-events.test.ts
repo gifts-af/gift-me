@@ -264,6 +264,39 @@ describe.skipIf(!dbUp)("Zinc webhooks (real local database, fake Zinc)", () => {
     expect(placeHeld).toHaveBeenCalledTimes(1);
   });
 
+  it("an older wallet event cannot overwrite a newer one (replay or out of order)", async () => {
+    const a = await newAccount();
+    placeHeld.mockClear();
+    const ev = (name: string, timestamp: string) => JSON.stringify({ event: name, timestamp, data: { amount_cents: 1, status: "x" } });
+    const flag = async () => (await pg.query("select auto_topup_on from concierge.accounts where user_id = $1", [a.userId])).rows[0].auto_topup_on;
+    // Zinc's timestamps may lack the Z; they are UTC.
+    await send(a, ev("wallet.auto_topup.disabled", "2026-01-21T09:00:00"));
+    expect(await flag()).toBe(false);
+    await send(a, ev("wallet.auto_topup.succeeded", "2026-01-21T08:30:00Z"));
+    expect(await flag()).toBe(false);
+    expect(placeHeld).not.toHaveBeenCalled();
+    await send(a, ev("wallet.auto_topup.succeeded", "2026-01-21T09:30:00"));
+    expect(await flag()).toBe(true);
+    expect(placeHeld).toHaveBeenCalledTimes(1);
+    // The same event again is harmless; an older disabled does nothing.
+    await send(a, ev("wallet.auto_topup.disabled", "2026-01-21T09:00:00"));
+    expect(await flag()).toBe(true);
+  });
+
+  it("an unmatched order event raises the alert, with ids only", async () => {
+    const a = await newAccount();
+    const zincId = randomUUID();
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      expect(await send(a, placedBody(zincId))).toEqual({ status: 200 });
+      const lines = log.mock.calls.map((c) => String(c[0])).filter((l) => l.includes("zinc.webhook_unmatched"));
+      expect(lines).toHaveLength(1);
+      expect(JSON.parse(lines[0])).toMatchObject({ alert: true, user_id: a.userId, provider_order_id: zincId });
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it("a signed body that is not an event is acknowledged without effect", async () => {
     const a = await newAccount();
     expect(await send(a, "not json")).toEqual({ status: 200 });

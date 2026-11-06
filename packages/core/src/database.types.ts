@@ -23,6 +23,7 @@ export type Database = {
           zinc_api_key_secret_id: string | null;
           zinc_connected_at: string | null;
           zinc_env: string | null;
+          zinc_wallet_event_at: string | null;
           zinc_webhook_id: string | null;
           zinc_webhook_secret_id: string | null;
         };
@@ -40,6 +41,7 @@ export type Database = {
           zinc_api_key_secret_id?: string | null;
           zinc_connected_at?: string | null;
           zinc_env?: string | null;
+          zinc_wallet_event_at?: string | null;
           zinc_webhook_id?: string | null;
           zinc_webhook_secret_id?: string | null;
         };
@@ -56,6 +58,7 @@ export type Database = {
           zinc_api_key_secret_id?: string | null;
           zinc_connected_at?: string | null;
           zinc_env?: string | null;
+          zinc_wallet_event_at?: string | null;
           zinc_webhook_id?: string | null;
           zinc_webhook_secret_id?: string | null;
         };

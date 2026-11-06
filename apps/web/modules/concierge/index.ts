@@ -87,6 +87,7 @@ export {
 export type { DisconnectDeps, PaymentResult, PaymentStatus } from "./zinc/connect";
 export type { PlaceAddressHeld, PlaceHeld, ZincDeps } from "./zinc/types";
 export { handleZincWebhook } from "./zinc/events";
+export { readWebhookBody } from "./zinc/guard";
 export { hasPaidFeatures } from "./paid-features";
 // Approving and buying from the user's own Zinc wallet (ALL-30, ALL-32 Task 6). The tick, the
 // webhook route, Settings and the people actions bind these in app/settings/zinc-deps.ts.
