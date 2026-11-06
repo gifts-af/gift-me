@@ -11,7 +11,37 @@ export type ActionName =
   | "open_settings"
   | "cancel_held_gift";
 
-export type ActionResult = { ok: true } | { ok: false; error: string };
+/** `done`: the done page's words when they depend on what happened (else the action's own). */
+export type ActionResult = { ok: true; done?: { title: string; body: string } } | { ok: false; error: string };
+
+/** What a cancel link did: held gifts it cancelled, and the round's others still being ordered or on their way. */
+export type CancelOutcome = { cancelled: number; ordering: number; onItsWay: number };
+
+/** The cancel link's done page, saying what actually happened (N2). */
+export function cancelDone(o: CancelOutcome): { title: string; body: string } {
+  const other = o.onItsWay > 0
+    ? "Your other gift is already on its way and still arrives."
+    : o.ordering > 0
+      ? "Your other gift is already being ordered; we'll email you once the store confirms it."
+      : "Nothing more will be bought for this occasion.";
+  if (o.cancelled > 0) {
+    const what = o.cancelled > 1 ? "the gifts that were waiting" : "the gift that was waiting";
+    const charged = o.onItsWay + o.ordering > 0
+      ? `nothing was charged for ${o.cancelled > 1 ? "them" : "it"}`
+      : `nothing was bought or charged for ${o.cancelled > 1 ? "them" : "it"}`;
+    return { title: "Cancelled", body: `We cancelled ${what}, so ${charged}. ${other}` };
+  }
+  if (o.ordering > 0) {
+    return {
+      title: "Already being ordered",
+      body: "The gift was already being ordered, so there was nothing left to cancel. We'll email you once the store confirms it.",
+    };
+  }
+  if (o.onItsWay > 0) {
+    return { title: "Already on its way", body: "The gift was already ordered, so there was nothing left to cancel. It's on its way." };
+  }
+  return { title: "Nothing to cancel", body: "There was no gift waiting to be bought for this occasion." };
+}
 
 export type Action = {
   confirm: { title: string; body: string; button: string };
@@ -139,8 +169,8 @@ export const ACTIONS: Record<ActionName, Action> = {
     },
     async run({ userId, roundId, store }) {
       if (!roundId) return { ok: false, error: "The link has no round." };
-      const status = await store.cancelHeldGift(roundId, userId);
-      return status ? { ok: true } : { ok: false, error: "No such round for this user." };
+      const outcome = await store.cancelHeldGift(roundId, userId);
+      return outcome ? { ok: true, done: cancelDone(outcome) } : { ok: false, error: "No such round for this user." };
     },
     async next(roundId, store) {
       const personId = roundId ? await store.roundPersonId(roundId) : null;

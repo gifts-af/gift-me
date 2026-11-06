@@ -79,8 +79,9 @@ export async function confirmActionLink(
   }
   // The link is already used, so a failed lookup only costs the shortcut.
   const next = await action.next?.(claimed.roundId, deps.store).catch(() => null);
-  if (!next) return { state: "done", done: action.done };
-  return { state: "done", done: action.done, next, ...(action.straight ? { straight: true as const } : {}) };
+  const done = result.done ?? action.done;
+  if (!next) return { state: "done", done };
+  return { state: "done", done, next, ...(action.straight ? { straight: true as const } : {}) };
 }
 
 /** A throwing action counts as a failed one, so the page still answers. */

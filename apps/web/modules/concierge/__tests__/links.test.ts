@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ACTIONS, type ActionName } from "../notify/actions";
+import { ACTIONS, cancelDone, type ActionName } from "../notify/actions";
 import { confirmActionLink, readActionLink } from "../notify/links";
 import { hashActionToken } from "../notify/tokens";
 import { FakeStore } from "./fake-store";
@@ -270,6 +270,36 @@ describe("confirmActionLink", () => {
     expect(await confirmActionLink(TOKEN, OWNER, { store, now: NOW })).toEqual({
       state: "done",
       done: ACTIONS.open_person.done,
+    });
+  });
+});
+
+// N2: the cancel link's done page says what actually happened.
+describe("cancelDone", () => {
+  it("cancelled, with nothing else in the round", () => {
+    expect(cancelDone({ cancelled: 1, ordering: 0, onItsWay: 0 })).toEqual({
+      title: "Cancelled",
+      body: "We cancelled the gift that was waiting, so nothing was bought or charged for it. Nothing more will be bought for this occasion.",
+    });
+  });
+  it("partly: cancelled, with another gift on its way", () => {
+    expect(cancelDone({ cancelled: 1, ordering: 0, onItsWay: 1 })).toEqual({
+      title: "Cancelled",
+      body: "We cancelled the gift that was waiting, so nothing was charged for it. Your other gift is already on its way and still arrives.",
+    });
+    expect(cancelDone({ cancelled: 2, ordering: 1, onItsWay: 0 }).body).toBe(
+      "We cancelled the gifts that were waiting, so nothing was charged for them. Your other gift is already being ordered; we'll email you once the store confirms it.",
+    );
+  });
+  it("nothing cancelled: already being ordered, already on its way, or nothing left", () => {
+    expect(cancelDone({ cancelled: 0, ordering: 1, onItsWay: 0 }).title).toBe("Already being ordered");
+    expect(cancelDone({ cancelled: 0, ordering: 0, onItsWay: 1 })).toEqual({
+      title: "Already on its way",
+      body: "The gift was already ordered, so there was nothing left to cancel. It's on its way.",
+    });
+    expect(cancelDone({ cancelled: 0, ordering: 0, onItsWay: 0 })).toEqual({
+      title: "Nothing to cancel",
+      body: "There was no gift waiting to be bought for this occasion.",
     });
   });
 });

@@ -1267,11 +1267,37 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     const token = m.text.match(/Cancel this gift: https:\/\/giftsaf\.test\/a\/(\S+)/)![1];
     const store = createSupabaseNotifyStore(client());
     const result = await confirmActionLink(token, u.userId, { store, now: new Date() });
-    expect(result).toMatchObject({ state: "done", done: { title: "Cancelled" } });
+    expect(result).toMatchObject({
+      state: "done",
+      done: { title: "Cancelled", body: "We cancelled the gift that was waiting, so nothing was bought or charged for it. Nothing more will be bought for this occasion." },
+    });
     expect(await roundRow(r.roundId)).toMatchObject({ status: "skipped" });
     expect(await orderRows(r.roundId)).toEqual([{ status: "cancelled", hold_reason: "funds", failure_type: "cancelled" }]);
     expect((await pg.query("select count(*)::int as n from lists.gift_claims where item_id = $1", [item.rows[0].id])).rows[0].n).toBe(0);
     // Someone else's round can't be cancelled through it.
     expect(await store.cancelHeldGift(r.roundId, owner.userId)).toBeNull();
+  });
+
+  // N2: the done page says what actually happened.
+  it("the cancel link's done page says when the gift was already being ordered and nothing was cancelled", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    zinc.balance = 1000;
+    await approve(u, r);
+    const [m] = mail.filter((x) => x.to === u.email);
+    const token = m.text.match(/Cancel this gift: https:\/\/giftsaf\.test\/a\/(\S+)/)![1];
+    // Topped up, and the next try sent it before the buyer tapped the link.
+    zinc.balance = 100_000;
+    await advance(r.roundId, 1);
+    expect(await orderRows(r.roundId)).toEqual([expect.objectContaining({ status: "placing" })]);
+    const result = await confirmActionLink(token, u.userId, { store: createSupabaseNotifyStore(client()), now: new Date() });
+    expect(result).toMatchObject({
+      state: "done",
+      done: {
+        title: "Already being ordered",
+        body: "The gift was already being ordered, so there was nothing left to cancel. We'll email you once the store confirms it.",
+      },
+    });
+    expect(await orderRows(r.roundId)).toEqual([expect.objectContaining({ status: "placing" })]);
   });
 });
