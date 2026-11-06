@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 // Run with `pnpm live-check`: a read-only look at giftsaf.com, signed in as the
-// shared test account (README > Production test account, T60).
+// shared test account (design/operations.md > Production test account, T60).
 for (const [path, current] of [
   ["/", "Give"],
   ["/lists", "Get"],

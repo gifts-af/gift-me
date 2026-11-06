@@ -56,7 +56,7 @@ All on Vercel DNS for `giftsaf.com` (team GiftMe), added 2026-11-01. Resend doma
 ## Accounts and cleanup
 
 - Resend account: allensforever711@gmail.com (free plan).
-- **Cleaned up 2026-11-01:** the spike key `gift-me-email-spike` (full access, pasted into a Claude session) and the test webhook are both deleted. The app's keys were then set up in Vercel as `RESEND_API_KEY` (dev key in Development and Preview, prod key in Production, README > Environments). The inbound webhook and its `RESEND_WEBHOOK_SECRET` are created in W4-3, once the app's endpoint exists.
+- **Cleaned up 2026-11-01:** the spike key `gift-me-email-spike` (full access, pasted into a Claude session) and the test webhook are both deleted. The app's keys were then set up in Vercel as `RESEND_API_KEY` (dev key in Development and Preview, prod key in Production, `design/operations.md` > Environments). The inbound webhook and its `RESEND_WEBHOOK_SECRET` are created in W4-3, once the app's endpoint exists.
 
 ## How to rerun
 

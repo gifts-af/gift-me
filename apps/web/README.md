@@ -12,10 +12,10 @@ template, which provides cookie-based auth via [`@supabase/ssr`](https://supabas
 
 Run these from `apps/web` unless noted. Install dependencies once from the repo root with `pnpm install`.
 
-1. **Link the Vercel project** (once; `.vercel/` is gitignored). Sign in to the Vercel CLI as **allensforever711** (`npx vercel login`), since the GiftsAF team (`gift-me3`) is on Hobby and has no other members (T25). Pick team **GiftMe** and project **gift-me**:
+1. **Link the Vercel project** (once; `.vercel/` is gitignored). Sign in to the Vercel CLI as **allensforever711** (`npx vercel login`), since the GiftsAF team (`gift-me3`) is on Hobby and has no other members (T25). This also writes a short-lived token to `.env.local` and adds a line to `.gitignore`; discard the `.gitignore` change with `git checkout -- .gitignore`:
 
    ```bash
-   npx vercel link
+   npx vercel link --yes --project gift-me --scope gift-me3
    ```
 
 2. **Pull environment variables** into `.env.development.local` (gitignored), which
@@ -25,24 +25,22 @@ Run these from `apps/web` unless noted. Install dependencies once from the repo 
    npx vercel env pull .env.development.local
    ```
 
-   This pulls Vercel's **Development** environment. Make sure the Supabase integration's
-   variables are enabled for Development in Vercel → Settings → Environment Variables,
-   or the file will contain only `VERCEL_OIDC_TOKEN`. The app needs:
+   This pulls Vercel's **Development** environment, which points at the hosted `dev` database. The app needs:
 
    ```
    NEXT_PUBLIC_SUPABASE_URL=...
-   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...   # or NEXT_PUBLIC_SUPABASE_ANON_KEY
+   NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=...
    ```
 
-   This project's integration uses a `GIFT` prefix, so Vercel provides
-   `NEXT_PUBLIC_GIFT_SUPABASE_URL` and `NEXT_PUBLIC_GIFT_SUPABASE_PUBLISHABLE_KEY`;
-   `lib/supabase/env.ts` accepts either spelling.
+   The Supabase integration's `GIFT`-prefixed variables are missing from this file on purpose.
+   The integration is connected to Production only, which keeps prod's server-side keys off
+   developer machines. **Don't enable it for Development** (`design/operations.md` > Environments).
 
    See `.env.example`. Both keys are public, limited by Row Level Security. Never give the
    service-role key a `NEXT_PUBLIC_` prefix.
 
 3. **Apply the database migrations** in the repo root's `supabase/migrations/`. Locally,
-   `pnpm supabase start` applies them (see the root README, Local development). For a hosted
+   `pnpm supabase start` applies them (see `design/operations.md` > Local development). For a hosted
    project, use `pnpm supabase db push`.
 
 4. **Run it:**

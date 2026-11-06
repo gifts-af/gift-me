@@ -219,7 +219,7 @@ flowchart LR
 **As built for notifications** (ALL-23, T38; plan: [design/plans/ALL-23-notifications.md](plans/ALL-23-notifications.md)):
 - New table `concierge.action_links` (above). `notifications.action_token_hash` is gone; `provider_message_id` and `error` record what the email provider said.
 - New setting `test_action_link_hours` (24) in `app_settings`: how long the Settings test email's button works (T23).
-- Server code writes these server-only tables with the Supabase secret key (`lib/supabase/admin.ts`, server-only import). See README > Environments.
+- Server code writes these server-only tables with the Supabase secret key (`lib/supabase/admin.ts`, server-only import). See design/operations.md > Environments.
 
 **As built in people v1.2** (ALL-21, T41):
 - `people.birthday` is gone. A birthday is an `occasions` row; `people.birth_year` (optional) only adds an age. A partial unique index allows one live occasion per kind per person, and holidays can be added for anyone.
@@ -366,7 +366,7 @@ flowchart LR
 
 Funding comes in two stages. Ordering, tracking and the data model are the same in both; only where the money comes from changes, recorded as `profiles.funding_mode` and `orders.funding_mode`.
 
-**Stage 1, MVP: each user's own Zinc wallet** (a little friction, no Stripe). **As built (ALL-32, T56):** spec and plan in [`plans/ALL-32-zinc-connection.md`](plans/ALL-32-zinc-connection.md); runbooks (stop ordering, unconfirmed orders) in the README.
+**Stage 1, MVP: each user's own Zinc wallet** (a little friction, no Stripe). **As built (ALL-32, T56):** spec and plan in [`plans/ALL-32-zinc-connection.md`](plans/ALL-32-zinc-connection.md); runbooks (stop ordering, unconfirmed orders) in [`operations.md`](operations.md).
 1. **Connect (one time, in Settings).** The app starts Zinc's sign-in (`POST /device/code`) and shows the user a link. The user signs in to Zinc (or creates an account) and clicks **Allow**, and the app collects that user's key once (`POST /device/token`). The key goes into Supabase Vault, and only the server can read it. The app then registers its webhook URL on that account (`Set Webhook Endpoint`) and stores the account's webhook secret in Vault. No keys to copy or paste. W1-2 tested this flow for real.
 2. **Fund (one time, in Zinc).** The app links the user straight to Zinc's wallet page and walks them through adding funds and turning on **auto top-up** (a minimum balance plus a top-up amount, charged to a card saved in Zinc). With auto top-up on, Zinc charges the card when an order would otherwise be short, and the order goes ahead. Suggested settings: a minimum of their largest gift budget plus $1, topping up by about $100, since card top-ups cost 2.9% + $0.30 each and fewer, larger top-ups waste less.
 3. **Keep it visible in our app.** The app reads the balance (`GET /wallet/me`, free) and shows it in Settings and on the approval screen. It looks ahead: the approved and upcoming gifts in the next 3 weeks are compared with the balance, and the heads-up email warns early ("$160 in gifts due, $40 in Zinc"). This matters because each order needs its **full cap plus $1** available at once (§4.2).

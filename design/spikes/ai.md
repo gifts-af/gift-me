@@ -19,7 +19,7 @@ Date started: 2026-10-25. Status: **done.** Prompt v1–v3 tested on made-up fix
   3. Buying **paid credit** (prepaid, not a subscription) unlocks them. The balance after the top-up was $25.
 - **Model ID:** the gateway's ID is `anthropic/claude-opus-5.5` (with a dot). The design's `anthropic/claude-opus-5-5` is wrong. Always take IDs from `GET https://ai-gateway.vercel.sh/v1/models`.
 - **Every response reports its own cost** (`usage.cost` on Chat Completions), so the spike measures real cost instead of estimating it.
-- Key: since ALL-42 the spike uses the shared dev key, `AI_GATEWAY_API_KEY` in Vercel's Development variables, from `apps/web/.env.development.local` (`vercel env pull`, T39). The old `spikes/ai/.env` key is no longer used. No rotation was needed: the owner's 2026-11-01 call is that a key seen in a session isn't rotated (README > Environments).
+- Key: since ALL-42 the spike uses the shared dev key, `AI_GATEWAY_API_KEY` in Vercel's Development variables, from `apps/web/.env.development.local` (`vercel env pull`, T39). The old `spikes/ai/.env` key is no longer used. No rotation was needed: the owner's 2026-11-01 call is that a key seen in a session isn't rotated (`design/operations.md` > Environments).
 
 ## Web search through the gateway: confirmed
 

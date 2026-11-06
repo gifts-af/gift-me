@@ -1665,7 +1665,7 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     await pg.query("select concierge.mark_unconfirmed($1)", [o.id]);
     await advance(r.roundId, 1);
     await advance(r.roundId, 30);
-    // README runbook: Zinc has no such order, so the owner settles it as failed.
+    // Runbook in design/operations.md: Zinc has no such order, so the owner settles it as failed.
     await pg.query("select concierge.settle_order($1, $2, 'failed', 'failed', null)", [u.userId, o.id]);
     expect(await roundRow(r.roundId)).toMatchObject({ status: "skipped" });
     await retryOrderedEmails(engine(dayAt(31)));

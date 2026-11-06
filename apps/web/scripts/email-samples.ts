@@ -25,7 +25,7 @@ async function main() {
   const apiKey = process.env.RESEND_API_KEY;
   if (!apiKey) {
     console.error(
-      "RESEND_API_KEY is not set. Pull it into apps/web/.env.development.local (vercel env pull, see README) or add it to apps/web/.env.local, and try again.",
+      "RESEND_API_KEY is not set. Pull it into apps/web/.env.development.local (vercel env pull, see apps/web/README.md) or add it to apps/web/.env.local, and try again.",
     );
     process.exit(1);
   }
