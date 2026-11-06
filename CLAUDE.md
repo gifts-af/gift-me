@@ -127,6 +127,7 @@ The owner's claude.ai account owns the page. To update it, a person needs **edit
 
 - **One app, products as modules (T19, T20):** `apps/web/modules/<product>/` with a public `index.ts`. Import another product only through its `index.ts`; lint fails otherwise. Shared code lives in `apps/web/components`, `apps/web/lib` and `packages/core`.
 - **Next.js 16 has breaking changes:** read `apps/web/AGENTS.md`, and check `apps/web/node_modules/next/dist/docs/` before writing Next-specific code.
+- **Catching errors in server components:** with `cacheComponents` on, a `catch` around request data (`cookies()`, `headers()` or anything that calls them) starts with `unstable_rethrow(error)`. Otherwise Next's end-of-prerender signal gets logged as a failure (ALL-87).
 - **Local setup:** if the session-start check reports missing tools, walk the person through `README.md` > Local development before other work. When a new tool becomes required, add a check to `scripts/dev-check.mjs` and a row to that README table.
 - **No hard-coded values (T23).** Fees, prices, rates, limits, timings and thresholds live outside the code: app-wide settings in `concierge.app_settings`, per-user ones in `concierge.accounts` (T26), and secrets or per-environment values in env vars. Code takes them as inputs and never falls back to a silent default constant. Only true constants (7 days in a week) stay in code.
 - **Before a PR:** `pnpm lint && pnpm typecheck && pnpm test && pnpm build` from the repo root. CI runs the same.
