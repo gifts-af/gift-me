@@ -321,6 +321,22 @@ describe("runTick", () => {
 });
 
 describe("resumeRoundsForPerson", () => {
+  it("a waiting round notices an address at the next daily tick, with no resume and no extra email (ALL-63 AC-19)", async () => {
+    const h = harness({ hasAddress: false });
+    await h.tick("2027-02-11");
+    expect(h.store.rounds[0].status).toBe("needs_address");
+    // Days before its next reminder, nothing goes out and the round is still looked at.
+    await h.tick("2027-02-12");
+    await h.tick("2027-02-13");
+    expect(h.sent()).toEqual(["needs_address@2027-02-11"]);
+
+    h.store.people.get(PERSON)!.hasAddress = true;
+    await h.tick("2027-02-14");
+
+    expect(h.store.rounds[0].status).toBe("awaiting_approval");
+    expect(h.sent()).toEqual(["needs_address@2027-02-11", "heads_up@2027-02-14"]);
+  });
+
   it("sends the heads-up as soon as the address arrives and restarts the reminders (AC-9)", async () => {
     const h = harness({ hasAddress: false });
     await h.runDays("2027-02-11", "2027-02-19");
@@ -845,6 +861,51 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
   const walletReads = () => zinc.calls.filter((c) => c === "GET /wallet/me").length;
 
   // ─── a list owner's shared address (ALL-112, T61) ─────────────────────────
+
+  describe("whether a round has an address (ALL-63)", () => {
+    const hasAddress = async (roundId: string) => (await createSupabaseRoundStore(client()).roundContext(roundId)).hasAddress;
+    const personOf = async (roundId: string) =>
+      (await pg.query("select person_id from concierge.gift_rounds where id = $1", [roundId])).rows[0].person_id as string;
+    const clearOwnEntry = async (roundId: string) =>
+      pg.query("update public.people set address_line1 = null, city = null, state = null, zip = null where id = $1", [await personOf(roundId)]);
+
+    it("a shared address counts when the buyer has none (AC-16)", async () => {
+      const u = await newUser();
+      const r = await newRound(u);
+      await clearOwnEntry(r.roundId);
+      await shareWith(r, u);
+      expect(await hasAddress(r.roundId)).toBe(true);
+    });
+
+    it("with sharing off or the link revoked, it doesn't (AC-17)", async () => {
+      const u = await newUser();
+      const off = await newRound(u);
+      await clearOwnEntry(off.roundId);
+      const owner = await shareWith(off, u);
+      await pg.query("update public.account_addresses set share_for_gifts = false where user_id = $1", [owner.userId]);
+      expect(await hasAddress(off.roundId)).toBe(false);
+
+      const revoked = await newRound(u);
+      await clearOwnEntry(revoked.roundId);
+      const other = await shareWith(revoked, u);
+      await pg.query("update lists.lists set share_token = gen_random_uuid() where owner_id = $1", [other.userId]);
+      expect(await hasAddress(revoked.roundId)).toBe(false);
+    });
+
+    it("a malformed shared row alone decides, even with a good entry of the buyer's (AC-18)", async () => {
+      const u = await newUser();
+      const r = await newRound(u);
+      const owner = await shareWith(r, u);
+      await pg.query("update public.account_addresses set state = 'Ohio' where user_id = $1", [owner.userId]);
+      expect(await hasAddress(r.roundId)).toBe(false);
+    });
+
+    it("with nothing shared, the buyer's own entry counts as before", async () => {
+      const u = await newUser();
+      const r = await newRound(u);
+      expect(await hasAddress(r.roundId)).toBe(true);
+    });
+  });
 
   const WITHDRAWN = "we can't use the address Mary was sharing, so we didn't buy the Stoneware mug set and you haven't been charged for it.";
   const REJECTED = "the store couldn't use the address Mary saved, so we didn't buy the Stoneware mug set and you haven't been charged for it.";

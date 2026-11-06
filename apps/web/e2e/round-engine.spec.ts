@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { expect, test } from "@playwright/test";
+import { createFreshUser } from "./fresh-user";
 import { localSupabase } from "./local-supabase";
 import { signIn } from "./sign-in";
 import { TEST_USER } from "./test-user";
@@ -94,6 +95,111 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await setEngine(false);
   await deletePerson();
+});
+
+// ALL-63: a list owner sharing their address, on a fresh account so no other spec sees it.
+async function freshUser(): Promise<{ id: string; email: string; password: string }> {
+  const user = await createFreshUser();
+  const res = await fetch(`${supabase.url}/auth/v1/token?grant_type=password`, {
+    method: "POST",
+    headers: { apikey: supabase.publishableKey, "Content-Type": "application/json" },
+    body: JSON.stringify(user),
+  });
+  if (!res.ok) throw new Error(`Couldn't sign in: ${res.status}`);
+  return { ...user, id: ((await res.json()) as { user: { id: string } }).user.id };
+}
+
+/** Adds a list for a fresh owner, with an address they share. Returns its share link's token. */
+async function shareFrom(ownerId: string): Promise<string> {
+  const address = await fetch(`${supabase.url}/rest/v1/account_addresses`, {
+    method: "POST",
+    headers: serviceHeaders,
+    body: JSON.stringify({
+      user_id: ownerId,
+      recipient_first_name: "Sam",
+      recipient_last_name: "Rivera",
+      address_line1: "44 Shared St",
+      city: "Akron",
+      state: "OH",
+      zip: "44301",
+      share_for_gifts: true,
+    }),
+  });
+  if (!address.ok) throw new Error(`Couldn't seed the address: ${address.status} ${await address.text()}`);
+  const list = await fetch(`${supabase.url}/rest/v1/lists`, {
+    method: "POST",
+    headers: { ...serviceHeaders, "Accept-Profile": "lists", "Content-Profile": "lists", Prefer: "return=representation" },
+    body: JSON.stringify({ owner_id: ownerId, title: "Birthday" }),
+  });
+  if (!list.ok) throw new Error(`Couldn't add a list: ${list.status} ${await list.text()}`);
+  return ((await list.json()) as { share_token: string }[])[0].share_token;
+}
+
+const setSharing = async (ownerId: string, on: boolean) => {
+  const res = await fetch(`${supabase.url}/rest/v1/account_addresses?user_id=eq.${ownerId}`, {
+    method: "PATCH",
+    headers: serviceHeaders,
+    body: JSON.stringify({ share_for_gifts: on }),
+  });
+  if (!res.ok) throw new Error(`Couldn't change sharing: ${res.status} ${await res.text()}`);
+};
+
+test("a round waiting for an address goes on once its person's list shares one (ALL-63 AC-16, AC-17, AC-19, AC-20)", async ({
+  page,
+  baseURL,
+}) => {
+  const base = baseURL ?? "http://localhost:3100";
+  const today = new Date().toISOString().slice(0, 10);
+  const tomorrow = new Date(Date.now() + DAY_MS).toISOString().slice(0, 10);
+  const later = new Date(Date.now() + 2 * DAY_MS).toISOString().slice(0, 10);
+  const birthday = new Date(Date.now() + 35 * DAY_MS);
+
+  const buyer = await freshUser();
+  const owner = await freshUser();
+  const token = await shareFrom(owner.id);
+  await setSharing(owner.id, false);
+
+  const person = await fetch(`${supabase.url}/rest/v1/people`, {
+    method: "POST",
+    headers: { ...serviceHeaders, Prefer: "return=representation" },
+    body: JSON.stringify({ user_id: buyer.id, name: "Shared Sam", relationship: "friend" }),
+  });
+  if (!person.ok) throw new Error(`Couldn't add a person: ${person.status} ${await person.text()}`);
+  const personId = ((await person.json()) as { id: string }[])[0].id;
+  const occasion = await fetch(`${supabase.url}/rest/v1/occasions`, {
+    method: "POST",
+    headers: concierge,
+    body: JSON.stringify({ user_id: buyer.id, person_id: personId, kind: "birthday", month: birthday.getUTCMonth() + 1, day: birthday.getUTCDate() }),
+  });
+  if (!occasion.ok) throw new Error(`Couldn't add an occasion: ${occasion.status} ${await occasion.text()}`);
+
+  await setEngine(true);
+
+  // Nothing's shared yet: the round asks for an address (AC-17).
+  await tick(base, today);
+  const [round] = await roundsFor(personId);
+  expect(round.status).toBe("needs_address");
+  const asked = () => notificationsFor(round.id).then((n) => n.filter((x) => x.kind === "needs_address").length);
+  expect(await asked()).toBe(1);
+
+  // The buyer links the list while it shares nothing: still waiting, with no new email (AC-17).
+  await signIn(page, buyer);
+  await page.goto(`/people/${personId}`);
+  const linkField = page.getByLabel("Their list link");
+  await linkField.fill(`${base}/share/${token}`);
+  await expect.poll(() => linkField.evaluate((el) => Object.keys(el).some((k) => k.startsWith("__reactProps")))).toBe(true);
+  await linkField.press("Enter");
+  await expect(page.getByText("Linked.", { exact: false })).toBeVisible();
+  await tick(base, tomorrow);
+  expect((await roundsFor(personId))[0].status).toBe("needs_address");
+  expect(await asked()).toBe(1);
+
+  // The owner starts sharing: the next day's tick moves it on, with no address email (AC-16, AC-19).
+  await setSharing(owner.id, true);
+  await tick(base, later);
+  expect((await roundsFor(personId))[0].status).toBe("awaiting_approval");
+  expect(await asked()).toBe(1);
+  expect((await notificationsFor(round.id)).filter((n) => n.kind === "heads_up")).toHaveLength(1);
 });
 
 test("a round starts without an address, resumes when one is saved, and is skipped at the deadline", async ({

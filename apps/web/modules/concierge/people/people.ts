@@ -69,8 +69,15 @@ export function setBudget(id: string, kind: OccasionKind, cents: number | null):
   return service.setBudget(createSupabasePeopleStore(), id, kind, cents);
 }
 
-export function linkList(id: string, token: string): Promise<SaveResult> {
-  return service.linkList(createSupabasePeopleStore(), id, token);
+/** A linked list can bring a shared address, so this does what saving one does (ALL-63 AC-20). */
+export async function linkList(
+  id: string,
+  token: string,
+  wiring: { placeAddressHeld: PlaceAddressHeld; engine: EngineWiring },
+): Promise<SaveResult> {
+  const result = await service.linkList(createSupabasePeopleStore(), id, token, wiring.placeAddressHeld);
+  if (result.ok) await resumeWaitingRounds(id, wiring.engine);
+  return result;
 }
 
 export function unlinkList(id: string): Promise<SaveResult> {

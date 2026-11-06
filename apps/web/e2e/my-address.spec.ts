@@ -1,11 +1,13 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { createFreshUser } from "./fresh-user";
 import { localSupabase } from "./local-supabase";
+import { signIn } from "./sign-in";
 
-// ALL-63: your own address and sharing it, at phone and desktop width, against
-// the local Supabase. Every test makes its own accounts, because the table has
-// one row per account and the projects run in parallel. Never turn sharing on
-// for the shared test users: it would change other specs' person pages.
+// ALL-63: your own address and sharing it, against the local Supabase. Every
+// test makes its own accounts, because the table has one row per account and
+// tests run in parallel. Never turn sharing on for the shared test users: it
+// would change other specs' person pages. The two that lay out new screens run
+// on every browser (@layout, T62).
 const supabase = localSupabase();
 const service = {
   apikey: supabase.serviceRoleKey,
@@ -55,14 +57,6 @@ async function deleteAddress(id: string) {
   await fetch(`${supabase.url}/rest/v1/account_addresses?user_id=eq.${id}`, { method: "DELETE", headers: service });
 }
 
-async function signIn(page: Page, user: User) {
-  await page.goto("/auth/login");
-  await page.getByLabel("Email").fill(user.email);
-  await page.getByLabel("Password").fill(user.password);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
-}
-
 async function saveFirstList(page: Page) {
   await page.goto("/lists");
   await page.getByRole("button", { name: "Add by hand" }).click();
@@ -93,7 +87,7 @@ async function tap(target: Locator) {
 
 const shareSwitch = (page: Page) => page.getByRole("switch", { name: "Let people with my list ship gifts to me" });
 
-test("My address waits for a list, then adds, changes and removes (AC-1 to AC-5)", async ({ page }) => {
+test("My address waits for a list, then adds, changes and removes (AC-1 to AC-5)", { tag: "@layout" }, async ({ page }) => {
   const user = await createFreshUser();
   const id = await userId(user);
   await signIn(page, user);
@@ -164,7 +158,7 @@ test("changing an address keeps sharing on (AC-3)", async ({ page }) => {
   expect(await row(id)).toMatchObject({ share_for_gifts: false });
 });
 
-test("the switch appears with a first list, asks once, then turns off and on (AC-7, AC-8, AC-9, AC-11)", async ({ page }) => {
+test("the switch appears with a first list, asks once, then turns off and on (AC-7, AC-8, AC-9, AC-11)", { tag: "@layout" }, async ({ page }) => {
   const user = await createFreshUser();
   const id = await userId(user);
   await signIn(page, user);

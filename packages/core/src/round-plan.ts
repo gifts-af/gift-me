@@ -199,8 +199,13 @@ export function nextAction(r: RoundView, today: CalendarDate, s: ScheduleSetting
       return { do: "generate" };
     case "awaiting_approval":
       return dueFromSchedule(r, today, s, APPROVAL_KEYS);
-    case "needs_address":
-      return r.hasAddress ? { do: "generate" } : dueFromSchedule(r, today, s, ADDRESS_KEYS);
+    case "needs_address": {
+      if (r.hasAddress) return { do: "generate" };
+      // A list owner can start sharing on any day, and the deadline comes first, so look
+      // again tomorrow (ALL-63). It's silent unless a reminder is due.
+      const due = dueFromSchedule(r, today, s, ADDRESS_KEYS);
+      return due.do === "wait" ? { do: "wait", until: addDays(today, 1) } : due;
+    }
     case "needs_attention":
       return holdAction(r, today, s);
     default: // the statuses we never act on

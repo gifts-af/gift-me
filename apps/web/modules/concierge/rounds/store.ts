@@ -389,6 +389,11 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
       });
 
       const p = person.data;
+      // A list owner's shared address decides when there is one, as it does for the order
+      // and the person's page. Only the answer is kept, never the address (ALL-63, T61).
+      const { data: shared, error: sharedError } = await db.rpc("shared_address_for_person", { p_person_id: round.person_id });
+      if (sharedError) fail("Reading the shared address failed", sharedError);
+      const a = shared && typeof shared === "object" ? (shared as Partial<typeof p>) : p;
       return {
         userId: round.user_id,
         personId: round.person_id,
@@ -398,14 +403,14 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
         shipByDeadline: round.ship_by_deadline,
         // The same format check as the address form (T51): an incomplete import still asks.
         hasAddress: isShippableAddress({
-          firstName: p.recipient_first_name,
-          lastName: p.recipient_last_name,
-          line1: p.address_line1,
-          line2: p.address_line2,
-          city: p.city,
-          state: p.state,
-          zip: p.zip,
-          country: p.country,
+          firstName: a.recipient_first_name,
+          lastName: a.recipient_last_name,
+          line1: a.address_line1,
+          line2: a.address_line2,
+          city: a.city,
+          state: a.state,
+          zip: a.zip,
+          country: a.country,
         }),
         openQuestions: open.length,
         ideas: ideas.data.map((i) => ({ title: i.title, totalCents: i.est_total_cents })),

@@ -128,6 +128,17 @@ describe("nextAction: address path", () => {
     ...over,
   });
 
+  // ALL-63: a shared address can arrive on any day, and the deadline skip comes first, so the
+  // round looks every day. No email goes unless a reminder is due.
+  it("is looked at again tomorrow, never later, while it waits (ALL-63 AC-19)", () => {
+    const sent = new Set<StepKey>(["address_request"]);
+    expect(nextAction(needs({ sent }), "2027-02-23", s)).toEqual({ do: "wait", until: "2027-02-24" });
+    // A reminder still goes on its own day, and the next day's look is the deadline.
+    expect(nextAction(needs({ sent }), "2027-03-20", s)).toEqual({ do: "send", send: "address_final_notice" });
+    sent.add("address_final_notice");
+    expect(nextAction(needs({ sent }), "2027-03-21", s)).toEqual({ do: "wait", until: "2027-03-22" });
+  });
+
   it("fires the address_* steps on the same days (AC-8)", () => {
     expect(walk(needs(), "2027-02-22", "2027-03-25")).toEqual([
       ["2027-02-27", "address_reminder_1"],

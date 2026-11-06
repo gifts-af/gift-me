@@ -279,15 +279,18 @@ export async function saveAddress(
   placeAddressHeld?: PlaceAddressHeld,
 ): Promise<SaveResult> {
   const result = await writeAddress(store, id, { ...a, checkedAt: now.toISOString() });
-  if (result.ok && placeAddressHeld) {
-    const userId = await store.userId();
-    try {
-      if (userId) await placeAddressHeld(userId, id);
-    } catch (e) {
-      logEvent("person_address_place_failed", { person_id: id, user_id: userId, ...errorFields(e) });
-    }
-  }
+  if (result.ok && placeAddressHeld) await tryAddressHolds(store, id, placeAddressHeld);
   return result;
+}
+
+/** This person may now have a usable address: their gifts held for one are tried again. */
+async function tryAddressHolds(store: PeopleStore, id: string, placeAddressHeld: PlaceAddressHeld): Promise<void> {
+  const userId = await store.userId();
+  try {
+    if (userId) await placeAddressHeld(userId, id);
+  } catch (e) {
+    logEvent("person_address_place_failed", { person_id: id, user_id: userId, ...errorFields(e) });
+  }
 }
 
 /** Clears every address column at once (AC-6). */
@@ -331,11 +334,21 @@ export function setBudget(
   });
 }
 
-export function linkList(store: PeopleStore, id: string, link: string): Promise<SaveResult> {
+export async function linkList(
+  store: PeopleStore,
+  id: string,
+  link: string,
+  placeAddressHeld?: PlaceAddressHeld,
+): Promise<SaveResult> {
   const token = parseShareToken(link);
-  if (!token) {
-    return Promise.resolve({ ok: false, error: "Paste the share link from their GiftsAF list." });
-  }
+  if (!token) return { ok: false, error: "Paste the share link from their GiftsAF list." };
+  // A linked list can bring a shared address, so this does what saving one does (ALL-63 AC-20).
+  const result = await linkToken(store, id, token);
+  if (result.ok && placeAddressHeld) await tryAddressHolds(store, id, placeAddressHeld);
+  return result;
+}
+
+function linkToken(store: PeopleStore, id: string, token: string): Promise<SaveResult> {
   return onOwnPerson(store, id, "linking a list", async () => {
     try {
       await store.linkList(token, id);
