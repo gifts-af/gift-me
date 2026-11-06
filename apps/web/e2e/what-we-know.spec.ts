@@ -2,6 +2,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { localSupabase } from "./local-supabase";
 import { phoneLayoutProblems } from "./phone-layout";
 import { SECOND_USER, TEST_USER } from "./test-user";
+import { signIn } from "./sign-in";
 
 // ALL-25: a person's page lists the AI's suggestions from captures apart from
 // anything else, and Remove takes one away for good. The facts are seeded
@@ -69,14 +70,6 @@ async function seed(name: string, { user = TEST_USER, paidFeatures = true }: { u
     ]),
   });
   return { personId: person.id as string, vise: facts[0].id as string };
-}
-
-async function signIn(page: Page, user: User = TEST_USER) {
-  await page.goto("/auth/login");
-  await page.getByLabel("Email").fill(user.email);
-  await page.getByLabel("Password").fill(user.password);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
 }
 
 test("facts show by category with their source, and can be turned off, turned on and deleted", async ({ page }, testInfo) => {

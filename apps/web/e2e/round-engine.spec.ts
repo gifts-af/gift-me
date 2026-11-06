@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { expect, test } from "@playwright/test";
 import { localSupabase } from "./local-supabase";
+import { signIn } from "./sign-in";
 import { TEST_USER } from "./test-user";
 
 // ALL-28: a gift round from start to skip, against the local Supabase, with the
@@ -10,8 +11,8 @@ import { TEST_USER } from "./test-user";
 // The tick is global: it also starts rounds for people other specs seed. So every
 // assertion is scoped to this person's round id. The spec switches the engine on
 // and always switches it back off.
-// Desktop only, set in playwright.config.ts (testIgnore on the phones), so the hooks below
-// can't run in a phone worker and undo the desktop run. A reused local dev server must have
+// One browser only: it has no @layout tag, so only the iphone project runs it
+// (playwright.config.ts), and the hooks below can't run in another worker and undo it. A reused local dev server must have
 // been started with CRON_SECRET=e2e-cron-secret and EMAIL_OUTBOX=log (reuseExistingServer).
 test.describe.configure({ mode: "serial" });
 
@@ -165,11 +166,7 @@ test("a round starts without an address, resumes when one is saved, and is skipp
   });
   if (!link.ok) throw new Error(`Couldn't store the link: ${link.status} ${await link.text()}`);
 
-  await page.goto("/auth/login");
-  await page.getByLabel("Email").fill(TEST_USER.email);
-  await page.getByLabel("Password").fill(TEST_USER.password);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
+  await signIn(page);
   await page.goto(`/a/${linkToken}`);
   await page.getByRole("button", { name: "Add an address", exact: true }).click();
   await page.getByRole("link", { name: "Open their page" }).click();

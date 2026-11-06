@@ -44,7 +44,7 @@ test("every email sample was rendered: ten concierge, five forms (ALL-71)", () =
 
 for (const colorScheme of ["light", "dark"] as const) {
   for (const { name, html } of samples) {
-    test(`${name} email fits a phone (${colorScheme})`, async ({ page }, testInfo) => {
+    test(`${name} email fits a phone (${colorScheme})`, { tag: "@layout" }, async ({ page }, testInfo) => {
       await page.emulateMedia({ colorScheme });
       await page.setContent(html);
       await page.screenshot({

@@ -2,7 +2,7 @@ import { expect, type Page, test } from "@playwright/test";
 import { TEST_USER } from "./test-user";
 
 // ALL-46: the public home page and the guided tour.
-test("a signed-out visitor sees the home page at / on a phone", async ({ page }) => {
+test("a signed-out visitor sees the home page at / on a phone", { tag: "@layout" }, async ({ page }) => {
   await page.goto("/");
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("heading", { name: "Gifting, handled AF." })).toBeVisible();
@@ -15,7 +15,7 @@ test("a signed-out visitor sees the home page at / on a phone", async ({ page })
 const listHero = (page: Page) => page.locator("section", { has: page.getByRole("heading", { level: 1 }) });
 const conciergeHero = (page: Page) => page.locator("section", { has: page.getByRole("heading", { name: "Gifting, handled AF." }) });
 
-test("on a computer the list hook sits beside its sample card", async ({ page }) => {
+test("on a computer the list hook sits beside its sample card", { tag: "@layout" }, async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your wish list, one text away.");
@@ -26,7 +26,7 @@ test("on a computer the list hook sits beside its sample card", async ({ page })
   expect(preview!.y).toBeLessThan(text!.y + text!.height);
 });
 
-test("on a computer the hook sits beside the pick-a-gift card", async ({ page }) => {
+test("on a computer the hook sits beside the pick-a-gift card", { tag: "@layout" }, async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/");
   const text = await page.getByTestId("hook-text").boundingBox();
@@ -38,7 +38,7 @@ test("on a computer the hook sits beside the pick-a-gift card", async ({ page })
 });
 
 for (const colorScheme of ["dark", "light"] as const) {
-  test(`the home page follows a ${colorScheme} browser`, async ({ browser }) => {
+  test(`the home page follows a ${colorScheme} browser`, { tag: "@layout" }, async ({ browser }) => {
     const context = await browser.newContext({ colorScheme, viewport: { width: 375, height: 812 } });
     const page = await context.newPage();
     await page.goto("/");
@@ -53,7 +53,7 @@ for (const colorScheme of ["dark", "light"] as const) {
 // on a phone it stays one column: caption, then the screen, then the buttons.
 // ALL-71: the list tour uses the same frame, so the same rules.
 for (const [tour, width] of [["/tour", 375], ["/tour", 1280], ["/tour/list", 375], ["/tour/list", 1280]] as const) {
-  test(`the tour at ${tour} lays out for a ${width} px screen`, async ({ page }) => {
+  test(`the tour at ${tour} lays out for a ${width} px screen`, { tag: "@layout" }, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     await page.goto(tour);
     await page.getByRole("button", { name: "Next", exact: true }).click();
@@ -135,7 +135,7 @@ test("feedback opens a box over the page, and Esc closes it (ALL-53)", async ({ 
 
 // ALL-54: the logo stays exactly where it is on the home page.
 for (const width of [390, 1280]) {
-  test(`the logo stays put across pages at ${width} px`, async ({ page }) => {
+  test(`the logo stays put across pages at ${width} px`, { tag: "@layout" }, async ({ page }) => {
     await page.setViewportSize({ width, height: 800 });
     const logo = page.getByRole("img", { name: "GiftsAF" }).first();
     const spot = async (path: string) => {

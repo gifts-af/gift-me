@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import { localSupabase } from "./local-supabase";
 import { SECOND_USER, TEST_USER } from "./test-user";
+import { signIn } from "./sign-in";
 
 // ALL-23: a one-time email action link, end to end against the local Supabase.
 // Each test stores its own fresh link (action "test", an hour to live, for
@@ -49,14 +50,6 @@ async function usedAt(tokenHash: string): Promise<string | null> {
   const rows = (await res.json()) as { used_at: string | null }[];
   expect(rows).toHaveLength(1);
   return rows[0].used_at;
-}
-
-async function signIn(page: Page, user: { email: string; password: string }) {
-  await page.goto("/auth/login");
-  await page.getByLabel("Email").fill(user.email);
-  await page.getByLabel("Password").fill(user.password);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
 }
 
 test("signed out, an action link asks you to sign in and isn't used up", async ({ page }) => {

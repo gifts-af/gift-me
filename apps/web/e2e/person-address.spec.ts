@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { localSupabase } from "./local-supabase";
 import { TEST_USER } from "./test-user";
+import { signIn } from "./sign-in";
 
 // ALL-81: a person's shipping address on their page, at phone and desktop width
 // (every project runs it), against the local Supabase. Each project uses its own
@@ -68,14 +69,6 @@ async function stored(personId: string): Promise<Row> {
   const rows = (await res.json()) as Row[];
   expect(rows).toHaveLength(1);
   return rows[0];
-}
-
-async function signIn(page: Page) {
-  await page.goto("/auth/login");
-  await page.getByLabel("Email").fill(TEST_USER.email);
-  await page.getByLabel("Password").fill(TEST_USER.password);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
 }
 
 const nameFor = (project: string) => `Rita Address ${project}`;

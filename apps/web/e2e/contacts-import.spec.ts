@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { localSupabase } from "./local-supabase";
 import { TEST_USER } from "./test-user";
+import { signIn } from "./sign-in";
 
 // ALL-24: import people from Google Contacts. Google's sign-in script and the
 // People API are replaced with fakes at the network level, so the real page,
@@ -19,14 +20,6 @@ const FAKE_GIS = `
     revoke: (t, done) => { window.__revoked.push(t); done && done(); },
   } } };
 `;
-
-async function signIn(page: Page) {
-  await page.goto("/auth/login");
-  await page.getByLabel("Email").fill(TEST_USER.email);
-  await page.getByLabel("Password").fill(TEST_USER.password);
-  await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
-}
 
 // Removes people a failed earlier run left behind (service role, so no RLS).
 async function deleteLeftovers(names: string[]) {
@@ -79,6 +72,7 @@ test("import Grandma and a friend from Google Contacts, then see them as already
   });
 
   await signIn(page);
+  await page.goto("/");
   await page.getByRole("link", { name: "Import from Google" }).click();
   await expect(page.getByRole("heading", { name: "Who do you buy gifts for?" })).toBeVisible();
   await page.getByRole("button", { name: "Connect Google Contacts" }).click();
