@@ -16,8 +16,10 @@ test("a signed-out visitor sees the home page at / on a phone", { tag: "@layout"
 const listHero = (page: Page) => page.locator("section", { has: page.getByRole("heading", { level: 1 }) });
 const conciergeHero = (page: Page) => page.locator("section", { has: page.getByRole("heading", { name: "Gifting, handled AF." }) });
 
-test("on a computer the list hook sits beside its sample card", { tag: "@layout" }, async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 900 });
+// Computer-width layout runs on desktop Chrome only, and phone-width layout on
+// the phones, each at its own project's screen size (ALL-118).
+test("on a computer the list hook sits beside its sample card", { tag: "@layout" }, async ({ page, isMobile }) => {
+  test.skip(isMobile, "a computer layout");
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your wish list, one text away.");
   const text = await page.getByTestId("list-hook-text").boundingBox();
@@ -27,8 +29,8 @@ test("on a computer the list hook sits beside its sample card", { tag: "@layout"
   expect(preview!.y).toBeLessThan(text!.y + text!.height);
 });
 
-test("on a computer the hook sits beside the pick-a-gift card", { tag: "@layout" }, async ({ page }) => {
-  await page.setViewportSize({ width: 1280, height: 900 });
+test("on a computer the hook sits beside the pick-a-gift card", { tag: "@layout" }, async ({ page, isMobile }) => {
+  test.skip(isMobile, "a computer layout");
   await page.goto("/");
   const text = await page.getByTestId("hook-text").boundingBox();
   const preview = await page.getByTestId("pick-preview").boundingBox();
@@ -38,24 +40,14 @@ test("on a computer the hook sits beside the pick-a-gift card", { tag: "@layout"
   expect(preview!.y).toBeLessThan(text!.y + text!.height);
 });
 
-for (const colorScheme of ["dark", "light"] as const) {
-  test(`the home page follows a ${colorScheme} browser`, { tag: "@layout" }, async ({ browser }) => {
-    const context = await browser.newContext({ colorScheme, viewport: { width: 375, height: 812 } });
-    const page = await context.newPage();
-    await page.goto("/");
-    await expect(page.getByRole("heading", { name: "Gifting, handled AF." })).toBeVisible();
-    const isDark = await page.evaluate(() => document.documentElement.classList.contains("dark"));
-    expect(isDark).toBe(colorScheme === "dark");
-    await context.close();
-  });
-}
+// Following a dark or light phone is theme.spec.ts's job (ALL-118).
 
 // ALL-61: on a computer the tour uses two columns, caption left and phone right;
 // on a phone it stays one column: caption, then the screen, then the buttons.
 // ALL-71: the list tour uses the same frame, so the same rules.
-for (const [tour, width] of [["/tour", 375], ["/tour", 1280], ["/tour/list", 375], ["/tour/list", 1280]] as const) {
-  test(`the tour at ${tour} lays out for a ${width} px screen`, { tag: "@layout" }, async ({ page }) => {
-    await page.setViewportSize({ width, height: 900 });
+for (const tour of ["/tour", "/tour/list"]) {
+  test(`the tour at ${tour} lays out for this screen`, { tag: "@layout" }, async ({ page }) => {
+    const { width } = page.viewportSize()!;
     await page.goto(tour);
     await page.getByRole("button", { name: "Next", exact: true }).click();
     const caption = (await page.getByRole("heading", { level: 1 }).boundingBox())!;
@@ -115,49 +107,30 @@ test("request access opens over the page and checks its fields (ALL-47, ALL-53)"
   expect(overflow).toBeLessThanOrEqual(0);
 });
 
-test("Join the waitlist opens the waitlist form (ALL-71)", async ({ page }) => {
+// The waitlist and feedback boxes opening, and Esc closing them, are
+// component tests in components/home/__tests__/overlays.test.tsx (ALL-118).
+
+// ALL-54: the logo stays exactly where it is on the home page, at each
+// project's own width: a phone's and a computer's.
+test("the logo stays put across pages", { tag: "@layout" }, async ({ page }) => {
+  const logo = page.getByRole("img", { name: "GiftsAF" }).first();
+  const spot = async (path: string) => {
+    await page.goto(path);
+    const box = await logo.boundingBox();
+    return box && { x: Math.round(box.x), y: Math.round(box.y) };
+  };
+  const home = await spot("/");
+  expect(await spot("/tour")).toEqual(home);
+  expect(await spot("/request-access")).toEqual(home);
+
+  await signIn(page);
   await page.goto("/");
-  await conciergeHero(page).getByRole("button", { name: "Join the waitlist" }).click();
-  const dialog = page.getByRole("dialog", { name: "Join the waitlist" });
-  await expect(dialog.getByText("The concierge is still being built.", { exact: false })).toBeVisible();
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-  expect(overflow).toBeLessThanOrEqual(0);
+  await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
+  expect(await spot("/")).toEqual(home);
+
+  // The list: the logo is in the same spot at every width (ALL-95).
+  await page.goto("/lists");
+  await expect(page.getByRole("region", { name: "My list" })).toBeVisible();
+  expect(await spot("/lists")).toEqual(home);
+  expect(await spot("/settings")).toEqual(home);
 });
-
-test("feedback opens a box over the page, and Esc closes it (ALL-53)", async ({ page }) => {
-  await page.goto("/");
-  const open = page.getByRole("button", { name: "Send feedback" });
-  await open.click();
-  const dialog = page.getByRole("dialog", { name: "Tell us the sad story" });
-  await expect(dialog.getByLabel("What happened?")).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(dialog).toBeHidden();
-  await expect(open).toBeFocused();
-});
-
-// ALL-54: the logo stays exactly where it is on the home page.
-for (const width of [390, 1280]) {
-  test(`the logo stays put across pages at ${width} px`, { tag: "@layout" }, async ({ page }) => {
-    await page.setViewportSize({ width, height: 800 });
-    const logo = page.getByRole("img", { name: "GiftsAF" }).first();
-    const spot = async (path: string) => {
-      await page.goto(path);
-      const box = await logo.boundingBox();
-      return box && { x: Math.round(box.x), y: Math.round(box.y) };
-    };
-    const home = await spot("/");
-    expect(await spot("/tour")).toEqual(home);
-    expect(await spot("/request-access")).toEqual(home);
-
-    await signIn(page);
-    await page.goto("/");
-    await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
-    expect(await spot("/")).toEqual(home);
-
-    // The list: the logo is in the same spot at every width (ALL-95).
-    await page.goto("/lists");
-    await expect(page.getByRole("region", { name: "My list" })).toBeVisible();
-    expect(await spot("/lists")).toEqual(home);
-    expect(await spot("/settings")).toEqual(home);
-  });
-}

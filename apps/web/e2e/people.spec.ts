@@ -1,8 +1,10 @@
 import { expect, test } from "@playwright/test";
 import { localSupabase } from "./local-supabase";
 import { SECOND_USER, TEST_USER } from "./test-user";
+import { createFreshUser } from "./fresh-user";
 import { scrollsSideways } from "./phone-layout";
-import { signIn } from "./sign-in";
+import { addMother } from "./seed";
+import { session, signIn } from "./sign-in";
 
 // ALL-21: add someone, see their card, switch occasions and budgets, link their
 // list, delete them. On a phone, as TEST_USER, against the local Supabase.
@@ -13,14 +15,8 @@ test.use({ viewport: { width: 375, height: 812 } });
 const supabase = localSupabase();
 
 async function signInApi(user: { email: string; password: string }): Promise<{ token: string; id: string }> {
-  const res = await fetch(`${supabase.url}/auth/v1/token?grant_type=password`, {
-    method: "POST",
-    headers: { apikey: supabase.publishableKey, "Content-Type": "application/json" },
-    body: JSON.stringify({ email: user.email, password: user.password }),
-  });
-  if (!res.ok) throw new Error(`Couldn't sign in ${user.email}: ${res.status} ${await res.text()}`);
-  const body = (await res.json()) as { access_token: string; user: { id: string } };
-  return { token: body.access_token, id: body.user.id };
+  const { access_token, user: { id } } = await session(user);
+  return { token: access_token, id };
 }
 
 // Removes any person with this name a failed earlier run left behind (service role, so no RLS).
@@ -62,9 +58,26 @@ async function secondUserShareLink(): Promise<string> {
   return `/share/${rows[0].share_token}`;
 }
 
-test("add Mom, set her occasions and budget, link her list, delete her", { tag: "@layout" }, async ({ page }, testInfo) => {
-  // The three projects run at once as the same user, so each gets its own Mom.
-  const mom = `Mom ${testInfo.project.name}`;
+// The layout of each screen this journey passes through, on every browser. The
+// journey itself is behavior, so it runs on the iPhone only (ALL-118).
+test("the Add form, Home with a card, and a person's page fit the screen", { tag: "@layout" }, async ({ page }) => {
+  const user = await createFreshUser();
+  const personId = await addMother(user, "Mom");
+  await signIn(page, user);
+  await page.goto("/people/new");
+  await expect(page.getByLabel("Name")).toBeVisible();
+  expect(await scrollsSideways(page)).toBe(0);
+  await page.goto("/");
+  await expect(page.getByRole("link", { name: "Mom", exact: true })).toBeVisible();
+  expect(await scrollsSideways(page)).toBe(0);
+  await page.goto(`/people/${personId}`);
+  await expect(page.getByRole("region", { name: "Your budget" })).toBeVisible();
+  expect(await scrollsSideways(page)).toBe(0);
+});
+
+test("add Mom, set her occasions and budget, link her list, delete her", async ({ page }) => {
+  // TEST_USER is shared with other specs, so a name no other spec uses.
+  const mom = "Mom Journey";
   await deleteLeftovers(mom);
   await signIn(page);
   await page.goto("/");
@@ -73,7 +86,6 @@ test("add Mom, set her occasions and budget, link her list, delete her", { tag: 
   await page.getByRole("link", { name: "Add someone you buy for" }).first().click();
   await page.getByLabel("Name").fill(mom);
   await page.getByLabel("Who are they to you?").selectOption({ label: "Mother" });
-  expect(await scrollsSideways(page)).toBe(0);
   await page.getByRole("button", { name: `Add ${mom}` }).click();
 
   // 2. Her card: Add birthday, a next occasion, and "We suggest ideas".
@@ -84,7 +96,6 @@ test("add Mom, set her occasions and budget, link her list, delete her", { tag: 
   await expect(card.getByRole("link", { name: "Add birthday" })).toBeVisible();
   await expect(card).toContainText(/Christmas|Mother's Day/);
   await expect(card).toContainText("We suggest ideas");
-  expect(await scrollsSideways(page)).toBe(0);
 
   // 3. Her page: Christmas off, a $75 Mother's Day budget, then cleared.
   await momLink.click();
@@ -105,7 +116,6 @@ test("add Mom, set her occasions and budget, link her list, delete her", { tag: 
   await budgets.getByRole("button", { name: "Save", exact: true }).click();
   await expect(budgets.getByRole("listitem").filter({ hasText: "Mother's Day" }).getByText("Not set")).toBeVisible();
   await expect(budgets.getByRole("button", { name: "Set Mother's Day budget" })).toBeVisible();
-  expect(await scrollsSideways(page)).toBe(0);
 
   // 4. SECOND_USER's list, linked by its share link: "Their own list".
   const sharePath = await secondUserShareLink();

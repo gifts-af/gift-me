@@ -2,13 +2,14 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import { createFreshUser } from "./fresh-user";
 import { localSupabase } from "./local-supabase";
 import { phoneLayoutProblems } from "./phone-layout";
-import { signIn } from "./sign-in";
+import { saveOneGiftList } from "./seed";
+import { session, signIn } from "./sign-in";
 
 // ALL-63: your own address and sharing it, against the local Supabase. Every
 // test makes its own accounts, because the table has one row per account and
 // tests run in parallel. Never turn sharing on for the shared test users: it
-// would change other specs' person pages. The two that lay out new screens run
-// on every browser (@layout, T62).
+// would change other specs' person pages. One test checks the new screens'
+// layout on every browser (@layout, T62); the rest run on the iPhone.
 const supabase = localSupabase();
 const service = {
   apikey: supabase.serviceRoleKey,
@@ -20,15 +21,7 @@ const STREET = "44 Elm St";
 type User = { email: string; password: string };
 type Row = { city: string; address_line1: string; share_for_gifts: boolean; country: string; phone: string | null; address_checked_at: string | null };
 
-async function userId(user: User): Promise<string> {
-  const res = await fetch(`${supabase.url}/auth/v1/token?grant_type=password`, {
-    method: "POST",
-    headers: { apikey: supabase.publishableKey, "Content-Type": "application/json" },
-    body: JSON.stringify(user),
-  });
-  if (!res.ok) throw new Error(`Couldn't sign in: ${res.status}`);
-  return ((await res.json()) as { user: { id: string } }).user.id;
-}
+const userId = async (user: User) => (await session(user)).user.id;
 
 async function row(id: string): Promise<Row | null> {
   const res = await fetch(`${supabase.url}/rest/v1/account_addresses?user_id=eq.${id}`, { headers: service });
@@ -68,13 +61,15 @@ async function saveFirstList(page: Page) {
   await expect(page.getByText("Unsaved changes")).toHaveCount(0);
 }
 
-async function fillAddress(page: Page) {
-  await page.getByLabel("First name").fill("Sam");
-  await page.getByLabel("Last name").fill("Rivera");
-  await page.getByLabel("Street address").fill(STREET);
-  await page.getByLabel("City").fill("Columbus");
-  await page.getByLabel("State").selectOption("OH");
-  await page.getByLabel("ZIP code").fill("43215");
+// `within` narrows it to one form, such as the share dialog, when another
+// address form is still in the page, hidden, from a route visited earlier (ALL-119).
+async function fillAddress(within: Page | Locator) {
+  await within.getByLabel("First name").fill("Sam");
+  await within.getByLabel("Last name").fill("Rivera");
+  await within.getByLabel("Street address").fill(STREET);
+  await within.getByLabel("City").fill("Columbus");
+  await within.getByLabel("State").selectOption("OH");
+  await within.getByLabel("ZIP code").fill("43215");
 }
 
 // A tap before React attaches to the page does nothing, so wait for that rather
@@ -88,7 +83,44 @@ async function tap(target: Locator) {
 
 const shareSwitch = (page: Page) => page.getByRole("switch", { name: "Let people with my list ship gifts to me" });
 
-test("My address waits for a list, then adds, changes and removes (AC-1 to AC-5)", { tag: "@layout" }, async ({ page }) => {
+// The new screens' layout on every browser (T62), in each state the journeys
+// below pass through. The journeys are behavior, so they run on the iPhone only (ALL-118).
+test("My address and the share switch fit the screen, in every state", { tag: "@layout" }, async ({ page }) => {
+  const user = await createFreshUser();
+  const id = await userId(user);
+  await saveOneGiftList(user);
+  await signIn(page, user);
+
+  // Settings: no address yet, then the open form.
+  await page.goto("/settings");
+  await expect(page.getByRole("button", { name: "Add my address" })).toBeVisible();
+  expect(await phoneLayoutProblems(page)).toEqual([]);
+  await tap(page.getByRole("button", { name: "Add my address" }));
+  await expect(page.getByLabel("First name")).toBeVisible();
+  expect(await phoneLayoutProblems(page)).toEqual([]);
+
+  // My list: the switch, then its form with an error showing.
+  await page.goto("/lists");
+  await expect(shareSwitch(page)).toBeVisible();
+  expect(await phoneLayoutProblems(page)).toEqual([]);
+  await tap(shareSwitch(page));
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("ZIP code").fill("1");
+  await dialog.getByRole("button", { name: "Save and share" }).click();
+  await expect(dialog.getByText("Enter a 5-digit ZIP code.")).toBeVisible();
+  expect(await phoneLayoutProblems(page)).toEqual([]);
+
+  // A saved address: shared on My list, and in Settings.
+  await seedAddress(id, true);
+  await page.goto("/lists");
+  await expect(page.getByText(/^They see Columbus, OH in GiftsAF\./)).toBeVisible();
+  expect(await phoneLayoutProblems(page)).toEqual([]);
+  await page.goto("/settings");
+  await expect(page.getByText(STREET)).toBeVisible();
+  expect(await phoneLayoutProblems(page)).toEqual([]);
+});
+
+test("My address waits for a list, then adds, changes and removes (AC-1 to AC-5)", async ({ page }) => {
   const user = await createFreshUser();
   const id = await userId(user);
   await signIn(page, user);
@@ -100,10 +132,8 @@ test("My address waits for a list, then adds, changes and removes (AC-1 to AC-5)
 
   await saveFirstList(page);
   await page.goto("/settings");
-  expect(await phoneLayoutProblems(page)).toEqual([]);
   await tap(page.getByRole("button", { name: "Add my address" }));
   await expect(page.getByLabel("First name")).toHaveValue("");
-  expect(await phoneLayoutProblems(page)).toEqual([]);
 
   await page.getByLabel("ZIP code").fill("123");
   await page.getByRole("button", { name: "Save address" }).click();
@@ -116,7 +146,6 @@ test("My address waits for a list, then adds, changes and removes (AC-1 to AC-5)
   await page.getByRole("button", { name: "Save address" }).click();
   await expect(page.getByText(`${STREET}`)).toBeVisible();
   await expect(page.getByText(/^Not shared\./)).toBeVisible();
-  expect(await phoneLayoutProblems(page)).toEqual([]);
   const saved = await row(id);
   expect(saved).toMatchObject({ share_for_gifts: false, country: "US", phone: null });
   expect(saved?.address_checked_at).not.toBeNull();
@@ -162,7 +191,7 @@ test("changing an address keeps sharing on (AC-3)", async ({ page }) => {
   expect(await row(id)).toMatchObject({ share_for_gifts: false });
 });
 
-test("the switch appears with a first list, asks once, then turns off and on (AC-7, AC-8, AC-9, AC-11)", { tag: "@layout" }, async ({ page }) => {
+test("the switch appears with a first list, asks once, then turns off and on (AC-7, AC-8, AC-9, AC-11)", async ({ page }) => {
   const user = await createFreshUser();
   const id = await userId(user);
   await signIn(page, user);
@@ -174,7 +203,6 @@ test("the switch appears with a first list, asks once, then turns off and on (AC
   await saveFirstList(page);
   await expect(shareSwitch(page)).toBeVisible();
   await expect(shareSwitch(page)).not.toBeChecked();
-  expect(await phoneLayoutProblems(page)).toEqual([]);
 
   await shareSwitch(page).click();
   const dialog = page.getByRole("dialog");
@@ -187,7 +215,6 @@ test("the switch appears with a first list, asks once, then turns off and on (AC
   await dialog.getByLabel("ZIP code").fill("1");
   await dialog.getByRole("button", { name: "Save and share" }).click();
   await expect(dialog.getByText("Enter a 5-digit ZIP code.")).toBeVisible();
-  expect(await phoneLayoutProblems(page)).toEqual([]);
   expect(await row(id)).toBeNull();
 
   await fillAddress(page);
@@ -195,7 +222,6 @@ test("the switch appears with a first list, asks once, then turns off and on (AC
   await expect(dialog).toHaveCount(0);
   await expect(shareSwitch(page)).toBeChecked();
   await expect(page.getByText(/^They see Columbus, OH in GiftsAF\./)).toBeVisible();
-  expect(await phoneLayoutProblems(page)).toEqual([]);
   expect(await row(id)).toMatchObject({ share_for_gifts: true, address_line1: STREET });
 
   await shareSwitch(page).click();
@@ -260,8 +286,10 @@ test("Settings shows the new address after sharing from the list, with the form 
 
   await page.getByRole("link", { name: "Get", exact: true }).click();
   await shareSwitch(page).click();
-  await fillAddress(page);
-  await page.getByRole("dialog").getByRole("button", { name: "Save and share" }).click();
+  // Settings' open form is still in the page, hidden, so fill the dialog's fields only.
+  const dialog = page.getByRole("dialog");
+  await fillAddress(dialog);
+  await dialog.getByRole("button", { name: "Save and share" }).click();
   await expect(shareSwitch(page)).toBeChecked();
 
   await page.getByRole("link", { name: "Change my address" }).click();
