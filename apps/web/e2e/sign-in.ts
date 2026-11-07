@@ -5,6 +5,20 @@ import { TEST_USER } from "./test-user";
 
 export type Credentials = { email: string; password: string };
 
+export type Session = { access_token: string; refresh_token: string; user: { id: string } };
+
+/** A session for `user` from the local Supabase, by email and password: its tokens and user id. */
+export async function session(user: Credentials): Promise<Session> {
+  const { url, publishableKey } = localSupabase();
+  const res = await fetch(`${url}/auth/v1/token?grant_type=password`, {
+    method: "POST",
+    headers: { apikey: publishableKey, "Content-Type": "application/json" },
+    body: JSON.stringify({ email: user.email, password: user.password }),
+  });
+  if (!res.ok) throw new Error(`Couldn't sign in ${user.email}: ${res.status} ${await res.text()}`);
+  return (await res.json()) as Session;
+}
+
 /**
  * Signs `page` in as `user` without the login form (ALL-103): it gets a
  * session from the local Supabase and sets the cookies the app itself would
@@ -13,13 +27,7 @@ export type Credentials = { email: string; password: string };
  */
 export async function signIn(page: Page, user: Credentials = TEST_USER): Promise<void> {
   const { url, publishableKey } = localSupabase();
-  const res = await fetch(`${url}/auth/v1/token?grant_type=password`, {
-    method: "POST",
-    headers: { apikey: publishableKey, "Content-Type": "application/json" },
-    body: JSON.stringify(user),
-  });
-  if (!res.ok) throw new Error(`Couldn't sign in ${user.email}: ${res.status} ${await res.text()}`);
-  const { access_token, refresh_token } = (await res.json()) as { access_token: string; refresh_token: string };
+  const { access_token, refresh_token } = await session(user);
 
   const jar = new Map<string, string>();
   const client = createServerClient(url, publishableKey, {

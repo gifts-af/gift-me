@@ -3,7 +3,7 @@ import { createFreshUser } from "./fresh-user";
 import { localSupabase } from "./local-supabase";
 import { phoneLayoutProblems } from "./phone-layout";
 import { saveOneGiftList } from "./seed";
-import { signIn } from "./sign-in";
+import { session, signIn } from "./sign-in";
 
 // ALL-63: your own address and sharing it, against the local Supabase. Every
 // test makes its own accounts, because the table has one row per account and
@@ -21,15 +21,7 @@ const STREET = "44 Elm St";
 type User = { email: string; password: string };
 type Row = { city: string; address_line1: string; share_for_gifts: boolean; country: string; phone: string | null; address_checked_at: string | null };
 
-async function userId(user: User): Promise<string> {
-  const res = await fetch(`${supabase.url}/auth/v1/token?grant_type=password`, {
-    method: "POST",
-    headers: { apikey: supabase.publishableKey, "Content-Type": "application/json" },
-    body: JSON.stringify(user),
-  });
-  if (!res.ok) throw new Error(`Couldn't sign in: ${res.status}`);
-  return ((await res.json()) as { user: { id: string } }).user.id;
-}
+const userId = async (user: User) => (await session(user)).user.id;
 
 async function row(id: string): Promise<Row | null> {
   const res = await fetch(`${supabase.url}/rest/v1/account_addresses?user_id=eq.${id}`, { headers: service });

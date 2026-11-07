@@ -82,13 +82,14 @@ test.describe("which bar each page gets", () => {
     ] as const) {
       await test.step(path, async () => {
         await page.goto(path);
-        await expect(page.getByRole("button", { name: "Account" })).toBeVisible();
-        await expect(page.getByRole("button", { name: /Switch to/ })).toHaveCount(0);
+        // Soft, so one wrong page doesn't hide the others.
+        await expect.soft(page.getByRole("button", { name: "Account" })).toBeVisible();
+        await expect.soft(page.getByRole("button", { name: /Switch to/ })).toHaveCount(0);
         for (const name of ["Get", "Give"]) {
           const tab = page.getByRole("navigation", { name: "Main" }).getByRole("link", { name, exact: true });
-          await expect(tab).toBeVisible();
-          if (name === current) await expect(tab).toHaveAttribute("aria-current", "page");
-          else await expect(tab).not.toHaveAttribute("aria-current");
+          await expect.soft(tab).toBeVisible();
+          if (name === current) await expect.soft(tab).toHaveAttribute("aria-current", "page");
+          else await expect.soft(tab).not.toHaveAttribute("aria-current");
         }
       });
     }

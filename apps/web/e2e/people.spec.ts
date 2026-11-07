@@ -4,7 +4,7 @@ import { SECOND_USER, TEST_USER } from "./test-user";
 import { createFreshUser } from "./fresh-user";
 import { scrollsSideways } from "./phone-layout";
 import { addMother } from "./seed";
-import { signIn } from "./sign-in";
+import { session, signIn } from "./sign-in";
 
 // ALL-21: add someone, see their card, switch occasions and budgets, link their
 // list, delete them. On a phone, as TEST_USER, against the local Supabase.
@@ -15,14 +15,8 @@ test.use({ viewport: { width: 375, height: 812 } });
 const supabase = localSupabase();
 
 async function signInApi(user: { email: string; password: string }): Promise<{ token: string; id: string }> {
-  const res = await fetch(`${supabase.url}/auth/v1/token?grant_type=password`, {
-    method: "POST",
-    headers: { apikey: supabase.publishableKey, "Content-Type": "application/json" },
-    body: JSON.stringify({ email: user.email, password: user.password }),
-  });
-  if (!res.ok) throw new Error(`Couldn't sign in ${user.email}: ${res.status} ${await res.text()}`);
-  const body = (await res.json()) as { access_token: string; user: { id: string } };
-  return { token: body.access_token, id: body.user.id };
+  const { access_token, user: { id } } = await session(user);
+  return { token: access_token, id };
 }
 
 // Removes any person with this name a failed earlier run left behind (service role, so no RLS).

@@ -9,7 +9,8 @@ const isDark = (page: import("@playwright/test").Page) =>
 test.describe("a phone that reports dark", () => {
   test.use({ colorScheme: "dark" });
 
-  test("starts dark, switches to light, and stays light across pages and visits", async ({ page }) => {
+  // @layout: the only check that dark mode works on Android and desktop too (ALL-118).
+  test("starts dark, switches to light, and stays light across pages and visits", { tag: "@layout" }, async ({ page }) => {
     await page.goto("/");
     expect(await isDark(page)).toBe(true);
     await page.getByRole("button", { name: "Switch to light mode" }).click();

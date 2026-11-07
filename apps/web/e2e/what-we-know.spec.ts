@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { localSupabase } from "./local-supabase";
 import { phoneLayoutProblems } from "./phone-layout";
 import { SECOND_USER, TEST_USER } from "./test-user";
-import { signIn } from "./sign-in";
+import { session, signIn } from "./sign-in";
 
 // ALL-25: a person's page lists the AI's suggestions from captures apart from
 // anything else, and Remove takes one away for good. The facts are seeded
@@ -29,14 +29,7 @@ async function rest(path: string, init: RequestInit & { profile?: string; merge?
 
 type User = typeof TEST_USER;
 
-async function userIdOf(user: User): Promise<string> {
-  const res = await fetch(`${supabase.url}/auth/v1/token?grant_type=password`, {
-    method: "POST",
-    headers: { apikey: supabase.publishableKey, "Content-Type": "application/json" },
-    body: JSON.stringify({ email: user.email, password: user.password }),
-  });
-  return ((await res.json()) as { user: { id: string } }).user.id;
-}
+const userIdOf = async (user: User) => (await session(user)).user.id;
 
 /** A person with one read capture (two AI facts) and one capture that failed. */
 async function seed(name: string, { user = TEST_USER, paidFeatures = true }: { user?: User; paidFeatures?: boolean } = {}) {

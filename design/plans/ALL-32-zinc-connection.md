@@ -607,7 +607,7 @@ These failure modes need their own tests:
   - templates: the logo, one button and the alpha line on each; the heads-up warning only with `funding`
   - AC-11: no `wallet()` call without paid features
   - cancel link → cancelled, the round skipped, and the list claim released
-- [ ] **Step 2:** FAIL. **Step 3:** implement, and show the owner mock-ups of `hold_address` and `hold_trouble` (sample renders). **Step 4:** PASS. Run the e2e `emails` to refresh the phone-check screenshots.
+- [ ] **Step 2:** FAIL. **Step 3:** implement, and show the owner mock-ups of `hold_address` and `hold_trouble` (sample renders). **Step 4:** PASS. Run `pnpm email:html <folder>` to render the samples and look at them (the e2e `emails` check saves a screenshot only when it fails, since ALL-118).
 - [ ] **Step 5:** commit `feat(concierge): hold emails, retries and cancel link in the round engine (ALL-32)`.
 
 ### Task 8: Docs, runbook, review, PR (E9, E10, T44, T55)
