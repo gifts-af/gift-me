@@ -1,5 +1,3 @@
-// @vitest-environment jsdom
-// Browser code: it checks localStorage stays empty.
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CONTACTS_SCOPE, loadGoogleContacts, type GoogleIdentity } from "../import/google-contacts";
 

@@ -27,25 +27,13 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: ["./test/setup.ts"],
-    // Unit tests are split by file type (ALL-117). Starting a jsdom browser for
-    // every file was most of the run's time, and only component tests (.tsx)
-    // need one; the .ts tests are logic and run in plain Node.
     projects: [
       {
         extends: true,
         test: {
           name: "unit",
-          environment: "node",
-          include: ["**/*.{test,spec}.{js,ts}"],
+          include: ["**/*.{test,spec}.{js,jsx,ts,tsx}"],
           exclude: [...EXCLUDE, ...LOCAL_DB_TESTS],
-        },
-      },
-      {
-        extends: true,
-        test: {
-          name: "unit-dom",
-          include: ["**/*.{test,spec}.{jsx,tsx}"],
-          exclude: EXCLUDE,
         },
       },
       {
