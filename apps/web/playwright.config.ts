@@ -6,9 +6,9 @@ import { localSupabase } from "./e2e/local-supabase";
 // (`pnpm supabase start`). They run against a production build, as CI's do: under
 // `pnpm dev`, Next's overlay blocks clicks and slow compiling lets clicks land
 // before the page responds (ALL-99). Local runs build first; CI builds in an
-// earlier step. A server already on this port fails the run instead of being
-// reused, because it could be old code or another session's. To test a running
-// server on purpose, set E2E_BASE_URL.
+// earlier step. The run only uses the server it started itself: if anything else
+// holds the port, ours fails to start and so does the run (ALL-99, ALL-108). To
+// test a running server on purpose, set E2E_BASE_URL.
 const supabase = localSupabase();
 // E2E_PORT lets several worktrees run the browser tests at once.
 const port = Number(process.env.E2E_PORT ?? 3100);
@@ -47,7 +47,11 @@ export default defineConfig({
     ? undefined
     : {
         command: CI ? `pnpm start --port ${port}` : `pnpm build && pnpm start --port ${port}`,
-        url: `http://localhost:${port}/auth/login`,
+        // Wait for this run's own server to say it's listening, not for the port
+        // to answer: another checkout can take the port during the ~30 s build, and
+        // a URL check would then pass on its server (ALL-108). If ours can't start
+        // (EADDRINUSE), it exits and the run fails.
+        wait: { stdout: /Ready in/ },
         reuseExistingServer: false,
         timeout: 120_000,
         env: {
