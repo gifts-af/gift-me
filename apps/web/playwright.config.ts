@@ -25,6 +25,8 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: CI,
   retries: CI ? 1 : 0,
+  // CI's runner has 4 cores; Playwright's default would use only 2 (ALL-117).
+  workers: CI ? 4 : undefined,
   reporter: CI ? [["github"], ["list"]] : "list",
   use: {
     baseURL: process.env.E2E_BASE_URL ?? `http://localhost:${port}`,

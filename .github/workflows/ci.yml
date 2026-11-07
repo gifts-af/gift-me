@@ -1,28 +1,23 @@
 name: CI
 
 on:
+  # The PR title check lives in pr-title.yml, so editing a title doesn't re-run
+  # everything here (ALL-117).
   pull_request:
-    # "edited" re-runs the check when a PR title is fixed.
-    types: [opened, synchronize, reopened, edited]
   push:
     branches: [main]
+    # Docs are pushed straight to main and change no code, so they don't need
+    # the tests (ALL-117). PRs aren't filtered: "check" is required to merge,
+    # and a filtered-out run would leave it waiting forever.
+    paths-ignore:
+      - "planning/**"
+      - "design/**"
+      - "**/*.md"
 
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      # The PR title becomes the squash commit on main (CLAUDE.md > Git).
-      - name: PR title follows Conventional Commits and names its ticket
-        if: github.event_name == 'pull_request'
-        env:
-          TITLE: ${{ github.event.pull_request.title }}
-        run: |
-          pattern='^(feat|fix|docs|refactor|test|chore|ci|perf)(\([a-z0-9-]+\))?!?: .+ \(ALL-[0-9]+(, ALL-[0-9]+)*\)$'
-          if [[ ! "$TITLE" =~ $pattern ]]; then
-            echo "::error::PR title \"$TITLE\" should look like \"feat: what changed (ALL-19)\". See CLAUDE.md > Git."
-            exit 1
-          fi
-
       - uses: actions/checkout@v7
 
       # Uses the pnpm version from package.json "packageManager".
