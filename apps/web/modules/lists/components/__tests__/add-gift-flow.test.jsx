@@ -6,7 +6,10 @@ import AddGiftPanel from "../add-gift-panel.jsx";
 async function lookUp(url) {
   const onAdd = vi.fn();
   render(<AddGiftPanel onAdd={onAdd} />);
-  await userEvent.type(screen.getByLabelText("Paste a link"), url);
+  // Paste, as a person does: typing a long URL a key at a time made this the
+  // slowest unit test file (ALL-117).
+  await userEvent.click(screen.getByLabelText("Paste a link"));
+  await userEvent.paste(url);
   await userEvent.click(screen.getByRole("button", { name: "Add" }));
   return onAdd;
 }
@@ -88,7 +91,8 @@ describe("adding a gift from another store while signed in (ALL-10)", () => {
   async function lookUpWith(readStorePage, url) {
     const onAdd = vi.fn();
     render(<AddGiftPanel onAdd={onAdd} readStorePage={readStorePage} />);
-    await userEvent.type(screen.getByLabelText("Paste a link"), url);
+    await userEvent.click(screen.getByLabelText("Paste a link"));
+    await userEvent.paste(url);
     await userEvent.click(screen.getByRole("button", { name: "Add" }));
     return onAdd;
   }
@@ -156,7 +160,7 @@ describe("pasting a new link starts a fresh draft (ALL-91)", () => {
   async function paste(url) {
     const field = screen.getByLabelText("Paste a link");
     await userEvent.clear(field);
-    await userEvent.type(field, url);
+    await userEvent.paste(url);
     await userEvent.click(screen.getByRole("button", { name: "Add" }));
   }
 
