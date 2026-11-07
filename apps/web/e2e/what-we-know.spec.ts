@@ -72,8 +72,18 @@ async function seed(name: string, { user = TEST_USER, paidFeatures = true }: { u
   return { personId: person.id as string, vise: facts[0].id as string };
 }
 
-test("facts show by category with their source, and can be turned off, turned on and deleted", { tag: "@layout" }, async ({ page }, testInfo) => {
+// The page's layout on every browser; what the buttons do runs on the iPhone only (ALL-118).
+test("a person's facts, with an AI suggestion and an unread capture, fit the screen", { tag: "@layout" }, async ({ page }, testInfo) => {
   // The projects run at once as the same user, so each gets its own Dad.
+  const { personId } = await seed(`Dad L ${testInfo.project.name}`);
+  await signIn(page);
+  await page.goto(`/people/${personId}`);
+  await expect(page.getByRole("region", { name: "Wants" }).getByText("a new rotary fly-tying vise")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Read it now" })).toBeVisible();
+  expect(await phoneLayoutProblems(page)).toEqual([]);
+});
+
+test("facts show by category with their source, and can be turned off, turned on and deleted", async ({ page }, testInfo) => {
   const { personId, vise } = await seed(`Dad ${testInfo.project.name}`);
   await signIn(page);
   await page.goto(`/people/${personId}`);
@@ -86,9 +96,6 @@ test("facts show by category with their source, and can be turned off, turned on
   await expect(page.getByText("1 capture hasn't been read.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Read it now" })).toBeVisible();
   await expect(page.getByRole("note")).toHaveText("Alpha: we read each capture with AI, which spends real money, about 2¢ each.");
-  expect(await phoneLayoutProblems(page)).toEqual([]);
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
-  expect(overflow).toBeLessThanOrEqual(0);
 
   // Turn off (AC-5): gone from the profile, kept so the AI won't suggest it again.
   await wants.getByRole("button", { name: "Edit a new rotary fly-tying vise" }).click();

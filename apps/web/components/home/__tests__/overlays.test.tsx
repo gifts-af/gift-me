@@ -85,6 +85,16 @@ describe("feedback overlay", () => {
     expect(within(dialog).getByLabelText(/Your email/)).not.toBeRequired();
   });
 
+  // Moved down from e2e/home.spec.ts (ALL-118).
+  it("closes on Esc and puts focus back on the button", async () => {
+    render(<FeedbackButton />);
+    const open = screen.getByRole("button", { name: "Send feedback" });
+    fireEvent.click(open);
+    fireEvent.keyDown(screen.getByRole("dialog", { name: "Tell us the sad story" }), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(open).toHaveFocus();
+  });
+
   it("shows what to fix when the message is empty, and stays open", async () => {
     submitFeedback.mockResolvedValue({ status: "invalid", errors: { message: "Tell us what happened." } });
     render(<FeedbackButton />);

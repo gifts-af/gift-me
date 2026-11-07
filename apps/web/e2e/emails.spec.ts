@@ -59,21 +59,29 @@ test("every email sample was rendered: 28 concierge, five forms (ALL-71, ALL-32)
   );
 });
 
-for (const colorScheme of ["light", "dark"] as const) {
-  for (const { name, html } of samples) {
-    test(`${name} email fits a phone (${colorScheme})`, { tag: "@layout" }, async ({ page }, testInfo) => {
+// One page per sample, checked in light and then dark (ALL-118): switching the
+// color scheme re-applies the email's media queries without loading it again.
+// A screenshot is taken only when a check fails, since screenshots were 40% of
+// this spec's time; to look at the emails themselves, open `pnpm email:html`'s files.
+for (const { name, html } of samples) {
+  test(`${name} email fits a phone, light and dark`, { tag: "@layout" }, async ({ page }, testInfo) => {
+    await page.setContent(html);
+    for (const colorScheme of ["light", "dark"] as const) {
       await page.emulateMedia({ colorScheme });
-      await page.setContent(html);
-      await page.screenshot({
-        path: testInfo.outputPath(`${name}-${colorScheme}.png`),
-        fullPage: true,
-      });
-      expect(await phoneLayoutProblems(page)).toEqual([]);
-    });
-  }
+      const problems = await phoneLayoutProblems(page);
+      if (problems.length > 0) {
+        const file = testInfo.outputPath(`${name}-${colorScheme}.png`);
+        await page.screenshot({ path: file, fullPage: true });
+        await testInfo.attach(`${name}-${colorScheme}.png`, { path: file, contentType: "image/png" });
+      }
+      expect.soft(problems, `${name} (${colorScheme})`).toEqual([]);
+    }
+  });
 }
 
-test("the checks catch a broken email", { tag: "@layout" }, async ({ page }) => {
+// This checks the checker, so one browser is enough (ALL-118).
+test("the checks catch a broken email", { tag: "@layout" }, async ({ page, browserName }) => {
+  test.skip(browserName !== "webkit", "tests the helper, not the email");
   await page.setContent(
     `<meta name="viewport" content="width=device-width, initial-scale=1">` +
       `<body><table style="width:700px"><tr><td>Too wide for any phone</td></tr></table>` +

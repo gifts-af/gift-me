@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { createFreshUser } from "./fresh-user";
 import { phoneLayoutProblems } from "./phone-layout";
+import { addMother } from "./seed";
 import { signIn } from "./sign-in";
 
 // ALL-95: one bar with Get and Give on every signed-in page.
@@ -18,30 +19,19 @@ const barAndLogo = async (page: Page) => {
   return { barY: bar?.y, barHeight: bar?.height, logoX: logo?.x, logoY: logo?.y };
 };
 
+// The account menu's items are a component test (components/app-shell/__tests__/account-menu.test.tsx, ALL-118).
 test.describe("My list", () => {
-  test("a signed-out visitor gets the sun/moon, with no tabs or account menu", async ({ page }) => {
+  test("the bar is the same size and the logo in the same spot, signed out or in", { tag: "@layout" }, async ({ page }) => {
     await page.goto("/lists");
+    // Signed out: the sun/moon, with no tabs or account menu.
     await expect(page.getByRole("button", { name: /Switch to/ })).toBeVisible();
     await expect(page.getByRole("link", { name: "Get" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Account" })).toHaveCount(0);
-  });
-
-  test("the bar is the same size and the logo in the same spot, signed out or in", { tag: "@layout" }, async ({ page }) => {
-    await page.goto("/lists");
-    await expect(page.getByRole("button", { name: /Switch to/ })).toBeVisible();
     const signedOut = await barAndLogo(page);
     await signIn(page);
     await page.goto("/lists");
     await expect(page.getByRole("link", { name: "Get" })).toHaveAttribute("aria-current", "page");
     expect(await barAndLogo(page)).toEqual(signedOut);
-  });
-
-  test("the account menu is there, with Settings and Sign out", async ({ page }) => {
-    await signIn(page);
-    await page.goto("/lists");
-    await page.getByRole("button", { name: "Account" }).click();
-    await expect(page.getByRole("menuitem", { name: "Settings" })).toBeVisible();
-    await expect(page.getByRole("menuitem", { name: "Sign out" })).toBeVisible();
   });
 
   test("pressing Give with unsaved changes still asks first", async ({ page }) => {
@@ -79,27 +69,30 @@ test("Sign out with unsaved changes asks first, and staying keeps the gift and t
 });
 
 test.describe("which bar each page gets", () => {
-  for (const [path, current] of [
-    ["/", "Give"],
-    ["/lists", "Get"],
-    ["/people/new", "Give"],
-    ["/people/import", "Give"],
-    ["/settings", null],
-    ["/extension/connect", null],
-  ] as const) {
-    test(`${path} has the tabs and account menu`, async ({ page }) => {
-      await signIn(page);
-      await page.goto(path);
-      await expect(page.getByRole("button", { name: "Account" })).toBeVisible();
-      await expect(page.getByRole("button", { name: /Switch to/ })).toHaveCount(0);
-      for (const name of ["Get", "Give"]) {
-        const tab = page.getByRole("navigation", { name: "Main" }).getByRole("link", { name, exact: true });
-        await expect(tab).toBeVisible();
-        if (name === current) await expect(tab).toHaveAttribute("aria-current", "page");
-        else await expect(tab).not.toHaveAttribute("aria-current");
-      }
-    });
-  }
+  // One test, one sign-in, every page (ALL-118: was one test per page).
+  test("every signed-in page has the tabs and account menu, with the right tab marked", async ({ page }) => {
+    await signIn(page);
+    for (const [path, current] of [
+      ["/", "Give"],
+      ["/lists", "Get"],
+      ["/people/new", "Give"],
+      ["/people/import", "Give"],
+      ["/settings", null],
+      ["/extension/connect", null],
+    ] as const) {
+      await test.step(path, async () => {
+        await page.goto(path);
+        await expect(page.getByRole("button", { name: "Account" })).toBeVisible();
+        await expect(page.getByRole("button", { name: /Switch to/ })).toHaveCount(0);
+        for (const name of ["Get", "Give"]) {
+          const tab = page.getByRole("navigation", { name: "Main" }).getByRole("link", { name, exact: true });
+          await expect(tab).toBeVisible();
+          if (name === current) await expect(tab).toHaveAttribute("aria-current", "page");
+          else await expect(tab).not.toHaveAttribute("aria-current");
+        }
+      });
+    }
+  });
 
   test("a shared list has no tabs or account menu, signed out or in", async ({ page }) => {
     const owner = await createFreshUser();
@@ -191,17 +184,15 @@ test.describe("at 320 px, the narrowest phone", { tag: "@layout" }, () => {
     }
   });
 
+  // Both add their person through the API and go straight to the page: adding
+  // through the form is people.spec.ts's job, and clicking then jumping raced
+  // the app's own navigation (ALL-111).
   test("a very long name in the back link stays on screen", async ({ page }) => {
-    await signIn(page, await createFreshUser());
-    await page.goto("/");
+    const user = await createFreshUser();
     const name = "Bartholomew".repeat(5);
-    await page.getByRole("link", { name: "Add someone you buy for" }).first().click();
-    await page.getByLabel("Name").fill(name);
-    await page.getByLabel("Who are they to you?").selectOption({ label: "Mother" });
-    await page.getByRole("button", { name: `Add ${name}` }).click();
-    await page.getByRole("link", { name, exact: true }).click();
-    await expect(page).toHaveURL(/\/people\/.+/);
-    await page.goto(`${page.url()}/questions`);
+    const personId = await addMother(user, name);
+    await signIn(page, user);
+    await page.goto(`/people/${personId}/questions`);
     const back = page.getByRole("main").getByRole("link", { name, exact: true });
     await expect(back).toBeVisible();
     const box = await back.boundingBox();
@@ -210,20 +201,14 @@ test.describe("at 320 px, the narrowest phone", { tag: "@layout" }, () => {
   });
 
   test("a person's page and their questions fit, with the back link in the page", async ({ page }) => {
-    await signIn(page, await createFreshUser());
-    await page.goto("/");
-    await page.getByRole("link", { name: "Add someone you buy for" }).first().click();
-    await page.getByLabel("Name").fill("Ada");
-    await page.getByLabel("Who are they to you?").selectOption({ label: "Mother" });
-    await page.getByRole("button", { name: "Add Ada" }).click();
-    await page.getByRole("link", { name: "Ada", exact: true }).click();
+    const user = await createFreshUser();
+    const personId = await addMother(user, "Ada");
+    await signIn(page, user);
+    await page.goto(`/people/${personId}`);
     await expect(page.getByRole("link", { name: "People" })).toBeVisible();
-    await expect(page).toHaveURL(/\/people\/.+/);
-    // A full load: pages kept hidden after moving around would count as 0 px tall.
-    await page.reload();
     await expect(page.getByRole("link", { name: "Give" })).toHaveAttribute("aria-current", "page");
     expect(await phoneLayoutProblems(page)).toEqual([]);
-    await page.goto(`${page.url()}/questions`);
+    await page.goto(`/people/${personId}/questions`);
     await expect(page.getByRole("link", { name: "Ada" })).toBeVisible();
     expect(await phoneLayoutProblems(page)).toEqual([]);
   });

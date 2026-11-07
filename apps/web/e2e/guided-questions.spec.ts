@@ -53,22 +53,31 @@ const box = (page: Page, name: string) => page.getByRole("textbox", { name });
 const INTERESTS = "What are they into right now?";
 const WANTS = "Anything they've said they want or need?";
 
-test("a new person gets questions, and answering raises the meter (AC-1, AC-2)", { tag: "@layout" }, async ({ page }, info) => {
+// The two pages' layout on every browser; answering runs on the iPhone only (ALL-118).
+test("the readiness meter and the questions fit the screen", { tag: "@layout" }, async ({ page }, info) => {
   const personId = await newPerson(`Sam Q ${info.project.name}`);
+  await signIn(page);
+  await page.goto(`/people/${personId}`);
+  await expect(page.getByText("Just starting")).toBeVisible();
+  expect(await phoneLayoutProblems(page)).toEqual([]);
+  await page.goto(`/people/${personId}/questions`);
+  await expect(page.getByRole("textbox")).toHaveCount(5);
+  expect(await phoneLayoutProblems(page)).toEqual([]);
+});
+
+test("a new person gets questions, and answering raises the meter (AC-1, AC-2)", async ({ page }, info) => {
+  const personId = await newPerson(`Sam A ${info.project.name}`);
   await signIn(page);
   await page.goto(`/people/${personId}`);
 
   const meter = page.getByRole("meter");
   await expect(meter).toHaveAttribute("aria-valuenow", "0");
   await expect(page.getByText("Just starting")).toBeVisible();
-  expect(await phoneLayoutProblems(page)).toEqual([]);
   await page.getByRole("link", { name: "Answer 5 questions" }).click();
-
   await expect(page.getByRole("textbox")).toHaveCount(5);
   // A fresh load: after in-app navigation the last page lingers, hidden, in the DOM.
   await page.reload();
   await expect(page.getByRole("textbox")).toHaveCount(5);
-  expect(await phoneLayoutProblems(page)).toEqual([]);
 
   await box(page, INTERESTS).fill("fly fishing, crime podcasts");
   await box(page, WANTS).fill("a new vise");

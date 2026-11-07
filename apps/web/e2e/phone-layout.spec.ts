@@ -1,6 +1,10 @@
 import { expect, test } from "@playwright/test";
 import { phoneLayoutProblems, scrollsSideways } from "./phone-layout";
 
+// These check the checker, so one browser is enough: the iPhone's WebKit
+// (ALL-118). They keep the @layout tag so the helpers' own guard lets them run.
+test.skip(({ browserName }) => browserName !== "webkit", "tests the helper, not a page");
+
 test("flags a visible link that's too short to tap, even at zero height", { tag: "@layout" }, async ({ page }) => {
   await page.setContent(`<a href="#" style="display:block;height:0;overflow:hidden">Collapsed</a>`);
   expect(await phoneLayoutProblems(page)).toEqual(['"Collapsed" is 0.0px tall, under 44px to tap']);
