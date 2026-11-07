@@ -1,0 +1,24 @@
+name: PR title
+
+# Its own workflow so that fixing a title re-runs only this, not the whole of
+# ci.yml (ALL-117). Required to merge, like ci.yml's "check".
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions: {}
+
+jobs:
+  pr-title:
+    runs-on: ubuntu-latest
+    steps:
+      # The PR title becomes the squash commit on main (CLAUDE.md > Git).
+      - name: PR title follows Conventional Commits and names its ticket
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          pattern='^(feat|fix|docs|refactor|test|chore|ci|perf)(\([a-z0-9-]+\))?!?: .+ \(ALL-[0-9]+(, ALL-[0-9]+)*\)$'
+          if [[ ! "$TITLE" =~ $pattern ]]; then
+            echo "::error::PR title \"$TITLE\" should look like \"feat: what changed (ALL-19)\". See CLAUDE.md > Git."
+            exit 1
+          fi
