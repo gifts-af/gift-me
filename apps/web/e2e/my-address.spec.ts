@@ -61,13 +61,15 @@ async function saveFirstList(page: Page) {
   await expect(page.getByText("Unsaved changes")).toHaveCount(0);
 }
 
-async function fillAddress(page: Page) {
-  await page.getByLabel("First name").fill("Sam");
-  await page.getByLabel("Last name").fill("Rivera");
-  await page.getByLabel("Street address").fill(STREET);
-  await page.getByLabel("City").fill("Columbus");
-  await page.getByLabel("State").selectOption("OH");
-  await page.getByLabel("ZIP code").fill("43215");
+// `within` narrows it to one form, such as the share dialog, when another
+// address form is still in the page, hidden, from a route visited earlier (ALL-119).
+async function fillAddress(within: Page | Locator) {
+  await within.getByLabel("First name").fill("Sam");
+  await within.getByLabel("Last name").fill("Rivera");
+  await within.getByLabel("Street address").fill(STREET);
+  await within.getByLabel("City").fill("Columbus");
+  await within.getByLabel("State").selectOption("OH");
+  await within.getByLabel("ZIP code").fill("43215");
 }
 
 // A tap before React attaches to the page does nothing, so wait for that rather
@@ -284,8 +286,10 @@ test("Settings shows the new address after sharing from the list, with the form 
 
   await page.getByRole("link", { name: "Get", exact: true }).click();
   await shareSwitch(page).click();
-  await fillAddress(page);
-  await page.getByRole("dialog").getByRole("button", { name: "Save and share" }).click();
+  // Settings' open form is still in the page, hidden, so fill the dialog's fields only.
+  const dialog = page.getByRole("dialog");
+  await fillAddress(dialog);
+  await dialog.getByRole("button", { name: "Save and share" }).click();
   await expect(shareSwitch(page)).toBeChecked();
 
   await page.getByRole("link", { name: "Change my address" }).click();
