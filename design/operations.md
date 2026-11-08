@@ -77,6 +77,7 @@ pnpm db:types          # regenerate packages/core/src/database.types.ts after ch
 pnpm db:push:dev       # apply new migrations to dev (CI does this on every merge to main; by hand only to recover)
 pnpm db:push:prod      # apply new migrations to prod (same; add --dry-run to see what would run)
 pnpm live-check        # signed-in checks on giftsaf.com with the shared test account (needs `pnpm supabase login`; see Production test account)
+pnpm gallery          # screenshot the main screens (phone, phone dark, desktop) and every email into apps/web/gallery/index.html, for reviewing by eye. Needs `pnpm supabase start`; builds like the browser tests (E2E_PORT works too)
 pnpm ai:eval           # check capture extraction against the fixtures with the real model (~10¢, needs AI_GATEWAY_API_KEY; not in CI)
 ```
 
@@ -85,6 +86,11 @@ Write new migrations with `pnpm supabase migration new <name>` and test them loc
 **Before the first migration push to a hosted project (`dev` or `prod`):** `config.toml` only exposes the `concierge` and `lists` schemas locally. On each hosted project, add both under Project Settings > Data API > Exposed schemas (admin, as allensforever711), or the app's queries fail with `PGRST106`. Do it **right after** pushing the migration that creates the schema, never before. Exposing a schema that doesn't exist yet takes the whole Data API down (every request gets a 503; tested locally on 2026-10-25). That project also needs Postgres 15 or later; the migrations use `on delete set null (column)`.
 
 **Browser tests (Playwright):** with the local database running, `pnpm --filter @gifts-af/web e2e`. They sign in as a throwaway local account (created for you, email and password, since local Supabase has no Google) at phone width (375 px). They build the app first (about 30 seconds, and type errors stop the run) and test that production build, as CI's `e2e` job does. They need port 3100 free: the run waits for its own server to start, so if anything else holds the port, even one taken during the build, the run fails rather than testing someone else's code (ALL-108). Set `E2E_PORT` to use another port, so several worktrees can run them at once. To test a server that's already running, set `E2E_BASE_URL`. CI keeps the downloaded browsers in a cache until `pnpm-lock.yaml` changes, so most runs install only the system packages the browsers need; both install steps time out after 15 minutes (the system packages come from Ubuntu's mirror, which can take 7 minutes or more), so a stuck download fails well short of the hour-long hangs we used to see and can be re-run (ALL-100).
+
+**Reviewing screens and emails by eye:**
+
+- `pnpm gallery` signs in as a fresh local account with one person and a one-gift list, screenshots each screen on a phone (light and dark) and on desktop, screenshots every email on the phone, and writes `apps/web/gallery/index.html` (not committed). It's published as the [screens and emails page](https://claude.ai/artifact/9mrDvFAgoqxvxmzirJFCz6); CLAUDE.md > Updating the screens and emails page says how to republish it. To add a screen, add a line to `SIGNED_OUT` or `SIGNED_IN` in `apps/web/e2e/gallery.shots.ts`. It checks nothing and CI doesn't run it.
+- `/dev/emails` shows every email at phone and desktop widths in the running app: under `pnpm dev` and on any PR preview. Everywhere else, production included, returns 404. You need to be signed in.
 
 **Writing a browser test** (T62, ALL-103):
 

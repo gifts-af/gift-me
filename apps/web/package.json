@@ -12,6 +12,7 @@
     "check:bundle": "node scripts/check-bundle-secrets.mjs",
     "test:watch": "vitest",
     "e2e": "playwright test",
+    "gallery": "playwright test --config playwright.gallery.config.ts",
     "live-check": "node scripts/live-check.mjs",
     "email:samples": "tsx --conditions=react-server scripts/email-samples.ts",
     "email:html": "tsx --conditions=react-server scripts/email-html.ts",
