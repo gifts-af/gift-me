@@ -121,6 +121,10 @@ The owner's claude.ai account owns the page. To update it, a person needs **edit
 
 The round engine page, https://claude.ai/artifact/Edr5DRi5s53iRPfAsuSnd8, draws `design/technical-design.md` §4.1, §5 and §5.1. When a change touches round statuses, the tick or the reminder schedule, update the page in the same piece of work: read it with the Artifact tool (`action: "read"`), change it, and republish to the same URL. Never publish a copy. The doc stays the source; if the two disagree, the doc wins. Edit access works the same as for the roadmap page.
 
+## Updating the screens and emails page
+
+The screens and emails page, https://claude.ai/artifact/9mrDvFAgoqxvxmzirJFCz6, shows every main screen (phone light and dark, desktop) and every email, from `pnpm gallery` (`design/operations.md` > Reviewing screens and emails by eye). When a change alters how a screen or email looks, update the page in the same piece of work: run `pnpm gallery` with the local Supabase running, then republish `apps/web/gallery/index.html` to the same URL with the Artifact tool (`url` set to the link, `root` set to `apps/web/gallery`, and every PNG under it in `files`; pass `null` for a picture whose screen was removed). Never publish a copy. The app is the source; the page is a snapshot. Edit access works the same as for the roadmap page.
+
 ## Writing for the human in the loop
 
 - Lead with the answer or the decision, then the reasons.

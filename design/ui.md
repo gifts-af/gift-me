@@ -142,6 +142,8 @@ Headings in the app and in emails use balanced wrapping (`text-wrap: balance`, T
 
 ## Mock-ups
 
+**What's built, as it looks today:** the [screens and emails page](https://claude.ai/artifact/9mrDvFAgoqxvxmzirJFCz6) has every main screen on a phone (light and dark) and on desktop, and every email, taken from the real app by `pnpm gallery`. The mock-ups below are the designs; that page is the result.
+
 A clickable, phone-first prototype, published as a private shareable artifact page that the owner and Jim can each open on their phones and comment on. **Link:** [GiftsAF mock-ups](https://claude.ai/artifact/BvdSVB6RPatUPRbBDyPRzW) (private; shared with Jim from the page's Share menu). **Source:** [`design/mockups/ALL-41.html`](mockups/ALL-41.html); republish it to the same link after changes.
 
 **Zinc connection (ALL-32):** [`mockups/ALL-32-settings.html`](mockups/ALL-32-settings.html) (Settings, four states), [`mockups/ALL-32-emails.html`](mockups/ALL-32-emails.html) and [`mockups/ALL-32-emails-2.html`](mockups/ALL-32-emails-2.html) (hold, ordered and skipped emails).

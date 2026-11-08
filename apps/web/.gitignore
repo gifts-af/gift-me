@@ -12,6 +12,8 @@
 
 # testing
 /coverage
+# `pnpm gallery` screenshots (ALL-000)
+/gallery/
 
 # next.js
 /.next/
