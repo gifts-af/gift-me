@@ -117,6 +117,10 @@ The shareable roadmap is one claude.ai page: https://claude.ai/artifact/6D9ycNqh
 
 The owner's claude.ai account owns the page. To update it, a person needs **edit** access, which the owner grants from the page's Share menu. Without it, the publish is refused. In that case, tell the person to ask the owner for edit access. Don't publish a copy.
 
+## Updating the round engine page
+
+The round engine page, https://claude.ai/artifact/Edr5DRi5s53iRPfAsuSnd8, draws `design/technical-design.md` §4.1, §5 and §5.1. When a change touches round statuses, the tick or the reminder schedule, update the page in the same piece of work: read it with the Artifact tool (`action: "read"`), change it, and republish to the same URL. Never publish a copy. The doc stays the source; if the two disagree, the doc wins. Edit access works the same as for the roadmap page.
+
 ## Writing for the human in the loop
 
 - Lead with the answer or the decision, then the reasons.

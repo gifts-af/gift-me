@@ -268,6 +268,8 @@ flowchart LR
 
 A round has **nine statuses**: a straight main path plus three side statuses.
 
+**See it drawn:** the [round engine page](https://claude.ai/artifact/Edr5DRi5s53iRPfAsuSnd8) shows every status and arrow, the daily tick and the reminder clock. It's a view of §4.1, §5 and §5.1; this doc is the source.
+
 ```mermaid
 flowchart LR
   S[scheduled] --> G[generating] --> A[awaiting_approval] --> O[ordered] --> D[delivered] --> C[complete]
