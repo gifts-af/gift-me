@@ -30,10 +30,13 @@ select is(concierge.round_fail_count(:'r'), 0, 'a bad address isn''t counted as 
 select concierge.hold_orders(:'r', 'retry');
 select concierge.fail_order(:'o2', 'too_late');
 select is(concierge.round_fail_count(:'r'), 1, 'one failure');
-select is((select attention_reason from concierge.gift_rounds where id = :'r'), 'too_late', 'the round says too_late');
-select ok((select next_action_at <= now() from concierge.gift_rounds where id = :'r'), 'due now while fail:1:notice is unsent');
+-- ALL-116: a held gift (the bad address's replacement) decides the reason now; the
+-- failure is told by its own key whatever the reason.
+select is((select attention_reason from concierge.gift_rounds where id = :'r'), 'retry', 'the held gift decides the reason (ALL-116)');
+select ok((select next_action_at <= now() from concierge.gift_rounds where id = :'r'), 'due now while the failure is untold');
 
-insert into concierge.round_sends (round_id, user_id, step) values (:'r', :'u', 'fail:1:notice');
+-- An older-style key, sent after the failure (its own transaction in real life, so clock_timestamp here).
+insert into concierge.round_sends (round_id, user_id, step, created_at) values (:'r', :'u', 'fail:1:notice', clock_timestamp());
 select concierge.reconcile_round(:'r');
 select is((select next_action_at from concierge.gift_rounds where id = :'r'),
           ((now() at time zone 'utc')::date + 1)::timestamp at time zone 'utc', 'tomorrow once it was sent');

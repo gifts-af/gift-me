@@ -198,7 +198,8 @@ export class FakeRoundStore implements RoundStore {
       openQuestions: person.openQuestions ?? 0,
       ideas: this.ideas.get(roundId) ?? [],
       orders: [],
-      failCount: 0,
+      personRemoved: false,
+      closedEarly: false,
     };
   }
 
@@ -226,6 +227,12 @@ export class FakeRoundStore implements RoundStore {
     throw new Error("The money path isn't in the fake store");
   }
   async markHoldEmailed(): Promise<void> {
+    throw new Error("The money path isn't in the fake store");
+  }
+  async claimFailureNotices(): Promise<string[]> {
+    throw new Error("The money path isn't in the fake store");
+  }
+  async releaseFailureNotices(): Promise<void> {
     throw new Error("The money path isn't in the fake store");
   }
   /** Paid features on and Zinc connected; off unless a test says so. */

@@ -168,7 +168,7 @@ describe("WhatWeKnow", () => {
     setup(knowledge({ unread: 1 }));
     expect(screen.getByRole("button", { name: "Read it now" })).toBeInTheDocument();
     expect(screen.getByRole("note")).toHaveTextContent(
-      "Alpha: we read each capture with AI, which spends real money, about 2¢ each.",
+      "We read each capture with AI, which costs real money: about 2¢ each.",
     );
   });
 
@@ -177,7 +177,7 @@ describe("WhatWeKnow", () => {
     expect(screen.getByText("1 capture hasn't been read.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Read it now" })).not.toBeInTheDocument();
     expect(
-      screen.getByText("Reading captures spends real money, so during alpha it's only on for test accounts."),
+      screen.getByText("Reading captures costs real money, so for now it's only on for test accounts."),
     ).toBeInTheDocument();
   });
 

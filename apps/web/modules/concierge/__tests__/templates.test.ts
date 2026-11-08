@@ -77,14 +77,52 @@ describe("heads_up", () => {
 });
 
 describe("skipped", () => {
-  it("says nothing was bought and has one button", () => {
+  it("says nothing was bought, what happens next, and has one button; no apology when nobody chose", () => {
     const s = SAMPLE_DATA.skipped;
     const mail = TEMPLATES.skipped(s.data, s.links);
     expect(mail.subject).toBe("No gift for Mom's birthday this time");
-    expect(mail.text).toContain("No gift was chosen for Mom's birthday (Saturday, March 14), so nothing was bought.");
-    expect(mail.text).toContain("You can still buy something yourself. We'll be back for the next occasion.");
-    expect(mail.html).toContain("Open GiftsAF");
+    expect(mail.text).toContain(
+      "No gift was chosen for Mom's birthday on Saturday, March 14, so we didn't buy anything and you haven't been charged.",
+    );
+    expect(mail.text).toContain(
+      "What happens next: You can still pick something up yourself. We'll be in touch before Mom's next occasion.",
+    );
+    expect(mail.text).not.toContain("sorry");
+    expect(mail.html).toContain("Open Mom&#39;s page");
     expect(mail.html.match(/<a[\s>]/g)).toHaveLength(1);
+  });
+});
+
+// ─── ALL-116: bad news says sorry, what it means, what was charged, and what happens next ───
+
+describe.each([
+  "skipped-held",
+  "skipped-partial",
+  "needs_attention",
+  "price_up",
+  "out_of_stock",
+  "too_late",
+  "missed_on_us",
+  "failed_late",
+  "failed_several",
+  "hold_funds",
+  "hold_setup",
+  "hold_address",
+  "hold_trouble",
+  "hold_unconfirmed",
+] as const)("bad news: %s", (name) => {
+  const mail = (() => {
+    const s = SAMPLE_DATA.skipped;
+    if (name === "skipped-held") return TEMPLATES.skipped({ ...s.data, held: true }, s.links);
+    if (name === "skipped-partial") {
+      return TEMPLATES.skipped({ ...s.data, held: true, partial: { cancelled: ["Linen apron"], onItsWay: ["Mug"] } }, s.links);
+    }
+    return render(name);
+  })();
+  it("apologizes, says what was charged, and says what happens next", () => {
+    expect(mail.text).toMatch(/sorry/i);
+    expect(mail.text).toMatch(/haven't been charged|won't be charged/);
+    expect(mail.text).toContain("What happens next:");
   });
 });
 
@@ -152,41 +190,92 @@ describe("guided questions link (ALL-26 AC-10)", () => {
 // ─── ALL-32: holds and failures (approved mock-ups, design/mockups/ALL-32-emails*.html) ───
 
 const HOLDS = ["hold_funds", "hold_setup", "hold_address", "hold_trouble"] as const;
-const ALPHA = "Alpha:";
 
 describe.each(HOLDS)("hold email %s", (kind) => {
   const mail = render(kind);
-  it("carries the alpha line and a plain cancel link under the button", () => {
+  it("says the cost plainly, with no Alpha label (ALL-114), and a plain cancel link under the button", () => {
     const cancel = (SAMPLE_DATA[kind].links as { cancel: string }).cancel;
-    expect(mail.text).toContain(ALPHA);
+    expect(mail.text).toMatch(/we'll buy the gift: its price plus Zinc's \$1 fee\./);
     expect(mail.text).toContain(`Changed your mind? Cancel this gift: ${cancel}`);
     expect(mail.html.match(/<a[\s>]/g)).toHaveLength(2);
   });
 });
 
-describe("failed_late (S2: a failure after the round closed)", () => {
-  it("says the store couldn't place it, nothing was bought or charged for it, and it's too late to choose again", () => {
+it("no email says Alpha (ALL-114)", () => {
+  for (const kind of kinds) expect(render(kind).text).not.toContain("Alpha");
+});
+
+describe("failed_late (a failure after the round closed, or untold when it closed)", () => {
+  it("one gift: sorry, why, nothing charged, and too late to choose again", () => {
     const mail = render("failed_late");
-    expect(mail.subject).toBe("We couldn't buy Mom's gift");
+    expect(mail.subject).toBe("We're sorry, we couldn't buy Mom's gift");
     expect(mail.text).toContain(
-      "The store couldn't place the order for the Le Creuset mug set for Mom's birthday on Saturday, March 14, so nothing was bought or charged for it.",
+      "We know you were counting on the Le Creuset mug set for Mom's birthday on Saturday, March 14, and we're sorry it didn't work out. The store ran out. You haven't been charged for it.",
     );
-    expect(mail.text).toContain("It's too late to choose another gift through us this time, but you can still buy something yourself.");
+    expect(mail.text).toContain(
+      "What happens next: it's too late for us to send another gift in time, but you can still pick something up yourself. This round is now closed.",
+    );
     expect(mail.text).toContain("Open Mom's page:");
+  });
+
+  it("says the store couldn't place it when the reason isn't known", () => {
+    const s = SAMPLE_DATA.failed_late;
+    const mail = TEMPLATES.failed_late({ ...s.data, failed: [{ title: "Mug" }] }, s.links);
+    expect(mail.text).toContain("The store couldn't place the order. You haven't been charged for it.");
   });
 
   it("names a gift of the round that is on its way", () => {
     const s = SAMPLE_DATA.failed_late;
     const mail = TEMPLATES.failed_late({ ...s.data, onItsWay: ["Linen apron"] }, s.links);
-    expect(mail.text).toContain("The Linen apron is on its way.");
+    expect(mail.text).toContain("The Linen apron is ordered and on its way.");
+  });
+
+  it("several gifts: one email, a row with the reason for each (AC-15)", () => {
+    const s = SAMPLE_DATA.failed_late;
+    const failed = [
+      { title: "Mug", detail: "The price went up more than you allowed for." },
+      { title: "Apron", detail: "The store ran out." },
+    ];
+    const mail = TEMPLATES.failed_late({ ...s.data, failed }, s.links);
+    expect(mail.subject).toBe("We're sorry, we couldn't buy 2 of Mom's birthday gifts");
+    expect(mail.text).toContain("- Mug (The price went up more than you allowed for.)");
+    expect(mail.text).toContain("- Apron (The store ran out.)");
+    expect(mail.text).toContain("You haven't been charged for them.");
   });
 });
 
-describe.each(["hold_unconfirmed", "price_up", "out_of_stock", "too_late", "missed_on_us", "ordered", "failed_late"] as const)("%s", (kind) => {
-  it("has no cancel link or alpha line", () => {
-    const mail = render(kind);
-    expect(mail.text).not.toContain("Cancel this gift");
-    expect(mail.text).not.toContain(ALPHA);
+describe("failed_several (ALL-116: two or more failed while the round is open)", () => {
+  const s = SAMPLE_DATA.failed_several;
+  it("says how many were tried and failed, names what's on its way, and a row and link per gift", () => {
+    const mail = TEMPLATES.failed_several(s.data, s.links);
+    expect(mail.subject).toBe("Sorry, 2 of Mom's birthday gifts couldn't be bought");
+    expect(mail.text).toContain(
+      "We're sorry. We tried to order 3 gifts for Mom's birthday on Saturday, March 14, and 2 of them didn't go through. You haven't been charged for either.",
+    );
+    expect(mail.text).toContain("The good news: the Cast-iron herb planter is ordered and on its way.");
+    expect(mail.text).toContain("- Le Creuset mug set (The price went up more than you allowed for. Approve the new price, or choose another gift.)");
+    expect(mail.text).toContain(`Review the new price for the Le Creuset mug set: ${s.links.open}`);
+    expect(mail.text).toContain(`Choose another gift instead of the Linen apron: ${s.links.open}`);
+    expect(mail.text).toContain("Choose by Thursday, March 5 so it arrives in time.");
+    expect(mail.html.match(/background:#0f766e/g)).toHaveLength(1);
+  });
+
+  it("says neither when both of two failed, and leaves out the good news when nothing is on its way", () => {
+    const mail = TEMPLATES.failed_several({ ...s.data, tried: 2, onItsWay: undefined }, s.links);
+    expect(mail.text).toContain("and neither of them went through. You haven't been charged for either.");
+    expect(mail.text).not.toContain("good news");
+  });
+
+  it("says none, and them, when three of three failed", () => {
+    const three = [...s.data.failed, { title: "Vase", detail: "The store ran out. Choose another gift." }];
+    const mail = TEMPLATES.failed_several({ ...s.data, tried: 3, failed: three, onItsWay: undefined }, s.links);
+    expect(mail.text).toContain("and none of them went through. You haven't been charged for them.");
+  });
+});
+
+describe.each(["hold_unconfirmed", "price_up", "out_of_stock", "too_late", "missed_on_us", "ordered", "failed_late", "failed_several"] as const)("%s", (kind) => {
+  it("has no cancel link", () => {
+    expect(render(kind).text).not.toContain("Cancel this gift");
   });
 });
 
@@ -194,15 +283,19 @@ describe("hold_funds", () => {
   const s = SAMPLE_DATA.hold_funds;
   it("says what Zinc needs, what they have and the shortfall, and links the wallet", () => {
     const mail = TEMPLATES.hold_funds(s.data, s.links);
-    expect(mail.subject).toBe("Mom's gift is waiting on your Zinc balance");
-    expect(mail.text).toContain("Top up to send Mom's gift");
+    expect(mail.subject).toBe("Sorry, Mom's gift is waiting on your Zinc balance");
+    expect(mail.text).toContain("Sorry, we couldn't buy Mom's gift yet");
     expect(mail.text).toContain(
-      "You chose the Le Creuset mug set for Mom's birthday on Saturday, March 14. Zinc needs $46.20 in your balance to buy it (the gift with room for a small price change, plus Zinc's $1 fee). You have $12, so you're $34.20 short.",
+      "Sorry for the hold-up. You chose the Le Creuset mug set for Mom's birthday on Saturday, March 14, and there isn't enough in your Zinc balance to buy it yet. You haven't been charged.",
     );
-    expect(mail.text).toContain("Add funds in Zinc and we'll buy it as soon as we see them, usually within a day.");
+    expect(mail.text).toContain(
+      "Zinc needs $46.20 (the gift with room for a small price change, plus Zinc's $1 fee). You have $12, so you're $34.20 short.",
+    );
+    expect(mail.text).toContain("What happens next: add funds in Zinc and we'll buy it as soon as we see them, usually within a day.");
     expect(mail.text).toContain(`Top up your Zinc balance: ${s.data.walletUrl}`);
-    expect(mail.text).toContain("Alpha: topping up means we'll buy this gift, its price plus Zinc's $1 fee.");
-    expect(mail.text).toContain("To avoid this next time, turn on auto top-up in Zinc.");
+    expect(mail.text).toContain(
+      "Topping up means we'll buy the gift: its price plus Zinc's $1 fee. To avoid this next time, turn on auto top-up in Zinc.",
+    );
   });
 
   it("says still short after a partial top-up, and names a gift already on its way", () => {
@@ -215,71 +308,80 @@ describe("hold_funds", () => {
   it("says them for two gifts", () => {
     const mail = TEMPLATES.hold_funds({ ...s.data, giftTitles: ["Mug", "Apron"] }, s.links);
     expect(mail.text).toContain("You chose the Mug and the Apron for Mom's birthday");
-    expect(mail.text).toContain("to buy them");
+    expect(mail.text).toContain("to buy them yet");
   });
 });
 
-describe("the other gift emails match the mock-ups", () => {
+describe("the other gift emails match the approved wording (ALL-116)", () => {
   it("hold_setup", () => {
     const mail = render("hold_setup");
     expect(mail.subject).toBe("Finish setting up payment to send Mom's gift");
-    expect(mail.text).toContain("Finish setting up payment");
+    expect(mail.text).toContain("but payment isn't set up yet, so we couldn't buy it. You haven't been charged.");
     expect(mail.text).toContain("Connect Zinc and add your phone in Settings.");
     expect(mail.text).toContain("Finish setup:");
   });
 
   it("hold_address", () => {
     const mail = render("hold_address");
-    expect(mail.subject).toBe("Mom's gift needs an address");
+    expect(mail.subject).toBe("Sorry, Mom's gift needs an address");
     expect(mail.text).toContain(
-      "You chose the Le Creuset mug set for Mom's birthday on Saturday, March 14, but we don't have an address we can ship to.",
+      "You chose the Le Creuset mug set for Mom's birthday on Saturday, March 14, but we don't have an address we can ship to, so we haven't bought it yet.",
     );
     expect(mail.text).toContain("Fix the address:");
   });
 
   it("price_up", () => {
     const mail = render("price_up");
-    expect(mail.subject).toBe("The price of Mom's gift went up");
-    expect(mail.text).toContain("Mom's gift went up in price");
-    expect(mail.text).toContain("The price of the Le Creuset mug set went up more than we allowed for, so we didn't buy it and nothing was charged.");
+    expect(mail.subject).toBe("Sorry, the price of Mom's gift went up");
+    expect(mail.text).toContain(
+      "We're sorry. The price of the Le Creuset mug set for Mom's birthday on Saturday, March 14 went up more than you allowed for, so we didn't buy it and you haven't been charged.",
+    );
     expect(mail.text).toContain("Review the gift:");
-    expect(mail.text).toContain("Nothing is bought until you choose.");
+    expect(mail.text).toContain("Nothing is bought until you choose. Choose by Thursday, March 5 so it arrives in time.");
   });
 
   it("out_of_stock", () => {
     const mail = render("out_of_stock");
-    expect(mail.text).toContain("The store ran out of the Le Creuset mug set, so we didn't buy it and nothing was charged.");
+    expect(mail.text).toContain("The store ran out of the Le Creuset mug set for Mom's birthday on Saturday, March 14, so we didn't buy it");
+    expect(mail.text).toContain("choose another gift by Thursday, March 5 and we'll send it in time.");
     expect(mail.text).toContain("Choose another gift:");
   });
 
   it("too_late", () => {
     const mail = render("too_late");
-    expect(mail.subject).toBe("Mom's gift can't arrive in time");
-    expect(mail.text).toContain("Too late for Mom's gift");
+    expect(mail.subject).toBe("Sorry, Mom's gift can't arrive in time");
+    expect(mail.text).toContain("you can still choose something that ships faster, by Thursday, March 5.");
     expect(mail.text).toContain("See faster gifts:");
+  });
+
+  it("needs_attention: says when to choose again, or what happens next once there's nothing to choose", () => {
+    const s = SAMPLE_DATA.needs_attention;
+    expect(TEMPLATES.needs_attention(s.data, s.links).text).toContain("Choose another gift by Thursday, March 5 so it arrives in time.");
+    expect(TEMPLATES.needs_attention({ ...s.data, orderByText: undefined }, s.links).text).toContain(
+      "What happens next: You can still pick something up yourself.",
+    );
   });
 
   it("hold_unconfirmed", () => {
     const mail = render("hold_unconfirmed");
     expect(mail.subject).toBe("We're confirming Mom's gift with the store");
-    expect(mail.text).toContain("You won't be charged twice, and we'll email you as soon as we know.");
+    expect(mail.text).toContain("we'll email you as soon as we know. You won't be charged twice.");
     expect(mail.text).toContain("Open Mom's page:");
   });
 
   it("hold_trouble", () => {
     const mail = render("hold_trouble");
-    expect(mail.subject).toBe("We're having trouble ordering Mom's gift");
-    expect(mail.text).toContain("Still trying to order Mom's gift");
+    expect(mail.subject).toBe("Sorry, we're having trouble ordering Mom's gift");
+    expect(mail.text).toContain("Sorry, we're still trying to order Mom's gift");
   });
 
-  it("missed_on_us: on us, nothing bought or charged (owner)", () => {
+  it("missed_on_us: on us, sorry, nothing bought or charged (owner)", () => {
     const mail = render("missed_on_us");
-    expect(mail.subject).toBe("We couldn't send Mom's gift in time");
-    expect(mail.text).toContain("We couldn't send Mom's gift in time");
-    // Two paragraphs, as in the mock-up.
+    expect(mail.subject).toBe("We're sorry, we couldn't send Mom's gift in time");
     expect(mail.text).toContain(
-      "A problem on our side stopped us placing the order before it was too late to arrive.\n\nThat's on us. Nothing was bought and nothing was charged.",
+      "A problem on our side stopped us placing the order before it was too late to arrive.\n\nThat's on us, and we're sorry. Nothing was bought and you haven't been charged.",
     );
+    expect(mail.text).toContain("What happens next: we're looking into what went wrong.");
     expect(mail.text).toContain("Open Mom's page:");
   });
 
@@ -287,8 +389,9 @@ describe("the other gift emails match the mock-ups", () => {
     const s = SAMPLE_DATA.skipped;
     const mail = TEMPLATES.skipped({ ...s.data, held: true }, s.links);
     expect(mail.text).not.toContain("No gift was chosen");
+    expect(mail.subject).toBe("Sorry, we couldn't buy Mom's gift in time");
     expect(mail.text).toContain(
-      "The gift you chose for Mom's birthday (Saturday, March 14) couldn't be bought in time, so nothing was bought or charged.",
+      "We're sorry. The gift you chose for Mom's birthday on Saturday, March 14 couldn't be bought in time, so we didn't buy it and you haven't been charged.",
     );
   });
 });
@@ -315,16 +418,18 @@ describe("skipped, partly (a held gift cancelled at the deadline next to one on 
     const s = SAMPLE_DATA.skipped;
     const mail = TEMPLATES.skipped({ ...s.data, held: true, partial: { cancelled: ["Linen apron"], onItsWay: ["Le Creuset mug set"] } }, s.links);
     expect(mail.text).toContain(
-      "We couldn't buy the Linen apron for Mom in time, so we cancelled it. Nothing was charged for it. The Le Creuset mug set is on its way.",
+      "We're sorry. We couldn't buy the Linen apron for Mom's birthday in time, so we cancelled it. You haven't been charged for it.",
     );
+    expect(mail.text).toContain("The good news: the Le Creuset mug set is ordered and on its way.");
+    expect(mail.text).toContain("What happens next: you can still pick something up yourself in its place.");
     expect(mail.text).not.toContain("No gift");
   });
 
   it("says nothing about a gift that isn't confirmed yet", () => {
     const s = SAMPLE_DATA.skipped;
     const mail = TEMPLATES.skipped({ ...s.data, held: true, partial: { cancelled: ["Linen apron"], onItsWay: [] } }, s.links);
-    expect(mail.text).toContain("We cancelled one of Mom's gifts");
-    expect(mail.text).toContain("so we cancelled it. Nothing was charged for it.");
+    expect(mail.text).toContain("Sorry, we had to cancel one of Mom's gifts");
+    expect(mail.text).toContain("so we cancelled it. You haven't been charged for it.");
     expect(mail.text).not.toContain("on its way");
   });
 });

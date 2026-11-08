@@ -22,6 +22,8 @@ export type NotificationKind =
   | "missed_on_us"
   | "ordered"
   | "failed_late"
+  // ALL-116: two or more of a round's gifts failed, told together.
+  | "failed_several"
   // ALL-112: to a list owner, whose shared address a store couldn't use. Says nothing of a gift.
   | "check_your_address";
 
@@ -40,8 +42,12 @@ export type Funding = { dueText: string; haveText: string; atLeast: boolean; win
 
 /** The gifts the buyer chose, by title. */
 type Gifts = Occasion & { giftTitles: string[] };
-/** One failed gift. */
+/** One gift, by title. */
 type OneGift = Occasion & { giftTitle: string };
+/** One failed gift while the round is open; `orderByText`: the last day to choose again in time. */
+type Failure = OneGift & { orderByText: string };
+/** A failed gift in a summary (ALL-116): what happened, and the link text for what to do now. */
+export type FailedGift = { title: string; detail: string; action?: string };
 
 export type TemplateData = {
   test: Record<string, never>;
@@ -57,7 +63,8 @@ export type TemplateData = {
       });
   reminder: Occasion & Asks & { ideas: IdeaRow[] };
   final_notice: Occasion & { ideas: IdeaRow[]; orderByText: string };
-  needs_attention: Occasion & { reason: string };
+  /** `orderByText`: when the buyer can still choose again; absent once there's nothing to choose. */
+  needs_attention: Occasion & { reason: string; orderByText?: string };
   reaction_prompt: { personName: string; occasion: string; giftTitle: string };
   needs_address: Occasion & { reminder?: boolean };
   /**
@@ -81,14 +88,26 @@ export type TemplateData = {
   hold_address: Gifts & { feeText: string };
   hold_trouble: Gifts & { feeText: string };
   hold_unconfirmed: Gifts;
-  price_up: OneGift;
-  out_of_stock: OneGift;
-  too_late: OneGift;
+  price_up: Failure;
+  out_of_stock: Failure;
+  too_late: Failure;
   missed_on_us: Gifts;
   /** City only, never the full address. */
   ordered: OneGift & { cityText?: string };
-  /** A gift that failed after its round closed (too late to choose again); `onItsWay`: the round's other gifts placed. */
-  failed_late: OneGift & { onItsWay?: string[] };
+  /**
+   * Gifts that failed once their round closed, or untold when it closed (too late to choose
+   * again), with why when known; `onItsWay`: the round's other gifts placed.
+   */
+  failed_late: Occasion & {
+    failed: { title: string; detail?: string }[];
+    onItsWay?: string[];
+    /** Closed before its ship-by day (the cancel link, the occasion off, the person removed). */
+    closedEarly?: boolean;
+    /** The person was removed, so the button opens GiftsAF, not their page. */
+    personRemoved?: boolean;
+  };
+  /** ALL-116: `tried`, how many gifts were ordered in the round. */
+  failed_several: Occasion & { tried: number; failed: FailedGift[]; onItsWay?: string[]; orderByText: string };
   check_your_address: Record<string, never>;
 };
 
@@ -113,6 +132,8 @@ export type TemplateLinks = {
   missed_on_us: { open: string };
   ordered: { open: string };
   failed_late: { open: string };
+  // Until ALL-29, every gift's link opens the person's page too.
+  failed_several: { open: string };
   check_your_address: { open: string };
 };
 
@@ -120,18 +141,34 @@ const rowsOf = (ideas: IdeaRow[]) => ideas.map((i) => ({ title: `${i.title} · $
 
 const PRICES_NOTE = "Prices include shipping and tax.";
 
+// Bad news is told with an apology, what it means for the buyer, what was charged, and what
+// happens next (owner, 2026-11-08, ALL-116).
+const NEXT_TIME = (name: string) => `You can still pick something up yourself. We'll be in touch before ${name}'s next occasion.`;
+
 function skippedEmail(d: TemplateData["skipped"], links: TemplateLinks["skipped"]): RenderedEmail {
+  if (d.held) {
+    return {
+      subject: `Sorry, we couldn't buy ${d.personName}'s gift in time`,
+      ...renderEmail({
+        heading: `We're sorry, ${d.personName}'s gift couldn't be bought in time`,
+        paragraphs: [
+          `We're sorry. The gift you chose for ${d.personName}'s ${d.occasion} on ${d.dateText} couldn't be bought in time, so we didn't buy it and you haven't been charged.`,
+        ],
+        button: { label: `Open ${d.personName}'s page`, url: links.open },
+        footer: `What happens next: ${NEXT_TIME(d.personName)}`,
+      }),
+    };
+  }
+  // Not bad news on our side: nobody chose a gift. Plain, never blaming.
   return {
     subject: `No gift for ${d.personName}'s ${d.occasion} this time`,
     ...renderEmail({
-      heading: `No gift for ${d.personName}'s ${d.occasion}`,
+      heading: `No gift for ${d.personName}'s ${d.occasion} this time`,
       paragraphs: [
-        d.held
-          ? `The gift you chose for ${d.personName}'s ${d.occasion} (${d.dateText}) couldn't be bought in time, so nothing was bought or charged.`
-          : `No gift was chosen for ${d.personName}'s ${d.occasion} (${d.dateText}), so nothing was bought.`,
-        "You can still buy something yourself. We'll be back for the next occasion.",
+        `No gift was chosen for ${d.personName}'s ${d.occasion} on ${d.dateText}, so we didn't buy anything and you haven't been charged.`,
       ],
-      button: { label: `Open ${APP_NAME}`, url: links.open },
+      button: { label: `Open ${d.personName}'s page`, url: links.open },
+      footer: `What happens next: ${NEXT_TIME(d.personName)}`,
     }),
   };
 }
@@ -145,6 +182,14 @@ function giftList(titles: string[]): string {
 }
 
 const itOrThem = (titles: string[]) => (titles.length > 1 ? "them" : "it");
+
+/** "The Mug is ordered and on its way.", for the round's gifts already placed; nothing when none. */
+function onItsWayLine(titles: string[] | undefined, lead = ""): string[] {
+  if (!titles || titles.length === 0) return [];
+  const list = giftList(titles);
+  const sentence = `${titles.length > 1 ? `${list} are` : `${list} is`} ordered and on ${titles.length > 1 ? "their" : "its"} way.`;
+  return [lead ? `${lead}${sentence}` : capitalize(sentence)];
+}
 
 /**
  * Why a gift for a list owner's shared address ended (ALL-112), for the needs_attention email.
@@ -162,12 +207,15 @@ export function endedAddressReason(
   return ownerAsked ? `${ended} We'll ask ${personName} to check it, without mentioning a gift.` : ended;
 }
 
-/** Every hold email ends the same way (owner): what topping up or fixing it means, and how to back out. */
-function holdEnd(cancel: string, alpha: string) {
-  return { note: `Alpha: ${alpha}`, cancel: { before: "Changed your mind?", label: "Cancel this gift", url: cancel } };
+/**
+ * Every hold email ends the same way (owner): what it will cost once it's sorted, said plainly
+ * (ALL-114, folded into ALL-116), and how to back out.
+ */
+function holdEnd(cancel: string, cost: string) {
+  return { tip: cost, cancel: { before: "Changed your mind?", label: "Cancel this gift", url: cancel } };
 }
 
-const alphaBuy = (feeText: string) => `once this is sorted, we'll buy this gift, its price plus Zinc's ${feeText} fee.`;
+const costOnceSorted = (feeText: string) => `Once it's sorted, we'll buy the gift: its price plus Zinc's ${feeText} fee.`;
 
 /** The low-balance box and top-up link of the heads-up (AC-11). */
 function fundingParts(f: Funding | undefined) {
@@ -272,14 +320,14 @@ export const TEMPLATES: {
   }),
 
   needs_attention: (d, links) => ({
-    subject: `${d.personName}'s ${d.occasion} gift needs your attention`,
+    subject: `Sorry, there's a problem with ${d.personName}'s gift`,
     ...renderEmail({
-      heading: `${d.personName}'s gift needs your attention`,
-      paragraphs: [
-        `We couldn't finish the gift for ${d.personName}'s ${d.occasion} on ${d.dateText}: ${d.reason}`,
-        "Open it to see what to do next.",
-      ],
-      button: { label: "Open it", url: links.open },
+      heading: `Sorry, there's a problem with ${d.personName}'s gift`,
+      paragraphs: [`We're sorry. We couldn't finish the gift for ${d.personName}'s ${d.occasion} on ${d.dateText}: ${d.reason}`],
+      button: { label: `Open ${d.personName}'s page`, url: links.open },
+      footer: d.orderByText
+        ? `What happens next: nothing else is bought until you choose. Choose another gift by ${d.orderByText} so it arrives in time.`
+        : `What happens next: ${NEXT_TIME(d.personName)}`,
     }),
   }),
 
@@ -313,16 +361,15 @@ export const TEMPLATES: {
   skipped: (d, links) =>
     d.partial
       ? {
-          subject: `One of ${d.personName}'s gifts couldn't be bought in time`,
+          subject: `Sorry, we couldn't buy all of ${d.personName}'s gifts in time`,
           ...renderEmail({
-            heading: d.partial.onItsWay.length > 0 ? `${d.personName}'s other gift is on its way` : `We cancelled one of ${d.personName}'s gifts`,
+            heading: `Sorry, we had to cancel ${d.partial.cancelled.length > 1 ? "some" : "one"} of ${d.personName}'s gifts`,
             paragraphs: [
-              `We couldn't buy ${giftList(d.partial.cancelled)} for ${d.personName} in time, so we cancelled ${itOrThem(d.partial.cancelled)}. Nothing was charged for ${itOrThem(d.partial.cancelled)}.` +
-                (d.partial.onItsWay.length > 0
-                  ? ` ${capitalize(giftList(d.partial.onItsWay))} ${d.partial.onItsWay.length > 1 ? "are on their way" : "is on its way"}.`
-                  : ""),
+              `We're sorry. We couldn't buy ${giftList(d.partial.cancelled)} for ${d.personName}'s ${d.occasion} in time, so we cancelled ${itOrThem(d.partial.cancelled)}. You haven't been charged for ${itOrThem(d.partial.cancelled)}.`,
+              ...onItsWayLine(d.partial.onItsWay, "The good news: "),
             ],
             button: { label: `Open ${d.personName}'s page`, url: links.open },
+            footer: `What happens next: you can still pick something up yourself in ${d.partial.cancelled.length > 1 ? "their" : "its"} place.`,
           }),
         }
       : skippedEmail(d, links),
@@ -330,78 +377,74 @@ export const TEMPLATES: {
   // ─── ALL-32: approved mock-ups, design/mockups/ALL-32-emails.html and ALL-32-emails-2.html ───
 
   hold_funds: (d, links) => {
-    const end = holdEnd(
-      links.cancel,
-      `topping up means we'll buy this gift, its price plus Zinc's ${d.feeText} fee.`,
-    );
+    const end = holdEnd(links.cancel, `Topping up means we'll buy the gift: its price plus Zinc's ${d.feeText} fee.`);
     return {
       subject: d.still && d.shortText
         ? `You're still ${d.shortText} short for ${d.personName}'s gift`
-        : `${d.personName}'s gift is waiting on your Zinc balance`,
+        : `Sorry, ${d.personName}'s gift is waiting on your Zinc balance`,
       ...renderEmail({
-        heading: `Top up to send ${d.personName}'s gift`,
+        heading: `Sorry, we couldn't buy ${d.personName}'s gift yet`,
         paragraphs: [
-          `You chose ${giftList(d.giftTitles)} for ${d.personName}'s ${d.occasion} on ${d.dateText}.` +
-            (d.placedTitle ? ` The ${d.placedTitle} is on its way.` : "") +
-            ` Zinc needs ${d.neededText} in your balance to buy ${itOrThem(d.giftTitles)} (the gift with room for a small price change, plus Zinc's ${d.feeText} fee).` +
+          `Sorry for the hold-up. You chose ${giftList(d.giftTitles)} for ${d.personName}'s ${d.occasion} on ${d.dateText}, and there isn't enough in your Zinc balance to buy ${itOrThem(d.giftTitles)} yet. You haven't been charged.` +
+            (d.placedTitle ? ` The ${d.placedTitle} is on its way.` : ""),
+          `Zinc needs ${d.neededText} (the gift with room for a small price change, plus Zinc's ${d.feeText} fee).` +
             (d.haveText && d.shortText ? ` You have ${d.haveText}, so you're ${d.still ? "still " : ""}${d.shortText} short.` : ""),
-          "Add funds in Zinc and we'll buy it as soon as we see them, usually within a day. There's no need to come back.",
+          "What happens next: add funds in Zinc and we'll buy it as soon as we see them, usually within a day. There's no need to come back.",
         ],
         button: { label: "Top up your Zinc balance", url: d.walletUrl },
-        note: end.note,
         // Its own line: a long sentence in front of the link would wrap around the tall tap target.
-        tip: "To avoid this next time, turn on auto top-up in Zinc.",
+        tip: `${end.tip} To avoid this next time, turn on auto top-up in Zinc.`,
         link: end.cancel,
       }),
     };
   },
 
   hold_setup: (d, links) => {
-    const end = holdEnd(links.cancel, alphaBuy(d.feeText));
+    const end = holdEnd(links.cancel, costOnceSorted(d.feeText));
     return {
       subject: `Finish setting up payment to send ${d.personName}'s gift`,
       ...renderEmail({
-        heading: "Finish setting up payment",
+        heading: `Sorry, we couldn't buy ${d.personName}'s gift yet`,
         paragraphs: [
-          `You chose ${giftList(d.giftTitles)} for ${d.personName}'s ${d.occasion} on ${d.dateText}. Gifts are paid from your own Zinc balance. Connect Zinc and add your phone in Settings.`,
-          `It takes about a minute. Once it's connected and funded, we'll buy ${itOrThem(d.giftTitles)}.`,
+          `Sorry for the hold-up. You chose ${giftList(d.giftTitles)} for ${d.personName}'s ${d.occasion} on ${d.dateText}, but payment isn't set up yet, so we couldn't buy ${itOrThem(d.giftTitles)}. You haven't been charged.`,
+          `What happens next: gifts are paid from your own Zinc balance. Connect Zinc and add your phone in Settings. It takes about a minute, and once it's connected and funded, we'll buy ${itOrThem(d.giftTitles)}.`,
         ],
         button: { label: "Finish setup", url: links.setup },
-        note: end.note,
+        tip: end.tip,
         link: end.cancel,
       }),
     };
   },
 
   hold_address: (d, links) => {
-    const end = holdEnd(links.cancel, alphaBuy(d.feeText));
+    const end = holdEnd(links.cancel, costOnceSorted(d.feeText));
     return {
-      subject: `${d.personName}'s gift needs an address`,
+      subject: `Sorry, ${d.personName}'s gift needs an address`,
       ...renderEmail({
-        heading: `${d.personName}'s gift needs an address`,
+        heading: `Sorry, ${d.personName}'s gift needs an address`,
         paragraphs: [
-          `You chose ${giftList(d.giftTitles)} for ${d.personName}'s ${d.occasion} on ${d.dateText}, but we don't have an address we can ship to.`,
-          "Add or fix it and we'll send the gift straight away. There's nothing else to do.",
+          `Sorry for the hold-up. You chose ${giftList(d.giftTitles)} for ${d.personName}'s ${d.occasion} on ${d.dateText}, but we don't have an address we can ship to, so we haven't bought ${itOrThem(d.giftTitles)} yet. You haven't been charged.`,
+          "What happens next: add or fix the address and we'll send the gift straight away. There's nothing else to do.",
         ],
         button: { label: "Fix the address", url: links.addAddress },
-        note: end.note,
+        tip: end.tip,
         link: end.cancel,
       }),
     };
   },
 
   hold_trouble: (d, links) => {
-    const end = holdEnd(links.cancel, alphaBuy(d.feeText));
+    const end = holdEnd(links.cancel, costOnceSorted(d.feeText));
     return {
-      subject: `We're having trouble ordering ${d.personName}'s gift`,
+      subject: `Sorry, we're having trouble ordering ${d.personName}'s gift`,
       ...renderEmail({
-        heading: `Still trying to order ${d.personName}'s gift`,
+        heading: `Sorry, we're still trying to order ${d.personName}'s gift`,
         paragraphs: [
-          `Our ordering service has been having trouble since you chose ${giftList(d.giftTitles)}. Nothing has been charged.`,
-          "We'll keep trying and email you when it's placed. If you'd rather not wait, you can cancel it or choose another gift.",
+          `We're sorry for the wait. Our ordering service has been having trouble since you chose ${giftList(d.giftTitles)} for ${d.personName}'s ${d.occasion} on ${d.dateText}. You haven't been charged.`,
+          "What happens next: we'll keep trying and email you as soon as it's placed. If you'd rather not wait, you can cancel it or choose another gift.",
         ],
         button: { label: `Open ${d.personName}'s page`, url: links.open },
-        note: end.note,
+        tip: end.tip,
         link: end.cancel,
       }),
     };
@@ -412,59 +455,59 @@ export const TEMPLATES: {
     ...renderEmail({
       heading: `Confirming ${d.personName}'s gift`,
       paragraphs: [
-        `We sent the order for ${giftList(d.giftTitles)}, but haven't had confirmation from the store yet.`,
-        "We're checking on it now. You won't be charged twice, and we'll email you as soon as we know.",
+        `Sorry for the wait. We sent the order for ${giftList(d.giftTitles)} for ${d.personName}'s ${d.occasion} on ${d.dateText}, but haven't had confirmation from the store yet.`,
+        "What happens next: we're checking on it now, and we'll email you as soon as we know. You won't be charged twice.",
       ],
       button: { label: `Open ${d.personName}'s page`, url: links.open },
     }),
   }),
 
   price_up: (d, links) => ({
-    subject: `The price of ${d.personName}'s gift went up`,
+    subject: `Sorry, the price of ${d.personName}'s gift went up`,
     ...renderEmail({
-      heading: `${d.personName}'s gift went up in price`,
+      heading: `Sorry, ${d.personName}'s gift went up in price`,
       paragraphs: [
-        `The price of the ${d.giftTitle} went up more than we allowed for, so we didn't buy it and nothing was charged.`,
-        `Approve the new price, or choose a different gift for ${d.personName}'s ${d.occasion} on ${d.dateText}.`,
+        `We're sorry. The price of the ${d.giftTitle} for ${d.personName}'s ${d.occasion} on ${d.dateText} went up more than you allowed for, so we didn't buy it and you haven't been charged.`,
       ],
       button: { label: "Review the gift", url: links.open },
-      footer: "Nothing is bought until you choose.",
+      footer: `What happens next: approve the new price, or choose a different gift. Nothing is bought until you choose. Choose by ${d.orderByText} so it arrives in time.`,
     }),
   }),
 
   out_of_stock: (d, links) => ({
-    subject: `${d.personName}'s gift is out of stock`,
+    subject: `Sorry, ${d.personName}'s gift is out of stock`,
     ...renderEmail({
-      heading: `${d.personName}'s gift is out of stock`,
+      heading: `Sorry, ${d.personName}'s gift is out of stock`,
       paragraphs: [
-        `The store ran out of the ${d.giftTitle}, so we didn't buy it and nothing was charged.`,
-        `Choose another gift and we'll send it in time for ${d.personName}'s ${d.occasion} on ${d.dateText}.`,
+        `We're sorry. The store ran out of the ${d.giftTitle} for ${d.personName}'s ${d.occasion} on ${d.dateText}, so we didn't buy it and you haven't been charged.`,
       ],
       button: { label: "Choose another gift", url: links.open },
+      footer: `What happens next: choose another gift by ${d.orderByText} and we'll send it in time. Nothing is bought until you choose.`,
     }),
   }),
 
   too_late: (d, links) => ({
-    subject: `${d.personName}'s gift can't arrive in time`,
+    subject: `Sorry, ${d.personName}'s gift can't arrive in time`,
     ...renderEmail({
-      heading: `Too late for ${d.personName}'s gift`,
+      heading: `Sorry, ${d.personName}'s gift can't arrive in time`,
       paragraphs: [
-        `The ${d.giftTitle} wouldn't arrive in time for ${d.personName}'s ${d.occasion} on ${d.dateText} anymore, so we didn't buy it and nothing was charged.`,
-        "You can still pick something that ships faster.",
+        `We're sorry. The ${d.giftTitle} wouldn't arrive in time for ${d.personName}'s ${d.occasion} on ${d.dateText} anymore, so we didn't buy it and you haven't been charged.`,
       ],
       button: { label: "See faster gifts", url: links.open },
+      footer: `What happens next: you can still choose something that ships faster, by ${d.orderByText}. Nothing is bought until you choose.`,
     }),
   }),
 
   missed_on_us: (d, links) => ({
-    subject: `We couldn't send ${d.personName}'s gift in time`,
+    subject: `We're sorry, we couldn't send ${d.personName}'s gift in time`,
     ...renderEmail({
-      heading: `We couldn't send ${d.personName}'s gift in time`,
+      heading: `We're sorry, we couldn't send ${d.personName}'s gift in time`,
       paragraphs: [
         `You chose ${giftList(d.giftTitles)} for ${d.personName}'s ${d.occasion} on ${d.dateText}. A problem on our side stopped us placing the order before it was too late to arrive.`,
-        "That's on us. Nothing was bought and nothing was charged.",
+        "That's on us, and we're sorry. Nothing was bought and you haven't been charged.",
       ],
       button: { label: `Open ${d.personName}'s page`, url: links.open },
+      footer: `What happens next: we're looking into what went wrong. ${NEXT_TIME(d.personName)}`,
     }),
   }),
 
@@ -482,18 +525,45 @@ export const TEMPLATES: {
   }),
 
   // A confirmed failure (Zinc said so, or the owner checked Zinc) after the deadline closed the round.
-  failed_late: (d, links) => ({
-    subject: `We couldn't buy ${d.personName}'s gift`,
+  failed_late: (d, links) => {
+    const several = d.failed.length > 1;
+    const one = d.failed[0];
+    const what = several ? `${d.failed.length} of ${d.personName}'s ${d.occasion} gifts` : `${d.personName}'s gift`;
+    return {
+      subject: `We're sorry, we couldn't buy ${what}`,
+      ...renderEmail({
+        heading: `We're sorry, we couldn't buy ${what}`,
+        paragraphs: [
+          several
+            ? `We know you were counting on these for ${d.personName}'s ${d.occasion} on ${d.dateText}, and we're sorry they didn't work out. You haven't been charged for them.`
+            : `We know you were counting on the ${one.title} for ${d.personName}'s ${d.occasion} on ${d.dateText}, and we're sorry it didn't work out. ${one.detail ?? "The store couldn't place the order."} You haven't been charged for it.`,
+          ...onItsWayLine(d.onItsWay),
+        ],
+        rows: several ? d.failed.map((f) => ({ title: f.title, ...(f.detail ? { detail: f.detail } : {}) })) : undefined,
+        button: { label: d.personRemoved ? `Open ${APP_NAME}` : `Open ${d.personName}'s page`, url: links.open },
+        footer: d.closedEarly
+          ? "What happens next: this occasion's gifts were stopped early, so we won't buy anything more for it. You can still pick something up yourself."
+          : "What happens next: it's too late for us to send another gift in time, but you can still pick something up yourself. This round is now closed.",
+      }),
+    };
+  },
+
+  failed_several: (d, links) => ({
+    subject: `Sorry, ${d.failed.length} of ${d.personName}'s ${d.occasion} gifts couldn't be bought`,
     ...renderEmail({
-      heading: `We couldn't buy ${d.personName}'s gift`,
+      heading: `Sorry, ${d.failed.length} of ${d.personName}'s ${d.occasion} gifts couldn't be bought`,
       paragraphs: [
-        `The store couldn't place the order for the ${d.giftTitle} for ${d.personName}'s ${d.occasion} on ${d.dateText}, so nothing was bought or charged for it.` +
-          (d.onItsWay && d.onItsWay.length > 0
-            ? ` ${capitalize(giftList(d.onItsWay))} ${d.onItsWay.length > 1 ? "are on their way" : "is on its way"}.`
-            : ""),
-        "It's too late to choose another gift through us this time, but you can still buy something yourself.",
+        `We're sorry. We tried to order ${d.tried} gifts for ${d.personName}'s ${d.occasion} on ${d.dateText}, and ` +
+          (d.failed.length >= d.tried
+            ? `${d.tried === 2 ? "neither" : "none"} of them went through.`
+            : `${d.failed.length} of them didn't go through.`) +
+          ` You haven't been charged for ${d.failed.length === 2 ? "either" : "them"}.`,
+        ...onItsWayLine(d.onItsWay, "The good news: "),
       ],
+      rows: d.failed.map((f) => ({ title: f.title, detail: f.detail })),
       button: { label: `Open ${d.personName}'s page`, url: links.open },
+      link: d.failed.filter((f) => f.action).map((f) => ({ label: f.action as string, url: links.open })),
+      footer: `What happens next: there's still time to put this right. Nothing else is bought until you choose. Choose by ${d.orderByText} so it arrives in time. If you don't, we'll close this round then and let you know.`,
     }),
   }),
 
@@ -515,6 +585,7 @@ const IDEAS: IdeaRow[] = [
 const OCC = { personName: "Mom", occasion: "birthday", dateText: "Saturday, March 14" };
 const GIFT = { ...OCC, giftTitles: ["Le Creuset mug set"] };
 const ONE_GIFT = { ...OCC, giftTitle: "Le Creuset mug set" };
+const FAILURE = { ...ONE_GIFT, orderByText: "Thursday, March 5" };
 
 export const SAMPLE_DATA: {
   [K in NotificationKind]: { data: TemplateData[K]; links: TemplateLinks[K] };
@@ -533,7 +604,7 @@ export const SAMPLE_DATA: {
     links: { choose: "https://example.com/a/final-token" },
   },
   needs_attention: {
-    data: { ...OCC, reason: "the payment didn't go through." },
+    data: { ...OCC, reason: "the store couldn't place the order for the Le Creuset mug set, and you haven't been charged.", orderByText: "Thursday, March 5" },
     links: { open: "https://example.com/a/attention-token" },
   },
   reaction_prompt: {
@@ -566,11 +637,31 @@ export const SAMPLE_DATA: {
     links: { open: "https://example.com/a/open-token", cancel: "https://example.com/a/cancel-token" },
   },
   hold_unconfirmed: { data: GIFT, links: { open: "https://example.com/a/open-token" } },
-  price_up: { data: ONE_GIFT, links: { open: "https://example.com/a/open-token" } },
-  out_of_stock: { data: ONE_GIFT, links: { open: "https://example.com/a/open-token" } },
-  too_late: { data: ONE_GIFT, links: { open: "https://example.com/a/open-token" } },
+  price_up: { data: FAILURE, links: { open: "https://example.com/a/open-token" } },
+  out_of_stock: { data: FAILURE, links: { open: "https://example.com/a/open-token" } },
+  too_late: { data: FAILURE, links: { open: "https://example.com/a/open-token" } },
   missed_on_us: { data: GIFT, links: { open: "https://example.com/a/open-token" } },
   ordered: { data: { ...ONE_GIFT, cityText: "Dayton" }, links: { open: "https://example.com/a/open-token" } },
-  failed_late: { data: ONE_GIFT, links: { open: "https://example.com/a/open-token" } },
+  failed_late: {
+    data: { ...OCC, failed: [{ title: "Le Creuset mug set", detail: "The store ran out." }] },
+    links: { open: "https://example.com/a/open-token" },
+  },
+  failed_several: {
+    data: {
+      ...OCC,
+      tried: 3,
+      failed: [
+        {
+          title: "Le Creuset mug set",
+          detail: "The price went up more than you allowed for. Approve the new price, or choose another gift.",
+          action: "Review the new price for the Le Creuset mug set",
+        },
+        { title: "Linen apron", detail: "The store ran out. Choose another gift.", action: "Choose another gift instead of the Linen apron" },
+      ],
+      onItsWay: ["Cast-iron herb planter"],
+      orderByText: "Thursday, March 5",
+    },
+    links: { open: "https://example.com/a/open-token" },
+  },
   check_your_address: { data: {}, links: { open: "https://example.com/a/open-token" } },
 };

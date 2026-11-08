@@ -18,7 +18,6 @@ const s: ScheduleSettings = {
 const NO_HOLD = {
   attentionReason: null,
   holdCount: 0,
-  failCount: 0,
   seenBalanceCents: null,
   emailedBalanceCents: null,
   placeTried: false,
@@ -234,7 +233,6 @@ describe("nextAction: money holds (AC-20, AC-22, AC-23)", () => {
     sent: new Set(),
     attentionReason: "funds",
     holdCount: 1,
-    failCount: 0,
     seenBalanceCents: 1000,
     emailedBalanceCents: 1000,
     placeTried: false,
@@ -365,17 +363,9 @@ describe("nextAction: money holds (AC-20, AC-22, AC-23)", () => {
     }
   });
 
-  it("tells the buyer about each new failure at once (fail:<n>:notice), then waits", () => {
+  it("leaves failures to the engine, which tells each one by its own key (ALL-116), and waits", () => {
     for (const attentionReason of ["price_up", "out_of_stock", "too_late", "failed"] as const) {
-      expect(nextAction(hold({ attentionReason, failCount: 1 }), "2027-03-01", s)).toEqual({
-        do: "send_hold",
-        send: "fail:1:notice",
-      });
-      expect(nextAction(hold({ attentionReason, failCount: 1, sent: sent("fail:1:notice") }), "2027-03-01", s)).toEqual(wait);
-      expect(nextAction(hold({ attentionReason, failCount: 2, sent: sent("fail:1:notice") }), "2027-03-01", s)).toEqual({
-        do: "send_hold",
-        send: "fail:2:notice",
-      });
+      expect(nextAction(hold({ attentionReason }), "2027-03-01", s)).toEqual(wait);
     }
   });
 

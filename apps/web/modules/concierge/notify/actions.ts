@@ -88,7 +88,8 @@ export const ACTIONS: Record<ActionName, Action> = {
       return { ok: true };
     },
     async next(roundId, store) {
-      const personId = roundId ? await store.roundPersonId(roundId) : null;
+      // A removed person's page is gone: home (Give) instead (ALL-116, owner).
+      const personId = roundId ? await store.roundPersonId(roundId, { skipRemoved: true }) : null;
       return personId ? `/people/${personId}` : null;
     },
   },

@@ -10,13 +10,13 @@ describe("centsLabel", () => {
   });
 });
 
-describe("the alpha wording", () => {
+describe("the money wording (no Alpha label, ALL-114 in ALL-116)", () => {
   it("says real money is spent, and about how much", () => {
-    expect(captureReadNotice(2)).toBe("Alpha: we read each capture with AI, which spends real money, about 2¢ each.");
+    expect(captureReadNotice(2)).toBe("We read each capture with AI, which costs real money: about 2¢ each.");
   });
 
   it("says why reading is off", () => {
-    expect(CAPTURE_READ_OFF).toBe("Reading captures spends real money, so during alpha it's only on for test accounts.");
+    expect(CAPTURE_READ_OFF).toBe("Reading captures costs real money, so for now it's only on for test accounts.");
   });
 });
 
@@ -29,7 +29,7 @@ describe("the Zinc wallet wording (ALL-32)", () => {
   });
 
   it("says each gift costs its price plus Zinc's fee", () => {
-    expect(zincFeeNotice(100)).toBe("Alpha: each gift costs its price plus Zinc's $1 order fee, taken from your Zinc balance.");
+    expect(zincFeeNotice(100)).toBe("Each gift costs its price plus Zinc's $1 order fee, taken from your Zinc balance.");
   });
 });
 

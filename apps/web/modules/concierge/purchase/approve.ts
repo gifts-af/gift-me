@@ -12,6 +12,7 @@ import {
   concierge,
   readAccount,
   readIdeas,
+  hasUntoldFailure,
   readRound,
   recipientAddress,
   setting,
@@ -135,10 +136,13 @@ export async function approveAndBuy(input: ApproveInput, deps: PurchaseDeps): Pr
   // 5. The customer is always told: an emailed hold's notice is unsent (next_action_at = now)
   //    and a failure needs them, so the engine takes the round straight away. A paused,
   //    not_allowed or retry hold waits for the tick, with no email.
+  //    A failure no longer always shows in the reason (a hold outranks it, ALL-116), so the
+  //    round's untold failures are read too.
   const after = await readRound(deps, roundId);
   const reason = after?.attention_reason ?? null;
-  const failed = after?.status === "needs_attention" && reason !== null && FAILURE_REASONS.includes(reason);
-  if (after?.status === "needs_attention" && reason !== null && (failed || EMAILED_REASONS.includes(reason))) {
+  const untold = after?.status === "needs_attention" && (await hasUntoldFailure(deps, roundId));
+  const failed = after?.status === "needs_attention" && (untold || (reason !== null && FAILURE_REASONS.includes(reason)));
+  if (after?.status === "needs_attention" && (failed || (reason !== null && EMAILED_REASONS.includes(reason)))) {
     try {
       await deps.advanceRound(roundId);
     } catch (e) {

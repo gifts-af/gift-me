@@ -37,6 +37,11 @@ export function sampleEmails(link: string): SampleEmail[] {
     }
     if (kind === "failed_late") {
       add("failed_late-partial", kind, { ...SAMPLE_DATA.failed_late.data, onItsWay: ["Linen apron"] }, links);
+      const two = [
+        { title: "Le Creuset mug set", detail: "The price went up more than you allowed for." },
+        { title: "Linen apron", detail: "The store ran out." },
+      ];
+      add("failed_late-several", kind, { ...SAMPLE_DATA.failed_late.data, failed: two, onItsWay: ["Cast-iron herb planter"] }, links);
     }
     if (kind === "hold_funds") {
       add("hold_funds-still", kind, { ...SAMPLE_DATA.hold_funds.data, still: true, placedTitle: "Linen apron" }, links);

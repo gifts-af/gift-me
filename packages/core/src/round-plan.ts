@@ -21,8 +21,9 @@ export type StepKey =
   | `hold:${number}:short:${string}`
   // Once per round: the store is still unreachable on the final hold day.
   | "hold_trouble"
-  // The n-th failed order in the round (price_up, out_of_stock, too_late, failed), told at once.
-  | `fail:${number}:notice`
+  // A failed order, told once by its own id (ALL-116); a summary records one per gift it names.
+  // Older code wrote `fail:<n>:notice`, which untold_failures still reads.
+  | `fail:${string}`
   // The deadline email when our own switch (paused) kept the gift from going out.
   | "missed_on_us"
   // The deadline email when held gifts are cancelled next to one placed or placing.
@@ -46,7 +47,10 @@ export const EMAILED_HOLDS: readonly AttentionReason[] = ["funds", "setup", "add
  * resend the same address. Saving that person's address places it (placeAddressHeld).
  */
 export const PLACEABLE_HOLDS: readonly AttentionReason[] = ["funds", "setup", "paused", "not_allowed", "retry"];
-/** Failed orders that need the buyer; each new one is emailed at once (`fail:<n>:notice`). */
+/**
+ * Failed orders that need the buyer. The engine tells each at once by its own key (`fail:<id>`),
+ * outside this plan, so a failure as the round's reason only waits (ALL-116).
+ */
 export const FAILURE_REASONS: readonly AttentionReason[] = ["price_up", "out_of_stock", "too_late", "failed"];
 
 export type NewRound = {
@@ -81,8 +85,6 @@ export type RoundView = {
   attentionReason: AttentionReason | null;
   /** How many times the round has gone on hold; numbers the hold emails. */
   holdCount: number;
-  /** How many of the round's orders have failed (not counting a bad address, which is held instead); numbers the failure emails. */
-  failCount: number;
   /** The wallet balance the last check saw. */
   seenBalanceCents: number | null;
   /** The wallet balance the user was last emailed about. */
@@ -141,11 +143,9 @@ function holdAction(r: RoundView, today: CalendarDate, s: ScheduleSettings): Nex
   const wait: NextAction = { do: "wait", until: r.shipByDeadline };
   if (!reason) return wait;
 
-  // A failure is told once, at once; then the buyer decides (or the deadline skips it).
-  if (FAILURE_REASONS.includes(reason)) {
-    const notice: StepKey = `fail:${r.failCount}:notice`;
-    return r.sent.has(notice) ? wait : { do: "send_hold", send: notice };
-  }
+  // The engine tells each failure by its own key before this runs; then the buyer decides
+  // (or the deadline closes the round).
+  if (FAILURE_REASONS.includes(reason)) return wait;
 
   // A gift waiting on an address, and now one the buyer can't edit has arrived: place it rather
   // than ask them to fix it (ALL-63). One try a run; a rejection ends the order (ALL-112).

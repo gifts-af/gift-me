@@ -248,7 +248,7 @@ describe("runTick", () => {
     expect(headsUp.text).toContain("Stoneware mug set · $42");
     expect(headsUp.text).toContain("Herb planter · $38.50");
     const final = h.emails.find((e) => e.subject.startsWith("Last chance"))!;
-    expect(final.text).toContain("by Thu, Mar 11");
+    expect(final.text).toContain("by Wed, Mar 10");
 
     const links = h.notifyStore.links;
     expect(links).toHaveLength(5);
@@ -963,7 +963,12 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     const r = await newRound(u, o);
     const owner = await shareWith(r, u);
     await approve(u, r);
-    const rows = await pg.query("select id from concierge.orders where round_id = $1 and status = 'placing' order by created_at", [r.roundId]);
+    // In the ideas' order: orders made in one transaction share created_at, so it can't order them.
+    const rows = await pg.query(
+      `select o.id from concierge.orders o join concierge.gift_ideas i on i.id = o.idea_id
+        where o.round_id = $1 and o.status = 'placing' order by i.rank`,
+      [r.roundId],
+    );
     return { ...r, owner, orderIds: rows.rows.map((x) => x.id as string) };
   }
   const zincRejects = (u: User, orderId: string) =>
@@ -1061,7 +1066,7 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     expect(textFor(u)).toHaveLength(1);
     expect(text).toContain("the Stoneware mug set");
     expect(text).toContain("the Linen apron");
-    expect(text).toContain("you haven't been charged for them.");
+    expect(text).toContain("You haven't been charged for either.");
   });
 
   it("the owner already changed the address: no email to them, and the buyer isn't promised one (AC-11, AC-13)", async () => {
@@ -1108,7 +1113,7 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     await tellOwnersOfRejections(engine(dayAt(2)));
 
     expect(textFor(owner)).toHaveLength(1);
-    expect(mail.filter((m) => m.to === u.email).map((m) => m.subject)).toEqual([expect.stringContaining("We couldn't buy")]);
+    expect(mail.filter((m) => m.to === u.email).map((m) => m.subject)).toEqual([expect.stringContaining("we couldn't buy")]);
   });
 
   it("a price failure already open doesn't hide the address email (AC-9)", async () => {
@@ -1169,7 +1174,7 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     expect(textFor(u)).toHaveLength(1);
     expect(text).toContain("the Stoneware mug set");
     expect(text).toContain("the Linen apron");
-    expect(text).toContain("you haven't been charged for them.");
+    expect(text).toContain("You haven't been charged for either.");
   });
 
   it("the person now links someone else: neither owner is emailed (AC-11)", async () => {
@@ -1277,7 +1282,7 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
 
     expect(await approve(u, r)).toEqual({ ok: true, status: "held", reason: "funds" });
     for (let day = 1; day < 30; day++) expect(await advance(r.roundId, day)).toBe("advanced");
-    const waiting = "Mary's gift is waiting on your Zinc balance";
+    const waiting = "Sorry, Mary's gift is waiting on your Zinc balance";
     expect(inbox(u)).toEqual([`${waiting}@0`, `${waiting}@23`, `${waiting}@28`]);
     expect(await sends(r.roundId)).toEqual(expect.arrayContaining(["hold:1:notice", "hold:1:reminder", "hold:1:final"]));
     // One look at the wallet a day, and nothing ever sent to Zinc.
@@ -1289,8 +1294,8 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     expect(await roundRow(r.roundId)).toMatchObject({ status: "skipped", next_action_at: null, locked_until: null });
     expect(await orderRows(r.roundId)).toEqual([{ status: "cancelled", hold_reason: "funds", failure_type: "held_expired" }]);
     const last = mail.filter((m) => m.to === u.email).at(-1)!;
-    expect(last.subject).toBe("No gift for Mary's Christmas this time");
-    expect(last.text).toContain("couldn't be bought in time, so nothing was bought or charged");
+    expect(last.subject).toBe("Sorry, we couldn't buy Mary's gift in time");
+    expect(last.text).toContain("couldn't be bought in time, so we didn't buy it and you haven't been charged.");
   }, 60_000);
 
   // S1: the app builds its wiring (and its `now`) when the request starts; reconcile_round then
@@ -1307,7 +1312,7 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
       reason: "funds",
     });
     expect(await sends(r.roundId)).toContain("hold:1:notice");
-    expect(inbox(u)).toEqual(["Mary's gift is waiting on your Zinc balance@0"]);
+    expect(inbox(u)).toEqual(["Sorry, Mary's gift is waiting on your Zinc balance@0"]);
     expect(await roundRow(r.roundId)).toMatchObject({ locked_until: null });
   });
 
@@ -1318,7 +1323,7 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     const r = await newRound(u);
     zinc.balance = 1000;
     expect(await approve(u, r)).toEqual({ ok: true, status: "held", reason: "funds" });
-    expect(inbox(u)).toEqual(["Mary's gift is waiting on your Zinc balance@0"]);
+    expect(inbox(u)).toEqual(["Sorry, Mary's gift is waiting on your Zinc balance@0"]);
     expect(await roundRow(r.roundId)).toMatchObject({ locked_until: null });
     // The ordinary path stays off: nothing but the money path moves.
     expect(await advance(r.roundId, 23)).toBe("off");
@@ -1344,16 +1349,16 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     expect(zinc.posts).toHaveLength(1);
   });
 
-  it("names the amounts and carries the alpha line and cancel link in the hold email", async () => {
+  it("names the amounts and says the cost plainly (no Alpha label) and carries the cancel link in the hold email", async () => {
     const u = await newUser();
     const r = await newRound(u);
     zinc.balance = 1000;
     await approve(u, r);
     const [m] = mail.filter((x) => x.to === u.email);
-    expect(m.text).toContain("Zinc needs $46.20 in your balance to buy it");
+    expect(m.text).toContain("Zinc needs $46.20 (the gift with room for a small price change");
     expect(m.text).toContain("You have $10, so you're $36.20 short.");
     expect(m.text).toContain("Top up your Zinc balance: https://zinc.test/wallet");
-    expect(m.text).toContain("Alpha: topping up means we'll buy this gift");
+    expect(m.text).toContain("Topping up means we'll buy the gift: its price plus Zinc's $1 fee.");
     expect(m.text).toMatch(/Cancel this gift: https:\/\/giftsaf\.test\/a\/\S+/);
   });
 
@@ -1370,7 +1375,7 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     zinc.balance = 3500;
     await advance(r.roundId, 3);
     expect(inbox(u)).toEqual([
-      "Mary's gift is waiting on your Zinc balance@0",
+      "Sorry, Mary's gift is waiting on your Zinc balance@0",
       "You're still $16.20 short for Mary's gift@1",
       "You're still $11.20 short for Mary's gift@3",
     ]);
@@ -1385,7 +1390,7 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     zinc.balance = 1000;
     await advance(r.roundId, 1);
     expect(await roundRow(r.roundId)).toMatchObject({ attention_reason: "funds", hold_count: 2 });
-    expect(inbox(u)).toEqual(["Finish setting up payment to send Mary's gift@0", "Mary's gift is waiting on your Zinc balance@1"]);
+    expect(inbox(u)).toEqual(["Finish setting up payment to send Mary's gift@0", "Sorry, Mary's gift is waiting on your Zinc balance@1"]);
     expect(await sends(r.roundId)).toEqual(expect.arrayContaining(["hold:1:notice", "hold:2:notice"]));
   });
 
@@ -1398,7 +1403,7 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     await advance(r.roundId, 23); // the reminder day: placing comes first, so no reminder goes out
     expect(await roundRow(r.roundId)).toMatchObject({ status: "ordered", locked_until: null });
     expect(zinc.posts).toHaveLength(1);
-    expect(inbox(u)).toEqual(["Mary's gift is waiting on your Zinc balance@0"]);
+    expect(inbox(u)).toEqual(["Sorry, Mary's gift is waiting on your Zinc balance@0"]);
   });
 
   it("at the deadline, one placing and one held → the cancel email first (retried if refused), then ordered", async () => {
@@ -1418,9 +1423,9 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     await advance(r.roundId, 31);
     expect(await roundRow(r.roundId)).toMatchObject({ status: "ordered", locked_until: null });
     expect((await orderRows(r.roundId)).map((o) => o.status)).toEqual(["placing", "cancelled"]);
-    expect(inbox(u).slice(before)).toEqual(["One of Mary's gifts couldn't be bought in time@31"]);
+    expect(inbox(u).slice(before)).toEqual(["Sorry, we couldn't buy all of Mary's gifts in time@31"]);
     const last = mail.filter((m) => m.to === u.email).at(-1)!;
-    expect(last.text).toContain("We couldn't buy the Linen apron for Mary in time, so we cancelled it. Nothing was charged for it.");
+    expect(last.text).toContain("We couldn't buy the Linen apron for Mary's Christmas in time, so we cancelled it. You haven't been charged for it.");
     // The placing one isn't confirmed yet: its own emails say what happens to it.
     expect(last.text).not.toContain("on its way");
     expect(last.text).not.toContain("No gift");
@@ -1437,7 +1442,7 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     await advance(r.roundId, 30);
     await advance(r.roundId, 31);
     expect(inbox(u).slice(before)).toEqual([
-      "One of Mary's gifts couldn't be bought in time@30",
+      "Sorry, we couldn't buy all of Mary's gifts in time@30",
       "We're confirming Mary's gift with the store@31",
     ]);
     expect((await orderRows(r.roundId)).map((o) => o.status)).toEqual(["unconfirmed", "cancelled"]);
@@ -1459,7 +1464,7 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     await pg.query("update concierge.gift_rounds set locked_until = null where id = $1", [r.roundId]);
     expect(await advance(r.roundId, 31)).toBe("advanced");
     expect(await roundRow(r.roundId)).toMatchObject({ status: "ordered" });
-    expect(inbox(u).filter((m) => m.startsWith("One of Mary's gifts"))).toEqual(["One of Mary's gifts couldn't be bought in time@31"]);
+    expect(inbox(u).filter((m) => m.startsWith("Sorry, we couldn't buy all of Mary's gifts"))).toEqual(["Sorry, we couldn't buy all of Mary's gifts in time@31"]);
   });
 
   it("tells the buyer it was on us when our switch kept the gift back past the deadline (missed_on_us)", async () => {
@@ -1470,8 +1475,8 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     await advance(r.roundId, 30);
     expect(await roundRow(r.roundId)).toMatchObject({ status: "skipped" });
     const [m] = mail.filter((x) => x.to === u.email);
-    expect(m.subject).toBe("We couldn't send Mary's gift in time");
-    expect(m.text).toContain("That's on us. Nothing was bought and nothing was charged.");
+    expect(m.subject).toBe("We're sorry, we couldn't send Mary's gift in time");
+    expect(m.text).toContain("That's on us, and we're sorry. Nothing was bought and you haven't been charged.");
   });
 
   // S8: ordering switched off while a gift waits on funds: no "top up" reminders (topping up
@@ -1486,7 +1491,7 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     expect(await roundRow(r.roundId)).toMatchObject({ attention_reason: "funds" });
     expect(await advance(r.roundId, 30)).toBe("advanced");
     expect(await roundRow(r.roundId)).toMatchObject({ status: "skipped" });
-    expect(inbox(u)).toEqual(["Mary's gift is waiting on your Zinc balance@0", "We couldn't send Mary's gift in time@30"]);
+    expect(inbox(u)).toEqual(["Sorry, Mary's gift is waiting on your Zinc balance@0", "We're sorry, we couldn't send Mary's gift in time@30"]);
     expect(zinc.posts).toEqual([]);
   });
 
@@ -1532,7 +1537,7 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     const r = await newRound(u, { deadlineIn: 5 });
     zinc.balance = 1000;
     await approve(u, r);
-    const waiting = "Mary's gift is waiting on your Zinc balance";
+    const waiting = "Sorry, Mary's gift is waiting on your Zinc balance";
     expect(inbox(u)).toEqual([`${waiting}@0`]);
     expect(await sends(r.roundId)).toEqual(["hold:1:notice"]);
     await advance(r.roundId, 1);
@@ -1556,7 +1561,7 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     await pg.query("update concierge.gift_rounds set locked_until = null where id = $1", [r.roundId]);
     expect(await advance(r.roundId, 31)).toBe("advanced");
     expect(await roundRow(r.roundId)).toMatchObject({ status: "skipped" });
-    expect(inbox(u).at(-1)).toBe("No gift for Mary's Christmas this time@31");
+    expect(inbox(u).at(-1)).toBe("Sorry, we couldn't buy Mary's gift in time@31");
   });
 
   it("tells the buyer once per order when Zinc confirms it placed (the ordered email, city only)", async () => {
@@ -1579,7 +1584,7 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     expect((await sends(r.roundId)).filter((s: string) => s.startsWith("ordered:"))).toHaveLength(2);
   });
 
-  it("if the placing gift fails while the round closes, the skipped email still goes (once)", async () => {
+  it("if the placing gift fails while the round closes, the late email tells it, not 'skipped' (ALL-116 AC-6)", async () => {
     const u = await newUser({ autoTopUp: null });
     const r = await newRound(u, { totals: [4200, 3000] });
     zinc.plan.set(`https://shop.test/p/${r.ideaIds[0]}`, ["timeout"]);
@@ -1599,7 +1604,7 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     const before = inbox(u).length;
     await advanceRound(r.roundId, deps);
     expect(await roundRow(r.roundId)).toMatchObject({ status: "skipped" });
-    expect(inbox(u).slice(before)).toEqual(["One of Mary's gifts couldn't be bought in time@30", "No gift for Mary's Christmas this time@30"]);
+    expect(inbox(u).slice(before)).toEqual(["Sorry, we couldn't buy all of Mary's gifts in time@30", "We're sorry, we couldn't buy Mary's gift@30"]);
   });
 
   it("alerts the owner when a refused deadline email keeps a round open past its deadline", async () => {
@@ -1647,12 +1652,12 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     // ...so the tick sends it, once.
     await retryOrderedEmails(engine(dayAt(32)));
     await retryOrderedEmails(engine(dayAt(33)));
-    expect(inbox(u).slice(before)).toEqual(["We couldn't buy Mary's gift@32"]);
-    const text = mail.filter((m) => m.to === u.email && m.subject.startsWith("We couldn't buy")).map((m) => m.text)[0];
+    expect(inbox(u).slice(before)).toEqual(["We're sorry, we couldn't buy Mary's gift@32"]);
+    const text = mail.filter((m) => m.to === u.email && m.subject.startsWith("We're sorry, we couldn't buy")).map((m) => m.text)[0];
     expect(text).toContain(
-      "The store couldn't place the order for the Stoneware mug set for Mary's Christmas on",
+      "We know you were counting on the Stoneware mug set for Mary's Christmas on",
     );
-    expect(text).toContain("so nothing was bought or charged for it.");
+    expect(text).toContain("The store ran out. You haven't been charged for it.");
     expect(text).not.toContain("on its way");
   });
 
@@ -1669,7 +1674,7 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     await pg.query("select concierge.settle_order($1, $2, 'failed', 'failed', null)", [u.userId, o.id]);
     expect(await roundRow(r.roundId)).toMatchObject({ status: "skipped" });
     await retryOrderedEmails(engine(dayAt(31)));
-    expect(inbox(u).at(-1)).toBe("We couldn't buy Mary's gift@31");
+    expect(inbox(u).at(-1)).toBe("We're sorry, we couldn't buy Mary's gift@31");
     expect(await sends(r.roundId)).toContain(`late_fail:${o.id}`);
   });
 
@@ -1688,15 +1693,16 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     expect(inbox(u).filter((m) => m.startsWith("Mary's gift is ordered"))).toEqual(["Mary's gift is ordered@2"]);
   });
 
-  it("emails a failed order at once (fail:1:notice), and only once", async () => {
+  it("emails a failed order at once, keyed by the order (fail:<id>, ALL-116), and only once", async () => {
     const u = await newUser({ autoTopUp: null });
     const r = await newRound(u);
     zinc.plan.set(`https://shop.test/p/${r.ideaIds[0]}`, [{ status: 400, code: "out_of_stock" }]);
     expect(await approve(u, r)).toEqual({ ok: true, status: "failed", reason: "out_of_stock" });
     await advance(r.roundId, 1);
     expect(await roundRow(r.roundId)).toMatchObject({ status: "needs_attention", attention_reason: "out_of_stock" });
-    expect(inbox(u)).toEqual(["Mary's gift is out of stock@0"]);
-    expect(await sends(r.roundId)).toEqual(["fail:1:notice"]);
+    expect(inbox(u)).toEqual(["Sorry, Mary's gift is out of stock@0"]);
+    const [o] = (await pg.query("select id from concierge.orders where round_id = $1", [r.roundId])).rows;
+    expect(await sends(r.roundId)).toEqual([`fail:${o.id}`]);
   });
 
   it("with Zinc unreachable all along, says so once on the final hold day", async () => {
@@ -1705,7 +1711,7 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     await advance(r.roundId, 27, { zinc: false });
     await advance(r.roundId, 28, { zinc: false });
     await advance(r.roundId, 29, { zinc: false });
-    expect(inbox(u)).toEqual(["We're having trouble ordering Mary's gift@28"]);
+    expect(inbox(u)).toEqual(["Sorry, we're having trouble ordering Mary's gift@28"]);
     expect(await roundRow(r.roundId)).toMatchObject({ status: "needs_attention", attention_reason: "retry" });
   });
 
@@ -1756,4 +1762,178 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     });
     expect(await orderRows(r.roundId)).toEqual([expect.objectContaining({ status: "placing" })]);
   });
+  // ─── ALL-116: every failure is told, once, with the right gift and reason ───
+
+  /** A round whose picks are all placing, ids in rank order. (A Zinc timeout stops the run, so only
+   *  the first would really be placing: the rest are moved there directly, as a later run would.) */
+  async function placingRound(u: User, totals = [4200, 3000]) {
+    const r = await newRound(u, { totals });
+    for (const id of r.ideaIds) zinc.plan.set(`https://shop.test/p/${id}`, ["timeout"]);
+    await approve(u, r);
+    await pg.query("update concierge.orders set status = 'placing', hold_reason = null where round_id = $1 and status = 'held'", [r.roundId]);
+    await pg.query("select concierge.reconcile_round($1)", [r.roundId]);
+    const rows = await pg.query(
+      "select o.id from concierge.orders o join concierge.gift_ideas i on i.id = o.idea_id where o.round_id = $1 order by i.rank",
+      [r.roundId],
+    );
+    return { ...r, orderIds: rows.rows.map((x) => x.id as string) };
+  }
+  const settleFailed = (u: User, orderId: string, type: string) =>
+    pg.query("select concierge.settle_order($1, $2, 'failed', $3, null)", [u.userId, orderId, type]);
+  const lastText = (u: User) => mail.filter((m) => m.to === u.email).at(-1)!.text;
+
+  it("two failures before one email: one summary names both, each with its reason (AC-1)", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await placingRound(u);
+    await settleFailed(u, r.orderIds[0], "price_up");
+    await settleFailed(u, r.orderIds[1], "out_of_stock");
+    const before = inbox(u).length;
+    await advance(r.roundId, 1);
+    expect(inbox(u).slice(before)).toEqual(["Sorry, 2 of Mary's Christmas gifts couldn't be bought@1"]);
+    const text = lastText(u);
+    expect(text).toContain("and neither of them went through.");
+    expect(text).toContain("- Stoneware mug set (The price went up more than you allowed for. Approve the new price, or choose another gift.)");
+    expect(text).toContain("- Linen apron (The store ran out. Choose another gift.)");
+    expect(text).toContain("Review the new price for the Stoneware mug set:");
+    expect(await sends(r.roundId)).toEqual(expect.arrayContaining(r.orderIds.map((id) => `fail:${id}`)));
+    // The price failure can still be re-approved.
+    const priceUp = await pg.query("select status, failure_type, resolved from concierge.orders where id = $1", [r.orderIds[0]]);
+    expect(priceUp.rows[0]).toEqual({ status: "failed", failure_type: "price_up", resolved: false });
+    // Told once.
+    await pg.query("update concierge.gift_rounds set next_action_at = now() where id = $1", [r.roundId]);
+    await advance(r.roundId, 2);
+    expect(inbox(u).slice(before)).toHaveLength(1);
+  });
+
+  it("a later failure is told on its own, and the gift named is the one that failed (AC-2, AC-3)", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await placingRound(u);
+    // The one created second fails first...
+    await settleFailed(u, r.orderIds[1], "out_of_stock");
+    await advance(r.roundId, 1);
+    expect(lastText(u)).toContain("The store ran out of the Linen apron");
+    // ...and the one created first fails last.
+    await settleFailed(u, r.orderIds[0], "too_late");
+    await advance(r.roundId, 2);
+    expect(inbox(u).slice(-2)).toEqual(["Sorry, Mary's gift is out of stock@1", "Sorry, Mary's gift can't arrive in time@2"]);
+    expect(lastText(u)).toContain("The Stoneware mug set wouldn't arrive in time");
+    expect(lastText(u)).not.toContain("Linen apron");
+  });
+
+  it("a failure next to an unconfirmed order is told, not hidden behind 'still confirming' (AC-4)", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await placingRound(u);
+    await pg.query("select concierge.mark_unconfirmed($1)", [r.orderIds[0]]);
+    await advance(r.roundId, 1);
+    await settleFailed(u, r.orderIds[1], "out_of_stock");
+    await advance(r.roundId, 2);
+    expect(inbox(u)).toContain("Sorry, Mary's gift is out of stock@2");
+    expect(await roundRow(r.roundId)).toMatchObject({ status: "needs_attention", attention_reason: "unconfirmed" });
+  });
+
+  it("a failure on the ship-by day with nothing else: 'We couldn't buy it' with the reason, not 'No gift' (AC-7)", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await placingRound(u, [4200]);
+    await settleFailed(u, r.orderIds[0], "out_of_stock");
+    const before = inbox(u).length;
+    await advance(r.roundId, 30);
+    expect(inbox(u).slice(before)).toEqual(["We're sorry, we couldn't buy Mary's gift@30"]);
+    expect(lastText(u)).toContain("The store ran out. You haven't been charged for it.");
+    expect(await roundRow(r.roundId)).toMatchObject({ status: "skipped" });
+    expect(await sends(r.roundId)).not.toContain("skipped");
+  });
+
+  it("on the ship-by day, an untold failure and a held gift: one email names both (owner, AC-5)", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await newRound(u, { totals: [4200, 3000] });
+    zinc.plan.set(`https://shop.test/p/${r.ideaIds[0]}`, ["timeout"]);
+    zinc.plan.set(`https://shop.test/p/${r.ideaIds[1]}`, ["402"]);
+    await approve(u, r);
+    const [first] = (
+      await pg.query("select o.id from concierge.orders o join concierge.gift_ideas i on i.id = o.idea_id where o.round_id = $1 order by i.rank", [r.roundId])
+    ).rows;
+    await settleFailed(u, first.id, "out_of_stock");
+    const before = inbox(u).length;
+    await advance(r.roundId, 30);
+    expect(inbox(u).slice(before)).toEqual(["We're sorry, we couldn't buy 2 of Mary's Christmas gifts@30"]);
+    const text = lastText(u);
+    expect(text).toContain("- Stoneware mug set (The store ran out.)");
+    expect(text).toContain("- Linen apron (It couldn't be bought in time, so we cancelled it.)");
+    expect(await roundRow(r.roundId)).toMatchObject({ status: "skipped" });
+  });
+
+  it("a refused failure email is logged for the owner, still lets the run go on, and goes on the next look (AC-11)", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await placingRound(u, [4200]);
+    await settleFailed(u, r.orderIds[0], "out_of_stock");
+    const log = vi.spyOn(console, "log");
+    refuse = true;
+    expect(await advance(r.roundId, 1)).toBe("advanced");
+    refuse = false;
+    const alerts = log.mock.calls.map((c) => JSON.parse(String(c[0]))).filter((e) => e.event === "round_failure_email_failed");
+    expect(alerts).toEqual([expect.objectContaining({ round_id: r.roundId, user_id: u.userId, alert: true })]);
+    expect(await sends(r.roundId)).not.toContain(`fail:${r.orderIds[0]}`);
+    await advance(r.roundId, 2);
+    expect(inbox(u)).toEqual(["Sorry, Mary's gift is out of stock@2"]);
+  });
+
+  it("closed early with a failure untold (the cancel link): the late email tells it and says it stopped early (AC-5, AC-13)", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await placingRound(u, [4200]);
+    await settleFailed(u, r.orderIds[0], "price_up");
+    await pg.query("select concierge.cancel_held($1, 'cancel')", [r.roundId]);
+    await retryOrderedEmails(engine(dayAt(1)));
+    expect(inbox(u)).toEqual(["We're sorry, we couldn't buy Mary's gift@1"]);
+    expect(lastText(u)).toContain("The price went up more than you allowed for. You haven't been charged for it.");
+    expect(lastText(u)).toContain("this occasion's gifts were stopped early");
+    expect(lastText(u)).toContain("Open Mary's page:");
+  });
+
+  it("a removed person with a failure untold: still told, and the button doesn't open their page (owner)", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await placingRound(u, [4200]);
+    await settleFailed(u, r.orderIds[0], "out_of_stock");
+    const person = (await pg.query("select person_id from concierge.gift_rounds where id = $1", [r.roundId])).rows[0].person_id;
+    await pg.query("update public.people set deleted_at = now() where id = $1", [person]);
+    await pg.query("select concierge.skip_open_rounds($1, null)", [person]);
+    await retryOrderedEmails(engine(dayAt(1)));
+    expect(inbox(u)).toEqual(["We're sorry, we couldn't buy Mary's gift@1"]);
+    expect(lastText(u)).toContain("Open GiftsAF:");
+    expect(lastText(u)).not.toContain("Open Mary's page");
+  });
+
+  it("approving into one failure and one funds hold: both told at once, and the result says failed (AC-14, review S1)", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await newRound(u, { totals: [4200, 3000] });
+    zinc.plan.set(`https://shop.test/p/${r.ideaIds[0]}`, [{ status: 400, code: "out_of_stock" }]);
+    zinc.plan.set(`https://shop.test/p/${r.ideaIds[1]}`, ["402"]);
+    const result = await approve(u, r);
+    expect(result).toMatchObject({ ok: true, status: "failed" });
+    // The held gift decides the reason, so it's still emailed and placed when funds arrive.
+    expect(await roundRow(r.roundId)).toMatchObject({ status: "needs_attention", attention_reason: "funds" });
+    expect(inbox(u).sort()).toEqual(["Sorry, Mary's gift is out of stock@0", "Sorry, Mary's gift is waiting on your Zinc balance@0"].sort());
+    expect(await pg.query("select 1 from concierge.held_rounds_for_user($1) where id = $2", [u.userId, r.roundId])).toMatchObject({ rowCount: 1 });
+  });
+
+  it("an error after claiming gives the failures back, so the next look still tells them (review B2)", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await placingRound(u, [4200]);
+    await settleFailed(u, r.orderIds[0], "out_of_stock");
+    const deps = engine(dayAt(1));
+    const real = deps.notify.store;
+    deps.notify = {
+      ...deps.notify,
+      store: {
+        ...real,
+        insertNotification: async () => {
+          throw new Error("database blip");
+        },
+      },
+    };
+    await advanceRound(r.roundId, deps);
+    expect(await sends(r.roundId)).not.toContain(`fail:${r.orderIds[0]}`);
+    await advance(r.roundId, 2);
+    expect(inbox(u)).toEqual(["Sorry, Mary's gift is out of stock@2"]);
+  });
+
 });

@@ -30,8 +30,11 @@ export type NewLink = {
 export interface NotifyStore {
   recipient(userId: string): Promise<{ email: string | null; timezone: string | null }>;
   setting(key: string): Promise<number>;
-  /** The person a round is for, or null. Used by the open_person action's done page. */
-  roundPersonId(roundId: string): Promise<string | null>;
+  /**
+   * The person a round is for, or null. Used by the actions' done pages. `skipRemoved`: also null
+   * when they were removed, so open_person goes home rather than to a missing page (ALL-116).
+   */
+  roundPersonId(roundId: string, opts?: { skipRemoved?: boolean }): Promise<string | null>;
   insertLinks(rows: NewLink[]): Promise<void>;
   insertNotification(row: {
     userId: string;
@@ -99,14 +102,19 @@ export function createSupabaseNotifyStore(db: SupabaseClient<Database> = createA
       return data;
     },
 
-    async roundPersonId(roundId) {
+    async roundPersonId(roundId, opts) {
       const { data, error } = await concierge
         .from("gift_rounds")
         .select("person_id")
         .eq("id", roundId)
         .maybeSingle();
       if (error) fail("Loading the round's person failed", error);
-      return data?.person_id ?? null;
+      if (!data) return null;
+      if (!opts?.skipRemoved) return data.person_id;
+      // A removed person has no page: open_person goes home (Give, the people list) instead (ALL-116).
+      const person = await db.from("people").select("deleted_at").eq("id", data.person_id).maybeSingle();
+      if (person.error) fail("Loading the round's person failed", person.error);
+      return person.data && person.data.deleted_at === null ? data.person_id : null;
     },
 
     async insertLinks(rows) {

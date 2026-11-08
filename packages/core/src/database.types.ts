@@ -617,6 +617,7 @@ export type Database = {
           created_at: string;
           est_delivery_date: string | null;
           failed_after_close: boolean;
+          failed_at: string | null;
           failure_type: string | null;
           fee_cents: number;
           funding_mode: string;
@@ -650,6 +651,7 @@ export type Database = {
           created_at?: string;
           est_delivery_date?: string | null;
           failed_after_close?: boolean;
+          failed_at?: string | null;
           failure_type?: string | null;
           fee_cents: number;
           funding_mode: string;
@@ -682,6 +684,7 @@ export type Database = {
           created_at?: string;
           est_delivery_date?: string | null;
           failed_after_close?: boolean;
+          failed_at?: string | null;
           failure_type?: string | null;
           fee_cents?: number;
           funding_mode?: string;
@@ -1007,6 +1010,7 @@ export type Database = {
           created_at: string;
           est_delivery_date: string | null;
           failed_after_close: boolean;
+          failed_at: string | null;
           failure_type: string | null;
           fee_cents: number;
           funding_mode: string;
@@ -1053,6 +1057,7 @@ export type Database = {
           created_at: string;
           est_delivery_date: string | null;
           failed_after_close: boolean;
+          failed_at: string | null;
           failure_type: string | null;
           fee_cents: number;
           funding_mode: string;
@@ -1158,6 +1163,10 @@ export type Database = {
           isOneToOne: false;
           isSetofReturn: true;
         };
+      };
+      claim_failure_notices: {
+        Args: { p_round_id: string };
+        Returns: string[];
       };
       claim_round: {
         Args: { p_now: string; p_round_id: string };
@@ -1321,6 +1330,7 @@ export type Database = {
           created_at: string;
           est_delivery_date: string | null;
           failed_after_close: boolean;
+          failed_at: string | null;
           failure_type: string | null;
           fee_cents: number;
           funding_mode: string;
@@ -1368,6 +1378,7 @@ export type Database = {
           created_at: string;
           est_delivery_date: string | null;
           failed_after_close: boolean;
+          failed_at: string | null;
           failure_type: string | null;
           fee_cents: number;
           funding_mode: string;
@@ -1409,6 +1420,10 @@ export type Database = {
       record_outcomes: {
         Args: { p_results: Json; p_round_id: string };
         Returns: Database["concierge"]["Enums"]["round_status"];
+      };
+      release_failure_notices: {
+        Args: { p_order_ids: string[]; p_round_id: string };
+        Returns: undefined;
       };
       release_round: {
         Args: { p_lock: string; p_round_id: string };
@@ -1477,6 +1492,7 @@ export type Database = {
           created_at: string;
           est_delivery_date: string | null;
           failed_after_close: boolean;
+          failed_at: string | null;
           failure_type: string | null;
           fee_cents: number;
           funding_mode: string;
@@ -1511,6 +1527,7 @@ export type Database = {
           isSetofReturn: true;
         };
       };
+      untold_failures: { Args: { p_round_id: string }; Returns: string[] };
       zinc_claim_poll: {
         Args: { p_now: string; p_user_id: string };
         Returns: {

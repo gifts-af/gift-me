@@ -98,9 +98,13 @@ Light is the default for the mock-ups; the app follows the phone's light or dark
 - **Spacing:** Tailwind's 4 px scale. 16 px page margins on a phone, 12 px between cards, 24 px between sections.
 - **Icons:** lucide (already installed), 20 px, in the text colour. Icons go next to a label, never alone, except standard ones (back, close, more).
 
-## Alpha money notice (decision 53, ALL-94)
+## Money notice (decision 53, ALL-94)
 
-Every action that spends real money says so, right next to the action and always visible, with no hover or menu needed. It's a short line on `--warning-soft` with `--warning` text and `role="note"`, starting "Alpha:" and giving a rough cost from settings. The wording lives in `packages/core/src/paid-features.ts`. People without paid features don't see the notice or the action. Where that would leave them wondering, a plain muted line says why.
+Every action that spends real money says so, right next to the action and always visible, with no hover or menu needed. It's a short line on `--warning-soft` with `--warning` text and `role="note"`, giving a rough cost from settings in plain words ("Each gift costs its price plus Zinc's $1 order fee"). It no longer starts "Alpha:": the owner doesn't want money notices to shout the testing stage (ALL-114, done in ALL-116). The wording lives in `packages/core/src/paid-features.ts`. People without paid features don't see the notice or the action. Where that would leave them wondering, a plain muted line says why. Hold emails state the cost the same way, as a plain line under the button.
+
+## Tone in emails (owner, 2026-11-08, ALL-116)
+
+Bad news is told with care. The email says sorry plainly ("We're sorry", "Sorry for the hold-up"), says what it means for the buyer, says what was or wasn't charged, and ends with "What happens next". Any good news, like another gift on its way, gets its own line. When it isn't our doing (nobody chose a gift), there's no apology, but it still says what happens next. When several things go wrong in one round at once, they go in one summary email with a row and a link for each, not one email each.
 
 ## Phone and computer
 
