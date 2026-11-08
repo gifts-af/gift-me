@@ -115,7 +115,7 @@ describe("Popup", () => {
     expect(screen.getByRole("button", { name: "Save to Mom" })).toBeEnabled();
   });
 
-  const NOTICE = "Alpha: we read each capture with AI, which spends real money, about 2¢ each.";
+  const NOTICE = "We read each capture with AI, which costs real money: about 2¢ each.";
 
   it("with paid features, shows the money notice before saving (ALL-94)", async () => {
     render(<App />);
@@ -131,7 +131,7 @@ describe("Popup", () => {
     expect(screen.queryByRole("note")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Save to Mom" }));
     expect(
-      await screen.findByText("Saved to Mom. Reading captures spends real money, so during alpha it's only on for test accounts."),
+      await screen.findByText("Saved to Mom. Reading captures costs real money, so for now it's only on for test accounts."),
     ).toBeInTheDocument();
     expect(screen.queryByText(/learn from it later/)).not.toBeInTheDocument();
   });

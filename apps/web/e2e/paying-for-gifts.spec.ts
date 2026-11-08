@@ -155,7 +155,7 @@ test.describe("paying for gifts, in order on one account", () => {
 
     // State 2: ready to connect, with the alpha money notice.
     await expect(section(page).getByRole("note")).toHaveText(
-      "Alpha: each gift costs its price plus Zinc's $1 order fee, taken from your Zinc balance.",
+      "Each gift costs its price plus Zinc's $1 order fee, taken from your Zinc balance.",
     );
     // One teal main button on the page (Save): Zinc's buttons are outline buttons (owner, 2026-11-06).
     await expect(page.getByRole("button", { name: "Connect Zinc" })).toHaveClass(/border-input/);

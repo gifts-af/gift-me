@@ -595,7 +595,7 @@ export const SAMPLE_DATA: {
     links: { choose: "https://example.com/a/final-token" },
   },
   needs_attention: {
-    data: { ...OCC, reason: "the store couldn't place the order for the Le Creuset mug set.", orderByText: "Thursday, March 5" },
+    data: { ...OCC, reason: "the store couldn't place the order for the Le Creuset mug set, and you haven't been charged.", orderByText: "Thursday, March 5" },
     links: { open: "https://example.com/a/attention-token" },
   },
   reaction_prompt: {

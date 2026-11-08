@@ -88,7 +88,7 @@ test("facts show by category with their source, and can be turned off, turned on
   await expect(page.getByRole("region", { name: "Already has" }).getByText("Owala water bottle")).toBeVisible();
   await expect(page.getByText("1 capture hasn't been read.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Read it now" })).toBeVisible();
-  await expect(page.getByRole("note")).toHaveText("Alpha: we read each capture with AI, which spends real money, about 2¢ each.");
+  await expect(page.getByRole("note")).toHaveText("We read each capture with AI, which costs real money: about 2¢ each.");
 
   // Turn off (AC-5): gone from the profile, kept so the AI won't suggest it again.
   await wants.getByRole("button", { name: "Edit a new rotary fly-tying vise" }).click();
@@ -139,7 +139,7 @@ test("without paid features, the page doesn't offer reading and says why (ALL-94
   await page.goto(`/people/${personId}`);
 
   await expect(page.getByText("1 capture hasn't been read.")).toBeVisible();
-  await expect(page.getByText("Reading captures spends real money, so during alpha it's only on for test accounts.")).toBeVisible();
+  await expect(page.getByText("Reading captures costs real money, so for now it's only on for test accounts.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Read it now" })).toHaveCount(0);
   await expect(page.getByRole("note")).toHaveCount(0);
 });
