@@ -403,7 +403,7 @@ async function closeAtDeadline(
   // Failures the buyer hasn't heard about: one "We couldn't buy" email names them and any held
   // gift cancelled now, in place of the cancelled or skipped email (owner, 2026-11-08, ALL-116).
   if (ctx.orders.some((o) => isUntold(o, sent))) {
-    const told = await tellClosing(round, held, deps);
+    const told = await tellClosing(round, held, orderingPaused, deps);
     if (told === "refused") {
       heldOpen();
       throw new Error("Sending the deadline's failure email failed");
@@ -563,27 +563,35 @@ export async function tellOrdered(roundId: string, deps: EngineDeps): Promise<vo
   // Every late failure not yet told goes in one email (ALL-116). Only the keys this call recorded
   // are its own: another run that got some first sends those, and a refusal forgets only these.
   const fresh: RoundOrder[] = [];
-  for (const o of ctx.orders.filter((x) => x.status === "failed" && x.failedAfterClose && !sent.has(`late_fail:${x.id}`))) {
-    if (await deps.store.recordSend(roundId, ctx.userId, `late_fail:${o.id}`)) fresh.push(o);
-  }
-  if (fresh.length === 0) return;
-  const onItsWay = placed.map((x) => x.title);
-  const result = await notify(
-    {
-      userId: ctx.userId,
-      roundId,
-      kind: "failed_late",
-      data: {
-        ...occasion,
-        failed: fresh.map((o) => ({ title: o.title, detail: lateDetail(o, ctx.personName) })),
-        ...(onItsWay.length > 0 ? { onItsWay } : {}),
-        ...(ctx.closedEarly ? { closedEarly: true } : {}),
-        ...(ctx.personRemoved ? { personRemoved: true } : {}),
+  let result: NotifyResult;
+  try {
+    for (const o of ctx.orders.filter((x) => x.status === "failed" && x.failedAfterClose && !sent.has(`late_fail:${x.id}`))) {
+      if (await deps.store.recordSend(roundId, ctx.userId, `late_fail:${o.id}`)) fresh.push(o);
+    }
+    if (fresh.length === 0) return;
+    const onItsWay = placed.map((x) => x.title);
+    result = await notify(
+      {
+        userId: ctx.userId,
+        roundId,
+        kind: "failed_late",
+        data: {
+          ...occasion,
+          failed: fresh.map((o) => ({ title: o.title, detail: lateDetail(o, ctx.personName) })),
+          ...(onItsWay.length > 0 ? { onItsWay } : {}),
+          ...(ctx.closedEarly ? { closedEarly: true } : {}),
+          ...(ctx.personRemoved ? { personRemoved: true } : {}),
+        },
+        links: { open },
       },
-      links: { open },
-    },
-    deps.notify,
-  );
+      deps.notify,
+    );
+  } catch (err) {
+    // Never lose one (owner: always told): its keys go back and the tick tries again. A
+    // database error just after the send could repeat it once; that beats never telling.
+    for (const o of fresh) await deps.store.forgetSend(roundId, `late_fail:${o.id}`);
+    throw err;
+  }
   for (const o of fresh) {
     if (!result.ok) await deps.store.forgetSend(roundId, `late_fail:${o.id}`);
     const event = result.ok ? "order.failed_late_told" : "order.failed_late_email_failed";
@@ -673,9 +681,19 @@ async function tellFailures(round: ClaimedRound, deps: EngineDeps): Promise<"sen
   }
   const claimed = await store.claimFailureNotices(round.id);
   if (claimed.length === 0) return "none";
-  ctx = await store.roundContext(round.id);
-  const failed = claimed.map((id) => ctx.orders.find((o) => o.id === id)).filter((o): o is RoundOrder => o !== undefined);
-  const result = await sendOpenFailures(round, ctx, failed, ownerAsked, deps);
+  let failed: RoundOrder[] = [];
+  let result: NotifyResult;
+  try {
+    ctx = await store.roundContext(round.id);
+    failed = claimed.map((id) => ctx.orders.find((o) => o.id === id)).filter((o): o is RoundOrder => o !== undefined);
+    result = await sendOpenFailures(round, ctx, failed, claimed, ownerAsked, deps);
+  } catch (err) {
+    // Never lose one (owner: always told): an error anywhere after the claim gives the keys
+    // back. A database error just after the send could repeat it once; that beats never telling.
+    await store.releaseFailureNotices(round.id, claimed);
+    logEvent("round_failure_email_failed", { ...ids, ...errorFields(err), alert: true });
+    return "refused";
+  }
   if (!result.ok) {
     await store.releaseFailureNotices(round.id, claimed);
     logEvent("round_failure_email_failed", { ...ids, alert: true });
@@ -689,6 +707,7 @@ async function sendOpenFailures(
   round: ClaimedRound,
   ctx: RoundContext,
   failed: RoundOrder[],
+  claimed: string[],
   ownerAsked: boolean,
   deps: EngineDeps,
 ): Promise<NotifyResult> {
@@ -697,7 +716,10 @@ async function sendOpenFailures(
   const open = { open: { action: "open_person" as const, expiresAt: new Date(`${round.shipByDeadline}T23:59:00Z`) } };
   const orderByText = chooseBy(round.shipByDeadline);
   if (failed.length > 1) {
-    const tried = new Set(ctx.orders.filter((o) => o.status !== "cancelled").map((o) => o.ideaId)).size;
+    // Gifts still in play before this news: not cancelled, and not a failure the buyer already heard about.
+    const tried = new Set(
+      ctx.orders.filter((o) => o.status !== "cancelled" && !(o.status === "failed" && !claimed.includes(o.id))).map((o) => o.ideaId),
+    ).size;
     const onItsWay = ctx.orders.filter((o) => ["placed", "shipped", "delivered"].includes(o.status)).map((o) => o.title);
     return notify(
       {
@@ -741,45 +763,77 @@ async function sendOpenFailures(
  * couldn't buy" email names them and any held gift cancelled now, in place of the cancelled
  * or skipped email. "none": another run got them first.
  */
-async function tellClosing(round: ClaimedRound, held: RoundOrder[], deps: EngineDeps): Promise<"sent" | "none" | "refused"> {
+async function tellClosing(
+  round: ClaimedRound,
+  held: RoundOrder[],
+  orderingPaused: boolean,
+  deps: EngineDeps,
+): Promise<"sent" | "none" | "refused"> {
   const { store } = deps;
   const ids = { round_id: round.id, user_id: round.userId };
   const claimed = await store.claimFailureNotices(round.id);
   if (claimed.length === 0) return "none";
-  // The held gifts are named here only if the cancelled email hasn't gone.
-  const heldToo = held.length > 0 && (await store.recordSend(round.id, round.userId, "held_cancelled"));
-  const ctx = await store.roundContext(round.id);
-  const failed = claimed.map((id) => ctx.orders.find((o) => o.id === id)).filter((o): o is RoundOrder => o !== undefined);
-  const rows = [
-    ...failed.map((o) => ({ title: o.title, detail: lateDetail(o, ctx.personName) })),
-    ...(heldToo ? held.map((o) => ({ title: o.title, detail: "It couldn't be bought in time, so we cancelled it." })) : []),
-  ];
-  const onItsWay = ctx.orders.filter((o) => ["placed", "shipped", "delivered"].includes(o.status)).map((o) => o.title);
-  const result = await notify(
-    {
-      userId: round.userId,
-      roundId: round.id,
-      kind: "failed_late",
-      data: {
-        personName: ctx.personName,
-        occasion: occasionWord(ctx.occasionKind),
-        dateText: shortDate(ctx.occasionDate),
-        failed: rows,
-        ...(onItsWay.length > 0 ? { onItsWay } : {}),
-        ...(ctx.personRemoved ? { personRemoved: true } : {}),
+  let heldToo = false;
+  let failed: RoundOrder[] = [];
+  let result: NotifyResult;
+  try {
+    // The held gifts are named here only if the cancelled email hasn't gone.
+    heldToo = held.length > 0 && (await store.recordSend(round.id, round.userId, "held_cancelled"));
+    const ctx = await store.roundContext(round.id);
+    failed = claimed.map((id) => ctx.orders.find((o) => o.id === id)).filter((o): o is RoundOrder => o !== undefined);
+    const rows = [
+      ...failed.map((o) => ({ title: o.title, detail: lateDetail(o, ctx.personName) })),
+      ...(heldToo ? held.map((o) => ({ title: o.title, detail: heldDetail(o, orderingPaused) })) : []),
+    ];
+    const onItsWay = ctx.orders.filter((o) => ["placed", "shipped", "delivered"].includes(o.status)).map((o) => o.title);
+    result = await notify(
+      {
+        userId: round.userId,
+        roundId: round.id,
+        kind: "failed_late",
+        data: {
+          personName: ctx.personName,
+          occasion: occasionWord(ctx.occasionKind),
+          dateText: shortDate(ctx.occasionDate),
+          failed: rows,
+          ...(onItsWay.length > 0 ? { onItsWay } : {}),
+          ...(ctx.personRemoved ? { personRemoved: true } : {}),
+        },
+        links: { open: { action: "open_person", expiresAt: new Date(`${ctx.occasionDate}T23:59:00Z`) } },
       },
-      links: { open: { action: "open_person", expiresAt: new Date(`${ctx.occasionDate}T23:59:00Z`) } },
-    },
-    deps.notify,
-  );
+      deps.notify,
+    );
+  } catch (err) {
+    // A database error just after the send could repeat it once; that beats never telling.
+    logEvent("round_failure_email_failed", { ...ids, ...errorFields(err), alert: true });
+    result = { ok: false, error: "threw" };
+  }
   if (!result.ok) {
+    // Never lose one: the keys go back and the round stays open for the next look.
     await store.releaseFailureNotices(round.id, claimed);
     if (heldToo) await store.forgetSend(round.id, "held_cancelled");
-    logEvent("round_failure_email_failed", { ...ids, alert: true });
+    if (result.error !== "threw") logEvent("round_failure_email_failed", { ...ids, alert: true });
     return "refused";
   }
   logEvent("round_failures_told", { ...ids, count: failed.length });
   return "sent";
+}
+
+/** Why a held gift was cancelled at the deadline, for the closing summary (plan review S4). */
+function heldDetail(o: RoundOrder, orderingPaused: boolean): string {
+  if (orderingPaused || o.holdReason === "paused") {
+    return "A problem on our side stopped us ordering it in time. That's on us, and we're sorry.";
+  }
+  switch (o.holdReason) {
+    case "funds":
+      return "There wasn't enough in your Zinc balance in time, so we cancelled it.";
+    case "setup":
+      return "Payment wasn't set up in time, so we cancelled it.";
+    case "address":
+      return "We didn't have an address we could ship to in time, so we cancelled it.";
+    default:
+      return "It couldn't be bought in time, so we cancelled it.";
+  }
 }
 
 /**

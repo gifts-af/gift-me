@@ -375,7 +375,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
     async claimFailureNotices(roundId) {
       const { data, error } = await concierge.rpc("claim_failure_notices", { p_round_id: roundId });
       if (error) fail("Claiming the failure notices failed", error);
-      return (data ?? []).map((o: { id: string }) => o.id);
+      return (data ?? []) as string[];
     },
 
     async releaseFailureNotices(roundId, orderIds) {

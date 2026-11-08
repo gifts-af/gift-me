@@ -79,6 +79,13 @@ export async function readRound(deps: ZincDeps, roundId: string): Promise<RoundR
   return data as RoundRow | null;
 }
 
+/** A failure the buyer hasn't been told about (untold_failures, ALL-116), whatever the round's reason. */
+export async function hasUntoldFailure(deps: ZincDeps, roundId: string): Promise<boolean> {
+  const { data, error } = await concierge(deps).rpc("untold_failures", { p_round_id: roundId });
+  if (error) fail("Reading the round's failures failed", error);
+  return (data ?? []).length > 0;
+}
+
 /** The person is live and the occasion still on. */
 export async function roundStillWanted(deps: ZincDeps, r: RoundRow): Promise<boolean> {
   const [person, occasion] = await Promise.all([

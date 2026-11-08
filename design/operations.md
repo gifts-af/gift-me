@@ -210,7 +210,9 @@ update concierge.app_settings set value = '0' where key = 'zinc_ordering_enabled
 
 ### Rolling back ALL-116 (failure emails)
 
-Code and migration ship together. If the code is rolled back with Vercel's instant rollback, the older engine runs on the new schema: it keeps working and writes the older `fail:<n>:notice` keys. Nothing needs undoing. `untold_failures` counts an older key as telling every failure that happened before it, so rolling forward again sends no repeats. A failure in between may get the older single email, as it did before ALL-116.
+Code and migration ship together. If the code is rolled back with Vercel's instant rollback, the older engine runs on the new schema and keeps working. Nothing needs undoing.
+
+**What the buyer may see:** the older engine doesn't read the new `fail:<order id>` keys, so while it runs, a round whose failure was already told can get the older single failure email again. Rolling forward sends no repeats: `untold_failures` counts an older `fail:<n>:notice` key as telling every failure that happened before it. Rounds are off on production until ALL-29 (decision 53), so only test and admin buyers can see a repeat. **[Claude's call]**
 
 ## Production test account
 

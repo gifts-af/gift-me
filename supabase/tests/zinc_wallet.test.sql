@@ -388,7 +388,8 @@ select is((select status || '/' || failure_type from concierge.orders where id =
 
 -- ─── settle_order ──────────────────────────────────────────────────────────
 
--- a failed price_up on a funds round → price_up
+-- a failed price_up on a funds round: the held gift decides the reason (ALL-116), so it's
+-- still emailed and placed; the failure is told by its own key.
 select tests.zw_round(:'a', 'needs_attention') as r12 \gset
 select tests.zw_order(:'r12', 'held', 'funds') as r12_held \gset
 select tests.zw_order(:'r12', 'placing') as r12_placing \gset
@@ -396,7 +397,7 @@ select is(concierge.settle_order(:'b', :'r12_placing', 'failed', 'price_up', nul
   'another user''s webhook can''t settle the order');
 select is((select status from concierge.orders where id = :'r12_placing'), 'placing', '... it is untouched');
 select concierge.settle_order(:'a', :'r12_placing', 'failed', 'price_up', null);
-select is(tests.zw_state(:'r12'), 'needs_attention/price_up', 'a failed price_up on a funds round → price_up');
+select is(tests.zw_state(:'r12'), 'needs_attention/funds', 'a failed price_up on a funds round stays funds (ALL-116)');
 
 -- invalid_shipping_address twice → one replacement
 select tests.zw_round(:'a', 'ordered') as r13 \gset
@@ -535,7 +536,9 @@ select tests.act_as_server();
 
 select is((select id from concierge.order_by_reference(:'a', :'r16_placed')), :'r16_placed'::uuid, 'an order is found by our reference');
 select is((select count(*)::int from concierge.order_by_reference(:'b', :'r16_placed')), 0, '... only for its own user');
-select ok(not exists (select 1 from concierge.held_rounds_for_user(:'a') where id = :'r12')
+-- r12 has a funds hold next to a failure: still placeable (ALL-116). r11 has only a failure.
+select ok(not exists (select 1 from concierge.held_rounds_for_user(:'a') where id = :'r11')
+          and exists (select 1 from concierge.held_rounds_for_user(:'a') where id = :'r12')
           and exists (select 1 from concierge.held_rounds_for_user(:'a') where id = :'r5'), 'held rounds are the placeable ones');
 
 -- held rounds are claimed first

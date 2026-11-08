@@ -1,7 +1,7 @@
 -- Every failed gift is told, once, and closing never hides one (ALL-116).
 begin;
 \ir _helpers.psql
-select plan(27);
+select plan(29);
 
 select tests.create_user('everyfail@example.com') as u \gset
 insert into public.people (user_id, name, relationship) values (:'u', 'P', 'friend') returning id as p \gset
@@ -31,7 +31,7 @@ create function tests.ef_order(p_round uuid, p_rank integer) returns uuid langua
    where o.round_id = p_round and i.rank = p_rank order by o.created_at desc limit 1;
 $$;
 create function tests.ef_untold(p_round uuid) returns uuid[] language sql as $$
-  select coalesce(array_agg(id order by failed_at, id), '{}') from concierge.untold_failures(p_round);
+  select coalesce(array_agg(x), '{}') from concierge.untold_failures(p_round) x;
 $$;
 grant execute on all functions in schema tests to service_role;
 
@@ -47,9 +47,6 @@ select isnt((select failed_at from concierge.orders where id = :'a'), null, 'a f
 select failed_at as a_at from concierge.orders where id = :'a' \gset
 update concierge.orders set ship_city = '' where id = :'a';
 select is((select failed_at from concierge.orders where id = :'a'), :'a_at'::timestamptz, 'later updates never move failed_at');
-select throws_ok(
-  format('update concierge.orders set status = ''failed'', failed_at = null where id = %L', :'b'),
-  '23514', null, 'a failed order needs failed_at');
 
 -- ─── untold, and the round's reason (held ranks above failed) ───
 select concierge.fail_order(:'b', 'out_of_stock');
@@ -58,7 +55,7 @@ select is((select attention_reason from concierge.gift_rounds where id = :'r'), 
 select ok((select next_action_at <= now() from concierge.gift_rounds where id = :'r'), 'due now while a failure is untold, whatever the reason');
 
 -- ─── claim and release, under the round's lock ───
-select is((select array_agg(id order by failed_at, id) from concierge.claim_failure_notices(:'r')), array[:'a', :'b']::uuid[], 'claim returns the untold failures');
+select is((select array_agg(x) from concierge.claim_failure_notices(:'r') x), array[:'a', :'b']::uuid[], 'claim returns the untold failures');
 select ok(exists (select 1 from concierge.round_sends where round_id = :'r' and step = 'fail:' || :'a')
       and exists (select 1 from concierge.round_sends where round_id = :'r' and step = 'fail:' || :'b'), 'and records fail:<id> for each');
 select is((select count(*)::int from concierge.claim_failure_notices(:'r')), 0, 'a second claim gets nothing');
@@ -81,7 +78,7 @@ select is((select count(*)::int from concierge.claim_failure_notices(:'r')), 0, 
 select tests.ef_round(:'u', :'p', :'o', 2031, 2) as r2 \gset
 select tests.ef_order(:'r2', 1) as d \gset
 select concierge.fail_order(:'d', 'too_late');
-select id as claimed from concierge.claim_failure_notices(:'r2') \gset
+select x as claimed from concierge.claim_failure_notices(:'r2') x \gset
 select concierge.cancel_held(:'r2', 'cancel');
 select is((select failed_after_close from concierge.orders where id = :'d'), false, 'claimed before the close, so the close leaves it');
 select concierge.release_failure_notices(:'r2', array[:'d']::uuid[]);
@@ -116,6 +113,19 @@ insert into concierge.round_sends (round_id, user_id, step, created_at) values (
 select is(tests.ef_untold(:'r5'), '{}'::uuid[], 'an older-style email sent after it failed counts as telling it');
 select concierge.fail_order(:'k', 'out_of_stock');
 select is(tests.ef_untold(:'r5'), array[:'k']::uuid[], 'a failure after that email is still untold');
+
+-- ─── a hold next to a failure is still a new hold to tell (plan review B1) ───
+select tests.ef_round(:'u', :'p', :'o', 2036, 2) as r8 \gset
+select concierge.fail_order(tests.ef_order(:'r8', 1), 'price_up');
+select concierge.hold_orders(:'r8', 'funds');
+select is((select attention_reason || '/' || hold_count from concierge.gift_rounds where id = :'r8'), 'funds/1',
+          'a funds hold next to a told-or-not failure becomes the reason, a new hold (hold_count 1)');
+select ok((select next_action_at <= now() from concierge.gift_rounds where id = :'r8'), 'and its notice is due now');
+
+-- ─── a failure written directly gets failed_at too (the trigger) ───
+select tests.ef_round(:'u', :'p', :'o', 2035, 1) as r7 \gset
+update concierge.orders set status = 'failed', failure_type = 'failed', hold_reason = null where round_id = :'r7';
+select isnt((select failed_at from concierge.orders where round_id = :'r7'), null, 'a failure written directly gets failed_at');
 
 -- ─── a bad address isn't a failure to tell ───
 select tests.ef_round(:'u', :'p', :'o', 2034, 1) as r6 \gset

@@ -6,7 +6,8 @@
 -- on the ship-by day could go unmentioned or be named wrongly.
 --
 -- Now:
--- - Each failed order has its own key, fail:<order id>, and failed_at, set once.
+-- - Each failed order has its own key, fail:<order id>, and failed_at, set once by a
+--   trigger whichever way it fails.
 -- - untold_failures(round) is the one rule for what the buyer hasn't heard yet.
 --   A key written by older code (fail:<n>:notice) counts as telling every failure
 --   that happened before it, so a deploy or rollback never repeats an email.
@@ -18,81 +19,47 @@
 -- - reconcile_round ranks unconfirmed, then held, then failed: failures are told
 --   outside the round's reason now, which only has to drive the holds.
 --
--- reconcile_round is copied from 20261110100000_failure_notices.sql and
--- fail_order_row from 20261113100000_order_address_source.sql; no later migration
--- changed them. Only the lines marked New differ. Same signatures, so create or
+-- reconcile_round is copied from 20261110100000_failure_notices.sql; no later
+-- migration changed it. Only the lines marked New differ. Same signatures, so create or
 -- replace keeps their grants (service_role only). Expand-only (E7):
 -- round_fail_count stays until a later contract migration.
 
 alter table concierge.orders add column failed_at timestamptz;
--- Older failures: when they were last touched is the closest we have. But never
--- after the round's last older-style failure email, so a round that already sent
--- one counts all its failures as told (owner, 2026-11-08: no repeats).
-update concierge.orders o
-   set failed_at = least(o.updated_at,
-                         coalesce((select max(s.created_at) from concierge.round_sends s
-                                    where s.round_id = o.round_id and s.step like 'fail:%:notice'), o.updated_at))
- where o.status = 'failed' and o.failed_at is null;
-alter table concierge.orders add constraint orders_failed_at_set check (status <> 'failed' or failed_at is not null);
+-- Older failures: when they were last touched is the closest we have. An older-style
+-- email sent after that counts as telling it; one the old code never sent is told
+-- late (owner, 2026-11-08: late is better than never). Only test and admin users
+-- can buy today (decision 53), so a rare repeat is the accepted cost.
+update concierge.orders set failed_at = updated_at where status = 'failed' and failed_at is null;
 
-create or replace function concierge.fail_order_row(p_order concierge.orders, p_failure_type text)
-returns void
+-- Set once, whenever an order becomes failed, by any path (fail_order_row or a direct
+-- write); later updates never move it.
+create function concierge.set_failed_at()
+returns trigger
 language plpgsql
-security definer
 set search_path = ''
 as $$
-declare
-  v_new uuid;
-  -- A shared address Zinc rejected ends the order. Only its owner could fix it,
-  -- so there's no replacement waiting on the buyer (T61).
-  v_type text := case when p_failure_type = 'invalid_shipping_address' and p_order.address_source = 'shared'
-                      then 'address_rejected' else p_failure_type end;
 begin
-  update concierge.orders
-     set status = 'failed',
-         failure_type = v_type,
-         hold_reason = null,
-         resolved = (v_type = 'invalid_shipping_address'),
-         -- New: when it failed, set once; later updates move updated_at, never this.
-         -- clock_timestamp keeps two failures in one transaction in order.
-         failed_at = clock_timestamp(),
-         -- The round already closed, so the engine won't tell the buyer; the app does.
-         failed_after_close = exists (select 1 from concierge.gift_rounds where id = p_order.round_id and closed_at is not null)
-   where id = p_order.id;
-
-  -- A share that was withdrawn leaves nothing of the address on the order, in
-  -- this same transaction (T42, decision 43).
-  if v_type = 'address_withdrawn' then
-    delete from concierge.order_addresses where order_id = p_order.id;
-    update concierge.orders set ship_city = '', ship_state = '' where id = p_order.id;
+  if new.status = 'failed' and new.failed_at is null then
+    -- clock_timestamp keeps two failures in one transaction in order.
+    new.failed_at := clock_timestamp();
   end if;
-
-  if v_type = 'invalid_shipping_address'
-     and not exists (select 1 from concierge.gift_rounds where id = p_order.round_id and closed_at is not null)
-     and not exists (select 1 from concierge.orders
-                      where idea_id = p_order.idea_id and status not in ('failed', 'cancelled', 'refunded')) then
-    insert into concierge.orders (user_id, round_id, idea_id, provider, funding_mode, max_price_cents, is_gift, gift_message,
-                                  fee_cents, status, hold_reason, ship_to, ship_city, ship_state, address_source)
-    values (p_order.user_id, p_order.round_id, p_order.idea_id, p_order.provider, p_order.funding_mode, p_order.max_price_cents,
-            p_order.is_gift, p_order.gift_message, p_order.fee_cents, 'held', 'address', p_order.ship_to, p_order.ship_city,
-            p_order.ship_state, p_order.address_source)
-    returning id into v_new;
-    -- No address snapshot: begin_placing needs a fresh, valid one before it sends.
-  end if;
+  return new;
 end;
 $$;
+create trigger set_failed_at before insert or update of status, failed_at on concierge.orders
+  for each row execute function concierge.set_failed_at();
 
 -- The failures the buyer hasn't been told about while the round was open, in the
 -- order they failed. Not a bad address (held for a new one instead), not one that failed after
 -- the round closed (the late email tells it), and not one already resolved.
 create function concierge.untold_failures(p_round_id uuid)
-returns setof concierge.orders
+returns setof uuid
 language sql
 stable
 security definer
 set search_path = ''
 as $$
-  select o.*
+  select o.id
     from concierge.orders o
    where o.round_id = p_round_id
      and o.status = 'failed'
@@ -109,25 +76,25 @@ as $$
 $$;
 
 -- Takes the untold failures for one email, under the round's lock: records
--- fail:<order id> for each and returns them. Nothing once the round has closed
+-- fail:<order id> for each and returns their ids (ids only, T42). Nothing once the round has closed
 -- (the late email tells them instead).
 create function concierge.claim_failure_notices(p_round_id uuid)
-returns setof concierge.orders
+returns setof uuid
 language plpgsql
 security definer
 set search_path = ''
 as $$
 declare
   r concierge.gift_rounds;
-  v_order concierge.orders;
+  v_id uuid;
 begin
   select * into r from concierge.gift_rounds where id = p_round_id for update;
   if not found or r.closed_at is not null then
     return;
   end if;
-  for v_order in select * from concierge.untold_failures(p_round_id) loop
-    insert into concierge.round_sends (round_id, user_id, step) values (p_round_id, r.user_id, 'fail:' || v_order.id);
-    return next v_order;
+  for v_id in select x from concierge.untold_failures(p_round_id) x loop
+    insert into concierge.round_sends (round_id, user_id, step) values (p_round_id, r.user_id, 'fail:' || v_id);
+    return next v_id;
   end loop;
 end;
 $$;
@@ -196,7 +163,7 @@ begin
     -- New: any close (the deadline, the cancel link, skip_open_rounds) hands the
     -- failures the buyer hasn't heard about to the late email, before they're resolved.
     update concierge.orders set failed_after_close = true
-     where id in (select id from concierge.untold_failures(p_round_id));
+     where id in (select x from concierge.untold_failures(p_round_id) x);
     update concierge.orders
        set status = 'cancelled',
            failure_type = case v_ctx when 'deadline' then 'held_expired' when 'cancel' then 'cancelled' else 'round_closed' end

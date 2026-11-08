@@ -1902,4 +1902,38 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     expect(lastText(u)).not.toContain("Open Mary's page");
   });
 
+  it("approving into one failure and one funds hold: both told at once, and the result says failed (AC-14, review S1)", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await newRound(u, { totals: [4200, 3000] });
+    zinc.plan.set(`https://shop.test/p/${r.ideaIds[0]}`, [{ status: 400, code: "out_of_stock" }]);
+    zinc.plan.set(`https://shop.test/p/${r.ideaIds[1]}`, ["402"]);
+    const result = await approve(u, r);
+    expect(result).toMatchObject({ ok: true, status: "failed" });
+    // The held gift decides the reason, so it's still emailed and placed when funds arrive.
+    expect(await roundRow(r.roundId)).toMatchObject({ status: "needs_attention", attention_reason: "funds" });
+    expect(inbox(u).sort()).toEqual(["Sorry, Mary's gift is out of stock@0", "Sorry, Mary's gift is waiting on your Zinc balance@0"].sort());
+    expect(await pg.query("select 1 from concierge.held_rounds_for_user($1) where id = $2", [u.userId, r.roundId])).toMatchObject({ rowCount: 1 });
+  });
+
+  it("an error after claiming gives the failures back, so the next look still tells them (review B2)", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await placingRound(u, [4200]);
+    await settleFailed(u, r.orderIds[0], "out_of_stock");
+    const deps = engine(dayAt(1));
+    const real = deps.notify.store;
+    deps.notify = {
+      ...deps.notify,
+      store: {
+        ...real,
+        insertNotification: async () => {
+          throw new Error("database blip");
+        },
+      },
+    };
+    await advanceRound(r.roundId, deps);
+    expect(await sends(r.roundId)).not.toContain(`fail:${r.orderIds[0]}`);
+    await advance(r.roundId, 2);
+    expect(inbox(u)).toEqual(["Sorry, Mary's gift is out of stock@2"]);
+  });
+
 });
