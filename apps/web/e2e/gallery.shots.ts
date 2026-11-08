@@ -85,6 +85,8 @@ async function shareToken(user: Credentials): Promise<string> {
   const res = await fetch(`${url}/rest/v1/lists?select=share_token&owner_id=eq.${me.id}`, {
     headers: { apikey: publishableKey, Authorization: `Bearer ${access_token}`, "Accept-Profile": "lists" },
   });
+  if (!res.ok) throw new Error(`Couldn't read the share token: ${res.status} ${await res.text()}`);
   const [row] = (await res.json()) as { share_token: string }[];
+  if (!row) throw new Error("The seeded list has no share token");
   return row.share_token;
 }

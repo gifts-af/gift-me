@@ -90,7 +90,7 @@ Write new migrations with `pnpm supabase migration new <name>` and test them loc
 **Reviewing screens and emails by eye:**
 
 - `pnpm gallery` signs in as a fresh local account with one person and a one-gift list, screenshots each screen on a phone (light and dark) and on desktop, screenshots every email on the phone, and writes `apps/web/gallery/index.html` (not committed). It's published as the [screens and emails page](https://claude.ai/artifact/9mrDvFAgoqxvxmzirJFCz6); CLAUDE.md > Updating the screens and emails page says how to republish it. To add a screen, add a line to `SIGNED_OUT` or `SIGNED_IN` in `apps/web/e2e/gallery.shots.ts`. It checks nothing and CI doesn't run it.
-- `/dev/emails` shows every email at phone and desktop widths in the running app: locally, and on any PR preview. Production returns 404. You need to be signed in.
+- `/dev/emails` shows every email at phone and desktop widths in the running app: under `pnpm dev` and on any PR preview. Everywhere else, production included, returns 404. You need to be signed in.
 
 **Writing a browser test** (T62, ALL-103):
 

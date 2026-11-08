@@ -67,9 +67,9 @@ a:focus-visible img{outline:2px solid var(--accent);outline-offset:2px}
 <div class="wrap">
 <h1>GiftsAF screens and emails</h1>
 <p>Every main screen on a phone (light and dark) and on desktop, and every email on a phone, from a fresh test account with one person and a one-gift list. Taken ${new Date().toISOString().slice(0, 10)} by <code>pnpm gallery</code>. Open a picture for full size.</p>
-<h2>Screens (${screens.length})</h2>
+<h2>Jump to a screen (${screens.length})</h2>
 <nav>${chips(screens)}</nav>
-<h2>Emails (${emails.length})</h2>
+<h2>Jump to an email (${emails.length})</h2>
 <nav>${chips(emails, "email-")}</nav>
 <h2>Screens</h2>
 ${screens.map((n) => section(n, n)).join("\n")}
