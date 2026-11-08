@@ -38,7 +38,7 @@ Root cause: the notice isn't keyed to the order it's about.
 | AC-6 | The engine has read the round on the ship-by day | `settle_order` fails a placing pick before `cancel_held` runs | That failure still gets the "We couldn't buy it" email (the race from the review) |
 | AC-7 | A failure on the ship-by day, nothing held, placed or pending | The tick closes the round | The buyer gets "We couldn't buy it" for that gift, and not also "No gift … this time" (case 4) |
 | AC-8 | A rejected shared address (ALL-112) | The round closes, or another update touches the order | The order's `failed_at` doesn't change, and the retry window in `tellOwnerOfRejection` counts from `failed_at` (case 5) |
-| AC-9 | Shared-address orders ended together (`address_withdrawn` and/or `address_rejected`) | The next tick | One email per type names every untold order of that type, as today (ALL-112). It records `fail:<order id>` for each one it names, and forgets them all if refused. None is named again later |
+| AC-9 | Two or more shared-address orders end together (`address_withdrawn` and/or `address_rejected`) | The next tick | One summary names them all, a row each with its ALL-112 wording. It records `fail:<order id>` for each one it names, and forgets only those if refused. None is named again later. One alone keeps its ALL-112 email |
 | AC-10 | Failures in rounds that have any old `fail:<n>:notice` key | The migration runs | They count as told, so nobody gets a repeat. A failure in a round with no such key was never told, and is told at the next tick |
 | AC-11 | A failure email that the email service refuses | The tick goes on | It's forgotten and logged with an alert; the run still tries placing held gifts, and the failure is sent at the next tick |
 | AC-12 | A failure that happened after the round closed | Any tick | Only the existing `late_fail:<order id>` email goes, never a round failure email too |
@@ -156,6 +156,34 @@ In `runHeld`, before the pass loop and only when the round isn't at its deadline
 
 - `design/technical-design.md` round engine: failure notices per order, closing marks untold failures late.
 - `design/operations.md`: nothing new to run.
+
+### Plan review (2026-11-08, fresh agent): 2 blockers, 6 should-fixes, 6 nits, all taken
+
+These change the tasks above. Where they disagree, this list wins.
+
+- **B1: reason ranking.** `reconcile_round` ranks `unconfirmed`, then held, then failed. Failures are told outside the plan now, so the round's reason only has to drive holds; otherwise a told `price_up` next to a funds hold would leave the hold unemailed and unplaced. Test: the `hold_count` bump when the reason moves from a failure to `funds`.
+- **B2: claim under the round's lock.** Two new SQL functions, each locking the round row:
+  - `claim_failure_notices(round)`: returns the untold failures and inserts their `fail:<id>` in one transaction; nothing once the round is closed.
+  - `release_failure_notices(round, ids)`: on a refused send, deletes those keys, and if the round closed meanwhile, marks them `failed_after_close` so the late path tells them.
+  pgTAP covers each interleaving with the cancel link and `skip_open_rounds`.
+- **S1:** the failure step runs again after the pass loop, so a failure from this run's own placing is told the same run.
+- **S2:** a refused grouped send forgets only the keys this call recorded fresh. Two runs at once may send two emails, not lose one.
+- **S3 (replaces the backfill):** "told" means a `fail:<id>` key exists, or an old-style `fail:%:notice` key whose `created_at` is at or after the order's `failed_at`. Old code writing count keys during the rollout, or after a Vercel rollback, can't cause a repeat. Rollback steps go in `design/operations.md`.
+- **S4:** `design/operations.md` Alerts: a row for `round_failure_email_failed`, and the `failed_late_email_failed` and `round_skip_email_failed` rows updated.
+- **S5:** `failed_late` gets the reason the round closed: `deadline` keeps "too late"; an early close (cancel, occasion off, person deleted) says the round was closed early, with no "too late" wording. Owner decision below for a deleted person.
+- **S6:** address endings are rows in the summary when there are two or more failures; one failure alone keeps its ALL-112 email. AC-9 changes to match. `tellOwnerOfRejection` runs before the claim when any untold failure is `address_rejected`, so `ownerAsked` is known.
+- **Nits:**
+  - `tried` counts distinct gifts (`idea_id`) with a non-cancelled order.
+  - "Choose by" is the day before the ship-by date, for the new emails and `final_notice` too (same file).
+  - At the deadline, a told failure decides the skipped email as today; only untold ones suppress it.
+  - The `failed_at` backfill from `updated_at` may restart one ALL-112 retry window once; accepted.
+  - `samples.test.ts` and `e2e/emails.spec.ts` list the new samples.
+  - A crash mid-send can now leave a group recorded as told, not just one gift; same at-most-once rule as every email.
+
+### Owner decisions from the plan review
+
+1. **Person deleted or occasion turned off with an untold failure:** send "We couldn't buy it"? **[Claude's pick: yes for both; for a deleted person, the button opens the People list instead of their page]**
+2. **At the deadline, an untold failure next to a held gift:** one email or two? **[Claude's pick: one. The "We couldn't buy" summary also lists the held gift as cancelled, following the owner's "group into one summary"]**
 
 ## Before coding: consistency check
 
