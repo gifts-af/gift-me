@@ -288,8 +288,8 @@ flowchart LR
 | Side status | Meaning | Way out |
 |---|---|---|
 | `needs_address` | No address yet, so no ideas can be checked (P-5) | Address added (→ `generating`), or the deadline passes (→ `skipped`) |
-| `needs_attention` | Something went wrong: order failed, price over the approved amount, likely late, or the AI budget was hit | The user re-approves at the new price or picks the next-best idea (→ `ordered`, D29), or the deadline passes (→ `skipped`) |
-| `skipped` | No reply by the deadline. Nothing is bought (D23) | — |
+| `needs_attention` | Something went wrong: order failed, price over the approved amount, likely late, or the AI budget was hit | The user re-approves at the new price or picks the next-best idea (→ `ordered`, D29). At the deadline, held gifts are cancelled and failures closed: → `ordered` if any gift is already placed, otherwise → `skipped`. An order Zinc hasn't confirmed yet keeps the round here (`reconcile_round`) |
+| `skipped` | No reply by the deadline. Nothing is bought (D23) | None, on purpose: past the deadline a gift can't arrive in time. The next occasion starts a fresh round |
 
 - Every transition writes `gift_rounds.status` and `next_action_at` together, so the UI and recovery logic only need to read the database.
 - **Idempotency:** each Zinc order request uses the order's `idempotency_key`, so a retry can never buy twice (a fresh key after a synchronous 4xx, T56). **Revised by T56:** Zinc webhooks have no event ID, so instead of a dedupe table, order status only moves forward and webhooks write only the order row.
