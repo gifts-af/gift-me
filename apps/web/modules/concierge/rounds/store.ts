@@ -63,6 +63,8 @@ export type ClaimedRound = {
 /** One of the round's orders, for the hold and failure emails (ALL-32). */
 export type RoundOrder = {
   id: string;
+  /** The gift it buys; a reapproved or re-held order has the same one (counts gifts tried). */
+  ideaId: string;
   title: string;
   /** Where it ships, city only (never the full address); null when unknown. */
   shipCity: string | null;
@@ -70,9 +72,9 @@ export type RoundOrder = {
   holdReason: string | null;
   failureType: string | null;
   resolved: boolean;
-  /** Last changed; for a failed order, about when it failed. */
-  updatedAt: string;
-  /** It failed after the round closed: emailed once as `late_fail:<id>` (failed_late). */
+  /** When it failed, set once (ALL-116); null unless failed. */
+  failedAt: string | null;
+  /** It failed after the round closed, or was untold when it closed: emailed once as `late_fail:<id>` (failed_late). */
   failedAfterClose: boolean;
   maxPriceCents: number;
   feeCents: number;
@@ -95,8 +97,10 @@ export type RoundContext = {
   ideas: { title: string; totalCents: number }[];
   /** The round's orders, oldest first, with their idea's title (ALL-32). */
   orders: RoundOrder[];
-  /** round_fail_count: numbers the failure emails (fail:<n>:notice). */
-  failCount: number;
+  /** The person was removed (soft-deleted): emails don't link their page (ALL-116). */
+  personRemoved: boolean;
+  /** The round closed before its ship-by day (the cancel link, the occasion off, the person removed). */
+  closedEarly: boolean;
 };
 
 export type RoundFinish = {
@@ -143,6 +147,14 @@ export interface RoundStore {
   /** false = already recorded, so the email must not go out again. */
   recordSend(roundId: string, userId: string, step: StepKey): Promise<boolean>;
   forgetSend(roundId: string, step: StepKey): Promise<void>;
+  /**
+   * claim_failure_notices (ALL-116): under the round's lock, records `fail:<id>` for each
+   * failure the buyer hasn't been told about and returns their ids, in the order they failed.
+   * Nothing once the round has closed.
+   */
+  claimFailureNotices(roundId: string): Promise<string[]>;
+  /** release_failure_notices: the email was refused, so those keys go back (to the late email if it closed meanwhile). */
+  releaseFailureNotices(roundId: string, orderIds: string[]): Promise<void>;
   /** Rounds with a rejected shared address still to deal with (ALL-112). */
   roundsWithRejectedAddresses(): Promise<string[]>;
   /** Who to ask to check their address: only while the rejected address is still what they share. */
@@ -360,18 +372,29 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
       if (error) fail("Forgetting the send failed", error);
     },
 
+    async claimFailureNotices(roundId) {
+      const { data, error } = await concierge.rpc("claim_failure_notices", { p_round_id: roundId });
+      if (error) fail("Claiming the failure notices failed", error);
+      return (data ?? []).map((o: { id: string }) => o.id);
+    },
+
+    async releaseFailureNotices(roundId, orderIds) {
+      const { error } = await concierge.rpc("release_failure_notices", { p_round_id: roundId, p_order_ids: orderIds });
+      if (error) fail("Releasing the failure notices failed", error);
+    },
+
     async roundContext(roundId) {
       const { data: round, error } = await concierge
         .from("gift_rounds")
-        .select("user_id, person_id, occasion_id, occasion_date, ship_by_deadline, status, attention_reason")
+        .select("user_id, person_id, occasion_id, occasion_date, ship_by_deadline, status, attention_reason, closed_at")
         .eq("id", roundId)
         .single();
       if (error) fail("Loading the round failed", error);
 
-      const [person, occasion, ideas, orders, failCount] = await Promise.all([
+      const [person, occasion, ideas, orders] = await Promise.all([
         db
           .from("people")
-          .select("name, recipient_first_name, recipient_last_name, address_line1, address_line2, city, state, zip, country")
+          .select("name, deleted_at, recipient_first_name, recipient_last_name, address_line1, address_line2, city, state, zip, country")
           .eq("id", round.person_id)
           .single(),
         concierge.from("occasions").select("kind").eq("id", round.occasion_id).single(),
@@ -383,17 +406,15 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
           .order("rank"),
         concierge
           .from("orders")
-          .select("id, status, hold_reason, failure_type, resolved, updated_at, failed_after_close, max_price_cents, fee_cents, ship_city, created_at, gift_ideas(title)")
+          .select("id, idea_id, status, hold_reason, failure_type, resolved, failed_at, failed_after_close, max_price_cents, fee_cents, ship_city, created_at, gift_ideas(title)")
           .eq("round_id", roundId)
           .order("created_at")
           .order("id"),
-        concierge.rpc("round_fail_count", { p_round_id: roundId }),
       ]);
       if (person.error) fail("Loading the round's person failed", person.error);
       if (occasion.error) fail("Loading the round's occasion failed", occasion.error);
       if (ideas.error) fail("Loading the round's ideas failed", ideas.error);
       if (orders.error) fail("Loading the round's orders failed", orders.error);
-      if (failCount.error) fail("Counting the round's failures failed", failCount.error);
 
       // A bonus in the email: failing to count them mustn't hold up a gift reminder.
       const open = await getOpenQuestions(db, round.person_id).catch((err: unknown) => {
@@ -441,18 +462,21 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
         ideas: ideas.data.map((i) => ({ title: i.title, totalCents: i.est_total_cents })),
         orders: orders.data.map((o) => ({
           id: o.id,
+          ideaId: o.idea_id,
           title: (o.gift_ideas as { title: string } | null)?.title ?? "gift",
           shipCity: o.ship_city,
           status: o.status,
           holdReason: o.hold_reason,
           failureType: o.failure_type,
           resolved: o.resolved,
-          updatedAt: o.updated_at,
+          failedAt: o.failed_at,
           failedAfterClose: o.failed_after_close,
           maxPriceCents: o.max_price_cents,
           feeCents: o.fee_cents,
         })),
-        failCount: failCount.data ?? 0,
+        personRemoved: p.deleted_at !== null,
+        // Closed on a day before its ship-by day: not by the deadline.
+        closedEarly: round.closed_at !== null && round.closed_at.slice(0, 10) < round.ship_by_deadline,
       };
     },
 

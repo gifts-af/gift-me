@@ -180,10 +180,10 @@ These change the tasks above. Where they disagree, this list wins.
   - `samples.test.ts` and `e2e/emails.spec.ts` list the new samples.
   - A crash mid-send can now leave a group recorded as told, not just one gift; same at-most-once rule as every email.
 
-### Owner decisions from the plan review
+### Owner decisions from the plan review (answered 2026-11-08)
 
-1. **Person deleted or occasion turned off with an untold failure:** send "We couldn't buy it"? **[Claude's pick: yes for both; for a deleted person, the button opens the People list instead of their page]**
-2. **At the deadline, an untold failure next to a held gift:** one email or two? **[Claude's pick: one. The "We couldn't buy" summary also lists the held gift as cancelled, following the owner's "group into one summary"]**
+1. **Person deleted or occasion turned off with an untold failure: yes, send "We couldn't buy it" for both.** For a deleted person, the button opens the People list instead of their page.
+2. **At the deadline, an untold failure next to a held gift: one email.** The "We couldn't buy" summary also lists the held gift as cancelled. It goes before the round closes, as the deadline's deciding email does today: the failures' `fail:<id>` keys are claimed with it, and a refusal releases them and keeps the round open for the next look. A failure that arrives during the close goes to the late email.
 
 ## Before coding: consistency check
 

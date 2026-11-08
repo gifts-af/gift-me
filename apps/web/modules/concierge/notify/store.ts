@@ -30,7 +30,7 @@ export type NewLink = {
 export interface NotifyStore {
   recipient(userId: string): Promise<{ email: string | null; timezone: string | null }>;
   setting(key: string): Promise<number>;
-  /** The person a round is for, or null. Used by the open_person action's done page. */
+  /** The person a round is for, or null (also when they were removed). Used by the open_person action's done page. */
   roundPersonId(roundId: string): Promise<string | null>;
   insertLinks(rows: NewLink[]): Promise<void>;
   insertNotification(row: {
@@ -106,7 +106,11 @@ export function createSupabaseNotifyStore(db: SupabaseClient<Database> = createA
         .eq("id", roundId)
         .maybeSingle();
       if (error) fail("Loading the round's person failed", error);
-      return data?.person_id ?? null;
+      if (!data) return null;
+      // A removed person has no page: the link goes home (Give, the people list) instead (ALL-116).
+      const person = await db.from("people").select("deleted_at").eq("id", data.person_id).maybeSingle();
+      if (person.error) fail("Loading the round's person failed", person.error);
+      return person.data && person.data.deleted_at === null ? data.person_id : null;
     },
 
     async insertLinks(rows) {

@@ -98,7 +98,14 @@ export type TemplateData = {
    * Gifts that failed once their round closed, or untold when it closed (too late to choose
    * again), with why when known; `onItsWay`: the round's other gifts placed.
    */
-  failed_late: Occasion & { failed: { title: string; detail?: string }[]; onItsWay?: string[] };
+  failed_late: Occasion & {
+    failed: { title: string; detail?: string }[];
+    onItsWay?: string[];
+    /** Closed before its ship-by day (the cancel link, the occasion off, the person removed). */
+    closedEarly?: boolean;
+    /** The person was removed, so the button opens GiftsAF, not their page. */
+    personRemoved?: boolean;
+  };
   /** ALL-116: `tried`, how many gifts were ordered in the round. */
   failed_several: Occasion & { tried: number; failed: FailedGift[]; onItsWay?: string[]; orderByText: string };
   check_your_address: Record<string, never>;
@@ -533,8 +540,10 @@ export const TEMPLATES: {
           ...onItsWayLine(d.onItsWay),
         ],
         rows: several ? d.failed.map((f) => ({ title: f.title, ...(f.detail ? { detail: f.detail } : {}) })) : undefined,
-        button: { label: `Open ${d.personName}'s page`, url: links.open },
-        footer: "What happens next: it's too late for us to send another gift in time, but you can still pick something up yourself. This round is now closed.",
+        button: { label: d.personRemoved ? `Open ${APP_NAME}` : `Open ${d.personName}'s page`, url: links.open },
+        footer: d.closedEarly
+          ? "What happens next: this occasion's gifts were stopped early, so we won't buy anything more for it. You can still pick something up yourself."
+          : "What happens next: it's too late for us to send another gift in time, but you can still pick something up yourself. This round is now closed.",
       }),
     };
   },
