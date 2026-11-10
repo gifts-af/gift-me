@@ -97,6 +97,18 @@ How the concierge's intelligence works (matches design §3.1):
 - **Per run (option):** concierge runs people schedule for their own list could carry a small fee that covers our AI cost plus a margin, instead of or alongside limits per plan (idea 7).
 - **Affiliate links (option):** commission on purchases made through GiftsAF, never used to rank or pick gifts (PRD G-5; idea 10, ALL-84).
 
+**What paid features cost us** (estimates from the spikes and ALL-27's spec; Jim, 2026-11-10). Pricing (ALL-76) should cover these with a margin:
+
+| What | When it spends | Our cost |
+|---|---|---|
+| Reading a capture | Each capture saved from the extension, or "Read it now" | About 2¢ (the `capture_read_estimate_cents` setting) |
+| Gift ideas in a round | Once per round, when the round needs ideas (about 1–2 weeks before the order-by date). A round that finds good gifts never runs again | About 40¢: 20–25¢ of AI, mostly web searches, plus about 16¢ of Zinc lookups at 1¢ each |
+| A round that finds nothing | Tries again the next day, at most 2 runs, plus 1 more if the buyer adds facts, then stops and emails the buyer | At most about $1.20 in a round's life |
+| "Suggest ideas" on a person's page | Each tap | About 40¢ |
+| Buying a gift | Each order | Zinc's $1 order fee, from the buyer's own Zinc wallet (T56), not from us |
+
+Rough yearly cost per buyer: about 40¢ per occasion, so 5 people with one birthday each is about $2, plus captures and taps.
+
 To be decided before we take money: ALL-76. Until then, anything that costs us money (AI calls, Zinc lookups, rounds) is only for test and admin users (decision 53), so pricing also gates opening the concierge beyond us, friends included (owner, 2026-11-06). Taking money also means moving off free hosting plans and making the repo private (ALL-75).
 
 Billing stays out of MVP scope.
