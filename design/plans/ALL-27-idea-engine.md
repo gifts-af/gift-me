@@ -146,7 +146,9 @@ All in `concierge.app_settings`, with no fallback in code.
 | `idea_rounds_per_tick` | 1 | Most rounds that make ideas in one tick. Raise it only with the AC-28 timings in hand |
 | `idea_run_lease_ms` | 600000 | How long an unfinished on-demand run blocks another for the same person |
 | `tick_deadline_ms` | 270000 | The tick starts no new work after this, leaving 30 s of Vercel's 300 s |
-| `zinc_lookup_cents` | 1 | Cost of one Zinc call, for logging |
+| `zinc_lookup_cents` | 1 | Cost of one Zinc call, for logging and the cost cap |
+| `zinc_requests_per_second` | 10 | Zinc's rate limit per key; a run never calls faster |
+| `idea_ai_max_tokens` | 6000 | Output token limit per AI call, which bounds the cost of the call in flight (AC-29) |
 
 The order fee (`zinc_order_fee_cents`) already exists in settings, and `over_budget_pct` is per account in `concierge.accounts`. `pnpm ai:eval` only checks capture reading today, so it's extended for AC-22, and the 5 profiles move from `spikes/ai/fixtures/` to `apps/web/lib/ai/fixtures/`. Product lookups are new (`zinc/products.ts`); the HTTP client and error type are ALL-32's.
 
@@ -169,4 +171,468 @@ The order fee (`zinc_order_fee_cents`) already exists in settings, and `over_bud
 
 ## Plan
 
-To be written next.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** build the spec above. A paid buyer gets live, checked gift ideas in a round (on dev) and on demand from a person's page, inside the tick's time and a hard cost cap per run.
+
+**Architecture:** pure rules (offer choice, filtering, keeping, name redaction) live in `packages/core/src/ideas.ts`. Vendor adapters: Zinc product lookups in `modules/concierge/zinc/products.ts`, and the AI's brainstorm and rank in `lib/ai/ideas.ts`. A single run orchestrator, `modules/concierge/ideas/run.ts`, is used both by the round engine's new idea pass and by an on-demand server action. The database counts and leases runs (`concierge.idea_runs`) and saves ideas atomically through service-role functions.
+
+**Tech stack:** Next.js 16, Supabase (Postgres, RLS, pgTAP), Vitest, Playwright, the AI Gateway's Anthropic-compatible `/v1/messages` endpoint (Sonnet 5.5 with `web_search`), and the Zinc REST API.
+
+**Spec:** this file, above. Branch: `JimtheBurger/all-27-idea-engine`.
+
+### Global constraints
+
+- Every number comes from `concierge.app_settings` via `setting_int`. There are no fallbacks in code (T23). New settings are listed in Task 1.
+- Logic never reads `process.env` or builds clients (E3). Only `app/settings/zinc-deps.ts` and the server action read env and build deps.
+- Events go through `logEvent`, with ids, counts and cents only (E6, T42). Events: `ideas.run_started`, `ideas.run`, `ideas.candidate_dropped` (reason only).
+- The AI never sees a name, email or address. Zinc only ever gets search text and product ids (AC-21).
+- Copy: plain words. The money notice uses the `design/ui.md` style, with no "Alpha:". Emails use the ALL-116 tone.
+- Migrations are expand-only (E7). **Don't push this branch's migration to dev before it merges** (ALL-32 rule in `design/operations.md`). Test against local Supabase.
+- The AI and Zinc are mocked in unit and browser tests. The database is always real for privacy, ownership and run limits (E5, T67).
+- Before the PR: `pnpm lint && pnpm typecheck && pnpm test && pnpm test:db && pnpm db:test && pnpm build`.
+
+### Review focus
+
+1. **A Zinc 429 in the middle of resolving.** Eight candidates make about 16 calls, so a burst can pass 10 a second. The run limits itself to `zinc_requests_per_second` (setting, 10). A 429 drops only that candidate and the run carries on. Test this in Task 5.
+2. **A run killed by the deadline or a closed tab.** The `idea_runs` row stays unfinished. After `idea_run_lease_ms` the person can run again, and a round counts the killed run. Test both in Task 2.
+3. **A person deleted, or their facts changed, during a run.** `save_ideas` checks again that the person is live and owned, and saves nothing otherwise. Test this in Task 2.
+4. **Names that are parts of other words.** A person called "Al" must not turn "always" into "themways". Redaction matches whole words, ignoring case, and skips names shorter than 2 letters. Test this in Task 3.
+5. **An occasion with no budget, or no reachable occasion on demand.** No over-budget label, and no arrival check on demand. The total still shows. Test this in Task 3 and Task 6.
+
+### File map
+
+| File | Change |
+|---|---|
+| `supabase/migrations/20261115100000_idea_engine.sql` | New: `gift_ideas` changes, `idea_runs`, functions, trigger, `round_candidates` filter, settings |
+| `supabase/tests/idea_engine.test.sql` | New pgTAP |
+| `packages/core/src/ideas.ts` (+ `index.ts`) | New: pure rules |
+| `packages/core/src/paid-features.ts` | `ideaRunNotice`, `IDEA_RUN_OFF` |
+| `packages/core/src/round-plan.ts` | `RoundView.hasFacts`, `ideaRunsLeft`; `no_ideas` and `no_ideas_again` steps |
+| `apps/web/modules/concierge/zinc/client.ts` | `SendOptions.signal` |
+| `apps/web/modules/concierge/zinc/products.ts` | New: search and offers adapter |
+| `apps/web/lib/ai/messages.ts`, `lib/ai/ideas.ts`, `lib/ai/models.ts` | New: Gateway `/v1/messages` client, brainstorm and rank |
+| `apps/web/modules/concierge/ideas/{run,store,read}.ts` | New: orchestrator, Supabase store, on-demand read |
+| `apps/web/modules/concierge/rounds/{engine,store}.ts` | Idea pass, tick deadline, `unlock`, skip rule, facts and runs in the view |
+| `apps/web/modules/concierge/rounds/ideas.ts` | Deleted (the stub) |
+| `apps/web/modules/concierge/people/people.ts` | No resume in `updatePerson` and `saveAddress` |
+| `apps/web/modules/concierge/notify/templates.ts` | `no_ideas` email; over-budget label on idea rows |
+| `apps/web/app/settings/zinc-deps.ts` | Builds the real `generateIdeas` and on-demand deps |
+| `apps/web/app/people/actions.ts`, `app/people/[id]/ideas-section.tsx`, `person-view.tsx` | On-demand button, notice and results |
+| `apps/web/e2e/fake-zinc.ts`, `e2e/fake-gateway.ts`, `e2e/suggest-ideas.spec.ts` | Fake vendors and the one journey |
+| `apps/web/scripts/ai-eval.ts`, `lib/ai/fixtures/people.json` | `--ideas` mode (AC-22) |
+
+---
+
+### Task 1: Confirm vendor shapes (no code)
+
+**Files:** `design/spikes/checkout.md` (Zinc), `design/spikes/ai.md` (Gateway).
+
+- [ ] **Step 1:** Ask an admin to top up the app Zinc account (about $10, T17). Until then the two calls below cost about 2¢ of the 33¢ left.
+- [ ] **Step 2:** Make one live `GET /products/search?retailer=amazon&query=lodge%20cast%20iron` and one `GET /products/{id}/offers?retailer=amazon` with `ZINC_API_KEY`. Record which list field holds the results (`results` or `products`), and the field names for `product_id`, `title`, `brand`, `price`, `available`, `condition`, `buy_box_winner`, `seller.name`, `seller.first_party`, `handling_days`, `shipping_options[].{price,delivery_days}`.
+- [ ] **Step 3:** Make one `POST /v1/messages` to the Gateway with `web_search` (`max_uses: 1`). Record whether the reply carries a cost (in a header or the body). If it doesn't, record the `usage` fields and where `GET /v1/models` gives prices.
+- [ ] **Step 4:** Write both down in the two spike docs under "ALL-27 shapes", then commit (`docs: Zinc product and Gateway cost shapes for ALL-27`).
+
+Tasks 4 and 5 use these field names. If one differs from what's assumed there, the schema in that task changes and nothing else does.
+
+### Task 2: Schema, run limits and pgTAP
+
+**Files:** create the migration and `supabase/tests/idea_engine.test.sql`; regenerate `packages/core/src/database.types.ts`.
+
+**Produces:**
+- `gift_ideas.round_id` becomes nullable.
+- New columns on `gift_ideas`: `person_id uuid` (FK `(person_id, user_id)` → `public.people(id, user_id)`), check `round_id is not null or person_id is not null`, and index `(person_id) where round_id is null`.
+- New table `concierge.idea_runs`:
+  - `id`
+  - `user_id`
+  - `person_id` not null (FK to people as above)
+  - `round_id` null (FK `(round_id, user_id)` → `gift_rounds`, on delete cascade)
+  - `started_at`, `finished_at`
+  - `cost_cents int not null default 0`
+  - `outcome text` check in (`saved`, `none`, `failed`, `cost_cap`, `deadline`)
+  - Owner read RLS, no insert, update or delete for `authenticated`.
+- `concierge.start_idea_run(p_user_id uuid, p_person_id uuid, p_round_id uuid, p_now timestamptz) returns table (run_id uuid, refusal text)`. Security definer, service_role only. It takes `pg_advisory_xact_lock(hashtext(p_person_id::text))`. Refusals, checked in this order:
+  - `not_found`: the person isn't live or isn't owned.
+  - `not_paid`: `has_paid_features` is false.
+  - `busy`: an unfinished run for this person started less than `idea_run_lease_ms` ago.
+  - `limit`: a round has used `idea_round_runs_max` runs, and no active fact was created after its last run started. A round can never pass `idea_round_runs_max + 1` runs.
+  - Otherwise it inserts a row and returns its id.
+- `concierge.idea_runs_left(p_round_id uuid) returns boolean`: the same round rule, read-only.
+- `concierge.save_ideas(p_run_id uuid, p_ideas jsonb) returns int`. Security definer, service_role only. It:
+  - returns 0 if the person is no longer live or owned
+  - returns 0 for a round that already has ideas (AC-11)
+  - for on-demand, deletes that person's previous `round_id is null` ideas (AC-18)
+  - inserts the rest with `source 'generated'`, `status 'proposed'`, and the run's user, person and round
+  - all in one transaction
+- `concierge.excluded_products(p_person_id uuid) returns setof text`: `retailer_product_id` of this person's ideas that were ordered (orders in any status except `failed`, `cancelled`, `refunded`), rejected (`status = 'rejected'`, or a `rejections` row), or turned down as a whole. Service_role only.
+- A trigger on `profile_facts` insert, and on update to `active = true`: sets `next_action_at = now()` on that person's open rounds before approval (`scheduled`, `needs_address`, `generating`) whose `next_action_at` is later, so a round that sent `no_ideas` for lack of facts comes back too.
+- `round_candidates` is re-created with `and concierge.has_paid_features(o.user_id)`. Grants stay as they are.
+- Settings, each with a description:
+
+| Setting | Value |
+|---|---|
+| `idea_engine_enabled` | 1 |
+| `idea_candidates` | 8 |
+| `idea_max_searches` | 3 |
+| `idea_ai_max_tokens` | 6000 |
+| `idea_keep_min` | 3 |
+| `idea_keep_max` | 5 |
+| `idea_ai_timeout_ms` | 60000 |
+| `idea_zinc_timeout_ms` | 15000 |
+| `idea_tax_estimate_pct` | 8 |
+| `idea_run_estimate_cents` | 40 |
+| `idea_run_max_cents` | 100 |
+| `idea_round_runs_max` | 2 |
+| `idea_rounds_per_tick` | 1 |
+| `idea_run_lease_ms` | 600000 |
+| `tick_deadline_ms` | 270000 |
+| `zinc_lookup_cents` | 1 |
+| `zinc_requests_per_second` | 10 |
+
+  `idea_ai_max_tokens` and `zinc_requests_per_second` are added to the spec's Settings table in this task.
+
+- [ ] **Step 1: Write the failing pgTAP tests**, each as one `is`, `ok` or `throws_ok`:
+  - `an on-demand idea needs a person`: insert with both ids null fails the check.
+  - `a user reads only their own runs`, and `a user can't insert or update runs`.
+  - `start_idea_run refuses a deleted person` → `not_found`; `another user's person` → `not_found`.
+  - `start_idea_run refuses without paid features` → `not_paid`.
+  - `a second on-demand run inside the lease is busy`, and `after the lease it starts` (insert a row with `started_at = now() - interval '11 minutes'`).
+  - `a round gets two runs, then limit`.
+  - `a fact saved after the last run allows a third`.
+  - `never a fourth`.
+  - `a killed run counts`: an unfinished row counts toward the limit.
+  - `save_ideas saves nothing for a round that has ideas`.
+  - `save_ideas replaces the previous on-demand set and leaves round ideas alone`.
+  - `save_ideas saves nothing once the person is deleted`.
+  - `excluded_products lists ordered and rejected products for that person only`.
+  - `saving a fact moves a waiting scheduled, needs_address or generating round to now, and leaves awaiting_approval alone`.
+  - `round_candidates leaves out users without paid features`.
+  - `anon and authenticated can't execute the new functions`.
+- [ ] **Step 2:** `pnpm db:test`. Expected: the new file fails (functions missing).
+- [ ] **Step 3:** Write the migration. Copy `round_candidates` from `20261105100000_round_engine.sql` and add the filter.
+- [ ] **Step 4:** `supabase db reset && pnpm db:test`. Expected: everything passes. Then `pnpm db:types`.
+- [ ] **Step 5:** Commit `feat(db): idea runs, on-demand ideas and paid-only rounds (ALL-27)`.
+
+### Task 3: Pure rules in `packages/core`
+
+**Files:**
+- Create `packages/core/src/ideas.ts` and `src/__tests__/ideas.test.ts`.
+- Modify `paid-features.ts` and `index.ts`.
+
+**Produces:**
+```ts
+export type ZincHit = { productId: string; title: string; brand: string | null; priceCents: number | null };
+export type ZincOffer = { offerId: string | null; priceCents: number; shippingCents: number; available: boolean;
+  condition: string; buyBox: boolean; firstParty: boolean; sellerName: string | null;
+  handlingDaysMax: number; deliveryDaysMin: number; deliveryDaysMax: number };
+export type DropReason = "not_found" | "unavailable" | "late" | "over_limit" | "given_or_rejected" | "sensitive" | "names";
+export function matchHit(hits: ZincHit[], brand: string | null): ZincHit | null;          // AC-3
+export function pickOffer(offers: ZincOffer[]): ZincOffer | null;                           // AC-4
+export function judgeCandidate(c: { productId: string; offer: ZincOffer }, ctx: JudgeContext, s: ScheduleSettings):
+  { keep: true; totalCents: number; fit: "within" | "over"; arriveBy: CalendarDate | null } | { keep: false; reason: DropReason };
+export type JudgeContext = { budgetCents: number | null; overBudgetPct: number; taxPct: number; feeCents: number;
+  occasionDate: CalendarDate | null; orderDate: CalendarDate; excluded: ReadonlySet<string> };
+export function keepIdeas<T extends { fit: "within" | "over" }>(ranked: T[], keepMax: number): T[]; // AC-1
+export function redactNames(text: string, names: string[]): string;                         // AC-21
+export function mentionsName(text: string, names: string[]): boolean;
+export function onDemandOccasion(occasions: { date: CalendarDate; budgetCents: number | null }[], today: CalendarDate, s: ScheduleSettings):
+  { date: CalendarDate; budgetCents: number | null } | null;
+export function ideaRunWorstMs(aiTimeoutMs: number, zincTimeoutMs: number): number;         // 2*ai + 2*zinc
+// paid-features.ts
+export function ideaRunNotice(estimateCents: number, maxCents: number): string;
+export const IDEA_RUN_OFF: string;
+```
+
+- [ ] **Step 1: Write the failing tests:**
+  - `matchHit picks the first hit whose brand matches, ignoring case`.
+  - `matchHit returns null when no brand matches`.
+  - `matchHit takes the first hit when the candidate names no brand`.
+  - `pickOffer never picks used or refurbished, even when cheaper`.
+  - `pickOffer prefers buy box, then first party, then fastest delivery`.
+  - `pickOffer skips unavailable offers`.
+  - `judgeCandidate drops a late arrival`: uses `canArriveInTime` with `orderDate` and `occasionDate`.
+  - `judgeCandidate skips the arrival check when occasionDate is null`.
+  - `judgeCandidate totals with estimatedTotalCents and the flat tax`: price 2000, shipping 500, tax 8% of 2000 = 160, fee 100 → 2760.
+  - `judgeCandidate marks over and drops past the limit` (via `classifyTotal`).
+  - `judgeCandidate never says over with no budget`.
+  - `judgeCandidate drops excluded products` → `given_or_rejected`.
+  - `keepIdeas keeps up to keepMax within plus the first over`.
+  - `redactNames replaces whole words only, any case`: "Bob loves fishing" → "them loves fishing", and "always" stays as it is for the name "Al".
+  - `redactNames ignores names under 2 letters`.
+  - `mentionsName finds a whole-word name`.
+  - `onDemandOccasion picks the next occasion an order today can reach, else null`.
+  - `ideaRunWorstMs(60000, 15000) is 150000`.
+  - `ideaRunNotice(40, 100)` equals "Suggesting ideas uses AI and live product lookups, which cost real money: usually about 40¢, at most $1."
+- [ ] **Step 2:** `pnpm --filter @gifts-af/core test ideas`. Expected: FAIL (module missing).
+- [ ] **Step 3:** Implement. Tax is `Math.round(price * taxPct / 100)`. `centsLabel` and `dollarsLabel` already exist.
+- [ ] **Step 4:** Run again. Expected: PASS.
+- [ ] **Step 5:** Commit `feat(core): rules for choosing and keeping gift ideas (ALL-27)`.
+
+### Task 4: Zinc product lookups
+
+**Files:**
+- Modify `zinc/client.ts`: add `signal?: AbortSignal` to `SendOptions`, combined as `AbortSignal.any([AbortSignal.timeout(h.timeoutMs), o.signal])`.
+- Create `zinc/products.ts` and `__tests__/zinc-products.test.ts`.
+
+**Produces:**
+```ts
+export function searchProducts(h: ZincHttp, key: string, query: string, signal: AbortSignal): Promise<ZincHit[]>;
+export function productOffers(h: ZincHttp, key: string, productId: string, signal: AbortSignal): Promise<ZincOffer[]>;
+```
+Both use `call()` with a zod schema shaped from Task 1. Paths: `/products/search` (`retailer=amazon`, `query`) and `/products/{id}/offers` (`retailer=amazon`). Prices are converted to cents here, and Zinc's shape stops here (E4).
+
+- [ ] **Step 1: Write the failing tests**, using the `fake(replies)` pattern from `zinc-adapter.test.ts`:
+  - `search maps hits to ZincHit`.
+  - `offers maps price, shipping and the slowest delivery to ZincOffer`.
+  - `a 429 throws ZincError unavailable with status 429`.
+  - `a reply that fails the schema throws rejected`.
+  - `an aborted signal throws unavailable`.
+  - `sends the app key and only the search text`: assert the URL and the Authorization header.
+- [ ] **Step 2:** `pnpm --filter @gifts-af/web test zinc-products`. Expected: FAIL.
+- [ ] **Step 3:** Implement.
+- [ ] **Step 4:** Run again, plus the existing `zinc-adapter` tests. Expected: PASS.
+- [ ] **Step 5:** Commit `feat(zinc): product search and offers for gift ideas (ALL-27)`.
+
+### Task 5: AI brainstorm and rank
+
+**Files:**
+- Create `lib/ai/messages.ts`, `lib/ai/ideas.ts`, and `lib/ai/__tests__/ideas.test.ts`.
+- Modify `models.ts` to add `ideas: "anthropic/claude-sonnet-5.5"`.
+
+**[Claude's call]** Both steps call the Gateway's Anthropic-compatible `/v1/messages` directly, as the spike did. The AI SDK has no Gateway route for Anthropic's server-side `web_search`. A plain HTTP adapter can also be faked in the browser test the same way Zinc is.
+
+**Produces:**
+```ts
+export type GatewayHttp = { base: string; apiKey: string; fetch: typeof fetch };
+export function sendMessages(h: GatewayHttp, body: object, signal: AbortSignal): Promise<{ text: string; costCents: number }>;
+export type IdeaCandidate = { id: string; title: string; search: string; brand: string | null; why: string };
+export type BrainstormInput = { relationship: string; occasion: string | null; budgetCents: number | null; facts: string[]; avoidTitles: string[] };
+export function brainstorm(h: GatewayHttp, input: BrainstormInput, o: { candidates: number; maxSearches: number; maxTokens: number; signal: AbortSignal }): Promise<{ candidates: IdeaCandidate[]; costCents: number }>;
+export type RankInput = { relationship: string; facts: string[]; options: { id: string; title: string; totalCents: number; fit: "within" | "over" }[] };
+export function rank(h: GatewayHttp, input: RankInput, o: { maxTokens: number; signal: AbortSignal }): Promise<{ order: { id: string; reason: string }[]; costCents: number }>;
+```
+- The prompts are the spike's v3 `IDEAS_SYSTEM` and `RANK_SYSTEM`, kept in code.
+- Output is the last text block, parsed as JSON and checked with zod. A failed check throws `AiError("malformed")`.
+- Cost comes from Task 1's finding. If there's no cost field, it's tokens times the `/v1/models` prices plus searches times the search price, fetched once per run and passed in.
+- `rank` keeps only ids it was given.
+
+- [ ] **Step 1: Write the failing tests**, faking `fetch`:
+  - `brainstorm sends web_search with max_uses and no names`: assert the body has no fact text that was meant to be redacted. That's the caller's job, so this test asserts the body is exactly the input.
+  - `brainstorm parses candidates and cost`.
+  - `brainstorm throws malformed on bad JSON`.
+  - `rank drops ids it wasn't given`.
+  - `an aborted signal rejects`.
+- [ ] **Step 2:** Run. Expected: FAIL.
+- [ ] **Step 3:** Implement.
+- [ ] **Step 4:** Run. Expected: PASS.
+- [ ] **Step 5:** Commit `feat(ai): brainstorm and rank gift ideas through the Gateway (ALL-27)`.
+
+### Task 6: One run, from start to saved ideas
+
+**Files:** create `modules/concierge/ideas/run.ts`, `ideas/store.ts`, `ideas/read.ts`, `__tests__/idea-run.test.ts` (unit, fakes), and `__tests__/idea-store.test.ts` (local-db; add it to `LOCAL_DB_TESTS`). Export through `modules/concierge/index.ts`.
+
+**Produces:**
+```ts
+export type IdeaRequest = { userId: string; personId: string; roundId: string | null; signal: AbortSignal };
+export type IdeaOutcome =
+  | { status: "saved"; count: number } | { status: "none" } | { status: "no_facts" } | { status: "off" }
+  | { status: "refused"; reason: "not_found" | "not_paid" | "busy" | "limit" } | { status: "failed" } | { status: "cost_cap" };
+export type IdeaDeps = { store: IdeaStore; gateway: GatewayHttp; zinc: { http: ZincHttp; key: string }; today: CalendarDate };
+export function runIdeas(req: IdeaRequest, deps: IdeaDeps): Promise<IdeaOutcome>;
+export interface IdeaStore {
+  settings(): Promise<IdeaSettings>;           // every idea_* setting plus schedule settings and the order fee
+  hasPaidFeatures(userId: string): Promise<boolean>;
+  inputs(req: IdeaRequest): Promise<IdeaInputs>; // relationship, names (person and buyer), active facts, excluded ids, occasion, budget, over_budget_pct
+  start(req: IdeaRequest, now: Date): Promise<{ runId: string } | { refused: "not_found" | "not_paid" | "busy" | "limit" }>;
+  addCost(runId: string, cents: number): Promise<void>;
+  finish(runId: string, outcome: "saved" | "none" | "failed" | "cost_cap" | "deadline", costCents: number): Promise<void>;
+  save(runId: string, ideas: SavedIdea[]): Promise<number>;
+}
+export function createSupabaseIdeaStore(db: AdminDb): IdeaStore;
+export function onDemandIdeas(db: Db, personId: string): Promise<ShownIdea[]>; // the user's client, RLS
+```
+- Order of work: `idea_engine_enabled` → `off`. Paid check → `refused not_paid`. `inputs`; no active facts → `no_facts`. Neither counts a run.
+- Then `start`, and log `ideas.run_started`.
+- Brainstorm with redacted facts. Drop any candidate whose search mentions a name.
+- Resolve the candidates with at most `zinc_requests_per_second` calls a second. Before each call, stop if the cost reached `idea_run_max_cents`. A `ZincError` drops that candidate.
+- Then `judgeCandidate`, and drop any title that `isSensitive`.
+- Stop before ranking if the cost reached the cap. Otherwise rank, then `keepIdeas`, then `save`, then `finish`.
+- An abort ends as `deadline`, and a thrown vendor error as `failed`.
+- Always log `ideas.run` with `run_id`, `user_id`, `person_id`, `round_id`, `candidates`, `resolved`, `kept`, `short` (kept < `idea_keep_min`), `stage`, `cost_cents` and `ms`.
+
+- [ ] **Step 1: Write the failing unit tests** (fake store, gateway and Zinc):
+  - `off spends nothing and starts no run`.
+  - `not paid spends nothing`.
+  - `no facts spends nothing and starts no run`.
+  - `busy and limit refusals spend nothing`.
+  - `saves up to keepMax within plus one over, from live offers only` (AC-1, AC-2).
+  - `a 429 on one candidate drops only that one`.
+  - `stops resolving at the cost cap and saves nothing` (AC-29).
+  - `an abort finishes the run as deadline`.
+  - `facts reach the AI with names replaced` (AC-21).
+  - `a search naming the person never reaches Zinc`.
+  - `a sensitive title is dropped` (AC-20).
+  - `ideas.run carries no fact or title text` (spy on `logEvent`; AC-19).
+  - `a run with nothing left saves nothing and returns none`.
+  - `never calls Zinc more than 10 times in a second`: a fake clock records the call times.
+- [ ] **Step 2: Write the failing local-db tests** for `createSupabaseIdeaStore`:
+  - `inputs reads only active facts of a live person` (via `activeFacts`).
+  - `start and save round-trip a run`.
+  - `excluded comes from excluded_products`.
+  - `onDemandIdeas shows only the signed-in user's ideas`.
+- [ ] **Step 3:** `pnpm test idea-run && pnpm test:db idea-store`. Expected: FAIL.
+- [ ] **Step 4:** Implement.
+- [ ] **Step 5:** Run. Expected: PASS.
+- [ ] **Step 6:** Commit `feat(concierge): one gift idea run, capped by cost and time (ALL-27)`.
+
+### Task 7: Rounds use the engine
+
+**Files:**
+- `packages/core/src/round-plan.ts` and its tests.
+- `rounds/engine.ts`, `rounds/store.ts`, `__tests__/fake-round-store.ts`, `__tests__/round-engine.test.ts`.
+- `notify/templates.ts`, `samples.ts` and their tests.
+- `people/people.ts`, `app/settings/zinc-deps.ts`.
+- Delete `rounds/ideas.ts` and its export.
+- Update `e2e/round-engine.spec.ts`: after saving the address, it ticks before expecting ideas.
+
+**Interfaces:**
+- `RoundView` gains `hasFacts: boolean` and `ideaRunsLeft: boolean`.
+- `StepKey` gains `"no_ideas" | "no_ideas_again"`.
+- `nextAction`, for `scheduled`, `needs_address` and `generating` before the deadline:
+  - `!hasFacts` or `!ideaRunsLeft` → `{ do: "send", send: "no_ideas" }` if not sent; else `{ do: "send", send: "no_ideas_again" }` if runs are spent and that wasn't sent; else `wait` until `shipByDeadline`.
+  - The facts check comes before `request_address` (AC-13).
+- `GenerateIdeas` becomes `(round: { id: string; userId: string; personId: string }, signal: AbortSignal) => Promise<IdeaOutcome>`.
+- `RoundStore` gains `unlock(roundId: string, lockedUntil: Date): Promise<void>` and `ideaFacts(roundId): Promise<{ hasFacts: boolean; ideaRunsLeft: boolean }>` (read into `view`).
+- `RoundContext.ideas` items gain `overBudget: boolean`, and `IdeaRow` gains `overBudget?: boolean`, shown as the row detail "Over budget".
+- Template kind `no_ideas` with `TemplateData` `{ personName; again: boolean }` and the `answer_questions` link.
+- `runTick` sets `tickDeadline = clock() + tick_deadline_ms`. `runStep`'s `generate` case no longer generates. It adds the round to `pass` and returns `"deferred"`, keeping the lock.
+- After `tellOwnersOfRejections`, the idea pass runs. For each deferred round, while fewer than `idea_rounds_per_tick` have run and `tickDeadline - clock() >= ideaRunWorstMs(...)`, it calls `generateIdeas(round, AbortSignal.timeout(tickDeadline - clock()))`:
+  - `saved` → the existing heads-up path.
+  - `none`, `failed`, `deadline` or `cost_cap` → `finishStep` with status `generating`.
+  - `refused not_paid` or `not_found` → `finishStep` (`skip` at the deadline).
+  - Any other deferred round → `unlock`, with no run counted.
+- Outside the tick (`advanceRound`), a `generate` action finishes with `next_action_at` = now, so the next tick picks it up.
+- The skip email rule adds `sent.has("no_ideas")`.
+- `updatePerson` and `saveAddress` stop calling `resumeWaitingRounds`.
+
+- [ ] **Step 1: Write the failing tests:**
+  - round-plan:
+    - `no facts asks for facts before the address`.
+    - `no_ideas once, then waits for the deadline`.
+    - `no_ideas_again after the runs are spent`.
+    - `generate while runs are left`.
+  - engine (`FakeRoundStore`, `vi.fn` generateIdeas):
+    - `ideas run after the money path and rejection notices`: record the call order.
+    - `only idea_rounds_per_tick rounds generate; the rest are unlocked uncounted`.
+    - `no run starts when the time left is under the worst case`.
+    - `a run that saves none stays generating`.
+    - `a skip after no_ideas is emailed`.
+    - `saving an address doesn't generate`.
+  - templates:
+    - `no_ideas says sorry, nothing was charged, and links the questions`.
+    - `the again version says it tried with the new facts`.
+    - `an over-budget idea is labeled in the heads-up`.
+  - The local-db part of `round-engine.test.ts`: `a fact saved after giving up gets one more run on the next tick`.
+- [ ] **Step 2:** Run `pnpm test round-plan round-engine templates && pnpm test:db round-engine`. Expected: FAIL.
+- [ ] **Step 3:** Implement. Wire `generateIdeas` in `buyingWiring` from `runIdeas` with `createSupabaseIdeaStore(admin)`:
+  - Gateway from `AI_GATEWAY_BASE` and `AI_GATEWAY_API_KEY`.
+  - Zinc from `ZINC_API_BASE` and `ZINC_API_KEY`, with `idea_zinc_timeout_ms`.
+  - Add `AI_GATEWAY_BASE` to `.env.example` and `design/operations.md`.
+  - If a key is missing, `generateIdeas` returns `{ status: "failed" }` and logs `ideas.not_configured`. No stub remains.
+- [ ] **Step 4:** Run all of Step 2, then the full `pnpm test && pnpm test:db`. Expected: PASS.
+- [ ] **Step 5:** Commit `feat(rounds): real gift ideas in rounds, in their own pass of the tick (ALL-27)`.
+
+### Task 8: Suggest ideas on a person's page
+
+**Files:**
+- Create `app/people/[id]/ideas-section.tsx` and `__tests__/ideas-section.test.tsx`.
+- Modify `person-view.tsx` and `app/people/actions.ts`.
+- Modify `e2e/fake-zinc.ts`: add `GET /products/search` and `GET /products/:id/offers` with canned replies.
+- Create `e2e/fake-gateway.ts`: `POST /v1/messages` returning one canned brainstorm or rank, chosen by whether the body has tools. Start it in `global-setup.ts` and pass `AI_GATEWAY_BASE` in `playwright.config.ts`.
+- Create `e2e/suggest-ideas.spec.ts`.
+
+**Interfaces:**
+- `suggestIdeasAction(personId: string): Promise<{ ok: true; count: number } | { ok: false; error: string }>`. It reads the user from the session client, checks the person through `getPerson` (RLS), then calls `runIdeas` with admin deps and `AbortSignal.timeout(idea_ai_timeout_ms * 2 + idea_zinc_timeout_ms * 2)`, then `revalidatePath`. Messages:
+  - `none` → "We couldn't find anything suitable this time."
+  - `no_facts` → "Tell us a bit about them first." plus the questions link.
+  - `busy` → "Already looking. This takes about a minute."
+  - `off` → "Suggestions are switched off right now."
+  - `failed`, `deadline` or `cost_cap` → "Couldn't get ideas. Try again."
+  - `not_paid` → `IDEA_RUN_OFF`.
+- `IdeasSection` props: `{ personName: string; offer: { estimateCents: number; maxCents: number } | null; ideas: ShownIdea[]; occasionLabel: string | null; action: typeof suggestIdeasAction }`.
+  - With `offer`: the button "Suggest ideas for {name}", disabled while pending, and the `role="note"` notice beside it.
+  - Without it: the `IDEA_RUN_OFF` line and no button.
+  - Each idea shows title, store, full cost, "Arrives by {date} if ordered today" (no date when there's no occasion), reason, and the over-budget label.
+
+- [ ] **Step 1: Write the failing component tests:**
+  - `shows the button and money notice with the offer`.
+  - `shows the off line and no button without it`.
+  - `disables the button while running`.
+  - `shows each error message`.
+  - `labels the over-budget idea`.
+  - `no arrival date without an occasion`.
+- [ ] **Step 2: Write the failing journey.** `@layout` isn't needed; this is behaviour. With `signIn`, a person with facts, and `paid_features` set via `rest()`: tap Suggest → 3 ideas from the fake Zinc's prices appear with reasons. Tap again → still 3 (replaced, not added).
+- [ ] **Step 3:** Run `pnpm test ideas-section` and `pnpm --filter @gifts-af/web e2e suggest-ideas`. Expected: FAIL.
+- [ ] **Step 4:** Implement. Add the section to `person-view.tsx` after `WhatWeKnow`, and read `offer` the same way `captureReadOffer` does.
+- [ ] **Step 5:** Run again. Expected: PASS.
+- [ ] **Step 6:** Commit `feat(people): suggest gift ideas on a person's page (ALL-27)`.
+
+### Task 9: `pnpm ai:eval --ideas`
+
+**Files:**
+- `scripts/ai-eval.ts`.
+- Move `spikes/ai/fixtures/people.json` to `apps/web/lib/ai/fixtures/people.json`.
+
+- [ ] **Step 1:** Add the `--ideas` mode. For each of the 5 profiles, it runs `runIdeas` with an in-memory `IdeaStore` built from the fixture (no database) and real vendors. It checks AC-2, AC-5 and AC-6 on each kept idea using the core rules, prints cost per run, and fails if any check fails or the AI cost is over 20¢.
+- [ ] **Step 2:** Run it by hand once Task 1's top-up is done, and save the output for evidence. It never runs in CI.
+- [ ] **Step 3:** Commit `test(ai): idea eval against the five fixture profiles (ALL-27)`.
+
+### Task 10: Docs, pages, evidence and PR
+
+- [ ] **Step 1: Docs.**
+  - Design §3, §4.2 (flat tax), §6.3 (paths and the idea pass) and §7 (stuck rounds follow §5.1).
+  - `design/ui.md` gets an Ideas section and the notice.
+  - `design/operations.md` gets the new settings, `AI_GATEWAY_BASE`, how to turn ideas off, and the fake gateway.
+  - ALL-28 gets a note that the stub is gone.
+- [ ] **Step 2: Pages.**
+  - Republish the round engine page: read it, add the idea pass, the tick deadline, `no_ideas`, and the skip rule.
+  - Run `pnpm gallery` and republish the screens and emails page (person page with ideas, the `no_ideas` email).
+- [ ] **Step 3: Verify.** `pnpm lint && pnpm typecheck && pnpm test && pnpm test:db && pnpm db:test && pnpm build`, all green.
+- [ ] **Step 4: PR.** Open `feat: gift idea engine for rounds and on demand (ALL-27)` with `Part of ALL-27`, since dev checks follow the merge. The body answers E9: we'll see it working through `ideas.run` events and the button for test and admin users, and turn it off with `idea_engine_enabled = 0` or a Vercel rollback. Run the adversarial review (T55), then read PR feedback (T59).
+- [ ] **Step 5: After merge, with Jim's approval.** The migration reaches dev and prod through the Action. Then, on dev:
+  - one round through the test clock with real ideas in the heads-up (AC-23)
+  - timings for one round run and one on-demand run (AC-28), posted on ALL-27 and ALL-125
+  - the eval output (AC-22)
+  - screenshots
+  
+  Tick the boxes and move ALL-27 to Done when nothing is still open.
+
+### Consistency check
+
+| Spec item | Task |
+|---|---|
+| AC-1, AC-2, AC-3, AC-4, AC-5, AC-6, AC-7 | 3 (rules), 6 (run) |
+| AC-8 | 6 (`short`, no second brainstorm) |
+| AC-9, AC-13 | 2 (limits, trigger), 7 (plan, emails) |
+| AC-10, AC-14, AC-15, AC-18 | 8 (UI), 2 (lease, replace) |
+| AC-11 | 2 (`save_ideas`) |
+| AC-12 | 4 (errors), 6 (drop, failed) |
+| AC-16 | 2 (`round_candidates`), 6 (paid check) |
+| AC-17 | 6 (`off`), 8 (message) |
+| AC-19, AC-20, AC-21 | 6, 3 |
+| AC-22 | 9 |
+| AC-23, AC-28 | 10 (dev checks) |
+| AC-24 | 7 (template) |
+| AC-25 | 7 (idea pass, deadline) |
+| AC-26 | 7 (no resume) |
+| AC-27 | 2 (FK, `start`, `save_ideas`) |
+| AC-29 | 6 |
+| Settings table | 2 (adds `idea_ai_max_tokens` and `zinc_requests_per_second`, and the spec's table is updated) |
+| Docs list in Principles check | 10 |
+
+Types line up across tasks:
+- `ZincHit`/`ZincOffer` (3, 4, 6)
+- `GatewayHttp` (5, 6, 7)
+- `IdeaOutcome` (6, 7, 8)
+- `IdeaStore` (6, 9)
+- `GenerateIdeas` (7)
