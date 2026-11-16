@@ -78,9 +78,12 @@ function hasName(text: string, name: string): boolean {
   return false;
 }
 
+const firstName = (name: string) => name.trim().split(/\s+/)[0] ?? "";
+
 /**
- * The people a note names, in people order. Full names first: only when no full name matches
- * do first names count, so "Bob Smith" doesn't also pick Bob Jones.
+ * The people a note names, in people order. A full name always counts. A first name counts
+ * unless a full-name match already covers someone with that first name, so "Bob Smith" doesn't
+ * also pick Bob Jones, while "Dad and Jennifer" still picks Jennifer Lopez.
  */
 export function matchPeople(
   subject: string,
@@ -88,11 +91,17 @@ export function matchPeople(
   people: { id: string; name: string }[],
 ): string[] {
   const text = `${subject}\n${body}`;
-  const matching = (nameOf: (p: { name: string }) => string) => [
-    ...new Set(people.filter((p) => hasName(text, nameOf(p))).map((p) => p.id)),
-  ];
-  const full = matching((p) => p.name);
-  return full.length > 0 ? full : matching((p) => p.name.trim().split(/\s+/)[0] ?? "");
+  const fullIds = new Set(people.filter((p) => hasName(text, p.name)).map((p) => p.id));
+  const coveredFirsts = new Set(
+    people.filter((p) => fullIds.has(p.id)).map((p) => firstName(p.name).toLowerCase()),
+  );
+  const ids: string[] = [];
+  for (const p of people) {
+    const first = firstName(p.name);
+    const byFirst = !coveredFirsts.has(first.toLowerCase()) && hasName(text, first);
+    if ((fullIds.has(p.id) || byFirst) && !ids.includes(p.id)) ids.push(p.id);
+  }
+  return ids;
 }
 
 /** Phrases that mean "don't act on this". Kept short on purpose; review here. */

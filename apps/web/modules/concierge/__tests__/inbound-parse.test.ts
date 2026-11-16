@@ -123,6 +123,10 @@ describe("matchPeople", () => {
     expect(matchPeople("", "Bob Smith wants a kayak", people)).toEqual(["1"]);
     expect(matchPeople("", "Bob wants a kayak", people)).toEqual(["1", "2"]);
   });
+  it("still matches a first name when a different full name matches", () => {
+    const people = [p("1", "Dad"), p("2", "Jennifer Lopez")];
+    expect(matchPeople("", "Dad and Jennifer both want tea", people)).toEqual(["1", "2"]);
+  });
   it("returns [] when nothing matches", () => {
     expect(matchPeople("hi", "a fly rod", [p("1", "Dad")])).toEqual([]);
   });
