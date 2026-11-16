@@ -23,6 +23,7 @@ const TRY_AGAIN = "That didn't save. Try again.";
  *   after something outside the hook changed it (a Remove, a Delete). A save
  *   in flight then is ignored and a queued one dropped, so a failed value can
  *   never be sent again (review of ALL-127).
+ * - A pending change is also saved when the tab is hidden (switching apps).
  * - Next keeps visited routes in the page, hidden: when hidden, a pending
  *   change is saved, and if that save fails the value goes back to what's
  *   saved, so it can't look saved on return.
@@ -127,7 +128,13 @@ export function useAutosave<T>({
 
   useLayoutEffect(() => {
     visible.current = true;
+    // Switching apps on a phone often hides the tab without a blur.
+    const onTabHidden = () => {
+      if (document.visibilityState === "hidden") void send();
+    };
+    document.addEventListener("visibilitychange", onTabHidden);
     return () => {
+      document.removeEventListener("visibilitychange", onTabHidden);
       visible.current = false;
       void send();
       setStatus("idle");

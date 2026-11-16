@@ -255,6 +255,14 @@ describe("one field at a time (ALL-127)", () => {
     ]);
   });
 
+  it("setBirthYear refuses a year for someone with no birthday, but can still clear one", async () => {
+    const store = new FakePeopleStore();
+    const id = store.seed(ME, { name: "No date", relationship: "friend" }, [{ kind: "christmas" }]);
+    expect(await setBirthYear(store, id, 1960, 2026)).toEqual({ ok: false, error: "Add a birthday first." });
+    expect(await setBirthYear(store, id, null, 2026)).toEqual({ ok: true });
+    expect(store.writes).toEqual([`updatePersonFields ${id} {"birthYear":null}`]);
+  });
+
   it("setDatedOccasion moves the existing birthday, keeping its id and switch", async () => {
     const { store, mine } = setup();
     await setOccasionEnabled(store, mine, "birthday", false);

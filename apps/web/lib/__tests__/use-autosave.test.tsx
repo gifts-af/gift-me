@@ -146,6 +146,26 @@ describe("useAutosave", () => {
     expect(save).toHaveBeenCalledTimes(2);
   });
 
+  it("saves a pending change when the tab is hidden, as when switching apps on a phone", async () => {
+    const save = vi.fn().mockResolvedValue({ ok: true });
+    const { result } = renderHook(() => useAutosave({ initial: "a", save }));
+    act(() => result.current.setValue("b"));
+    const state = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    await act(async () => void document.dispatchEvent(new Event("visibilitychange")));
+    state.mockRestore();
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(save).toHaveBeenCalledWith("b");
+    expect(result.current.status).toBe("saved");
+  });
+
+  it("sends nothing when the tab is shown again", async () => {
+    const save = vi.fn().mockResolvedValue({ ok: true });
+    const { result } = renderHook(() => useAutosave({ initial: "a", save }));
+    act(() => result.current.setValue("b"));
+    await act(async () => void document.dispatchEvent(new Event("visibilitychange")));
+    expect(save).not.toHaveBeenCalled();
+  });
+
   it("saves a pending change on unmount", () => {
     const save = vi.fn().mockResolvedValue({ ok: true });
     const { result, unmount } = renderHook(() => useAutosave({ initial: "a", save }));

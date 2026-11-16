@@ -251,12 +251,19 @@ export function setRelationship(store: PeopleStore, id: string, relationship: st
   return writeFields(store, id, { relationship: checked.value });
 }
 
-/** The birth year, or null to clear it; from 1900 to `currentYear`. */
+/** The birth year, or null to clear it; from 1900 to `currentYear`. A year needs a birthday. */
 export function setBirthYear(store: PeopleStore, id: string, year: number | null, currentYear: number): Promise<SaveResult> {
   const checked = checkBirthYear(year, currentYear);
   if (!checked.ok) return Promise.resolve(checked);
-  return writeFields(store, id, { birthYear: checked.value });
+  if (checked.value === null) return writeFields(store, id, { birthYear: null });
+  return onOwnPerson(store, id, async () => {
+    const hasBirthday = (await store.occasions([id])).some((o) => o.kind === "birthday");
+    if (!hasBirthday) return { ok: false, error: NO_BIRTHDAY };
+    return (await store.updatePersonFields(id, { birthYear: checked.value })) ? { ok: true } : notFound();
+  });
 }
+
+const NO_BIRTHDAY = "Add a birthday first.";
 
 /**
  * Sets a birthday or anniversary. An existing one is moved, keeping its id,
