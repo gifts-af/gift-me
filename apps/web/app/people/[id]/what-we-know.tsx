@@ -1,23 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useId, useState } from "react";
 import Link from "next/link";
-import { ChevronRight, ExternalLink, Pencil } from "lucide-react";
-import { CAPTURE_READ_OFF, CATEGORY_GROUPS, captureReadNotice } from "@gifts-af/core";
+import { ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
+import { CAPTURE_READ_OFF, CATEGORY_GROUPS, captureReadNotice, type FactCategory } from "@gifts-af/core";
 import { ExtensionLink } from "@/components/extension-link";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NativeSelect } from "@/components/ui/native-select";
+import { Switch } from "@/components/ui/switch";
+import { useAutosave } from "@/lib/use-autosave";
+import { useHydrated } from "@/lib/use-hydrated";
+import { cn } from "@/lib/utils";
 import type { Profile, ProfileFact, SaveResult } from "@/modules/concierge";
+import { confirmFactAction } from "../actions";
 
 // "What we know" on a person's page (ALL-26, C-7, D51): one list by category,
-// each fact with its source and a pencil that opens Save, Turn off and Delete.
+// each fact with its source. Tapping a fact opens it in place, and it saves as
+// you go (ALL-127, T71): the text on leaving the field or Enter, the kind when
+// picked, "Use for gift ideas" when flipped. A ✨ fact gets "Looks right".
 
 export type Knowledge = Pick<Profile, "groups" | "off" | "unread" | "captureRead">;
 
 type Action = (previous: null, formData: FormData) => Promise<SaveResult>;
+
+type Send = (action: Action, fields: Record<string, string>) => Promise<SaveResult>;
 
 type Run = (action: Action, fields: Record<string, string>, onError?: (message: string) => void) => Promise<boolean>;
 
@@ -31,6 +40,32 @@ type Actions = {
   /** `readCapturesAction` */
   readAction: Action;
 };
+
+/** The open fact, and the group and place it was opened in. */
+type Open = { id: string; category: FactCategory; index: number };
+
+const EMPTY = "Type something first.";
+
+/**
+ * The groups to show. An open fact stays where it was opened until it's closed,
+ * even after a save moves it to another kind or turns it off, so the editor
+ * (and its "Saved") doesn't jump away mid-edit.
+ */
+function arrange(knowledge: Knowledge, open: Open | null) {
+  const active = knowledge.groups.flatMap((g) => g.facts);
+  const pinned = open ? [...active, ...knowledge.off].find((f) => f.id === open.id) : undefined;
+  const offIds = new Set(knowledge.off.map((f) => f.id));
+  const groups = CATEGORY_GROUPS.map((g) => {
+    const facts = active.filter((f) => f.category === g.category && f.id !== pinned?.id);
+    if (pinned && open?.category === g.category) facts.splice(Math.min(open.index, facts.length), 0, pinned);
+    return { ...g, facts };
+  }).filter((g) => g.facts.length > 0);
+  return {
+    groups,
+    off: knowledge.off.filter((f) => f.id !== pinned?.id),
+    isOff: (id: string) => offIds.has(id),
+  };
+}
 
 export function WhatWeKnow({
   personId,
@@ -50,18 +85,24 @@ export function WhatWeKnow({
 } & Actions) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { groups, off, unread, captureRead } = knowledge;
+  const [open, setOpen] = useState<Open | null>(null);
+  const { unread, captureRead } = knowledge;
+  const { groups, off, isOff } = arrange(knowledge, open);
+
+  const send: Send = async (action, fields) => {
+    const form = new FormData();
+    form.set("personId", personId);
+    for (const [k, v] of Object.entries(fields)) form.set(k, v);
+    return action(null, form);
+  };
 
   const run: Run = async (action, fields, onError = setError) => {
     if (busy) return false;
     setBusy(true);
     setError(null);
-    const form = new FormData();
-    form.set("personId", personId);
-    for (const [k, v] of Object.entries(fields)) form.set(k, v);
     let result: SaveResult;
     try {
-      result = await action(null, form);
+      result = await send(action, fields);
     } catch {
       result = { ok: false, error: "That didn't work. Try again." };
     }
@@ -69,8 +110,6 @@ export function WhatWeKnow({
     if (!result.ok) onError(result.error);
     return result.ok;
   };
-
-  const rowActions = { busy, run, editAction, setActiveAction, deleteAction };
 
   return (
     <section className="flex flex-col gap-4 border-b border-border pb-6" aria-labelledby="know-heading">
@@ -100,8 +139,21 @@ export function WhatWeKnow({
             {g.label}
           </h3>
           <ul className="flex flex-col divide-y divide-border">
-            {g.facts.map((f) => (
-              <FactRow key={f.id} fact={f} {...rowActions} />
+            {g.facts.map((f, index) => (
+              <FactRow
+                key={f.id}
+                fact={f}
+                active={!isOff(f.id)}
+                open={open?.id === f.id}
+                onToggle={() => setOpen(open?.id === f.id ? null : { id: f.id, category: g.category, index })}
+                onClose={() => setOpen(null)}
+                busy={busy}
+                send={send}
+                run={run}
+                editAction={editAction}
+                setActiveAction={setActiveAction}
+                deleteAction={deleteAction}
+              />
             ))}
           </ul>
         </section>
@@ -231,70 +283,124 @@ function OffRow({
   );
 }
 
-function FactRow({
+type RowProps = {
+  fact: ProfileFact;
+  /** False once it's turned off while open. */
+  active: boolean;
+  busy: boolean;
+  send: Send;
+  run: Run;
+  onClose: () => void;
+} & Omit<Actions, "readAction">;
+
+function FactRow({ open, onToggle, ...props }: RowProps & { open: boolean; onToggle: () => void }) {
+  const { fact } = props;
+  const hydrated = useHydrated();
+  const editorId = useId();
+  return (
+    <li className="flex flex-col py-1">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={open ? editorId : undefined}
+        // Until the page's JavaScript loads a tap does nothing (ALL-110).
+        aria-disabled={hydrated ? undefined : true}
+        onClick={onToggle}
+        className="flex min-h-11 w-full items-center justify-between gap-2 rounded-md pt-1.5 text-left"
+      >
+        <span className="min-w-0 break-words text-[15px]">{fact.value}</span>
+        <ChevronDown
+          className={cn("size-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")}
+          aria-hidden="true"
+        />
+      </button>
+      <p className="flex flex-wrap items-center gap-x-1.5 pb-1.5 text-[13px] text-muted-foreground">
+        <span>{fact.sourceLabel}</span>
+        {fact.sourceUrl && (
+          <a
+            href={fact.sourceUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-h-11 max-w-full items-center gap-1 underline-offset-2 hover:underline"
+          >
+            <span className="truncate">from &ldquo;{fact.sourceTitle || fact.sourceUrl}&rdquo;</span>
+            <ExternalLink className="size-3 shrink-0" aria-hidden="true" />
+          </a>
+        )}
+      </p>
+      {open && <FactEditor id={editorId} {...props} />}
+    </li>
+  );
+}
+
+/** An open fact. Mounted only while open, so it starts from what's saved. */
+function FactEditor({
+  id,
   fact,
+  active,
   busy,
+  send,
   run,
+  onClose,
   editAction,
   setActiveAction,
   deleteAction,
-}: { fact: ProfileFact; busy: boolean; run: Run } & Omit<Actions, "readAction">) {
-  const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState(fact.value);
-  const [category, setCategory] = useState<string>(fact.category);
+}: RowProps & { id: string }) {
+  // Text and kind are one value, so every save carries both and neither can
+  // put back the other's old value (`updateFact` writes both).
+  const words = useAutosave<{ text: string; category: FactCategory }>({
+    initial: { text: fact.value, category: fact.category },
+    equals: (a, b) => a.text === b.text && a.category === b.category,
+    save: async ({ text, category }) => {
+      if (!text.trim()) return { ok: false, error: EMPTY };
+      return send(editAction, { id: fact.id, value: text, category });
+    },
+  });
+  const use = useAutosave<boolean>({
+    initial: active,
+    save: (on) => send(setActiveAction, { id: fact.id, active: String(on) }),
+  });
   const [confirming, setConfirming] = useState(false);
-  // Shown in the editor: the section's own message can be a screen away on a phone.
+  // Looks right and Delete. Shown here, where a phone is looking.
   const [error, setError] = useState<string | null>(null);
+  const [closing, setClosing] = useState(false);
 
-  if (!editing) {
-    return (
-      <li className="flex items-start justify-between gap-2 py-1">
-        <div className="min-w-0 py-1.5">
-          <p className="break-words text-[15px]">{fact.value}</p>
-          <p className="flex flex-wrap items-center gap-x-1.5 text-[13px] text-muted-foreground">
-            <span>{fact.sourceLabel}</span>
-            {fact.sourceUrl && (
-              <a
-                href={fact.sourceUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex min-h-11 max-w-full items-center gap-1 underline-offset-2 hover:underline"
-              >
-                <span className="truncate">from &ldquo;{fact.sourceTitle || fact.sourceUrl}&rdquo;</span>
-                <ExternalLink className="size-3 shrink-0" aria-hidden="true" />
-              </a>
-            )}
-          </p>
-        </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="shrink-0"
-          aria-label={`Edit ${fact.value}`}
-          onClick={() => {
-            setValue(fact.value);
-            setCategory(fact.category);
-            setError(null);
-            setEditing(true);
-          }}
-        >
-          <Pencil aria-hidden="true" />
-        </Button>
-      </li>
-    );
+  /** Done: waits for anything still saving and closes only if it saved (AC-9). */
+  async function done() {
+    setClosing(true);
+    const results = await Promise.all([words.commit(), use.commit()]);
+    setClosing(false);
+    if (results.every((r) => r === null || r.ok)) onClose();
   }
 
-  const fieldId = `fact-${fact.id}`;
+  const statuses = [words.status, use.status];
+  const status = statuses.includes("saving")
+    ? "Saving…"
+    : statuses.includes("saved") && !statuses.includes("error")
+      ? "Saved"
+      : "";
+  const unconfirmedAi = fact.source === "capture" && !fact.confirmed;
+
   return (
-    <li className="flex flex-col gap-3 py-3">
+    <div id={id} className="flex flex-col gap-3 pb-3 pt-1">
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor={`${fieldId}-value`}>Fact</Label>
-        <Input id={`${fieldId}-value`} value={value} onChange={(e) => setValue(e.target.value)} />
+        <Label htmlFor={`${id}-value`}>Fact</Label>
+        <Input
+          id={`${id}-value`}
+          value={words.value.text}
+          onChange={(e) => words.setValue({ ...words.value, text: e.target.value })}
+          onBlur={words.onBlur}
+          onKeyDown={words.onKeyDown}
+          aria-invalid={words.error ? true : undefined}
+        />
       </div>
       <div className="flex flex-col gap-1.5">
-        <Label htmlFor={`${fieldId}-category`}>Kind</Label>
-        <NativeSelect id={`${fieldId}-category`} value={category} onChange={(e) => setCategory(e.target.value)}>
+        <Label htmlFor={`${id}-category`}>Kind</Label>
+        <NativeSelect
+          id={`${id}-category`}
+          value={words.value.category}
+          onChange={(e) => void words.commit({ ...words.value, category: e.target.value as FactCategory })}
+        >
           {CATEGORY_GROUPS.map((g) => (
             <option key={g.category} value={g.category}>
               {g.label}
@@ -302,48 +408,49 @@ function FactRow({
           ))}
         </NativeSelect>
       </div>
-      {error && (
-        <p role="alert" className="text-[13px] text-destructive">
-          {error}
-        </p>
+      <div className="flex min-h-11 items-center justify-between gap-3">
+        <Label htmlFor={`${id}-use`}>Use for gift ideas</Label>
+        <Switch id={`${id}-use`} checked={use.value} onCheckedChange={(next) => void use.commit(next)} />
+      </div>
+      <p role="status" className="text-[13px] text-success">
+        {status}
+      </p>
+      {[words.error, use.error, error].map(
+        (message, i) =>
+          message && (
+            <p key={i} role="alert" className="text-[13px] text-destructive">
+              {message}
+            </p>
+          ),
       )}
       <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          size="sm"
-          disabled={busy}
-          onClick={async () => {
-            setError(null);
-            if (await run(editAction, { id: fact.id, value, category }, setError)) setEditing(false);
-          }}
-        >
-          Save
+        {unconfirmedAi && (
+          <Button
+            type="button"
+            size="sm"
+            disabled={busy}
+            onClick={() => {
+              setError(null);
+              void run(confirmFactAction, { id: fact.id }, setError);
+            }}
+          >
+            Looks right
+          </Button>
+        )}
+        <Button type="button" variant="outline" size="sm" disabled={closing} onClick={() => void done()}>
+          Done
         </Button>
         <Button
           type="button"
-          variant="outline"
+          variant="ghost"
           size="sm"
-          disabled={busy}
-          onClick={() => {
-            setError(null);
-            setEditing(false);
-          }}
-        >
-          Cancel
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
+          className="text-destructive"
           disabled={busy}
           onClick={() => {
             setError(null);
-            void run(setActiveAction, { id: fact.id, active: "false" }, setError);
+            setConfirming(true);
           }}
         >
-          Turn off
-        </Button>
-        <Button type="button" variant="ghost" size="sm" className="text-destructive" disabled={busy} onClick={() => setConfirming(true)}>
           Delete
         </Button>
       </div>
@@ -352,10 +459,15 @@ function FactRow({
         busy={busy}
         onOpenChange={setConfirming}
         onConfirm={async () => {
-          await run(deleteAction, { id: fact.id }, setError);
+          const deleted = await run(deleteAction, { id: fact.id }, setError);
           setConfirming(false);
+          if (!deleted) return;
+          // Gone: nothing left to save, so closing never sends a failed edit again.
+          words.reset(words.value);
+          use.reset(use.value);
+          onClose();
         }}
       />
-    </li>
+    </div>
   );
 }

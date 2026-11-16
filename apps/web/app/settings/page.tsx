@@ -13,7 +13,7 @@ import { getConciergeSettings, getPaymentSummary, type PaymentSummary } from "@/
 import { getMyList } from "@/modules/lists";
 import { saveTimezone } from "./actions";
 import { addressRowText, paymentRowText } from "./rows";
-import { SettingsRow } from "./settings-row";
+import { SettingsRow } from "@/components/settings-row";
 import { TimeZoneRow } from "./time-zone-row";
 import { zincWiring } from "./zinc-deps";
 

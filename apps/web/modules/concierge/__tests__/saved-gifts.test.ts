@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { parseSavedGiftForm } from "../saved-gifts/rules";
-import { listSavedGifts, removeSavedGift, saveGift } from "../saved-gifts/service";
+import { countSavedGifts, listSavedGifts, removeSavedGift, saveGift } from "../saved-gifts/service";
 import { FakeSavedGiftsStore, ME, MY_PERSON, NOT_MINE } from "./fake-saved-gifts-store";
 
 // Saved gifts for someone (ALL-93). The database's own rules are tested in
@@ -154,5 +154,24 @@ describe("listSavedGifts", () => {
 
   it("returns nothing for an id that isn't one", async () => {
     expect(await listSavedGifts(new FakeSavedGiftsStore(), "nope")).toEqual([]);
+  });
+});
+
+// The Saved gifts row on a person's page shows only how many (ALL-127).
+describe("countSavedGifts", () => {
+  it("counts a person's gifts without loading them", async () => {
+    const store = new FakeSavedGiftsStore();
+    await saveGift(store, vi.fn(), MY_PERSON, REEL);
+    await saveGift(store, vi.fn(), MY_PERSON, { ...REEL, name: "Coffee" });
+    const list = vi.spyOn(store, "list");
+    expect(await countSavedGifts(store, MY_PERSON)).toBe(2);
+    expect(list).not.toHaveBeenCalled();
+  });
+
+  it("is 0 for an id that isn't one, without asking the store", async () => {
+    const store = new FakeSavedGiftsStore();
+    const count = vi.spyOn(store, "count");
+    expect(await countSavedGifts(store, "nope")).toBe(0);
+    expect(count).not.toHaveBeenCalled();
   });
 });

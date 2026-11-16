@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { Activity } from "react";
+import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { AddressSaveResult, PersonAddress, SaveResult } from "@/modules/concierge";
 import { AddressSection } from "../address";
@@ -150,5 +151,29 @@ describe("AddressSection", () => {
     expect(screen.getByText("Gifts ship to Mom's own address in Tampa, FL. They keep it up to date.")).toBeInTheDocument();
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+  });
+
+  // ALL-127: the address has its own screen, which Next keeps hidden after
+  // leaving. Coming back shows the saved address, not a half-typed form.
+  it("closes the form when the screen is hidden", async () => {
+    const ui = (mode: "visible" | "hidden") => (
+      <Activity mode={mode}>
+        <AddressSection
+          personId="p1"
+          name="Mom"
+          address={{ kind: "none" }}
+          startOpen={false}
+          saveAction={vi.fn()}
+          removeAction={vi.fn()}
+        />
+      </Activity>
+    );
+    const { rerender } = render(ui("visible"));
+    await userEvent.click(screen.getByRole("button", { name: "Add an address" }));
+    expect(screen.getByLabelText("Street address")).toBeInTheDocument();
+    act(() => rerender(ui("hidden")));
+    act(() => rerender(ui("visible")));
+    expect(screen.queryByLabelText("Street address")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add an address" })).toBeInTheDocument();
   });
 });

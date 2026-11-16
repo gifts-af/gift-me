@@ -2,7 +2,7 @@ import "server-only";
 import type { Address, CalendarDate, OccasionKind } from "@gifts-af/core";
 import type { SaveResult } from "../settings";
 import type { PlaceAddressHeld } from "../zinc/types";
-import type { ImportRow, PersonInput } from "./rules";
+import type { ImportRow, MonthDay, PersonInput } from "./rules";
 import { logEvent } from "@/lib/log";
 import { resumeRoundsForPerson, type EngineDeps } from "../rounds/engine";
 import * as service from "./service";
@@ -11,7 +11,7 @@ import { createSupabasePeopleStore } from "./store";
 // The people API for the rest of the app: the logic in service.ts bound to the
 // signed-in user's Supabase client. Server only.
 
-export type { AddResult, ImportResult, PersonAddress, PersonCard, PersonDetail } from "./service";
+export type { AddResult, DatedKind, ImportResult, PersonAddress, PersonCard, PersonDetail } from "./service";
 
 export function listPeople(today: CalendarDate): Promise<service.PersonCard[]> {
   return service.listPeople(createSupabasePeopleStore(), today);
@@ -37,10 +37,26 @@ async function resumeWaitingRounds(id: string, engine: EngineWiring): Promise<vo
   }
 }
 
-export async function updatePerson(id: string, input: PersonInput, engine: EngineWiring): Promise<SaveResult> {
-  const result = await service.updatePerson(createSupabasePeopleStore(), id, input);
-  if (result.ok) await resumeWaitingRounds(id, engine);
-  return result;
+// About's fields, one at a time (ALL-127). None of these resumes rounds:
+// only an address can unpause one, and resuming can place orders.
+export function renamePerson(id: string, name: string): Promise<SaveResult> {
+  return service.renamePerson(createSupabasePeopleStore(), id, name);
+}
+
+export function setRelationship(id: string, relationship: string): Promise<SaveResult> {
+  return service.setRelationship(createSupabasePeopleStore(), id, relationship);
+}
+
+export function setBirthYear(id: string, year: number | null, currentYear: number): Promise<SaveResult> {
+  return service.setBirthYear(createSupabasePeopleStore(), id, year, currentYear);
+}
+
+export function setDatedOccasion(id: string, kind: service.DatedKind, date: MonthDay): Promise<SaveResult> {
+  return service.setDatedOccasion(createSupabasePeopleStore(), id, kind, date);
+}
+
+export function removeDatedOccasion(id: string, kind: service.DatedKind): Promise<SaveResult> {
+  return service.removeDatedOccasion(createSupabasePeopleStore(), id, kind);
 }
 
 /**

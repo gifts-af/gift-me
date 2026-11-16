@@ -327,15 +327,20 @@ test("a linked buyer sees only the city, and nothing once sharing stops (AC-13, 
   const context = await browser.newContext({ viewport: page.viewportSize() });
   const buyerPage = await context.newPage();
   await signIn(buyerPage, buyer);
-  await buyerPage.goto(`/people/${personId}`);
+  // Their list and Shipping address are screens of their own (ALL-127).
+  await buyerPage.goto(`/people/${personId}/list`);
   const linkField = buyerPage.getByLabel("Their list link");
   await linkField.fill(`${new URL(page.url()).origin}/share/${share_token}`);
   await expect.poll(() => linkField.evaluate((el) => Object.keys(el).some((k) => k.startsWith("__reactProps")))).toBe(true);
   await linkField.press("Enter");
+  await expect(buyerPage.getByText("Linked.", { exact: false })).toBeVisible();
 
   const line = "Gifts ship to Sam's own address in Columbus, OH. They keep it up to date.";
+  await buyerPage.goto(`/people/${personId}/address`);
   await expect(buyerPage.getByText(line)).toBeVisible();
-  expect(await (await buyerPage.request.get(`/people/${personId}`)).text()).not.toContain(STREET);
+  for (const path of [`/people/${personId}`, `/people/${personId}/address`]) {
+    expect(await (await buyerPage.request.get(path)).text()).not.toContain(STREET);
+  }
 
   await page.goto("/lists");
   await tap(shareSwitch(page));

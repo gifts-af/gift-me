@@ -13,7 +13,11 @@ import {
   setOccasionEnabled,
   setPhoto,
   unlinkList,
-  updatePerson,
+  removeDatedOccasion,
+  renamePerson,
+  setBirthYear,
+  setDatedOccasion,
+  setRelationship,
 } from "../people/service";
 import { parseBudgetForm, type ImportRow, type PersonInput } from "../people/rules";
 import { FakePeopleStore, ME, OTHER } from "./fake-people-store";
@@ -200,51 +204,148 @@ describe("a malformed id", () => {
   });
 });
 
-describe("updatePerson", () => {
-  it("changes the details and moves the birthday, leaving other switches alone", async () => {
+describe("one field at a time (ALL-127)", () => {
+  const occasionsOf = (store: FakePeopleStore, id: string) => store.occasionRows.filter((o) => o.personId === id);
+
+  it("renamePerson changes only the name, trimmed", async () => {
     const { store, mine } = setup();
-    await setOccasionEnabled(store, mine, "christmas", false);
-    const result = await updatePerson(
-      store,
-      mine,
-      input({ name: "New", relationship: "wife", birthday: { month: 1, day: 9 }, anniversary: { month: 6, day: 5 } }),
-    );
-    expect(result).toEqual({ ok: true });
-    expect(store.rows.get(mine)).toMatchObject({ name: "New", birthYear: 1960 });
-    const occ = store.occasionRows.filter((o) => o.personId === mine);
-    expect(occ.find((o) => o.kind === "birthday")).toMatchObject({ month: 1, day: 9, enabled: true });
-    expect(occ.find((o) => o.kind === "christmas")!.enabled).toBe(false);
-    expect(occ.find((o) => o.kind === "anniversary")).toMatchObject({ month: 6, day: 5 });
+    store.rows.get(mine)!.birthYear = 1960;
+    expect(await renamePerson(store, mine, "  Mama  ")).toEqual({ ok: true });
+    expect(store.rows.get(mine)).toMatchObject({ name: "Mama", relationship: "wife", birthYear: 1960 });
+    expect(store.writes).toEqual([`updatePersonFields ${mine} {"name":"Mama"}`]);
   });
 
-  it("removes the birthday and anniversary when cleared", async () => {
+  it("renamePerson refuses an empty or too-long name, with no writes", async () => {
     const { store, mine } = setup();
-    await updatePerson(store, mine, input({ birthday: null, anniversary: null }));
-    expect(store.occasionRows.filter((o) => o.personId === mine).map((o) => o.kind)).toEqual(["christmas"]);
+    expect(await renamePerson(store, mine, "   ")).toEqual({ ok: false, error: "Enter a name." });
+    expect(await renamePerson(store, mine, "x".repeat(121))).toEqual({ ok: false, error: "Enter a name." });
+    expect(store.writes).toEqual([]);
+    expect(store.rows.get(mine)!.name).toBe("Mine");
   });
 
-  it("adds a birthday later, enabled", async () => {
+  it("setRelationship changes only the relationship, and refuses one we don't list", async () => {
+    const { store, mine } = setup();
+    expect(await setRelationship(store, mine, "aunt")).toEqual({ ok: true });
+    expect(store.rows.get(mine)).toMatchObject({ name: "Mine", relationship: "aunt" });
+    expect(store.writes).toEqual([`updatePersonFields ${mine} {"relationship":"aunt"}`]);
+    expect(await setRelationship(store, mine, "parent")).toEqual({ ok: false, error: "Pick a relationship." });
+    expect(store.writes).toHaveLength(1);
+  });
+
+  it("setRelationship leaves every occasion alone, even the anniversary", async () => {
+    const { store, mine } = setup();
+    const before = JSON.stringify(occasionsOf(store, mine));
+    await setRelationship(store, mine, "partner");
+    expect(JSON.stringify(occasionsOf(store, mine))).toBe(before);
+  });
+
+  it("setBirthYear changes only the year; null clears it; out of range is refused", async () => {
+    const { store, mine } = setup();
+    expect(await setBirthYear(store, mine, 1960, 2026)).toEqual({ ok: true });
+    expect(store.rows.get(mine)).toMatchObject({ name: "Mine", birthYear: 1960 });
+    expect(await setBirthYear(store, mine, null, 2026)).toEqual({ ok: true });
+    expect(store.rows.get(mine)!.birthYear).toBeNull();
+    const bad = { ok: false, error: "Enter a birth year between 1900 and this year." };
+    expect(await setBirthYear(store, mine, 1899, 2026)).toEqual(bad);
+    expect(await setBirthYear(store, mine, 2027, 2026)).toEqual(bad);
+    expect(await setBirthYear(store, mine, 1960.5, 2026)).toEqual(bad);
+    expect(store.writes).toEqual([
+      `updatePersonFields ${mine} {"birthYear":1960}`,
+      `updatePersonFields ${mine} {"birthYear":null}`,
+    ]);
+  });
+
+  it("setBirthYear refuses a year for someone with no birthday, but can still clear one", async () => {
+    const store = new FakePeopleStore();
+    const id = store.seed(ME, { name: "No date", relationship: "friend" }, [{ kind: "christmas" }]);
+    expect(await setBirthYear(store, id, 1960, 2026)).toEqual({ ok: false, error: "Add a birthday first." });
+    expect(await setBirthYear(store, id, null, 2026)).toEqual({ ok: true });
+    expect(store.writes).toEqual([`updatePersonFields ${id} {"birthYear":null}`]);
+  });
+
+  it("setDatedOccasion moves the existing birthday, keeping its id and switch", async () => {
+    const { store, mine } = setup();
+    await setOccasionEnabled(store, mine, "birthday", false);
+    const before = { ...occasionsOf(store, mine).find((o) => o.kind === "birthday")! };
+    expect(await setDatedOccasion(store, mine, "birthday", { month: 11, day: 30 })).toEqual({ ok: true });
+    expect(occasionsOf(store, mine).filter((o) => o.kind === "birthday")).toEqual([{ ...before, month: 11, day: 30 }]);
+    expect(before.enabled).toBe(false);
+    expect(store.writes.at(-1)).toBe(`moveOccasion ${before.id}`);
+  });
+
+  it("setDatedOccasion adds the occasion only when there is none", async () => {
     const store = new FakePeopleStore();
     const id = store.seed(ME, { name: "Pat" }, [{ kind: "christmas" }]);
-    await updatePerson(store, id, input({ birthday: { month: 4, day: 2 } }));
-    expect(store.occasionRows.find((o) => o.kind === "birthday")).toMatchObject({
-      personId: id, month: 4, day: 2, enabled: true,
-    });
+    expect(await setDatedOccasion(store, id, "anniversary", { month: 2, day: 29 })).toEqual({ ok: true });
+    expect(occasionsOf(store, id).filter((o) => o.kind === "anniversary")).toEqual([
+      expect.objectContaining({ month: 2, day: 29, enabled: true }),
+    ]);
+    expect(store.writes).toEqual([`addOccasion ${id} anniversary`]);
   });
 
-  it("keeps a wife's anniversary when she becomes a partner", async () => {
+  it("setDatedOccasion writes nothing when the date hasn't changed", async () => {
     const { store, mine } = setup();
-    const before = store.occasionRows.find((o) => o.personId === mine && o.kind === "anniversary");
-    await updatePerson(store, mine, input({ relationship: "partner", birthday: { month: 12, day: 1 }, anniversary: { month: 6, day: 5 } }));
-    const after = store.occasionRows.find((o) => o.personId === mine && o.kind === "anniversary");
-    expect(after).toMatchObject({ month: 6, day: 5 });
-    expect(after).toEqual(before);
+    expect(await setDatedOccasion(store, mine, "birthday", { month: 12, day: 1 })).toEqual({ ok: true });
+    expect(store.writes).toEqual([]);
   });
 
-  it("does not touch occasions that already match", async () => {
+  it("setDatedOccasion refuses a date that doesn't exist, with no writes", async () => {
     const { store, mine } = setup();
-    await updatePerson(store, mine, input({ birthday: { month: 12, day: 1 }, anniversary: { month: 6, day: 5 } }));
-    expect(store.writes).toEqual([`updatePerson ${mine}`]);
+    for (const date of [{ month: 2, day: 31 }, { month: 13, day: 1 }, { month: 4, day: 0 }, { month: 1.5, day: 2 }]) {
+      expect(await setDatedOccasion(store, mine, "birthday", date)).toEqual({ ok: false, error: "That date doesn't exist." });
+    }
+    expect(store.writes).toEqual([]);
+  });
+
+  it("removeDatedOccasion('birthday') clears the birth year first, then removes the occasion", async () => {
+    const { store, mine } = setup();
+    store.rows.get(mine)!.birthYear = 1960;
+    const birthday = occasionsOf(store, mine).find((o) => o.kind === "birthday")!;
+    expect(await removeDatedOccasion(store, mine, "birthday")).toEqual({ ok: true });
+    expect(store.rows.get(mine)!.birthYear).toBeNull();
+    expect(occasionsOf(store, mine).map((o) => o.kind)).toEqual(["christmas", "anniversary"]);
+    expect(store.writes).toEqual([`updatePersonFields ${mine} {"birthYear":null}`, `removeOccasion ${birthday.id}`]);
+  });
+
+  it("removeDatedOccasion('anniversary') removes only the anniversary", async () => {
+    const { store, mine } = setup();
+    store.rows.get(mine)!.birthYear = 1960;
+    const anniversary = occasionsOf(store, mine).find((o) => o.kind === "anniversary")!;
+    expect(await removeDatedOccasion(store, mine, "anniversary")).toEqual({ ok: true });
+    expect(store.rows.get(mine)!.birthYear).toBe(1960);
+    expect(store.writes).toEqual([`removeOccasion ${anniversary.id}`]);
+  });
+
+  it("removeDatedOccasion with nothing to remove is a success with no writes", async () => {
+    const store = new FakePeopleStore();
+    const id = store.seed(ME, { name: "Pat" }, [{ kind: "christmas" }]);
+    expect(await removeDatedOccasion(store, id, "anniversary")).toEqual({ ok: true });
+    expect(store.writes).toEqual([]);
+  });
+
+  // Review of PR 1 (E6): a failed write logs one event with ids and the code, never free text.
+  it("logs a failed write as person.save_failed, with ids and the code only", async () => {
+    const { store, mine } = setup();
+    vi.spyOn(store, "updatePersonFields").mockRejectedValue(
+      Object.assign(new Error("Updating a person failed: bad row (Mama Secret)"), { code: "XX000" }),
+    );
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    expect(await renamePerson(store, mine, "Mama Secret")).toEqual({ ok: false, error: "That couldn't be saved. Try again." });
+    const errors = error.mock.calls;
+    const events = log.mock.calls.map((c) => JSON.parse(String(c[0])));
+    error.mockRestore();
+    log.mockRestore();
+    expect(errors).toEqual([]);
+    expect(events).toEqual([expect.objectContaining({ event: "person.save_failed", person_id: mine, code: "XX000" })]);
+    expect(Object.keys(events[0]).sort()).toEqual(["at", "code", "event", "person_id"]);
+  });
+
+  it("removeDatedOccasion stops if clearing the year changed no row", async () => {
+    const { store, mine } = setup();
+    store.noRows.add("updatePersonFields");
+    expect(await removeDatedOccasion(store, mine, "birthday")).toEqual({ ok: false, error: NOT_FOUND });
+    expect(occasionsOf(store, mine).some((o) => o.kind === "birthday")).toBe(true);
   });
 });
 
@@ -361,7 +462,11 @@ describe("deletePerson and setPhoto", () => {
 
 describe("another user's person, or nobody", () => {
   const calls: [string, (s: FakePeopleStore, id: string) => Promise<{ ok: boolean }>][] = [
-    ["updatePerson", (s, id) => updatePerson(s, id, input({ birthday: { month: 1, day: 1 } }))],
+    ["renamePerson", (s, id) => renamePerson(s, id, "New")],
+    ["setRelationship", (s, id) => setRelationship(s, id, "aunt")],
+    ["setBirthYear", (s, id) => setBirthYear(s, id, 1960, 2026)],
+    ["setDatedOccasion", (s, id) => setDatedOccasion(s, id, "birthday", { month: 1, day: 1 })],
+    ["removeDatedOccasion", (s, id) => removeDatedOccasion(s, id, "birthday")],
     ["setOccasionEnabled", (s, id) => setOccasionEnabled(s, id, "christmas", false)],
     ["saveBudgets", (s, id) => saveBudgets(s, () => {}, id, { christmas: 100 })],
     ["linkList", (s, id) => { s.lists.set(TOKEN, "x"); return linkList(s, id, TOKEN); }],
@@ -430,12 +535,10 @@ describe("another user's person, or nobody", () => {
 });
 
 describe("when the database says no row changed", () => {
-  it("updatePerson reports an error and does not touch occasions", async () => {
+  it("renamePerson reports an error", async () => {
     const { store, mine } = setup();
-    store.noRows.add("updatePerson");
-    const result = await updatePerson(store, mine, input({ birthday: null }));
-    expect(result).toEqual({ ok: false, error: NOT_FOUND });
-    expect(store.writes).toEqual([`updatePerson ${mine}`]);
+    store.noRows.add("updatePersonFields");
+    expect(await renamePerson(store, mine, "New")).toEqual({ ok: false, error: NOT_FOUND });
   });
 
   it("setOccasionEnabled reports an error", async () => {
@@ -454,8 +557,7 @@ describe("when the database says no row changed", () => {
   it("a moved birthday that changes no row is an error", async () => {
     const { store, mine } = setup();
     store.noRows.add("moveOccasion");
-    const result = await updatePerson(store, mine, input({ birthday: { month: 1, day: 9 }, anniversary: { month: 6, day: 5 } }));
-    expect(result.ok).toBe(false);
+    expect(await setDatedOccasion(store, mine, "birthday", { month: 1, day: 9 })).toEqual({ ok: false, error: NOT_FOUND });
   });
 });
 

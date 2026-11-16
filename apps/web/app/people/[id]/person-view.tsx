@@ -1,70 +1,67 @@
 import { ListChecks, Sparkles } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { relationshipLabel } from "@gifts-af/core";
-import { OCCASION_NAMES, shortDate } from "@/components/occasion-format";
+import { OCCASION_NAMES, monthDay, shortDate } from "@/components/occasion-format";
 import { PersonAvatar } from "@/components/person-avatar";
 import { PageTitle } from "@/components/app-shell/page-frame";
-import { appSettingInt } from "@/lib/app-settings";
 import { createClient } from "@/lib/supabase/server";
 import { todayForRequest } from "@/lib/today";
-import { getPerson, getProfile, listSavedGifts, type Db } from "@/modules/concierge";
-import { storeName } from "@/modules/lists";
+import { getPerson, countSavedGifts, getProfile, type Db, type PersonDetail } from "@/modules/concierge";
+import { SettingsRow } from "@/components/settings-row";
 import {
   deleteFactAction,
   deletePersonAction,
   editFactAction,
-  linkListAction,
-  readGiftLinkAction,
   readCapturesAction,
-  removeAddressAction,
-  removeSavedGiftAction,
-  saveAddressAction,
-  saveGiftAction,
   setFactActiveAction,
   setOccasionEnabledAction,
-  setPhotoAction,
-  unlinkListAction,
-  updatePersonAction,
 } from "../actions";
-import { PersonForm } from "../person-form";
-import { PhotoPicker } from "../photo-picker";
-import { AddressSection } from "./address";
 import { BudgetRow } from "./budget-row";
 import { DeletePerson } from "./delete-person";
-import { ListLink } from "./list-link";
 import { Occasions } from "./occasions";
 import { ReadinessBanner } from "./readiness";
-import { SavedGifts } from "./saved-gifts";
 import { WhatWeKnow } from "./what-we-know";
 
-const text = (n: number | undefined) => (n === undefined ? "" : String(n));
+/** The About row's value (ALL-127): "Mother · Birthday Mar 14". */
+function aboutSummary(person: PersonDetail): string {
+  const who = relationshipLabel(person.relationship);
+  return person.birthday ? `${who} · Birthday ${monthDay(person.birthday)}` : who;
+}
+
+/** The Shipping address row's value: the street, what's missing, or a shared city. */
+function addressSummary(address: PersonDetail["address"]): string {
+  if (address.kind === "none") return "Not added";
+  if (address.kind === "shared") return `${address.city}, ${address.state}`;
+  if (Object.keys(address.problems).length > 0) return "Something's missing";
+  return address.address.line1 ?? "Not added";
+}
+
+/** A bordered block of rows, like Settings' groups (ALL-115), with an optional heading. */
+function RowGroup({ title, children }: { title?: string; children: React.ReactNode }) {
+  return (
+    <section className="flex flex-col gap-1.5" aria-label={title ? undefined : "About"}>
+      {title && <h2 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">{title}</h2>}
+      <div className="divide-y divide-border rounded-xl border border-border">{children}</div>
+    </section>
+  );
+}
 
 /**
- * Everything about one person, top to bottom as in the mock-up. An unknown,
- * deleted or someone else's id is a 404. Room for the ALL-25 and ALL-26
- * sections goes between the list line and Edit.
+ * A person's page (ALL-127, T71): who they are, what we know, then a short
+ * list of rows. Each row shows its value and opens its own screen, where it
+ * changes. An unknown, deleted or someone else's id is a 404.
  */
-export async function PersonView({
-  id,
-  photoFailed,
-  openAddress,
-}: {
-  id: string;
-  photoFailed: boolean;
-  /** From `?address=open`, the "Add an address" email's link (ALL-81). */
-  openAddress: boolean;
-}) {
+export async function PersonView({ id, photoFailed }: { id: string; photoFailed: boolean }) {
   const supabase = await createClient();
   const userId = (await supabase.auth.getClaims()).data?.claims?.sub;
   if (!userId) redirect("/");
   const person = await getPerson(id, await todayForRequest());
   if (!person) notFound();
-  const [maxUploadBytes, px, profile, savedGifts] = await Promise.all([
-    appSettingInt("person_photo_max_upload_bytes"),
-    appSettingInt("person_photo_px"),
+  const [profile, savedGifts] = await Promise.all([
     getProfile(supabase as unknown as Db, person.id, person.keepsList),
-    listSavedGifts(person.id),
+    countSavedGifts(person.id),
   ]);
+  const base = `/people/${person.id}`;
 
   return (
     <>
@@ -87,84 +84,47 @@ export async function PersonView({
         </div>
       </header>
 
-      {profile.readiness && <ReadinessBanner personId={person.id} name={person.name} readiness={profile.readiness} />}
+      {photoFailed && (
+        <p role="status" className="text-[13px] text-muted-foreground">
+          The photo didn&apos;t save. Try again.
+        </p>
+      )}
 
-      <div className="flex flex-col gap-1.5">
-        <PhotoPicker
-          personId={person.id}
-          userId={userId}
-          currentPath={person.photoPath}
-          maxUploadBytes={maxUploadBytes}
-          px={px}
-          action={setPhotoAction}
-        />
-        {photoFailed && (
-          <p role="status" className="text-[13px] text-muted-foreground">
-            The photo didn&apos;t save. Try again.
-          </p>
-        )}
-      </div>
+      {profile.readiness && <ReadinessBanner personId={person.id} name={person.name} readiness={profile.readiness} />}
 
       <WhatWeKnow
         personId={person.id}
         name={person.name}
         knowledge={profile}
-        questionsHref={profile.openCount > 0 ? `/people/${person.id}/questions` : null}
+        questionsHref={profile.openCount > 0 ? `${base}/questions` : null}
         editAction={editFactAction}
         setActiveAction={setFactActiveAction}
         deleteAction={deleteFactAction}
         readAction={readCapturesAction}
       />
 
-      <section className="flex flex-col gap-3 border-b border-border pb-6" aria-labelledby="edit-heading">
-        <h2 id="edit-heading" className="text-lg font-semibold">
-          Edit
-        </h2>
-        <PersonForm
-          mode="edit"
-          action={updatePersonAction}
-          initial={{
-            id: person.id,
-            name: person.name,
-            relationship: person.relationship,
-            birthdayMonth: text(person.birthday?.month),
-            birthdayDay: text(person.birthday?.day),
-            birthYear: text(person.birthYear ?? undefined),
-            anniversaryMonth: text(person.anniversary?.month),
-            anniversaryDay: text(person.anniversary?.day),
-          }}
-        />
-      </section>
+      <RowGroup>
+        <SettingsRow href={`${base}/about`} label={`About ${person.name}`} value={aboutSummary(person)} />
+      </RowGroup>
 
       <Occasions personId={person.id} occasions={person.occasions} action={setOccasionEnabledAction} />
-      <BudgetRow
-        personId={person.id}
-        baseCents={person.baseBudgetCents}
-        defaultCents={person.defaultBudgetCents}
-        occasions={person.occasions}
-      />
-      <AddressSection
-        personId={person.id}
-        name={person.name}
-        address={person.address}
-        startOpen={openAddress}
-        saveAction={saveAddressAction}
-        removeAction={removeAddressAction}
-      />
-      <SavedGifts
-        personId={person.id}
-        name={person.name}
-        gifts={savedGifts.map((g) => ({ ...g, store: g.productUrl ? storeName(g.productUrl) : null }))}
-        readAction={readGiftLinkAction}
-        saveAction={saveGiftAction}
-        removeAction={removeSavedGiftAction}
-      />
-      <ListLink
-        personId={person.id}
-        keepsList={person.keepsList}
-        linkAction={linkListAction}
-        unlinkAction={unlinkListAction}
-      />
+
+      <RowGroup title="Gifts">
+        <BudgetRow
+          personId={person.id}
+          baseCents={person.baseBudgetCents}
+          defaultCents={person.defaultBudgetCents}
+          occasions={person.occasions}
+        />
+        <SettingsRow
+          href={`${base}/saved-gifts`}
+          label="Saved gifts"
+          value={savedGifts > 0 ? String(savedGifts) : "None"}
+        />
+        <SettingsRow href={`${base}/list`} label="Their list" value={person.keepsList ? "Linked" : "Not linked"} />
+        <SettingsRow href={`${base}/address`} label="Shipping address" value={addressSummary(person.address)} />
+      </RowGroup>
+
       <DeletePerson personId={person.id} name={person.name} action={deletePersonAction} />
     </>
   );

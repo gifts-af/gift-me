@@ -30,6 +30,10 @@ export class FakeSavedGiftsStore implements SavedGiftsStore {
     return this.rows.filter((r) => r.person_id === personId);
   }
 
+  async count(personId: string) {
+    return this.rows.filter((r) => r.person_id === personId).length;
+  }
+
   async insert(gift: NewSavedGift) {
     if (!this.people.has(gift.person_id)) throw dbError("Person not found", "P0002");
     if (this.rows.filter((r) => r.person_id === gift.person_id).length >= this.max) {

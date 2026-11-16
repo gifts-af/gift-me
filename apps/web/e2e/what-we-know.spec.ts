@@ -74,13 +74,20 @@ test("a person's facts, with an AI suggestion and an unread capture, fit the scr
   await expect(page.getByRole("region", { name: "Wants" }).getByText("a new rotary fly-tying vise")).toBeVisible();
   await expect(page.getByRole("button", { name: "Read it now" })).toBeVisible();
   expect(await phoneLayoutProblems(page)).toEqual([]);
+  // And with a fact open in place (ALL-127).
+  await page.getByRole("button", { name: "a new rotary fly-tying vise", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Looks right" })).toBeVisible();
+  expect(await phoneLayoutProblems(page)).toEqual([]);
 });
 
-test("facts show by category with their source, and can be turned off, turned on and deleted", async ({ page }, testInfo) => {
+test("facts open in place and save as you go: confirmed, turned off and on, edited and deleted", async ({ page }, testInfo) => {
   const { personId, vise } = await seed(`Dad ${testInfo.project.name}`);
+  const factRow = async () =>
+    (await rest(`profile_facts?id=eq.${vise}&select=value,category,active,confirmed`, { profile: "concierge" }))[0];
   await signIn(page);
   await page.goto(`/people/${personId}`);
 
+  const know = page.getByRole("region", { name: "What we know" });
   const wants = page.getByRole("region", { name: "Wants" });
   await expect(wants.getByText("a new rotary fly-tying vise")).toBeVisible();
   await expect(wants.getByText("✨ AI suggestion")).toBeVisible();
@@ -90,37 +97,61 @@ test("facts show by category with their source, and can be turned off, turned on
   await expect(page.getByRole("button", { name: "Read it now" })).toBeVisible();
   await expect(page.getByRole("note")).toHaveText("We read each capture with AI, which costs real money: about 2¢ each.");
 
-  // Turn off (AC-5): gone from the profile, kept so the AI won't suggest it again.
-  await wants.getByRole("button", { name: "Edit a new rotary fly-tying vise" }).click();
-  await page.getByRole("button", { name: "Turn off" }).click();
+  // Tapping a fact opens it in place, with no Save button (ALL-127).
+  await wants.getByRole("button", { name: "a new rotary fly-tying vise", exact: true }).click();
+  await expect(know.getByRole("textbox", { name: "Fact" })).toHaveValue("a new rotary fly-tying vise");
+  await expect(know.getByRole("button", { name: "Save" })).toHaveCount(0);
+
+  // Looks right (AC-10): confirmed as it is, and the ✨ goes.
+  await know.getByRole("button", { name: "Looks right" }).click();
+  await expect(wants.getByText("From a capture")).toBeVisible();
+  await expect(wants.getByText("✨ AI suggestion")).toHaveCount(0);
+  await expect(know.getByRole("button", { name: "Looks right" })).toHaveCount(0);
+  expect(await factRow()).toMatchObject({ value: "a new rotary fly-tying vise", confirmed: true });
+
+  // Use for gift ideas, off (AC-9, AC-5): saved at once, kept so the AI won't suggest it again.
+  await know.getByRole("switch", { name: "Use for gift ideas" }).click();
+  await expect(know.getByRole("status")).toHaveText("Saved");
+  await expect.poll(async () => (await factRow()).active).toBe(false);
+  await know.getByRole("button", { name: "Done", exact: true }).click();
   await expect(page.getByRole("region", { name: "Wants" })).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole("region", { name: "Wants" })).toHaveCount(0);
   await expect(page.getByText("Turned off (1)")).toBeVisible();
-  const [row] = await rest(`profile_facts?id=eq.${vise}&select=active`, { profile: "concierge" });
-  expect(row.active).toBe(false);
 
   // Turn it back on.
   await page.getByText("Turned off (1)").click();
   await page.getByRole("button", { name: "Turn on a new rotary fly-tying vise" }).click();
-  await expect(page.getByRole("region", { name: "Wants" }).getByText("a new rotary fly-tying vise")).toBeVisible();
+  await expect(wants.getByText("a new rotary fly-tying vise")).toBeVisible();
 
-  // Edit (AC-6): the new words stick, and the buyer has now vouched for it.
-  await page.getByRole("button", { name: "Edit a new rotary fly-tying vise" }).click();
-  await page.getByLabel("Fact").fill("a rotary vise");
-  await page.getByRole("region", { name: "What we know" }).getByRole("button", { name: "Save" }).click();
-  await expect(page.getByRole("region", { name: "Wants" }).getByText("a rotary vise")).toBeVisible();
-  await expect(page.getByRole("region", { name: "Wants" }).getByText("From a capture")).toBeVisible();
+  // Kind, then words (AC-9): each saves, and the words' save keeps the new kind.
+  await wants.getByRole("button", { name: "a new rotary fly-tying vise", exact: true }).click();
+  await know.getByRole("combobox", { name: "Kind" }).selectOption("loved");
+  await expect(know.getByRole("status")).toHaveText("Saved");
+  await expect.poll(async () => (await factRow()).category).toBe("loved");
+  const fact = know.getByRole("textbox", { name: "Fact" });
+  await fact.fill("a rotary vise");
+  await fact.press("Enter");
+  await expect(know.getByRole("status")).toHaveText("Saved");
+  await expect.poll(factRow).toMatchObject({ value: "a rotary vise", category: "loved" });
+  await page.reload();
+  await expect(page.getByRole("region", { name: "Loved" }).getByText("a rotary vise")).toBeVisible();
 
-  // A duplicate gets a plain message (AC-6).
-  await page.getByRole("button", { name: "Edit a rotary vise" }).click();
-  await page.getByLabel("Fact").fill("Owala water bottle");
-  await page.getByLabel("Kind").selectOption("owns");
-  await page.getByRole("region", { name: "What we know" }).getByRole("button", { name: "Save" }).click();
-  await expect(page.getByText("That's already on their profile (it may be turned off).")).toBeVisible();
+  // Empty words show an error and save nothing.
+  await page.getByRole("region", { name: "Loved" }).getByRole("button", { name: "a rotary vise", exact: true }).click();
+  await fact.fill("");
+  await fact.press("Enter");
+  await expect(know.getByRole("alert")).toHaveText("Type something first.");
+  expect((await factRow()).value).toBe("a rotary vise");
+
+  // A refused save keeps the words and says why (AC-9).
+  await fact.fill("Owala water bottle");
+  await know.getByRole("combobox", { name: "Kind" }).selectOption("owns");
+  await expect(know.getByRole("alert")).toHaveText("That's already on their profile (it may be turned off).");
+  await expect(fact).toHaveValue("Owala water bottle");
 
   // Delete (AC-4): the row is really gone, and so is it from what ideas read.
-  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await know.getByRole("button", { name: "Delete", exact: true }).click();
   await page.getByRole("button", { name: "Delete for good" }).click();
   // By text, and with the dialog gone: an open dialog hides the page from role queries.
   await expect(page.getByRole("dialog")).toHaveCount(0);
