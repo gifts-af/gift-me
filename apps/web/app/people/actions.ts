@@ -39,8 +39,15 @@ import {
   setOccasionEnabled,
   setPhoto,
   unlinkList,
-  updatePerson,
+  parseBirthYear,
+  parseMonthDay,
+  removeDatedOccasion,
+  renamePerson,
+  setBirthYear,
+  setDatedOccasion,
+  setRelationship,
   type AddResult,
+  type DatedKind,
   type AddressSaveResult,
   type ImportResult,
   type SaveResult,
@@ -98,12 +105,51 @@ async function tipAfterAdd(person: { id: string; name: string }): Promise<void> 
 /** The round engine with the real buying side, for rounds that go on once an address arrives. */
 const engineNow = async () => (await buyingWiring(new Date())).engine;
 
-export async function updatePersonAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
-  const currentYear = parseDate(await todayForRequest()).year;
-  const parsed = parsePersonForm(formData, currentYear, { anyAnniversary: true });
+// About (ALL-127): each field saves on its own through useAutosave, so these
+// take plain values, not forms. None resumes rounds; only the address does.
+const DATED: DatedKind[] = ["birthday", "anniversary"];
+const isText = (...values: unknown[]) => values.every((v) => typeof v === "string");
+
+/** Like refresh, plus Home, whose cards show the name and next date. */
+function refreshPerson(result: SaveResult, id: string): SaveResult {
+  if (result.ok) revalidatePath("/");
+  return refresh(result, id);
+}
+
+export async function renamePersonAction(id: string, name: string): Promise<SaveResult> {
+  if (!isText(id, name)) return BAD_FORM;
+  return refreshPerson(await renamePerson(id, name), id);
+}
+
+export async function setRelationshipAction(id: string, relationship: string): Promise<SaveResult> {
+  if (!isText(id, relationship)) return BAD_FORM;
+  return refreshPerson(await setRelationship(id, relationship), id);
+}
+
+/** Month and day as picked; only a real date is saved, and cleared fields never are. */
+export async function setDatedOccasionAction(id: string, kind: string, month: string, day: string): Promise<SaveResult> {
+  const dated = DATED.find((k) => k === kind);
+  if (!dated || !isText(id, month, day)) return BAD_FORM;
+  const parsed = parseMonthDay(month.trim(), day.trim());
   if (!parsed.ok) return parsed;
-  const id = text(formData, "id");
-  return refresh(await updatePerson(id, parsed.value, engineNow), id);
+  // Both fields empty: clearing never removes a date ("Remove birthday" does).
+  if (!parsed.value) return { ok: false, error: "That date doesn't exist." };
+  return refreshPerson(await setDatedOccasion(id, dated, parsed.value), id);
+}
+
+/** The year's text; empty clears it. */
+export async function setBirthYearAction(id: string, year: string): Promise<SaveResult> {
+  if (!isText(id, year)) return BAD_FORM;
+  const currentYear = parseDate(await todayForRequest()).year;
+  const parsed = parseBirthYear(year, currentYear);
+  if (!parsed.ok) return parsed;
+  return refreshPerson(await setBirthYear(id, parsed.value, currentYear), id);
+}
+
+export async function removeDatedOccasionAction(id: string, kind: string): Promise<SaveResult> {
+  const dated = DATED.find((k) => k === kind);
+  if (!dated || !isText(id)) return BAD_FORM;
+  return refreshPerson(await removeDatedOccasion(id, dated), id);
 }
 
 /** The Shipping address form (ALL-81): checked by format, then saved; a waiting round goes on. */

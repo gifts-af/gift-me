@@ -53,15 +53,28 @@ export {
   listImportedContactIds,
   listPeople,
   removeAddress,
+  removeDatedOccasion,
+  renamePerson,
   saveAddress,
   saveBudgets,
+  setBirthYear,
+  setDatedOccasion,
   setOccasionEnabled,
   setPhoto,
+  setRelationship,
   unlinkList,
-  updatePerson,
 } from "./people/people";
-export type { AddResult, ImportResult, PersonAddress, PersonCard, PersonDetail } from "./people/people";
-export { parseAddressForm, parseBudget, parseBudgetForm, parseImportRows, parsePersonForm, parseShareToken } from "./people/rules";
+export type { AddResult, DatedKind, ImportResult, PersonAddress, PersonCard, PersonDetail } from "./people/people";
+export {
+  parseAddressForm,
+  parseBirthYear,
+  parseBudget,
+  parseBudgetForm,
+  parseImportRows,
+  parseMonthDay,
+  parsePersonForm,
+  parseShareToken,
+} from "./people/rules";
 // Saved gifts for someone, private to the buyer (ALL-93).
 export { listSavedGifts, removeSavedGift, saveGift } from "./saved-gifts/saved-gifts";
 export { parseSavedGiftForm } from "./saved-gifts/rules";

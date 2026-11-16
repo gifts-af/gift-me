@@ -38,6 +38,7 @@ describe("PersonCard", () => {
     const { rerender } = render(<PersonCard person={base} />);
     expect(screen.queryByRole("link", { name: "Add birthday" })).toBeNull();
     rerender(<PersonCard person={{ ...base, hasBirthday: false }} />);
-    expect(screen.getByRole("link", { name: "Add birthday" })).toHaveAttribute("href", "/people/p1#birthday");
+    // It opens About, where the birthday is set (ALL-127).
+    expect(screen.getByRole("link", { name: "Add birthday" })).toHaveAttribute("href", "/people/p1/about");
   });
 });

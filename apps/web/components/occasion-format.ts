@@ -12,6 +12,11 @@ export const OCCASION_NAMES: Record<OccasionKind, string> = {
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
+/** "Mar 14": a birthday or anniversary, which has no year. */
+export function monthDay(d: { month: number; day: number }): string {
+  return `${MONTHS[d.month - 1]} ${d.day}`;
+}
+
 /** "Sat, Mar 14" from a calendar date, with no time zone involved. */
 export function shortDate(date: string): string {
   const { year, month, day } = parseDate(date);

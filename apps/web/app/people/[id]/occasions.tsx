@@ -52,17 +52,18 @@ export function Occasions({
   }
 
   return (
-    <section className="flex flex-col gap-3" aria-labelledby="occasions-heading">
-      <h2 id="occasions-heading" className="text-lg font-semibold">
+    // Rows in one bordered group, like Settings (ALL-127).
+    <section className="flex flex-col gap-1.5" aria-labelledby="occasions-heading">
+      <h2 id="occasions-heading" className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
         Occasions
       </h2>
-      <ul className="flex flex-col gap-2">
+      <ul className="divide-y divide-border rounded-xl border border-border">
         {occasions.map((row) => {
           const enabled = chosen[row.kind] ?? row.enabled;
           // The server's order-by is only right for the server's switch position.
           const line = enabled === row.enabled ? orderByLine(row) : null;
           return (
-            <li key={row.kind} className="flex min-h-11 items-center gap-3 rounded-lg border bg-card p-3">
+            <li key={row.kind} className="flex min-h-11 items-center gap-3 px-4 py-2.5">
               <div className="min-w-0 flex-1">
                 <p className="text-[15px] font-semibold">{OCCASION_NAMES[row.kind]}</p>
                 <p className="text-[13px] text-muted-foreground">{shortDate(row.date)}</p>
