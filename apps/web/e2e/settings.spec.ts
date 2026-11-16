@@ -46,3 +46,17 @@ for (const saved of [true, false]) {
     expect(problems.filter((text) => HYDRATION.test(text))).toEqual([]);
   });
 }
+
+// The field saves when the page is left, so Back straight after typing must not lose it.
+test("over-budget saves when Back is tapped straight away", async ({ page }) => {
+  await signIn(page, await createFreshUser());
+  await page.goto("/settings/over-budget");
+  const field = page.getByRole("textbox", { name: "Over-budget allowance" });
+  await field.fill("15");
+  await page.getByRole("link", { name: "Settings" }).first().click();
+  await page.waitForURL("**/settings");
+  // Let Settings finish loading, so the next goto isn't interrupting it.
+  await page.waitForLoadState("networkidle");
+  await page.goto("/settings/over-budget");
+  await expect(page.getByRole("textbox", { name: "Over-budget allowance" })).toHaveValue("15");
+});

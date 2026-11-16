@@ -66,6 +66,15 @@ export async function saveTimezone(zone: string): Promise<SaveResult> {
   return { ok: true };
 }
 
+// Saves the over-budget allowance on its own, as its page needs (ALL-115).
+export async function saveOverBudget(value: string): Promise<SaveResult> {
+  const result = await saveConciergeSettings({ overBudgetPct: String(value) });
+  if (!result.ok) return result;
+  revalidatePath("/settings");
+  revalidatePath("/settings/over-budget");
+  return { ok: true };
+}
+
 // Sends the signed-in user a real notification email, so they can see what
 // reminders will look like and that the links work.
 export async function sendTestEmail(): Promise<{ ok: true } | { ok: false; error: string }> {
