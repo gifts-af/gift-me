@@ -55,8 +55,12 @@ export interface InboundStore {
   setMessageId(userId: string, notificationId: string, messageId: string): Promise<void>;
   /** Saves an asking message; returns its id. */
   saveAsking(row: AskingRow): Promise<string>;
+  /** Deletes this user's message while it is still asking. */
+  deleteAsking(userId: string, messageId: string): Promise<void>;
   /** Into the private captures bucket. Throws on failure. */
   uploadImage(path: string, bytes: Uint8Array, type: string): Promise<void>;
+  /** Out of the private captures bucket. Throws on failure. */
+  removeImage(path: string): Promise<void>;
   /** Sets a one-time flag; true only for the call that set it. */
   claimFlag(userId: string, flag: InboundFlag): Promise<boolean>;
 }

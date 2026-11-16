@@ -381,6 +381,37 @@ describe("handleInbound: mail loops", () => {
     expect(events("inbound.reply_capped")).toMatchObject([{ email_id: "e1", kind: "notes_cant_cancel" }]);
   });
 
+  it("drops the asking note and its image when \"Who is this about?\" would go over the cap", async () => {
+    for (let i = 0; i < 19; i++) await store.recordEvent(USER);
+    const out = await receive(
+      "e1",
+      email({ text: "a fly rod", attachments: [{ id: "att-png", content_type: "image/png", size: PNG.length }] }),
+    );
+    expect(out).toBe("capped");
+    expect(sent).toEqual([]);
+    expect(notifyStore.links).toEqual([]);
+    expect(store.asking).toEqual([]);
+    expect(store.uploads.size).toBe(0);
+    expect(events("inbound.reply_capped")).toMatchObject([{ email_id: "e1", kind: "who_is_this" }]);
+    expect(events("inbound.ask_capped")).toEqual([
+      expect.objectContaining({ email_id: "e1", user_id: USER, inbound_message_id: "msg-1" }),
+    ]);
+  });
+
+  it("keeps the asking row for the daily clear-out when removing its image fails", async () => {
+    for (let i = 0; i < 19; i++) await store.recordEvent(USER);
+    store.removeImage = async () => {
+      throw new Error("storage down");
+    };
+    const out = await receive(
+      "e1",
+      email({ text: "a fly rod", attachments: [{ id: "att-png", content_type: "image/png", size: PNG.length }] }),
+    );
+    expect(out).toBe("capped");
+    expect(store.asking).toHaveLength(1);
+    expect(events("inbound.ask_capped")).toMatchObject([{ inbound_message_id: "msg-1", name: "Error" }]);
+  });
+
   it("sends at most the daily cap back across 25 messages (AC-11)", async () => {
     for (let i = 0; i < 25; i++) await receive(`e${i}`, email({ text: "no names here" }));
     expect(sent.length).toBeLessThanOrEqual(20);

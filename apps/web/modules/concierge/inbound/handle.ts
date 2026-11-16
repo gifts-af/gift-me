@@ -228,13 +228,26 @@ async function ask(
   choices.forEach((c, i) => {
     links[`choice${i}`] = { action: "file_note", expiresAt, personId: c.id, inboundMessageId: messageId };
   });
-  await sendBack(ctx, {
+  const sent = await sendBack(ctx, {
     userId,
     kind: "who_is_this",
     data: { subject: note.subject, choices: choices.map((c) => ({ name: c.name })) },
     links: links as NotifyInput<"who_is_this">["links"],
   });
-  return "asking";
+  if (sent !== "capped") return "asking";
+
+  // Nobody will be asked, so don't keep a note nobody can file. Capped means nothing was sent
+  // and no buttons were saved. The image goes first: if that fails the row stays, and the daily
+  // clear-out (it has no buttons) clears it and retries the image.
+  const ids = { email_id: emailId, user_id: userId, inbound_message_id: messageId };
+  try {
+    if (imagePath) await store.removeImage(imagePath);
+    await store.deleteAsking(userId, messageId);
+    logEvent("inbound.ask_capped", ids);
+  } catch (err) {
+    logEvent("inbound.ask_capped", { ...ids, ...errorFields(err) });
+  }
+  return "capped";
 }
 
 /** An email back about this note, under the daily cap (sendInboundReply). */

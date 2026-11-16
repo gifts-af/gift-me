@@ -62,8 +62,14 @@ export class FakeInboundStore implements InboundStore {
     this.asking.push({ ...row, id });
     return id;
   }
+  async deleteAsking(userId: string, messageId: string) {
+    this.asking = this.asking.filter((m) => !(m.id === messageId && m.userId === userId));
+  }
   async uploadImage(path: string, bytes: Uint8Array, type: string) {
     this.uploads.set(path, { bytes, type });
+  }
+  async removeImage(path: string) {
+    this.uploads.delete(path);
   }
   async claimFlag(userId: string, flag: InboundFlag) {
     const key = `${userId}:${flag}`;

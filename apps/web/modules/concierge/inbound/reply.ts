@@ -17,23 +17,26 @@ export type ReplyDeps = {
  * Every email sent back counts toward the daily cap, so a reply that would go over it isn't
  * sent (AC-11). It's counted before sending so a failing send can't loop uncounted. A failed
  * send is logged and never thrown; the note itself is already handled. `ids`: the caller's
- * ids for the events (E6), on top of the user and the kind.
+ * ids for the events (E6), on top of the user and the kind. Says what happened, so a caller
+ * can undo what it saved for an email that never went.
  */
 export async function sendInboundReply<K extends NotificationKind>(
   input: NotifyInput<K>,
   deps: ReplyDeps,
   ids: Record<string, string>,
-): Promise<void> {
+): Promise<"sent" | "capped" | "failed"> {
   const fields = { ...ids, user_id: input.userId, kind: input.kind };
   try {
     if ((await deps.store.countToday(input.userId)) >= deps.maxPerDay) {
       logEvent("inbound.reply_capped", fields);
-      return;
+      return "capped";
     }
     await deps.store.recordEvent(input.userId);
     const result = await notify(input, deps.notify);
-    if (!result.ok) logEvent("inbound.reply_failed", fields);
+    if (result.ok) return "sent";
+    logEvent("inbound.reply_failed", fields);
   } catch (err) {
     logEvent("inbound.reply_failed", { ...fields, ...errorFields(err) });
   }
+  return "failed";
 }

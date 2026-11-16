@@ -147,11 +147,26 @@ export function createSupabaseInboundStore(db: SupabaseClient<Database>): Inboun
       return data.id;
     },
 
+    async deleteAsking(userId, messageId) {
+      const { error } = await concierge()
+        .from("inbound_messages")
+        .delete()
+        .eq("id", messageId)
+        .eq("user_id", userId)
+        .eq("status", "asking");
+      if (error) fail("Deleting the asking message failed", error);
+    },
+
     async uploadImage(path, bytes, type) {
       const { error } = await db.storage
         .from("captures")
         .upload(path, new Blob([bytes as BlobPart], { type }), { contentType: type, upsert: false });
       if (error) fail("Uploading the note's image failed", error);
+    },
+
+    async removeImage(path) {
+      const { error } = await db.storage.from("captures").remove([path]);
+      if (error) fail("Removing the note's image failed", error);
     },
 
     async claimFlag(userId, flag) {
