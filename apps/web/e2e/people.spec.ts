@@ -153,4 +153,6 @@ test("add a mother-in-law", async ({ page }) => {
   // The line under her name: "Mother-in-law · Christmas, …".
   await expect(page.getByText(/^Mother-in-law ·/)).toBeVisible();
   await expect(page.getByRole("switch", { name: "Mother's Day" })).toBeChecked();
+  // Saved and read back: the Edit form has her relationship selected.
+  await expect(page.getByLabel("Who are they to you?")).toHaveValue("mother_in_law");
 });
