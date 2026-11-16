@@ -1910,6 +1910,15 @@ export type Database = {
         Args: { p_items: Json; p_list_id: string; p_title: string };
         Returns: string;
       };
+      save_list_checked: {
+        Args: {
+          p_expected: string;
+          p_items: Json;
+          p_list_id: string;
+          p_title: string;
+        };
+        Returns: Json;
+      };
       unclaim_gift: {
         Args: { p_item_id: string; p_token: string };
         Returns: boolean;

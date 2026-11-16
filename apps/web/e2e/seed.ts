@@ -31,12 +31,13 @@ export async function addMother(user: Credentials, name: string): Promise<string
   })) as string;
 }
 
-/** Saves a one-gift list, as pressing Save on My list does. */
+/** Saves a one-gift list, as adding a first gift on My list does. */
 export async function saveOneGiftList(user: Credentials): Promise<void> {
-  await rpc(user, "lists", "save_list", {
+  await rpc(user, "lists", "save_list_checked", {
     p_list_id: null,
     p_title: null,
     p_items: [{ id: null, name: "Wool socks", price_cents: 1200, image_url: null, product_url: null, asin: null, source: "manual", added_at: null }],
+    p_expected: null,
   });
 }
 

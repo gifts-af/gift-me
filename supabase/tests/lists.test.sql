@@ -2,7 +2,7 @@
 -- share links anyone can open, and claims (design §2.2).
 begin;
 \ir _helpers.psql
-select plan(24);
+select plan(44);
 
 select tests.create_user('a@example.com', 'Aaron') as a \gset
 select tests.create_user('b@example.com', 'Bee') as b \gset
@@ -122,6 +122,107 @@ select tests.act_as_anon();
 select throws_ok(
   $q$select lists.save_list(null, 'x', '[]'::jsonb)$q$,
   '42501', null, 'anon cannot save a list'
+);
+
+-- ─── save_list_checked (ALL-127) ────────────────────────────────────────────
+-- Each save carries the list's version (updated_at as text); an out-of-date
+-- one is refused with GL409, so a stale tab can't overwrite newer gifts.
+select tests.act_as(:'a');
+select updated_at::text as v0 from lists.lists where id = :'list_id' \gset
+
+select lists.save_list_checked(:'list_id', null, '[
+  {"id": "aaaaaaaa-0000-4000-8000-000000000001", "name": "Kneeler", "price_cents": 2700},
+  {"id": "aaaaaaaa-0000-4000-8000-000000000002", "name": "Gloves", "price_cents": 1500},
+  {"id": "aaaaaaaa-0000-4000-8000-000000000003", "name": "Trowel", "price_cents": 900}
+]'::jsonb, :'v0') as saved \gset
+select is((:'saved'::jsonb) ->> 'id', :'list_id', 'a checked save returns the list id');
+select is(
+  (:'saved'::jsonb) ->> 'updated_at',
+  (select updated_at::text from lists.lists where id = :'list_id'),
+  'a checked save returns the new version, as text'
+);
+select isnt((:'saved'::jsonb) ->> 'updated_at', :'v0', 'the version moves on with each save');
+select is((select count(*)::int from lists.list_items where list_id = :'list_id'), 3, 'the current version saves the gifts');
+
+-- The gifts it wrote come back with the version, from the same snapshot, so
+-- the app never pairs a version with rows another save wrote later.
+select is(
+  (:'saved'::jsonb) -> 'items',
+  (select jsonb_agg(jsonb_build_object(
+      'id', i.id, 'name', i.name, 'price_cents', i.price_cents, 'image_url', i.image_url,
+      'product_url', i.product_url, 'asin', i.asin, 'source', i.source, 'added_at', i.added_at
+    ) order by i.position)
+     from lists.list_items i where i.list_id = :'list_id'),
+  'a checked save returns the gifts it wrote, in order'
+);
+select is((:'saved'::jsonb) ->> 'share_token', :'token', 'and the share token');
+
+-- The same old version again: refused, and nothing changes.
+select throws_ok(
+  format($q$select lists.save_list_checked(%L, null, '[]'::jsonb, %L)$q$, :'list_id', :'v0'),
+  'GL409', null, 'a save with an out-of-date version is refused'
+);
+select is((select count(*)::int from lists.list_items where list_id = :'list_id'), 3, 'a refused save changes nothing');
+
+-- The version is compared as a time, not as text, so a different print of the
+-- same moment (another DateStyle, or ISO with a T) still matches. A claim on a
+-- kept gift survives the save.
+select to_json(updated_at) #>> '{}' as v1_iso from lists.lists where id = :'list_id' \gset
+select isnt(:'v1_iso'::text, (:'saved'::jsonb) ->> 'updated_at', 'the ISO print differs from the text print');
+select lists.save_list_checked(:'list_id', null, '[
+  {"id": "aaaaaaaa-0000-4000-8000-000000000001", "name": "Kneeler", "price_cents": 2700},
+  {"id": "aaaaaaaa-0000-4000-8000-000000000002", "name": "Gloves", "price_cents": 1500}
+]'::jsonb, :'v1_iso') ->> 'updated_at' as v2 \gset
+select isnt(:'v2'::text, null,'the same moment, printed differently, is still the current version');
+select throws_ok(
+  format($q$select lists.save_list_checked(%L, null, '[]'::jsonb, 'not a time')$q$, :'list_id'),
+  'GL409', null, 'a version that isn''t a time is refused as stale'
+);
+select tests.act_as(:'b');
+select is(
+  (select count(*)::int from jsonb_array_elements(lists.get_shared_list(:'token') -> 'items') i where i -> 'claim' <> 'null'::jsonb),
+  2,
+  'a checked save keeps the claims on kept gifts'
+);
+
+-- Someone else's list, even with its right version: not found, not stale.
+select throws_ok(
+  format($q$select lists.save_list_checked(%L, null, '[]'::jsonb, %L)$q$, :'list_id', :'v2'),
+  'P0002', null, 'another person''s list is not found'
+);
+
+-- No list id: creates a list only when the caller has none.
+select tests.act_as(:'a');
+select throws_ok(
+  $q$select lists.save_list_checked(null, null, '[]'::jsonb, null)$q$,
+  'GL409', null, 'a caller who already has a list can''t create a second one'
+);
+select is((select count(*)::int from lists.lists), 1, 'A still has one list');
+select tests.act_as(:'c');
+select ok(
+  (lists.save_list_checked(null, null, '[{"name": "Mug", "price_cents": 1200}]'::jsonb, null) ->> 'updated_at') is not null,
+  'a caller with no list creates one'
+);
+select is((select count(*)::int from lists.list_items), 1, 'with its gift');
+
+-- Signed out: refused.
+select tests.act_as_anon();
+select throws_ok(
+  $q$select lists.save_list_checked(null, 'x', '[]'::jsonb, null)$q$,
+  '42501', null, 'anon cannot make a checked save'
+);
+select ok(
+  not has_function_privilege('anon', 'lists.save_list_checked(uuid, text, jsonb, text)', 'execute')
+  and has_function_privilege('authenticated', 'lists.save_list_checked(uuid, text, jsonb, text)', 'execute'),
+  'only signed-in users can make a checked save'
+);
+
+-- The old save_list stays exactly as it was, so a rolled-back deploy still
+-- saves (E7). A later cleanup migration drops it, and this check with it.
+select is(
+  md5((select replace(prosrc, E'\r', '') from pg_proc where oid = 'lists.save_list(uuid, text, jsonb)'::regprocedure)),
+  '96212f4322fbd178166a3b69caf9e19b',
+  'the old save_list is untouched'
 );
 
 select * from finish();
