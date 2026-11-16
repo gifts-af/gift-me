@@ -64,6 +64,11 @@ describe("AboutForm", () => {
       expect(a.rename).toHaveBeenCalledWith("p1", "Mama");
     });
 
+    it("takes at most 120 characters, as the rule does", () => {
+      setup();
+      expect(nameField()).toHaveAttribute("maxLength", "120");
+    });
+
     it("shows an error for an empty name and sends nothing (AC-3)", async () => {
       const { a } = setup();
       fireEvent.change(nameField(), { target: { value: "  " } });
@@ -131,19 +136,92 @@ describe("AboutForm", () => {
       expect(within(birthday()).queryByRole("alert")).toBeNull();
     });
 
-    it("keeps the year off until there's a date, and saves it on leaving it", async () => {
+    it("keeps the year off until a date is saved, and saves it on leaving it", async () => {
       const { a } = setup({ birthday: null });
       const year = () => within(birthday()).getByRole("spinbutton", { name: "Birth year (optional)" });
       expect(year()).toBeDisabled();
       const user = userEvent.setup();
       await user.selectOptions(within(birthday()).getByRole("combobox", { name: "Birthday month" }), "4");
       await user.type(within(birthday()).getByRole("spinbutton", { name: "Birthday day" }), "2");
-      expect(year()).toBeEnabled();
-      await user.click(year());
+      // A real date in the fields isn't enough: it has to be saved first.
+      expect(year()).toBeDisabled();
+      await act(async () => user.click(nameField()));
       expect(a.setDate).toHaveBeenCalledWith("p1", "birthday", "4", "2");
+      expect(year()).toBeEnabled();
       await user.type(year(), "1960");
       await act(async () => user.click(nameField()));
       expect(a.setBirthYear).toHaveBeenCalledWith("p1", "1960");
+    });
+
+    it("keeps the year off when the save fails", async () => {
+      setup({ birthday: null }, actions({ setDate: vi.fn(async () => ({ ok: false as const, error: "Nope." })) }));
+      const user = userEvent.setup();
+      await user.selectOptions(within(birthday()).getByRole("combobox", { name: "Birthday month" }), "4");
+      await user.type(within(birthday()).getByRole("spinbutton", { name: "Birthday day" }), "2");
+      await act(async () => user.click(nameField()));
+      expect(within(birthday()).getByRole("spinbutton", { name: "Birth year (optional)" })).toBeDisabled();
+    });
+
+    // Review of PR 1 (blocker): a failed date must never be sent again after a
+    // Remove, or it would make a new birthday (and a second round).
+    it("never re-sends a failed date after Remove, even when the page goes", async () => {
+      const calls: string[] = [];
+      const a = actions({
+        setDate: vi.fn(async () => (calls.push("setDate"), { ok: false as const, error: "That couldn't be saved. Try again." })),
+        removeDate: vi.fn(async () => (calls.push("removeDate"), { ok: true as const })),
+      });
+      const { unmount } = setup({}, a);
+      const user = userEvent.setup();
+      await user.selectOptions(within(birthday()).getByRole("combobox", { name: "Birthday month" }), "11");
+      const day = within(birthday()).getByRole("spinbutton", { name: "Birthday day" });
+      await user.clear(day);
+      await user.type(day, "30");
+      await act(async () => user.click(nameField()));
+      expect(within(birthday()).getByRole("alert")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Remove birthday" }));
+      await act(async () => user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Remove birthday" })));
+      await act(async () => user.click(nameField()));
+      unmount();
+      expect(calls).toEqual(["setDate", "removeDate"]);
+    });
+
+    // Review of PR 1: on iPhone, closing the month wheel blurs with no target.
+    it("waits a moment after a blur with no target, so a date on the way isn't saved (iPhone)", async () => {
+      vi.useFakeTimers();
+      try {
+        const { a } = setup();
+        const month = within(birthday()).getByRole("combobox", { name: "Birthday month" });
+        const day = within(birthday()).getByRole("spinbutton", { name: "Birthday day" });
+        fireEvent.change(month, { target: { value: "11" } });
+        fireEvent.blur(month, { relatedTarget: null });
+        await act(async () => vi.advanceTimersByTime(1000));
+        fireEvent.focus(day);
+        await act(async () => vi.advanceTimersByTime(1000));
+        expect(a.setDate).not.toHaveBeenCalled();
+        fireEvent.change(day, { target: { value: "30" } });
+        await act(async () => fireEvent.blur(day, { relatedTarget: nameField() }));
+        await act(async () => vi.advanceTimersByTime(3000));
+        expect(a.setDate).toHaveBeenCalledTimes(1);
+        expect(a.setDate).toHaveBeenCalledWith("p1", "birthday", "11", "30");
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("saves after the wait when focus doesn't come back", async () => {
+      vi.useFakeTimers();
+      try {
+        const { a } = setup();
+        const month = within(birthday()).getByRole("combobox", { name: "Birthday month" });
+        fireEvent.change(month, { target: { value: "11" } });
+        fireEvent.blur(month, { relatedTarget: null });
+        await act(async () => vi.advanceTimersByTime(1499));
+        expect(a.setDate).not.toHaveBeenCalled();
+        await act(async () => vi.advanceTimersByTime(1));
+        expect(a.setDate).toHaveBeenCalledWith("p1", "birthday", "11", "14");
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("asks before removing, then removes the birthday and its year (AC-7)", async () => {

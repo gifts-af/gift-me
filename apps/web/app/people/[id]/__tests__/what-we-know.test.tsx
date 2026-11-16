@@ -306,11 +306,51 @@ describe("WhatWeKnow", () => {
     const user = userEvent.setup();
     setup();
     const open = screen.getByRole("button", { name: "fly fishing" });
+    // The fact opens only after a tap, so only its row needs the guard.
     expect(open).toHaveAttribute("aria-disabled", "true");
-    await user.click(open);
-    expect(screen.getByLabelText("Fact")).toBeDisabled();
-    expect(screen.getByLabelText("Kind")).toBeDisabled();
-    expect(screen.getByRole("switch", { name: "Use for gift ideas" })).toHaveAttribute("aria-disabled", "true");
+  });
+
+  // Review of PR 1: Done waits for the pending save and closes only if it worked (AC-9).
+  it("stays open with the error and the text when Done follows a refused edit", async () => {
+    const user = userEvent.setup();
+    const { editAction } = setup();
+    editAction.mockResolvedValue({ ok: false, error: "Try wording it another way." });
+    await user.click(screen.getByRole("button", { name: "fly fishing" }));
+    const value = screen.getByLabelText("Fact");
+    await user.clear(value);
+    await user.type(value, "church");
+    await user.click(screen.getByRole("button", { name: "Done" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Try wording it another way.");
+    expect(screen.getByLabelText("Fact")).toHaveValue("church");
+    expect(screen.getByRole("button", { name: "fly fishing" })).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("closes on Done once the pending save worked", async () => {
+    const user = userEvent.setup();
+    const { editAction } = setup();
+    await user.click(screen.getByRole("button", { name: "fly fishing" }));
+    await user.type(screen.getByLabelText("Fact"), "!");
+    await user.click(screen.getByRole("button", { name: "Done" }));
+    await waitFor(() => expect(screen.queryByLabelText("Fact")).not.toBeInTheDocument());
+    expect(editAction).toHaveBeenCalledOnce();
+  });
+
+  // Review of PR 1 (blocker): a deleted fact's failed edit is never sent again.
+  it("doesn't retry a refused edit after the fact is deleted", async () => {
+    const user = userEvent.setup();
+    const { editAction, deleteAction } = setup();
+    editAction.mockResolvedValue({ ok: false, error: "Try wording it another way." });
+    await user.click(screen.getByRole("button", { name: "fly fishing" }));
+    const value = screen.getByLabelText("Fact");
+    await user.clear(value);
+    await user.type(value, "church");
+    await user.tab();
+    await screen.findByRole("alert");
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    await user.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Delete for good" }));
+    await waitFor(() => expect(deleteAction).toHaveBeenCalledOnce());
+    await waitFor(() => expect(screen.queryByLabelText("Fact")).not.toBeInTheDocument());
+    expect(editAction).toHaveBeenCalledOnce();
   });
 
   it("lists turned-off facts apart, and turns one back on (AC-5)", async () => {

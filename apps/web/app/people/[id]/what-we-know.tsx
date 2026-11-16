@@ -346,7 +346,6 @@ function FactEditor({
   setActiveAction,
   deleteAction,
 }: RowProps & { id: string }) {
-  const hydrated = useHydrated();
   // Text and kind are one value, so every save carries both and neither can
   // put back the other's old value (`updateFact` writes both).
   const words = useAutosave<{ text: string; category: FactCategory }>({
@@ -364,6 +363,15 @@ function FactEditor({
   const [confirming, setConfirming] = useState(false);
   // Looks right and Delete. Shown here, where a phone is looking.
   const [error, setError] = useState<string | null>(null);
+  const [closing, setClosing] = useState(false);
+
+  /** Done: waits for anything still saving and closes only if it saved (AC-9). */
+  async function done() {
+    setClosing(true);
+    const results = await Promise.all([words.commit(), use.commit()]);
+    setClosing(false);
+    if (results.every((r) => r === null || r.ok)) onClose();
+  }
 
   const statuses = [words.status, use.status];
   const status = statuses.includes("saving")
@@ -380,7 +388,6 @@ function FactEditor({
         <Input
           id={`${id}-value`}
           value={words.value.text}
-          disabled={!hydrated}
           onChange={(e) => words.setValue({ ...words.value, text: e.target.value })}
           onBlur={words.onBlur}
           onKeyDown={words.onKeyDown}
@@ -392,7 +399,6 @@ function FactEditor({
         <NativeSelect
           id={`${id}-category`}
           value={words.value.category}
-          disabled={!hydrated}
           onChange={(e) => void words.commit({ ...words.value, category: e.target.value as FactCategory })}
         >
           {CATEGORY_GROUPS.map((g) => (
@@ -431,7 +437,7 @@ function FactEditor({
             Looks right
           </Button>
         )}
-        <Button type="button" variant="outline" size="sm" onClick={onClose}>
+        <Button type="button" variant="outline" size="sm" disabled={closing} onClick={() => void done()}>
           Done
         </Button>
         <Button
@@ -455,7 +461,11 @@ function FactEditor({
         onConfirm={async () => {
           const deleted = await run(deleteAction, { id: fact.id }, setError);
           setConfirming(false);
-          if (deleted) onClose();
+          if (!deleted) return;
+          // Gone: nothing left to save, so closing never sends a failed edit again.
+          words.reset(words.value);
+          use.reset(use.value);
+          onClose();
         }}
       />
     </div>

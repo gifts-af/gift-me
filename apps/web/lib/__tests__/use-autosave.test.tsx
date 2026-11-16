@@ -153,4 +153,98 @@ describe("useAutosave", () => {
     unmount();
     expect(save).toHaveBeenCalledWith("b");
   });
+
+  // Review of PR 1 (blocker): after an explicit reset (a Remove, a Delete), a
+  // failed value must never be sent again, or it could bring the thing back.
+  describe("reset", () => {
+    it("makes a value the saved one, so a failed value isn't sent on unmount", async () => {
+      const save = vi.fn().mockResolvedValue({ ok: false, error: "Nope." });
+      const { result, unmount } = renderHook(() => useAutosave({ initial: "a", save }));
+      await act(async () => result.current.commit("b"));
+      expect(result.current.status).toBe("error");
+      act(() => result.current.reset(""));
+      expect(result.current.value).toBe("");
+      expect(result.current.status).toBe("idle");
+      expect(result.current.error).toBeNull();
+      unmount();
+      expect(save).toHaveBeenCalledTimes(1);
+    });
+
+    it("ignores a save still in flight when reset, and drops a queued one", async () => {
+      const first = deferred();
+      const save = vi.fn().mockReturnValueOnce(first.promise).mockResolvedValue({ ok: true });
+      const { result, unmount } = renderHook(() => useAutosave({ initial: "a", save }));
+      await act(async () => void result.current.commit("b"));
+      await act(async () => void result.current.commit("c"));
+      act(() => result.current.reset("z"));
+      await act(async () => first.resolve({ ok: true }));
+      expect(save).toHaveBeenCalledTimes(1);
+      expect(result.current.value).toBe("z");
+      expect(result.current.status).toBe("idle");
+      unmount();
+      expect(save).toHaveBeenCalledTimes(1);
+    });
+
+    it("saves changes made after it as usual", async () => {
+      const save = vi.fn().mockResolvedValue({ ok: true });
+      const { result } = renderHook(() => useAutosave({ initial: "a", save }));
+      act(() => result.current.reset("x"));
+      await act(async () => result.current.commit("x"));
+      expect(save).not.toHaveBeenCalled();
+      await act(async () => result.current.commit("y"));
+      expect(save).toHaveBeenCalledWith("y");
+    });
+  });
+
+  // Review of PR 1: Done waits for the save and closes only if it worked.
+  describe("commit's result", () => {
+    it("is null when there's nothing to save", async () => {
+      const save = vi.fn();
+      const { result } = renderHook(() => useAutosave({ initial: "a", save }));
+      let got: unknown = "unset";
+      await act(async () => {
+        got = await result.current.commit();
+      });
+      expect(got).toBeNull();
+    });
+
+    it("is the save's result", async () => {
+      const save = vi.fn().mockResolvedValue({ ok: false, error: "Nope." });
+      const { result } = renderHook(() => useAutosave({ initial: "a", save }));
+      let got: unknown;
+      await act(async () => {
+        got = await result.current.commit("b");
+      });
+      expect(got).toEqual({ ok: false, error: "Nope." });
+    });
+
+    it("during a save, waits for it and the queued one, and gives the last result", async () => {
+      const first = deferred();
+      const save = vi.fn().mockReturnValueOnce(first.promise).mockResolvedValue({ ok: false, error: "Second." });
+      const { result } = renderHook(() => useAutosave({ initial: "a", save }));
+      await act(async () => void result.current.commit("b"));
+      let got: unknown;
+      let waiting!: Promise<unknown>;
+      act(() => {
+        waiting = result.current.commit("c").then((r) => (got = r));
+      });
+      await act(async () => first.resolve({ ok: true }));
+      await act(async () => waiting);
+      expect(save).toHaveBeenCalledTimes(2);
+      expect(got).toEqual({ ok: false, error: "Second." });
+    });
+
+    it("during a save with nothing new, gives that save's result", async () => {
+      const first = deferred();
+      const save = vi.fn().mockReturnValueOnce(first.promise);
+      const { result } = renderHook(() => useAutosave({ initial: "a", save }));
+      await act(async () => void result.current.commit("b"));
+      let waiting!: Promise<unknown>;
+      act(() => {
+        waiting = result.current.commit();
+      });
+      await act(async () => first.resolve({ ok: false, error: "Nope." }));
+      expect(await waiting).toEqual({ ok: false, error: "Nope." });
+    });
+  });
 });

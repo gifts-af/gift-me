@@ -1,7 +1,7 @@
 "use client";
 
-import { useId, useState, type FocusEvent } from "react";
-import { RELATIONSHIPS, relationshipLabel } from "@gifts-af/core";
+import { useEffect, useId, useLayoutEffect, useRef, useState, type FocusEvent } from "react";
+import { RELATIONSHIPS, relationshipLabel, toDate } from "@gifts-af/core";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -34,20 +34,32 @@ export type AboutActions = {
 
 const BAD_DATE = "That date doesn't exist.";
 const EMPTY_NAME = "Enter a name.";
-// A leap year, so 29 February is a real birthday.
+/** The longest name the rules accept (people/rules.ts). */
+const MAX_NAME_LENGTH = 120;
+// A leap year, so 29 February is a real birthday (as people/rules.ts checks).
 const LEAP_YEAR = 2000;
+/**
+ * UI timing, like ALL-115's picker wait: how long the date waits after a blur
+ * that goes nowhere before saving. On an iPhone, closing the month wheel or
+ * tapping between month and day blurs with no target; waiting lets the day
+ * be picked before anything is saved (review of ALL-127).
+ */
+export const DATE_SETTLE_MS = 1500;
 
 type DateText = { month: string; day: string };
+const EMPTY_DATE: DateText = { month: "", day: "" };
 const sameDate = (a: DateText, b: DateText) => a.month === b.month && a.day === b.day;
-const dateText = (d: MonthDay | null): DateText => (d ? { month: String(d.month), day: String(d.day) } : { month: "", day: "" });
+const dateText = (d: MonthDay | null): DateText => (d ? { month: String(d.month), day: String(d.day) } : EMPTY_DATE);
 
 /** True for a whole month and day that happen in some year. The server checks again. */
 function isRealDate(d: DateText): boolean {
   if (!/^\d{1,2}$/.test(d.month) || !/^\d{1,2}$/.test(d.day)) return false;
-  const month = Number(d.month);
-  const day = Number(d.day);
-  const date = new Date(Date.UTC(LEAP_YEAR, month - 1, day));
-  return date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+  try {
+    toDate(LEAP_YEAR, Number(d.month), Number(d.day));
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function Status({ saved }: { saved: boolean }) {
@@ -150,6 +162,7 @@ function NameField({
       <Input
         id={id}
         autoComplete="off"
+        maxLength={MAX_NAME_LENGTH}
         value={field.value}
         disabled={disabled}
         onChange={(e) => field.setValue(e.target.value)}
@@ -196,8 +209,10 @@ function RelationshipField({
 }
 
 /**
- * A birthday (with its year) or an anniversary. Removing it remounts the
- * fields empty (a new key), since the hook reads its start value once.
+ * A birthday (with its year) or an anniversary. Month and day are one value,
+ * saved together when focus leaves them, so a date passed through on the way
+ * to another is never saved (AC-5). Only a real date is sent; cleared or
+ * impossible ones never are (AC-6).
  */
 function DatedField({
   personId,
@@ -217,93 +232,62 @@ function DatedField({
   actions: AboutActions;
 }) {
   const label = kind === "birthday" ? "Birthday" : "Anniversary";
-  const [start, setStart] = useState({ round: 0, date: dateText(saved), year: birthYear === null ? "" : String(birthYear) });
+  // A date is saved: offers Remove and turns the year on.
   const [hasDate, setHasDate] = useState(saved !== null);
+  const date = useAutosave<DateText>({
+    initial: dateText(saved),
+    equals: sameDate,
+    save: async (value) => {
+      if (!isRealDate(value)) return { ok: false, error: BAD_DATE };
+      const result = await actions.setDate(personId, kind, value.month, value.day);
+      if (result.ok) setHasDate(true);
+      return result;
+    },
+  });
+  const year = useAutosave({
+    initial: birthYear === null ? "" : String(birthYear),
+    save: (value) => actions.setBirthYear(personId, value),
+  });
+  const settle = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The fields as last shown, for a save the timer runs later (an iPhone can
+  // fire the picker's change after its blur).
+  const shown = useRef(date.value);
+  useLayoutEffect(() => {
+    shown.current = date.value;
+  });
+
+  function cancelSettle() {
+    if (settle.current) clearTimeout(settle.current);
+    settle.current = null;
+  }
+  // Leaving the page saves through the hook; the timer just goes.
+  useEffect(() => cancelSettle, []);
+
+  function saveDate() {
+    cancelSettle();
+    // Cleared or half-filled: nothing to save. "Remove birthday" removes one.
+    if (shown.current.month === "" || shown.current.day === "") return;
+    void date.commit();
+  }
+
+  function leaveDate(event: FocusEvent<HTMLDivElement>) {
+    const to = event.relatedTarget as Node | null;
+    if (to && event.currentTarget.contains(to)) return;
+    // Focus went nowhere (an iPhone picker closing): wait, in case it comes back.
+    if (!to) {
+      cancelSettle();
+      settle.current = setTimeout(saveDate, DATE_SETTLE_MS);
+      return;
+    }
+    saveDate();
+  }
 
   return (
     <fieldset className="flex flex-col gap-2">
       {/* The legend must be the fieldset's first child to name the group. */}
       <legend className="mb-1.5 p-0 text-[15px] font-semibold">{label}</legend>
-      <DateInputs
-        key={start.round}
-        personId={personId}
-        kind={kind}
-        label={label}
-        start={start}
-        hasDate={hasDate}
-        disabled={disabled}
-        actions={actions}
-        onSaved={() => setHasDate(true)}
-      />
-      {kind === "birthday" && (
-        <p className="text-[13px] text-muted-foreground">
-          We&apos;ll suggest gifts before it. The year is just for age-right ideas.
-        </p>
-      )}
-      {hasDate && (
-        <RemoveDate
-          personId={personId}
-          personName={personName}
-          kind={kind}
-          label={label}
-          remove={actions.removeDate}
-          onRemoved={() => {
-            setHasDate(false);
-            setStart((s) => ({ round: s.round + 1, date: dateText(null), year: "" }));
-          }}
-        />
-      )}
-    </fieldset>
-  );
-}
-
-function DateInputs({
-  personId,
-  kind,
-  label,
-  start,
-  hasDate,
-  disabled,
-  actions,
-  onSaved,
-}: {
-  personId: string;
-  kind: Kind;
-  label: string;
-  start: { date: DateText; year: string };
-  hasDate: boolean;
-  disabled: boolean;
-  actions: AboutActions;
-  onSaved: () => void;
-}) {
-  // Month and day are one value, saved together when focus leaves them, so a
-  // date passed through on the way to another is never saved (AC-5). Only a
-  // real date is sent; cleared or impossible ones never are (AC-6).
-  const date = useAutosave<DateText>({
-    initial: start.date,
-    equals: sameDate,
-    save: async (value) => {
-      if (!isRealDate(value)) return { ok: false, error: BAD_DATE };
-      const result = await actions.setDate(personId, kind, value.month, value.day);
-      if (result.ok) onSaved();
-      return result;
-    },
-  });
-  const year = useAutosave({ initial: start.year, save: (value) => actions.setBirthYear(personId, value) });
-  const withYear = kind === "birthday";
-  const yearOn = hasDate || isRealDate(date.value);
-
-  function leaveDate(event: FocusEvent<HTMLDivElement>) {
-    if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
-    // Cleared or half-filled: nothing to save. "Remove birthday" removes one.
-    if (date.value.month === "" || date.value.day === "") return;
-    void date.commit();
-  }
-
-  return (
-    <>
       <div className="grid grid-cols-[minmax(0,1fr)_4.5rem_5.75rem] gap-2">
-        <div className="col-span-2 grid grid-cols-[minmax(0,1fr)_4.5rem] gap-2" onBlur={leaveDate}>
+        <div className="col-span-2 grid grid-cols-[minmax(0,1fr)_4.5rem] gap-2" onBlur={leaveDate} onFocus={cancelSettle}>
           <NativeSelect
             aria-label={`${label} month`}
             value={date.value.month}
@@ -332,7 +316,7 @@ function DateInputs({
             onChange={(e) => date.setValue({ ...date.value, day: e.target.value })}
           />
         </div>
-        {withYear ? (
+        {kind === "birthday" ? (
           <Input
             aria-label="Birth year (optional)"
             type="number"
@@ -340,7 +324,7 @@ function DateInputs({
             placeholder="Year"
             className={NUMBER_CLASS}
             value={year.value}
-            disabled={disabled || !yearOn}
+            disabled={disabled || !hasDate}
             aria-invalid={year.error ? true : undefined}
             onChange={(e) => year.setValue(e.target.value)}
             onBlur={year.onBlur}
@@ -352,7 +336,29 @@ function DateInputs({
       </div>
       <ErrorLine error={date.error ?? year.error} />
       <Status saved={date.status === "saved" || year.status === "saved"} />
-    </>
+      {kind === "birthday" && (
+        <p className="text-[13px] text-muted-foreground">
+          We&apos;ll suggest gifts before it. The year is just for age-right ideas.
+        </p>
+      )}
+      {hasDate && (
+        <RemoveDate
+          personId={personId}
+          personName={personName}
+          kind={kind}
+          label={label}
+          remove={actions.removeDate}
+          onRemoved={() => {
+            // Removed on the server: empty and saved, with nothing pending, so
+            // a date that failed to save is never sent again (review blocker).
+            cancelSettle();
+            date.reset(EMPTY_DATE);
+            year.reset("");
+            setHasDate(false);
+          }}
+        />
+      )}
+    </fieldset>
   );
 }
 
