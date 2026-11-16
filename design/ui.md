@@ -144,6 +144,13 @@ No short leftover wraps: a line that would spill one or two words onto the next 
 
 Headings in the app and in emails use balanced wrapping (`text-wrap: balance`, Tailwind `text-balance`), and paragraphs avoid a lone last word (`text-wrap: pretty`, Tailwind `text-pretty`). The email shell (`apps/web/lib/email-layout.ts`) sets both as inline styles, so every email gets them; keep headings short too (owner, ALL-32 email review).
 
+## Buttons before the page has loaded (ALL-110)
+
+A button in the server's HTML shows before its click handler is attached, and a tap in that gap does nothing. So every button looks faded until the page's JavaScript has loaded:
+
+- **`Button`, `DialogTrigger` and `Switch` do it for you.** A submit button is `disabled`, so an early tap can't send its form the browser's own way (ALL-60). Any other button gets `aria-disabled`, so a keyboard can still reach it. `Button asChild` (a link) is left alone, because links work before the page loads.
+- **A plain `<button>` or another Radix trigger** that's in the server's HTML needs the same: `aria-disabled` from `useHydrated()` (`apps/web/lib/use-hydrated.ts`), plus an `aria-disabled:opacity-45` style.
+
 ## Mock-ups
 
 **What's built, as it looks today:** the [screens and emails page](https://claude.ai/artifact/9mrDvFAgoqxvxmzirJFCz6) has every main screen on a phone (light and dark) and on desktop, and every email, taken from the real app by `pnpm gallery`. The mock-ups below are the designs; that page is the result.

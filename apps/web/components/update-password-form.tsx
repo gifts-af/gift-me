@@ -5,11 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
-import { useHydrated } from "@/lib/use-hydrated";
 import { FormError } from "./auth-frame";
 
 export function UpdatePasswordForm() {
-  const hydrated = useHydrated();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -37,7 +35,7 @@ export function UpdatePasswordForm() {
         <Input id="password" name="password" type="password" autoComplete="new-password" required />
       </div>
       {error && <FormError>{error}</FormError>}
-      <Button type="submit" className="w-full" disabled={!hydrated || isLoading} aria-busy={isLoading}>
+      <Button type="submit" className="w-full" disabled={isLoading} aria-busy={isLoading}>
         {isLoading ? "Saving…" : "Save new password"}
       </Button>
     </form>

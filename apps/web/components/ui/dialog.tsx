@@ -49,8 +49,8 @@ const DialogTrigger = React.forwardRef<
       ref={ref}
       asChild={asChild}
       className={asChild ? className : cn(className, "aria-disabled:opacity-45")}
-      aria-disabled={props["aria-disabled"] ?? (!hydrated && !asChild ? true : undefined)}
       {...props}
+      aria-disabled={props["aria-disabled"] ?? (!hydrated && !asChild ? true : undefined)}
     />
   );
 });

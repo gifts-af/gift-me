@@ -64,7 +64,7 @@ describe("the Google Contacts import checklist", () => {
     await act(async () => {
       render(ui, { container, hydrate: true });
     });
-    expect(button()).toHaveAttribute("aria-disabled", "false");
+    expect(button()).not.toHaveAttribute("aria-disabled");
 
     await connect();
     expect(load).toHaveBeenCalledOnce();

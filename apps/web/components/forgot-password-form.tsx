@@ -6,12 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { useState } from "react";
-import { useHydrated } from "@/lib/use-hydrated";
 import { useHumanCheck } from "./human-check";
 import { FormError } from "./auth-frame";
 
 export function ForgotPasswordForm() {
-  const hydrated = useHydrated();
   const human = useHumanCheck();
   // Kept for the "on its way to …" message after sending.
   const [email, setEmail] = useState("");
@@ -53,7 +51,7 @@ export function ForgotPasswordForm() {
       </div>
       {human.widget}
       {error && <FormError>{error}</FormError>}
-      <Button type="submit" className="w-full" disabled={!hydrated || isLoading || !human.token} aria-busy={isLoading}>
+      <Button type="submit" className="w-full" disabled={isLoading || !human.token} aria-busy={isLoading}>
         {isLoading ? "Sending…" : "Send reset link"}
       </Button>
       <Button asChild variant="link" size="sm" className="self-center">

@@ -7,7 +7,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { useState } from "react";
-import { useHydrated } from "@/lib/use-hydrated";
 import { useHumanCheck } from "./human-check";
 import { Divider, FormError } from "./auth-frame";
 import { GoogleButton } from "./google-button";
@@ -16,7 +15,6 @@ import { GoogleButton } from "./google-button";
 // people already using the list app (mock-up "signin").
 export function LoginForm({ next: rawNext }: { next?: string }) {
   const next = safeNext(rawNext);
-  const hydrated = useHydrated();
   const human = useHumanCheck({ wayOut: "google" });
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -75,7 +73,7 @@ export function LoginForm({ next: rawNext }: { next?: string }) {
         </div>
         {human.widget}
         {error && <FormError>{error}</FormError>}
-        <Button type="submit" variant="secondary" className="w-full" disabled={!hydrated || isLoading || !human.token} aria-busy={isLoading}>
+        <Button type="submit" variant="secondary" className="w-full" disabled={isLoading || !human.token} aria-busy={isLoading}>
           {isLoading ? "Signing in…" : "Sign in"}
         </Button>
       </form>
