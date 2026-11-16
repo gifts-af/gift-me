@@ -20,6 +20,8 @@ export function isPublicPath(pathname: string) {
     pathname === "/api/keepalive" ||
     // The daily round tick checks its own cron secret (ALL-28).
     pathname === "/api/rounds/tick" ||
+    // Resend posts received mail here; the route checks the Svix signature (ALL-31).
+    pathname === "/api/inbound/resend" ||
     // The extension calls this cross-origin with a bearer token; the route checks it (ALL-22).
     pathname === "/api/captures" ||
     /^\/api\/captures\/[^/]+\/extract$/.test(pathname) ||
