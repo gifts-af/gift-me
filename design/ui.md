@@ -166,6 +166,21 @@ A button in the server's HTML shows before its click handler is attached, and a 
 
 **Where a new setting goes:** in the Settings section it belongs to (You, Reminders, Gift ideas, Paying for gifts) as a row with its value. A new section only when none fits.
 
+### My list (ALL-127, T74)
+
+My list saves as you go too, with no Save button and no "Unsaved changes" bar. What a signed-in list owner sees:
+
+- **Adding a gift** saves straight away.
+- **Removing a gift** hides it and shows "Removed {gift} · Undo" in a bar at the bottom for 6 seconds (`UNDO_MS`). Focus moves to Undo and a screen reader hears "Removed {gift}. Undo available." The 6 seconds wait while Undo has focus or the pointer is over the bar. Undo puts the gift back in its place and focus on the heading. The remove is only sent when the 6 seconds are up, so Undo never reaches the server and a friend's claim on that gift is never lost. It's sent sooner when a second gift is removed (Undo moves to the second), when the page is left in the app, when the tab is hidden or closed (the bar goes then), and when Sign out is picked (Sign out waits for it, up to 3 seconds).
+- **An add during the 6 seconds** saves the gifts on screen plus the held one, in its old place.
+- **One save at a time**; a change made during a save goes in the next one.
+- **Under the title**, next to the count and total: "Saved", "Saving…", or "Couldn't save" with "Try again". A failed save keeps every gift on screen.
+- **Changed somewhere else:** if another tab or device saved first, this tab's save is refused. It loads the latest list, puts its own new gifts and any held remove back on top, saves once more, and says "Your list changed somewhere else. We've loaded the latest." If that's refused too, it shows "Couldn't save".
+- **Leaving:** the browser warns before closing the tab only while a save is on its way or has failed, including one started as the page was left in the app. In-app links and Sign out ask only after a failed save.
+- **Back to a page the browser kept** (back/forward cache): the page shows the list as it was. Its next save is refused as stale and merged like any other, with the notice. Accepted rather than reloading it **[Claude's call]**.
+- **Gifts carried over from before signing in** save themselves when the list opens.
+- **Guests** are unchanged: there's nowhere to save to, a remove is immediate, and they're warned before leaving with gifts on the list.
+
 ## A person's page (ALL-127)
 
 **A person's page is what we know about them, then a short list of rows.** Each row shows its value and opens its own screen, like Settings (T71). There's no Edit form on the page any more. On a computer it's the same centred column. Plan: [`plans/ALL-127-save-as-you-go.md`](plans/ALL-127-save-as-you-go.md).
@@ -213,7 +228,7 @@ A clickable, phone-first prototype, published as a private shareable artifact pa
 | Suggested ideas (Dad) | Generated ideas with the reason each fits, the same optional budget, and "None of these" with a reason | A-1, B-4, G-3, decision 36 |
 | Where it goes | Ship to the recipient, to you (your saved address), or to another address. For someone with a list, their shared address is one tap (city shown); for someone without one, you add theirs once and can save it | P-5, A-3, decision 38 |
 | Price went up **[Claude's call]** | Re-approve at the new total, or pick the next-best idea (D29) | A-4 |
-| Gift list | The list app in the new look: add by link or by hand, save, share | Existing (GiftsAF) |
+| Gift list | The list app in the new look: add by link or by hand, saved as you go with Undo on remove (ALL-127), share | Existing (GiftsAF) |
 | Shared list and claim | A friend opening a share link and claiming a gift; a claim that lost the race. The list's owner never sees claims | Existing (GiftsAF), decision 39 |
 | Sign-in | Google sign-in (email and password stays for existing list users) | ALL-20 |
 | Extension popup | "Capture for…" with a person picker | C-1 |
@@ -257,7 +272,7 @@ The prototype's colours and stylesheet go; **none of its behaviour does.** When 
 
 - Adding a gift by Amazon link (with lookup status and image) or by hand, with price checking
 - Removing a gift, and focus moving somewhere sensible after
-- Saving, the "unsaved changes" warning on leaving, and the save error messages
+- Saving, the warning on leaving, and the save error messages (since ALL-127: saving as you go, see Editing and saving > My list)
 - A guest's list carried over through sign-in or sign-up (kept for 24 hours)
 - Copying a share link, with a copy-by-hand fallback when the clipboard is blocked
 - The shared list page: a signed-out friend can view and claim; the owner sees "this is your list" and can't claim; a second claim on the same gift is refused

@@ -57,8 +57,8 @@ async function saveFirstList(page: Page) {
   await page.getByLabel("Gift name").fill("Wool socks");
   await page.getByLabel("Price").fill("12");
   await page.getByRole("button", { name: "Add to list" }).click();
-  await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByText("Unsaved changes")).toHaveCount(0);
+  // My list saves as you go (ALL-127).
+  await expect(page.getByRole("status", { name: "Save status" })).toHaveText("Saved");
 }
 
 // `within` narrows it to one form, such as the share dialog, when another

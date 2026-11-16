@@ -14,6 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { finishBeforeLeaving } from "@/lib/leaving-page";
 import { createClient } from "@/lib/supabase/client";
 
 // Settings, the light/dark switch and sign-out, behind one icon
@@ -22,6 +23,8 @@ export function AccountMenu({ email }: { email?: string | null }) {
   const { theme, setTheme } = useTheme();
 
   async function signOut() {
+    // My list may still be sending a remove held for Undo (ALL-127).
+    await finishBeforeLeaving();
     await createClient().auth.signOut();
     // A full page load, so no signed-in page survives in the router cache.
     window.location.assign("/auth/login");
@@ -61,7 +64,7 @@ export function AccountMenu({ email }: { email?: string | null }) {
           </DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
         <DropdownMenuSeparator />
-        {/* Leaves the page without being a link, so the list's unsaved-changes check needs telling (ALL-95). */}
+        {/* Leaves the page without being a link, so the list's failed-save check needs telling (ALL-95). */}
         <DropdownMenuItem data-leaves-page="" onSelect={signOut} className="min-h-11">
           <LogOut aria-hidden="true" />
           Sign out
