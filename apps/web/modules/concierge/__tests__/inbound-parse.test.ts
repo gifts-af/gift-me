@@ -100,7 +100,7 @@ describe("firstImage", () => {
     expect(firstImage(atts, 1000)).toEqual({ id: "ok", content_type: "image/webp" });
   });
   it("accepts a content type with parameters and tolerates a missing one", () => {
-    expect(firstImage([a("x", "Image/JPEG; name=x.jpg", 5)], 1000)).toEqual({ id: "x", content_type: "Image/JPEG; name=x.jpg" });
+    expect(firstImage([a("x", "Image/JPEG; name=x.jpg", 5)], 1000)).toEqual({ id: "x", content_type: "image/jpeg" });
     expect(firstImage([{ id: "n", size: 1 } as never], 1000)).toBeNull();
   });
   it("returns null when none qualify", () => {

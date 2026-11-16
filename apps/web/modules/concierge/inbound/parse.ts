@@ -92,6 +92,9 @@ export function firstImage(
   atts: { id: string; content_type: string; size: number }[],
   maxBytes: number,
 ): { id: string; content_type: string } | null {
-  const hit = atts.find((a) => IMAGE_TYPES.has((a.content_type ?? "").split(";")[0].trim().toLowerCase()) && a.size <= maxBytes);
-  return hit ? { id: hit.id, content_type: hit.content_type } : null;
+  for (const att of atts) {
+    const type = (att.content_type ?? "").split(";")[0].trim().toLowerCase();
+    if (IMAGE_TYPES.has(type) && att.size <= maxBytes) return { id: att.id, content_type: type };
+  }
+  return null;
 }
