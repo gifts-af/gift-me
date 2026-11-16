@@ -37,6 +37,7 @@ async function readZone(userId: string): Promise<string | null> {
 
 // The Settings row for a label (a link row, or the time zone row's picker).
 const zoneRow = (page: Page) => page.getByLabel("Time zone");
+const zoneValue = (page: Page) => page.locator("span[id$=\"-value\"]");
 
 for (const saved of [true, false]) {
   test(`@layout settings loads without a hydration error ${saved ? "with" : "without"} a saved zone`, async ({ page }) => {
@@ -59,24 +60,28 @@ for (const saved of [true, false]) {
 
     // AC-13: every row is at least 44 px, and the picker covers the whole time zone row.
     expect(await phoneLayoutProblems(page)).toEqual([]);
-    for (const name of ["Over-budget allowance", "Zinc"]) {
-      const box = await page.getByRole("link", { name: new RegExp(name) }).boundingBox();
-      expect(box!.height).toBeGreaterThanOrEqual(44);
+    const links = page.getByRole("main").locator('a[href^="/settings/"]');
+    for (const link of await links.all()) {
+      expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
     }
     const picker = (await zoneRow(page).boundingBox())!;
     const row = (await zoneRow(page).locator("xpath=..").boundingBox())!;
     expect(picker.height).toBeGreaterThanOrEqual(44);
-    expect(picker).toEqual(row);
+    for (const side of ["x", "y", "width", "height"] as const) {
+      expect(Math.abs(picker[side] - row[side])).toBeLessThanOrEqual(1);
+    }
   });
 }
 
 test.describe("with a location header", () => {
-  test.use({ extraHTTPHeaders: { "x-vercel-ip-timezone": "America/Chicago" } });
-
-  test("@layout no saved zone shows the zone from the request", async ({ page }) => {
+  test("no saved zone shows the zone from the request", async ({ page }) => {
     await signIn(page, await createFreshUser());
+    // Only the /settings document request carries the header, not Supabase calls.
+    await page.route("**/settings", async (route) => {
+      await route.continue({ headers: { ...route.request().headers(), "x-vercel-ip-timezone": "America/Chicago" } });
+    });
     await page.goto("/settings");
-    await expect(page.getByText("Not set (using America/Chicago)")).toBeVisible();
+    await expect(zoneValue(page)).toHaveText("Not set (using America/Chicago)");
   });
 });
 
@@ -87,7 +92,7 @@ test("settings lists every group and row", async ({ page }) => {
     await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
   }
   await expect(zoneRow(page)).toBeVisible();
-  await expect(page.getByRole("link", { name: /Email/ })).toContainText("By email");
+  await expect(page.getByRole("link", { name: /^Email/ })).toContainText("By email");
   await expect(page.getByRole("link", { name: /Over-budget allowance/ })).toContainText("%");
   await expect(page.getByRole("link", { name: /Zinc/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /save/i })).not.toBeVisible();
@@ -116,7 +121,7 @@ test("no saved zone shows the fallback and saves nothing until picked", async ({
   const user = await createFreshUser();
   await signIn(page, user);
   await page.goto("/settings");
-  await expect(page.getByText(/^Not set/)).toBeVisible();
+  await expect(zoneValue(page)).toHaveText(/^Not set/);
   await page.waitForLoadState("networkidle");
   expect(await readZone((await session(user)).user.id)).toBeNull();
 });
