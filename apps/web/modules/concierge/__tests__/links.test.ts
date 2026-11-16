@@ -126,6 +126,15 @@ describe("confirmActionLink", () => {
     expect(store.links[0].usedAt).toEqual(NOW);
   });
 
+  it("never builds file_note's deps for another action", async () => {
+    const store = await storeWithLink();
+    const notes = vi.fn(() => {
+      throw new Error("built");
+    });
+    expect(await confirmActionLink(TOKEN, OWNER, { store, now: NOW, notes })).toEqual({ state: "done", done: ACTIONS.test.done });
+    expect(notes).not.toHaveBeenCalled();
+  });
+
   it("returns used on a second confirm and doesn't run again (AC-5)", async () => {
     const store = await storeWithLink();
     const run = vi.spyOn(ACTIONS.test, "run");

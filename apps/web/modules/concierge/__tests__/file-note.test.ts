@@ -80,7 +80,7 @@ beforeEach(() => {
     inbound,
     notify: { store, channels: [channel], baseUrl: "https://giftsaf.test", now: NOW },
   };
-  deps = { store, now: NOW, notes };
+  deps = { store, now: NOW, notes: () => notes };
   logs = [];
   vi.spyOn(console, "log").mockImplementation((line: string) => {
     logs.push(JSON.parse(line));

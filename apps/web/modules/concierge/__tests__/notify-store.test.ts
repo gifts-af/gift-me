@@ -149,12 +149,12 @@ describe.skipIf(!dbUp)("createSupabaseNotifyStore: file_note links (ALL-31)", ()
     const deps = {
       store,
       now: new Date(),
-      notes: {
+      notes: () => ({
         captureStore: (userId: string) => captureStoreFor(db, userId),
         extract,
         inbound: createSupabaseInboundStore(db),
         notify: { store, channels: [], baseUrl: "https://giftsaf.test", now: new Date() },
-      },
+      }),
     };
 
     expect(await confirmActionLink(tokens.dad, userA, deps)).toMatchObject({ state: "done", done: { title: "Filed" }, next: `/people/${dad}` });

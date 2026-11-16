@@ -26,13 +26,13 @@ export async function confirmLink(token: string): Promise<ConfirmResult> {
   const store = createSupabaseNotifyStore(db);
   const now = new Date();
   // file_note (ALL-31) files an emailed note, reads it and may email back, under the inbound
-  // daily cap, like the webhook route.
-  const notes = {
+  // daily cap, like the webhook route. Built only when a file_note link runs.
+  const notes = () => ({
     captureStore: (userId: string) => captureStoreFor(db, userId),
     extract: createExtractor(AI_MODELS.extraction),
     inbound: createSupabaseInboundStore(db),
     notify: { store, channels: defaultChannels(), baseUrl: siteUrl(), now },
-  };
+  });
   const result = await confirmActionLink(token, viewerId, { store, now, notes });
   if (result.state === "done" && result.straight && result.next) redirect(result.next);
   return result;

@@ -64,7 +64,8 @@ export function cancelDone(o: CancelOutcome): { title: string; body: string } {
  * What file_note needs beyond the database (ALL-31): the capture store for the link's user (on
  * the service-role client), the model that reads it, and for the "can't cancel" email the
  * inbound daily cap (its count and inbound_max_per_user_per_day, read only when sending) and
- * notify. Built by the confirm route; a caller without them can't run file_note.
+ * notify. The confirm route passes a builder, called only when a file_note link runs; a caller
+ * without one can't run file_note.
  */
 export type NoteDeps = {
   captureStore(userId: string): CaptureStore;
@@ -79,7 +80,8 @@ export type ActionCtx = {
   personId: string | null;
   inboundMessageId: string | null;
   store: NotifyStore;
-  notes?: NoteDeps;
+  /** Builds file_note's deps; only file_note calls it. */
+  notes?: () => NoteDeps;
 };
 
 export type Action = {
@@ -266,9 +268,10 @@ export const ACTIONS: Record<ActionName, Action> = {
       };
     },
     done: { title: "Filed", body: "Your note is on their page." },
-    async run({ userId, personId, inboundMessageId, store, notes }) {
+    async run({ userId, personId, inboundMessageId, store, notes: buildNotes }) {
       if (!personId || !inboundMessageId) return { ok: false, error: "The link has no note or person." };
-      if (!notes) return { ok: false, error: "Filing a note needs the capture and notify deps." };
+      if (!buildNotes) return { ok: false, error: "Filing a note needs the capture and notify deps." };
+      const notes = buildNotes();
       // Neither result files to this person, so neither opens their page.
       const gone = { ok: true as const, done: NOTE_PERSON_GONE, next: null };
       if (!(await store.personName(userId, personId))) return gone;

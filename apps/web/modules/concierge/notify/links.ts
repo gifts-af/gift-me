@@ -19,8 +19,11 @@ export type ConfirmResult =
   | { state: "done"; done: Action["done"]; next?: string; straight?: true }
   | Exclude<LinkView, { state: "confirm" }>;
 
-/** `notes`: what file_note needs beyond the database (ALL-31); only the confirm route passes it. */
-export type LinkDeps = { store: NotifyStore; now: Date; notes?: NoteDeps };
+/**
+ * `notes`: builds what file_note needs beyond the database (ALL-31), called only when a file_note
+ * link runs; only the confirm route passes it.
+ */
+export type LinkDeps = { store: NotifyStore; now: Date; notes?: () => NoteDeps };
 
 /**
  * The action a saved link names, or null when this build doesn't have it: the
