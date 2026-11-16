@@ -78,8 +78,9 @@ export async function confirmActionLink(
     console.error(`Action link "${claimed.action}" failed for user ${userId}: ${result.error}`);
     return { state: "invalid" };
   }
-  // The link is already used, so a failed lookup only costs the shortcut.
-  const next = await action.next?.(claimed, deps.store).catch(() => null);
+  // The link is already used, so a failed lookup only costs the shortcut. The result's own
+  // `next` (null: home) wins over the action's.
+  const next = "next" in result ? result.next : await action.next?.(claimed, deps.store).catch(() => null);
   const done = result.done ?? action.done;
   if (!next) return { state: "done", done };
   return { state: "done", done, next, ...(action.straight ? { straight: true as const } : {}) };

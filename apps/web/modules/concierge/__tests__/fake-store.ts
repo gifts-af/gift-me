@@ -1,5 +1,5 @@
 import type { NotificationKind } from "../notify/templates";
-import type { FiledNote, LinkRow, NewLink, NotifyStore } from "../notify/store";
+import type { LinkRow, NewLink, NotifyStore } from "../notify/store";
 
 export type FakeNotification = {
   id: string;
@@ -44,7 +44,7 @@ export class FakeStore implements NotifyStore {
   /** Captures created by fileInboundMessage, as "capture:person". */
   filed: string[] = [];
   /** Hands each filed note to the capture store, so the action can read it. */
-  onFiled?: (note: FiledNote & { personId: string }) => void;
+  onFiled?: (note: { captureId: string; personId: string; text: string }) => void;
 
   async personName(userId: string, personId: string) {
     const p = this.people.get(personId);
@@ -58,10 +58,10 @@ export class FakeStore implements NotifyStore {
     if ((await this.personName(userId, personId)) === null) return null;
     if (m.filedTo !== null) return null;
     m.filedTo = personId;
-    const note = { captureId: `cap-${this.filed.length + 1}`, text: m.text };
-    this.filed.push(`${note.captureId}:${personId}`);
-    this.onFiled?.({ ...note, personId });
-    return note;
+    const captureId = `cap-${this.filed.length + 1}`;
+    this.filed.push(`${captureId}:${personId}`);
+    this.onFiled?.({ captureId, personId, text: m.text });
+    return captureId;
   }
 
   async recipient(userId: string) {

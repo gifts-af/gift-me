@@ -6,7 +6,9 @@ import { errorFields, logEvent } from "@/lib/log";
 import { processCapture } from "../capture/extract";
 import type { CaptureStore } from "../capture/store";
 import { looksLikeCancel } from "../inbound/parse";
-import { notify, type NotifyDeps } from "./notify";
+import { sendInboundReply } from "../inbound/reply";
+import type { InboundStore } from "../inbound/store";
+import type { NotifyDeps } from "./notify";
 import type { LinkRow, NotifyStore } from "./store";
 
 export type ActionName =
@@ -20,8 +22,14 @@ export type ActionName =
   // ALL-31: a "Who is this about?" choice, filing an emailed note to that person.
   | "file_note";
 
-/** `done`: the done page's words when they depend on what happened (else the action's own). */
-export type ActionResult = { ok: true; done?: { title: string; body: string } } | { ok: false; error: string };
+/**
+ * `done`: the done page's words when they depend on what happened (else the action's own).
+ * `next`: where the done page's button goes when that depends on what happened too, overriding
+ * the action's `next`; null means home.
+ */
+export type ActionResult =
+  | { ok: true; done?: { title: string; body: string }; next?: string | null }
+  | { ok: false; error: string };
 
 /** What a cancel link did: held gifts it cancelled, and the round's others still being ordered or on their way. */
 export type CancelOutcome = { cancelled: number; ordering: number; onItsWay: number };
@@ -54,12 +62,14 @@ export function cancelDone(o: CancelOutcome): { title: string; body: string } {
 
 /**
  * What file_note needs beyond the database (ALL-31): the capture store for the link's user (on
- * the service-role client), the model that reads it, and notify for the "can't cancel" email.
- * Built by the confirm route; a caller without them can't run file_note.
+ * the service-role client), the model that reads it, and for the "can't cancel" email the
+ * inbound daily cap (its count and inbound_max_per_user_per_day, read only when sending) and
+ * notify. Built by the confirm route; a caller without them can't run file_note.
  */
 export type NoteDeps = {
   captureStore(userId: string): CaptureStore;
   extract: Extract;
+  inbound: Pick<InboundStore, "countToday" | "recordEvent" | "settings">;
   notify: NotifyDeps;
 };
 
@@ -259,27 +269,52 @@ export const ACTIONS: Record<ActionName, Action> = {
     async run({ userId, personId, inboundMessageId, store, notes }) {
       if (!personId || !inboundMessageId) return { ok: false, error: "The link has no note or person." };
       if (!notes) return { ok: false, error: "Filing a note needs the capture and notify deps." };
-      if (!(await store.personName(userId, personId))) return { ok: true, done: NOTE_PERSON_GONE };
+      // Neither result files to this person, so neither opens their page.
+      const gone = { ok: true as const, done: NOTE_PERSON_GONE, next: null };
+      if (!(await store.personName(userId, personId))) return gone;
 
-      const filed = await store.fileInboundMessage(userId, inboundMessageId, personId);
-      if (!filed) return { ok: true, done: NOTE_ALREADY_FILED };
-      const ids = { user_id: userId, person_id: personId, inbound_message_id: inboundMessageId, capture_id: filed.captureId };
-      logEvent("inbound.filed", { ...ids, matched_by: "choice" });
+      const ids = { user_id: userId, person_id: personId, inbound_message_id: inboundMessageId };
+      const captureId = await store.fileInboundMessage(userId, inboundMessageId, personId);
+      if (!captureId) {
+        // Refused: deleted between the check and filing, or another button won.
+        if (!(await store.personName(userId, personId))) return gone;
+        return { ok: true, done: NOTE_ALREADY_FILED, next: null };
+      }
+      const filedIds = { ...ids, capture_id: captureId };
+      logEvent("inbound.filed", { ...filedIds, matched_by: "choice" });
 
+      // Filing cleared the message's subject and body; the capture holds them now.
+      const captures = notes.captureStore(userId);
+      let text: string;
       try {
-        await processCapture(notes.captureStore(userId), notes.extract, filed.captureId);
+        const capture = await captures.loadCapture(captureId);
+        if (!capture) throw new Error("The filed capture is missing.");
+        text = [capture.title, capture.text].filter(Boolean).join("\n");
       } catch (err) {
-        // The capture stays filed and unread; "Try again" on the person's page reads it.
-        logEvent("inbound.read_failed", { ...ids, ...errorFields(err) });
+        // Filed, but not read: it stays pending for "Try again" on the person's page.
+        logEvent("inbound.failed", { ...filedIds, ...errorFields(err) });
+        return { ok: true };
       }
 
-      // AC-14 for a note that was asked about: filed, plus the "replies can't cancel" email.
-      if (looksLikeCancel(filed.text)) {
+      try {
+        await processCapture(captures, notes.extract, captureId);
+      } catch (err) {
+        // The capture stays filed and unread; "Try again" on the person's page reads it.
+        logEvent("inbound.read_failed", { ...filedIds, ...errorFields(err) });
+      }
+
+      // AC-14 for a note that was asked about: filed, plus the "replies can't cancel" email,
+      // under the same daily cap as the webhook's replies (AC-11).
+      if (looksLikeCancel(text)) {
         try {
-          const sent = await notify({ userId, kind: "notes_cant_cancel", data: {}, links: {} }, notes.notify);
-          if (!sent.ok) logEvent("inbound.reply_failed", { ...ids, kind: "notes_cant_cancel" });
+          const { maxPerDay } = await notes.inbound.settings();
+          await sendInboundReply(
+            { userId, kind: "notes_cant_cancel", data: {}, links: {} },
+            { store: notes.inbound, maxPerDay, notify: notes.notify },
+            filedIds,
+          );
         } catch (err) {
-          logEvent("inbound.reply_failed", { ...ids, kind: "notes_cant_cancel", ...errorFields(err) });
+          logEvent("inbound.reply_failed", { ...filedIds, kind: "notes_cant_cancel", ...errorFields(err) });
         }
       }
       return { ok: true };

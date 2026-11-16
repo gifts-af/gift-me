@@ -9,6 +9,7 @@ import type { Channel } from "../notify/channels";
 import { confirmActionLink, readActionLink, type LinkDeps } from "../notify/links";
 import { hashActionToken } from "../notify/tokens";
 import { FakeCaptureStore } from "./fake-capture-store";
+import { FakeInboundStore } from "./fake-inbound-store";
 import { FakeStore } from "./fake-store";
 
 const USER = "user-1";
@@ -20,6 +21,7 @@ const LATER = new Date(NOW.getTime() + 72 * 60 * 60 * 1000);
 
 let store: FakeStore;
 let captures: FakeCaptureStore;
+let inbound: FakeInboundStore;
 let extract: ReturnType<typeof vi.fn<Extract>>;
 let sent: { subject: string; to: string }[];
 let logs: Record<string, unknown>[];
@@ -71,9 +73,11 @@ beforeEach(() => {
       return { ok: true, id: `p${sent.length}` };
     },
   };
+  inbound = new FakeInboundStore();
   const notes: NoteDeps = {
     captureStore: () => captures,
     extract,
+    inbound,
     notify: { store, channels: [channel], baseUrl: "https://giftsaf.test", now: NOW },
   };
   deps = { store, now: NOW, notes };
@@ -120,6 +124,8 @@ describe("file_note (ALL-31 AC-4)", () => {
       state: "done",
       done: { title: "Already filed", body: "This note was already added to someone's page, so nothing changed." },
     });
+    // The note went to Dad, so the button doesn't open Bob's page.
+    expect(result).not.toHaveProperty("next");
     expect(store.filed).toEqual([`cap-1:${DAD}`]);
     expect(extract).not.toHaveBeenCalled();
   });
@@ -165,7 +171,7 @@ describe("file_note (ALL-31 AC-4)", () => {
 
   it("a read that throws outright is logged with ids only and the note stays filed", async () => {
     await buttons("wants a new fly rod");
-    captures.loadCapture = async () => {
+    captures.extractionSettings = async () => {
       throw new Error("db down");
     };
     const result = await confirmActionLink("tok-person-dad", USER, deps);
@@ -176,10 +182,51 @@ describe("file_note (ALL-31 AC-4)", () => {
     expect(JSON.stringify(failed)).not.toContain("fly rod");
   });
 
-  it("emails once that replies can't cancel a gift when the note sounds like stopping one (AC-14)", async () => {
+  it("emails once that replies can't cancel a gift when the note sounds like stopping one, counted toward the cap (AC-14, AC-11)", async () => {
     await buttons("Don't buy him socks anymore");
+    inbound.events = Array(19).fill(USER);
     expect(await confirmActionLink("tok-person-dad", USER, deps)).toMatchObject({ done: { title: "Filed" } });
     expect(sent).toEqual([{ subject: "Replies can't cancel a gift", to: "me@example.com" }]);
+    expect(inbound.events).toHaveLength(20);
+  });
+
+  it("sends no can't-cancel email at the daily cap, and still files (AC-11)", async () => {
+    await buttons("Don't buy him socks anymore");
+    inbound.events = Array(20).fill(USER);
+    expect(await confirmActionLink("tok-person-dad", USER, deps)).toMatchObject({ done: { title: "Filed" } });
+    expect(store.filed).toEqual([`cap-1:${DAD}`]);
+    expect(sent).toEqual([]);
+    expect(inbound.events).toHaveLength(20);
+    expect(logs).toContainEqual(
+      expect.objectContaining({ event: "inbound.reply_capped", user_id: USER, kind: "notes_cant_cancel", capture_id: "cap-1" }),
+    );
+  });
+
+  it("says they were removed when the person is deleted between the check and filing", async () => {
+    await buttons("wants a new fly rod");
+    const file = store.fileInboundMessage.bind(store);
+    store.fileInboundMessage = async (userId, messageId, personId) => {
+      store.people.delete(DAD);
+      return file(userId, messageId, personId);
+    };
+    const result = await confirmActionLink("tok-person-dad", USER, deps);
+    expect(result).toEqual({ state: "done", done: expect.objectContaining({ title: "They were removed" }) });
+    expect(store.filed).toEqual([]);
+  });
+
+  it("when the filed note can't be read back: logged with ids only, done, and left pending for Try again", async () => {
+    await buttons("wants a new fly rod");
+    captures.loadCapture = async () => {
+      throw new Error("db down");
+    };
+    const result = await confirmActionLink("tok-person-dad", USER, deps);
+    expect(result).toMatchObject({ state: "done", done: { title: "Filed" }, next: `/people/${DAD}` });
+    expect(store.filed).toEqual([`cap-1:${DAD}`]);
+    expect(extract).not.toHaveBeenCalled();
+    expect(captures.captures.get("cap-1")?.status).toBe("pending");
+    const failed = logs.find((l) => l.event === "inbound.failed");
+    expect(failed).toMatchObject({ capture_id: "cap-1", person_id: DAD, user_id: USER, name: "Error" });
+    expect(JSON.stringify(failed)).not.toContain("fly rod");
   });
 
   it("refuses without the note deps rather than filing unread", async () => {

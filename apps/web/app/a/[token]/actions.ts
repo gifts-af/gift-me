@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   captureStoreFor,
   confirmActionLink,
+  createSupabaseInboundStore,
   createSupabaseNotifyStore,
   defaultChannels,
   type ConfirmResult,
@@ -24,10 +25,12 @@ export async function confirmLink(token: string): Promise<ConfirmResult> {
   const db = createAdminClient();
   const store = createSupabaseNotifyStore(db);
   const now = new Date();
-  // file_note (ALL-31) files an emailed note, reads it and may email back.
+  // file_note (ALL-31) files an emailed note, reads it and may email back, under the inbound
+  // daily cap, like the webhook route.
   const notes = {
     captureStore: (userId: string) => captureStoreFor(db, userId),
     extract: createExtractor(AI_MODELS.extraction),
+    inbound: createSupabaseInboundStore(db),
     notify: { store, channels: defaultChannels(), baseUrl: siteUrl(), now },
   };
   const result = await confirmActionLink(token, viewerId, { store, now, notes });

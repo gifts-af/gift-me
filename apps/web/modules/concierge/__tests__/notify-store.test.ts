@@ -11,6 +11,7 @@ import type { Database } from "@gifts-af/core";
 import type { Extract } from "@/lib/ai/extract";
 import { LOCAL_DB, localStack } from "../../../test/local-db";
 import { captureStoreFor } from "../capture/supabase-store";
+import { createSupabaseInboundStore } from "../inbound/supabase-store";
 import { confirmActionLink } from "../notify/links";
 import { createSupabaseNotifyStore } from "../notify/store";
 import { hashActionToken } from "../notify/tokens";
@@ -117,7 +118,7 @@ describe.skipIf(!dbUp)("createSupabaseNotifyStore: file_note links (ALL-31)", ()
     expect(await store.personName(userA, gone)).toBeNull();
   });
 
-  it("files a message once, with its text, and refuses someone else's, a deleted person or a second time", async () => {
+  it("files a message once, moving its text onto the capture, and refuses someone else's, a deleted person or a second time", async () => {
     const store = createSupabaseNotifyStore(client());
     const messageId = await asking(userA, "Ideas", "a fly rod");
     const gone = await newPerson(userA, "Gone");
@@ -125,12 +126,12 @@ describe.skipIf(!dbUp)("createSupabaseNotifyStore: file_note links (ALL-31)", ()
 
     expect(await store.fileInboundMessage(userB, messageId, dad)).toBeNull();
     expect(await store.fileInboundMessage(userA, messageId, gone)).toBeNull();
-    const filed = await store.fileInboundMessage(userA, messageId, dad);
-    expect(filed).toEqual({ captureId: expect.any(String), text: "Ideas\na fly rod" });
+    const captureId = await store.fileInboundMessage(userA, messageId, dad);
+    expect(captureId).toEqual(expect.any(String));
     expect(await store.fileInboundMessage(userA, messageId, bob)).toBeNull();
 
-    const { rows } = await pg.query("select person_id from concierge.captures where id = $1", [filed!.captureId]);
-    expect(rows).toEqual([{ person_id: dad }]);
+    const { rows } = await pg.query("select person_id, page_title, text_excerpt from concierge.captures where id = $1", [captureId]);
+    expect(rows).toEqual([{ person_id: dad, page_title: "Ideas", text_excerpt: "a fly rod" }]);
     expect(await captureCount(messageId)).toBe(1);
   });
 
@@ -151,12 +152,15 @@ describe.skipIf(!dbUp)("createSupabaseNotifyStore: file_note links (ALL-31)", ()
       notes: {
         captureStore: (userId: string) => captureStoreFor(db, userId),
         extract,
+        inbound: createSupabaseInboundStore(db),
         notify: { store, channels: [], baseUrl: "https://giftsaf.test", now: new Date() },
       },
     };
 
     expect(await confirmActionLink(tokens.dad, userA, deps)).toMatchObject({ state: "done", done: { title: "Filed" }, next: `/people/${dad}` });
-    expect(await confirmActionLink(tokens.bob, userA, deps)).toMatchObject({ state: "done", done: { title: "Already filed" } });
+    const second = await confirmActionLink(tokens.bob, userA, deps);
+    expect(second).toMatchObject({ state: "done", done: { title: "Already filed" } });
+    expect(second).not.toHaveProperty("next");
     expect(await captureCount(messageId)).toBe(1);
     const { rows } = await pg.query(
       "select m.status, m.body, c.person_id from concierge.inbound_messages m join concierge.captures c on c.id = m.capture_id where m.id = $1",

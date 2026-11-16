@@ -67,14 +67,10 @@ export interface NotifyStore {
   personName(userId: string, personId: string): Promise<string | null>;
   /**
    * The file_note action (ALL-31 AC-4): file_inbound_message, so only the first call files the
-   * asking message. The new capture and the note's text (subject and body, which filing moves
-   * onto the capture), or null when it was already filed or the person is gone.
+   * asking message. The new capture's id, or null when it was already filed or the person is gone.
    */
-  fileInboundMessage(userId: string, messageId: string, personId: string): Promise<FiledNote | null>;
+  fileInboundMessage(userId: string, messageId: string, personId: string): Promise<string | null>;
 }
-
-/** A note just filed by file_note: its capture, and its subject and body for the cancel check. */
-export type FiledNote = { captureId: string; text: string };
 
 const LINK_COLUMNS = "user_id, round_id, action, expires_at, used_at, person_id, inbound_message_id";
 
@@ -259,15 +255,7 @@ export function createSupabaseNotifyStore(db: SupabaseClient<Database> = createA
         p_person_id: personId,
       });
       if (filed.error) fail("Filing the note failed", filed.error);
-      if (!filed.data) return null;
-      // Filing cleared the message's subject and body; the capture holds them now.
-      const { data, error } = await concierge
-        .from("captures")
-        .select("page_title, text_excerpt")
-        .eq("id", filed.data)
-        .single();
-      if (error) fail("Loading the filed note failed", error);
-      return { captureId: filed.data, text: [data.page_title, data.text_excerpt].filter(Boolean).join("\n") };
+      return filed.data ?? null;
     },
   };
 }

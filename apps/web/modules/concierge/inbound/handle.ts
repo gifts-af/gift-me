@@ -6,9 +6,10 @@ import { fetchAttachment, fetchReceivedEmail, type Deps as ResendDeps, type Rece
 import { IMAGE_EXTENSIONS, saveNoteCapture } from "../capture/capture";
 import { processCapture } from "../capture/extract";
 import type { CaptureStore } from "../capture/store";
-import { notify, type LinkSpec, type NotifyDeps, type NotifyInput } from "../notify/notify";
+import type { LinkSpec, NotifyDeps, NotifyInput } from "../notify/notify";
 import type { NotificationKind } from "../notify/templates";
 import { firstImage, isAutoReply, looksLikeCancel, matchPeople, senderVerified, stripQuoted } from "./parse";
+import { sendInboundReply } from "./reply";
 import type { InboundSettings, InboundStore } from "./store";
 
 // One emailed note, start to finish (ALL-31): decide whether to take it, then file it to
@@ -227,23 +228,8 @@ async function ask(
   return "asking";
 }
 
-/**
- * Every email sent back counts toward the daily cap, so a reply that would go over it isn't
- * sent (AC-11). It's counted before sending so a failing send can't loop uncounted. A failed
- * send is logged; the note itself is already handled.
- */
-async function sendBack<K extends NotificationKind>(ctx: Ctx, input: NotifyInput<K>) {
-  const { deps, emailId, userId, settings } = ctx;
-  const ids = { email_id: emailId, user_id: userId, kind: input.kind };
-  try {
-    if ((await deps.store.countToday(userId)) >= settings.maxPerDay) {
-      logEvent("inbound.reply_capped", ids);
-      return;
-    }
-    await deps.store.recordEvent(userId);
-    const result = await notify(input, deps.notify);
-    if (!result.ok) logEvent("inbound.reply_failed", ids);
-  } catch (err) {
-    logEvent("inbound.reply_failed", { ...ids, ...errorFields(err) });
-  }
+/** An email back about this note, under the daily cap (sendInboundReply). */
+function sendBack<K extends NotificationKind>(ctx: Ctx, input: NotifyInput<K>) {
+  const { deps, emailId, settings } = ctx;
+  return sendInboundReply(input, { store: deps.store, maxPerDay: settings.maxPerDay, notify: deps.notify }, { email_id: emailId });
 }
