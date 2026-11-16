@@ -8,6 +8,8 @@ const revalidatePath = vi.hoisted(() => vi.fn());
 vi.mock("@/app/settings/zinc-deps", () => ({ placeHeld: async () => {} }));
 vi.mock("@/lib/app-settings", () => ({ appSettingInt: async () => 20 }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({}) }));
+const scheduleNotesTip = vi.hoisted(() => vi.fn());
+vi.mock("../notes-tip", () => ({ scheduleNotesTip }));
 vi.mock("next/cache", () => ({ revalidatePath }));
 vi.mock("@/lib/today", () => ({ todayForRequest: async () => "2026-11-01" }));
 vi.mock("@/modules/concierge", async () => {
@@ -28,6 +30,7 @@ describe("importContactsAction", () => {
   beforeEach(() => {
     importPeople.mockReset();
     revalidatePath.mockClear();
+    scheduleNotesTip.mockReset();
   });
 
   it("saves the checked rows and refreshes Home", async () => {
@@ -47,5 +50,21 @@ describe("importContactsAction", () => {
   it("saves nothing for a form that isn't a list of rows", async () => {
     expect(await importContactsAction(null, form("nope"))).toEqual({ ok: false, error: "Nothing to import. Try again." });
     expect(importPeople).not.toHaveBeenCalled();
+  });
+
+  it("tips about the first person added, not the result's extra field (AC-15)", async () => {
+    importPeople.mockResolvedValue({ ok: true, added: 2, skipped: 0, failed: 0, photosMissed: 0, firstAdded: { id: "p1", name: "Sam" } });
+    const result = await importContactsAction(null, form([good]));
+    expect(scheduleNotesTip).toHaveBeenCalledWith({ id: "p1", name: "Sam" });
+    expect(result).toEqual({ ok: true, added: 2, skipped: 0, failed: 0, photosMissed: 0 });
+  });
+
+  it("sends no tip when nobody was added, and still succeeds when the tip throws", async () => {
+    importPeople.mockResolvedValue({ ok: true, added: 0, skipped: 1, failed: 0, photosMissed: 0, firstAdded: null });
+    await importContactsAction(null, form([good]));
+    expect(scheduleNotesTip).not.toHaveBeenCalled();
+    importPeople.mockResolvedValue({ ok: true, added: 1, skipped: 0, failed: 0, photosMissed: 0, firstAdded: { id: "p1", name: "Sam" } });
+    scheduleNotesTip.mockRejectedValue(new Error("boom"));
+    expect(await importContactsAction(null, form([good]))).toMatchObject({ ok: true, added: 1 });
   });
 });

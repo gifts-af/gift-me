@@ -458,7 +458,7 @@ describe("importPeople", () => {
   it("adds each person with their relationship's occasions, birthday, Google id and address (AC-3)", async () => {
     const store = new FakePeopleStore();
     const result = await importPeople(store, [row(), sam], deps());
-    expect(result).toEqual({ ok: true, added: 2, skipped: 0, failed: 0, photosMissed: 0 });
+    expect(result).toMatchObject({ ok: true, added: 2, skipped: 0, failed: 0, photosMissed: 0, firstAdded: { name: "Jane Allen" } });
     const people = await store.people();
     const mom = people.find((p) => p.name === "Jane Allen")!;
     const friend = people.find((p) => p.name === "Sam")!;

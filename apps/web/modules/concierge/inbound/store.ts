@@ -27,7 +27,7 @@ export type AskingRow = {
 /** One of our sent notifications whose Message-ID we haven't read back from the provider yet. */
 export type UnthreadedNotification = { id: string; providerMessageId: string };
 
-export type InboundFlag = "notes_unpaid_reply_sent_at";
+export type InboundFlag = "notes_unpaid_reply_sent_at" | "notes_tip_sent_at";
 
 export interface InboundStore {
   /** inbound_email_enabled is 1 (the off switch, E7). */

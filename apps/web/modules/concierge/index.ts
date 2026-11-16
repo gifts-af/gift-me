@@ -101,4 +101,5 @@ export { handleInbound } from "./inbound/handle";
 export type { InboundDeps, InboundOutcome } from "./inbound/handle";
 export { createSupabaseInboundStore } from "./inbound/supabase-store";
 export type { InboundStore } from "./inbound/store";
+export { sendNotesTipOnce } from "./inbound/tip";
 export { captureStoreFor } from "./capture/supabase-store";
