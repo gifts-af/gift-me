@@ -259,7 +259,17 @@ describe("confirmActionLink", () => {
     expect(await confirmActionLink(TOKEN, OWNER, { store, now: NOW })).toEqual({
       state: "done",
       done: ACTIONS.check_my_address.done,
-      next: "/settings#my-address",
+      next: "/settings/address",
+      straight: true,
+    });
+  });
+
+  it("open_settings: goes straight to Paying for gifts (ALL-115 AC-14)", async () => {
+    const store = await storeWithLink({ action: "open_settings" });
+    expect(await confirmActionLink(TOKEN, OWNER, { store, now: NOW })).toEqual({
+      state: "done",
+      done: ACTIONS.open_settings.done,
+      next: "/settings/paying",
       straight: true,
     });
   });

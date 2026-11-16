@@ -32,7 +32,7 @@ describe("ShareAddressSwitch", () => {
     setup({ kind: "on", city: "Columbus", state: "OH" });
     expect(toggle()).toBeChecked();
     expect(screen.getByText(new RegExp(`^They see Columbus, OH in GiftsAF\\. ${ZINC}`))).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Change my address" })).toHaveAttribute("href", "/settings#my-address");
+    expect(screen.getByRole("link", { name: "Change my address" })).toHaveAttribute("href", "/settings/address");
   });
 
   it("turning on with an address calls the action (AC-7)", async () => {
