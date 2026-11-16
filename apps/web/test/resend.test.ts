@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import { EMAIL_FROM } from "@/lib/brand";
-import { sendEmail } from "@/lib/resend";
+import { fetchMessageId, sendEmail } from "@/lib/resend";
 
 const email = { to: "jo@example.com", subject: "Hi", text: "Hello" };
 const ok = () => new Response(JSON.stringify({ id: "e1" }), { status: 200 });
@@ -46,5 +46,29 @@ describe("sendEmail", () => {
     const result = await sendEmail(email, { apiKey: undefined, fetch: send });
     expect(result).toMatchObject({ ok: false });
     expect(send).not.toHaveBeenCalled();
+  });
+});
+
+// ALL-31: Resend's mail goes out through Amazon SES, which replaces any Message-ID we set, so the
+// header a reply's In-Reply-To names is the one Resend reports back (checked 2026-11-16).
+describe("fetchMessageId", () => {
+  it("reads message_id from Resend's email record", async () => {
+    const get = vi.fn(async () => new Response(JSON.stringify({ id: "e1", message_id: "<abc@email.amazonses.com>" }), { status: 200 }));
+    expect(await fetchMessageId("e1", { apiKey: "re_test", fetch: get })).toBe("<abc@email.amazonses.com>");
+    const [url, init] = get.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://api.resend.com/emails/e1");
+    expect((init.headers as Record<string, string>).Authorization).toBe("Bearer re_test");
+  });
+
+  it("returns null when Resend has no message_id yet, errors, or can't be reached", async () => {
+    const none = vi.fn(async () => new Response(JSON.stringify({ id: "e1", message_id: null }), { status: 200 }));
+    expect(await fetchMessageId("e1", { apiKey: "re_test", fetch: none })).toBeNull();
+    const bad = vi.fn(async () => new Response("nope", { status: 404 }));
+    expect(await fetchMessageId("e1", { apiKey: "re_test", fetch: bad })).toBeNull();
+    const offline = vi.fn(async () => {
+      throw new Error("offline");
+    });
+    expect(await fetchMessageId("e1", { apiKey: "re_test", fetch: offline })).toBeNull();
+    expect(await fetchMessageId("e1", { apiKey: undefined, fetch: none })).toBeNull();
   });
 });

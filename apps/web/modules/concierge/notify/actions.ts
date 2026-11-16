@@ -10,7 +10,9 @@ export type ActionName =
   | "answer_questions"
   | "open_settings"
   | "check_my_address"
-  | "cancel_held_gift";
+  | "cancel_held_gift"
+  // ALL-31: a "Who is this about?" choice, filing an emailed note to that person.
+  | "file_note";
 
 /** `done`: the done page's words when they depend on what happened (else the action's own). */
 export type ActionResult = { ok: true; done?: { title: string; body: string } } | { ok: false; error: string };
@@ -197,6 +199,16 @@ export const ACTIONS: Record<ActionName, Action> = {
     async next(roundId, store) {
       const personId = roundId ? await store.roundPersonId(roundId) : null;
       return personId ? `/people/${personId}` : null;
+    },
+  },
+
+  // TODO(ALL-31 Task 8): the real file_note action (file_inbound_message for the link's message and
+  // person). A placeholder so who_is_this links type-check; it refuses until then.
+  file_note: {
+    confirm: { title: "File your note", body: "Confirm to add your note to this person's page.", button: "File it" },
+    done: { title: "Filed", body: "Your note is on their page." },
+    async run() {
+      return { ok: false, error: "not built yet" };
     },
   },
 };

@@ -40,3 +40,25 @@ export async function sendEmail(
     return { ok: false, error: err instanceof Error ? err.message : "Network error" };
   }
 }
+
+/**
+ * The Message-ID header an email went out with, from Resend's record of it (ALL-31), or null when
+ * Resend doesn't have it yet or can't be reached. Resend sends through Amazon SES, which replaces
+ * any Message-ID we set, so this is the id a reply's In-Reply-To names (checked 2026-11-16).
+ */
+export async function fetchMessageId(
+  id: string,
+  deps: { apiKey: string | undefined; fetch: typeof fetch },
+): Promise<string | null> {
+  if (!deps.apiKey) return null;
+  try {
+    const res = await deps.fetch(`${RESEND_URL}/${encodeURIComponent(id)}`, {
+      headers: { Authorization: `Bearer ${deps.apiKey}` },
+    });
+    if (!res.ok) return null;
+    const body = (await res.json().catch(() => ({}))) as { message_id?: unknown };
+    return typeof body.message_id === "string" && body.message_id ? body.message_id : null;
+  } catch {
+    return null;
+  }
+}

@@ -3,6 +3,8 @@ import { SAMPLE_DATA, TEMPLATES, type NotificationKind } from "../notify/templat
 
 const kinds = Object.keys(SAMPLE_DATA) as NotificationKind[];
 
+const NO_BUTTON: NotificationKind[] = ["notes_tip", "who_is_this", "notes_not_read", "notes_cant_cancel"];
+
 /** The Zinc wallet address some emails carry as data rather than a one-time link. */
 function walletUrl(kind: NotificationKind): string[] {
   const data = SAMPLE_DATA[kind].data as { walletUrl?: string };
@@ -21,10 +23,11 @@ describe.each(kinds)("template %s", (kind) => {
   const urls = Object.values(SAMPLE_DATA[kind].links) as string[];
 
   it("has a subject", () => expect(mail.subject.length).toBeGreaterThan(0));
-  it("has the logo, one button, 600px, inline styles only", () => {
+  it("has the logo, at most one button, 600px, inline styles only", () => {
     expect(mail.html).toContain("https://giftsaf.com/email-logo.png");
-    // One teal button; anything else is a plain link (a hold's "Cancel this gift").
-    expect(mail.html.match(/background:#0f766e/g)).toHaveLength(1);
+    // One teal button; anything else is a plain link (a hold's "Cancel this gift"). The notes
+    // emails (ALL-31) have none: the tip is answered by replying, the choices are equal links.
+    expect(mail.html.match(/background:#0f766e/g) ?? []).toHaveLength(NO_BUTTON.includes(kind) ? 0 : 1);
     expect(mail.html).toContain("max-width:600px");
     expect(mail.html).not.toContain("<style");
     expect(mail.html).not.toContain("class=");
@@ -459,5 +462,54 @@ describe("heads_up funding warning (AC-11)", () => {
   it("says at least when some rounds have no budget", () => {
     const warned = TEMPLATES.heads_up({ ...s.data, funding: { ...funding, atLeast: true } }, s.links);
     expect(warned.text).toContain("At least $160 in gifts are due");
+  });
+});
+
+// ALL-31: emailed notes. Copy from design/plans/ALL-31-email-capture.md > How it works.
+describe("notes emails (ALL-31)", () => {
+  const both = (m: { html: string; text: string }) => [m.html, m.text];
+
+  it("notes_tip names the person and says to reply (AC-15)", () => {
+    const mail = TEMPLATES.notes_tip({ personName: "Dad" }, {});
+    expect(mail.subject).toContain("Dad");
+    for (const out of both(mail)) {
+      expect(out).toContain("Did you know?");
+      expect(out).toMatch(/Reply to this with anything you learn about Dad, like (&quot;|")wants a new fly rod(&quot;|"), and we(&#39;|')ll remember it\./);
+    }
+  });
+
+  it("who_is_this has one link per choice, in order, plus Someone else (AC-3)", () => {
+    const links = { choice0: "https://x.test/a/t0", choice1: "https://x.test/a/t1", someoneElse: "https://x.test/people" };
+    const mail = TEMPLATES.who_is_this({ subject: "Fly rod", choices: [{ name: "Dad" }, { name: "Uncle Bob" }] }, links);
+    expect(mail.subject).toBe("Who is your note about?");
+    expect(mail.text).toContain("Dad: https://x.test/a/t0");
+    expect(mail.text).toContain("Uncle Bob: https://x.test/a/t1");
+    expect(mail.text).toContain("Someone else: https://x.test/people");
+    expect(mail.text.indexOf("Dad:")).toBeLessThan(mail.text.indexOf("Uncle Bob:"));
+    for (const out of both(mail)) expect(out).toMatch(/Fly rod/);
+    expect(mail.html).toContain('href="https://x.test/people"');
+  });
+
+  it("who_is_this reads well with no subject", () => {
+    const mail = TEMPLATES.who_is_this({ subject: "", choices: [{ name: "Dad" }] }, { choice0: "u0", someoneElse: "up" });
+    expect(mail.text).not.toContain('""');
+    expect(mail.text).toContain("couldn't tell who it's about");
+  });
+
+  it("notes_not_read says notes are read only for test accounts during the alpha (AC-10)", () => {
+    const mail = TEMPLATES.notes_not_read({}, {});
+    for (const out of both(mail)) {
+      expect(out).toContain("only for test accounts during the alpha");
+      expect(out).toMatch(/didn(&#39;|')t keep or read/);
+    }
+  });
+
+  it("notes_cant_cancel says replies can't cancel a gift and points to the email's button (AC-14)", () => {
+    const mail = TEMPLATES.notes_cant_cancel({}, {});
+    for (const out of both(mail)) {
+      expect(out).toMatch(/We saved your note/);
+      expect(out).toMatch(/can(&#39;|')t cancel a gift/);
+      expect(out).toContain("use the button in the email about it");
+    }
   });
 });

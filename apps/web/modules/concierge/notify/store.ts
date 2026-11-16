@@ -39,12 +39,14 @@ export interface NotifyStore {
   insertNotification(row: {
     userId: string;
     roundId: string | null;
+    personId: string | null;
     kind: NotificationKind;
     channel: string;
   }): Promise<string>;
+  /** `messageId`: the Message-ID header it went out with, when threadable (ALL-31). */
   finishNotification(
     id: string,
-    result: { sentAt: Date; providerMessageId: string } | { error: string },
+    result: { sentAt: Date; providerMessageId: string; messageId?: string | null } | { error: string },
   ): Promise<void>;
   attachLinks(hashes: string[], notificationId: string): Promise<void>;
   findLink(hash: string): Promise<LinkRow | null>;
@@ -137,6 +139,7 @@ export function createSupabaseNotifyStore(db: SupabaseClient<Database> = createA
         .insert({
           user_id: row.userId,
           round_id: row.roundId,
+          ...(row.personId ? { person_id: row.personId } : {}),
           kind: row.kind,
           channel: row.channel,
         })
@@ -153,6 +156,7 @@ export function createSupabaseNotifyStore(db: SupabaseClient<Database> = createA
           : {
               sent_at: result.sentAt.toISOString(),
               provider_message_id: result.providerMessageId,
+              ...(result.messageId ? { message_id: result.messageId } : {}),
             };
       const { error } = await concierge.from("notifications").update(update).eq("id", id);
       if (error) fail("Updating the notification failed", error);

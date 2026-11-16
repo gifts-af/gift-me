@@ -25,7 +25,20 @@ export type NotificationKind =
   // ALL-116: two or more of a round's gifts failed, told together.
   | "failed_several"
   // ALL-112: to a list owner, whose shared address a store couldn't use. Says nothing of a gift.
-  | "check_your_address";
+  | "check_your_address"
+  // ALL-31: emailed notes. The tip, the "Who is this about?" question, and two one-off replies.
+  | "notes_tip"
+  | "who_is_this"
+  | "notes_not_read"
+  | "notes_cant_cancel";
+
+/**
+ * The kinds whose replies are notes, so they may carry the notes address as Reply-To. Only the
+ * tip: a reply to a buying email ("don't buy it") must never become a note (ALL-31 AC-13, T18),
+ * and a reply to "Who is this about?" would start a mail loop.
+ */
+export const REPLIES_ARE_NOTES = ["notes_tip"] as const satisfies readonly NotificationKind[];
+export type NotesReplyKind = (typeof REPLIES_ARE_NOTES)[number];
 
 export type RenderedEmail = { subject: string; html: string; text: string };
 
@@ -109,6 +122,11 @@ export type TemplateData = {
   /** ALL-116: `tried`, how many gifts were ordered in the round. */
   failed_several: Occasion & { tried: number; failed: FailedGift[]; onItsWay?: string[]; orderByText: string };
   check_your_address: Record<string, never>;
+  notes_tip: { personName: string };
+  /** `subject`: the note's subject line, empty when it had none; `choices`: one link each, in order. */
+  who_is_this: { subject: string; choices: { name: string }[] };
+  notes_not_read: Record<string, never>;
+  notes_cant_cancel: Record<string, never>;
 };
 
 export type TemplateLinks = {
@@ -135,6 +153,11 @@ export type TemplateLinks = {
   // Until ALL-29, every gift's link opens the person's page too.
   failed_several: { open: string };
   check_your_address: { open: string };
+  notes_tip: Record<string, never>;
+  // `choice{i}` files the note to `choices[i]`; `someoneElse` is the plain people page.
+  who_is_this: { [choice: `choice${number}`]: string; someoneElse: string };
+  notes_not_read: Record<string, never>;
+  notes_cant_cancel: Record<string, never>;
 };
 
 const rowsOf = (ideas: IdeaRow[]) => ideas.map((i) => ({ title: `${i.title} · ${i.price}` }));
@@ -575,6 +598,60 @@ export const TEMPLATES: {
       button: { label: "Check my address", url: links.open },
     }),
   }),
+
+  // ─── ALL-31: emailed notes. Copy from design/plans/ALL-31-email-capture.md > How it works ───
+
+  // Answered by replying, so no button. Sent with the notes address as Reply-To (AC-15).
+  notes_tip: (d) => ({
+    subject: `Did you know? You can email us notes about ${d.personName}`,
+    ...renderEmail({
+      heading: "Did you know?",
+      paragraphs: [
+        `Reply to this with anything you learn about ${d.personName}, like "wants a new fly rod", and we'll remember it.`,
+      ],
+      footer: "You can attach a photo or screenshot too.",
+    }),
+  }),
+
+  // Every choice is equal, so each is a plain link; the shell allows only one button (T33).
+  who_is_this: (d, links) => ({
+    subject: "Who is your note about?",
+    ...renderEmail({
+      heading: "Who is your note about?",
+      paragraphs: [
+        `We got your note${d.subject ? ` "${d.subject}"` : ""}, but couldn't tell who it's about. Tap who it's for and we'll add it to their page.`,
+      ],
+      link: [
+        ...d.choices.map((c, i) => ({ label: c.name, url: links[`choice${i}`] })),
+        { label: "Someone else", url: links.someoneElse },
+      ],
+      footer: "Someone else? Add them on your people page, then send the note again. Each link works once.",
+    }),
+  }),
+
+  // Once ever, to an account without paid features (AC-10).
+  notes_not_read: () => ({
+    subject: "We didn't read your note",
+    ...renderEmail({
+      heading: "We didn't read your note",
+      paragraphs: [
+        "Thanks for your note. Emailed notes are read only for test accounts during the alpha, so we didn't keep or read this one.",
+        "We'll only tell you this once. Notes you email later won't be kept either.",
+      ],
+    }),
+  }),
+
+  // After filing a note that sounds like stopping a gift (AC-14).
+  notes_cant_cancel: () => ({
+    subject: "Replies can't cancel a gift",
+    ...renderEmail({
+      heading: "We saved your note",
+      paragraphs: [
+        "We saved your note. Just so you know, replies can't cancel a gift.",
+        "To cancel or skip one, use the button in the email about it.",
+      ],
+    }),
+  }),
 };
 
 const IDEAS: IdeaRow[] = [
@@ -664,4 +741,15 @@ export const SAMPLE_DATA: {
     links: { open: "https://example.com/a/open-token" },
   },
   check_your_address: { data: {}, links: { open: "https://example.com/a/open-token" } },
+  notes_tip: { data: { personName: "Dad" }, links: {} },
+  who_is_this: {
+    data: { subject: "Fly rod", choices: [{ name: "Dad" }, { name: "Uncle Bob" }] },
+    links: {
+      choice0: "https://example.com/a/choice0-token",
+      choice1: "https://example.com/a/choice1-token",
+      someoneElse: "https://example.com/people",
+    },
+  },
+  notes_not_read: { data: {}, links: {} },
+  notes_cant_cancel: { data: {}, links: {} },
 };
