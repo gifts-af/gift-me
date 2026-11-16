@@ -3,7 +3,7 @@ import { localSupabase } from "./local-supabase";
 import { SECOND_USER, TEST_USER } from "./test-user";
 import { createFreshUser } from "./fresh-user";
 import { phoneLayoutProblems } from "./phone-layout";
-import { addMother, addSavedGift } from "./seed";
+import { addMother, addSavedGift, saveBudgets } from "./seed";
 import { session, signIn } from "./sign-in";
 
 // ALL-21: add someone, see their card, switch occasions and budgets, link their
@@ -76,8 +76,10 @@ test("the Add form, Home with a card, and a person's page fit the screen", { tag
   await page.goto("/");
   await expect(page.getByRole("link", { name: "Mom", exact: true })).toBeVisible();
   await check("Home");
+  // A long Budget row (ALL-120): it's cut short, never pushed off the screen.
+  await saveBudgets(user, personId, { any: 7500, christmas: 12500, mothers_day: 5050 });
   await page.goto(`/people/${personId}`);
-  await expect(page.getByRole("link", { name: /^Budget/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Budget/ })).toContainText("$75 · Christmas $125 · Mother's Day $50.50");
   await check("Person page");
   // The Budget screen (ALL-120).
   await page.goto(`/people/${personId}/budget`);

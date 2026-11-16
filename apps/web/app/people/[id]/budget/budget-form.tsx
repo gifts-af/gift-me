@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { OCCASION_NAMES } from "@/components/occasion-format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -85,6 +85,18 @@ export function BudgetForm({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const fallback = baseCents ?? defaultCents;
+  const formRef = useRef<HTMLFormElement>(null);
+
+  // Leaving without saving means cancel. The app can keep this screen hidden
+  // and show it again, so on hide the fields go back to what's saved.
+  useEffect(() => {
+    const form = formRef.current;
+    return () => {
+      form?.reset();
+      setErrors({});
+      setError(null);
+    };
+  }, []);
 
   async function save(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -112,7 +124,7 @@ export function BudgetForm({
   }
 
   return (
-    <form onSubmit={save} noValidate className="flex flex-col gap-4">
+    <form ref={formRef} onSubmit={save} noValidate className="flex flex-col gap-4">
       <div className={CARD_CLASS}>
         <Amount
           id="any"

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { Activity } from "react";
 import { act, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { PersonDetail } from "@/modules/concierge";
@@ -53,6 +54,21 @@ describe("BudgetForm", () => {
     const form = action.mock.calls[0][1];
     expect([form.get("id"), form.get("any"), form.get("christmas"), form.get("mothers_day")]).toEqual(["p1", "75", "", ""]);
     await waitFor(() => expect(push).toHaveBeenCalledWith("/people/p1"));
+  });
+
+  it("drops unsaved edits when the screen is hidden, so reopening it shows what's saved", async () => {
+    const action = vi.fn(async (): Promise<BudgetsResult> => ({ ok: true }));
+    const view = (mode: "visible" | "hidden") => (
+      <Activity mode={mode}>
+        <BudgetForm personId="p1" name="Mom" baseCents={7500} defaultCents={null} occasions={OCCASIONS} action={action} />
+      </Activity>
+    );
+    const { rerender } = render(view("visible"));
+    await userEvent.clear(screen.getByLabelText("Any occasion"));
+    await userEvent.type(screen.getByLabelText("Any occasion"), "500");
+    await act(async () => rerender(view("hidden")));
+    await act(async () => rerender(view("visible")));
+    expect(screen.getByLabelText("Any occasion")).toHaveValue("75");
   });
 
   it("is ready to save again after a save, since the screen can be kept and shown again", async () => {

@@ -5,7 +5,7 @@ import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { createFreshUser } from "./fresh-user";
 import { localSupabase } from "./local-supabase";
-import { addMother, addSavedGift, saveOneGiftList } from "./seed";
+import { addMother, addSavedGift, saveBudgets, saveOneGiftList } from "./seed";
 import { signIn, session, type Credentials } from "./sign-in";
 
 // Screenshots for the gallery (ALL-000, see playwright.gallery.config.ts).
@@ -56,6 +56,7 @@ const SIGNED_IN: [name: string, url: (s: Seeded) => string][] = [
   ["my-list", () => "/lists"],
   ["person", (s) => `/people/${s.personId}`],
   ["person-questions", (s) => `/people/${s.personId}/questions`],
+  ["person-budget", (s) => `/people/${s.personId}/budget`],
   ["add-person", () => "/people/new"],
   ["import-people", () => "/people/import"],
   ["settings", () => "/settings"],
@@ -79,6 +80,7 @@ test.describe("signed in", () => {
     const user = await createFreshUser();
     const personId = await addMother(user, "Mom");
     await addSavedGift(user, personId, "Fly-fishing reel");
+    await saveBudgets(user, personId, { any: 7500, mothers_day: 5000 });
     await saveOneGiftList(user);
     seeded = { user, personId, shareToken: await shareToken(user) };
   });
