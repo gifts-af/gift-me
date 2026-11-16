@@ -53,14 +53,56 @@ function putGuestStash(items) {
 }
 
 // A keepalive fetch outlives the page; a server action started now wouldn't.
-// Only ids go: keepalive bodies are capped at 64 KiB.
+// Only ids go: keepalive bodies are capped at 64 KiB. Resolves to the route's
+// { version, behind } when saved, for a tab that lives on, or null.
 function sendOnClose(body) {
-  fetch(CLOSE_ROUTE, {
+  return fetch(CLOSE_ROUTE, {
     method: 'POST',
     keepalive: true,
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
-  }).catch(() => {})
+  })
+    .then((res) => (res.ok ? res.json() : null))
+    .catch(() => null)
+}
+
+// Once this page is hidden by the router (Next keeps a page left in the app
+// mounted under <Activity mode="hidden">) its effects have cleaned up, but the
+// save started on the way out may still be running. Until it's done and
+// saved: Sign out waits for it, closing the tab warns, and a closing tab
+// sends any remove it couldn't. Returns the stop.
+function guardWhileSaving(saver, sending) {
+  const stopWaiting = onBeforeLeaving(() => sending)
+  function warn(event) {
+    if (saver.getSnapshot().status === 'idle') return
+    event.preventDefault()
+    event.returnValue = ''
+  }
+  function onPageHide() {
+    saver.closing()
+  }
+  window.addEventListener('beforeunload', warn)
+  window.addEventListener('pagehide', onPageHide)
+  let unsubscribe = () => {}
+  let stopped = false
+  function stop() {
+    stopped = true
+    stopWaiting()
+    unsubscribe()
+    window.removeEventListener('beforeunload', warn)
+    window.removeEventListener('pagehide', onPageHide)
+  }
+  // A failed save keeps the guard up; it goes once a later save succeeds.
+  sending.then(() => {
+    stopWaiting()
+    if (stopped) return
+    if (saver.getSnapshot().status === 'idle') stop()
+    else
+      unsubscribe = saver.subscribe(() => {
+        if (saver.getSnapshot().status === 'idle') stop()
+      })
+  })
+  return stop
 }
 
 // The same while loading and loaded, so Share arriving doesn't move the page.
@@ -105,6 +147,12 @@ export default function GiftApp({ initial, footer = null }) {
   const [notice, setNotice] = useState('')
   const [announcement, setAnnouncement] = useState('')
   const headingRef = useRef(null)
+  const undoRef = useRef(null)
+  // The guest stash is taken once per list on screen: a page hidden by the
+  // router and shown again keeps its state, so taking it again would double it.
+  const stashTaken = useRef(false)
+  const stopHiddenGuard = useRef(null)
+  const heldId = list.held?.gift.id ?? null
 
   const shareBlockedReason = isGuest
     ? 'Sign in to share your list'
@@ -125,6 +173,8 @@ export default function GiftApp({ initial, footer = null }) {
   // render, so the server-rendered HTML still matches on hydration. A
   // member's carried gifts save straight away.
   useEffect(() => {
+    if (stashTaken.current) return
+    stashTaken.current = true
     const carried = takeGuestStash({ keep: loadError !== null })
     if (carried.length === 0) return
     saver.add(...carried)
@@ -146,14 +196,18 @@ export default function GiftApp({ initial, footer = null }) {
     }
   }, [isGuest, saver])
 
-  // A remove held for Undo is sent before the page goes: when the tab is
-  // hidden, when this page is left in the app (Next keeps a left page mounted
-  // but hidden, and that runs this cleanup), before Sign out, and as the tab
-  // closes (pagehide, to the close route with keepalive).
+  // A remove held for Undo is sent before the page goes. When the tab is
+  // hidden or closes, it goes to the close route with keepalive (phones often
+  // never fire pagehide, and may stop a hidden tab's requests). When this page
+  // is left in the app (Next keeps it mounted but hidden, which runs this
+  // cleanup) or Sign out is picked, it's a normal save, and guardWhileSaving
+  // covers the time until that's done.
   useEffect(() => {
     if (!canSave) return
+    stopHiddenGuard.current?.() // shown again: these listeners take over
+    stopHiddenGuard.current = null
     function onVisibility() {
-      if (document.visibilityState === 'hidden') saver.flush()
+      if (document.visibilityState === 'hidden') saver.closing()
     }
     function onPageHide() {
       saver.closing()
@@ -165,9 +219,15 @@ export default function GiftApp({ initial, footer = null }) {
       document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('pagehide', onPageHide)
       stopWaiting()
-      saver.flush()
+      stopHiddenGuard.current = guardWhileSaving(saver, saver.flush())
     }
   }, [canSave, saver])
+
+  // Undo gets focus as its bar appears, so a keyboard or screen-reader user
+  // can reach it straight away; the window waits while it has focus.
+  useEffect(() => {
+    if (heldId) undoRef.current?.focus()
+  }, [heldId])
 
   useEffect(() => {
     if (!atRisk) return
@@ -209,10 +269,19 @@ export default function GiftApp({ initial, footer = null }) {
   }
 
   function removeGift(id) {
+    const name = gifts.find((g) => g.id === id)?.name
     saver.remove(id)
     // Removing the focused button would otherwise drop focus onto <body> and
-    // strand keyboard users at the top of the document.
+    // strand keyboard users at the top of the document. A member's focus then
+    // moves on to Undo, once its bar is on screen.
     headingRef.current?.focus()
+    if (canSave && name) setAnnouncement(`Removed ${name}. Undo available.`)
+  }
+
+  function undoRemove() {
+    saver.undo()
+    headingRef.current?.focus()
+    setAnnouncement('')
   }
 
   // Resolves true once the link is on the clipboard.
@@ -331,15 +400,24 @@ export default function GiftApp({ initial, footer = null }) {
       </PageFrame>
 
       {/* Undo stays in view at the bottom, in thumb reach on a phone, lined
-          up with the list's column (design/ui.md > My list). */}
+          up with the list's column (design/ui.md > My list). Its 6 s wait
+          while it has focus or the pointer. */}
       {list.held && (
         <div className="sticky bottom-0 border-t bg-background pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
-          <div className="mx-auto flex max-w-5xl items-center gap-2 px-4 sm:px-8">
+          <div
+            className="mx-auto flex max-w-5xl items-center gap-2 px-4 sm:px-8"
+            onMouseEnter={() => saver.pauseUndo('hover')}
+            onMouseLeave={() => saver.resumeUndo('hover')}
+            onFocus={() => saver.pauseUndo('focus')}
+            onBlur={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget)) saver.resumeUndo('focus')
+            }}
+          >
             <p className="min-w-0 truncate text-[15px]">Removed {list.held.gift.name}</p>
             <span aria-hidden="true" className="text-muted-foreground">
               ·
             </span>
-            <button type="button" className={buttonClass.secondarySm} onClick={saver.undo}>
+            <button ref={undoRef} type="button" className={buttonClass.secondarySm} onClick={undoRemove}>
               Undo
             </button>
           </div>

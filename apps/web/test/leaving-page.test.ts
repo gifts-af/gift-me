@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { finishBeforeLeaving, onBeforeLeaving } from "@/lib/leaving-page";
+import { describe, expect, it, vi } from "vitest";
+import { finishBeforeLeaving, LEAVE_WAIT_MS, onBeforeLeaving } from "@/lib/leaving-page";
 
 // Sign out leaves with a full page load; a page with work still on its way
 // (My list's held remove, ALL-127) holds it up until that's done.
@@ -21,6 +21,23 @@ describe("finishBeforeLeaving", () => {
     expect(order).toEqual(["saved", "left"]);
     stop();
     stopFailing();
+  });
+
+  it("gives up waiting after LEAVE_WAIT_MS, so a save that never answers can't trap sign-out", async () => {
+    vi.useFakeTimers();
+    try {
+      const stop = onBeforeLeaving(() => new Promise(() => {}));
+      let left = false;
+      const leaving = finishBeforeLeaving().then(() => (left = true));
+      await vi.advanceTimersByTimeAsync(LEAVE_WAIT_MS - 1);
+      expect(left).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await leaving;
+      expect(left).toBe(true);
+      stop();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("stops asking a page once it unsubscribes", async () => {

@@ -25,6 +25,9 @@ export function isPublicPath(pathname: string) {
     // The extension calls this cross-origin with a bearer token; the route checks it (ALL-22).
     pathname === "/api/captures" ||
     /^\/api\/captures\/[^/]+\/extract$/.test(pathname) ||
+    // A closing My list tab posts here with keepalive; the route checks the
+    // session itself and answers 401, so nothing follows a redirect (ALL-127).
+    pathname === "/api/lists/save-on-close" ||
     pathname.startsWith("/login") ||
     pathname.startsWith("/share/") ||
     pathname.startsWith("/auth") ||

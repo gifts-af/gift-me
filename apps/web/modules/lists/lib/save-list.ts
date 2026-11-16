@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { logEvent } from "@/lib/log";
 import { MAX_PRICE_CENTS } from "./format.js";
-import { readList, UUID_PATTERN, type Gift } from "./lists";
+import { readList, rowToGift, UUID_PATTERN, type Gift, type ListItemRow } from "./lists";
 
 // Saving My list, shared by the saveList action and the close route
 // (app/api/lists/save-on-close). Every save goes through
@@ -108,26 +108,32 @@ export async function saveChecked(
     };
   }
 
-  const saved = data as { id?: unknown; updated_at?: unknown } | null;
-  if (error || typeof saved?.id !== "string" || typeof saved.updated_at !== "string") {
-    console.error("save_list_checked failed", error);
+  // The gifts come back from the save itself, read under its row lock, so they
+  // match its version. A separate read here could include another device's
+  // gift under this version, and the app's next merge would remove it.
+  const saved = data as { id?: unknown; updated_at?: unknown; share_token?: unknown; items?: unknown } | null;
+  if (
+    error ||
+    typeof saved?.id !== "string" ||
+    typeof saved.updated_at !== "string" ||
+    !Array.isArray(saved.items)
+  ) {
+    logEvent("list_save_failed", { user_id: userId, list_id: input.listId, code: errorCode(error) });
     return { ok: false, error: COULD_NOT_SAVE };
-  }
-
-  // The version is the one this save made. If another tab saved in the
-  // meantime the rows read here are newer, and this tab's next save is
-  // refused and re-applied on top, so nothing is lost either way.
-  const reread = await readList(db, saved.id);
-  if (!reread.ok || !reread.list) {
-    return { ok: false, error: "Your list was saved, but couldn't be reloaded. Refresh the page." };
   }
   return {
     ok: true,
     listId: saved.id,
-    shareToken: reread.list.shareToken,
+    shareToken: typeof saved.share_token === "string" ? saved.share_token : null,
     version: saved.updated_at,
-    items: reread.items,
+    items: (saved.items as ListItemRow[]).map(rowToGift),
   };
+}
+
+/** A Postgres or PostgREST error code, never the message (E6). */
+export function errorCode(error: unknown): string | null {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === "string" && /^[A-Za-z0-9_]{1,16}$/.test(code) ? code : null;
 }
 
 export type RemoveOutcome = "saved" | "stale" | "not_found" | "error";
@@ -144,7 +150,9 @@ export async function removeGifts(
   db: SupabaseClient,
   userId: string,
   input: { listId: string; version: string; removeIds: string[] },
-): Promise<{ outcome: RemoveOutcome; behind: boolean }> {
+): Promise<
+  { outcome: "saved"; behind: boolean; version: string } | { outcome: Exclude<RemoveOutcome, "saved">; behind: boolean }
+> {
   const current = await readList(db, input.listId);
   if (!current.ok) return { outcome: "error", behind: false };
   if (!current.list) return { outcome: "not_found", behind: false };
@@ -161,7 +169,8 @@ export async function removeGifts(
       version: base.version,
       rows: rows as ListRow[],
     });
-    if (result.ok) return { outcome: "saved", behind };
+    // Behind again if another save landed between the read and this one.
+    if (result.ok) return { outcome: "saved", behind: behind || attempt > 0, version: result.version };
     if (!result.stale) return { outcome: "error", behind };
     base = result;
   }

@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import Link from "next/link";
+import { Activity } from "react";
 import { finishBeforeLeaving } from "@/lib/leaving-page";
 
 vi.mock("@/modules/lists/actions/lists", () => ({ saveList: vi.fn() }));
@@ -59,6 +60,13 @@ async function addByHand(name) {
 }
 
 const remove = (name) => user.click(screen.getByRole("button", { name: new RegExp(`Remove ${name}`) }));
+const beforeUnloadBlocked = () => {
+  const event = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(event);
+  return event.defaultPrevented;
+};
+// The Undo window waits while the bar has focus, as it does right after a remove.
+const leaveUndo = () => act(async () => screen.getByRole("heading", { level: 1, name: "My list" }).focus());
 const visibleNames = () => screen.queryAllByRole("heading", { level: 3 }).map((h) => h.textContent);
 
 describe("GiftApp", () => {
@@ -160,6 +168,7 @@ describe("GiftApp", () => {
       await remove("Novel");
       expect(visibleNames()).toEqual(["Kettle"]);
       expect(screen.getByText("Removed Novel")).toBeVisible();
+      await leaveUndo();
       await act(async () => vi.advanceTimersByTime(UNDO_MS - 100));
       expect(saveList).not.toHaveBeenCalled();
       await act(async () => vi.advanceTimersByTime(100));
@@ -167,10 +176,75 @@ describe("GiftApp", () => {
       expect(screen.queryByText("Removed Novel")).not.toBeInTheDocument();
     });
 
-    it("moves focus to the list heading after removing a gift", async () => {
+    describe("Undo for keyboard and screen-reader users", () => {
+      it("moves focus to Undo and announces it", async () => {
+        render(<GiftApp initial={member} />);
+        await remove("Kettle");
+        expect(screen.getByRole("button", { name: "Undo" })).toHaveFocus();
+        expect(screen.getByText("Removed Kettle. Undo available.")).toHaveClass("sr-only");
+      });
+
+      it("waits while Undo has focus, and counts on once focus leaves", async () => {
+        render(<GiftApp initial={member} />);
+        await remove("Novel");
+        await act(async () => vi.advanceTimersByTime(UNDO_MS * 3));
+        expect(saveList).not.toHaveBeenCalled();
+        await leaveUndo();
+        await act(async () => vi.advanceTimersByTime(UNDO_MS));
+        expect(sentNames()).toEqual([["Kettle"]]);
+      });
+
+      it("waits while the pointer is over the bar, and counts on from where it was", async () => {
+        render(<GiftApp initial={member} />);
+        await remove("Novel");
+        await leaveUndo();
+        await act(async () => vi.advanceTimersByTime(UNDO_MS - 1000));
+        const bar = screen.getByText("Removed Novel").parentElement;
+        fireEvent.mouseEnter(bar);
+        await act(async () => vi.advanceTimersByTime(UNDO_MS * 3));
+        expect(saveList).not.toHaveBeenCalled();
+        fireEvent.mouseLeave(bar);
+        await act(async () => vi.advanceTimersByTime(900));
+        expect(saveList).not.toHaveBeenCalled();
+        await act(async () => vi.advanceTimersByTime(100));
+        expect(sentNames()).toEqual([["Kettle"]]);
+      });
+
+      it("puts focus on the heading after Undo", async () => {
+        render(<GiftApp initial={member} />);
+        await remove("Kettle");
+        await user.click(screen.getByRole("button", { name: "Undo" }));
+        expect(screen.getByRole("heading", { level: 1, name: "My list" })).toHaveFocus();
+      });
+    });
+
+    // The server action's version and gifts must come from one snapshot, and
+    // the app only removes what this tab removed: a gift another device added
+    // must never be treated as removed here (ALL-127 review).
+    it("never removes a gift it didn't remove, even when its record of the list is off", async () => {
+      const first = deferred();
+      const dad = gift("d", "Dad's pick");
+      let firstItems;
+      vi.mocked(saveList)
+        // The first save reports a gift ("Dad's pick") this tab never showed.
+        .mockImplementationOnce(({ items }) => {
+          firstItems = items;
+          return first.promise.then(() => ({ ok: true, listId: "list-1", shareToken: "tok", version: "v2", items: [...items, dad] }));
+        })
+        .mockImplementationOnce(async () => ({
+          ok: false,
+          stale: true,
+          listId: "list-1",
+          shareToken: "tok",
+          version: "v3",
+          items: [...firstItems, dad],
+        }));
       render(<GiftApp initial={member} />);
-      await remove("Kettle");
-      expect(screen.getByRole("heading", { level: 1, name: "My list" })).toHaveFocus();
+      await addByHand("Lamp");
+      await addByHand("Socks");
+      await act(async () => first.resolve());
+      expect(saveList).toHaveBeenCalledTimes(3);
+      expect(sentNames()[2]).toEqual(["Kettle", "Novel", "Lamp", "Dad's pick", "Socks"]);
     });
 
     it("puts the gift back in its place on Undo, and sends nothing (AC-12)", async () => {
@@ -208,23 +282,48 @@ describe("GiftApp", () => {
         Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
       });
 
-      it("when the tab is hidden", async () => {
+      const hideTab = () =>
+        act(async () => {
+          Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+          document.dispatchEvent(new Event("visibilitychange"));
+        });
+      const closeRoute = (version = "v2", behind = false) =>
+        vi
+          .spyOn(globalThis, "fetch")
+          .mockImplementation(async () => Response.json({ version, behind }, { status: 200 }));
+
+      // Phones often never fire pagehide, so a hidden tab sends it the way a
+      // closing one does.
+      it("when the tab is hidden, to the close route with keepalive", async () => {
+        const fetch = closeRoute();
         render(<GiftApp initial={member} />);
         await remove("Novel");
-        Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
-        await act(async () => document.dispatchEvent(new Event("visibilitychange")));
-        expect(sentNames()).toEqual([["Kettle"]]);
+        await hideTab();
+        expect(fetch).toHaveBeenCalledTimes(1);
+        expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ listId: "list-1", version: "v1", removeIds: ["b"] });
+        expect(saveList).not.toHaveBeenCalled();
       });
 
-      it("when the page is left in the app or hidden by the router (its effects clean up)", async () => {
+      it("and the tab carries on from the version the route saved", async () => {
+        closeRoute("v2");
+        render(<GiftApp initial={member} />);
+        await remove("Novel");
+        await hideTab();
+        Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+        await addByHand("Lamp");
+        expect(vi.mocked(saveList).mock.calls[0][0]).toMatchObject({ version: "v2" });
+        expect(sentNames()).toEqual([["Kettle", "Lamp"]]);
+      });
+
+      it("when the page is unmounted", async () => {
         const app = render(<GiftApp initial={member} />);
         await remove("Novel");
         app.unmount();
         expect(sentNames()).toEqual([["Kettle"]]);
       });
 
-      it("when the tab closes, to the close route with keepalive", async () => {
-        const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null, { status: 204 }));
+      it("when the tab closes, to the close route with keepalive, once", async () => {
+        const fetch = closeRoute();
         render(<GiftApp initial={member} />);
         await remove("Novel");
         await act(async () => window.dispatchEvent(new Event("pagehide")));
@@ -233,8 +332,10 @@ describe("GiftApp", () => {
         expect(url).toBe("/api/lists/save-on-close");
         expect(init).toMatchObject({ method: "POST", keepalive: true, headers: { "Content-Type": "application/json" } });
         expect(JSON.parse(init.body)).toEqual({ listId: "list-1", version: "v1", removeIds: ["b"] });
-        // Sent once: the window closing later, or the tab hiding, sends nothing more.
+        // The tab hiding just after, or the window closing, sends nothing more.
+        await hideTab();
         await act(async () => vi.advanceTimersByTime(UNDO_MS));
+        expect(fetch).toHaveBeenCalledTimes(1);
         expect(saveList).not.toHaveBeenCalled();
       });
 
@@ -264,6 +365,47 @@ describe("GiftApp", () => {
       expect(signOut).not.toHaveBeenCalled();
       await act(async () => save.resolve({ ok: true, listId: "list-1", shareToken: "tok", version: "v2", items: [] }));
       expect(signOut).toHaveBeenCalled();
+    });
+
+    // Next keeps a page left in the app mounted under <Activity mode="hidden">;
+    // its effects clean up, but what they started has to finish safely.
+    describe("hidden by the router", () => {
+      const app = (mode) => (
+        <Activity mode={mode}>
+          <GiftApp initial={member} />
+        </Activity>
+      );
+
+      it("sends a held remove, and Sign out still waits for it", async () => {
+        const save = deferred();
+        vi.mocked(saveList).mockReturnValueOnce(save.promise);
+        const view = render(app("visible"));
+        await remove("Novel");
+        view.rerender(app("hidden"));
+        expect(sentNames()).toEqual([["Kettle"]]);
+        let left = false;
+        const leaving = finishBeforeLeaving().then(() => (left = true));
+        await act(async () => {});
+        expect(left).toBe(false);
+        await act(async () => save.resolve({ ok: true, listId: "list-1", shareToken: "tok", version: "v2", items: [] }));
+        await leaving;
+        expect(left).toBe(true);
+      });
+
+      it("still warns before the tab closes while a save there is on its way, or has failed", async () => {
+        const save = deferred();
+        vi.mocked(saveList).mockReturnValueOnce(save.promise);
+        const view = render(app("visible"));
+        await addByHand("Lamp");
+        view.rerender(app("hidden"));
+        expect(beforeUnloadBlocked()).toBe(true);
+        await act(async () => save.resolve({ ok: false, error: "Nope." }));
+        expect(beforeUnloadBlocked()).toBe(true);
+        view.rerender(app("visible"));
+        await user.click(screen.getByRole("button", { name: "Try again" }));
+        expect(await screen.findByRole("status", { name: "Save status" })).toHaveTextContent("Saved");
+        expect(beforeUnloadBlocked()).toBe(false);
+      });
     });
 
     describe("a stale tab (AC-14)", () => {
@@ -296,6 +438,7 @@ describe("GiftApp", () => {
         vi.mocked(saveList).mockResolvedValueOnce(stale);
         render(<GiftApp initial={member} />);
         await remove("Novel");
+        await leaveUndo();
         await act(async () => vi.advanceTimersByTime(UNDO_MS));
         expect(sentNames()).toEqual([["Kettle"], ["Kettle", "Scarf"]]);
       });
@@ -315,11 +458,6 @@ describe("GiftApp", () => {
 
     describe("a failed save (AC-15)", () => {
       const failed = { ok: false, error: "Your list couldn't be saved. Try again." };
-      const beforeUnloadBlocked = () => {
-        const event = new Event("beforeunload", { cancelable: true });
-        window.dispatchEvent(event);
-        return event.defaultPrevented;
-      };
 
       it("says Couldn't save, keeps the gifts, warns before leaving, and Try again saves", async () => {
         vi.mocked(saveList).mockResolvedValueOnce(failed);
@@ -462,6 +600,21 @@ describe("GiftApp", () => {
       const event = new Event("beforeunload", { cancelable: true });
       window.dispatchEvent(event);
       expect(event.defaultPrevented).toBe(true);
+    });
+
+    it("takes the stash once, however often the page is hidden and shown", async () => {
+      localStorage.setItem(STASH, JSON.stringify({ items: [gift("x", "Socks")], at: Date.now() }));
+      const app = (mode) => (
+        <Activity mode={mode}>
+          <GiftApp initial={null} />
+        </Activity>
+      );
+      const view = render(app("visible"));
+      await act(async () => {});
+      view.rerender(app("hidden"));
+      view.rerender(app("visible"));
+      await act(async () => {});
+      expect(visibleNames()).toEqual(["Socks"]);
     });
 
     it("stashes their gifts when they leave for sign-in", () => {

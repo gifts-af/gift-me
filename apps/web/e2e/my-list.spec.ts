@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { createFreshUser } from "./fresh-user";
+import { phoneLayoutProblems } from "./phone-layout";
 import { signIn } from "./sign-in";
 
 // My list saves as you go (ALL-127, design/ui.md > My list). The rules in
@@ -26,13 +27,15 @@ test("adds save at once, Undo puts a gift back, and a remove saves once its wind
   await expect(page.getByRole("button", { name: "Save", exact: true })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Remove Kettle from your list" }).click();
-  await expect(page.getByText("Removed Kettle")).toBeVisible();
+  await expect(page.getByText("Removed Kettle", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Undo" }).click();
   await expect(gift(page, "Kettle")).toBeVisible();
 
   await page.getByRole("button", { name: "Remove Kettle from your list" }).click();
-  // The Undo window is 6 s; then the remove is sent.
-  await expect(page.getByText("Removed Kettle")).toHaveCount(0, { timeout: 10_000 });
+  await expect(page.getByRole("button", { name: "Undo" })).toBeFocused();
+  // The Undo window (6 s) waits while Undo has focus; move on, and it's sent.
+  await page.getByRole("heading", { level: 1, name: "My list" }).click();
+  await expect(page.getByText("Removed Kettle", { exact: true })).toHaveCount(0, { timeout: 10_000 });
   await expect(saveStatus(page)).toHaveText("Saved");
 
   await page.reload();
@@ -70,7 +73,7 @@ test.describe("a remove held for Undo is sent when the page goes (AC-17)", () =>
     await addGiftByHand(page, "Novel");
     await expect(saveStatus(page)).toHaveText("Saved");
     await page.getByRole("button", { name: "Remove Kettle from your list" }).click();
-    await expect(page.getByText("Removed Kettle")).toBeVisible();
+    await expect(page.getByText("Removed Kettle", { exact: true })).toBeVisible();
   }
 
   // The send can land just after the next page loads, so look again until it has.
@@ -94,9 +97,29 @@ test.describe("a remove held for Undo is sent when the page goes (AC-17)", () =>
 
   test("the tab unloads, through the close route", async ({ page }) => {
     await holdARemove(page);
-    const closeSent = page.waitForRequest((req) => req.url().endsWith("/api/lists/save-on-close"));
+    const closed = page.waitForResponse((res) => res.url().endsWith("/api/lists/save-on-close"));
     await page.goto("/settings");
-    expect((await closeSent).postDataJSON()).toMatchObject({ removeIds: [expect.any(String)] });
+    const res = await closed;
+    // Saved by the route itself: a 200 with the version it saved.
+    expect(res.status()).toBe(200);
+    expect(res.request().postDataJSON()).toMatchObject({ removeIds: [expect.any(String)] });
+    expect(await res.json()).toMatchObject({ version: expect.any(String), behind: false });
     await expectGone(page);
+  });
+});
+
+test.describe("at 320 px, the narrowest phone", { tag: "@layout" }, () => {
+  test.use({ viewport: { width: 320, height: 640 } });
+
+  test("the Undo bar fits and stays in view", async ({ page }) => {
+    await signIn(page, await createFreshUser());
+    await page.goto("/lists");
+    await addGiftByHand(page, "Hand-thrown ceramic pour-over coffee set with two cups");
+    await addGiftByHand(page, "Kettle");
+    await page.getByRole("button", { name: /^Remove Hand-thrown/ }).click();
+    const undo = page.getByRole("button", { name: "Undo" });
+    await expect(undo).toBeInViewport({ ratio: 1 });
+    await expect(page.getByText(/^Removed Hand-thrown.*cups$/)).toBeVisible();
+    expect(await phoneLayoutProblems(page)).toEqual([]);
   });
 });

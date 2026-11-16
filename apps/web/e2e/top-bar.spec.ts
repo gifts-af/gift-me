@@ -56,7 +56,7 @@ test("Sign out with a remove held for Undo saves it first (AC-18)", async ({ pag
   await addGiftByHand(page, "Kettle");
   await expect(page.getByRole("status", { name: "Save status" })).toHaveText("Saved");
   await page.getByRole("button", { name: "Remove Kettle from your list" }).click();
-  await expect(page.getByText("Removed Kettle")).toBeVisible();
+  await expect(page.getByText("Removed Kettle", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Account" }).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/auth\/login/);

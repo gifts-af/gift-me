@@ -171,12 +171,13 @@ A button in the server's HTML shows before its click handler is attached, and a 
 My list saves as you go too, with no Save button and no "Unsaved changes" bar. What a signed-in list owner sees:
 
 - **Adding a gift** saves straight away.
-- **Removing a gift** hides it and shows "Removed {gift} · Undo" in a bar at the bottom for 6 seconds (`UNDO_MS`). Undo puts it back in its place. The remove is only sent when the 6 seconds are up, so Undo never reaches the server and a friend's claim on that gift is never lost. It's sent sooner when a second gift is removed (Undo moves to the second), when the page is left in the app, when the tab is hidden or closed, and when Sign out is picked (Sign out waits for it).
+- **Removing a gift** hides it and shows "Removed {gift} · Undo" in a bar at the bottom for 6 seconds (`UNDO_MS`). Focus moves to Undo and a screen reader hears "Removed {gift}. Undo available." The 6 seconds wait while Undo has focus or the pointer is over the bar. Undo puts the gift back in its place and focus on the heading. The remove is only sent when the 6 seconds are up, so Undo never reaches the server and a friend's claim on that gift is never lost. It's sent sooner when a second gift is removed (Undo moves to the second), when the page is left in the app, when the tab is hidden or closed (the bar goes then), and when Sign out is picked (Sign out waits for it, up to 3 seconds).
 - **An add during the 6 seconds** saves the gifts on screen plus the held one, in its old place.
 - **One save at a time**; a change made during a save goes in the next one.
 - **Under the title**, next to the count and total: "Saved", "Saving…", or "Couldn't save" with "Try again". A failed save keeps every gift on screen.
 - **Changed somewhere else:** if another tab or device saved first, this tab's save is refused. It loads the latest list, puts its own new gifts and any held remove back on top, saves once more, and says "Your list changed somewhere else. We've loaded the latest." If that's refused too, it shows "Couldn't save".
-- **Leaving:** the browser warns before closing the tab only while a save is on its way or has failed. In-app links and Sign out ask only after a failed save.
+- **Leaving:** the browser warns before closing the tab only while a save is on its way or has failed, including one started as the page was left in the app. In-app links and Sign out ask only after a failed save.
+- **Back to a page the browser kept** (back/forward cache): the page shows the list as it was. Its next save is refused as stale and merged like any other, with the notice. Accepted rather than reloading it **[Claude's call]**.
 - **Gifts carried over from before signing in** save themselves when the list opens.
 - **Guests** are unchanged: there's nowhere to save to, a remove is immediate, and they're warned before leaving with gifts on the list.
 

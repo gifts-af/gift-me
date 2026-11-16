@@ -132,7 +132,8 @@ describe.skipIf(!dbUp)("saving My list with its version", () => {
 
     const novel = first.items.find((g) => g.name === "Novel")!.id;
     const result = await removeGifts(me.db, me.id, { listId: first.listId, version: first.version, removeIds: [novel] });
-    expect(result).toEqual({ outcome: "saved", behind: true });
+    expect(result).toEqual({ outcome: "saved", behind: true, version: expect.any(String) });
+    expect((await getMyList())?.list?.version).toBe(result.outcome === "saved" ? result.version : null);
     expect((await getMyList())?.items.map((g) => g.name)).toEqual(["Kettle", "Mug", "Scarf"]);
   });
 

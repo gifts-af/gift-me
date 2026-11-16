@@ -227,20 +227,23 @@ Vercel's instant rollback brings back the old budget section, which can't show o
 
 ## My list saving (ALL-127)
 
-My list saves each change as it's made, through `lists.save_list_checked`, which refuses a save made from an out-of-date version (T74; behaviour in `design/ui.md` > Editing and saving > My list).
+My list saves each change as it's made, through `lists.save_list_checked`, which refuses a save made from an out-of-date version and returns the gifts it wrote with the new version (T74; behaviour in `design/ui.md` > Editing and saving > My list).
 
-**The close route, `POST /api/lists/save-on-close`.** When a tab closes with a remove still held for Undo, the page posts `{ listId, version, removeIds }` here with `fetch(…, { keepalive: true })`. The route needs a signed-in user, a same-origin `Origin` header and a JSON body with exactly those three fields (ids are uuids, at most 500). It reads the list, drops those gifts and saves the rest through the checked path. It answers 204 when saved, 404 when the list isn't the caller's, 409 when two saves in a row were refused, and 400, 401, 403, 413 or 415 for a bad request. It isn't `/api/keepalive`, which is the daily Supabase ping.
+**Ship order:** the migration (`20261116150000_save_list_checked.sql`, with its pgTAP tests, the regenerated types and the e2e seed) ships as its own PR first, and its CI `migrate` job must finish green on dev and prod before the code PR merges. On its own it changes nothing: no deployed code calls the new function.
 
-**Seeing it work on production (E9):** two events, ids only.
+**The close route, `POST /api/lists/save-on-close`.** When a tab is hidden or closes with a remove not yet saved, the page posts `{ listId, version, removeIds }` here with `fetch(…, { keepalive: true })`. The proxy lets the path through signed out (`lib/supabase/proxy.ts`), so the route checks everything itself: a signed-in user (401), a same-origin `Origin` header (403), a JSON content type (415), a body under 64 KiB by its `Content-Length` and its text (413), and exactly those three fields, with uuid ids, at most 500 (400). It reads the list, drops those gifts and saves the rest through the checked path. It answers 200 with `{ version, behind }` when saved, so a tab that was only hidden carries on from that version; 404 when the list isn't the caller's; 409 when two saves in a row were refused; 500 otherwise. It isn't `/api/keepalive`, which is the daily Supabase ping.
+
+**Seeing it work on production (E9):** events, ids only.
 
 | Event | Means |
 |---|---|
 | `list_save_stale` | A save was refused because the list changed in another tab or device; the tab got the latest and saved again. A few are normal. |
-| `list_close_sent` | A closing tab sent a held remove. `outcome` is `saved`, `stale`, `not_found` or `error`; `behind` says the tab's version was already out of date. Anything but `saved`, repeating, means removes made just before closing a tab are coming back. |
+| `list_close_sent` | A hidden or closing tab sent its removes. `outcome` is `saved`, `stale`, `not_found` or `error`; `behind` says the tab's version was already out of date. Anything but `saved`, repeating, means removes made just before leaving a tab are coming back. |
+| `list_save_failed`, `list_read_failed` | A save or a read of a list failed in the database (`code` is the Postgres or PostgREST code). The person sees "Couldn't save" or a load error. Repeating means My list is down. |
 
 **Rolling back:** Vercel's instant rollback brings back the old Save button, which still saves through the untouched `lists.save_list`. Nothing in the database needs undoing.
 
-**Cleanup still to do:** once this has been live without a rollback, a later migration drops `lists.save_list` (E7, expand then contract), along with the tests in `supabase/tests/lists.test.sql` that call it or pin it as untouched. No app code calls it any more.
+**Cleanup still to do:** once this has been live without a rollback, a later migration drops `lists.save_list` (E7, expand then contract). Before it does, these must stop calling it: the tests in `supabase/tests/lists.test.sql` that call it or pin it as untouched, and `secondUserShareLink` in `apps/web/e2e/people.spec.ts`, which makes a list for a shared test user on every run (with `save_list_checked` it would need to reuse that user's list, so it was left for the cleanup). No app code calls it any more.
 
 ## Inbound notes (ALL-31)
 

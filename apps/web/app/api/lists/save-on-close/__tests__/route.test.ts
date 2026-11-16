@@ -32,14 +32,16 @@ function post(
 let log: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   getClaims.mockReset().mockResolvedValue({ data: { claims: { sub: "user-1" } } });
-  removeGifts.mockReset().mockResolvedValue({ outcome: "saved", behind: false });
+  removeGifts.mockReset().mockResolvedValue({ outcome: "saved", behind: false, version: "v2" });
   log = vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
 describe("POST /api/lists/save-on-close", () => {
   it("removes the named gifts for the signed-in user and logs it by id", async () => {
     const res = await POST(post());
-    expect(res.status).toBe(204);
+    // A tab that's only hidden, not closed, carries on from this version.
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ version: "v2", behind: false });
     expect(removeGifts).toHaveBeenCalledWith(expect.anything(), "user-1", body);
     const event = JSON.parse(String(log.mock.calls.at(-1)?.[0]));
     expect(event).toEqual({
@@ -71,6 +73,18 @@ describe("POST /api/lists/save-on-close", () => {
     const res = await POST(post(body, { origin: "https://giftsaf.test", host: "giftsaf.test", "content-type": "text/plain" }));
     expect(res.status).toBe(415);
     expect(removeGifts).not.toHaveBeenCalled();
+  });
+
+  it("refuses a body over 64 KiB by its length, before reading it", async () => {
+    const request = post(body, {
+      origin: "https://giftsaf.test",
+      host: "giftsaf.test",
+      "content-type": "application/json",
+      "content-length": String(64 * 1024 + 1),
+    });
+    const text = vi.spyOn(request, "text");
+    expect((await POST(request)).status).toBe(413);
+    expect(text).not.toHaveBeenCalled();
   });
 
   it.each([

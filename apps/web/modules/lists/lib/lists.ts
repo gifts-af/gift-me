@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { logEvent } from "@/lib/log";
 import { createClient } from "@/lib/supabase/server";
 
 // The shape the gift components already work with (see modules/lists/components).
@@ -74,7 +75,9 @@ export async function readList(
   const query = listId ? base.eq("id", listId) : base.order("created_at", { ascending: true }).limit(1);
   const { data, error } = await query.maybeSingle();
   if (error) {
-    console.error("loading the list failed", error);
+    // E6: ids and the code only; the message can quote the query.
+    const code = typeof error.code === "string" ? error.code : null;
+    logEvent("list_read_failed", { list_id: listId, code });
     return { ok: false };
   }
   if (!data) return { ok: true, list: null, items: [] };

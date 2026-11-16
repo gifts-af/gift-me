@@ -36,11 +36,16 @@ function isJson(request: Request): boolean {
   return type.split(";")[0].trim().toLowerCase() === "application/json";
 }
 
-const STATUS = { saved: 204, not_found: 404, stale: 409, error: 500 } as const;
+const STATUS = { not_found: 404, stale: 409, error: 500 } as const;
 
+// The proxy lets this path through signed out (lib/supabase/proxy.ts), so a
+// keepalive request gets a plain 401 here rather than a redirect to follow.
 export async function POST(request: Request) {
   if (!sameOrigin(request)) return new Response(null, { status: 403 });
   if (!isJson(request)) return new Response(null, { status: 415 });
+  if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY_CHARS) {
+    return new Response(null, { status: 413 });
+  }
 
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getClaims();
@@ -58,13 +63,16 @@ export async function POST(request: Request) {
   const parsed = CloseBody.safeParse(raw);
   if (!parsed.success) return new Response(null, { status: 400 });
 
-  const { outcome, behind } = await removeGifts(supabase, userId, parsed.data);
+  const result = await removeGifts(supabase, userId, parsed.data);
   logEvent("list_close_sent", {
     user_id: userId,
     list_id: parsed.data.listId,
     removed: parsed.data.removeIds.length,
-    behind,
-    outcome,
+    behind: result.behind,
+    outcome: result.outcome,
   });
-  return new Response(null, { status: STATUS[outcome] });
+  // A tab that was only hidden carries on from this version, unless it was
+  // already behind (then its next save is refused and merged as usual).
+  if (result.outcome === "saved") return Response.json({ version: result.version, behind: result.behind });
+  return new Response(null, { status: STATUS[result.outcome] });
 }
