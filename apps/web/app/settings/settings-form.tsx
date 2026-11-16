@@ -4,8 +4,8 @@ import { useActionState, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { SaveResult } from "@/modules/concierge";
 import { NativeSelect } from "@/components/ui/native-select";
+import type { SaveResult } from "@/modules/concierge";
 
 export type SettingsValues = { timezone: string | null; overBudgetPct: number };
 type Action = (previous: SaveResult | null, formData: FormData) => Promise<SaveResult>;

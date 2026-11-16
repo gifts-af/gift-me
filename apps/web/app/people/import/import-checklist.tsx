@@ -6,8 +6,8 @@ import { guessRelationship, RELATIONSHIPS, relationshipLabel, type GoogleContact
 import { PersonAvatar } from "@/components/person-avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { ImportResult } from "@/modules/concierge";
 import { NativeSelect } from "@/components/ui/native-select";
+import type { ImportResult } from "@/modules/concierge";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 

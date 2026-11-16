@@ -8,8 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { Profile, ProfileFact, SaveResult } from "@/modules/concierge";
 import { NativeSelect } from "@/components/ui/native-select";
+import type { Profile, ProfileFact, SaveResult } from "@/modules/concierge";
 
 // "What we know" on a person's page (ALL-26, C-7, D51): one list by category,
 // each fact with its source and a pencil that opens Save, Turn off and Delete.
