@@ -54,14 +54,14 @@ export {
   listPeople,
   removeAddress,
   saveAddress,
-  setBudget,
+  saveBudgets,
   setOccasionEnabled,
   setPhoto,
   unlinkList,
   updatePerson,
 } from "./people/people";
 export type { AddResult, ImportResult, PersonAddress, PersonCard, PersonDetail } from "./people/people";
-export { parseAddressForm, parseBudget, parseImportRows, parsePersonForm, parseShareToken } from "./people/rules";
+export { parseAddressForm, parseBudget, parseBudgetForm, parseImportRows, parsePersonForm, parseShareToken } from "./people/rules";
 // Saved gifts for someone, private to the buyer (ALL-93).
 export { listSavedGifts, removeSavedGift, saveGift } from "./saved-gifts/saved-gifts";
 export { parseSavedGiftForm } from "./saved-gifts/rules";

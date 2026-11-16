@@ -65,8 +65,9 @@ export function setOccasionEnabled(id: string, kind: OccasionKind, enabled: bool
   return service.setOccasionEnabled(createSupabasePeopleStore(), id, kind, enabled);
 }
 
-export function setBudget(id: string, kind: OccasionKind, cents: number | null): Promise<SaveResult> {
-  return service.setBudget(createSupabasePeopleStore(), id, kind, cents);
+/** The Budget screen's one save (ALL-120). */
+export function saveBudgets(id: string, amounts: Record<string, number | null>): Promise<SaveResult> {
+  return service.saveBudgets(createSupabasePeopleStore(), logEvent, id, amounts);
 }
 
 export function linkList(id: string, token: string): Promise<SaveResult> {

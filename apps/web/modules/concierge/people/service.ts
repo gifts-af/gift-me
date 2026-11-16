@@ -4,6 +4,7 @@
 // live person (the database's row-level security says the same, but a
 // refused write must come back as a clear error, not a silent no-op).
 import {
+  BASE_BUDGET_KIND,
   checkAddress,
   isGooglePhotoUrl,
   nextOccasion,
@@ -53,15 +54,19 @@ export type PersonDetail = PersonCard & {
     enabled: boolean;
     date: CalendarDate;
     orderBy: { date: CalendarDate; fast: boolean } | null;
+    /** This occasion's own budget; null means it uses the base, then the default (ALL-120). */
     budgetCents: number | null;
   }[];
+  /** The person's base budget, for any occasion without its own (ALL-120). */
+  baseBudgetCents: number | null;
+  /** The caller's default for this person's relationship (budget_defaults), used when there's no base. */
+  defaultBudgetCents: number | null;
   address: PersonAddress;
 };
 
 export type AddResult = { ok: true; id: string } | { ok: false; error: string };
 
 // The largest value of the database's integer column: a true constant.
-const MAX_BUDGET_CENTS = 2147483647;
 
 export const NOT_FOUND = "That person wasn't found.";
 export const SESSION_ENDED = "Your session ended. Sign in again.";
@@ -118,9 +123,10 @@ export async function getPerson(store: PeopleStore, id: string, today: CalendarD
   if (!isUuid(id)) return null; // not an id we could have issued; skip the query
   const person = await store.person(id);
   if (!person) return null;
-  const [occasions, budgets, schedule, photos, stored, shared] = await Promise.all([
+  const [occasions, budgets, defaultBudgetCents, schedule, photos, stored, shared] = await Promise.all([
     store.occasions([id]),
     store.budgets([id]),
+    store.relationshipDefault(person.relationship),
     store.schedule(),
     store.signPhotos(person.photoPath ? [person.photoPath] : []),
     store.address(id),
@@ -152,6 +158,8 @@ export async function getPerson(store: PeopleStore, id: string, today: CalendarD
     birthday: monthDay(occasions.find((o) => o.kind === "birthday")),
     anniversary: monthDay(occasions.find((o) => o.kind === "anniversary")),
     occasions: rows,
+    baseBudgetCents: budgets.find((b) => b.kind === BASE_BUDGET_KIND)?.cents ?? null,
+    defaultBudgetCents,
     address: personAddress(stored, shared),
   };
 }
@@ -313,20 +321,17 @@ export function setOccasionEnabled(
   });
 }
 
-export function setBudget(
+/** The Budget screen's one save (ALL-120): the base and occasion amounts, all or nothing. */
+export async function saveBudgets(
   store: PeopleStore,
+  log: (event: string, fields: Record<string, string>) => void,
   id: string,
-  kind: OccasionKind,
-  cents: number | null,
+  amounts: Record<string, number | null>,
 ): Promise<SaveResult> {
-  if (cents !== null) {
-    if (!Number.isInteger(cents) || cents < 0) {
-      return Promise.resolve({ ok: false, error: "Enter an amount like 75 or 75.50." });
-    }
-    if (cents > MAX_BUDGET_CENTS) return Promise.resolve({ ok: false, error: "That amount is too large." });
-  }
-  return onOwnPerson(store, id, "saving a budget", async () => {
-    await store.upsertBudget(id, kind, cents);
+  const userId = await store.userId();
+  return onOwnPerson(store, id, "saving budgets", async () => {
+    await store.saveBudgets(id, amounts);
+    log("budgets.save", { user_id: userId ?? "", person_id: id });
     return { ok: true };
   });
 }

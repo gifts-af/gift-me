@@ -20,7 +20,6 @@ import {
   removeSavedGiftAction,
   saveAddressAction,
   saveGiftAction,
-  setBudgetAction,
   setFactActiveAction,
   setOccasionEnabledAction,
   setPhotoAction,
@@ -30,7 +29,7 @@ import {
 import { PersonForm } from "../person-form";
 import { PhotoPicker } from "../photo-picker";
 import { AddressSection } from "./address";
-import { Budgets } from "./budgets";
+import { BudgetRow } from "./budget-row";
 import { DeletePerson } from "./delete-person";
 import { ListLink } from "./list-link";
 import { Occasions } from "./occasions";
@@ -138,7 +137,12 @@ export async function PersonView({
       </section>
 
       <Occasions personId={person.id} occasions={person.occasions} action={setOccasionEnabledAction} />
-      <Budgets personId={person.id} occasions={person.occasions} action={setBudgetAction} />
+      <BudgetRow
+        personId={person.id}
+        baseCents={person.baseBudgetCents}
+        defaultCents={person.defaultBudgetCents}
+        occasions={person.occasions}
+      />
       <AddressSection
         personId={person.id}
         name={person.name}
