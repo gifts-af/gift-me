@@ -43,7 +43,7 @@ Don't change hosted systems during install: no `pnpm db:push:*`, no Supabase CLI
 | `design/` | This file, [technical design](technical-design.md) (approved 2026-10-17), [decisions log](decisions.md). Spike write-ups go in `design/spikes/`, look and feel in `design/ui.md` (mock-ups in `design/mockups/`), and ticket specs and build plans in `design/plans/` (start from [the template](plans/TEMPLATE.md)), such as [Zinc wallet connection and buying, ALL-32](plans/ALL-32-zinc-connection.md). | Complete |
 | `.claude/` | Shared Claude Code settings (turns on the Superpowers plugin; runs the local setup check at session start) | Done |
 | `apps/web/` | The one web app (Next.js). Products live in `modules/lists` and `modules/concierge`; see its [README](../apps/web/README.md) | Lists live; concierge from Wave 2 |
-| `apps/extension/` | Chrome capture extension: save what's on screen to a person. How to build and load it is in its [README](../apps/extension/README.md) | MVP built (ALL-22), loaded unpacked |
+| `apps/extension/` | Chrome capture extension: save what's on screen to a person. How to build and load it is in its [README](../apps/extension/README.md) | On the Chrome Web Store, unlisted (ALL-65) |
 | `packages/core/` | Pure shared logic (dates, deadlines, budgets) and database types | W1-5 |
 | `supabase/` | Database migrations and local Supabase settings (`config.toml`) | Lists tables today |
 | `scripts/` | Repo tooling, such as `dev-check.mjs` (the local setup check) | Done |
@@ -78,6 +78,7 @@ pnpm db:push:dev       # apply new migrations to dev (CI does this on every merg
 pnpm db:push:prod      # apply new migrations to prod (same; add --dry-run to see what would run)
 pnpm live-check        # signed-in checks on giftsaf.com with the shared test account (needs `pnpm supabase login`; see Production test account)
 pnpm gallery          # screenshot the main screens (phone, phone dark, desktop) and every email into apps/web/gallery/index.html, for reviewing by eye. Needs `pnpm supabase start`; builds like the browser tests (E2E_PORT works too)
+pnpm extension:package # build the prod extension and zip it for the Chrome Web Store (apps/extension/README.md > Release a new version)
 pnpm ai:eval           # check capture extraction against the fixtures with the real model (~10¢, needs AI_GATEWAY_API_KEY; not in CI)
 ```
 

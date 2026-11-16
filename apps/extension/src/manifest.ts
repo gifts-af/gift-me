@@ -1,3 +1,7 @@
+export const ICON_SIZES = [16, 32, 48, 128] as const;
+
+const icons = Object.fromEntries(ICON_SIZES.map((size) => [String(size), `icons/icon-${size}.png`]));
+
 export type ManifestEnv = { appOrigin: string; key: string; name: string };
 
 // The extension asks Chrome for three permissions and nothing else: no host
@@ -10,8 +14,9 @@ export function buildManifest(env: ManifestEnv) {
     description: "Save what's on screen to a person in GiftsAF.",
     version: "0.1.0",
     key: env.key,
+    icons,
     permissions: ["activeTab", "scripting", "storage"],
-    action: { default_title: "Capture for…", default_popup: "src/popup/index.html" },
+    action: { default_title: "Capture for…", default_popup: "src/popup/index.html", default_icon: icons },
     background: { service_worker: "background.js", type: "module" as const },
     externally_connectable: { matches: [`${env.appOrigin}/*`] },
   } satisfies chrome.runtime.ManifestV3;

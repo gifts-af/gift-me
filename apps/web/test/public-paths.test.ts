@@ -26,6 +26,8 @@ describe("isPublicPath", () => {
     "/welcome",
     "/tour",
     "/tour/list",
+    // The privacy policy the Chrome Web Store listing links to (ALL-65).
+    "/privacy",
     // The logo image at the top of every email (ALL-71).
     "/email-logo.png",
     "/request-access",

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ExtensionLink } from "@/components/extension-link";
 import type { Readiness } from "@/modules/concierge";
 
 // One readiness line with its meter and one next step (ALL-26, C-6). The bar is
@@ -30,7 +31,7 @@ export function ReadinessBanner({ personId, name, readiness }: { personId: strin
         </p>
       )}
       {step.kind === "capture" && (
-        <p className="text-[13px] text-muted-foreground">Capture a page about {name} with the extension to learn more.</p>
+        <p className="text-[13px] text-muted-foreground">Capture a page about {name} with <ExtensionLink>the extension</ExtensionLink> to learn more.</p>
       )}
     </section>
   );
