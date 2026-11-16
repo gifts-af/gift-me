@@ -148,7 +148,7 @@ export const ACTIONS: Record<ActionName, Action> = {
   },
 
   // The "Add an address" button in needs_address emails (ALL-81): like
-  // open_person, but the done page opens the person's address form.
+  // open_person, but the done page opens the person's address screen with its form.
   add_address: {
     confirm: {
       title: "Add their address",
@@ -164,7 +164,9 @@ export const ACTIONS: Record<ActionName, Action> = {
     },
     async next({ roundId }, store) {
       const personId = roundId ? await store.roundPersonId(roundId) : null;
-      return personId ? `/people/${personId}?address=open#address` : null;
+      // The address screen, form open (ALL-127). Links already sent use the
+      // person's page with ?address=open, which redirects here.
+      return personId ? `/people/${personId}/address?open=1` : null;
     },
   },
 

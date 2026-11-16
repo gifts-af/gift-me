@@ -19,6 +19,11 @@ function errorMessage(e: unknown): string {
   return e instanceof Error ? e.message : typeof e === "object" && e !== null && "message" in e ? String(e.message) : "";
 }
 
+/** How many gifts are saved for someone, for the row on their page (ALL-127). */
+export async function countSavedGifts(store: SavedGiftsStore, personId: string): Promise<number> {
+  return isUuid(personId) ? store.count(personId) : 0;
+}
+
 export async function listSavedGifts(store: SavedGiftsStore, personId: string): Promise<SavedGift[]> {
   if (!isUuid(personId)) return [];
   const rows = await store.list(personId);

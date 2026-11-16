@@ -234,6 +234,7 @@ describe("confirmActionLink", () => {
     });
   });
 
+  // The address screen of its own since ALL-127; the old ?address=open link redirects there.
   it("add_address: done page opens the person's address form (ALL-81 AC-8)", async () => {
     const store = await storeWithLink({ action: "add_address" });
     store.links[0].roundId = "round-1";
@@ -242,7 +243,7 @@ describe("confirmActionLink", () => {
     expect(await confirmActionLink(TOKEN, OWNER, { store, now: NOW })).toEqual({
       state: "done",
       done: ACTIONS.add_address.done,
-      next: "/people/person-1?address=open#address",
+      next: "/people/person-1/address?open=1",
     });
   });
 

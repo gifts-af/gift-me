@@ -198,6 +198,33 @@ test("a round starts without an address, resumes when one is saved, and is skipp
   expect(asked).toHaveLength(1);
   expect(asked[0].sent_at).not.toBeNull();
 
+  // 1b. About (ALL-127 AC-2, AC-5): renaming her and moving her birthday by a day
+  // leaves the waiting round alone: same status, same occasion.
+  const roundOccasion = async () => {
+    const res = await fetch(`${supabase.url}/rest/v1/gift_rounds?select=status,occasion_id&id=eq.${round.id}`, { headers: concierge });
+    return ((await res.json()) as { status: string; occasion_id: string }[])[0];
+  };
+  const before = await roundOccasion();
+  await signIn(page);
+  await page.goto(`/people/${personId}/about`);
+  const name = page.getByRole("textbox", { name: "Name" });
+  await expect(name).toBeEnabled();
+  await name.fill(`${PERSON} Renamed`);
+  await name.press("Tab");
+  await expect(page.getByTestId("name-field").getByRole("status")).toHaveText("Saved");
+  const moved = new Date(birthday.getTime() + DAY_MS);
+  const dates = page.getByRole("group", { name: "Birthday" });
+  await dates.getByRole("combobox", { name: "Birthday month" }).selectOption(String(moved.getUTCMonth() + 1));
+  await dates.getByRole("spinbutton", { name: "Birthday day" }).fill(String(moved.getUTCDate()));
+  await name.click();
+  await expect(dates.getByRole("status")).toHaveText("Saved");
+  expect(await roundOccasion()).toEqual({ status: "needs_address", occasion_id: before.occasion_id });
+  // Her name back, so the clean-up by name finds her.
+  await name.fill(PERSON);
+  await name.press("Tab");
+  await expect(page.getByTestId("name-field").getByRole("status")).toHaveText("Saved");
+  expect(await roundOccasion()).toEqual(before);
+
   // 2. The email's "Add an address" button (an add_address link, stored the way
   // the app stores one) lands on the form, which shows what needs fixing
   // (ALL-81 AC-8, AC-10). Saving it resumes the round (AC-7).
@@ -215,11 +242,11 @@ test("a round starts without an address, resumes when one is saved, and is skipp
   });
   if (!link.ok) throw new Error(`Couldn't store the link: ${link.status} ${await link.text()}`);
 
-  await signIn(page);
   await page.goto(`/a/${linkToken}`);
   await page.getByRole("button", { name: "Add an address", exact: true }).click();
   await page.getByRole("link", { name: "Open their page" }).click();
-  await expect(page).toHaveURL(new RegExp(`/people/${personId}\\?address=open`));
+  // The address screen, with its form open (ALL-127). Older links are covered in people.spec.ts (AC-19).
+  await expect(page).toHaveURL(new RegExp(`/people/${personId}/address\\?open=1`));
 
   const section = page.locator("#address");
   await expect(section.getByLabel("Street address")).toHaveValue("1 Test Street");
@@ -269,7 +296,7 @@ async function personFor(buyerId: string): Promise<string> {
 }
 
 async function linkOnPage(page: Page, personId: string, base: string, token: string) {
-  await page.goto(`/people/${personId}`);
+  await page.goto(`/people/${personId}/list`);
   const linkField = page.getByLabel("Their list link");
   await linkField.fill(`${base}/share/${token}`);
   await expect.poll(() => linkField.evaluate((el) => Object.keys(el).some((k) => k.startsWith("__reactProps")))).toBe(true);

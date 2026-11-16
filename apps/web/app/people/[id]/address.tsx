@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { splitRecipientName, type AddressDraft, type AddressField } from "@gifts-af/core";
 import { AddressForm, type AddressValues } from "@/components/address/address-form";
 import { Button } from "@/components/ui/button";
@@ -19,8 +19,8 @@ function startValues(name: string, address: PersonAddress): AddressValues {
 }
 
 /**
- * A person's shipping address (ALL-81): below Budgets, optional until a round
- * needs it. Opens straight away from the "Add an address" email. A list
+ * A person's shipping address (ALL-81), on its own screen (ALL-127), optional
+ * until a round needs it. Opens straight away from the "Add an address" email. A list
  * owner's shared address is read-only and shows only city and state.
  */
 export function AddressSection({
@@ -47,6 +47,10 @@ export function AddressSection({
   useEffect(() => {
     if (startOpen) section.current?.scrollIntoView?.({ block: "start" });
   }, [startOpen]);
+
+  // Next keeps visited screens in the page, hidden (ALL-127): close the form
+  // on leaving, so coming back shows the saved address.
+  useLayoutEffect(() => () => setEditing(false), []);
 
   return (
     <section

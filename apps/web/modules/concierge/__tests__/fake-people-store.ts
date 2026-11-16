@@ -4,6 +4,7 @@ import type {
   NewPerson,
   OccasionRow,
   PeopleStore,
+  PersonFields,
   PersonRow,
   ScheduleDays,
   StoredAddress,
@@ -134,10 +135,10 @@ export class FakePeopleStore implements PeopleStore {
     return true;
   }
 
-  async updatePerson(id: string, p: { name: string; relationship: string; birthYear: number | null }) {
-    this.write("updatePerson", id);
+  async updatePersonFields(id: string, p: PersonFields) {
+    this.write("updatePersonFields", id, JSON.stringify(p));
     const row = this.mine(id);
-    if (!row || !this.changed("updatePerson")) return false;
+    if (!row || !this.changed("updatePersonFields")) return false;
     Object.assign(row, p);
     return true;
   }

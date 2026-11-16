@@ -1,7 +1,10 @@
 import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 
-/** One row of the Settings list (ALL-115): label left, value muted right, chevron. */
+/**
+ * One row of the Settings list (ALL-115): label left, value muted right,
+ * chevron. A person's page uses it too (ALL-120, ALL-127).
+ */
 export function SettingsRow({ href, label, value }: { href: string; label: string; value: string }) {
   return (
     <Link href={href} className="flex min-h-11 items-center justify-between gap-3 px-4">

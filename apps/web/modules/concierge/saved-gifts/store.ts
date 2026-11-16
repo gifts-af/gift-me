@@ -21,6 +21,8 @@ export interface SavedGiftsStore {
   userId(): Promise<string | null>;
   /** Newest first. */
   list(personId: string): Promise<SavedGiftRow[]>;
+  /** How many, without loading them. */
+  count(personId: string): Promise<number>;
   insert(gift: NewSavedGift): Promise<void>;
   remove(personId: string, giftId: string): Promise<void>;
 }
@@ -41,6 +43,11 @@ export function createSupabaseSavedGiftsStore(): SavedGiftsStore {
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data ?? [];
+    },
+    async count(personId) {
+      const { count, error } = await (await table()).select("id", { count: "exact", head: true }).eq("person_id", personId);
+      if (error) throw error;
+      return count ?? 0;
     },
     async insert(gift) {
       const { error } = await (await table()).insert(gift);
