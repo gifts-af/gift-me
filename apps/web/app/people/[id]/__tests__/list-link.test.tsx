@@ -47,6 +47,11 @@ describe("ListLink", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(error);
   });
 
+  it("says a list isn't needed to buy for them (ALL-93)", () => {
+    setup(false);
+    expect(screen.getByText("You don't need their list to buy for them.")).toBeInTheDocument();
+  });
+
   it("offers Unlink, not the paste field, once linked", async () => {
     const { unlink } = setup(true);
     expect(screen.queryByLabelText("Their list link")).not.toBeInTheDocument();

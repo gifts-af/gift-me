@@ -5,7 +5,8 @@ const getPerson = vi.hoisted(() => vi.fn());
 const getProfile = vi.hoisted(() =>
   vi.fn(async (...args: unknown[]) => (void args, { groups: [], off: [], unread: 0, openCount: 0, readiness: null as unknown })),
 );
-vi.mock("@/modules/concierge", () => ({ getPerson, getProfile }));
+vi.mock("@/modules/concierge", () => ({ getPerson, getProfile, listSavedGifts: async () => [] }));
+vi.mock("@/modules/lists", () => ({ storeName: () => "Amazon" }));
 vi.mock("@/lib/today", () => ({ todayForRequest: async () => "2026-11-01" }));
 vi.mock("@/lib/app-settings", () => ({ appSettingInt: async () => 1000 }));
 vi.mock("@/lib/supabase/server", () => ({
@@ -18,6 +19,7 @@ vi.mock("../../actions", () => {
     deletePersonAction: action, linkListAction: action, setBudgetAction: action, setOccasionEnabledAction: action,
     setPhotoAction: action, unlinkListAction: action, updatePersonAction: action, editFactAction: action, setFactActiveAction: action, deleteFactAction: action,
     readCapturesAction: action, saveAddressAction: action, removeAddressAction: action,
+    readGiftLinkAction: async () => ({ ok: false, error: "x" }), saveGiftAction: action, removeSavedGiftAction: action,
   };
 });
 const notFound = vi.hoisted(() =>
@@ -61,7 +63,7 @@ describe("PersonView", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Dad" })).toBeInTheDocument();
     expect(screen.getByText("No list of their own, so we suggest ideas")).toBeInTheDocument();
     const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
-    expect(headings).toEqual(["What we know", "Edit", "Occasions", "Your budget", "Shipping address", "Link to their list"]);
+    expect(headings).toEqual(["What we know", "Edit", "Occasions", "Your budget", "Shipping address", "Saved gifts", "Link to their list"]);
     expect(getProfile.mock.calls[0].slice(1)).toEqual(["p1", false]);
     expect(screen.getByRole("button", { name: "Delete Dad" })).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();

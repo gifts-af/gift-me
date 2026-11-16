@@ -68,6 +68,7 @@ export function ListLink({
             void run(linkAction, ["link", value]);
           }}
         >
+          <p className="text-[13px] text-muted-foreground">You don&apos;t need their list to buy for them.</p>
           <Label htmlFor="list-link">Their list link</Label>
           <div className="flex items-center gap-2">
             <Input
