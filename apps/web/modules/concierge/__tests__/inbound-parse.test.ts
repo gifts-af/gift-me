@@ -118,6 +118,11 @@ describe("matchPeople", () => {
     const people = [p("1", "Mom"), p("2", "Dad")];
     expect(matchPeople("Dad", "Mom and Dad and Mom", people)).toEqual(["1", "2"]);
   });
+  it("prefers a full name over a shared first name", () => {
+    const people = [p("1", "Bob Smith"), p("2", "Bob Jones")];
+    expect(matchPeople("", "Bob Smith wants a kayak", people)).toEqual(["1"]);
+    expect(matchPeople("", "Bob wants a kayak", people)).toEqual(["1", "2"]);
+  });
   it("returns [] when nothing matches", () => {
     expect(matchPeople("hi", "a fly rod", [p("1", "Dad")])).toEqual([]);
   });

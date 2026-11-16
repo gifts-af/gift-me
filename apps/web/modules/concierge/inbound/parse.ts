@@ -78,20 +78,21 @@ function hasName(text: string, name: string): boolean {
   return false;
 }
 
+/**
+ * The people a note names, in people order. Full names first: only when no full name matches
+ * do first names count, so "Bob Smith" doesn't also pick Bob Jones.
+ */
 export function matchPeople(
   subject: string,
   body: string,
   people: { id: string; name: string }[],
 ): string[] {
   const text = `${subject}\n${body}`;
-  const ids: string[] = [];
-  for (const person of people) {
-    const first = person.name.trim().split(/\s+/)[0] ?? "";
-    if ((hasName(text, person.name) || hasName(text, first)) && !ids.includes(person.id)) {
-      ids.push(person.id);
-    }
-  }
-  return ids;
+  const matching = (nameOf: (p: { name: string }) => string) => [
+    ...new Set(people.filter((p) => hasName(text, nameOf(p))).map((p) => p.id)),
+  ];
+  const full = matching((p) => p.name);
+  return full.length > 0 ? full : matching((p) => p.name.trim().split(/\s+/)[0] ?? "");
 }
 
 /** Phrases that mean "don't act on this". Kept short on purpose; review here. */
