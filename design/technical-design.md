@@ -151,7 +151,7 @@ All tables have `id uuid`, `created_at`, and `updated_at`. Accounts (`profiles`)
 | `reactions` | round_id, rating (loved, liked, meh, returned), note, source (email, web) | D-2 |
 | `notifications` | user_id, round_id, kind, channel, sent_at, provider_message_id, error | Audit trail plus reminder escalation state. Records delivery; the link token lives in `action_links` (ALL-23). |
 | `action_links` | user_id, round_id (nullable), notification_id, action, token_hash (unique), expires_at, used_at | One row per emailed button (ALL-23). Only the SHA-256 hash of the token is stored. Server-only: no policies and no grants for signed-in users. Generic on purpose, so scan-to-gift and ALL-49 can reuse it (T38). |
-| `inbound_messages` | user_id, from, subject, body, attachments, matched_person_id, status | N-2, C-5 |
+| `inbound_messages` | user_id, subject, body, image_path, image_type, matched_person_id, status (`asking` or `filed`), capture_id | N-2, C-5. Only notes waiting on "Who is this about?" (ALL-31); subject and body are cleared once filed or when the buttons expire |
 | `app_settings` | key, value (jsonb), updated_at | App-wide settings that change without a deploy (T23): `zinc_order_fee_cents` and the §4.1 schedule timings (`planning_delivery_days`, `safety_buffer_days`, `round_lead_days`, `reminder_1_after_heads_up_days`, `reminder_2_before_deadline_days`, `final_notice_before_deadline_days`, `fastest_days_to_arrive`). Not user-owned: only the server can read it, and the owner edits it. |
 
 Gift history (D-3) is a view over `gift_rounds`, `gift_ideas`, `orders`, and `reactions`.
