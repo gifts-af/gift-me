@@ -34,6 +34,35 @@ export function stripQuoted(text: string): string {
   return kept.join("\n").trim();
 }
 
+const FORWARD_MARKER = /^-{2,}\s*(Forwarded message|Original Message)\s*-{2,}$/i;
+const FORWARD_HEADER = /^(From|To|Cc|Bcc|Sent|Date|Subject):/i;
+const EMAIL_ADDRESS = /[\p{L}\p{N}._%+'-]+@[\p{L}\p{N}-]+(\.[\p{L}\p{N}-]+)+/giu;
+
+/**
+ * Keeps other people's details out of the saved note and the AI (T42): drops the header lines
+ * (From:, To:, Cc:, Bcc:, Sent:, Date:, Subject:) right after a "Forwarded message" or
+ * "Original Message" line, and turns every email address left in the text into "[email]".
+ */
+export function redactForwardHeaders(text: string): string {
+  const kept: string[] = [];
+  let inHeaders = false;
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (FORWARD_MARKER.test(trimmed)) {
+      inHeaders = true;
+      kept.push(line);
+      continue;
+    }
+    if (inHeaders) {
+      if (FORWARD_HEADER.test(trimmed)) continue;
+      // Blank lines before the headers stay; the first other line ends them.
+      if (trimmed !== "") inHeaders = false;
+    }
+    kept.push(line);
+  }
+  return kept.join("\n").replace(EMAIL_ADDRESS, "[email]");
+}
+
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /** Whole-word match, case-insensitive except the first letter must be a capital in the text. */

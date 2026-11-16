@@ -8,7 +8,15 @@ import { processCapture } from "../capture/extract";
 import type { CaptureStore } from "../capture/store";
 import type { LinkSpec, NotifyDeps, NotifyInput } from "../notify/notify";
 import type { NotificationKind } from "../notify/templates";
-import { firstImage, isAutoReply, looksLikeCancel, matchPeople, senderVerified, stripQuoted } from "./parse";
+import {
+  firstImage,
+  isAutoReply,
+  looksLikeCancel,
+  matchPeople,
+  redactForwardHeaders,
+  senderVerified,
+  stripQuoted,
+} from "./parse";
 import { sendInboundReply } from "./reply";
 import type { InboundSettings, InboundStore } from "./store";
 
@@ -100,7 +108,8 @@ async function accept(ctx: Ctx, email: ReceivedEmail): Promise<InboundOutcome> {
   const captures = deps.captureStore(userId);
   const limits = await captures.limits();
   const subject = email.subject.trim();
-  const text = stripQuoted(email.text).slice(0, limits.textMaxChars);
+  // Saved for both filing and asking, and later read by the AI: no forwarded headers or addresses.
+  const text = redactForwardHeaders(stripQuoted(email.text)).slice(0, limits.textMaxChars);
   const image = await loadImage(ctx, email.attachments, limits.screenshotMaxBytes);
 
   let personId = email.inReplyTo ? await personForReply(ctx, email.inReplyTo) : null;

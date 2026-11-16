@@ -222,6 +222,8 @@ describe("handleInbound: filing", () => {
     expect(row).toMatchObject({ personId: DAD, screenshotType: "image/png" });
     expect(row.screenshotPath).toMatch(/\.png$/);
     expect(row.text).toContain("The rod is back.");
+    expect(row.text).not.toContain("shop@example.com");
+    expect(row.text).not.toMatch(/^From:/m);
   });
 
   it("cuts the text to the capture limit", async () => {
@@ -355,6 +357,12 @@ describe("handleInbound: asking", () => {
     expect(sent[0].text).toContain("Someone else");
     expect(sent[0].text).toContain("https://giftsaf.test/people");
     expect(sent[0].text).not.toContain("/a/");
+  });
+
+  it("saves the asking body without forwarded headers or addresses (T42)", async () => {
+    const text = ["a fly rod", "---------- Forwarded message ----------", "From: shop@example.com", "To: me@example.com", "In stock, ask help@shop.example"].join("\n");
+    expect(await receive("e1", email({ text }))).toBe("asking");
+    expect(store.asking[0].body).toBe(["a fly rod", "---------- Forwarded message ----------", "In stock, ask [email]"].join("\n"));
   });
 
   it("cuts the asking body to the capture limit", async () => {

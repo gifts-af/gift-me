@@ -5,6 +5,7 @@ import {
   isAutoReply,
   looksLikeCancel,
   matchPeople,
+  redactForwardHeaders,
   senderVerified,
   stripQuoted,
 } from "../inbound/parse";
@@ -33,6 +34,49 @@ describe("stripQuoted", () => {
   it("keeps a forwarded message", () => {
     const text = "Idea for Mom\n---------- Forwarded message ----------\nFrom: Shop\nA nice scarf";
     expect(stripQuoted(text)).toBe(text);
+  });
+});
+
+describe("redactForwardHeaders (T42)", () => {
+  it("drops the header lines of a Gmail forward and keeps the rest", () => {
+    const text = [
+      "For Dad",
+      "",
+      "---------- Forwarded message ----------",
+      "From: Fly Shop <news@flyshop.example>",
+      "Date: Mon, Nov 16, 2026 at 9:00 AM",
+      "Subject: Back in stock",
+      "To: <me@example.com>",
+      "Cc: Jim Smith <jim@example.org>",
+      "",
+      "The rod is back. From: is a word here.",
+    ].join("\n");
+    expect(redactForwardHeaders(text)).toBe(
+      ["For Dad", "", "---------- Forwarded message ----------", "", "The rod is back. From: is a word here."].join("\n"),
+    );
+  });
+
+  it("drops the header lines of an Outlook forward, including Sent and Bcc", () => {
+    const text = ["Idea", "-----Original Message-----", "From: Shop", "Sent: Monday", "To: Me", "Bcc: Someone", "Subject: Sale", "Scarves on sale"].join("\r\n");
+    expect(redactForwardHeaders(text)).toBe(["Idea", "-----Original Message-----", "Scarves on sale"].join("\n"));
+  });
+
+  it("keeps header-like lines outside a forwarded block", () => {
+    const text = ["To: Mom", "Subject: her birthday"].join("\n");
+    expect(redactForwardHeaders(text)).toBe(text);
+  });
+
+  it("only drops the headers right after the marker, not later lines", () => {
+    const text = ["---------- Forwarded message ----------", "From: Shop", "", "Hello", "Date: Friday works"].join("\n");
+    expect(redactForwardHeaders(text)).toBe(
+      ["---------- Forwarded message ----------", "", "Hello", "Date: Friday works"].join("\n"),
+    );
+  });
+
+  it("redacts every email address in the text", () => {
+    expect(redactForwardHeaders("Ask jim.o'neil+gifts@mail.example.co.uk or <bob@x.io> about it")).toBe(
+      "Ask [email] or <[email]> about it",
+    );
   });
 });
 
