@@ -38,11 +38,12 @@ export default function PrivacyPage() {
 
         <Section title="The Chrome extension">
           <p>
-            The extension does nothing until you click <strong>Save</strong>. Then, for that one tab, it sends:
+            The extension reads nothing from a page until you click <strong>Save</strong>. Then, for that one tab, it
+            sends:
           </p>
           <ul className="list-disc pl-5">
             <li>the page&apos;s address and title</li>
-            <li>the text you can see on the page</li>
+            <li>the page&apos;s text</li>
             <li>a screenshot of what&apos;s on screen</li>
             <li>the person you picked, and any note you typed</li>
           </ul>
@@ -50,31 +51,46 @@ export default function PrivacyPage() {
             It never reads your browsing history, never runs in the background, and never looks at a page you
             didn&apos;t save. It asks Chrome for three permissions: <em>activeTab</em> (the tab you clicked on, only
             when you click), <em>scripting</em> (to read that tab&apos;s text) and <em>storage</em> (to keep you signed
-            in).
+            in). To show your people in the extension, it loads their names from your account.
           </p>
         </Section>
 
         <Section title="Where it's kept">
           <p>
-            Captures are saved to your {APP_NAME} account. Screenshots go in private storage that only your account
-            can open. Other people, including people whose lists you use, can&apos;t see your captures or notes. Our
-            data is hosted by Supabase and Vercel.
+            Captures are saved to your {APP_NAME} account. Screenshots go in private storage. Other people, including
+            people whose lists you use, can&apos;t see your captures or notes; we can, only to fix a problem.
           </p>
         </Section>
 
         <Section title="What the AI reads">
           <p>
-            To learn what someone might like, we send a capture&apos;s text and screenshot to an AI model (Anthropic&apos;s
-            Claude, through Vercel&apos;s AI Gateway). We tell it how you know the person, never their name. What it
-            finds shows on the person&apos;s page as AI suggestions, marked as such, and you can turn off or remove any
-            of them.
+            To learn what someone might like, we send a capture (its address, title, text, screenshot and your note) to
+            an AI model, along with what we already know about the person and how you know them. We don&apos;t send the
+            name we have on file for them, though the page or your note may contain it. What it finds shows on the
+            person&apos;s page as AI suggestions, marked as such, and you can turn off or remove any of them.
           </p>
+        </Section>
+
+        <Section title="Who else handles it">
+          <p>We share data only with the services that run {APP_NAME}, and only what each one needs:</p>
+          <ul className="list-disc pl-5">
+            <li>Supabase stores the data, and Vercel runs the site.</li>
+            <li>Anthropic&apos;s Claude, through Vercel&apos;s AI Gateway, reads captures and suggests gift ideas.</li>
+            <li>Resend sends our emails.</li>
+            <li>
+              When you approve a gift, Zinc and the store it&apos;s bought from get what&apos;s needed to ship it: the
+              recipient&apos;s name and address.
+            </li>
+          </ul>
         </Section>
 
         <Section title="Deleting it">
           <ul className="list-disc pl-5">
             <li>Remove any suggestion from the person&apos;s page.</li>
-            <li>Delete a person to remove them, and everything saved about them, from your account.</li>
+            <li>
+              Delete a person to remove them from your account. What was saved about them is hidden, not erased right
+              away.
+            </li>
             <li>
               Uninstall the extension, or sign out of it, to remove its sign-in from your browser.
             </li>

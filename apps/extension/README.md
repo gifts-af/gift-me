@@ -69,8 +69,8 @@ Keep these in step with the privacy page (`apps/web/app/privacy/page.tsx`, gifts
 - **Single purpose:** Save the page the user is looking at to a person in their GiftsAF account.
 - **Permission reasons:**
   - `activeTab`: read the tab the user clicked Save on, only at that moment.
-  - `scripting`: get that tab's visible text when the user clicks Save.
+  - `scripting`: get that tab's text when the user clicks Save, and check the tab can be captured when the popup opens.
   - `storage`: keep the user signed in to GiftsAF.
 - **Remote code:** No.
-- **Data collected:** Website content (page text and a screenshot, when the user clicks Save); Web history (the address of a page the user saves); Authentication information (the GiftsAF sign-in session). Nothing else.
+- **Data collected:** Website content (page text and a screenshot, when the user clicks Save); Web history (the address of a page the user saves); Authentication information (the GiftsAF sign-in session); Personally identifiable information (names of the people the user saves to, and the user's email in the session). Nothing else.
 - **Certifications:** not sold to third parties; not used for anything unrelated to the single purpose; not used for creditworthiness or lending.
