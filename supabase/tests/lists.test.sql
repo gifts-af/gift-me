@@ -2,7 +2,7 @@
 -- share links anyone can open, and claims (design §2.2).
 begin;
 \ir _helpers.psql
-select plan(44);
+select plan(45);
 
 select tests.create_user('a@example.com', 'Aaron') as a \gset
 select tests.create_user('b@example.com', 'Bee') as b \gset
@@ -177,6 +177,10 @@ select isnt(:'v2'::text, null,'the same moment, printed differently, is still th
 select throws_ok(
   format($q$select lists.save_list_checked(%L, null, '[]'::jsonb, 'not a time')$q$, :'list_id'),
   'GL409', null, 'a version that isn''t a time is refused as stale'
+);
+select throws_ok(
+  format($q$select lists.save_list_checked(%L, null, '[]'::jsonb, null)$q$, :'list_id'),
+  'GL409', null, 'a save to an existing list with no version is refused as stale, never unchecked'
 );
 select tests.act_as(:'b');
 select is(
