@@ -22,14 +22,55 @@ Settings live in `.env.development` and `.env.production` (all public values, so
 
 ## Extension ID
 
-The public key in `VITE_EXTENSION_KEY` pins the ID, so it is the same on every machine and in dev and prod:
+`VITE_EXTENSION_KEY` is the Chrome Web Store item's public key (dashboard > Package > View public key), so unpacked builds get the same ID as the store copy (ALL-65). One Chrome profile can't hold both; use a second profile to try a dev build next to the store one.
 
 ```
-nnakijeilmglcmjpdpagacbjannapafb
+bfagebaknjjgpopoieojpkogbifnijch
 ```
 
 The web app needs `NEXT_PUBLIC_EXTENSION_ID` set to this value, in `.env.local` for dev and in Vercel for all environments.
 
 ## Icons
 
-No icons yet. The web app draws its icons in code, so there is no PNG to reuse. Chrome shows a default letter tile until we add some.
+`public/icons/icon-{16,32,48,128}.png`, drawn from the GiftsAF tag logo (`apps/web/lib/logo-art.ts`). Rerun `pnpm --filter @gifts-af/extension icons` only when the logo changes.
+
+## Install for users
+
+People install it from the unlisted Chrome Web Store listing: <https://chromewebstore.google.com/detail/bfagebaknjjgpopoieojpkogbifnijch>. It doesn't show in search; anyone with the link can install it. The site links there ("Add to Chrome") on desktop Chrome when `NEXT_PUBLIC_EXTENSION_STORE_URL` is set. Store installs update themselves.
+
+## Release a new version
+
+Done as allensforever711 (admin, T7) in the [developer dashboard](https://chrome.google.com/webstore/devconsole).
+
+1. Raise `version` in `src/manifest.ts`. The store refuses a version it has already seen.
+2. `pnpm extension:package` from the repo root. This builds prod and writes `apps/extension/giftsaf-extension-<version>.zip`, with the manifest `key` removed because the store rejects it.
+3. Dashboard > GiftsAF > Package > Upload new package, then Submit for review. Review usually takes a few days.
+
+If a new version asks for a new permission, Chrome turns the extension off for everyone until they accept, and the privacy page and the listing's data-use answers must be updated first.
+
+## Store listing
+
+Keep these in step with the privacy page (`apps/web/app/privacy/page.tsx`, giftsaf.com/privacy).
+
+- **Visibility:** Unlisted.
+- **Category:** Shopping.
+- **Summary:** Save what's on screen to a person in GiftsAF, so it can learn what they'd like.
+- **Description:**
+
+  > GiftsAF remembers the people you buy for and helps you pick gifts they'll love.
+  >
+  > Seeing a friend's wishlist, a post about what they're into, or a product they mentioned? Click the GiftsAF button, pick the person, and Save. GiftsAF reads the page and adds what it learned to their profile as suggestions you can keep or remove.
+  >
+  > The extension does nothing until you click Save. It never reads your browsing history or runs in the background.
+  >
+  > GiftsAF is invite only while in early alpha. Sign in with your GiftsAF account.
+
+- **Privacy policy:** https://giftsaf.com/privacy
+- **Single purpose:** Save the page the user is looking at to a person in their GiftsAF account.
+- **Permission reasons:**
+  - `activeTab`: read the tab the user clicked Save on, only at that moment.
+  - `scripting`: get that tab's visible text when the user clicks Save.
+  - `storage`: keep the user signed in to GiftsAF.
+- **Remote code:** No.
+- **Data collected:** Website content (page text and a screenshot, when the user clicks Save); Web history (the address of a page the user saves); Authentication information (the GiftsAF sign-in session). Nothing else.
+- **Certifications:** not sold to third parties; not used for anything unrelated to the single purpose; not used for creditworthiness or lending.

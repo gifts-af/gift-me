@@ -5,6 +5,7 @@ import { ConnectClient } from "../connect-client";
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("ConnectClient", () => {
@@ -14,6 +15,17 @@ describe("ConnectClient", () => {
     render(<ConnectClient action={action} />);
     expect(await screen.findByText(/apps\/extension\/README\.md/)).toBeInTheDocument();
     expect(action).not.toHaveBeenCalled();
+  });
+
+  it("offers Add to Chrome when the extension isn't installed and the listing is set", async () => {
+    vi.stubEnv("NEXT_PUBLIC_EXTENSION_ID", "abc");
+    vi.stubEnv("NEXT_PUBLIC_EXTENSION_STORE_URL", "https://chromewebstore.google.com/detail/giftsaf/abc");
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue(
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+    );
+    render(<ConnectClient action={vi.fn()} />);
+    const link = await screen.findByRole("link", { name: /add to chrome/i });
+    expect(link).toHaveAttribute("href", "https://chromewebstore.google.com/detail/giftsaf/abc");
   });
 
   it("shows an error with a retry button when the action rejects", async () => {

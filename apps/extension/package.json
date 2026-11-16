@@ -7,7 +7,9 @@
     "build:dev": "vite build --mode development",
     "lint": "eslint .",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "icons": "node scripts/icons.ts",
+    "package": "node scripts/package.ts"
   },
   "dependencies": {
     "@gifts-af/core": "workspace:*",
@@ -29,9 +31,11 @@
     "autoprefixer": "^10.4.20",
     "eslint": "^9",
     "eslint-plugin-react-hooks": "^5",
+    "fflate": "^0.8.3",
     "globals": "^16",
     "jsdom": "^29.1.1",
     "postcss": "^8",
+    "sharp": "0.35.5",
     "tailwindcss": "^3.4.1",
     "typescript": "^5",
     "typescript-eslint": "^8",

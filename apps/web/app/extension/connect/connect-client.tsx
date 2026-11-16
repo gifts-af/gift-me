@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useExtensionStoreUrl } from "@/components/extension-link";
 import { Button } from "@/components/ui/button";
 
 type Reply = { ok: boolean; error?: string } | undefined;
@@ -22,6 +23,7 @@ export function ConnectClient({
   const [state, setState] = useState<State>("connecting");
   const [message, setMessage] = useState<string | null>(null);
   const started = useRef(false);
+  const storeUrl = useExtensionStoreUrl();
 
   const connect = useCallback(async () => {
     setState("connecting");
@@ -87,10 +89,21 @@ export function ConnectClient({
       {state === "not-installed" && (
         <>
           <p className="text-[15px]">We couldn&apos;t reach the GiftsAF extension.</p>
-          <p className="text-[15px] text-muted-foreground">
-            Load the GiftsAF extension in Chrome (see apps/extension/README.md), then reload this page. Ask Aaron or
-            Jim for the extension folder.
-          </p>
+          {storeUrl ? (
+            <>
+              <p className="text-[15px] text-muted-foreground">Add it to Chrome, then reload this page.</p>
+              <Button asChild className="w-full sm:w-auto">
+                <a href={storeUrl} target="_blank" rel="noreferrer">
+                  Add to Chrome
+                </a>
+              </Button>
+            </>
+          ) : (
+            <p className="text-[15px] text-muted-foreground">
+              Load the GiftsAF extension in Chrome (see apps/extension/README.md), then reload this page. Ask Aaron or
+              Jim for the extension folder.
+            </p>
+          )}
           <Button type="button" variant="outline" onClick={() => location.reload()} className="w-full sm:w-auto">
             Reload this page
           </Button>

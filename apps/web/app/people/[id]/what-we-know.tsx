@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ChevronRight, ExternalLink, Pencil } from "lucide-react";
 import { CAPTURE_READ_OFF, CATEGORY_GROUPS, captureReadNotice } from "@gifts-af/core";
+import { ExtensionLink } from "@/components/extension-link";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -84,10 +85,10 @@ export function WhatWeKnow({
               <Link href={questionsHref} className="inline-flex min-h-11 items-center font-semibold text-primary underline-offset-2 hover:underline">
                 Answer a few questions
               </Link>{" "}
-              or capture a page about {name} with the extension.
+              or capture a page about {name} with <ExtensionLink>the extension</ExtensionLink>.
             </>
           ) : (
-            <>Capture a page about {name} with the extension and we&apos;ll learn from it.</>
+            <>Capture a page about {name} with <ExtensionLink>the extension</ExtensionLink> and we&apos;ll learn from it.</>
           )}
         </p>
       )}

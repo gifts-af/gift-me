@@ -26,6 +26,13 @@ describe("buildManifest", () => {
     expect(buildManifest(env).key).toBe("abc123");
   });
 
+  it("lists the icons at 16, 32, 48 and 128 px for the toolbar and the store", () => {
+    const manifest = buildManifest(env);
+    const icons = { "16": "icons/icon-16.png", "32": "icons/icon-32.png", "48": "icons/icon-48.png", "128": "icons/icon-128.png" };
+    expect(manifest.icons).toEqual(icons);
+    expect(manifest.action.default_icon).toEqual(icons);
+  });
+
   it("uses a module service worker and the popup", () => {
     const manifest = buildManifest(env);
     expect(manifest.manifest_version).toBe(3);
@@ -40,6 +47,6 @@ describe("extensionIdFromKey", () => {
     const { fileURLToPath } = await import("node:url");
     const envFile = readFileSync(fileURLToPath(new URL("../.env.production", import.meta.url)), "utf8");
     const key = /^VITE_EXTENSION_KEY=(.+)$/m.exec(envFile)![1];
-    expect(extensionIdFromKey(key)).toBe("nnakijeilmglcmjpdpagacbjannapafb");
+    expect(extensionIdFromKey(key)).toBe("bfagebaknjjgpopoieojpkogbifnijch");
   });
 });
