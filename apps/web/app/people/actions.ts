@@ -14,6 +14,7 @@ import { buyingWiring, placeAddressHeld } from "@/app/settings/zinc-deps";
 import {
   addPerson,
   answerQuestions,
+  confirmFact,
   deleteFact,
   importPeople,
   isId,
@@ -196,6 +197,12 @@ export async function setFactActiveAction(_previous: SaveResult | null, formData
   if (!isId(text(formData, "id"))) return BAD_FORM;
   const active = text(formData, "active") === "true";
   return refresh(await setFactActive(await db(), text(formData, "id"), active), text(formData, "personId"));
+}
+
+// "Looks right" on a ✨ fact (ALL-127): confirms it without changing it.
+export async function confirmFactAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
+  if (!isId(text(formData, "id"))) return BAD_FORM;
+  return refresh(await confirmFact(await db(), text(formData, "id")), text(formData, "personId"));
 }
 
 export async function deleteFactAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {

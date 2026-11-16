@@ -31,6 +31,7 @@ export { readUnreadCaptures } from "./capture/facts";
 export {
   activeFacts,
   answerQuestions,
+  confirmFact,
   deleteFact,
   getOpenQuestions,
   getProfile,

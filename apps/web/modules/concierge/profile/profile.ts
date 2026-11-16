@@ -246,6 +246,25 @@ export async function updateFact(
   return { ok: true };
 }
 
+/**
+ * "Looks right" on a ✨ AI suggestion (ALL-127, AC-10): the buyer vouches for it
+ * as it is, so it loses the ✨. RLS limits it to the buyer's own facts.
+ */
+export async function confirmFact(db: Db, factId: string): Promise<SaveResult> {
+  const { data, error } = await db
+    .schema("concierge")
+    .from("profile_facts")
+    .update({ confirmed: true })
+    .eq("id", factId)
+    .select("id");
+  if (error || data.length === 0) {
+    logEvent("profile.fact_change_failed", { fact_id: factId, code: error?.code ?? "no_row" });
+    return { ok: false, error: "That didn't go through. Try again." };
+  }
+  logEvent("profile.fact_confirmed", { user_id: await currentUserId(db), fact_id: factId });
+  return { ok: true };
+}
+
 /** Off keeps the text so the AI won't suggest it again (AC-5, D47, D51). */
 export async function setFactActive(db: Db, factId: string, active: boolean): Promise<SaveResult> {
   const { data, error } = await db

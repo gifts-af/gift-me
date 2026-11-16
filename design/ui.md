@@ -192,7 +192,14 @@ A clickable, phone-first prototype, published as a private shareable artifact pa
 | Heads-up email | Two kinds. **Reminder:** the options as small read-only rows and "Choose a gift"; nothing is bought until you choose. **Auto-buy on** (opt-in, A-7): says which gift will be bought and on what date, marks it, and offers "Review or change" and how to skip. Buttons are signed one-time links (design §6.4) to the phone page | N-1, A-7, decision 40 |
 | Computer width | Give and the gift list only | — |
 
-**As built on the person page (ALL-26, D51):** facts are one list by category, each with its source and ✨ on unconfirmed AI suggestions, and a pencil that opens Save, Turn off and Delete. "Add a note" isn't built yet.
+**As built on the person page (ALL-26, D51, ALL-127):** "What we know" is one list of facts by category, each with its source and ✨ on unconfirmed AI suggestions. Tapping a fact opens it in place, and it saves as you go (T71), with no Save button:
+- **Fact** (the words) saves when you leave the field or press Enter, or when the fact is closed with **Done**; **Kind** saves when picked. Each save carries both, so a words save never puts back the old kind. Empty words show "Type something first." and save nothing; a failed save keeps what was typed and shows why under the fields.
+- **Use for gift ideas** is a switch that saves when flipped. Off moves the fact to "Turned off", where it keeps its text so the AI won't suggest it again; it stays open where it was until Done, so it can be flipped back.
+- **Looks right** shows only on an unconfirmed ✨ suggestion: it confirms the fact as it is, and the ✨ goes. Changing a fact's words or kind also confirms it, as before; saving with no change sends nothing.
+- **Delete** still asks first.
+- An open fact stays where it was opened until Done, even when a new kind belongs in another group, so "Saved" doesn't jump away. The fields stay off until the page's JavaScript has loaded (ALL-110).
+
+"Add a note" isn't built yet.
 
 Not mocked up now: the reaction prompt (ALL-34) and other later screens. They reuse these patterns and get mock-ups in their own tickets if needed **[Claude's call]**.
 
