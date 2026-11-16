@@ -23,32 +23,7 @@ import {
 import { baseUrlFrom } from "./base-url";
 import { placeHeld, zincWiring } from "./zinc-deps";
 
-// Time zone lives on the shared profile; the over-budget allowance is the
-// concierge's (T26).
-export async function saveSettings(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
-  const timezone = String(formData.get("timezone") ?? "");
-  if (!isTimeZone(timezone)) {
-    return { ok: false, error: "Pick a time zone from the list." };
-  }
-
-  const concierge = await saveConciergeSettings({ overBudgetPct: String(formData.get("overBudgetPct") ?? "") });
-  if (!concierge.ok) return concierge;
-
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getClaims();
-  const userId = auth?.claims?.sub;
-  if (!userId) return { ok: false, error: "Your session ended. Sign in again." };
-
-  const { error } = await supabase.from("profiles").update({ timezone }).eq("id", userId);
-  if (error) {
-    console.error("saving the time zone failed", error);
-    return { ok: false, error: "Your settings couldn't be saved. Try again." };
-  }
-  return { ok: true };
-}
-
-// Saves the time zone on its own, as the picker on Settings needs (ALL-115). Replaces the
-// time zone half of saveSettings, which goes away with the old form.
+// Saves the time zone on its own, as the picker on Settings needs (ALL-115).
 export async function saveTimezone(zone: string): Promise<SaveResult> {
   if (!isTimeZone(String(zone))) return { ok: false, error: "Pick a time zone from the list." };
 
@@ -104,6 +79,12 @@ export async function sendTestEmail(): Promise<{ ok: true } | { ok: false; error
 // Paying for gifts (ALL-32). Each action checks who is signed in, builds the Zinc wiring and
 // hands both to the module, which re-checks paid features before any Zinc call (AC-1). Results
 // are plain data with no keys in them (AC-6); details go to the log as ids only (E6).
+// The Settings list shows a one-word Zinc state, so it changes with the paying page.
+function refreshPaying() {
+  revalidatePath("/settings");
+  revalidatePath("/settings/paying");
+}
+
 async function withZinc(run: (userId: string, deps: ZincDeps) => Promise<PaymentResult>): Promise<PaymentResult> {
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getClaims();
@@ -112,7 +93,9 @@ async function withZinc(run: (userId: string, deps: ZincDeps) => Promise<Payment
   try {
     const wiring = await zincWiring(createAdminClient());
     if (!wiring) return { error: "Paying for gifts isn't switched on here yet." };
-    return await run(userId, wiring.deps);
+    const result = await run(userId, wiring.deps);
+    refreshPaying();
+    return result;
   } catch (error) {
     logEvent("zinc.action_failed", { user_id: userId, ...errorFields(error) });
     return { error: "That didn't work. Try again in a minute." };
@@ -141,7 +124,9 @@ export async function disconnectZincAccount(): Promise<PaymentResult> {
   try {
     const db = createAdminClient();
     const wiring = await zincWiring(db);
-    return await disconnectZinc(userId, { db, http: wiring?.deps.http ?? null });
+    const result = await disconnectZinc(userId, { db, http: wiring?.deps.http ?? null });
+    refreshPaying();
+    return result;
   } catch (error) {
     logEvent("zinc.action_failed", { user_id: userId, ...errorFields(error) });
     return { error: "That didn't work. Try again in a minute." };

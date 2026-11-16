@@ -24,6 +24,7 @@ async function session(): Promise<{ db: AccountAddressDb; userId: string } | nul
 
 function refresh(): AccountAddressResult {
   revalidatePath("/settings");
+  revalidatePath("/settings/address");
   revalidatePath("/lists");
   return { ok: true };
 }

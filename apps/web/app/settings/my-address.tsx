@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useState } from "react";
 import type { Address } from "@gifts-af/core";
 import { AddressForm, type AddressValues } from "@/components/address/address-form";
 import { Button } from "@/components/ui/button";
@@ -27,19 +27,13 @@ export function MyAddressSection({
   removeAction: () => Promise<AccountAddressResult>;
 }) {
   const [editing, setEditing] = useState(false);
-  const section = useRef<HTMLElement>(null);
 
   // Next keeps visited routes in the page, hidden, with their state: close the
   // form on leaving, so coming back shows the saved card.
   useLayoutEffect(() => () => setEditing(false), []);
 
-  // The section renders inside Suspense, after the browser has looked for the anchor.
-  useEffect(() => {
-    if (window.location.hash === "#my-address") section.current?.scrollIntoView?.({ block: "start" });
-  }, []);
-
   return (
-    <section ref={section} id="my-address" className="flex scroll-mt-4 flex-col gap-1.5" aria-labelledby="my-address-heading">
+    <section className="flex flex-col gap-1.5" aria-labelledby="my-address-heading">
       <h2 id="my-address-heading" className="text-sm font-semibold">
         My address
       </h2>

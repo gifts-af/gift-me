@@ -26,8 +26,7 @@ async function saveZone(userId: string, timezone: string) {
 }
 
 for (const saved of [true, false]) {
-  // ALL-115 Task 5 removes this fixme.
-  test.fixme(`@layout settings loads without a hydration error ${saved ? "with" : "without"} a saved zone`, async ({ page }) => {
+  test(`@layout settings loads without a hydration error ${saved ? "with" : "without"} a saved zone`, async ({ page }) => {
     const user = await createFreshUser();
     if (saved) await saveZone((await session(user)).user.id, "Asia/Calcutta");
     await signIn(page, user);
