@@ -13,5 +13,6 @@ test("it's marked not ready while the page's scripts haven't loaded", async ({ p
 
 test("it's ready once the page's scripts have loaded", async ({ page }) => {
   await page.goto("/people/import");
-  await expect(page.getByRole("button", button)).toHaveAttribute("aria-disabled", "false");
+  // Since ALL-110 a ready button has no aria-disabled at all.
+  await expect(page.getByRole("button", button)).not.toHaveAttribute("aria-disabled");
 });
