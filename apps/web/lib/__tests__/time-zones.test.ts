@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { isTimeZone, timeZoneOptions } from "../time-zones";
 
 describe("isTimeZone", () => {
@@ -14,12 +14,11 @@ describe("isTimeZone", () => {
 });
 
 describe("timeZoneOptions", () => {
+  afterEach(() => vi.restoreAllMocks());
+
   it("puts a saved zone missing from the server's list first", () => {
-    // Node's list has no "UTC", though browsers and the database accept it.
-    expect(Intl.supportedValuesOf("timeZone")).not.toContain("UTC");
-    const options = timeZoneOptions("UTC");
-    expect(options[0]).toBe("UTC");
-    expect(options.length).toBeGreaterThan(100);
+    vi.spyOn(Intl, "supportedValuesOf").mockReturnValue(["America/Chicago"]);
+    expect(timeZoneOptions("UTC")).toEqual(["UTC", "America/Chicago"]);
   });
 
   it("has no duplicates when nothing is saved", () => {
