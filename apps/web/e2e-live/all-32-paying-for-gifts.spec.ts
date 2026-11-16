@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 // for the shared test account, renders one of its states, and never the
 // load-failure line. Buys nothing, connects nothing.
 test("Settings shows the Paying for gifts section", async ({ page }) => {
-  await page.goto("/settings");
+  await page.goto("/settings/paying");
   await expect(page.getByRole("heading", { name: "Paying for gifts" })).toBeVisible();
   const section = page.locator("section", { has: page.getByRole("heading", { name: "Paying for gifts" }) });
   await expect(section).not.toContainText("Couldn't load");

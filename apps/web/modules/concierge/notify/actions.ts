@@ -204,7 +204,7 @@ export const ACTIONS: Record<ActionName, Action> = {
       return { ok: true };
     },
     async next() {
-      return "/settings";
+      return "/settings/paying";
     },
     straight: true,
   },
@@ -224,7 +224,7 @@ export const ACTIONS: Record<ActionName, Action> = {
       return { ok: true };
     },
     async next() {
-      return "/settings#my-address";
+      return "/settings/address";
     },
     straight: true,
   },

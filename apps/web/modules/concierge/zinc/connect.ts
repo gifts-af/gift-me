@@ -369,6 +369,27 @@ export async function hasZincConnection(userId: string, db: ZincDeps["db"]): Pro
   return account.zinc_connected_at !== null || (await readKey(userId, { db })) !== null;
 }
 
+export type PaymentSummary = "not_allowed" | "paused" | "off" | "not_connected" | "waiting" | "needs_phone" | "connected";
+
+/**
+ * The one-word state for Settings' list row (ALL-115). Database only: no Zinc call, no wallet
+ * balance. Same mapping as getPaymentStatus and the paying-for-gifts section.
+ */
+export async function getPaymentSummary(userId: string, db: ZincDeps["db"], zincOn: boolean, now: Date): Promise<PaymentSummary> {
+  if (!(await hasPaidFeatures(db, userId))) return (await hasZincConnection(userId, db)) ? "paused" : "not_allowed";
+  if (!zincOn) return "off";
+  const account = await readAccount(userId, { db });
+  if (account.zinc_connected_at) return account.buyer_phone === null ? "needs_phone" : "connected";
+  const { data: attempt, error } = await db
+    .schema("concierge")
+    .from("zinc_connect_attempts")
+    .select("expires_at")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) fail("Reading the connection attempt failed", error);
+  return attempt && new Date(attempt.expires_at) > now ? "waiting" : "not_connected";
+}
+
 /** Digits only, a leading US country code dropped. Null when it isn't 10 digits. */
 export function normalizePhone(raw: string): string | null {
   let digits = raw.replace(/\D/g, "");

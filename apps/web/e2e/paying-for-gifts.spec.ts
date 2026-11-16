@@ -110,7 +110,7 @@ async function shoot(page: Page, browser: Browser, state: string) {
   try {
     const wide = await desktop.newPage();
     await signIn(wide, USER);
-    await wide.goto("/settings");
+    await wide.goto("/settings/paying");
     await pictures(wide, `${state}-desktop`);
   } finally {
     await desktop.close();
@@ -141,7 +141,7 @@ test.describe("paying for gifts, in order on one account", () => {
 
   test("state 1: without paid features it says why and offers nothing", async ({ page, browser }) => {
     await signIn(page, USER);
-    await page.goto("/settings");
+    await page.goto("/settings/paying");
     await expect(section(page).getByText("Buying gifts is open to test accounts during the alpha.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Connect Zinc" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Disconnect Zinc" })).toHaveCount(0);
@@ -151,15 +151,15 @@ test.describe("paying for gifts, in order on one account", () => {
   test("states 2 to 4: connect with Allow, save a phone, then disconnect", async ({ page, browser }) => {
     await setPaid(userId, true);
     await signIn(page, USER);
-    await page.goto("/settings");
+    await page.goto("/settings/paying");
 
     // State 2: ready to connect, with the alpha money notice.
     await expect(section(page).getByRole("note")).toHaveText(
       "Each gift costs its price plus Zinc's $1 order fee, taken from your Zinc balance.",
     );
-    // One teal main button on the page (Save): Zinc's buttons are outline buttons (owner, 2026-11-06).
+    // No teal main button on this page (the Save button moved off it): Zinc's buttons are outline buttons (owner, 2026-11-06).
     await expect(page.getByRole("button", { name: "Connect Zinc" })).toHaveClass(/border-input/);
-    await expect(page.locator("button.bg-primary")).toHaveCount(1);
+    await expect(page.locator("button.bg-primary")).toHaveCount(0);
     await shoot(page, browser, "2-ready-to-connect");
 
     // State 3: waiting for Allow. Cancel goes back; connecting again gives a fresh code.
@@ -217,7 +217,7 @@ test.describe("paying for gifts, in order on one account", () => {
     await saveFakeKey(userId);
     await setPaid(userId, false);
     await signIn(page, USER);
-    await page.goto("/settings");
+    await page.goto("/settings/paying");
     await expect(section(page).getByText("Buying gifts is paused for your account.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Connect Zinc", exact: true })).toHaveCount(0);
     await shoot(page, browser, "5-paused-disconnect");
@@ -237,7 +237,7 @@ test("the Paying for gifts section fits the screen, connected and disconnect-onl
   await setPaid(userId, true);
   await saveFakeKey(userId);
   await signIn(page, user);
-  await page.goto("/settings");
+  await page.goto("/settings/paying");
   await expect(page.getByText("$40.00")).toBeVisible({ timeout: 15_000 });
   expect(await phoneLayoutProblems(page)).toEqual([]);
 

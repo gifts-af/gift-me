@@ -91,8 +91,8 @@ test("My address and the share switch fit the screen, in every state", { tag: "@
   await saveOneGiftList(user);
   await signIn(page, user);
 
-  // Settings: no address yet, then the open form.
-  await page.goto("/settings");
+  // My address: no address yet, then the open form.
+  await page.goto("/settings/address");
   await expect(page.getByRole("button", { name: "Add my address" })).toBeVisible();
   expect(await phoneLayoutProblems(page)).toEqual([]);
   await tap(page.getByRole("button", { name: "Add my address" }));
@@ -115,7 +115,7 @@ test("My address and the share switch fit the screen, in every state", { tag: "@
   await page.goto("/lists");
   await expect(page.getByText(/^They see Columbus, OH in GiftsAF\./)).toBeVisible();
   expect(await phoneLayoutProblems(page)).toEqual([]);
-  await page.goto("/settings");
+  await page.goto("/settings/address");
   await expect(page.getByText(STREET)).toBeVisible();
   expect(await phoneLayoutProblems(page)).toEqual([]);
 });
@@ -128,10 +128,12 @@ test("My address waits for a list, then adds, changes and removes (AC-1 to AC-5)
   await page.goto("/settings");
   await expect(page.getByRole("heading", { name: "Settings" })).toBeVisible();
   await expect(page.getByLabel("Time zone")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "My address" })).toHaveCount(0);
+  await expect(page.getByRole("link", { name: /My address/ })).not.toBeVisible();
 
   await saveFirstList(page);
   await page.goto("/settings");
+  await expect(page.getByRole("link", { name: /My address/ })).toBeVisible();
+  await page.goto("/settings/address");
   await tap(page.getByRole("button", { name: "Add my address" }));
   await expect(page.getByLabel("First name")).toHaveValue("");
 
@@ -171,7 +173,7 @@ test("changing an address keeps sharing on (AC-3)", async ({ page }) => {
   await seedAddress(id, true);
   await signIn(page, user);
   await saveFirstList(page);
-  await page.goto("/settings");
+  await page.goto("/settings/address");
   await expect(page.getByText(/^Shared with people who have your list\./)).toBeVisible();
   await tap(page.getByRole("button", { name: "Change address" }));
   await page.getByLabel("City").fill("Dayton");
@@ -280,7 +282,7 @@ test("Settings shows the new address after sharing from the list, with the form 
   const user = await createFreshUser();
   await signIn(page, user);
   await saveFirstList(page);
-  await page.goto("/settings");
+  await page.goto("/settings/address");
   await tap(page.getByRole("button", { name: "Add my address" }));
   await expect(page.getByLabel("First name")).toBeVisible();
 
@@ -293,9 +295,11 @@ test("Settings shows the new address after sharing from the list, with the form 
   await expect(shareSwitch(page)).toBeChecked();
 
   await page.getByRole("link", { name: "Change my address" }).click();
-  await expect(page.getByRole("heading", { name: "My address" })).toBeInViewport();
-  await expect(page.getByText(STREET)).toBeVisible();
-  await expect(page.getByRole("button", { name: "Save address" })).toHaveCount(0);
+  await expect(page).toHaveURL(/\/settings\/address$/);
+  await expect(page.getByRole("heading", { name: "My address", level: 2 })).toBeVisible();
+  // The Settings list, still in the page hidden, shows the street too: look inside the section.
+  await expect(page.getByRole("region", { name: "My address" }).getByText(STREET)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Save address" })).not.toBeVisible();
 });
 
 test("a linked buyer sees only the city, and nothing once sharing stops (AC-13, AC-14)", async ({ page, browser }) => {
@@ -349,4 +353,21 @@ test("a linked buyer sees only the city, and nothing once sharing stops (AC-13, 
   await buyerPage.reload();
   await expect(buyerPage.getByRole("button", { name: "Add an address" })).toBeVisible();
   await context.close();
+});
+
+test("the My address row shows the new street after saving and tapping Back (AC-7)", async ({ page }) => {
+  const user = await createFreshUser();
+  await signIn(page, user);
+  await saveFirstList(page);
+  await page.goto("/settings");
+  await page.getByRole("link", { name: /My address/ }).click();
+  await page.waitForURL("**/settings/address");
+  await tap(page.getByRole("button", { name: "Add my address" }));
+  await fillAddress(page);
+  await page.getByRole("button", { name: "Save address" }).click();
+  await expect(page.getByText(STREET)).toBeVisible();
+
+  await page.getByRole("main").getByRole("link", { name: "Settings" }).click();
+  await page.waitForURL("**/settings");
+  await expect(page.getByRole("link", { name: /My address/ }).getByText(STREET)).toBeVisible();
 });

@@ -1362,6 +1362,16 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     expect(m.text).toMatch(/Cancel this gift: https:\/\/giftsaf\.test\/a\/\S+/);
   });
 
+  it("links the top-up to Paying for gifts when no Zinc wallet link is wired (ALL-115 AC-14)", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    zinc.balance = 1000;
+    // Place through a wiring whose engine has no Zinc deps, so the hold email falls back.
+    await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, wiring(dayAt(0), { zinc: false }).purchase);
+    const [m] = mail.filter((x) => x.to === u.email);
+    expect(m.text).toContain(`Top up your Zinc balance: ${BASE}/settings/paying`);
+  });
+
   it("sends one 'still short' email a day after a partial top-up (AC-22)", async () => {
     const u = await newUser();
     const r = await newRound(u);

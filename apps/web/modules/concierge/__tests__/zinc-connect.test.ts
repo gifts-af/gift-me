@@ -12,6 +12,7 @@ import {
   cancelConnect,
   disconnect,
   getPaymentStatus,
+  getPaymentSummary,
   pollConnect,
   savePhone,
   startConnect,
@@ -403,5 +404,53 @@ describe.skipIf(!dbUp)("Zinc connect (real local database, fake Zinc)", () => {
     results.push(await startConnect(userId, bad.deps, placeHeld));
     secretsIn(results);
     secretsIn(out);
+  });
+
+  describe("getPaymentSummary (ALL-115 AC-9, database only)", () => {
+    const summary = (userId: string, zincOn = true, now = new Date()) => getPaymentSummary(userId, zinc().deps.db, zincOn, now);
+
+    it("unpaid with no connection is not_allowed", async () => {
+      expect(await summary(await newUser(false))).toBe("not_allowed");
+    });
+
+    it("unpaid with a leftover connection is paused", async () => {
+      const userId = await newUser(true);
+      await connected(userId);
+      await pg.query("update concierge.accounts set paid_features = false where user_id = $1", [userId]);
+      expect(await summary(userId)).toBe("paused");
+    });
+
+    it("paid with Zinc off is off, with or without a connection", async () => {
+      const bare = await newUser(true);
+      expect(await summary(bare, false)).toBe("off");
+      const linked = await newUser(true);
+      await connected(linked);
+      expect(await summary(linked, false)).toBe("off");
+    });
+
+    it("paid, no connection, no attempt is not_connected", async () => {
+      expect(await summary(await newUser(true))).toBe("not_connected");
+    });
+
+    it("a live connect attempt is waiting", async () => {
+      const userId = await newUser(true);
+      await startConnect(userId, zinc().deps, placeHeld);
+      expect(await summary(userId)).toBe("waiting");
+    });
+
+    it("an expired connect attempt is not_connected", async () => {
+      const userId = await newUser(true);
+      await startConnect(userId, zinc().deps, placeHeld);
+      await pg.query("update concierge.zinc_connect_attempts set expires_at = now() - interval '1 minute' where user_id = $1", [userId]);
+      expect(await summary(userId)).toBe("not_connected");
+    });
+
+    it("connected without a phone is needs_phone, with one is connected", async () => {
+      const userId = await newUser(true);
+      await connected(userId);
+      expect(await summary(userId)).toBe("needs_phone");
+      await pg.query("update concierge.accounts set buyer_phone = '5551234567' where user_id = $1", [userId]);
+      expect(await summary(userId)).toBe("connected");
+    });
   });
 });

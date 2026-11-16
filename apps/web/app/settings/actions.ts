@@ -1,7 +1,9 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { isTimeZone } from "@/lib/time-zones";
 import { errorFields, logEvent } from "@/lib/log";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -21,27 +23,31 @@ import {
 import { baseUrlFrom } from "./base-url";
 import { placeHeld, zincWiring } from "./zinc-deps";
 
-// Time zone lives on the shared profile; the over-budget allowance is the
-// concierge's (T26).
-export async function saveSettings(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
-  const timezone = String(formData.get("timezone") ?? "");
-  if (!Intl.supportedValuesOf("timeZone").includes(timezone)) {
-    return { ok: false, error: "Pick a time zone from the list." };
-  }
-
-  const concierge = await saveConciergeSettings({ overBudgetPct: String(formData.get("overBudgetPct") ?? "") });
-  if (!concierge.ok) return concierge;
+// Saves the time zone on its own, as the picker on Settings needs (ALL-115).
+export async function saveTimezone(zone: string): Promise<SaveResult> {
+  const value = String(zone);
+  if (!isTimeZone(value)) return { ok: false, error: "Pick a time zone from the list." };
 
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getClaims();
   const userId = auth?.claims?.sub;
   if (!userId) return { ok: false, error: "Your session ended. Sign in again." };
 
-  const { error } = await supabase.from("profiles").update({ timezone }).eq("id", userId);
+  const { error } = await supabase.from("profiles").update({ timezone: value }).eq("id", userId);
   if (error) {
-    console.error("saving the time zone failed", error);
-    return { ok: false, error: "Your settings couldn't be saved. Try again." };
+    logEvent("settings.timezone_save_failed", { user_id: userId, ...errorFields(error) });
+    return { ok: false, error: "Your time zone couldn't be saved. Try again." };
   }
+  revalidatePath("/settings");
+  return { ok: true };
+}
+
+// Saves the over-budget allowance on its own, as its page needs (ALL-115).
+export async function saveOverBudget(value: string): Promise<SaveResult> {
+  const result = await saveConciergeSettings({ overBudgetPct: String(value) });
+  if (!result.ok) return result;
+  revalidatePath("/settings");
+  revalidatePath("/settings/over-budget");
   return { ok: true };
 }
 
@@ -74,7 +80,18 @@ export async function sendTestEmail(): Promise<{ ok: true } | { ok: false; error
 // Paying for gifts (ALL-32). Each action checks who is signed in, builds the Zinc wiring and
 // hands both to the module, which re-checks paid features before any Zinc call (AC-1). Results
 // are plain data with no keys in them (AC-6); details go to the log as ids only (E6).
-async function withZinc(run: (userId: string, deps: ZincDeps) => Promise<PaymentResult>): Promise<PaymentResult> {
+// The Settings list shows a one-word Zinc state, so it changes with the paying page. The paying
+// page keeps its own state in the browser, so it isn't revalidated (that would re-run a Zinc call).
+function refreshPaying() {
+  revalidatePath("/settings");
+}
+
+// `refresh` says whether a result changes what Settings shows. Polling while waiting doesn't:
+// a re-render then would push new props into the open connect screen every few seconds.
+async function withZinc(
+  run: (userId: string, deps: ZincDeps) => Promise<PaymentResult>,
+  refresh: (result: PaymentResult) => boolean = () => true,
+): Promise<PaymentResult> {
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getClaims();
   const userId = auth?.claims?.sub;
@@ -82,7 +99,9 @@ async function withZinc(run: (userId: string, deps: ZincDeps) => Promise<Payment
   try {
     const wiring = await zincWiring(createAdminClient());
     if (!wiring) return { error: "Paying for gifts isn't switched on here yet." };
-    return await run(userId, wiring.deps);
+    const result = await run(userId, wiring.deps);
+    if (refresh(result)) refreshPaying();
+    return result;
   } catch (error) {
     logEvent("zinc.action_failed", { user_id: userId, ...errorFields(error) });
     return { error: "That didn't work. Try again in a minute." };
@@ -94,7 +113,10 @@ export async function startZincConnect(): Promise<PaymentResult> {
 }
 
 export async function pollZincConnect(): Promise<PaymentResult> {
-  return withZinc((userId, deps) => pollConnect(userId, deps, placeHeld));
+  return withZinc(
+    (userId, deps) => pollConnect(userId, deps, placeHeld),
+    (result) => "kind" in result && result.kind !== "waiting",
+  );
 }
 
 export async function cancelZincConnect(): Promise<PaymentResult> {
@@ -111,7 +133,9 @@ export async function disconnectZincAccount(): Promise<PaymentResult> {
   try {
     const db = createAdminClient();
     const wiring = await zincWiring(db);
-    return await disconnectZinc(userId, { db, http: wiring?.deps.http ?? null });
+    const result = await disconnectZinc(userId, { db, http: wiring?.deps.http ?? null });
+    refreshPaying();
+    return result;
   } catch (error) {
     logEvent("zinc.action_failed", { user_id: userId, ...errorFields(error) });
     return { error: "That didn't work. Try again in a minute." };
