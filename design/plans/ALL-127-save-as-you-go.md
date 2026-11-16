@@ -33,7 +33,7 @@
 - Anniversary: the same, without a year, with "Remove anniversary".
 - Photo: today's picker, which saves on pick.
 
-**Moved, unchanged inside:** Saved gifts (`/people/[id]/saved-gifts`), Their list (`/people/[id]/list`), Shipping address (`/people/[id]/address`, keeping its one Save and the 300 s time limit, since saving it can place held orders). Budget stays at `/people/[id]/budget`. Mom's page drops its 300 s limit.
+**Moved, unchanged inside:** Saved gifts (`/people/[id]/saved-gifts`), Their list (`/people/[id]/list`), Shipping address (`/people/[id]/address`, keeping its one Save and the 300 s time limit, since saving it can place held orders). Budget stays at `/people/[id]/budget`.
 
 **Old links keep working:** `/people/[id]?address=open` (in emails already sent) redirects to the address screen. The Home card's "Add birthday" opens About Mom.
 
@@ -106,7 +106,16 @@
 | Saving a fact | One save per fact always carrying its current text and category | `updateFact` writes both, so separate saves could put back the other's old value |
 | Confirming an AI fact | A "Looks right" button | Save used to confirm even with no change; save-as-you-go sends nothing unchanged |
 | Closing the tab on My list | A held remove goes to `POST /api/lists/save-on-close` with `fetch(..., { keepalive: true })`, carrying only `{ listId, version, removeIds }`; the server reads the list, drops those ids and saves through the same checked path | A server action started on `pagehide` is cancelled by the browser; keepalive bodies are capped at 64 KiB and a list can hold 500 gifts |
-| Releases | Two PRs: Mom's page, About Mom and facts in one; My list in another | Owner, 2026-11-16 (plan review): My list can be rolled back alone (E7, T19) |
+| Releases | Three PRs: `save_list_checked` first (#87), then Mom's page, About Mom and facts, then My list | Owner, 2026-11-16 (plan review): My list can be rolled back alone (E7, T19). The migration went first because Vercel deploys in parallel with `migrate` (T50), as ALL-31 did **[Claude's call]** |
+| A date on iPhone | A blur with nowhere to go waits `DATE_SETTLE_MS` (1500 ms) before saving; coming back to the date fields cancels it | PR review: closing the month wheel would otherwise save the date passed through **[Claude's call]** |
+| After Remove or Delete | The hook's `reset(value)` marks the field saved, so nothing pending is re-sent when it hides | PR review: a failed date re-sent after Remove made a new birthday, and with it a possible second gift |
+| Closing a fact | Done waits for the save and closes only if it worked; an open fact stays in its place until Done | PR review (AC-9); a kind change would otherwise move and close it **[Claude's call]** |
+| "Looks right" | Inside the open fact; a real change to a fact's words or kind still confirms it, as before; just opening it doesn't | ALL-26 AC-6 **[Claude's call]** |
+| The old Edit form | Removed with `updatePerson` and `updatePersonAction`; the store writes only the fields given | E2: dead once About exists |
+| Old address links | `?address=open` redirects to `/people/[id]/address?open=1`; new links use that URL directly | ALL-81 AC-1: the address form opens only when asked |
+| A birthday moved while its round is open | Out of scope here; the owner chose (2026-11-16) to skip an unordered round when its occasion moves outside the lead window | ALL-129 |
+| Undo, for keyboards and screen readers | Focus moves to Undo, which is announced; the 6 s pause while it has focus or the mouse | PR review (ui.md, WCAG 2.2.1) **[Claude's call]** |
+| A tab hidden with a remove held | Sent at once through the close route; Sign out waits at most 3 s (`LEAVE_WAIT_MS`) | PR review: phones often never fire `pagehide` |
 
 ## Principles check
 
@@ -140,7 +149,7 @@
 
 **Files:** create `apps/web/lib/use-autosave.ts` and its test; modify `apps/web/app/settings/over-budget-field.tsx` to use it. `time-zone-row.tsx` stays as it is (its 400 ms wait and hidden-page rule differ).
 
-**Produces:** `useAutosave<T>({ initial: T; save: (value: T) => Promise<SaveResult>; equals?: (a: T, b: T) => boolean }) → { value, setValue, commit(next?: T), onBlur, onKeyDown, status: "idle" | "saving" | "saved" | "error", error }`.
+**Produces:** `useAutosave<T>({ initial: T; save: (value: T) => Promise<SaveResult>; equals?: (a: T, b: T) => boolean }) → { value, setValue, commit(next?: T): Promise<SaveResult | null>, reset(value: T), onBlur, onKeyDown, status: "idle" | "saving" | "saved" | "error", error }`. (`reset` and `commit`'s result were added after the PR review.)
 - `initial` is read once; callers re-key the component to reset it.
 - `commit()` saves the current value now, for choices and switches; `commit(next)` sets and saves. `onBlur` and Enter call `commit()`.
 - Saves only if changed from the last saved value; one save at a time, the latest value wins.
