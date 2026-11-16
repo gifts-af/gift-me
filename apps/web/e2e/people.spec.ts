@@ -68,6 +68,14 @@ async function birthdayRow(personId: string): Promise<{ id: string; month: numbe
   return rows[0] ?? null;
 }
 
+/** The person's saved birth year, read with the service role. */
+async function birthYear(personId: string): Promise<number | null> {
+  const res = await fetch(`${supabase.url}/rest/v1/people?select=birth_year&id=eq.${personId}`, {
+    headers: { apikey: supabase.serviceRoleKey, Authorization: `Bearer ${supabase.serviceRoleKey}` },
+  });
+  return ((await res.json()) as { birth_year: number | null }[])[0].birth_year;
+}
+
 /** Adds a birthday the way About does, as the user. */
 async function addBirthday(user: { email: string; password: string }, personId: string, month: number, day: number) {
   const { token, id } = await signInApi(user);
@@ -190,12 +198,20 @@ test("About Mom: each field saves on its own", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("link", { name: "Mama", exact: true })).toBeVisible();
 
-  // AC-7: Remove birthday asks first, then removes it.
+  // AC-7: with a birth year saved, Remove birthday asks first, then removes the birthday and the year.
   await page.goto(`/people/${personId}/about`);
+  const year = page.getByRole("spinbutton", { name: "Birth year (optional)" });
+  await expect(year).toBeEnabled();
+  await year.fill("1960");
+  await year.press("Tab");
+  await expect.poll(() => birthYear(personId)).toBe(1960);
   await page.getByRole("button", { name: "Remove birthday" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Remove birthday" }).click();
   await expect(page.getByRole("button", { name: "Remove birthday" })).toHaveCount(0);
   await expect.poll(() => birthdayRow(personId)).toBeNull();
+  expect(await birthYear(personId)).toBeNull();
+  await expect(year).toHaveValue("");
+  await expect(year).toBeDisabled();
 });
 
 // ALL-127 AC-19: an "Add an address" email sent before this change links to

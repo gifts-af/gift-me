@@ -5,8 +5,8 @@ const getPerson = vi.hoisted(() => vi.fn());
 const getProfile = vi.hoisted(() =>
   vi.fn(async (...args: unknown[]) => (void args, { groups: [], off: [], unread: 0, openCount: 0, readiness: null as unknown })),
 );
-const listSavedGifts = vi.hoisted(() => vi.fn(async (...args: unknown[]) => (void args, [] as unknown[])));
-vi.mock("@/modules/concierge", () => ({ getPerson, getProfile, listSavedGifts }));
+const countSavedGifts = vi.hoisted(() => vi.fn(async (...args: unknown[]) => (void args, 0)));
+vi.mock("@/modules/concierge", () => ({ getPerson, getProfile, countSavedGifts }));
 vi.mock("@/lib/today", () => ({ todayForRequest: async () => "2026-11-01" }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ auth: { getClaims: async () => ({ data: { claims: { sub: "u1" } } }) } }),
@@ -101,7 +101,7 @@ describe("PersonView", () => {
 
   it("counts saved gifts, and says Linked for someone with a list", async () => {
     getPerson.mockResolvedValue({ ...dad, keepsList: true });
-    listSavedGifts.mockResolvedValueOnce([{ id: "g1" }, { id: "g2" }]);
+    countSavedGifts.mockResolvedValueOnce(2);
     await show();
     expect(screen.getByText("Their own list")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /^Saved gifts/ })).toHaveTextContent("2");

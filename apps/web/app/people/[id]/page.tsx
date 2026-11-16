@@ -5,9 +5,13 @@ import { BackLink, PageFrame } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
 import { PersonView } from "./person-view";
 
+// For the Server Actions on this page: "Read them now" (readCapturesAction) reads unread
+// captures with AI one after another, which can run long. 300 s is the most Vercel's Fluid
+// compute allows on our plan (review of ALL-127). Next needs a literal here.
+export const maxDuration = 300;
+
 // One person: what we know, then rows that open their own screens (ALL-127).
-// Nothing here places an order, so no long time limit: the address screen has
-// it. Signed-out visitors are sent to sign in by proxy.ts.
+// Signed-out visitors are sent to sign in by proxy.ts.
 export default function PersonPage({
   params,
   searchParams,

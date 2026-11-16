@@ -1,5 +1,5 @@
 import { OCCASION_NAMES } from "@/components/occasion-format";
-import { SettingsRow } from "@/app/settings/settings-row";
+import { SettingsRow } from "@/components/settings-row";
 import type { PersonDetail } from "@/modules/concierge";
 import { money } from "./money";
 

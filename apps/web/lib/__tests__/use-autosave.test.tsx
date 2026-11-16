@@ -236,7 +236,7 @@ describe("useAutosave", () => {
 
     it("during a save with nothing new, gives that save's result", async () => {
       const first = deferred();
-      const save = vi.fn().mockReturnValueOnce(first.promise);
+      const save = vi.fn().mockReturnValueOnce(first.promise).mockResolvedValue({ ok: true });
       const { result } = renderHook(() => useAutosave({ initial: "a", save }));
       await act(async () => void result.current.commit("b"));
       let waiting!: Promise<unknown>;
@@ -245,6 +245,8 @@ describe("useAutosave", () => {
       });
       await act(async () => first.resolve({ ok: false, error: "Nope." }));
       expect(await waiting).toEqual({ ok: false, error: "Nope." });
+      // The failed value isn't sent twice in a row.
+      expect(save).toHaveBeenCalledTimes(1);
     });
   });
 });

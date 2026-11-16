@@ -126,8 +126,7 @@ function DateFields({
  * then fails, the person still exists, so we go on anyway.
  */
 export function PersonForm(props: Props) {
-  const add = props;
-  const resize = add.resize ?? resizeToJpeg;
+  const resize = props.resize ?? resizeToJpeg;
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const hydrated = useHydrated();
@@ -167,8 +166,8 @@ export function PersonForm(props: Props) {
     try {
       const checked = await prepareJpeg({
         file,
-        px: add.px,
-        maxUploadBytes: add.maxUploadBytes,
+        px: props.px,
+        maxUploadBytes: props.maxUploadBytes,
         resize,
       });
       if (checked.ok) setPhoto(file);
@@ -206,11 +205,11 @@ export function PersonForm(props: Props) {
         const saved = await savePersonPhoto({
           file: photo,
           personId: newId,
-          userId: add.userId,
-          px: add.px,
-          maxUploadBytes: add.maxUploadBytes,
-          action: add.photoAction,
-          storage: add.storage,
+          userId: props.userId,
+          px: props.px,
+          maxUploadBytes: props.maxUploadBytes,
+          action: props.photoAction,
+          storage: props.storage,
           resize,
         });
         if (!saved.ok) {
@@ -224,7 +223,7 @@ export function PersonForm(props: Props) {
     }
     // The person exists either way. A failed photo goes to their page, where
     // a note and the picker let the user try again.
-    router.push(photoFailed ? `/people/${newId}?photo=failed` : add.doneHref);
+    router.push(photoFailed ? `/people/${newId}?photo=failed` : props.doneHref);
   }
 
   return (

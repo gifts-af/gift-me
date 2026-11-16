@@ -135,8 +135,12 @@ describe("one field at a time", () => {
   it("refuses a date that doesn't exist, or cleared fields, without saving", async () => {
     const bad = { ok: false, error: "That date doesn't exist." };
     expect(await setDatedOccasionAction(ID, "birthday", "2", "31")).toEqual(bad);
-    expect(await setDatedOccasionAction(ID, "anniversary", "", "")).toEqual(bad);
     expect(await setDatedOccasionAction(ID, "anniversary", "6", "")).toEqual(bad);
+    // Cleared fields never come from About (it doesn't send them): a bad form.
+    expect(await setDatedOccasionAction(ID, "anniversary", "", "")).toEqual({
+      ok: false,
+      error: "That didn't go through. Reload and try again.",
+    });
     expect(setDatedOccasion).not.toHaveBeenCalled();
   });
 

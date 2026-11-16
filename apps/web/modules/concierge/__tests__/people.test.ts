@@ -315,6 +315,24 @@ describe("one field at a time (ALL-127)", () => {
     expect(store.writes).toEqual([]);
   });
 
+  // Review of PR 1 (E6): a failed write logs one event with ids and the code, never free text.
+  it("logs a failed write as person.save_failed, with ids and the code only", async () => {
+    const { store, mine } = setup();
+    vi.spyOn(store, "updatePersonFields").mockRejectedValue(
+      Object.assign(new Error("Updating a person failed: bad row (Mama Secret)"), { code: "XX000" }),
+    );
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    expect(await renamePerson(store, mine, "Mama Secret")).toEqual({ ok: false, error: "That couldn't be saved. Try again." });
+    const errors = error.mock.calls;
+    const events = log.mock.calls.map((c) => JSON.parse(String(c[0])));
+    error.mockRestore();
+    log.mockRestore();
+    expect(errors).toEqual([]);
+    expect(events).toEqual([expect.objectContaining({ event: "person.save_failed", person_id: mine, code: "XX000" })]);
+    expect(Object.keys(events[0]).sort()).toEqual(["at", "code", "event", "person_id"]);
+  });
+
   it("removeDatedOccasion stops if clearing the year changed no row", async () => {
     const { store, mine } = setup();
     store.noRows.add("updatePersonFields");

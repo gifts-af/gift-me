@@ -209,10 +209,9 @@ export async function addPerson(store: PeopleStore, input: PersonInput): Promise
 async function onOwnPerson(
   store: PeopleStore,
   id: string,
-  what: string,
   run: (person: PersonRow) => Promise<SaveResult>,
-  /** Logs a failure instead of console.error, for writes whose errors could carry personal data. */
-  onError: (e: unknown) => void = (e) => console.error(`${what} failed`, e),
+  /** Logs a failure as one event with ids and the code only (E6): an error message can carry personal data. */
+  onError: (e: unknown) => void = (e) => logEvent("person.save_failed", { person_id: id, code: errorCode(e) ?? null }),
 ): Promise<SaveResult> {
   if (!isUuid(id)) return { ok: false, error: NOT_FOUND };
   try {
@@ -234,8 +233,8 @@ const notFound = (): SaveResult => ({ ok: false, error: NOT_FOUND });
 
 export type DatedKind = "birthday" | "anniversary";
 
-function writeFields(store: PeopleStore, id: string, what: string, fields: PersonFields): Promise<SaveResult> {
-  return onOwnPerson(store, id, what, async () =>
+function writeFields(store: PeopleStore, id: string, fields: PersonFields): Promise<SaveResult> {
+  return onOwnPerson(store, id, async () =>
     (await store.updatePersonFields(id, fields)) ? { ok: true } : notFound(),
   );
 }
@@ -243,20 +242,20 @@ function writeFields(store: PeopleStore, id: string, what: string, fields: Perso
 export function renamePerson(store: PeopleStore, id: string, name: string): Promise<SaveResult> {
   const checked = checkName(name);
   if (!checked.ok) return Promise.resolve(checked);
-  return writeFields(store, id, "renaming a person", { name: checked.value });
+  return writeFields(store, id, { name: checked.value });
 }
 
 export function setRelationship(store: PeopleStore, id: string, relationship: string): Promise<SaveResult> {
   const checked = checkRelationship(relationship);
   if (!checked.ok) return Promise.resolve(checked);
-  return writeFields(store, id, "setting a relationship", { relationship: checked.value });
+  return writeFields(store, id, { relationship: checked.value });
 }
 
 /** The birth year, or null to clear it; from 1900 to `currentYear`. */
 export function setBirthYear(store: PeopleStore, id: string, year: number | null, currentYear: number): Promise<SaveResult> {
   const checked = checkBirthYear(year, currentYear);
   if (!checked.ok) return Promise.resolve(checked);
-  return writeFields(store, id, "setting a birth year", { birthYear: checked.value });
+  return writeFields(store, id, { birthYear: checked.value });
 }
 
 /**
@@ -266,7 +265,7 @@ export function setBirthYear(store: PeopleStore, id: string, year: number | null
  */
 export function setDatedOccasion(store: PeopleStore, id: string, kind: DatedKind, date: MonthDay): Promise<SaveResult> {
   if (!isRealMonthDay(date)) return Promise.resolve({ ok: false, error: BAD_DATE });
-  return onOwnPerson(store, id, "setting a date", async () => {
+  return onOwnPerson(store, id, async () => {
     const existing = (await store.occasions([id])).find((o) => o.kind === kind);
     if (!existing) {
       await store.addOccasion(id, { kind, month: date.month, day: date.day });
@@ -283,7 +282,7 @@ export function setDatedOccasion(store: PeopleStore, id: string, kind: DatedKind
  * the birthday without a year, which is harmless).
  */
 export function removeDatedOccasion(store: PeopleStore, id: string, kind: DatedKind): Promise<SaveResult> {
-  return onOwnPerson(store, id, "removing a date", async () => {
+  return onOwnPerson(store, id, async () => {
     if (kind === "birthday" && !(await store.updatePersonFields(id, { birthYear: null }))) return notFound();
     const existing = (await store.occasions([id])).find((o) => o.kind === kind);
     if (existing) await store.removeOccasion(existing.id);
@@ -298,7 +297,6 @@ function writeAddress(store: PeopleStore, id: string, a: (Address & { checkedAt:
   return onOwnPerson(
     store,
     id,
-    "saving an address",
     async () => {
       if (await store.sharedCity(id)) return { ok: false, error: SHARED_ADDRESS };
       return (await store.saveAddress(id, a)) ? { ok: true } : notFound();
@@ -343,7 +341,7 @@ export function setOccasionEnabled(
   kind: OccasionKind,
   enabled: boolean,
 ): Promise<SaveResult> {
-  return onOwnPerson(store, id, "switching an occasion", async () => {
+  return onOwnPerson(store, id, async () => {
     const occasion = (await store.occasions([id])).find((o) => o.kind === kind);
     if (!occasion) {
       if (!HOLIDAYS.includes(kind)) return { ok: false, error: "Add their date first, then switch it on." };
@@ -363,7 +361,7 @@ export async function saveBudgets(
   amounts: Record<string, number | null>,
 ): Promise<SaveResult> {
   const userId = await store.userId();
-  return onOwnPerson(store, id, "saving budgets", async () => {
+  return onOwnPerson(store, id, async () => {
     await store.saveBudgets(id, amounts);
     log("budgets.save", { user_id: userId ?? "", person_id: id });
     return { ok: true };
@@ -375,7 +373,7 @@ export function linkList(store: PeopleStore, id: string, link: string): Promise<
   if (!token) {
     return Promise.resolve({ ok: false, error: "Paste the share link from their GiftsAF list." });
   }
-  return onOwnPerson(store, id, "linking a list", async () => {
+  return onOwnPerson(store, id, async () => {
     try {
       await store.linkList(token, id);
       return { ok: true };
@@ -389,7 +387,7 @@ export function linkList(store: PeopleStore, id: string, link: string): Promise<
 }
 
 export function unlinkList(store: PeopleStore, id: string): Promise<SaveResult> {
-  return onOwnPerson(store, id, "unlinking a list", async () => {
+  return onOwnPerson(store, id, async () => {
     await store.unlinkList(id);
     return { ok: true };
   });
@@ -403,13 +401,13 @@ export async function setPhoto(store: PeopleStore, id: string, path: string | nu
   if (path !== null && (!path.startsWith(folder) || path.slice(folder.length).includes("/") || path.includes(".."))) {
     return { ok: false, error: "That photo couldn't be saved. Try again." };
   }
-  return onOwnPerson(store, id, "saving a photo", async () =>
+  return onOwnPerson(store, id, async () =>
     (await store.setPhotoPath(id, path)) ? { ok: true } : notFound(),
   );
 }
 
 export function deletePerson(store: PeopleStore, id: string): Promise<SaveResult> {
-  return onOwnPerson(store, id, "deleting a person", async () => {
+  return onOwnPerson(store, id, async () => {
     await store.deletePerson(id);
     return { ok: true };
   });

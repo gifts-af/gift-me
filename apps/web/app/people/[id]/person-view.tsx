@@ -6,8 +6,8 @@ import { PersonAvatar } from "@/components/person-avatar";
 import { PageTitle } from "@/components/app-shell/page-frame";
 import { createClient } from "@/lib/supabase/server";
 import { todayForRequest } from "@/lib/today";
-import { getPerson, getProfile, listSavedGifts, type Db, type PersonDetail } from "@/modules/concierge";
-import { SettingsRow } from "@/app/settings/settings-row";
+import { getPerson, countSavedGifts, getProfile, type Db, type PersonDetail } from "@/modules/concierge";
+import { SettingsRow } from "@/components/settings-row";
 import {
   deleteFactAction,
   deletePersonAction,
@@ -59,7 +59,7 @@ export async function PersonView({ id, photoFailed }: { id: string; photoFailed:
   if (!person) notFound();
   const [profile, savedGifts] = await Promise.all([
     getProfile(supabase as unknown as Db, person.id, person.keepsList),
-    listSavedGifts(person.id),
+    countSavedGifts(person.id),
   ]);
   const base = `/people/${person.id}`;
 
@@ -119,7 +119,7 @@ export async function PersonView({ id, photoFailed }: { id: string; photoFailed:
         <SettingsRow
           href={`${base}/saved-gifts`}
           label="Saved gifts"
-          value={savedGifts.length > 0 ? String(savedGifts.length) : "None"}
+          value={savedGifts > 0 ? String(savedGifts) : "None"}
         />
         <SettingsRow href={`${base}/list`} label="Their list" value={person.keepsList ? "Linked" : "Not linked"} />
         <SettingsRow href={`${base}/address`} label="Shipping address" value={addressSummary(person.address)} />

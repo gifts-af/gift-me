@@ -301,9 +301,8 @@ describe("WhatWeKnow", () => {
     expect(screen.getByLabelText("Fact").closest("li")).toContainElement(alert);
   });
 
-  it("keeps the fields off until the page can save (ALL-110)", async () => {
+  it("keeps the fields off until the page can save (ALL-110)", () => {
     hydrated.value = false;
-    const user = userEvent.setup();
     setup();
     const open = screen.getByRole("button", { name: "fly fishing" });
     // The fact opens only after a tap, so only its row needs the guard.

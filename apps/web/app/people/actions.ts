@@ -133,8 +133,8 @@ export async function setDatedOccasionAction(id: string, kind: string, month: st
   if (!dated || !isText(id, month, day)) return BAD_FORM;
   const parsed = parseMonthDay(month.trim(), day.trim());
   if (!parsed.ok) return parsed;
-  // Both fields empty: clearing never removes a date ("Remove birthday" does).
-  if (!parsed.value) return { ok: false, error: "That date doesn't exist." };
+  // Both fields empty: About never sends that; clearing never removes a date ("Remove birthday" does).
+  if (!parsed.value) return BAD_FORM;
   return refreshPerson(await setDatedOccasion(id, dated, parsed.value), id);
 }
 

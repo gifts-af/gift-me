@@ -1,9 +1,8 @@
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-// A person's routes (ALL-127): Mom's page drops the 300 s limit, the address
-// screen keeps it (saving there can place held gifts), and the old address
-// email link lands on the address screen.
+// A person's routes (ALL-127): the 300 s limits, and the old address email
+// link landing on the address screen.
 
 vi.mock("server-only", () => ({}));
 const redirect = vi.hoisted(() =>
@@ -44,9 +43,11 @@ async function openPerson(search: Record<string, string>) {
 }
 
 describe("a person's routes", () => {
-  it("keeps 300 s on the address screen only (it can place held gifts)", () => {
+  // The address screen can place held gifts; the person's page reads captures
+  // with AI (readCapturesAction), which can run long too (review of PR 1).
+  it("keeps 300 s on the address screen and the person's page", () => {
     expect(addressPage.maxDuration).toBe(300);
-    expect("maxDuration" in personPage).toBe(false);
+    expect((personPage as { maxDuration?: number }).maxDuration).toBe(300);
   });
 
   it("sends the old address email link to the address screen, open (AC-19)", async () => {
