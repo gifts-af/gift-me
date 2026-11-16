@@ -20,6 +20,9 @@ export const maxDuration = 60;
 
 // Resend posts "email.received" here (ALL-31). Unsigned mail is never accepted: without the
 // signing secret or the notes address the answer is 500, so Resend retries once it's fixed.
+// The notes address isn't read here yet: it stays a required gate because the tip email (ALL-31
+// Task 9) needs it, and a deploy without it should fail loudly rather than half work.
+// Resend retries any non-2xx answer, so every 4xx/5xx below means "try again or give up", never "lost".
 // The raw body is read first because the signature is over exactly those bytes.
 export async function POST(request: Request) {
   const secret = process.env.RESEND_WEBHOOK_SECRET;
@@ -42,7 +45,16 @@ export async function POST(request: Request) {
   const id = emailId;
 
   try {
+    // Everything that can throw is built BEFORE the claim: a failure here answers 500 with
+    // nothing claimed, so Resend's retry is processed. Once claimed, only after() work is left.
     const db = createAdminClient();
+    const deps: InboundDeps = {
+      store: createSupabaseInboundStore(db),
+      captureStore: (userId) => captureStoreFor(db, userId),
+      extract: createExtractor(AI_MODELS.extraction),
+      resend: { apiKey: process.env.RESEND_API_KEY, fetch },
+      notify: { store: createSupabaseNotifyStore(db), channels: defaultChannels(), baseUrl: siteUrl(), now: new Date() },
+    };
     // One row per email: Resend retries and duplicates insert nothing, so nothing runs twice.
     const { data, error } = await db
       .schema("concierge")
@@ -52,13 +64,6 @@ export async function POST(request: Request) {
     if (error) throw error;
     if (!data || data.length === 0) return new Response(null, { status: 200 });
 
-    const deps: InboundDeps = {
-      store: createSupabaseInboundStore(db),
-      captureStore: (userId) => captureStoreFor(db, userId),
-      extract: createExtractor(AI_MODELS.extraction),
-      resend: { apiKey: process.env.RESEND_API_KEY, fetch },
-      notify: { store: createSupabaseNotifyStore(db), channels: defaultChannels(), baseUrl: siteUrl(), now: new Date() },
-    };
     after(async () => {
       try {
         await handleInbound(id, deps);
@@ -67,7 +72,7 @@ export async function POST(request: Request) {
       }
     });
   } catch (e) {
-    // A 500 makes Resend retry; nothing was claimed if the claim itself failed.
+    // A 500 makes Resend retry. Nothing stays claimed: either we threw before the claim or the claim itself failed.
     logEvent("inbound.failed", { email_id: id, ...errorFields(e) });
     return new Response(null, { status: 500 });
   }
