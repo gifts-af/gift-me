@@ -101,11 +101,12 @@ export function BudgetForm({
     } catch {
       result = { ok: false, error: "That didn't save. Try again." };
     }
+    // Ready again either way: the app can keep this screen and show it again.
+    setBusy(false);
     if (result.ok) {
       router.push(`/people/${personId}`);
       return;
     }
-    setBusy(false);
     setErrors(result.errors ?? {});
     setError(result.error ?? null);
   }

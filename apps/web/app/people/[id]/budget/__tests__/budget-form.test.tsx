@@ -55,6 +55,13 @@ describe("BudgetForm", () => {
     await waitFor(() => expect(push).toHaveBeenCalledWith("/people/p1"));
   });
 
+  it("is ready to save again after a save, since the screen can be kept and shown again", async () => {
+    setup();
+    await userEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(push).toHaveBeenCalled());
+    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
+  });
+
   it("shows each field's message by that field and keeps what was typed", async () => {
     setup({
       action: vi.fn(async (): Promise<BudgetsResult> => ({ ok: false, errors: { christmas: "Enter an amount like 75 or 75.50." } })),

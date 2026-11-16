@@ -35,6 +35,9 @@ async function Loaded({ params }: { params: Promise<{ id: string }> }) {
       <BackLink href={`/people/${person.id}`} label={person.name} />
       <PageTitle>Budget for {person.name}</PageTitle>
       <BudgetForm
+        // The fields start from the saved amounts; a new key rebuilds them when
+        // those change, since the app can keep this screen between visits.
+        key={JSON.stringify([person.baseBudgetCents, person.occasions.map((o) => [o.kind, o.budgetCents])])}
         personId={person.id}
         name={person.name}
         baseCents={person.baseBudgetCents}
