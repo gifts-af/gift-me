@@ -5,3 +5,7 @@ export { default as GiftApp, GiftAppSkeleton } from "./components/gift-app";
 export { default as SharedList } from "./components/shared-list";
 export { getMyList, getMyListSummary, getSharedList } from "./lib/lists";
 export type { MyList, SharedList as SharedListData } from "./lib/lists";
+// Reading a pasted gift link, for saved gifts on a person's page (ALL-93).
+export { cleanGiftLink, readGiftLinkForUser } from "./actions/gift-link";
+export type { GiftLinkRead } from "./lib/gift-link";
+export { storeName } from "./lib/product-link.js";
