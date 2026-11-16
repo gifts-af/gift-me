@@ -13,6 +13,10 @@ export const metadata: Metadata = {
   referrer: "no-referrer",
 };
 
+// For the confirm Server Action: file_note reads the note with the model (ALL-31), like
+// /api/captures/[id]/extract. Next needs a literal here.
+export const maxDuration = 60;
+
 // Params and the session cookie are runtime data, so this renders inside
 // <Suspense> under cacheComponents. A GET only reads: nothing is used up and
 // no action runs until the confirm button posts (AC-3).

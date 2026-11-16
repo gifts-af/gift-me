@@ -1,0 +1,173 @@
+// @vitest-environment node
+import { describe, expect, it } from "vitest";
+import {
+  firstImage,
+  isAutoReply,
+  looksLikeCancel,
+  matchPeople,
+  redactForwardHeaders,
+  senderVerified,
+  stripQuoted,
+} from "../inbound/parse";
+
+describe("senderVerified", () => {
+  it("is true only when dmarc passes", () => {
+    expect(senderVerified({ spf: "fail", dkim: "fail", dmarc: "pass" })).toBe(true);
+    expect(senderVerified({ spf: "pass", dkim: "pass", dmarc: "fail" })).toBe(false);
+    expect(senderVerified({ spf: "pass", dkim: "pass", dmarc: "none" })).toBe(false);
+    expect(senderVerified({ spf: "pass", dkim: "pass" } as never)).toBe(false);
+  });
+});
+
+describe("stripQuoted", () => {
+  it("drops quoted lines and everything from an 'On ... wrote:' line", () => {
+    const text = "Dad wants a fly rod\n> old text\nOn Mon, Jan 5, 2026 at 9:00 AM Jim <j@x.com> wrote:\nanything\nelse";
+    expect(stripQuoted(text)).toBe("Dad wants a fly rod");
+  });
+  it("handles an attribution wrapped over two lines", () => {
+    const text = "Dad wants a fly rod\n\nOn Mon, Jan 5, 2026 at 9:00 AM Jim Allen <jim@x.com>\nwrote:\n> quoted\nmore";
+    expect(stripQuoted(text)).toBe("Dad wants a fly rod");
+  });
+  it("keeps a line starting with On that is not an attribution", () => {
+    expect(stripQuoted("On Tuesday we ship\nrod")).toBe("On Tuesday we ship\nrod");
+  });
+  it("keeps a forwarded message", () => {
+    const text = "Idea for Mom\n---------- Forwarded message ----------\nFrom: Shop\nA nice scarf";
+    expect(stripQuoted(text)).toBe(text);
+  });
+});
+
+describe("redactForwardHeaders (T42)", () => {
+  it("drops the header lines of a Gmail forward and keeps the rest", () => {
+    const text = [
+      "For Dad",
+      "",
+      "---------- Forwarded message ----------",
+      "From: Fly Shop <news@flyshop.example>",
+      "Date: Mon, Nov 16, 2026 at 9:00 AM",
+      "Subject: Back in stock",
+      "To: <me@example.com>",
+      "Cc: Jim Smith <jim@example.org>",
+      "",
+      "The rod is back. From: is a word here.",
+    ].join("\n");
+    expect(redactForwardHeaders(text)).toBe(
+      ["For Dad", "", "---------- Forwarded message ----------", "", "The rod is back. From: is a word here."].join("\n"),
+    );
+  });
+
+  it("drops the header lines of an Outlook forward, including Sent and Bcc", () => {
+    const text = ["Idea", "-----Original Message-----", "From: Shop", "Sent: Monday", "To: Me", "Bcc: Someone", "Subject: Sale", "Scarves on sale"].join("\r\n");
+    expect(redactForwardHeaders(text)).toBe(["Idea", "-----Original Message-----", "Scarves on sale"].join("\n"));
+  });
+
+  it("drops the header lines of an Apple Mail forward", () => {
+    const text = ["For Mom", "", "Begin forwarded message:", "", "From: Ann Lee <ann@shop.example>", "Subject: Scarves", "Date: November 16, 2026", "To: Me <me@example.com>", "", "Scarves on sale"].join("\n");
+    expect(redactForwardHeaders(text)).toBe(["For Mom", "", "Begin forwarded message:", "", "", "Scarves on sale"].join("\n"));
+  });
+
+  it("drops the header lines after new Outlook's underscore separator", () => {
+    const text = ["For Mom", "________________________________", "From: Ann Lee <ann@shop.example>", "Sent: Monday", "To: Me", "Cc: Jim Smith", "Subject: Scarves", "", "Scarves on sale"].join("\n");
+    expect(redactForwardHeaders(text)).toBe(["For Mom", "________________________________", "", "Scarves on sale"].join("\n"));
+  });
+
+  it("keeps header-like lines outside a forwarded block", () => {
+    const text = ["To: Mom", "Subject: her birthday"].join("\n");
+    expect(redactForwardHeaders(text)).toBe(text);
+  });
+
+  it("only drops the headers right after the marker, not later lines", () => {
+    const text = ["---------- Forwarded message ----------", "From: Shop", "", "Hello", "Date: Friday works"].join("\n");
+    expect(redactForwardHeaders(text)).toBe(
+      ["---------- Forwarded message ----------", "", "Hello", "Date: Friday works"].join("\n"),
+    );
+  });
+
+  it("redacts every email address in the text", () => {
+    expect(redactForwardHeaders("Ask jim.o'neil+gifts@mail.example.co.uk or <bob@x.io> about it")).toBe(
+      "Ask [email] or <[email]> about it",
+    );
+  });
+});
+
+describe("isAutoReply", () => {
+  it("reads Auto-Submitted", () => {
+    expect(isAutoReply({ "Auto-Submitted": "auto-replied" })).toBe(true);
+    expect(isAutoReply({ "Auto-Submitted": "no" })).toBe(false);
+  });
+  it("reads Precedence, case-insensitively", () => {
+    expect(isAutoReply({ precedence: "bulk" })).toBe(true);
+    expect(isAutoReply({ Precedence: "Junk" })).toBe(true);
+    expect(isAutoReply({ PRECEDENCE: "list" })).toBe(true);
+    expect(isAutoReply({ Precedence: "auto_reply" })).toBe(true);
+    expect(isAutoReply({ Precedence: "first-class" })).toBe(false);
+  });
+  it("is false with no headers", () => {
+    expect(isAutoReply({})).toBe(false);
+  });
+});
+
+describe("matchPeople", () => {
+  const p = (id: string, name: string) => ({ id, name });
+  it("matches a single-word name", () => {
+    expect(matchPeople("", "Dad wants a fly rod", [p("1", "Dad")])).toEqual(["1"]);
+  });
+  it("matches first name and full name, in subject or body", () => {
+    const people = [p("1", "Jennifer Lopez")];
+    expect(matchPeople("Gift for Jennifer", "", people)).toEqual(["1"]);
+    expect(matchPeople("", "Jennifer Lopez likes tea", people)).toEqual(["1"]);
+  });
+  it("needs a whole word", () => {
+    expect(matchPeople("", "Jennifer likes tea", [p("1", "Jenn")])).toEqual([]);
+  });
+  it("needs a capital first letter", () => {
+    expect(matchPeople("", "we will see", [p("1", "Will")])).toEqual([]);
+    expect(matchPeople("", "Will would like a book", [p("1", "Will")])).toEqual(["1"]);
+  });
+  it("returns unique ids in people order", () => {
+    const people = [p("1", "Mom"), p("2", "Dad")];
+    expect(matchPeople("Dad", "Mom and Dad and Mom", people)).toEqual(["1", "2"]);
+  });
+  it("prefers a full name over a shared first name", () => {
+    const people = [p("1", "Bob Smith"), p("2", "Bob Jones")];
+    expect(matchPeople("", "Bob Smith wants a kayak", people)).toEqual(["1"]);
+    expect(matchPeople("", "Bob wants a kayak", people)).toEqual(["1", "2"]);
+  });
+  it("still matches a first name when a different full name matches", () => {
+    const people = [p("1", "Dad"), p("2", "Jennifer Lopez")];
+    expect(matchPeople("", "Dad and Jennifer both want tea", people)).toEqual(["1", "2"]);
+  });
+  it("returns [] when nothing matches", () => {
+    expect(matchPeople("hi", "a fly rod", [p("1", "Dad")])).toEqual([]);
+  });
+});
+
+describe("looksLikeCancel", () => {
+  it("spots cancel phrases", () => {
+    expect(looksLikeCancel("don't buy it")).toBe(true);
+    expect(looksLikeCancel("Please cancel")).toBe(true);
+    expect(looksLikeCancel("skip this one")).toBe(true);
+  });
+  it("does not treat a bare 'cancel' in a gift idea as a cancel", () => {
+    expect(looksLikeCancel("Cancel culture book for Dad")).toBe(false);
+  });
+  it("ignores normal notes", () => {
+    expect(looksLikeCancel("a fly rod")).toBe(false);
+  });
+});
+
+describe("firstImage", () => {
+  const a = (id: string, content_type: string, size: number) => ({ id, content_type, size });
+  it("skips non-images and oversize images", () => {
+    const atts = [a("pdf", "application/pdf", 10), a("big", "image/png", 5000), a("ok", "image/webp", 100)];
+    expect(firstImage(atts, 1000)).toEqual({ id: "ok", content_type: "image/webp" });
+  });
+  it("accepts a content type with parameters and tolerates a missing one", () => {
+    expect(firstImage([a("x", "Image/JPEG; name=x.jpg", 5)], 1000)).toEqual({ id: "x", content_type: "image/jpeg" });
+    expect(firstImage([{ id: "n", size: 1 } as never], 1000)).toBeNull();
+  });
+  it("returns null when none qualify", () => {
+    expect(firstImage([a("svg", "image/svg+xml", 1)], 1000)).toBeNull();
+    expect(firstImage([], 1000)).toBeNull();
+  });
+});

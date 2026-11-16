@@ -72,13 +72,13 @@ describe("createSupabaseCaptureStore setCaptureStatus()", () => {
     const store = await createSupabaseCaptureStore("t");
     await store!.setCaptureStatus("c1", "failed");
     expect(update).toHaveBeenCalledWith({ status: "failed" });
-    expect(filters).toEqual([["eq", "id", "c1"], ["neq", "status", "extracted"]]);
+    expect(filters).toEqual([["eq", "id", "c1"], ["eq", "user_id", "u1"], ["neq", "status", "extracted"]]);
   });
 
   it("marks a capture extracted whatever it was before", async () => {
     const filters = updateChain();
     const store = await createSupabaseCaptureStore("t");
     await store!.setCaptureStatus("c1", "extracted");
-    expect(filters).toEqual([["eq", "id", "c1"]]);
+    expect(filters).toEqual([["eq", "id", "c1"], ["eq", "user_id", "u1"]]);
   });
 });

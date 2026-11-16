@@ -70,6 +70,8 @@ export { advanceRound, resumeRoundsForPerson, runTick, tellOrdered } from "./rou
 export type { AdvanceResult, EngineDeps, EngineZinc, GenerateIdeas, TickSummary } from "./rounds/engine";
 export { createSupabaseRoundStore } from "./rounds/store";
 export type { Candidate, ClaimedRound, NewRoundRow, RoundContext, RoundFinish, RoundOrder, RoundStore } from "./rounds/store";
+export { clearUnfiledNotes } from "./inbound/cleanup";
+export type { InboundCleanup } from "./inbound/cleanup";
 export { createStubGenerateIdeas } from "./rounds/ideas";
 
 // Paying for gifts from the user's own Zinc wallet (ALL-32): connect, phone, disconnect, Settings status.
@@ -96,3 +98,10 @@ export type { ApproveError, ApproveInput, ApproveResult } from "./purchase/appro
 export { placeAddressHeld as placeAddressHeldFor, placeHeldForUser, placeRound, sweepStalePlacing } from "./purchase/place";
 export type { PlaceOutcome } from "./purchase/place";
 export type { PurchaseDeps } from "./purchase/store";
+// Notes emailed to the notes address (ALL-31): the webhook route binds these.
+export { handleInbound } from "./inbound/handle";
+export type { InboundDeps, InboundOutcome } from "./inbound/handle";
+export { createSupabaseInboundStore } from "./inbound/supabase-store";
+export type { InboundStore } from "./inbound/store";
+export { sendNotesTipOnce } from "./inbound/tip";
+export { captureStoreFor } from "./capture/supabase-store";

@@ -68,7 +68,9 @@ export async function processCapture(store: CaptureStore, extract: Extract, capt
   const started = Date.now();
   try {
     const known = await store.knownFacts(capture.personId);
-    const screenshot = capture.screenshotPath ? await store.downloadScreenshot(capture.screenshotPath) : null;
+    const screenshot = capture.screenshotPath
+      ? { bytes: await store.downloadScreenshot(capture.screenshotPath), type: capture.screenshotType }
+      : null;
     const candidates = await extract({
       relationship: capture.relationship,
       url: capture.url,

@@ -35,13 +35,19 @@ describe("sampleEmails", () => {
       "failed_late-several",
       "failed_several",
       "check_your_address",
+      "notes_tip",
+      "who_is_this",
+      "notes_not_read",
+      "notes_cant_cancel",
     ]);
   });
 
   it("points every button at the given link, so tapping a sample is harmless", () => {
-    for (const { email } of samples) {
+    // These three are answered by replying, or need nothing back, so they have no links (ALL-31).
+    const noLinks = ["notes_tip", "notes_not_read", "notes_cant_cancel"];
+    for (const { name, email } of samples.filter((s) => !noLinks.includes(s.name))) {
       const hrefs = [...email.html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
-      expect(hrefs.length).toBeGreaterThan(0);
+      expect(hrefs.length, name).toBeGreaterThan(0);
       expect(new Set(hrefs)).toEqual(new Set(["https://giftsaf.com/a/sample"]));
     }
   });

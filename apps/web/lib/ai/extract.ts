@@ -15,8 +15,8 @@ export type ExtractInput = {
   title: string;
   text: string;
   note: string | null;
-  /** JPEG bytes, or null when the capture has no screenshot. */
-  screenshot: Uint8Array | null;
+  /** The image and its media type (image/jpeg, png, webp or gif), or null when the capture has none. */
+  screenshot: { bytes: Uint8Array; type: string } | null;
   /** What's already recorded about them, active or removed, as factLine text. */
   known: string[];
 };
@@ -88,7 +88,7 @@ export function createExtractor(model: LanguageModel): Extract {
           role: "user",
           content: [
             { type: "text", text: lines.join("\n") },
-            ...(input.screenshot ? [{ type: "file" as const, mediaType: "image/jpeg", data: input.screenshot }] : []),
+            ...(input.screenshot ? [{ type: "file" as const, mediaType: input.screenshot.type, data: input.screenshot.bytes }] : []),
           ],
         },
       ],

@@ -6,6 +6,7 @@ export type FakeCaptureRow = NewCaptureRow & {
   id: string;
   userId: string;
   screenshotPath: string | null;
+  screenshotType: string | null;
 };
 
 /** In-memory CaptureStore for unit tests. */
@@ -15,6 +16,7 @@ export class FakeCaptureStore implements CaptureStore {
   userId = "user-1";
   rows: FakeCaptureRow[] = [];
   uploads = new Map<string, Blob>();
+  uploadTypes = new Map<string, string>();
   failLimits = false;
   failPersonCheck = false;
   failInsert = false;
@@ -43,17 +45,21 @@ export class FakeCaptureStore implements CaptureStore {
   async insertCapture(row: NewCaptureRow) {
     if (this.failInsert) throw new Error("insert failed");
     const id = `cap-${++this.n}`;
-    this.rows.push({ ...row, id, userId: this.userId, screenshotPath: null });
+    this.rows.push({ ...row, id, userId: this.userId, screenshotPath: null, screenshotType: null });
     return { id, userId: this.userId };
   }
-  async uploadScreenshot(path: string, jpeg: Blob) {
+  async uploadScreenshot(path: string, image: Blob, type: string) {
     if (this.failUpload) throw new Error("upload failed");
-    this.uploads.set(path, jpeg);
+    this.uploads.set(path, image);
+    this.uploadTypes.set(path, type);
   }
-  async setScreenshotPath(id: string, path: string) {
+  async setScreenshotPath(id: string, path: string, type: string) {
     if (this.failSetPath) throw new Error("set path failed");
     const row = this.rows.find((r) => r.id === id);
-    if (row) row.screenshotPath = path;
+    if (row) {
+      row.screenshotPath = path;
+      row.screenshotType = type;
+    }
   }
   async deleteCapture(id: string) {
     if (this.failDelete) throw new Error("delete failed");

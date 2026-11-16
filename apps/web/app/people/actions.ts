@@ -6,8 +6,10 @@ import { GUIDED_QUESTIONS, parseDate, type OccasionKind } from "@gifts-af/core";
 import { createExtractor } from "@/lib/ai/extract";
 import { AI_MODELS } from "@/lib/ai/models";
 import { appSettingInt } from "@/lib/app-settings";
+import { errorFields, logEvent } from "@/lib/log";
 import { createClient } from "@/lib/supabase/server";
 import { todayForRequest } from "@/lib/today";
+import { scheduleNotesTip } from "./notes-tip";
 import { buyingWiring, placeAddressHeld } from "@/app/settings/zinc-deps";
 import {
   addPerson,
@@ -73,8 +75,20 @@ export async function addPersonAction(_previous: AddResult | null, formData: For
   const parsed = parsePersonForm(formData, currentYear);
   if (!parsed.ok) return parsed;
   const result = await addPerson(parsed.value);
-  if (result.ok) revalidatePath("/people");
+  if (result.ok) {
+    revalidatePath("/people");
+    await tipAfterAdd({ id: result.id, name: parsed.value.name });
+  }
   return result;
+}
+
+// The one-time notes tip (ALL-31 AC-15). Whatever goes wrong, the person is already added.
+async function tipAfterAdd(person: { id: string; name: string }): Promise<void> {
+  try {
+    await scheduleNotesTip(person);
+  } catch (e) {
+    logEvent("inbound.tip_failed", { person_id: person.id, ...errorFields(e) });
+  }
 }
 
 /** The round engine with the real buying side, for rounds that go on once an address arrives. */
@@ -155,7 +169,9 @@ export async function importContactsAction(_previous: ImportResult | null, formD
   if (!result.ok) return result;
   revalidatePath("/");
   revalidatePath("/people");
-  return { ...result, failed: result.failed + parsed.refused };
+  const { firstAdded, ...counts } = result;
+  if (firstAdded) await tipAfterAdd(firstAdded);
+  return { ...counts, failed: result.failed + parsed.refused };
 }
 
 // "What we know" (ALL-26): edit, turn off or delete a fact; read unread captures.

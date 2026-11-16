@@ -122,8 +122,17 @@ describe("confirmActionLink", () => {
     expect(result).toEqual({ state: "done", done: ACTIONS.test.done });
     expect(ACTIONS.test.done.body).toBe("It works. Buttons in our emails will look like this.");
     expect(run).toHaveBeenCalledTimes(1);
-    expect(run).toHaveBeenCalledWith({ userId: OWNER, roundId: null, store });
+    expect(run).toHaveBeenCalledWith({ userId: OWNER, roundId: null, personId: null, inboundMessageId: null, store });
     expect(store.links[0].usedAt).toEqual(NOW);
+  });
+
+  it("never builds file_note's deps for another action", async () => {
+    const store = await storeWithLink();
+    const notes = vi.fn(() => {
+      throw new Error("built");
+    });
+    expect(await confirmActionLink(TOKEN, OWNER, { store, now: NOW, notes })).toEqual({ state: "done", done: ACTIONS.test.done });
+    expect(notes).not.toHaveBeenCalled();
   });
 
   it("returns used on a second confirm and doesn't run again (AC-5)", async () => {

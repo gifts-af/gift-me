@@ -22,7 +22,7 @@
 - **Who it's about, without AI:** a reply to one of our notes emails is matched to its person through its `In-Reply-To` header and the notification we sent. Otherwise code looks for the user's people's names, as capitalised whole words, in the subject and body (so "will" or "grace" in a sentence don't count). Exactly one match files it; zero or several ask (below). No AI call, and no names go to the AI.
 - **Filing:** the message becomes a normal capture for that person: the text as the capture's text, the first image (if any) as its screenshot, and the existing capture reading (T48) runs. AI suggestions show on the person's page as for extension captures, and "Try again" works the same.
 - **Unsure:** one "Who is this about?" email with a one-time button for each matching person, or for each of the user's people when nothing matched, up to `inbound_match_max_choices` (5), plus "Someone else" (opens the people page). Tapping a person files the message to them and reads it. The first tap wins: the message moves from asking to filed in one update, and any later tap says it's already filed. A person deleted since then can't be picked. Unfiled messages are cleared when their links expire.
-- **Did you know:** one tip email per account, sent the first time they add a person: "Did you know? Reply to this with anything you learn about Dad, like 'wants a new fly rod', and we'll remember it."
+- **Did you know:** one tip email per account, sent the first time they add a person, only while `inbound_email_enabled` is on and the account has paid features (otherwise it waits for a later person): "Did you know? Reply to this with anything you learn about Dad, like 'wants a new fly rod', and we'll remember it."
 - **Paid features:** reading costs money, so only accounts with paid features (ALL-94) get notes read. For anyone else nothing is kept, and they get one reply, once ever, saying notes are read only for test accounts during the alpha.
 - **Limits:** at most `inbound_max_per_user_per_day` (20) messages are accepted per user per day, counting every message and every email we send back; more are dropped and logged, so a mail loop can't run up AI spend or use up the daily email quota. Auto-replies (headers `Auto-Submitted` other than `no`, or `Precedence: bulk`/`auto_reply`) are dropped. `inbound_email_enabled` (1) is the off switch (E7).
 
@@ -55,7 +55,7 @@
 
 ### What changes in the code and schema
 
-- `concierge.inbound_messages`: add `provider_email_id` (unique), `notification_id` (the email it replied to, if any) and `capture_id`; statuses `received`, `filed`, `asking`, `ignored`; drop `from_address` (the account says who sent it). Subject and body are cleared when filed, and unfiled ones when their links expire.
+- `concierge.inbound_messages` stores only messages waiting on "Who is this about?" (`asking`, then `filed`); add `capture_id`, `image_path`, `image_type`; drop `from_address`. Dedupe is a separate `inbound_seen` table with no personal data. Subject and body are cleared when filed, and unfiled ones when their links expire.
 - `action_links`: add `inbound_message_id` and `person_id`, and a `file_note` action whose `run` gets them.
 - Capture saving: a server-side path that sets `user_id` itself (the webhook has no signed-in user), allows no URL and no screenshot, and records the image's real type. Capture reading passes the image's real media type instead of always `image/jpeg`.
 - `notifications`: a reply's `In-Reply-To` is looked up against the provider message id we already store.
@@ -123,7 +123,7 @@
 - [ ] Run it inside one rolled-back transaction in the `supabase_db_gift-me` container; expect failures.
 - [ ] Write the migration:
   - `concierge.inbound_seen (provider_email_id text primary key, created_at timestamptz default now())`, no personal data, service role only. The tick prunes rows older than 7 days (Task 10).
-  - `inbound_messages`: add `notification_id`, `capture_id` (`on delete set null`), `image_path`, `image_type`; drop `from_address` and `attachments`; status check `in ('asking','filed')` (only asking messages are stored).
+  - `inbound_messages`: add `capture_id` (`on delete set null`), `image_path`, `image_type`; drop `from_address` and `attachments`; status check `in ('asking','filed')` (only asking messages are stored).
   - `notifications`: add `person_id uuid` with FK `(person_id, user_id)` to `public.people` `on delete set null (person_id)`, and `message_id text unique` (the `Message-ID` header we set). `provider_message_id` keeps meaning Resend's id.
   - `action_links`: add `inbound_message_id uuid references concierge.inbound_messages on delete cascade` and `person_id uuid` with FK `(person_id, user_id)` to `public.people` `on delete cascade`.
   - `captures`: add `screenshot_type text` (null means `image/jpeg`, as today).

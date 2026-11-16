@@ -68,6 +68,7 @@ describe("processCapture", () => {
       text: "My vise gave out",
       note: null,
       screenshotPath: "user-1/cap-1.jpg",
+      screenshotType: "image/jpeg",
       ...over,
     };
     store.captures.set(c.id, c);
@@ -100,7 +101,7 @@ describe("processCapture", () => {
     capture();
     await processCapture(store, extract, "cap-1");
     expect(calls[0].relationship).toBe("father");
-    expect(calls[0].screenshot).toEqual(new Uint8Array([1, 2, 3]));
+    expect(calls[0].screenshot).toEqual({ bytes: new Uint8Array([1, 2, 3]), type: "image/jpeg" });
     expect(Object.keys(calls[0])).not.toContain("name");
   });
 
@@ -200,6 +201,13 @@ describe("processCapture", () => {
     expect(calls).toHaveLength(1);
     expect(again.facts.map((f) => f.value)).toEqual(["a new rotary vise"]);
     expect(store.facts).toHaveLength(1);
+  });
+
+  it("sends image/png for a PNG capture", async () => {
+    capture({ screenshotPath: "user-1/cap-1.png", screenshotType: "image/png" });
+    store.screenshots.set("user-1/cap-1.png", new Uint8Array([4, 5]));
+    await processCapture(store, extract, "cap-1");
+    expect(calls[0].screenshot).toEqual({ bytes: new Uint8Array([4, 5]), type: "image/png" });
   });
 
   it("works with text only when there's no screenshot", async () => {

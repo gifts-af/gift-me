@@ -4,7 +4,8 @@ import type { SavedFact } from "./extract";
 
 export type NewCaptureRow = {
   personId: string;
-  url: string;
+  /** Null for a capture with no page, like an emailed note. */
+  url: string | null;
   title: string;
   text: string;
   note: string | null;
@@ -23,17 +24,19 @@ export type StoredCapture = {
   text: string;
   note: string | null;
   screenshotPath: string | null;
+  /** The screenshot's media type; image/jpeg for older captures, whose type was never stored. */
+  screenshotType: string;
 };
 
 /** Persistence for captures; supabase-store.ts supplies the Supabase-backed version. */
 export interface CaptureStore {
   limits(): Promise<{ textMaxChars: number; screenshotMaxBytes: number }>;
-  /** RLS-scoped: false for a person that belongs to someone else. */
+  /** False for a person that belongs to someone else. Every query keeps to `userId`, so the store is safe with the service-role client. */
   personExists(personId: string): Promise<boolean>;
   insertCapture(row: NewCaptureRow): Promise<{ id: string; userId: string }>;
   /** Throws on failure. */
-  uploadScreenshot(path: string, jpeg: Blob): Promise<void>;
-  setScreenshotPath(id: string, path: string): Promise<void>;
+  uploadScreenshot(path: string, image: Blob, type: string): Promise<void>;
+  setScreenshotPath(id: string, path: string, type: string): Promise<void>;
   deleteCapture(id: string): Promise<void>;
 
   // Extraction (ALL-25).
@@ -42,7 +45,7 @@ export interface CaptureStore {
   userId: string;
   /** Whether this user may spend money on reading (ALL-94). */
   hasPaidFeatures(): Promise<boolean>;
-  /** RLS-scoped: null for an unknown or someone else's capture. */
+  /** Null for an unknown or someone else's capture. */
   loadCapture(id: string): Promise<StoredCapture | null>;
   downloadScreenshot(path: string): Promise<Uint8Array>;
   /** Every fact the person has, active or removed, oldest first. */

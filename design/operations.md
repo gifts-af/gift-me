@@ -221,6 +221,56 @@ Code and migration ship together. If the code is rolled back with Vercel's insta
 
 **What the buyer may see:** the older engine doesn't read the new `fail:<order id>` keys, so while it runs, a round whose failure was already told can get the older single failure email again. Rolling forward sends no repeats: `untold_failures` counts an older `fail:<n>:notice` key as telling every failure that happened before it. Rounds are off on production until ALL-29 (decision 53), so only test and admin buyers can see a repeat. **[Claude's call]**
 
+## Inbound notes (ALL-31)
+
+Users email a note to `notes@in.giftsaf.com` and it is filed on the right person (T70). Spec: [design/plans/ALL-31-email-capture.md](plans/ALL-31-email-capture.md).
+
+**Ship order:** the migration PR merges first and its CI `migrate` job must finish green on dev and prod before the code PR merges.
+
+**Setup**
+1. Resend dashboard > Webhooks > add endpoint `https://giftsaf.com/api/inbound/resend`, event `email.received`. The free plan has one webhook endpoint.
+2. Copy the endpoint's signing secret into Vercel as `RESEND_WEBHOOK_SECRET` (Production).
+3. Set `INBOUND_NOTES_ADDRESS=notes@in.giftsaf.com` in all environments.
+4. `RESEND_API_KEY` must be full access (reading received mail needs it).
+
+**Settings** (`concierge.app_settings`)
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `inbound_email_enabled` | 1 | Off switch |
+| `inbound_match_max_choices` | 5 | People offered as buttons in "Who is this about?" |
+| `inbound_max_per_user_per_day` | 20 | Messages in plus emails out, per user |
+| `inbound_link_hours` | 72 | How long the buttons work |
+| `inbound_thread_lookup_max` | 10 | Sent emails checked when matching a reply |
+| `inbound_thread_lookup_days` | 60 | How far back those are checked |
+| `inbound_prune_days` | 7 | Days before `inbound_seen` and `inbound_events` rows are pruned |
+
+**Turn it off:** set `inbound_email_enabled` to 0. Mail is then ignored; no deploy needed.
+
+**Events** (ids and a reason only, E6)
+
+| Event | Means |
+|---|---|
+| `inbound.filed` | A note was filed to a person (`matched_by`: reply, name or choice) |
+| `inbound.asking` | A note was saved and "Who is this about?" sent |
+| `inbound.ask_capped` | "Who is this about?" was over the daily cap, so the waiting note and its image were deleted (with error fields if that delete failed; the daily clear-out then catches it) |
+| `inbound.ignored` | A message was dropped, with a `reason` (disabled, auto_reply, unverified, unknown_sender, capped, unpaid) |
+| `inbound.reply_capped` | An email back wasn't sent because of the daily cap |
+| `inbound.reply_failed` | An email back failed to send |
+| `inbound.read_failed` | A note was filed but reading it failed; "Try again" on the person's page reads it |
+| `inbound.image_failed` | A note's image couldn't be downloaded or stored; the note was kept without it |
+| `inbound.tip_failed` | The "Did you know?" tip failed to send |
+| `inbound.failed` | Accepting or filing a message failed |
+| `inbound.misconfigured` | `RESEND_WEBHOOK_SECRET` or `INBOUND_NOTES_ADDRESS` is missing |
+| `inbound.notes_cleared` | The daily tick cleared unfiled notes (counts) |
+| `inbound.notes_clear_failed` | The daily clear-out failed; it retries on the next tick |
+| `inbound.note_images_left` | Deleting cleared notes' images failed (count); the next tick retries |
+| `inbound.note_images_left_paths` | The storage paths still waiting, a few per line |
+
+**A note can be lost:** the webhook claims the email (an `inbound_seen` row) before fetching it from Resend. If that fetch fails after the claim, Resend has already had its 200 and any repeat delivery is skipped as seen, so the note is gone; it's logged as `inbound.failed` with the `email_id`, and the user can send it again.
+
+**Testing in dev:** run a tunnel to the local app and point the Resend endpoint at `https://<tunnel>/api/inbound/resend`, with the secret in `.env.local`. With one endpoint on the free plan, switch it back to production afterwards.
+
 ## Production test account
 
 To check a change on giftsaf.com while signed in, use **`allensforever711+qa@gmail.com`** (T60). Don't create another account for this, and don't use a real person's.

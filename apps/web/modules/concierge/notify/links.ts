@@ -1,5 +1,5 @@
-import { ACTIONS, type Action, type ActionResult } from "./actions";
-import type { NotifyStore } from "./store";
+import { ACTIONS, type Action, type ActionResult, type NoteDeps } from "./actions";
+import type { LinkRow, NotifyStore } from "./store";
 import { hashActionToken } from "./tokens";
 
 // Reading and confirming one-time action links (ALL-23, AC-3 to AC-10).
@@ -19,7 +19,11 @@ export type ConfirmResult =
   | { state: "done"; done: Action["done"]; next?: string; straight?: true }
   | Exclude<LinkView, { state: "confirm" }>;
 
-export type LinkDeps = { store: NotifyStore; now: Date };
+/**
+ * `notes`: builds what file_note needs beyond the database (ALL-31), called only when a file_note
+ * link runs; only the confirm route passes it.
+ */
+export type LinkDeps = { store: NotifyStore; now: Date; notes?: () => NoteDeps };
 
 /**
  * The action a saved link names, or null when this build doesn't have it: the
@@ -51,7 +55,7 @@ export async function readActionLink(
   if (link.usedAt) return { state: "used" };
   // Same boundary as claimLink (expires_at > now): at the expiry instant it's expired.
   if (link.expiresAt.getTime() <= now.getTime()) return { state: "expired" };
-  return { state: "confirm", confirm: action.confirm };
+  return { state: "confirm", confirm: action.confirmFor ? await action.confirmFor(link, store) : action.confirm };
 }
 
 export async function confirmActionLink(
@@ -70,29 +74,26 @@ export async function confirmActionLink(
 
   const action = actionFor(claimed.action);
   if (!action) return { state: "invalid" };
-  const result = await runSafely(action, claimed.userId, claimed.roundId, deps.store);
+  const result = await runSafely(action, claimed, deps);
   if (!result.ok) {
     // [Claude's call] The link stays used: real actions must be safe to treat as
     // done or report their own failure. Never log the raw token.
     console.error(`Action link "${claimed.action}" failed for user ${userId}: ${result.error}`);
     return { state: "invalid" };
   }
-  // The link is already used, so a failed lookup only costs the shortcut.
-  const next = await action.next?.(claimed.roundId, deps.store).catch(() => null);
+  // The link is already used, so a failed lookup only costs the shortcut. The result's own
+  // `next` (null: home) wins over the action's.
+  const next = "next" in result ? result.next : await action.next?.(claimed, deps.store).catch(() => null);
   const done = result.done ?? action.done;
   if (!next) return { state: "done", done };
   return { state: "done", done, next, ...(action.straight ? { straight: true as const } : {}) };
 }
 
 /** A throwing action counts as a failed one, so the page still answers. */
-async function runSafely(
-  action: Action,
-  userId: string,
-  roundId: string | null,
-  store: NotifyStore,
-): Promise<ActionResult> {
+async function runSafely(action: Action, link: LinkRow, { store, notes }: LinkDeps): Promise<ActionResult> {
   try {
-    return await action.run({ userId, roundId, store });
+    const { userId, roundId, personId, inboundMessageId } = link;
+    return await action.run({ userId, roundId, personId, inboundMessageId, store, notes });
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }

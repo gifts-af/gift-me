@@ -12,6 +12,8 @@ describe("isPublicPath", () => {
     "/auth/callback",
     "/api/keepalive",
     "/api/rounds/tick",
+    // Resend posts inbound mail here, signed with Svix (ALL-31).
+    "/api/inbound/resend",
     // The Chrome extension posts captures here with a bearer token (ALL-22).
     "/api/captures",
     // ...and retries a capture's read the same way (ALL-25).

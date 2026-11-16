@@ -151,7 +151,7 @@ All tables have `id uuid`, `created_at`, and `updated_at`. Accounts (`profiles`)
 | `reactions` | round_id, rating (loved, liked, meh, returned), note, source (email, web) | D-2 |
 | `notifications` | user_id, round_id, kind, channel, sent_at, provider_message_id, error | Audit trail plus reminder escalation state. Records delivery; the link token lives in `action_links` (ALL-23). |
 | `action_links` | user_id, round_id (nullable), notification_id, action, token_hash (unique), expires_at, used_at | One row per emailed button (ALL-23). Only the SHA-256 hash of the token is stored. Server-only: no policies and no grants for signed-in users. Generic on purpose, so scan-to-gift and ALL-49 can reuse it (T38). |
-| `inbound_messages` | user_id, from, subject, body, attachments, matched_person_id, status | N-2, C-5 |
+| `inbound_messages` | user_id, subject, body, image_path, image_type, matched_person_id, status (`asking` or `filed`), capture_id | N-2, C-5. Only notes waiting on "Who is this about?" (ALL-31); subject and body are cleared once filed or when the buttons expire |
 | `app_settings` | key, value (jsonb), updated_at | App-wide settings that change without a deploy (T23): `zinc_order_fee_cents` and the §4.1 schedule timings (`planning_delivery_days`, `safety_buffer_days`, `round_lead_days`, `reminder_1_after_heads_up_days`, `reminder_2_before_deadline_days`, `final_notice_before_deadline_days`, `fastest_days_to_arrive`). Not user-owned: only the server can read it, and the owner edits it. |
 
 Gift history (D-3) is a view over `gift_rounds`, `gift_ideas`, `orders`, and `reactions`.
@@ -391,9 +391,11 @@ Funding comes in two stages. Ordering, tracking and the data model are the same 
 - **As built (ALL-26, T53):** a plain link under the email's one button, using the `answer_questions` action on `action_links`. It follows §6.4's sign-in and confirm steps, then goes straight to `/people/{id}/questions`. Answers become `profile_facts` with `source = question`, `confirmed = true`.
 
 ### 6.8 Inbound email quick capture (N-2, C-5)
-- **Each user gets a private capture address, `notes+{token}@in.giftsaf.com` (T33).** The token is random, identifies the user, and can be reset in Settings. It works from any account the user sends from. Heads-up and reminder emails use it as their Reply-To, so replying with news is the same as emailing a note. Mail to an unknown token is logged and dropped.
-- **Webhook handling (W1-4 findings):** verify the Svix signature against the raw body, answer 200 straight away, and dedupe on `email_id`. Then fetch the body and attachments from Resend's API, and **copy attachments into Supabase Storage at once**, because their download links expire after an hour. Use the plain-text body plus attachments, and ignore the HTML: pasted images appear in it a second time as base64.
-- The inbound webhook stores the message. The AI model then matches it to a person, using names in the text and the user's list of people, and extracts facts. If it isn't confident, it emails back asking "Who is this about?"
+- **One address for everyone, `notes@in.giftsaf.com` (T70, revises T33).** The user emails a note from their account email. The sender must match the account and pass DMARC; anyone else is dropped and logged with no reply, so a forged From gets no backscatter. Unpaid users get one reply ever and nothing is kept.
+- **Webhook handling (W1-4 findings):** verify the Svix signature against the raw body (missing `RESEND_WEBHOOK_SECRET` is a 500, never unsigned mail accepted), answer 200 straight away, and dedupe through `inbound_seen`. Then fetch the body and attachments from Resend's API, and **copy the first image under the size cap into Supabase Storage at once**, because download links expire after an hour. Use the plain-text body, with quoted text stripped, and ignore the HTML.
+- **No AI matching.** A note is matched to a person by reply threading (the notification's Resend id, then its Message-ID looked up later, because SES rewrites custom Message-IDs), then by capitalised names in code. No match asks "Who is this about?" with buttons that work for `inbound_link_hours`; unfiled notes are cleared by the daily tick. The note is stored as a capture once the person is known, and AI only reads the capture, as for extension captures.
+- **Reply-To** is set only on the "Did you know?" tip email. Purchase emails never carry it, and "Who is this about?" has buttons and no Reply-To.
+- **Cap:** `inbound_max_per_user_per_day` (20) counts messages in and emails out; auto-replies are dropped.
 
 ## 7. AI design
 
@@ -407,7 +409,6 @@ Funding comes in two stages. Ordering, tracking and the data model are the same 
 | Task | Default model and settings (T39) | Output | Cost (measured in W1-3 and ALL-42) |
 |---|---|---|---|
 | Capture extraction | Claude Sonnet 5.5, effort `low`, vision | Structured facts (schema-validated) | ~$0.005 per text capture, ~$0.01 per phone screenshot |
-| Inbound note matching and extraction | Claude Sonnet 5.5, effort `low` | Person match plus facts | ~$0.005 each (estimate, same as text capture) |
 | Idea brainstorm | Claude Sonnet 5.5, web search (up to 3 searches) | 8 candidates with ids and `product_search` terms, no URLs (schema) | ~$0.18 (mostly search results read) |
 | Idea ranking and reasons | Claude Sonnet 5.5, effort `low` | Ranked list by candidate id (schema) | ~$0.01 |
 

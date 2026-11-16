@@ -379,7 +379,7 @@ export function deletePerson(store: PeopleStore, id: string): Promise<SaveResult
 // ─── Google Contacts import (ALL-24) ────────────────────────────────────────
 
 export type ImportResult =
-  | { ok: true; added: number; skipped: number; failed: number; photosMissed: number }
+  | { ok: true; added: number; skipped: number; failed: number; photosMissed: number; firstAdded?: { id: string; name: string } | null }
   | { ok: false; error: string };
 
 export type ImportDeps = {
@@ -491,7 +491,7 @@ export async function importPeople(store: PeopleStore, rows: ImportRow[], deps: 
     return { ok: false, error: TRY_AGAIN };
   }
 
-  const result = { ok: true as const, added: 0, skipped: 0, failed: 0, photosMissed: 0 };
+  const result = { ok: true as const, added: 0, skipped: 0, failed: 0, photosMissed: 0, firstAdded: null as { id: string; name: string } | null };
   const photos: { id: string; url: string }[] = [];
   for (const row of rows) {
     if (imported.has(row.googleId)) {
@@ -511,6 +511,7 @@ export async function importPeople(store: PeopleStore, rows: ImportRow[], deps: 
       });
       imported.add(row.googleId);
       result.added++;
+      result.firstAdded ??= { id, name: row.name };
       if (row.photoUrl) photos.push({ id, url: row.photoUrl });
     } catch (e) {
       // The unique index: another import added them a moment ago.
