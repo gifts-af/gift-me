@@ -476,7 +476,6 @@ export type Database = {
           image_path: string | null;
           image_type: string | null;
           matched_person_id: string | null;
-          notification_id: string | null;
           status: string;
           subject: string | null;
           updated_at: string;
@@ -491,7 +490,6 @@ export type Database = {
           image_path?: string | null;
           image_type?: string | null;
           matched_person_id?: string | null;
-          notification_id?: string | null;
           status?: string;
           subject?: string | null;
           updated_at?: string;
@@ -505,7 +503,6 @@ export type Database = {
           image_path?: string | null;
           image_type?: string | null;
           matched_person_id?: string | null;
-          notification_id?: string | null;
           status?: string;
           subject?: string | null;
           updated_at?: string;
@@ -517,13 +514,6 @@ export type Database = {
             columns: ["capture_id"];
             isOneToOne: false;
             referencedRelation: "captures";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "inbound_messages_notification_id_fkey";
-            columns: ["notification_id"];
-            isOneToOne: false;
-            referencedRelation: "notifications";
             referencedColumns: ["id"];
           },
         ];
@@ -1252,10 +1242,6 @@ export type Database = {
         Args: { p_round_id: string };
         Returns: string[];
       };
-      clear_unfiled_inbound: {
-        Args: never;
-        Returns: { image_path: string; message_id: string }[];
-      };
       claim_inbound_flag: {
         Args: { p_flag: string; p_user_id: string };
         Returns: boolean;
@@ -1332,7 +1318,13 @@ export type Database = {
         Args: { p_round_id: string };
         Returns: undefined;
       };
-      forget_inbound_images: { Args: { p_message_ids: string[] }; Returns: undefined };
+      clear_unfiled_inbound: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          image_path: string;
+          message_id: string;
+        }[];
+      };
       delete_occasion: { Args: { p_occasion_id: string }; Returns: undefined };
       enable_owner_rls: { Args: { p_table: unknown }; Returns: undefined };
       fail_order: {
@@ -1362,6 +1354,10 @@ export type Database = {
           p_status: Database["concierge"]["Enums"]["round_status"];
         };
         Returns: boolean;
+      };
+      forget_inbound_images: {
+        Args: { p_message_ids: string[] };
+        Returns: undefined;
       };
       gate_held_orders: {
         Args: { p_reason: string; p_round_id: string };
