@@ -3,7 +3,7 @@ import { localSupabase } from "./local-supabase";
 import { SECOND_USER, TEST_USER } from "./test-user";
 import { createFreshUser } from "./fresh-user";
 import { phoneLayoutProblems } from "./phone-layout";
-import { addMother } from "./seed";
+import { addMother, addSavedGift } from "./seed";
 import { session, signIn } from "./sign-in";
 
 // ALL-21: add someone, see their card, switch occasions and budgets, link their
@@ -63,6 +63,8 @@ async function secondUserShareLink(): Promise<string> {
 test("the Add form, Home with a card, and a person's page fit the screen", { tag: "@layout" }, async ({ page }) => {
   const user = await createFreshUser();
   const personId = await addMother(user, "Mom");
+  // A long name, so the Saved gifts list is checked at its widest (ALL-93).
+  await addSavedGift(user, personId, `Hand-tied fly-fishing reel with a spare spool and a carry case ${"x".repeat(56)}`);
   await signIn(page, user);
   // The full phone check (ALL-109): sideways scroll, small links, text past the edge.
   // Collected for every screen, so one run lists them all.
@@ -155,4 +157,47 @@ test("add a mother-in-law", async ({ page }) => {
   await expect(page.getByRole("switch", { name: "Mother's Day" })).toBeChecked();
   // Saved and read back: the Edit form has her relationship selected.
   await expect(page.getByLabel("Who are they to you?")).toHaveValue("mother_in_law");
+});
+
+// ALL-93: a gift saved by link and one by hand stay on the person's page
+// after a reload, open the store page, and can be removed.
+test("save a gift for someone, then remove it", async ({ page }) => {
+  const user = await createFreshUser();
+  const personId = await addMother(user, "Mom");
+  await signIn(page, user);
+  await page.goto(`/people/${personId}`);
+  const saved = page.getByRole("region", { name: "Saved gifts" });
+  // Typed before the page is ready, nothing would be read from the link (ALL-110).
+  await expect(saved.getByRole("button", { name: "Save" })).toBeEnabled();
+
+  // 1. By link: the name comes from the link, the price is typed.
+  await saved.getByLabel("Link").fill("https://www.amazon.com/Fly-Reel/dp/B0TESTREEL?ref=abc");
+  await expect(saved.getByLabel("Gift")).not.toHaveValue("");
+  await saved.getByLabel("Gift").fill("Fly-fishing reel");
+  await saved.getByLabel("Price").fill("49");
+  await saved.getByRole("button", { name: "Save" }).click();
+  await expect(saved.getByRole("link", { name: "Fly-fishing reel" })).toBeVisible();
+
+  // 2. By hand.
+  await saved.getByLabel("Gift").fill("Coffee sampler");
+  await saved.getByLabel("Price").fill("20");
+  await saved.getByRole("button", { name: "Save" }).click();
+  await expect(saved.getByText("Coffee sampler")).toBeVisible();
+
+  // 3. Both are still there after a reload, newest first, with a clean link.
+  await page.reload();
+  const items = saved.getByRole("listitem");
+  await expect(items).toHaveCount(2);
+  await expect(items.nth(0)).toContainText("Coffee sampler");
+  await expect(items.nth(1)).toContainText("$49.00 · Amazon");
+  const reel = saved.getByRole("link", { name: "Fly-fishing reel" });
+  await expect(reel).toHaveAttribute("href", "https://www.amazon.com/dp/B0TESTREEL");
+  await expect(reel).toHaveAttribute("target", "_blank");
+
+  // 4. Remove the sampler; after a reload it's gone and the reel stays.
+  await saved.getByRole("button", { name: "Remove Coffee sampler" }).click();
+  await expect(saved.getByText("Coffee sampler")).toHaveCount(0);
+  await page.reload();
+  await expect(saved.getByRole("listitem")).toHaveCount(1);
+  await expect(saved.getByRole("link", { name: "Fly-fishing reel" })).toBeVisible();
 });
