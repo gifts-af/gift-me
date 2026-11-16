@@ -153,6 +153,19 @@ A button in the server's HTML shows before its click handler is attached, and a 
 - **`Button`, `DialogTrigger` and `Switch` do it for you.** A submit button is `disabled`, so an early tap can't send its form the browser's own way (ALL-60). Any other button gets `aria-disabled`, so a keyboard can still reach it. `Button asChild` (a link) is left alone, because links work before the page loads.
 - **A plain `<button>` or another Radix trigger** that's in the server's HTML needs the same: `aria-disabled` from `useHydrated()` (`apps/web/lib/use-hydrated.ts`), plus an `aria-disabled:opacity-45` style.
 
+## Editing and saving (owner, 2026-11-16, ALL-115, T71)
+
+**Save as you go.** Changing something that already exists saves it straight away, with no Save button: a choice (a select, a switch) saves when it's made, and a text field saves when you leave it. A small "Saved" tick confirms it. If the save fails, the error shows under the field and what was typed stays.
+
+**One Save only where the pieces mean nothing apart:**
+- **Creating something new** (add a person, add a gift, request access): one form, one teal button that names the action ("Add Sam").
+- **Fields that are only valid together**, like a shipping address: one Save for the group.
+- **Money or anything that can't be undone:** an explicit button, plus a confirm where it's needed.
+
+**Screens where you mostly look and change one thing at a time** (Settings first; a person's details may follow) are a list of rows. Each row shows its current value and opens its own detail screen, the way phone settings work. The list itself has no main button.
+
+**Where a new setting goes:** in the Settings section it belongs to (You, Reminders, Gift ideas, Paying for gifts) as a row with its value. A new section only when none fits.
+
 ## Mock-ups
 
 **What's built, as it looks today:** the [screens and emails page](https://claude.ai/artifact/9mrDvFAgoqxvxmzirJFCz6) has every main screen on a phone (light and dark) and on desktop, and every email, taken from the real app by `pnpm gallery`. The mock-ups below are the designs; that page is the result.
