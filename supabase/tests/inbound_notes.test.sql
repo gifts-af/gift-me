@@ -1,4 +1,4 @@
--- Inbound email notes (ALL-31): a Resend email id is claimed once, the four
+-- Inbound email notes (ALL-31): a Resend email id is claimed once, the inbound
 -- settings exist, one-time account flags are claimed once, a note asking
 -- "Who is this about?" is filed at most once and never to a deleted person,
 -- and only the server can do any of it.

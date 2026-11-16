@@ -221,6 +221,36 @@ Code and migration ship together. If the code is rolled back with Vercel's insta
 
 **What the buyer may see:** the older engine doesn't read the new `fail:<order id>` keys, so while it runs, a round whose failure was already told can get the older single failure email again. Rolling forward sends no repeats: `untold_failures` counts an older `fail:<n>:notice` key as telling every failure that happened before it. Rounds are off on production until ALL-29 (decision 53), so only test and admin buyers can see a repeat. **[Claude's call]**
 
+## Inbound notes (ALL-31)
+
+Users email a note to `notes@in.giftsaf.com` and it is filed on the right person (T70). Spec: [design/plans/ALL-31-email-capture.md](plans/ALL-31-email-capture.md).
+
+**Deploy order:** apply the migration to prod before this code deploys, because action links now read new columns.
+
+**Setup**
+1. Resend dashboard > Webhooks > add endpoint `https://giftsaf.com/api/inbound/resend`, event `email.received`. The free plan has one webhook endpoint.
+2. Copy the endpoint's signing secret into Vercel as `RESEND_WEBHOOK_SECRET` (Production).
+3. Set `INBOUND_NOTES_ADDRESS=notes@in.giftsaf.com` in all environments.
+4. `RESEND_API_KEY` must be full access (reading received mail needs it).
+
+**Settings** (`concierge.app_settings`)
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `inbound_email_enabled` | 1 | Off switch |
+| `inbound_match_max_choices` | 5 | People offered as buttons in "Who is this about?" |
+| `inbound_max_per_user_per_day` | 20 | Messages in plus emails out, per user |
+| `inbound_link_hours` | 72 | How long the buttons work |
+| `inbound_thread_lookup_max` | 10 | Sent emails checked when matching a reply |
+| `inbound_thread_lookup_days` | 60 | How far back those are checked |
+| `inbound_prune_days` | 7 | Days before `inbound_seen` rows are cleared |
+
+**Turn it off:** set `inbound_email_enabled` to 0. Mail is then ignored; no deploy needed.
+
+**Events to look for:** `inbound.filed`, `inbound.asking`, `inbound.ignored` (with a reason), `inbound.reply_capped`, `inbound.failed`, `inbound.misconfigured` (missing secret or address).
+
+**Testing in dev:** run a tunnel to the local app and point the Resend endpoint at `https://<tunnel>/api/inbound/resend`, with the secret in `.env.local`. With one endpoint on the free plan, switch it back to production afterwards.
+
 ## Production test account
 
 To check a change on giftsaf.com while signed in, use **`allensforever711+qa@gmail.com`** (T60). Don't create another account for this, and don't use a real person's.
