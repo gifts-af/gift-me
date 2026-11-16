@@ -55,7 +55,7 @@
 
 ### What changes in the code and schema
 
-- `concierge.inbound_messages`: add `provider_email_id` (unique), `notification_id` (the email it replied to, if any) and `capture_id`; statuses `received`, `filed`, `asking`, `ignored`; drop `from_address` (the account says who sent it). Subject and body are cleared when filed, and unfiled ones when their links expire.
+- `concierge.inbound_messages` stores only messages waiting on "Who is this about?" (`asking`, then `filed`); add `notification_id`, `capture_id`, `image_path`, `image_type`; drop `from_address`. Dedupe is a separate `inbound_seen` table with no personal data. Subject and body are cleared when filed, and unfiled ones when their links expire.
 - `action_links`: add `inbound_message_id` and `person_id`, and a `file_note` action whose `run` gets them.
 - Capture saving: a server-side path that sets `user_id` itself (the webhook has no signed-in user), allows no URL and no screenshot, and records the image's real type. Capture reading passes the image's real media type instead of always `image/jpeg`.
 - `notifications`: a reply's `In-Reply-To` is looked up against the provider message id we already store.
