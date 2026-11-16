@@ -15,6 +15,8 @@ export type Database = {
           buyer_phone: string | null;
           created_at: string;
           funding_mode: string;
+          notes_tip_sent_at: string | null;
+          notes_unpaid_reply_sent_at: string | null;
           notification_prefs: NonNullable<Json>;
           over_budget_pct: number;
           paid_features: boolean;
@@ -33,6 +35,8 @@ export type Database = {
           buyer_phone?: string | null;
           created_at?: string;
           funding_mode?: string;
+          notes_tip_sent_at?: string | null;
+          notes_unpaid_reply_sent_at?: string | null;
           notification_prefs?: NonNullable<Json>;
           over_budget_pct?: number;
           paid_features?: boolean;
@@ -50,6 +54,8 @@ export type Database = {
           buyer_phone?: string | null;
           created_at?: string;
           funding_mode?: string;
+          notes_tip_sent_at?: string | null;
+          notes_unpaid_reply_sent_at?: string | null;
           notification_prefs?: NonNullable<Json>;
           over_budget_pct?: number;
           paid_features?: boolean;
@@ -70,7 +76,9 @@ export type Database = {
           created_at: string;
           expires_at: string;
           id: string;
+          inbound_message_id: string | null;
           notification_id: string | null;
+          person_id: string | null;
           round_id: string | null;
           token_hash: string;
           updated_at: string;
@@ -83,7 +91,9 @@ export type Database = {
           created_at?: string;
           expires_at: string;
           id?: string;
+          inbound_message_id?: string | null;
           notification_id?: string | null;
+          person_id?: string | null;
           round_id?: string | null;
           token_hash: string;
           updated_at?: string;
@@ -95,7 +105,9 @@ export type Database = {
           created_at?: string;
           expires_at?: string;
           id?: string;
+          inbound_message_id?: string | null;
           notification_id?: string | null;
+          person_id?: string | null;
           round_id?: string | null;
           token_hash?: string;
           updated_at?: string;
@@ -103,6 +115,13 @@ export type Database = {
           user_id?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "action_links_inbound_message_id_fkey";
+            columns: ["inbound_message_id"];
+            isOneToOne: false;
+            referencedRelation: "inbound_messages";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "action_links_notification_id_fkey";
             columns: ["notification_id"];
@@ -208,6 +227,7 @@ export type Database = {
           page_title: string | null;
           person_id: string;
           screenshot_path: string | null;
+          screenshot_type: string | null;
           source_url: string | null;
           status: string;
           text_excerpt: string | null;
@@ -222,6 +242,7 @@ export type Database = {
           page_title?: string | null;
           person_id: string;
           screenshot_path?: string | null;
+          screenshot_type?: string | null;
           source_url?: string | null;
           status?: string;
           text_excerpt?: string | null;
@@ -235,6 +256,7 @@ export type Database = {
           page_title?: string | null;
           person_id?: string;
           screenshot_path?: string | null;
+          screenshot_type?: string | null;
           source_url?: string | null;
           status?: string;
           text_excerpt?: string | null;
@@ -426,13 +448,33 @@ export type Database = {
           },
         ];
       };
+      inbound_events: {
+        Row: {
+          created_at: string;
+          id: number;
+          user_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          id?: never;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: never;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       inbound_messages: {
         Row: {
-          attachments: NonNullable<Json>;
           body: string | null;
+          capture_id: string | null;
           created_at: string;
-          from_address: string | null;
           id: string;
+          image_path: string | null;
+          image_type: string | null;
           matched_person_id: string | null;
           status: string;
           subject: string | null;
@@ -441,11 +483,12 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
-          attachments?: NonNullable<Json>;
           body?: string | null;
+          capture_id?: string | null;
           created_at?: string;
-          from_address?: string | null;
           id?: string;
+          image_path?: string | null;
+          image_type?: string | null;
           matched_person_id?: string | null;
           status?: string;
           subject?: string | null;
@@ -453,16 +496,41 @@ export type Database = {
           user_id?: string;
         };
         Update: {
-          attachments?: NonNullable<Json>;
           body?: string | null;
+          capture_id?: string | null;
           created_at?: string;
-          from_address?: string | null;
           id?: string;
+          image_path?: string | null;
+          image_type?: string | null;
           matched_person_id?: string | null;
           status?: string;
           subject?: string | null;
           updated_at?: string;
           user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "inbound_messages_capture_id_fkey";
+            columns: ["capture_id"];
+            isOneToOne: false;
+            referencedRelation: "captures";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      inbound_seen: {
+        Row: {
+          created_at: string;
+          provider_email_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          provider_email_id: string;
+        };
+        Update: {
+          created_at?: string;
+          provider_email_id?: string;
         };
         Relationships: [];
       };
@@ -473,6 +541,8 @@ export type Database = {
           error: string | null;
           id: string;
           kind: string;
+          message_id: string | null;
+          person_id: string | null;
           provider_message_id: string | null;
           round_id: string | null;
           sent_at: string | null;
@@ -486,6 +556,8 @@ export type Database = {
           error?: string | null;
           id?: string;
           kind: string;
+          message_id?: string | null;
+          person_id?: string | null;
           provider_message_id?: string | null;
           round_id?: string | null;
           sent_at?: string | null;
@@ -498,6 +570,8 @@ export type Database = {
           error?: string | null;
           id?: string;
           kind?: string;
+          message_id?: string | null;
+          person_id?: string | null;
           provider_message_id?: string | null;
           round_id?: string | null;
           sent_at?: string | null;
@@ -1168,6 +1242,10 @@ export type Database = {
         Args: { p_round_id: string };
         Returns: string[];
       };
+      claim_inbound_flag: {
+        Args: { p_flag: string; p_user_id: string };
+        Returns: boolean;
+      };
       claim_round: {
         Args: { p_now: string; p_round_id: string };
         Returns: {
@@ -1240,6 +1318,13 @@ export type Database = {
         Args: { p_round_id: string };
         Returns: undefined;
       };
+      clear_unfiled_inbound: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          image_path: string;
+          message_id: string;
+        }[];
+      };
       delete_occasion: { Args: { p_occasion_id: string }; Returns: undefined };
       enable_owner_rls: { Args: { p_table: unknown }; Returns: undefined };
       fail_order: {
@@ -1256,6 +1341,10 @@ export type Database = {
         };
         Returns: undefined;
       };
+      file_inbound_message: {
+        Args: { p_message_id: string; p_person_id: string; p_user_id: string };
+        Returns: string;
+      };
       finish_round: {
         Args: {
           p_heads_up_on: string;
@@ -1265,6 +1354,10 @@ export type Database = {
           p_status: Database["concierge"]["Enums"]["round_status"];
         };
         Returns: boolean;
+      };
+      forget_inbound_images: {
+        Args: { p_message_ids: string[] };
+        Returns: undefined;
       };
       gate_held_orders: {
         Args: { p_reason: string; p_round_id: string };
@@ -1309,6 +1402,7 @@ export type Database = {
         Args: { p_reason: string; p_round_id: string };
         Returns: Database["concierge"]["Enums"]["round_status"];
       };
+      inbound_count_today: { Args: { p_user_id: string }; Returns: number };
       lookahead_rounds: {
         Args: { p_until: string; p_user_id: string };
         Returns: {

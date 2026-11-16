@@ -40,8 +40,8 @@ returning id as order_id \gset
 insert into concierge.rejections (user_id, round_id, reason_code) values (:'a', :'round', 'already_owns');
 insert into concierge.reactions (user_id, round_id, rating, source) values (:'a', :'round', 'loved', 'web');
 insert into concierge.notifications (user_id, round_id, kind) values (:'a', :'round', 'heads_up');
-insert into concierge.inbound_messages (user_id, from_address, subject, body, matched_person_id)
-values (:'a', 'a@example.com', 'Mom', 'She wants gloves', :'mom');
+insert into concierge.inbound_messages (user_id, subject, body, matched_person_id)
+values (:'a', 'Mom', 'She wants gloves', :'mom');
 
 select is((select status::text from concierge.gift_rounds where id = :'round'), 'scheduled', 'a round starts scheduled');
 select is((select attempts from concierge.gift_rounds where id = :'round'), 0, 'a round starts with no attempts');
