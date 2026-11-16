@@ -18,6 +18,10 @@ async function shoot(page: Page, name: string) {
   // Streamed pages show "Loading…" first; shoot what follows it.
   await expect(page.getByText("Loading…", { exact: true })).toHaveCount(0, { timeout: 15_000 });
   await page.evaluate(() => document.fonts.ready);
+  // Settings (and others) show "Loading…" while data streams in; wait for the real content.
+  await page.waitForFunction(
+    () => ![...document.querySelectorAll("body *")].some((el) => el.children.length === 0 && /^Loading/.test(el.textContent?.trim() ?? "")),
+  );
   const file = path.join(GALLERY_DIR, test.info().project.name, `${name}.png`);
   await page.screenshot({ path: file, fullPage: true, animations: "disabled" });
 }
@@ -42,6 +46,10 @@ const SIGNED_IN: [name: string, url: (s: Seeded) => string][] = [
   ["add-person", () => "/people/new"],
   ["import-people", () => "/people/import"],
   ["settings", () => "/settings"],
+  ["settings-over-budget", () => "/settings/over-budget"],
+  ["settings-reminders", () => "/settings/reminders"],
+  ["settings-address", () => "/settings/address"],
+  ["settings-paying", () => "/settings/paying"],
   ["shared-list", (s) => `/share/${s.shareToken}`],
 ];
 
