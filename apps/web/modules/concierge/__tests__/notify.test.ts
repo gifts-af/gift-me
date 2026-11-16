@@ -154,11 +154,14 @@ describe("notify for the notes emails (ALL-31)", () => {
   });
 
   // AC-13: a reply to a buying email must never become a note (T18), whatever a caller passes.
-  const purchaseKinds: NotificationKind[] = [
-    "heads_up", "hold_funds", "hold_setup", "hold_address", "hold_trouble", "hold_unconfirmed",
-    "ordered", "failed_late", "failed_several", "price_up", "out_of_stock", "too_late", "missed_on_us",
-  ];
-  it.each([...purchaseKinds, "who_is_this", "notes_not_read", "notes_cant_cancel"] as NotificationKind[])(
+  // Every kind but the tip, derived so a new kind is covered without editing this list.
+  const notTheTip = (Object.keys(SAMPLE_DATA) as NotificationKind[]).filter((k) => k !== "notes_tip");
+  it("covers every buying email (AC-13)", () => {
+    for (const k of ["heads_up", "hold_funds", "ordered", "failed_late", "price_up", "out_of_stock", "too_late", "missed_on_us"]) {
+      expect(notTheTip).toContain(k);
+    }
+  });
+  it.each(notTheTip)(
     "never sends Reply-To for %s, even when a caller passes one (AC-13)",
     async (kind) => {
       const store = storeWithUser();
@@ -190,46 +193,6 @@ describe("notify for the notes emails (ALL-31)", () => {
     expect(sent[0].text).toContain(`Someone else: ${BASE}/people`);
     expect(sent[0].text).toMatch(new RegExp(`Dad: ${BASE}/a/[A-Za-z0-9_-]{43}`));
     expect(store.links.map((l) => l.action)).toEqual(["file_note", "file_note"]);
-  });
-
-  describe("threadable", () => {
-    const tip = (store: FakeStore, channels: Channel[], threadable?: true) =>
-      notify({ userId: USER, kind: "notes_tip", data: { personName: "Dad" }, links: {}, threadable }, deps(store, channels));
-
-    it("saves the Message-ID the email went out with, as the channel reports it", async () => {
-      const store = storeWithUser();
-      const { channel } = fakeChannel("email", { ok: true, id: "msg-1" });
-      channel.messageId = vi.fn(async (id: string) => `<${id}@email.example.test>`);
-      await tip(store, [channel], true);
-      expect(channel.messageId).toHaveBeenCalledWith("msg-1");
-      expect(store.notifications[0]).toMatchObject({ providerMessageId: "msg-1", messageId: "<msg-1@email.example.test>" });
-    });
-
-    it("doesn't look the Message-ID up when not threadable", async () => {
-      const store = storeWithUser();
-      const { channel } = fakeChannel("email", { ok: true, id: "msg-1" });
-      channel.messageId = vi.fn(async () => "<x@y>");
-      await tip(store, [channel]);
-      expect(channel.messageId).not.toHaveBeenCalled();
-      expect(store.notifications[0].messageId).toBeNull();
-    });
-
-    it("still counts as sent when the Message-ID isn't known yet, and logs it by id", async () => {
-      const log = vi.spyOn(console, "log").mockImplementation(() => {});
-      try {
-        const store = storeWithUser();
-        const { channel } = fakeChannel("email", { ok: true, id: "msg-1" });
-        channel.messageId = vi.fn(async () => null);
-        expect(await tip(store, [channel], true)).toEqual({ ok: true });
-        expect(store.notifications[0]).toMatchObject({ sentAt: NOW, messageId: null });
-        const events = log.mock.calls.map((c) => JSON.parse(String(c[0])));
-        expect(events).toContainEqual(
-          expect.objectContaining({ event: "notify.message_id_missing", notification_id: store.notifications[0].id }),
-        );
-      } finally {
-        log.mockRestore();
-      }
-    });
   });
 });
 

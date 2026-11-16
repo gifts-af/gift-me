@@ -258,6 +258,13 @@ function questionsLink(d: Occasion & Asks, url: string | undefined): { label: st
   return { label: `Answer ${d.questions} quick ${d.questions === 1 ? "question" : "questions"} about ${d.personName}`, url };
 }
 
+/** A who_is_this choice's link. Missing, it would render href="undefined": refuse rather than send that. */
+function choiceLink(links: TemplateLinks["who_is_this"], i: number): string {
+  const url = links[`choice${i}`];
+  if (!url) throw new Error(`who_is_this: no link for choice ${i}`);
+  return url;
+}
+
 export const TEMPLATES: {
   [K in NotificationKind]: (data: TemplateData[K], links: TemplateLinks[K]) => RenderedEmail;
 } = {
@@ -622,10 +629,10 @@ export const TEMPLATES: {
         `We got your note${d.subject ? ` "${d.subject}"` : ""}, but couldn't tell who it's about. Tap who it's for and we'll add it to their page.`,
       ],
       link: [
-        ...d.choices.map((c, i) => ({ label: c.name, url: links[`choice${i}`] })),
+        ...d.choices.map((c, i) => ({ label: c.name, url: choiceLink(links, i) })),
         { label: "Someone else", url: links.someoneElse },
       ],
-      footer: "Someone else? Add them on your people page, then send the note again. Each link works once.",
+      footer: "Someone else? Add them on your people page, then send the note again. Each name works once.",
     }),
   }),
 

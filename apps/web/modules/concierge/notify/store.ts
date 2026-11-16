@@ -25,6 +25,9 @@ export type NewLink = {
   roundId: string | null;
   action: ActionName;
   expiresAt: Date;
+  /** A file_note link: the person it files to and the asking message it files (ALL-31). */
+  personId?: string;
+  inboundMessageId?: string;
 };
 
 export interface NotifyStore {
@@ -43,7 +46,7 @@ export interface NotifyStore {
     kind: NotificationKind;
     channel: string;
   }): Promise<string>;
-  /** `messageId`: the Message-ID header it went out with, when threadable (ALL-31). */
+  /** `messageId`: the Message-ID header it went out with, when known (ALL-31; nothing passes it yet). */
   finishNotification(
     id: string,
     result: { sentAt: Date; providerMessageId: string; messageId?: string | null } | { error: string },
@@ -128,6 +131,8 @@ export function createSupabaseNotifyStore(db: SupabaseClient<Database> = createA
           round_id: r.roundId,
           action: r.action,
           expires_at: r.expiresAt.toISOString(),
+          ...(r.personId ? { person_id: r.personId } : {}),
+          ...(r.inboundMessageId ? { inbound_message_id: r.inboundMessageId } : {}),
         })),
       );
       if (error) fail("Saving action links failed", error);

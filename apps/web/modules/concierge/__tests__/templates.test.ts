@@ -490,6 +490,17 @@ describe("notes emails (ALL-31)", () => {
     expect(mail.html).toContain('href="https://x.test/people"');
   });
 
+  it("who_is_this refuses a choice with no link, rather than sending href=undefined", () => {
+    const render = () =>
+      TEMPLATES.who_is_this({ subject: "x", choices: [{ name: "Dad" }, { name: "Mom" }] }, { choice0: "u0", someoneElse: "up" });
+    expect(render).toThrow("no link for choice 1");
+  });
+
+  it("who_is_this says each name works once", () => {
+    const s = SAMPLE_DATA.who_is_this;
+    expect(TEMPLATES.who_is_this(s.data, s.links).text).toContain("Each name works once.");
+  });
+
   it("who_is_this reads well with no subject", () => {
     const mail = TEMPLATES.who_is_this({ subject: "", choices: [{ name: "Dad" }] }, { choice0: "u0", someoneElse: "up" });
     expect(mail.text).not.toContain('""');

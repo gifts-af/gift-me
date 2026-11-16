@@ -1,4 +1,3 @@
-import { logEvent } from "@/lib/log";
 import type { ActionName } from "./actions";
 import type { Channel } from "./channels";
 import type { NewLink, NotifyStore } from "./store";
@@ -25,8 +24,13 @@ export type NotifyDeps = {
 
 export type NotifyResult = { ok: true } | { ok: false; error: string };
 
-/** A one-time action link, or (`path`) a plain link to a page of the app, with no token. */
-export type LinkSpec = { action: ActionName; expiresAt: Date } | { path: string };
+/**
+ * A one-time action link, or (`path`) a plain link to a page of the app, with no token.
+ * `personId` and `inboundMessageId` say which note a file_note link files, and to whom (ALL-31).
+ */
+export type LinkSpec =
+  | { action: ActionName; expiresAt: Date; personId?: string; inboundMessageId?: string }
+  | { path: string };
 
 export type NotifyInput<K extends NotificationKind> = {
   userId: string;
@@ -38,11 +42,6 @@ export type NotifyInput<K extends NotificationKind> = {
   links: { [L in keyof TemplateLinks[K]]: LinkSpec };
   /** Only for kinds whose replies are notes; dropped for any other kind (ALL-31 AC-13). */
   replyTo?: K extends NotesReplyKind ? string : never;
-  /**
-   * Save the Message-ID the email went out with, so a reply's In-Reply-To finds this
-   * notification (ALL-31). Read back from the channel: the email service sets the header.
-   */
-  threadable?: true;
 };
 
 const repliesAreNotes = (kind: NotificationKind) => (REPLIES_ARE_NOTES as readonly NotificationKind[]).includes(kind);
@@ -69,7 +68,15 @@ export async function notify<K extends NotificationKind>(
     }
     const { token, hash } = newActionToken();
     urls[name] = `${baseUrl}/a/${token}`;
-    links.push({ hash, userId: input.userId, roundId, action: spec.action, expiresAt: spec.expiresAt });
+    links.push({
+      hash,
+      userId: input.userId,
+      roundId,
+      action: spec.action,
+      expiresAt: spec.expiresAt,
+      ...(spec.personId ? { personId: spec.personId } : {}),
+      ...(spec.inboundMessageId ? { inboundMessageId: spec.inboundMessageId } : {}),
+    });
   }
   await store.insertLinks(links);
 
@@ -100,9 +107,7 @@ export async function notify<K extends NotificationKind>(
 
     if (result.ok) {
       anySent = true;
-      const messageId = input.threadable && channel.messageId ? await channel.messageId(result.id) : null;
-      if (input.threadable && !messageId) logEvent("notify.message_id_missing", { notification_id: id, kind: input.kind });
-      await store.finishNotification(id, { sentAt: now, providerMessageId: result.id, messageId });
+      await store.finishNotification(id, { sentAt: now, providerMessageId: result.id });
     } else {
       errors.push(result.error);
       await store.finishNotification(id, { error: result.error });

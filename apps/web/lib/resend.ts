@@ -43,8 +43,10 @@ export async function sendEmail(
 
 /**
  * The Message-ID header an email went out with, from Resend's record of it (ALL-31), or null when
- * Resend doesn't have it yet or can't be reached. Resend sends through Amazon SES, which replaces
- * any Message-ID we set, so this is the id a reply's In-Reply-To names (checked 2026-11-16).
+ * Resend doesn't have it yet or can't be reached. Never throws. Resend sends through Amazon SES,
+ * which replaces any Message-ID we set, so this is the id a reply's In-Reply-To names (checked
+ * 2026-11-16). It's empty while the email is queued (about a second), so it's looked up when a
+ * reply arrives, from notifications.provider_message_id, not right after sending.
  */
 export async function fetchMessageId(
   id: string,
