@@ -141,6 +141,24 @@ describe("PersonForm", () => {
     vi.unstubAllGlobals();
   });
 
+  // ALL-109: one Dates card, "Optional" said once, no loose file name.
+  it("groups the dates in one card that says Optional once", () => {
+    setup();
+    const dates = screen.getByRole("region", { name: "Dates" });
+    expect(screen.getByRole("heading", { level: 2, name: "Dates" })).toBeInTheDocument();
+    expect(dates).toContainElement(screen.getByRole("group", { name: "Birthday" }));
+    expect(screen.getAllByText("Optional")).toHaveLength(1);
+  });
+
+  it("doesn't show the picked photo's file name", async () => {
+    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: () => "blob:p", revokeObjectURL: () => {} }));
+    setup();
+    await userEvent.upload(screen.getByLabelText("Choose a photo"), photo);
+    await screen.findByRole("button", { name: "Change photo" });
+    expect(screen.queryByText("me.png")).not.toBeInTheDocument();
+    vi.unstubAllGlobals();
+  });
+
   it("sends the birthday it was given", async () => {
     const t = setup();
     await fill();
@@ -259,6 +277,13 @@ describe("PersonForm in edit mode", () => {
     expect(action.mock.calls[0][1].get("name")).toBe("Dad");
     expect(refresh).toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
+  });
+
+  // ALL-109: on a person's page the form sits under the "Edit" h2.
+  it("puts the Dates heading one level under Edit", () => {
+    useRouterMock.mockReturnValue({ push, refresh });
+    setupEdit();
+    expect(screen.getByRole("heading", { level: 3, name: "Dates" })).toBeInTheDocument();
   });
 
   it("always shows the anniversary fields, even for a friend", () => {

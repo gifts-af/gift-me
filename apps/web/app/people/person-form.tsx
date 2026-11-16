@@ -7,9 +7,9 @@ import { RELATIONSHIPS, relationshipLabel } from "@gifts-af/core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import { PersonAvatar } from "@/components/person-avatar";
 import { useHydrated } from "@/lib/use-hydrated";
-import { cn } from "@/lib/utils";
 import type { AddResult, SaveResult } from "@/modules/concierge";
 import { prepareJpeg, resizeToJpeg, savePersonPhoto, type PhotoStorage } from "./photo-picker";
 
@@ -28,8 +28,12 @@ const MONTH_NAMES = [
   "December",
 ];
 
-const SELECT_CLASS =
-  "flex min-h-11 w-full rounded-md border border-input bg-background px-3 py-2.5 text-base font-normal";
+// Number boxes without the browser's up and down arrows, which crowd a short box.
+const NUMBER_CLASS =
+  "px-2.5 text-center [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none";
+
+// One look for every section of the form (ALL-109).
+const CARD_CLASS = "flex flex-col gap-4 rounded-xl border border-border p-4";
 
 type Common = {
   /** Starting values (for editing). Months and days are numbers as text, "" when not given. */
@@ -93,10 +97,9 @@ function DateFields({
 }) {
   return (
     <div className="grid grid-cols-[minmax(0,1fr)_4.5rem_5.75rem] gap-2">
-      <select
+      <NativeSelect
         aria-label={`${label} month`}
         name={`${name}Month`}
-        className={cn(SELECT_CLASS, "px-2.5")}
         value={month}
         onChange={(e) => onMonth(e.target.value)}
       >
@@ -106,7 +109,7 @@ function DateFields({
             {m}
           </option>
         ))}
-      </select>
+      </NativeSelect>
       <Input
         aria-label={`${label} day`}
         name={`${name}Day`}
@@ -115,7 +118,7 @@ function DateFields({
         min={1}
         max={31}
         placeholder="Day"
-        className="px-2.5 text-center"
+        className={NUMBER_CLASS}
         value={day}
         onChange={(e) => onDay(e.target.value)}
       />
@@ -126,7 +129,7 @@ function DateFields({
           type="number"
           inputMode="numeric"
           placeholder="Year"
-          className="px-2.5 text-center"
+          className={NUMBER_CLASS}
           value={year ?? ""}
           onChange={(e) => onYear(e.target.value)}
         />
@@ -182,6 +185,8 @@ export function PersonForm(props: Props) {
   const submitLabel = add ? (trimmed ? `Add ${trimmed}` : "Add someone") : "Save";
 
   // Editing always offers the anniversary, so a changed relationship keeps it.
+  // On a person's page the form sits under the "Edit" heading, so one level down.
+  const DatesHeading = add ? "h2" : "h3";
   const showAnniversary = !add || relationship === "wife" || relationship === "husband";
 
   async function onPickPhoto(file: File) {
@@ -264,9 +269,9 @@ export function PersonForm(props: Props) {
     <form onSubmit={onSubmit} className="flex flex-col gap-6" noValidate>
       {initial?.id && <input type="hidden" name="id" value={initial.id} />}
 
-      <section aria-label="Who they are" className="flex items-start gap-4 rounded-xl border border-border p-4">
+      <section aria-label="Who they are" className={CARD_CLASS}>
         {add && (
-          <div className="flex w-[72px] shrink-0 flex-col items-center">
+          <div className="flex flex-col items-center gap-1">
             <input
               ref={input}
               type="file"
@@ -283,98 +288,95 @@ export function PersonForm(props: Props) {
               aria-label={photo ? "Change photo" : "Add a photo"}
               onClick={() => input.current?.click()}
               aria-disabled={hydrated ? undefined : true}
-              className="flex w-[72px] flex-col items-center gap-1.5 rounded-md text-[13px] text-primary aria-disabled:opacity-45"
+              className="flex min-h-11 flex-col items-center gap-1.5 rounded-md text-[14px] font-semibold text-primary aria-disabled:opacity-45"
             >
               <span className="relative inline-flex">
-                <PersonAvatar name={trimmed} photoUrl={previewUrl} size={72} decorative />
-                <span className="absolute -right-0.5 -bottom-0.5 flex size-[26px] items-center justify-center rounded-full border-2 border-background bg-primary text-primary-foreground">
-                  <Camera className="size-3.5" aria-hidden="true" />
+                <PersonAvatar name={trimmed} photoUrl={previewUrl} size={88} decorative />
+                <span className="absolute -right-0.5 -bottom-0.5 flex size-[30px] items-center justify-center rounded-full border-2 border-background bg-primary text-primary-foreground">
+                  <Camera className="size-4" aria-hidden="true" />
                 </span>
               </span>
-              <span aria-hidden="true">{photo ? "Change" : "Add photo"}</span>
+              <span aria-hidden="true">{photo ? "Change photo" : "Add photo"}</span>
             </button>
+            {photoError && (
+              <p role="alert" className="text-center text-[13px] text-destructive">
+                {photoError}
+              </p>
+            )}
           </div>
         )}
 
-        <div className="flex min-w-0 grow flex-col gap-3">
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="person-name">Name</Label>
-            <Input
-              id="person-name"
-              name="name"
-              autoComplete="off"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="person-relationship">Who are they to you?</Label>
-            <select
-              id="person-relationship"
-              name="relationship"
-              className={SELECT_CLASS}
-              value={relationship}
-              onChange={(e) => setRelationship(e.target.value)}
-            >
-              <option value="">Choose one</option>
-              {RELATIONSHIPS.map((r) => (
-                <option key={r} value={r}>
-                  {relationshipLabel(r)}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="person-name">Name</Label>
+          <Input
+            id="person-name"
+            name="name"
+            autoComplete="off"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label htmlFor="person-relationship">Who are they to you?</Label>
+          <NativeSelect
+            id="person-relationship"
+            name="relationship"
+            value={relationship}
+            onChange={(e) => setRelationship(e.target.value)}
+          >
+            <option value="">Choose one</option>
+            {RELATIONSHIPS.map((r) => (
+              <option key={r} value={r}>
+                {relationshipLabel(r)}
+              </option>
+            ))}
+          </NativeSelect>
         </div>
       </section>
 
-      {add && photo && <p className="-mt-3 text-[13px] text-muted-foreground">{photo.name}</p>}
-      {photoError && (
-        <p role="alert" className="-mt-3 text-[13px] text-destructive">
-          {photoError}
-        </p>
-      )}
+      <section aria-labelledby="dates-heading" className={CARD_CLASS}>
+        <div className="flex items-baseline justify-between">
+          <DatesHeading id="dates-heading" className="text-base font-semibold">
+            Dates
+          </DatesHeading>
+          <span className="text-[13px] text-muted-foreground">Optional</span>
+        </div>
 
-      <fieldset id="birthday" className="flex flex-col gap-2">
-        {/* The legend must be the fieldset's first child to name the group. */}
-        <legend className="flex w-full items-baseline justify-between p-0">
-          <span className="text-base font-semibold">Birthday</span>
-          <span aria-hidden="true" className="text-[13px] font-normal text-muted-foreground">
-            Optional
-          </span>
-        </legend>
-        <DateFields
-          name="birthday"
-          label="Birthday"
-          month={bMonth}
-          day={bDay}
-          year={bYear}
-          onMonth={setBMonth}
-          onDay={setBDay}
-          onYear={setBYear}
-        />
-        <p className="text-[13px] text-muted-foreground">
-          We&apos;ll suggest gifts before it. The year is just for age-right ideas.
-        </p>
-      </fieldset>
-
-      {showAnniversary && (
-        <fieldset className="flex flex-col gap-2">
-          <legend className="flex w-full items-baseline justify-between p-0">
-            <span className="text-base font-semibold">Anniversary</span>
-            <span aria-hidden="true" className="text-[13px] font-normal text-muted-foreground">
-              Optional
-            </span>
-          </legend>
+        <fieldset id="birthday" className="flex flex-col gap-2">
+          {/* The legend must be the fieldset's first child to name the group. */}
+          <legend className="mb-1.5 p-0 text-[15px] font-semibold">Birthday</legend>
           <DateFields
-            name="anniversary"
-            label="Anniversary"
-            month={aMonth}
-            day={aDay}
-            onMonth={setAMonth}
-            onDay={setADay}
+            name="birthday"
+            label="Birthday"
+            month={bMonth}
+            day={bDay}
+            year={bYear}
+            onMonth={setBMonth}
+            onDay={setBDay}
+            onYear={setBYear}
           />
+          <p className="text-[13px] text-muted-foreground">
+            We&apos;ll suggest gifts before it. The year is just for age-right ideas.
+          </p>
         </fieldset>
-      )}
+
+        {showAnniversary && (
+          // A divider above, on a wrapper: a fieldset's own border runs through its legend.
+          <div className="border-t border-border pt-4">
+            <fieldset className="flex flex-col gap-2">
+              <legend className="mb-1.5 p-0 text-[15px] font-semibold">Anniversary</legend>
+              <DateFields
+                name="anniversary"
+                label="Anniversary"
+                month={aMonth}
+                day={aDay}
+                onMonth={setAMonth}
+                onDay={setADay}
+              />
+            </fieldset>
+          </div>
+        )}
+      </section>
 
       {error && (
         <p role="alert" className="text-[13px] text-destructive">

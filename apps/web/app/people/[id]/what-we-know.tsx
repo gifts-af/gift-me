@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import type { Profile, ProfileFact, SaveResult } from "@/modules/concierge";
 
 // "What we know" on a person's page (ALL-26, C-7, D51): one list by category,
@@ -293,18 +294,13 @@ function FactRow({
       </div>
       <div className="flex flex-col gap-1.5">
         <Label htmlFor={`${fieldId}-category`}>Kind</Label>
-        <select
-          id={`${fieldId}-category`}
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          className="min-h-11 rounded-xl border border-input bg-background px-3 text-base"
-        >
+        <NativeSelect id={`${fieldId}-category`} value={category} onChange={(e) => setCategory(e.target.value)}>
           {CATEGORY_GROUPS.map((g) => (
             <option key={g.category} value={g.category}>
               {g.label}
             </option>
           ))}
-        </select>
+        </NativeSelect>
       </div>
       {error && (
         <p role="alert" className="text-[13px] text-destructive">

@@ -4,6 +4,7 @@ import { useActionState, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 import type { SaveResult } from "@/modules/concierge";
 
 export type SettingsValues = { timezone: string | null; overBudgetPct: number };
@@ -28,20 +29,19 @@ export function SettingsForm({ initial, action }: { initial: SettingsValues; act
         <p id="timezone-hint" className="text-[13px] text-muted-foreground">
           Reminders arrive in the morning, your time.
         </p>
-        <select
+        <NativeSelect
           id="timezone"
           name="timezone"
           value={timezone}
           onChange={(event) => setTimezone(event.target.value)}
           aria-describedby="timezone-hint"
-          className="min-h-11 w-full rounded-md border border-input bg-background px-3 text-base"
         >
           {zones.map((zone) => (
             <option key={zone} value={zone}>
               {zone.replace(/_/g, " ")}
             </option>
           ))}
-        </select>
+        </NativeSelect>
       </section>
 
       <section className="flex flex-col gap-1.5">

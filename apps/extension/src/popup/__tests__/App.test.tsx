@@ -184,6 +184,18 @@ describe("Popup", () => {
     expect(args.p_kinds).toEqual(expect.arrayContaining(["christmas", "mothers_day"]));
   });
 
+  // ALL-121: the in-laws are in the quick add too, labelled with hyphens.
+  it("offers the in-laws, and a mother-in-law starts Mother's Day", async () => {
+    db.people = [];
+    render(<App />);
+    await userEvent.type(await screen.findByLabelText("Name"), "Linda");
+    await userEvent.selectOptions(screen.getByLabelText("Relationship"), screen.getByRole("option", { name: "Mother-in-law" }));
+    await userEvent.click(screen.getByRole("button", { name: "Add" }));
+    await screen.findByRole("button", { name: "Save to Linda" });
+    expect(db.adds[0]).toMatchObject({ p_relationship: "mother_in_law" });
+    expect((db.adds[0] as { p_kinds: string[] }).p_kinds).toContain("mothers_day");
+  });
+
   it("with people: Add a person opens the same form", async () => {
     render(<App />);
     await userEvent.click(await screen.findByRole("button", { name: "Add a person" }));

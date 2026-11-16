@@ -33,8 +33,21 @@ export async function phoneLayoutProblems(page: Page): Promise<string[]> {
     const scrollWidth = document.documentElement.scrollWidth;
     if (scrollWidth > width) problems.push(`scrolls sideways: ${scrollWidth}px of content on a ${width}px screen`);
 
+    // A link stretched over its card with an absolute, inset-0 ::after (the
+    // person cards on Home) is tapped anywhere on the card, so measure the card
+    // (ALL-109). Any other ::after, such as an underline, is only decoration.
+    const tapHeight = (link: HTMLAnchorElement) => {
+      const own = link.getBoundingClientRect().height;
+      const after = getComputedStyle(link, "::after");
+      const fills = [after.top, after.right, after.bottom, after.left].every((v) => v === "0px");
+      if (after.position !== "absolute" || after.content === "none" || !fills) return own;
+      let box = link.parentElement;
+      while (box && getComputedStyle(box).position === "static") box = box.parentElement;
+      return Math.max(own, box?.getBoundingClientRect().height ?? 0);
+    };
+
     for (const link of document.querySelectorAll("a")) {
-      const { height } = link.getBoundingClientRect();
+      const height = tapHeight(link);
       // A hidden link can't be tapped, such as a page kept in the background.
       if (link.checkVisibility({ checkVisibilityCSS: true }) && height < minTap) {
         problems.push(`"${link.textContent?.trim()}" is ${height.toFixed(1)}px tall, under ${minTap}px to tap`);

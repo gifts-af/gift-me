@@ -51,11 +51,11 @@ The relationship is picked from a short list. Each one sets which occasions are 
 
 | Relationship | Extra occasions added (on) |
 |---|---|
-| Mother, Grandmother | Mother's Day |
-| Father, Grandfather | Father's Day |
+| Mother, Grandmother, Mother-in-law | Mother's Day |
+| Father, Grandfather, Father-in-law | Father's Day |
 | Wife, Husband | Valentine's Day, plus an anniversary if a date is given |
 | Girlfriend, Boyfriend, Partner | Valentine's Day |
-| Son, Daughter, Sister, Brother, Best friend, Friend, Other | none |
+| Son, Daughter, Sister, Brother, Sister-, Brother-, Daughter- and Son-in-law, Best friend, Friend, Other | none |
 
 All six occasion kinds the schema knows (birthday, anniversary, Christmas, Valentine's Day, Mother's Day, Father's Day) can be turned on for anyone from their page; the list above only sets the starting point. Changing someone's relationship later doesn't change their occasions **[Claude's call]**: the switches you set are kept.
 
@@ -184,8 +184,8 @@ None left for the owner. Calls marked **[Claude's call]** are listed in "What wa
 - Modify: `packages/core/src/schedule.ts`, `packages/core/src/schedule.test.ts`, `packages/core/src/index.ts`
 
 **Interfaces:**
-- Produces: `RELATIONSHIPS` (readonly, in this order): `mother, father, wife, husband, girlfriend, boyfriend, partner, son, daughter, grandmother, grandfather, sister, brother, best_friend, friend, other`; `type Relationship`; `relationshipLabel(r: Relationship): string` ("Mother", …, "Best friend").
-- Produces: `startingOccasions(r: Relationship, o: { birthday: boolean; anniversary: boolean }): OccasionKind[]`, following the spec's table: always `christmas`; `birthday` when given; `mothers_day` for mother and grandmother; `fathers_day` for father and grandfather; `valentines_day` for wife, husband, girlfriend, boyfriend and partner; `anniversary` only for wife and husband, and only when given.
+- Produces: `RELATIONSHIPS` (readonly, in this order): `mother, father, wife, husband, girlfriend, boyfriend, partner, son, daughter, grandmother, grandfather, sister, brother, mother_in_law, father_in_law, sister_in_law, brother_in_law, daughter_in_law, son_in_law, best_friend, friend, other` (the in-laws added by ALL-121, labelled "Mother-in-law" and so on); `type Relationship`; `relationshipLabel(r: Relationship): string` ("Mother", …, "Best friend").
+- Produces: `startingOccasions(r: Relationship, o: { birthday: boolean; anniversary: boolean }): OccasionKind[]`, following the spec's table: always `christmas`; `birthday` when given; `mothers_day` for mother, grandmother and mother-in-law; `fathers_day` for father, grandfather and father-in-law (in-laws: ALL-121, [Claude's call], shown to the owner with the ALL-109 mock-up); `valentines_day` for wife, husband, girlfriend, boyfriend and partner; `anniversary` only for wife and husband, and only when given.
 - Produces: `nextOccasion(occasions: { kind: OccasionKind; month: number | null; day: number | null; enabled: boolean }[], today: CalendarDate): { kind: OccasionKind; date: CalendarDate } | null`. It returns the soonest enabled occasion on or after today (ties go to list order), or `null` when none is enabled.
 - Produces (in `schedule.ts`): `orderBy(occasionDate: CalendarDate, today: CalendarDate, s: Pick<ScheduleSettings, "planningDeliveryDays" | "safetyBufferDays" | "fastestDaysToArrive">): { date: CalendarDate; fast: boolean } | null`. It returns the normal `shipByDeadline` if that's after today; otherwise the fast-shipping deadline (`fast: true`) if that's after today; otherwise `null` ("Too late to ship"). This is the same rule as `planRoundStart`'s deadline, so refactor `planRoundStart` to use it.
 

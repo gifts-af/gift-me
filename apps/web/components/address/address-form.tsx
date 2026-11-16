@@ -5,13 +5,12 @@ import { US_STATES, type AddressField } from "@gifts-af/core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { NativeSelect } from "@/components/ui/native-select";
 
 export type AddressValues = Record<AddressField, string>;
 type Errors = Partial<Record<AddressField, string>>;
 type SaveResult = { ok: true } | { ok: false; error: string; fields?: Errors };
 
-const SELECT_CLASS =
-  "flex min-h-11 w-full rounded-md border border-input bg-background px-3 py-2.5 text-base font-normal";
 const TRY_AGAIN = "That didn't save. Try again.";
 
 const FIELDS: { key: AddressField; label: string; autoComplete: string; numeric?: boolean }[] = [
@@ -89,10 +88,9 @@ export function AddressForm({
           <div key={f.key} className="flex flex-col gap-1.5">
             <Label htmlFor={id}>{f.label}</Label>
             {f.key === "state" ? (
-              <select
+              <NativeSelect
                 id={id}
                 name={f.key}
-                className={SELECT_CLASS}
                 autoComplete={f.autoComplete}
                 aria-invalid={message ? true : undefined}
                 aria-describedby={described}
@@ -105,7 +103,7 @@ export function AddressForm({
                     {s.name}
                   </option>
                 ))}
-              </select>
+              </NativeSelect>
             ) : (
               <Input
                 id={id}
