@@ -56,7 +56,7 @@ Run these from `apps/web` unless noted. Install dependencies once from the repo 
 | Route | Purpose |
 | --- | --- |
 | `/` | Give: the "You" card, then your people. Needs an account |
-| `/settings` | Time zone and over-budget allowance. Needs an account |
+| `/settings` | A list of rows (time zone, My address, reminders, over-budget allowance, Zinc); most open a detail page under `/settings/...` and save as you go. Needs an account |
 | `/lists` | Get: the gift list. Works signed in or out (a guest's list isn't saved) |
 | `/share/{token}` | Shared list, open to anyone with the link; friends can claim gifts. The list's owner sees no claims (product decision 39) |
 | `/auth/login`, `/auth/sign-up` | Continue with Google, or email and password |

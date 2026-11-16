@@ -54,9 +54,9 @@ async function LoadedList() {
     loadPaymentSummary(userId),
   ]);
   const saved = profile?.timezone ?? null;
-  const zones = timeZoneOptions(saved);
   const guess = requestHeaders.get("x-vercel-ip-timezone");
-  const fallback = guess && isTimeZone(guess) && zones.includes(guess) ? guess : null;
+  const fallback = guess && isTimeZone(guess) ? guess : null;
+  const zones = timeZoneOptions(saved, fallback);
   // Your address does nothing for you until you have a list (principle 10). A
   // failed read still shows the row, so it can't look like a missing address.
   const showAddress = address.kind !== "none" || myList?.list != null || myList?.loadError != null;

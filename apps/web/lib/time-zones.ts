@@ -11,8 +11,9 @@ export function isTimeZone(zone: string): boolean {
   }
 }
 
-/** The server's zones, with `saved` first when the list doesn't include it. */
-export function timeZoneOptions(saved: string | null): string[] {
+/** The server's zones, with `saved` and `extra` first when the list doesn't include them. */
+export function timeZoneOptions(saved: string | null, extra: string | null = null): string[] {
   const all = Intl.supportedValuesOf("timeZone");
-  return saved && !all.includes(saved) ? [saved, ...all] : all;
+  const missing = [saved, extra].filter((zone, i, zones): zone is string => !!zone && !all.includes(zone) && zones.indexOf(zone) === i);
+  return missing.length ? [...missing, ...all] : all;
 }

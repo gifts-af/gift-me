@@ -354,3 +354,20 @@ test("a linked buyer sees only the city, and nothing once sharing stops (AC-13, 
   await expect(buyerPage.getByRole("button", { name: "Add an address" })).toBeVisible();
   await context.close();
 });
+
+test("the My address row shows the new street after saving and tapping Back (AC-7)", async ({ page }) => {
+  const user = await createFreshUser();
+  await signIn(page, user);
+  await saveFirstList(page);
+  await page.goto("/settings");
+  await page.getByRole("link", { name: /My address/ }).click();
+  await page.waitForURL("**/settings/address");
+  await tap(page.getByRole("button", { name: "Add my address" }));
+  await fillAddress(page);
+  await page.getByRole("button", { name: "Save address" }).click();
+  await expect(page.getByText(STREET)).toBeVisible();
+
+  await page.getByRole("main").getByRole("link", { name: "Settings" }).click();
+  await page.waitForURL("**/settings");
+  await expect(page.getByRole("link", { name: /My address/ }).getByText(STREET)).toBeVisible();
+});

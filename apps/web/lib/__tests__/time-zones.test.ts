@@ -21,6 +21,13 @@ describe("timeZoneOptions", () => {
     expect(timeZoneOptions("UTC")).toEqual(["UTC", "America/Chicago"]);
   });
 
+  it("also adds an extra zone, such as an alias the list doesn't show", () => {
+    vi.spyOn(Intl, "supportedValuesOf").mockReturnValue(["America/Chicago"]);
+    expect(timeZoneOptions("UTC", "Asia/Kolkata")).toEqual(["UTC", "Asia/Kolkata", "America/Chicago"]);
+    expect(timeZoneOptions(null, "America/Chicago")).toEqual(["America/Chicago"]);
+    expect(timeZoneOptions("Asia/Kolkata", "Asia/Kolkata")).toEqual(["Asia/Kolkata", "America/Chicago"]);
+  });
+
   it("has no duplicates when nothing is saved", () => {
     const options = timeZoneOptions(null);
     expect(new Set(options).size).toBe(options.length);

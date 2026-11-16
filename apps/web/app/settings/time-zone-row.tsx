@@ -92,7 +92,7 @@ export function TimeZoneRow({
         </span>
         <select
           aria-labelledby={`${id}-label ${id}-value`}
-          aria-disabled={!hydrated}
+          disabled={!hydrated}
           value={picked ?? ""}
           onChange={(event) => pick(event.target.value)}
           className="absolute inset-0 size-full cursor-pointer opacity-0"

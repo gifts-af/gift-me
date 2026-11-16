@@ -32,7 +32,14 @@ export function OverBudgetField({ initial, action }: { initial: number; action: 
     }
     // A failed save can be tried again, by blur, Enter or leaving.
     if (!result.ok && sent.current === value) sent.current = prev;
-    if (!visible.current) return;
+    if (!visible.current) {
+      // Hidden while saving: a failed change goes back to what's saved, so it can't look saved on return.
+      if (!result.ok) {
+        current.current = prev;
+        setText(prev);
+      }
+      return;
+    }
     if (result.ok) {
       setDone(true);
       setError(null);

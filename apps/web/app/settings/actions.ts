@@ -25,14 +25,15 @@ import { placeHeld, zincWiring } from "./zinc-deps";
 
 // Saves the time zone on its own, as the picker on Settings needs (ALL-115).
 export async function saveTimezone(zone: string): Promise<SaveResult> {
-  if (!isTimeZone(String(zone))) return { ok: false, error: "Pick a time zone from the list." };
+  const value = String(zone);
+  if (!isTimeZone(value)) return { ok: false, error: "Pick a time zone from the list." };
 
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getClaims();
   const userId = auth?.claims?.sub;
   if (!userId) return { ok: false, error: "Your session ended. Sign in again." };
 
-  const { error } = await supabase.from("profiles").update({ timezone: zone }).eq("id", userId);
+  const { error } = await supabase.from("profiles").update({ timezone: value }).eq("id", userId);
   if (error) {
     logEvent("settings.timezone_save_failed", { user_id: userId, ...errorFields(error) });
     return { ok: false, error: "Your time zone couldn't be saved. Try again." };
@@ -79,10 +80,10 @@ export async function sendTestEmail(): Promise<{ ok: true } | { ok: false; error
 // Paying for gifts (ALL-32). Each action checks who is signed in, builds the Zinc wiring and
 // hands both to the module, which re-checks paid features before any Zinc call (AC-1). Results
 // are plain data with no keys in them (AC-6); details go to the log as ids only (E6).
-// The Settings list shows a one-word Zinc state, so it changes with the paying page.
+// The Settings list shows a one-word Zinc state, so it changes with the paying page. The paying
+// page keeps its own state in the browser, so it isn't revalidated (that would re-run a Zinc call).
 function refreshPaying() {
   revalidatePath("/settings");
-  revalidatePath("/settings/paying");
 }
 
 // `refresh` says whether a result changes what Settings shows. Polling while waiting doesn't:

@@ -130,8 +130,9 @@ describe("TimeZoneRow", () => {
     expect(screen.getByRole("combobox")).toHaveValue("America/New_York");
   });
 
-  it("is faded and aria-disabled before the page has loaded", () => {
+  it("is faded and its select is disabled before the page has loaded", () => {
     const html = renderToString(<TimeZoneRow zones={zones} saved="America/New_York" fallback={null} action={vi.fn()} />);
+    expect(html).toMatch(/<select[^>]*disabled=""/);
     expect(html).toContain('aria-disabled="true"');
     expect(html).toContain("aria-disabled:opacity-45");
   });

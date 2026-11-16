@@ -54,12 +54,12 @@ describe("address actions revalidate the address page (ALL-115)", () => {
   });
 });
 
-describe("Zinc actions revalidate the list and the paying page (ALL-115)", () => {
+describe("Zinc actions revalidate the list only; the paying page keeps its own state (ALL-115)", () => {
   it("connect", async () => {
     m.zincWiring.mockResolvedValue({ deps: {}, walletUrl: "" });
     m.startConnect.mockResolvedValue({ ok: true });
     await startZincConnect();
-    expect(paths()).toEqual(expect.arrayContaining(["/settings", "/settings/paying"]));
+    expect(paths()).toEqual(["/settings"]);
   });
   it("poll while waiting does not revalidate", async () => {
     m.zincWiring.mockResolvedValue({ deps: {}, walletUrl: "" });
@@ -71,12 +71,12 @@ describe("Zinc actions revalidate the list and the paying page (ALL-115)", () =>
     m.zincWiring.mockResolvedValue({ deps: {}, walletUrl: "" });
     m.pollConnect.mockResolvedValue({ kind: "connected" });
     await pollZincConnect();
-    expect(paths()).toEqual(expect.arrayContaining(["/settings", "/settings/paying"]));
+    expect(paths()).toEqual(["/settings"]);
   });
   it("disconnect", async () => {
     m.zincWiring.mockResolvedValue(null);
     m.disconnectZinc.mockResolvedValue({ ok: true });
     await disconnectZincAccount();
-    expect(paths()).toEqual(expect.arrayContaining(["/settings", "/settings/paying"]));
+    expect(paths()).toEqual(["/settings"]);
   });
 });

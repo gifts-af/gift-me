@@ -92,6 +92,10 @@ describe("OverBudgetField", () => {
     await act(async () => rerender(ui("hidden")));
     expect(action).toHaveBeenCalledTimes(1);
     await act(async () => rerender(ui("visible")));
+    // The failed pick isn't left looking saved: the box goes back to what is saved.
+    expect(field()).toHaveValue("10");
+    expect(screen.queryByRole("alert")).toBeNull();
+    type("15");
     await act(async () => fireEvent.blur(field()));
     expect(action).toHaveBeenCalledTimes(2);
   });
