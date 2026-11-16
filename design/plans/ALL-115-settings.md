@@ -56,7 +56,7 @@ None left; see below.
 | No saved time zone | Show "Not set (using X)" until they pick | **[Claude's call]** principle 10, and honest; easy to switch to saving the location-based zone later |
 | Zinc row value | Database only: Connected / Not set up / Not available yet / Paused | **[Claude's call]** the Settings list shouldn't wait on Zinc |
 | URLs | `/settings/over-budget`, `/settings/reminders`, `/settings/address`, `/settings/paying` | **[Claude's call]** plain names; the email actions compute their link when clicked, so old emails follow the new paths |
-| Old `/settings` and `/settings#my-address` links | `/settings` keeps working (it's the list); `#my-address` isn't kept | Action links compute their path at click time. The one path baked into sent emails is the `walletUrl` fallback to `/settings`, which still lands on the list, one tap from Paying for gifts |
+| Old `/settings` and `/settings#my-address` links | `/settings` keeps working (it's the list); `#my-address` isn't kept. The `walletUrl` fallback in new emails becomes `/settings/paying` | Action links compute their path at click time. Emails already sent with the old `/settings` fallback still land on the list, one tap from Paying for gifts |
 
 ## Principles check
 
@@ -107,9 +107,9 @@ None left; see below.
 
 **Files:** create `app/settings/time-zone-row.tsx`, `app/settings/__tests__/time-zone-row.test.tsx`.
 
-**Produces:** `TimeZoneRow({ zones, saved, fallback, action }: { zones: string[]; saved: string | null; fallback: string | null; action: (zone: string) => Promise<SaveResult> })`. A row: label "Time zone"; value is `saved` with `_` as spaces, or "Not set (using X)" from `fallback`, or "Not set". A native `<select aria-label="Time zone">` covers the whole row transparently; with nothing saved it starts on an empty placeholder option so picking the fallback fires `change`. Nothing reads `Intl` during render. A pick waits 400 ms for further picks; only the latest is sent, and a late older result is ignored.
+**Produces:** `TimeZoneRow({ zones, saved, fallback, action }: { zones: string[]; saved: string | null; fallback: string | null; action: (zone: string) => Promise<SaveResult> })`. A row: label "Time zone"; value is `saved` with `_` as spaces, or "Not set (using X)" from `fallback`, or "Not set". A native `<select>` covers the whole row transparently, named by `aria-labelledby` pointing at the label and the value; with nothing saved it starts on an empty placeholder option so picking the fallback fires `change`. Nothing reads `Intl` during render. A pick waits 400 ms for further picks; only the latest is sent, and a late older result is ignored. The tick and error reset when `/settings` is hidden, without cancelling a pick still waiting.
 
-- [ ] Tests (fake timers): a pick saves after the delay and shows "Saved"; three quick picks call `action` once with the last zone; a failed save shows the error and keeps the pick; with `saved` null and `fallback` "America/Los_Angeles" it shows "Not set (using America/Los Angeles)" and picking that zone calls `action("America/Los_Angeles")`. FAIL, implement, PASS, commit.
+- [ ] Tests (fake timers): a pick saves after the delay and shows "Saved"; three quick picks call `action` once with the last zone; a failed save shows the error and keeps the pick; with `saved` null and `fallback` "America/Los_Angeles" it shows "Not set (using America/Los Angeles)" and picking that zone calls `action("America/Los_Angeles")`; the select's accessible name is "Time zone" plus the value. FAIL, implement, PASS, commit.
 
 ### Task 3: Payment summary from the database (AC-9)
 
@@ -117,18 +117,19 @@ None left; see below.
 
 **Produces:**
 - `type PaymentSummary = "not_allowed" | "paused" | "off" | "not_connected" | "waiting" | "needs_phone" | "connected"`.
-- `getPaymentSummary(userId: string, db: ZincDeps["db"], zincOn: boolean): Promise<PaymentSummary>`: uses `hasPaidFeatures`, `hasZincConnection`, and the rows `getPaymentStatus` already reads (`zinc_connect_attempts`, `accounts.buyer_phone`). It never makes a Zinc call. The mapping matches `PayingForGiftsSection`: unpaid or off with a connection gives "paused"; unpaid gives "not_allowed"; paid with Zinc off gives "off".
+- `getPaymentSummary(userId: string, db: ZincDeps["db"], zincOn: boolean): Promise<PaymentSummary>`: uses `hasPaidFeatures`, `hasZincConnection`, and the rows `getPaymentStatus` already reads (`zinc_connect_attempts`, `accounts.buyer_phone`). It never makes a Zinc call. The mapping matches `PayingForGiftsSection` exactly: unpaid with a connection gives "paused"; unpaid gives "not_allowed"; paid with Zinc off gives "off", with or without a connection. Signature takes `now: Date` as a fourth argument, so an expired connect attempt is "not_connected", not "waiting" (E3).
 - `paymentRowText(s: PaymentSummary | "error"): string` in `rows.ts`: not_allowed and off "Not available yet", paused "Paused", not_connected "Not set up", waiting "Connecting", needs_phone "Add your phone", connected "Connected", error "Couldn't load".
 
-- [ ] Tests: one per summary value with the existing fake db, asserting no Zinc client call; `paymentRowText` for every value. FAIL, implement, PASS, commit.
+- [ ] Tests: one per summary value with the existing fake db, plus an expired attempt giving `not_connected`; `paymentRowText` for every value. FAIL, implement, PASS, commit.
 
 ### Task 4: Over-budget page (AC-4, AC-5, AC-10)
 
 **Files:** create `app/settings/over-budget/page.tsx`, `app/settings/over-budget-field.tsx`, `app/settings/__tests__/over-budget-field.test.tsx`; modify `app/settings/actions.ts`.
 
-**Produces:** server action `saveOverBudget(value: string): Promise<SaveResult>`, which wraps `saveConciergeSettings` and revalidates `/settings` and `/settings/over-budget`. Also `OverBudgetField({ initial, action }: { initial: number; action: (v: string) => Promise<SaveResult> })`, which saves on blur, Enter and the hide cleanup, only when the text differs from the last saved value. The page has a `BackLink` to `/settings` ("Settings"), the title "Over-budget allowance", today's hint, and the field followed by "%".
+**Produces:** server action `saveOverBudget(value: string): Promise<SaveResult>`, which wraps `saveConciergeSettings` and revalidates `/settings` and `/settings/over-budget`. Also `OverBudgetField({ initial, action }: { initial: number; action: (v: string) => Promise<SaveResult> })`, which saves on blur, Enter and the hide cleanup, only when the text differs from the last value **sent** (kept in a ref, so blur followed by the hide cleanup sends once). The page has a `BackLink` to `/settings` ("Settings"), the title "Over-budget allowance", today's hint, and the field followed by "%".
 
-- [ ] Tests: blur with a change saves once; Enter then blur saves once; blur with no change doesn't call `action`; "abc" shows the action's error and keeps "abc"; unmounting with an unsaved change calls `action`. FAIL, implement, PASS, commit.
+- [ ] Tests: blur with a change saves once; Enter then blur saves once; blur with no change doesn't call `action`; "abc" shows the action's error and keeps "abc"; unmounting with an unsaved change calls `action`; blur then unmount calls it once; `saveOverBudget` calls `revalidatePath` for both paths (`next/cache` mocked). FAIL, implement, PASS.
+- [ ] Spike the Back case now, as `e2e/settings.spec.ts` › `over-budget saves when Back is tapped straight away`: open `/settings/over-budget`, type 15, tap Back, open `/settings/over-budget` again and expect the field to show 15. If that's unreliable, save from the BackLink's `onNavigate` instead. Task 7 extends it to check the row. Commit.
 
 ### Task 5: Settings list and the other detail pages (AC-1, AC-6, AC-7, AC-8, AC-10)
 
@@ -154,7 +155,7 @@ None left; see below.
 - `/settings/reminders`: "By email", "More ways to be reminded are coming.", and `TestEmailButton`.
 - Every detail page: a `BackLink` to `/settings` ("Settings") and a `PageTitle`.
 
-- [ ] Unit tests: `addressRowText` for all three cases; importing `app/settings/paying/page` gives `maxDuration === 300`. FAIL, implement, PASS.
+- [ ] Unit tests: `addressRowText` for all three cases; the address and Zinc actions revalidate their paths (`next/cache` mocked). FAIL, implement, PASS. The `/settings/address` redirect sits outside any try/catch.
 - [ ] Point `e2e/my-address.spec.ts` and `e2e/paying-for-gifts.spec.ts` at `/settings/address` and `/settings/paying`; both run green. Commit.
 
 ### Task 6: Links into Settings (AC-14)
@@ -172,11 +173,15 @@ None left; see below.
 
 **Files:** create `e2e/settings.spec.ts`; modify `e2e/top-bar.spec.ts` (add the four detail pages to the 320 px loop).
 
+All assertions use `toBeVisible()` / `not.toBeVisible()`, never counts: hidden visited pages stay in the document.
+
+- [ ] `settings lists every group and row`: the headings You, Reminders, Gift ideas and Paying for gifts are visible; each row shows its value; there's no button named Save.
+- [ ] `address page redirects when the row is hidden`: a fresh user with no list who opens `/settings/address` lands on `/settings`.
 - [ ] `picking a time zone saves it`: pick, see "Saved", reload, and the row shows it.
 - [ ] `no saved zone shows the fallback and saves nothing until picked`: a fresh user sees "Not set" on the row, and `profiles.timezone` is still null.
 - [ ] `over-budget saves when Back is tapped straight away`: type 15, tap Back, and the row shows "15%".
 - [ ] `coming back shows no stale state`: save, Back, open again, and there's no "Saved".
-- [ ] `@layout settings loads without a hydration error`: collect console errors and `pageerror` on `/settings` for a user with a zone and one without; none match /Hydration/. The rows are at least 44 px (`phone-layout.ts` helpers).
+- [ ] `@layout settings loads without a hydration error`: `test.use({ timezoneId: "America/Los_Angeles" })` so the browser's zone differs from the server's; collect console errors and `pageerror` on `/settings` for a user with a zone and one without; none match `/Hydration|#418|#423|#425/` (the e2e runs a production build, where React's messages are minified). **Write this first, against today's code, and record that it fails.** Also check the rows are at least 44 px and the picker covers the time zone row (`phone-layout.ts` helpers). One test sends `extraHTTPHeaders: { "x-vercel-ip-timezone": "America/Chicago" }` and sees "Not set (using America/Chicago)".
 - [ ] `pnpm e2e settings top-bar` green on all projects. Commit.
 
 ### Task 8: Gallery and docs (AC-12)
@@ -185,6 +190,7 @@ None left; see below.
 
 - [ ] `shoot` waits until no text matches `/^Loading\b/`. Add the shots `settings-over-budget`, `settings-reminders`, `settings-address` and `settings-paying`.
 - [ ] Run `pnpm gallery`. `phone/settings.png` shows rows. Republish the screens page (CLAUDE.md > Updating the screens and emails page). Commit.
+- [ ] Grep check: `maxDuration = 300` is in `app/settings/paying/page.tsx` and not in `app/settings/page.tsx`.
 - [ ] Full gate: `pnpm lint && pnpm typecheck && pnpm test && pnpm build`.
 
 ## Before coding: consistency check
