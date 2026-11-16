@@ -1,3 +1,4 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 
 // The shape the gift components already work with (see modules/lists/components).
@@ -12,9 +13,14 @@ export type Gift = {
   addedAt: number;
 };
 
+// `version` is the list's updated_at as Postgres prints it. It stays a string
+// end to end: a JS Date keeps only milliseconds, and every save is checked
+// against it to the microsecond (lists.save_list_checked, ALL-127).
+export type ListInfo = { id: string; title: string; shareToken: string; version: string };
+
 export type MyList = {
   user: { email: string | null };
-  list: { id: string; title: string; shareToken: string } | null;
+  list: ListInfo | null;
   items: Gift[];
   // Set when the saved list couldn't be read. The app still renders, but
   // saving is blocked: a save now would start a second, near-empty list.
@@ -51,10 +57,45 @@ export function rowToGift(row: ListItemRow): Gift {
 const LOAD_ERROR = "We couldn't load your saved list, so saving is paused. Refresh to try again.";
 
 /**
- * The signed-in user's list, or null for a guest. A user may own several
- * lists; until the UI can switch between them, the oldest one is "the" list.
- * A database failure is reported through loadError rather than thrown, so one
- * bad query can't take the whole page down.
+ * A list with its gifts and version, read in one query so the version matches
+ * the gifts. With no id, the caller's oldest list: a user may own several, and
+ * until the UI can switch between them the oldest is "the" list. RLS keeps it
+ * to the caller's own.
+ */
+export async function readList(
+  db: SupabaseClient,
+  listId: string | null,
+): Promise<{ ok: true; list: ListInfo | null; items: Gift[] } | { ok: false }> {
+  const base = db
+    .schema("lists")
+    .from("lists")
+    .select(`id, title, share_token, version:updated_at::text, list_items(${LIST_ITEM_COLUMNS})`)
+    .order("position", { referencedTable: "list_items", ascending: true });
+  const query = listId ? base.eq("id", listId) : base.order("created_at", { ascending: true }).limit(1);
+  const { data, error } = await query.maybeSingle();
+  if (error) {
+    console.error("loading the list failed", error);
+    return { ok: false };
+  }
+  if (!data) return { ok: true, list: null, items: [] };
+  const row = data as {
+    id: string;
+    title: string;
+    share_token: string;
+    version: string;
+    list_items: ListItemRow[] | null;
+  };
+  return {
+    ok: true,
+    list: { id: row.id, title: row.title, shareToken: row.share_token, version: row.version },
+    items: (row.list_items ?? []).map(rowToGift),
+  };
+}
+
+/**
+ * The signed-in user's list, or null for a guest. A database failure is
+ * reported through loadError rather than thrown, so one bad query can't take
+ * the whole page down.
  */
 export async function getMyList(): Promise<MyList | null> {
   const supabase = await createClient();
@@ -63,39 +104,9 @@ export async function getMyList(): Promise<MyList | null> {
   if (!claims) return null;
 
   const user = { email: typeof claims.email === "string" ? claims.email : null };
-
-  const { data: list, error: listError } = await supabase
-    .schema("lists")
-    .from("lists")
-    .select("id, title, share_token")
-    .order("created_at", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (listError) {
-    console.error("loading lists failed", listError);
-    return { user, list: null, items: [], loadError: LOAD_ERROR };
-  }
-  if (!list) return { user, list: null, items: [], loadError: null };
-
-  const { data: rows, error: itemsError } = await supabase
-    .schema("lists")
-    .from("list_items")
-    .select(LIST_ITEM_COLUMNS)
-    .eq("list_id", list.id)
-    .order("position", { ascending: true });
-
-  if (itemsError) {
-    console.error("loading list items failed", itemsError);
-    return { user, list: null, items: [], loadError: LOAD_ERROR };
-  }
-
-  return {
-    user,
-    list: { id: list.id, title: list.title, shareToken: list.share_token },
-    items: (rows ?? []).map(rowToGift),
-    loadError: null,
-  };
+  const read = await readList(supabase, null);
+  if (!read.ok) return { user, list: null, items: [], loadError: LOAD_ERROR };
+  return { user, list: read.list, items: read.items, loadError: null };
 }
 
 /**

@@ -225,6 +225,23 @@ Code and migration ship together. If the code is rolled back with Vercel's insta
 
 Vercel's instant rollback brings back the old budget section, which can't show or clear a base budget, while `round_candidates` keeps using it. After the rollback, run `delete from concierge.budgets where occasion_kind = 'any';` on the database. This deletes base budgets people typed, for good, which is fine before launch. Occasion budgets are untouched (T73).
 
+## My list saving (ALL-127)
+
+My list saves each change as it's made, through `lists.save_list_checked`, which refuses a save made from an out-of-date version (T74; behaviour in `design/ui.md` > Editing and saving > My list).
+
+**The close route, `POST /api/lists/save-on-close`.** When a tab closes with a remove still held for Undo, the page posts `{ listId, version, removeIds }` here with `fetch(…, { keepalive: true })`. The route needs a signed-in user, a same-origin `Origin` header and a JSON body with exactly those three fields (ids are uuids, at most 500). It reads the list, drops those gifts and saves the rest through the checked path. It answers 204 when saved, 404 when the list isn't the caller's, 409 when two saves in a row were refused, and 400, 401, 403, 413 or 415 for a bad request. It isn't `/api/keepalive`, which is the daily Supabase ping.
+
+**Seeing it work on production (E9):** two events, ids only.
+
+| Event | Means |
+|---|---|
+| `list_save_stale` | A save was refused because the list changed in another tab or device; the tab got the latest and saved again. A few are normal. |
+| `list_close_sent` | A closing tab sent a held remove. `outcome` is `saved`, `stale`, `not_found` or `error`; `behind` says the tab's version was already out of date. Anything but `saved`, repeating, means removes made just before closing a tab are coming back. |
+
+**Rolling back:** Vercel's instant rollback brings back the old Save button, which still saves through the untouched `lists.save_list`. Nothing in the database needs undoing.
+
+**Cleanup still to do:** once this has been live without a rollback, a later migration drops `lists.save_list` (E7, expand then contract), along with the tests in `supabase/tests/lists.test.sql` that call it or pin it as untouched. No app code calls it any more.
+
 ## Inbound notes (ALL-31)
 
 Users email a note to `notes@in.giftsaf.com` and it is filed on the right person (T70). Spec: [design/plans/ALL-31-email-capture.md](plans/ALL-31-email-capture.md).

@@ -1,34 +1,32 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
+import { onBeforeLeaving } from '@/lib/leaving-page'
 import { saveList } from '@/modules/lists/actions/lists'
 import { readStorePage } from '@/modules/lists/actions/store-page'
+import { createListSaver } from '@/modules/lists/lib/list-saver.js'
 import AddGiftPanel from './add-gift-panel.jsx'
 import GiftList from './gift-list.jsx'
 import GiftSummary from './gift-summary.jsx'
 import Link from 'next/link'
 import { PageFrame } from '@/components/app-shell/page-frame'
-import SaveButton from './save-button.jsx'
 import ShareButton from './share-button.jsx'
-import { Banner, inputClass } from './ui.jsx'
+import { Banner, buttonClass, inputClass } from './ui.jsx'
+
+export { UNDO_MS } from '@/modules/lists/lib/list-saver.js'
 
 // A guest's list is carried across the trip to /auth/* in localStorage, so
 // signing in (or confirming a sign-up email in a new tab) doesn't lose it.
 const GUEST_STASH_KEY = 'giftme:guest-list'
 const GUEST_STASH_MAX_AGE_MS = 24 * 60 * 60 * 1000
 
+// Where a closing tab sends a remove still held for Undo (ALL-127).
+const CLOSE_ROUTE = '/api/lists/save-on-close'
+
 // crypto.randomUUID is undefined outside a secure context -- which includes
 // demoing over plain HTTP on a phone via `next dev -H 0.0.0.0`.
 function newId() {
   return crypto.randomUUID?.() ?? `g_${Date.now()}_${Math.random().toString(36).slice(2)}`
-}
-
-// What "unsaved changes" compares: the content and order of the list, never
-// the ids, which change when the server hands back its own rows.
-function serialize(gifts) {
-  return JSON.stringify(
-    gifts.map((g) => [g.name, g.priceCents, g.imageUrl, g.productUrl, g.asin, g.source]),
-  )
 }
 
 // `keep` leaves the stash in place, for when the list it would join can't be
@@ -54,6 +52,17 @@ function putGuestStash(items) {
   }
 }
 
+// A keepalive fetch outlives the page; a server action started now wouldn't.
+// Only ids go: keepalive bodies are capped at 64 KiB.
+function sendOnClose(body) {
+  fetch(CLOSE_ROUTE, {
+    method: 'POST',
+    keepalive: true,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).catch(() => {})
+}
+
 // The same while loading and loaded, so Share arriving doesn't move the page.
 const TITLE_ROW = 'flex min-h-11 items-center justify-between gap-3'
 
@@ -70,58 +79,61 @@ export function GiftAppSkeleton() {
   )
 }
 
+const STATUS_TEXT = { idle: 'Saved', saving: 'Saving…', error: "Couldn't save" }
+
 /**
  * @param {{ initial: import('@/modules/lists/lib/lists').MyList | null, footer?: import('react').ReactNode }} props
  * `initial` is null for a guest. `footer` shows below the list once a saved list exists.
+ * The list is built from `initial` once: a later render with new data (a
+ * router refresh) doesn't replace what's on screen.
  */
 export default function GiftApp({ initial, footer = null }) {
   const isGuest = initial === null
   const loadError = initial?.loadError ?? null
-  const saveBlockedReason = isGuest
-    ? 'Sign in to save your list'
-    : loadError
-      ? 'Saving is paused until your list loads'
-      : null
-  const [gifts, setGifts] = useState(() => initial?.items ?? [])
-  const [listId, setListId] = useState(() => initial?.list?.id ?? null)
-  const [shareToken, setShareToken] = useState(() => initial?.list?.shareToken ?? null)
+  // Fixed at the first render, so a refresh that fails to load can't stop a
+  // save that's on its way.
+  const [canSave] = useState(() => initial !== null && !initial.loadError)
+  const [saver] = useState(() =>
+    createListSaver({ initial, enabled: canSave, save: saveList, sendOnClose }),
+  )
+  const list = useSyncExternalStore(saver.subscribe, saver.getSnapshot, saver.getSnapshot)
+  const gifts = list.gifts
+
   // Kept apart from `notice` so copying a link never hides the carried-gifts
   // message. `url` is set when the clipboard can't be written, to copy by hand.
   const [shareNotice, setShareNotice] = useState(null)
-  const [savedKey, setSavedKey] = useState(() => serialize(initial?.items ?? []))
-  const [saving, setSaving] = useState(false)
-  const [saveError, setSaveError] = useState('')
   const [notice, setNotice] = useState('')
   const [announcement, setAnnouncement] = useState('')
   const headingRef = useRef(null)
-  const giftsRef = useRef(gifts)
 
-  const dirty = serialize(gifts) !== savedKey
   const shareBlockedReason = isGuest
     ? 'Sign in to share your list'
-    : !shareToken
+    : !list.shareToken
       ? 'Save your list to share it'
       : null
-  // Guests lose everything on leaving; members lose only what isn't saved.
-  const atRisk = isGuest ? gifts.length > 0 : dirty
-
-  useEffect(() => {
-    giftsRef.current = gifts
-  }, [gifts])
+  // Guests lose everything on leaving. Members are warned only while a save
+  // is on its way or has failed: a held remove is sent as the tab goes.
+  const atRisk = isGuest
+    ? gifts.length > 0
+    : canSave
+      ? list.status !== 'idle'
+      : list.dirty
+  const askBeforeLeaving = !isGuest && (canSave ? list.status === 'error' : list.dirty)
 
   // Pick up a list brought over from before signing in (or from a guest's
   // own trip to the sign-in page and back). Read in an effect, not during
-  // render, so the server-rendered HTML still matches on hydration.
+  // render, so the server-rendered HTML still matches on hydration. A
+  // member's carried gifts save straight away.
   useEffect(() => {
     const carried = takeGuestStash({ keep: loadError !== null })
     if (carried.length === 0) return
-    setGifts((prev) => [...prev, ...carried])
+    saver.add(...carried)
     if (!isGuest && !loadError) {
       setNotice(
-        `We brought over ${carried.length === 1 ? '1 gift' : `${carried.length} gifts`} from before you signed in. Save to keep ${carried.length === 1 ? 'it' : 'them'}.`,
+        `We brought over ${carried.length === 1 ? '1 gift' : `${carried.length} gifts`} from before you signed in.`,
       )
     }
-  }, [isGuest, loadError])
+  }, [isGuest, loadError, saver])
 
   // Client-side navigation to /auth/* unmounts the app; stash the guest's
   // list on the way out. Closing the tab runs no cleanup, so that still loses
@@ -129,9 +141,33 @@ export default function GiftApp({ initial, footer = null }) {
   useEffect(() => {
     if (!isGuest) return
     return () => {
-      if (giftsRef.current.length > 0) putGuestStash(giftsRef.current)
+      const { gifts: left } = saver.getSnapshot()
+      if (left.length > 0) putGuestStash(left)
     }
-  }, [isGuest])
+  }, [isGuest, saver])
+
+  // A remove held for Undo is sent before the page goes: when the tab is
+  // hidden, when this page is left in the app (Next keeps a left page mounted
+  // but hidden, and that runs this cleanup), before Sign out, and as the tab
+  // closes (pagehide, to the close route with keepalive).
+  useEffect(() => {
+    if (!canSave) return
+    function onVisibility() {
+      if (document.visibilityState === 'hidden') saver.flush()
+    }
+    function onPageHide() {
+      saver.closing()
+    }
+    document.addEventListener('visibilitychange', onVisibility)
+    window.addEventListener('pagehide', onPageHide)
+    const stopWaiting = onBeforeLeaving(() => saver.flush())
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('pagehide', onPageHide)
+      stopWaiting()
+      saver.flush()
+    }
+  }, [canSave, saver])
 
   useEffect(() => {
     if (!atRisk) return
@@ -144,11 +180,13 @@ export default function GiftApp({ initial, footer = null }) {
   }, [atRisk])
 
   // In-app links (Get, Give, the logo) navigate without beforeunload, so ask
-  // here. Capture on document runs before React's own listeners, so stopping
-  // the click keeps <Link> from navigating. Guests are stashed on unmount.
-  // `data-leaves-page` marks anything else that leaves: Sign out in AccountMenu.
+  // here, but only once a save has failed: one on its way finishes with the
+  // page hidden. Capture on document runs before React's own listeners, so
+  // stopping the click keeps <Link> from navigating. Guests are stashed on
+  // unmount. `data-leaves-page` marks anything else that leaves: Sign out in
+  // AccountMenu.
   useEffect(() => {
-    if (isGuest || !dirty) return
+    if (!askBeforeLeaving) return
     function confirmLeave(event) {
       if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
       const leaving = event.target instanceof Element ? event.target.closest('a[href], [data-leaves-page]') : null
@@ -163,66 +201,33 @@ export default function GiftApp({ initial, footer = null }) {
     }
     document.addEventListener('click', confirmLeave, true)
     return () => document.removeEventListener('click', confirmLeave, true)
-  }, [isGuest, dirty])
+  }, [askBeforeLeaving])
 
   function addGift(draft) {
-    // The id is made here rather than inside the updater: StrictMode
-    // double-invokes updaters in development, so the body has to stay pure.
-    const gift = { ...draft, id: newId(), addedAt: Date.now() }
-    setGifts((prev) => [...prev, gift])
+    setNotice('')
+    saver.add({ ...draft, id: newId(), addedAt: Date.now() })
   }
 
   function removeGift(id) {
-    setGifts((prev) => prev.filter((gift) => gift.id !== id))
+    saver.remove(id)
     // Removing the focused button would otherwise drop focus onto <body> and
     // strand keyboard users at the top of the document.
     headingRef.current?.focus()
   }
 
-  async function handleSave() {
-    if (saveBlockedReason || saving) return
-    const sent = gifts
-    setSaving(true)
-    setSaveError('')
-    setAnnouncement('')
-
-    let result
-    try {
-      result = await saveList({ listId, items: sent })
-    } catch {
-      result = { ok: false, error: "Your list couldn't be saved. Check your connection and try again." }
-    }
-    setSaving(false)
-
-    if (!result.ok) {
-      setSaveError(result.error)
-      return
-    }
-
-    setListId(result.listId)
-    if (result.shareToken) setShareToken(result.shareToken)
-    setSavedKey(serialize(sent))
-    // Adopt the server's rows only if nothing was edited mid-save; otherwise
-    // keep the newer local edits, which then still show as unsaved.
-    setGifts((current) => (current === sent ? result.items : current))
-    setNotice('')
-    setAnnouncement('List saved.')
-  }
-
   // Resolves true once the link is on the clipboard.
   async function handleShare() {
-    if (!shareToken) return false
-    const url = `${window.location.origin}/share/${shareToken}`
-    const unsavedNote = dirty ? " Unsaved changes won't appear until you save." : ''
+    if (!list.shareToken) return false
+    const url = `${window.location.origin}/share/${list.shareToken}`
     setAnnouncement('')
     try {
       // Undefined outside a secure context, e.g. a phone on plain HTTP.
       await navigator.clipboard.writeText(url)
     } catch {
-      setShareNotice({ text: `Copy this link to share your list.${unsavedNote}`, url })
+      setShareNotice({ text: 'Copy this link to share your list.', url })
       return false
     }
-    setShareNotice(unsavedNote ? { text: `Link copied.${unsavedNote}`, url: null } : null)
+    setShareNotice(null)
     setAnnouncement('Share link copied.')
     return true
   }
@@ -249,9 +254,14 @@ export default function GiftApp({ initial, footer = null }) {
             {notice}
           </Banner>
         )}
-        {saveError && (
+        {list.notice && (
+          <Banner tone="accent" role="status">
+            {list.notice}
+          </Banner>
+        )}
+        {list.status === 'error' && list.error && (
           <Banner tone="error" role="alert">
-            {saveError}
+            {list.error}
           </Banner>
         )}
 
@@ -267,7 +277,25 @@ export default function GiftApp({ initial, footer = null }) {
             </h1>
             {!isGuest && <ShareButton blockedReason={shareBlockedReason} onShare={handleShare} />}
           </div>
-          <GiftSummary gifts={gifts} />
+          <div className="flex min-h-6 flex-wrap items-center justify-between gap-x-3">
+            <GiftSummary gifts={gifts} />
+            {canSave && (
+              <div className="flex items-center gap-1">
+                <p
+                  role="status"
+                  aria-label="Save status"
+                  className={`text-[13px] ${list.status === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}
+                >
+                  {list.status === 'idle' && !list.listId ? '' : STATUS_TEXT[list.status]}
+                </p>
+                {list.status === 'error' && (
+                  <button type="button" className={`${buttonClass.link} text-[13px]`} onClick={saver.retry}>
+                    Try again
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {shareNotice && (
@@ -299,16 +327,21 @@ export default function GiftApp({ initial, footer = null }) {
           <GiftList gifts={gifts} onRemove={removeGift} />
         </section>
 
-        {listId && !loadError && footer}
+        {list.listId && !loadError && footer}
       </PageFrame>
 
-      {/* The main button sits at the bottom, in thumb reach, on a phone;
-          inline under the list from 640 px (design/ui.md). */}
-      {!isGuest && (dirty || saving) && (
-        <div className="sticky bottom-0 border-t bg-background px-4 pb-[max(16px,env(safe-area-inset-bottom))] pt-3 sm:static sm:border-t-0 sm:bg-transparent sm:pt-0">
-          <div className="mx-auto flex max-w-5xl items-center gap-3 sm:px-4">
-            <span className="flex-1 text-[15px] text-muted-foreground">Unsaved changes</span>
-            <SaveButton blockedReason={saveBlockedReason} saving={saving} onSave={handleSave} />
+      {/* Undo stays in view at the bottom, in thumb reach on a phone, lined
+          up with the list's column (design/ui.md > My list). */}
+      {list.held && (
+        <div className="sticky bottom-0 border-t bg-background pb-[max(12px,env(safe-area-inset-bottom))] pt-3">
+          <div className="mx-auto flex max-w-5xl items-center gap-2 px-4 sm:px-8">
+            <p className="min-w-0 truncate text-[15px]">Removed {list.held.gift.name}</p>
+            <span aria-hidden="true" className="text-muted-foreground">
+              ·
+            </span>
+            <button type="button" className={buttonClass.secondarySm} onClick={saver.undo}>
+              Undo
+            </button>
           </div>
         </div>
       )}

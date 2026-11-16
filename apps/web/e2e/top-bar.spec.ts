@@ -34,38 +34,37 @@ test.describe("My list", () => {
     expect(await barAndLogo(page)).toEqual(signedOut);
   });
 
-  test("pressing Give with unsaved changes still asks first", async ({ page }) => {
+  // The list saves as you go (ALL-127): leaving never needs to ask unless a
+  // save failed, which GiftApp's component tests cover.
+  test("pressing Give with a gift just added goes straight there", async ({ page }) => {
     await signIn(page, await createFreshUser());
     await page.goto("/lists");
-    await addGiftByHand(page, "Unsaved socks");
-    let asked = "";
-    page.once("dialog", (dialog) => {
-      asked = dialog.message();
-      return dialog.dismiss();
+    await addGiftByHand(page, "Wool socks");
+    page.on("dialog", (dialog) => {
+      throw new Error(`Asked before leaving: ${dialog.message()}`);
     });
     await page.getByRole("link", { name: "Give" }).click();
-    await expect.poll(() => asked).toMatch(/unsaved/i);
-    await expect(page).toHaveURL(/\/lists$/);
+    await expect(page).toHaveURL(/\/$/);
   });
 });
 
-test("Sign out with unsaved changes asks first, and staying keeps the gift and the session", async ({ page }) => {
-  await signIn(page, await createFreshUser());
+test("Sign out with a remove held for Undo saves it first (AC-18)", async ({ page }) => {
+  const user = await createFreshUser();
+  await signIn(page, user);
   await page.goto("/lists");
-  await addGiftByHand(page, "Unsaved socks");
-  let asked = "";
-  page.once("dialog", (dialog) => {
-    asked = dialog.message();
-    return dialog.dismiss();
-  });
+  await addGiftByHand(page, "Wool socks");
+  await addGiftByHand(page, "Kettle");
+  await expect(page.getByRole("status", { name: "Save status" })).toHaveText("Saved");
+  await page.getByRole("button", { name: "Remove Kettle from your list" }).click();
+  await expect(page.getByText("Removed Kettle")).toBeVisible();
   await page.getByRole("button", { name: "Account" }).click();
   await page.getByRole("menuitem", { name: "Sign out" }).click();
-  await expect.poll(() => asked).toMatch(/unsaved/i);
-  await expect(page).toHaveURL(/\/lists$/);
-  await page.keyboard.press("Escape");
-  await expect(page.getByRole("heading", { name: "Unsaved socks" })).toBeVisible();
-  await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByText("Unsaved changes")).toHaveCount(0);
+  await expect(page).toHaveURL(/\/auth\/login/);
+
+  await signIn(page, user);
+  await page.goto("/lists");
+  await expect(page.getByRole("heading", { name: "Wool socks" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Kettle" })).toHaveCount(0);
 });
 
 test.describe("which bar each page gets", () => {
@@ -100,8 +99,7 @@ test.describe("which bar each page gets", () => {
     await signIn(page, owner);
     await page.goto("/lists");
     await addGiftByHand(page, "Wool socks");
-    await page.getByRole("button", { name: "Save" }).click();
-    await expect(page.getByText("Unsaved changes")).toHaveCount(0);
+    await expect(page.getByRole("status", { name: "Save status" })).toHaveText("Saved");
     // With no clipboard the app shows the link, on every browser.
     await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { value: undefined }));
     await page.getByRole("button", { name: /Share/ }).click();
@@ -135,13 +133,12 @@ test.describe("the You card on Give", () => {
     await expect(page.getByRole("link", { name: /^My list/ })).toHaveCount(0);
   });
 
-  test("shows the new count after saving and pressing Give", async ({ page }) => {
+  test("shows the new count after adding a gift and pressing Give", async ({ page }) => {
     await signIn(page, await createFreshUser());
     await page.goto("/");
     await page.getByRole("link", { name: "Get" }).click();
     await addGiftByHand(page, "Wool socks");
-    await page.getByRole("button", { name: "Save" }).click();
-    await expect(page.getByText("Unsaved changes")).toHaveCount(0);
+    await expect(page.getByRole("status", { name: "Save status" })).toHaveText("Saved");
     await page.getByRole("link", { name: "Give" }).click();
     await expect(page.getByRole("link", { name: /^You/ })).toContainText("1 gift on your list");
   });
