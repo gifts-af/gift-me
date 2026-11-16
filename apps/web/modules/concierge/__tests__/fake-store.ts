@@ -51,7 +51,7 @@ export class FakeStore implements NotifyStore {
     return p && p.userId === userId ? p.name : null;
   }
 
-  // Like file_inbound_message: check and set with no await in between, so only the first wins.
+  // Like file_inbound_message: re-checked after the await and set with none in between, so only the first wins.
   async fileInboundMessage(userId: string, messageId: string, personId: string) {
     const m = this.asking.get(messageId);
     if (!m || m.userId !== userId || m.filedTo !== null) return null;
