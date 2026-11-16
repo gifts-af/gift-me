@@ -96,3 +96,9 @@ export type { ApproveError, ApproveInput, ApproveResult } from "./purchase/appro
 export { placeAddressHeld as placeAddressHeldFor, placeHeldForUser, placeRound, sweepStalePlacing } from "./purchase/place";
 export type { PlaceOutcome } from "./purchase/place";
 export type { PurchaseDeps } from "./purchase/store";
+// Notes emailed to the notes address (ALL-31): the webhook route binds these.
+export { handleInbound } from "./inbound/handle";
+export type { InboundDeps, InboundOutcome } from "./inbound/handle";
+export { createSupabaseInboundStore } from "./inbound/supabase-store";
+export type { InboundStore } from "./inbound/store";
+export { captureStoreFor } from "./capture/supabase-store";

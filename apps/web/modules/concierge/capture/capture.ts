@@ -32,7 +32,7 @@ export type NoteCaptureInput = {
 };
 
 /** File extension for each image type a capture can hold. */
-const IMAGE_EXTENSIONS: Record<string, string> = {
+export const IMAGE_EXTENSIONS: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/png": "png",
   "image/webp": "webp",
