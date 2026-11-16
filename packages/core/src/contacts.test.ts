@@ -116,6 +116,12 @@ describe("guessRelationship", () => {
     ["Grandpa", null, "grandfather"],
     ["Hubby", null, "husband"],
     ["Wifey ❤️", null, "wife"],
+    // ALL-121: an in-law isn't the parent.
+    ["Mother-in-law", null, "mother_in_law"],
+    ["Mom in law", null, "mother_in_law"],
+    ["Linda", "Mom-in-law", "mother_in_law"],
+    ["Dad in law", null, "father_in_law"],
+    ["Grandma in law", null, null],
   ])("%s (nickname %s) → %s", (name, nickname, expected) => {
     expect(guessRelationship(name, nickname)).toBe(expected);
   });

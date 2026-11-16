@@ -7,10 +7,9 @@ import { PersonAvatar } from "@/components/person-avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { ImportResult } from "@/modules/concierge";
+import { NativeSelect } from "@/components/ui/native-select";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const SELECT_CLASS =
-  "min-h-11 w-full rounded-md border border-input bg-background px-3 py-2 text-base font-normal sm:w-48";
 
 type Stage = { kind: "start" } | { kind: "loading" } | { kind: "failed" } | { kind: "list"; contacts: GoogleContact[] };
 
@@ -183,11 +182,10 @@ export function ImportChecklist({
                 </span>
               </label>
               {on && (
-                <div className="flex flex-col gap-1 pl-8 sm:pl-0">
-                  <select
+                <div className="flex flex-col gap-1 pl-8 sm:w-48 sm:pl-0">
+                  <NativeSelect
                     id={pickerId(c)}
                     aria-label={`Who is ${c.name} to you?`}
-                    className={SELECT_CLASS}
                     value={relationship}
                     onChange={(e) => choose(c, e.target.value)}
                   >
@@ -197,7 +195,7 @@ export function ImportChecklist({
                         {relationshipLabel(r)}
                       </option>
                     ))}
-                  </select>
+                  </NativeSelect>
                   {!relationship && <span className="text-[13px] text-warning">Pick who they are</span>}
                 </div>
               )}

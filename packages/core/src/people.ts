@@ -18,6 +18,12 @@ export const RELATIONSHIPS = [
   "grandfather",
   "sister",
   "brother",
+  "mother_in_law",
+  "father_in_law",
+  "sister_in_law",
+  "brother_in_law",
+  "daughter_in_law",
+  "son_in_law",
   "best_friend",
   "friend",
   "other",
@@ -28,7 +34,8 @@ export type Relationship = (typeof RELATIONSHIPS)[number];
 /** A readable name; a stored value we don't know (say, from an older build) reads "Other". */
 export function relationshipLabel(r: string): string {
   if (!(RELATIONSHIPS as readonly string[]).includes(r)) return "Other";
-  const words = r.replace("_", " ");
+  // "mother_in_law" reads "Mother-in-law", "best_friend" reads "Best friend".
+  const words = r.endsWith("_in_law") ? r.replaceAll("_", "-") : r.replace("_", " ");
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
@@ -39,8 +46,8 @@ export function startingOccasions(
 ): OccasionKind[] {
   const kinds: OccasionKind[] = ["christmas"];
   if (o.birthday) kinds.push("birthday");
-  if (r === "mother" || r === "grandmother") kinds.push("mothers_day");
-  if (r === "father" || r === "grandfather") kinds.push("fathers_day");
+  if (r === "mother" || r === "grandmother" || r === "mother_in_law") kinds.push("mothers_day");
+  if (r === "father" || r === "grandfather" || r === "father_in_law") kinds.push("fathers_day");
   if (["wife", "husband", "girlfriend", "boyfriend", "partner"].includes(r)) kinds.push("valentines_day");
   if ((r === "wife" || r === "husband") && o.anniversary) kinds.push("anniversary");
   return kinds;
