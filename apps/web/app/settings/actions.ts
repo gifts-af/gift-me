@@ -85,7 +85,12 @@ function refreshPaying() {
   revalidatePath("/settings/paying");
 }
 
-async function withZinc(run: (userId: string, deps: ZincDeps) => Promise<PaymentResult>): Promise<PaymentResult> {
+// `refresh` says whether a result changes what Settings shows. Polling while waiting doesn't:
+// a re-render then would push new props into the open connect screen every few seconds.
+async function withZinc(
+  run: (userId: string, deps: ZincDeps) => Promise<PaymentResult>,
+  refresh: (result: PaymentResult) => boolean = () => true,
+): Promise<PaymentResult> {
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getClaims();
   const userId = auth?.claims?.sub;
@@ -94,7 +99,7 @@ async function withZinc(run: (userId: string, deps: ZincDeps) => Promise<Payment
     const wiring = await zincWiring(createAdminClient());
     if (!wiring) return { error: "Paying for gifts isn't switched on here yet." };
     const result = await run(userId, wiring.deps);
-    refreshPaying();
+    if (refresh(result)) refreshPaying();
     return result;
   } catch (error) {
     logEvent("zinc.action_failed", { user_id: userId, ...errorFields(error) });
@@ -107,7 +112,10 @@ export async function startZincConnect(): Promise<PaymentResult> {
 }
 
 export async function pollZincConnect(): Promise<PaymentResult> {
-  return withZinc((userId, deps) => pollConnect(userId, deps, placeHeld));
+  return withZinc(
+    (userId, deps) => pollConnect(userId, deps, placeHeld),
+    (result) => "kind" in result && result.kind !== "waiting",
+  );
 }
 
 export async function cancelZincConnect(): Promise<PaymentResult> {

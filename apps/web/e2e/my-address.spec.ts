@@ -295,8 +295,9 @@ test("Settings shows the new address after sharing from the list, with the form 
   await expect(shareSwitch(page)).toBeChecked();
 
   await page.getByRole("link", { name: "Change my address" }).click();
-  // The link may land on the Settings list; the row there opens the address page.
-  if (!page.url().includes("/settings/address")) await page.getByRole("link", { name: /^My address/ }).click();
+  // For now the link lands on the Settings list (with its old anchor); Task 6 points it at /settings/address.
+  await expect(page).toHaveURL(/\/settings(#my-address)?$/);
+  await page.getByRole("link", { name: /^My address/ }).click();
   await expect(page.getByRole("heading", { name: "My address", level: 2 })).toBeVisible();
   // The Settings list, still in the page hidden, shows the street too: look inside the section.
   await expect(page.getByRole("region", { name: "My address" }).getByText(STREET)).toBeVisible();

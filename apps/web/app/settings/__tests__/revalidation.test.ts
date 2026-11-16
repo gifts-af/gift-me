@@ -7,6 +7,7 @@ const m = vi.hoisted(() => ({
   removeMyAddress: vi.fn(),
   setSharing: vi.fn(),
   startConnect: vi.fn(),
+  pollConnect: vi.fn(),
   disconnectZinc: vi.fn(),
   zincWiring: vi.fn(),
 }));
@@ -22,11 +23,11 @@ vi.mock("@/lib/account-address", () => ({
   removeMyAddress: m.removeMyAddress,
   setSharing: m.setSharing,
 }));
-vi.mock("@/modules/concierge", () => ({ startConnect: m.startConnect, disconnectZinc: m.disconnectZinc }));
+vi.mock("@/modules/concierge", () => ({ startConnect: m.startConnect, pollConnect: m.pollConnect, disconnectZinc: m.disconnectZinc }));
 vi.mock("../zinc-deps", () => ({ placeHeld: vi.fn(), zincWiring: m.zincWiring }));
 
 import { removeMyAddressAction, saveMyAddressAction, setSharingAction } from "../address-actions";
-import { disconnectZincAccount, startZincConnect } from "../actions";
+import { disconnectZincAccount, pollZincConnect, startZincConnect } from "../actions";
 
 const paths = () => m.revalidatePath.mock.calls.map((c) => c[0]);
 
@@ -58,6 +59,18 @@ describe("Zinc actions revalidate the list and the paying page (ALL-115)", () =>
     m.zincWiring.mockResolvedValue({ deps: {}, walletUrl: "" });
     m.startConnect.mockResolvedValue({ ok: true });
     await startZincConnect();
+    expect(paths()).toEqual(expect.arrayContaining(["/settings", "/settings/paying"]));
+  });
+  it("poll while waiting does not revalidate", async () => {
+    m.zincWiring.mockResolvedValue({ deps: {}, walletUrl: "" });
+    m.pollConnect.mockResolvedValue({ kind: "waiting" });
+    await pollZincConnect();
+    expect(m.revalidatePath).not.toHaveBeenCalled();
+  });
+  it("poll that connects revalidates", async () => {
+    m.zincWiring.mockResolvedValue({ deps: {}, walletUrl: "" });
+    m.pollConnect.mockResolvedValue({ kind: "connected" });
+    await pollZincConnect();
     expect(paths()).toEqual(expect.arrayContaining(["/settings", "/settings/paying"]));
   });
   it("disconnect", async () => {
