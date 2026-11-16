@@ -4,6 +4,7 @@ import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 
+import { useHydrated } from "@/lib/use-hydrated";
 import { cn } from "@/lib/utils";
 
 // A layer over the page (ALL-53): a sheet that slides up from the bottom on
@@ -36,7 +37,24 @@ export function useSelfClosingDialog() {
 }
 
 const Dialog = DialogPrimitive.Root;
-const DialogTrigger = DialogPrimitive.Trigger;
+// Faded until the page can respond: before then a tap does nothing (ALL-110).
+// With asChild, the child (our Button) handles that itself.
+const DialogTrigger = React.forwardRef<
+  React.ElementRef<typeof DialogPrimitive.Trigger>,
+  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Trigger>
+>(({ className, asChild, ...props }, ref) => {
+  const hydrated = useHydrated();
+  return (
+    <DialogPrimitive.Trigger
+      ref={ref}
+      asChild={asChild}
+      className={asChild ? className : cn(className, "aria-disabled:opacity-45")}
+      {...props}
+      aria-disabled={props["aria-disabled"] ?? (!hydrated && !asChild ? true : undefined)}
+    />
+  );
+});
+DialogTrigger.displayName = DialogPrimitive.Trigger.displayName;
 const DialogClose = DialogPrimitive.Close;
 
 const DialogContent = React.forwardRef<

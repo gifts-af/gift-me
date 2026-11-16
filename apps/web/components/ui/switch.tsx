@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useHydrated } from "@/lib/use-hydrated"
 import { cn } from "@/lib/utils"
 import * as SwitchPrimitive from "@radix-ui/react-switch"
 
@@ -11,15 +12,18 @@ function Switch({
 }: React.ComponentProps<typeof SwitchPrimitive.Root> & {
   size?: "sm" | "default"
 }) {
+  // Faded until the page can respond: before then a tap does nothing (ALL-110).
+  const hydrated = useHydrated()
   return (
     <SwitchPrimitive.Root
       data-slot="switch"
       data-size={size}
       className={cn(
-        "peer group/switch inline-flex shrink-0 items-center rounded-full border border-transparent shadow-xs transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 data-[size=default]:h-[1.15rem] data-[size=default]:w-8 data-[size=sm]:h-3.5 data-[size=sm]:w-6 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input dark:data-[state=unchecked]:bg-input/80",
+        "peer group/switch inline-flex shrink-0 items-center rounded-full border border-transparent shadow-xs transition-all outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:opacity-50 data-[size=default]:h-[1.15rem] data-[size=default]:w-8 data-[size=sm]:h-3.5 data-[size=sm]:w-6 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input dark:data-[state=unchecked]:bg-input/80",
         className
       )}
       {...props}
+      aria-disabled={props["aria-disabled"] ?? (hydrated ? undefined : true)}
     >
       <SwitchPrimitive.Thumb
         data-slot="switch-thumb"

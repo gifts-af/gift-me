@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PersonAvatar } from "@/components/person-avatar";
+import { useHydrated } from "@/lib/use-hydrated";
 import { cn } from "@/lib/utils";
 import type { AddResult, SaveResult } from "@/modules/concierge";
 import { prepareJpeg, resizeToJpeg, savePersonPhoto, type PhotoStorage } from "./photo-picker";
@@ -150,6 +151,7 @@ export function PersonForm(props: Props) {
   const resize = add?.resize ?? resizeToJpeg;
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
+  const hydrated = useHydrated();
   const [name, setName] = useState(initial?.name ?? "");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [relationship, setRelationship] = useState(initial?.relationship ?? "");
@@ -280,7 +282,8 @@ export function PersonForm(props: Props) {
               type="button"
               aria-label={photo ? "Change photo" : "Add a photo"}
               onClick={() => input.current?.click()}
-              className="flex w-[72px] flex-col items-center gap-1.5 rounded-md text-[13px] text-primary"
+              aria-disabled={hydrated ? undefined : true}
+              className="flex w-[72px] flex-col items-center gap-1.5 rounded-md text-[13px] text-primary aria-disabled:opacity-45"
             >
               <span className="relative inline-flex">
                 <PersonAvatar name={trimmed} photoUrl={previewUrl} size={72} decorative />

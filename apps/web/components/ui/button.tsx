@@ -1,7 +1,10 @@
+"use client";
+
 import * as React from "react";
 import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 
+import { useHydrated } from "@/lib/use-hydrated";
 import { cn } from "@/lib/utils";
 
 // Sizes and shapes from design/ui.md: 12 px rounding, 48 px main buttons,
@@ -43,12 +46,26 @@ export interface ButtonProps
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant, size, asChild = false, ...props }, ref) => {
-    const Comp = asChild ? Slot : "button";
+    const hydrated = useHydrated();
+    if (asChild) {
+      // Usually a link, which works before the page's JavaScript has loaded.
+      return <Slot className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />;
+    }
+    // A button in the server's HTML shows before React attaches its click
+    // handler, and a tap in that gap does nothing (ALL-104, ALL-110). Until
+    // then it looks not ready. A submit button is disabled, so an early tap
+    // can't send its form the browser's own way (ALL-60); any other button
+    // gets aria-disabled, so a keyboard can still reach it.
+    const early = !hydrated;
+    // No type means submit, as the browser treats it.
+    const submit = props.type !== "button" && props.type !== "reset";
     return (
-      <Comp
+      <button
         className={cn(buttonVariants({ variant, size, className }))}
         ref={ref}
         {...props}
+        disabled={props.disabled || (early && submit)}
+        aria-disabled={props["aria-disabled"] ?? (early && !submit ? true : undefined)}
       />
     );
   },
