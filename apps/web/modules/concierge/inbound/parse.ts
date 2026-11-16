@@ -18,11 +18,18 @@ export function isAutoReply(headers: Record<string, string>): boolean {
 
 /** Drops quoted lines (">") and everything from an "On ... wrote:" line. Forwarded content stays. */
 export function stripQuoted(text: string): string {
+  const lines = text.split(/\r?\n/);
   const kept: string[] = [];
-  for (const line of text.split(/\r?\n/)) {
-    if (/^On .+ wrote:\s*$/.test(line.trim())) break;
-    if (/^\s*>/.test(line)) continue;
-    kept.push(line);
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (/^On .+ wrote:$/.test(line)) break;
+    // Gmail often wraps the attribution: "On ... <jim@x.com>" then "wrote:" on the next line.
+    if (/^On /.test(line)) {
+      const next = lines.slice(i + 1).find((l) => l.trim() !== "");
+      if (next !== undefined && /^wrote:$/.test(next.trim())) break;
+    }
+    if (/^\s*>/.test(lines[i])) continue;
+    kept.push(lines[i]);
   }
   return kept.join("\n").trim();
 }
@@ -60,7 +67,12 @@ export function matchPeople(
 
 /** Phrases that mean "don't act on this". Kept short on purpose; review here. */
 export const CANCEL_PHRASES = [
-  "cancel",
+  "please cancel",
+  "cancel it",
+  "cancel this",
+  "cancel that",
+  "cancel the gift",
+  "cancel the order",
   "don't buy",
   "dont buy",
   "do not buy",
@@ -80,6 +92,6 @@ export function firstImage(
   atts: { id: string; content_type: string; size: number }[],
   maxBytes: number,
 ): { id: string; content_type: string } | null {
-  const hit = atts.find((a) => IMAGE_TYPES.has(a.content_type.toLowerCase()) && a.size <= maxBytes);
+  const hit = atts.find((a) => IMAGE_TYPES.has((a.content_type ?? "").split(";")[0].trim().toLowerCase()) && a.size <= maxBytes);
   return hit ? { id: hit.id, content_type: hit.content_type } : null;
 }
