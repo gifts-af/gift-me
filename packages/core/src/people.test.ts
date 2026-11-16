@@ -4,13 +4,23 @@ import { nextOccasion, relationshipLabel, RELATIONSHIPS, startingOccasions } fro
 const none = { birthday: false, anniversary: false };
 
 describe("relationships", () => {
-  it("lists them in order", () => {
+  // Alphabetical by label so a long list is easy to scan, with Other last (owner, 2026-11-16).
+  it("lists them alphabetically, Other last", () => {
     expect(RELATIONSHIPS).toEqual([
-      "mother", "father", "wife", "husband", "girlfriend", "boyfriend", "partner", "son",
-      "daughter", "grandmother", "grandfather", "sister", "brother",
-      "mother_in_law", "father_in_law", "sister_in_law", "brother_in_law", "daughter_in_law", "son_in_law",
-      "best_friend", "friend", "other",
+      "aunt", "best_friend", "boyfriend", "brother", "brother_in_law", "daughter", "daughter_in_law",
+      "father", "father_in_law", "friend", "girlfriend", "grandfather", "grandmother", "husband",
+      "mother", "mother_in_law", "partner", "sister", "sister_in_law", "son", "son_in_law", "uncle",
+      "wife", "other",
     ]);
+    const labels = RELATIONSHIPS.slice(0, -1).map(relationshipLabel);
+    expect(labels).toEqual([...labels].sort((a, b) => a.localeCompare(b)));
+  });
+
+  it("has Aunt and Uncle, which start with Christmas only", () => {
+    expect(relationshipLabel("aunt")).toBe("Aunt");
+    expect(relationshipLabel("uncle")).toBe("Uncle");
+    expect(startingOccasions("aunt", none)).toEqual(["christmas"]);
+    expect(startingOccasions("uncle", none)).toEqual(["christmas"]);
   });
 
   it("labels an unknown stored value as Other", () => {
@@ -24,7 +34,7 @@ describe("relationships", () => {
     expect(RELATIONSHIPS.map(relationshipLabel).every((l) => /^[A-Z][a-z -]+$/.test(l))).toBe(true);
   });
 
-  // ALL-121: in-laws read with hyphens, and sit after Brother and before Best friend.
+  // ALL-121: in-laws read with hyphens.
   it("labels the in-laws with hyphens", () => {
     expect(relationshipLabel("mother_in_law")).toBe("Mother-in-law");
     expect(relationshipLabel("father_in_law")).toBe("Father-in-law");
@@ -32,9 +42,6 @@ describe("relationships", () => {
     expect(relationshipLabel("brother_in_law")).toBe("Brother-in-law");
     expect(relationshipLabel("daughter_in_law")).toBe("Daughter-in-law");
     expect(relationshipLabel("son_in_law")).toBe("Son-in-law");
-    const at = (r: string) => (RELATIONSHIPS as readonly string[]).indexOf(r);
-    expect(at("mother_in_law")).toBe(at("brother") + 1);
-    expect(at("son_in_law")).toBe(at("best_friend") - 1);
   });
 });
 
