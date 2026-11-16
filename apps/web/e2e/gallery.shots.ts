@@ -22,6 +22,19 @@ async function shoot(page: Page, name: string) {
   await page.waitForFunction(
     () => ![...document.querySelectorAll("body *")].some((el) => el.children.length === 0 && /^Loading/.test(el.textContent?.trim() ?? "")),
   );
+  // ALL-110 fades controls until hydration; wait for the fade to clear, but never fail the shot.
+  try {
+    await page.waitForFunction(
+      () =>
+        ![...document.querySelectorAll('[aria-disabled="true"]')].some((el) =>
+          /aria-disabled:opacity/.test(el.getAttribute("class") ?? ""),
+        ),
+      undefined,
+      { timeout: 5000 },
+    );
+  } catch {
+    // A control that is really disabled keeps the class; shoot anyway.
+  }
   const file = path.join(GALLERY_DIR, test.info().project.name, `${name}.png`);
   await page.screenshot({ path: file, fullPage: true, animations: "disabled" });
 }
