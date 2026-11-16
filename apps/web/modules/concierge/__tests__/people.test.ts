@@ -9,13 +9,13 @@ import {
   removeAddress,
   saveAddress,
   listPeople,
-  setBudget,
+  saveBudgets,
   setOccasionEnabled,
   setPhoto,
   unlinkList,
   updatePerson,
 } from "../people/service";
-import type { ImportRow, PersonInput } from "../people/rules";
+import { parseBudgetForm, type ImportRow, type PersonInput } from "../people/rules";
 import { FakePeopleStore, ME, OTHER } from "./fake-people-store";
 
 const TODAY = "2026-11-01";
@@ -131,13 +131,17 @@ describe("listPeople", () => {
 describe("getPerson", () => {
   it("returns the detail with dates, order-by dates and budgets", async () => {
     const { store, mine } = setup();
-    store.budgetRows.push({ personId: mine, kind: "christmas", cents: 7500 });
+    store.budgetRows.push({ personId: mine, kind: "christmas", cents: 7500 }, { personId: mine, kind: "any", cents: 6000 });
+    store.defaults.set(store.rows.get(mine)!.relationship, 4000);
     store.rows.get(mine)!.birthYear = 1990;
     store.rows.get(mine)!.photoPath = `${ME}/${mine}/a.jpg`;
     const p = await getPerson(store, mine, TODAY);
     expect(p).toMatchObject({
       id: mine, photoPath: `${ME}/${mine}/a.jpg`, name: "Mine", birthYear: 1990, birthday: { month: 12, day: 1 }, anniversary: { month: 6, day: 5 },
+      baseBudgetCents: 6000, defaultBudgetCents: 4000,
     });
+    // The base row (kind any) is never an occasion.
+    expect(p!.occasions.some((o) => (o.kind as string) === "any")).toBe(false);
     const byKind = Object.fromEntries(p!.occasions.map((o) => [o.kind, o]));
     expect(byKind.christmas).toEqual({
       kind: "christmas", enabled: true, date: "2026-12-25", orderBy: { date: "2026-12-16", fast: false },
@@ -244,30 +248,52 @@ describe("updatePerson", () => {
   });
 });
 
-describe("setBudget", () => {
-  it("stores an amount, then null when cleared", async () => {
+describe("saveBudgets (ALL-120)", () => {
+  it("saves the base and occasion amounts for the caller's own person, and logs ids only", async () => {
     const { store, mine } = setup();
-    expect(await setBudget(store, mine, "christmas", 7500)).toEqual({ ok: true });
-    expect(store.budgetRows).toEqual([{ personId: mine, kind: "christmas", cents: 7500 }]);
-    expect(await setBudget(store, mine, "christmas", null)).toEqual({ ok: true });
-    expect(store.budgetRows).toEqual([{ personId: mine, kind: "christmas", cents: null }]);
+    const log = vi.fn();
+    expect(await saveBudgets(store, log, mine, { any: 7500, christmas: null })).toEqual({ ok: true });
+    expect(store.writes).toEqual([`saveBudgets ${mine} {"any":7500,"christmas":null}`]);
+    expect(log).toHaveBeenCalledTimes(1);
+    expect(log).toHaveBeenCalledWith("budgets.save", { user_id: ME, person_id: mine });
   });
 
-  it("refuses amounts above the database's integer limit", async () => {
-    const { store, mine } = setup();
-    expect(await setBudget(store, mine, "christmas", 2147483648)).toEqual({
-      ok: false,
-      error: "That amount is too large.",
-    });
-    expect(await setBudget(store, mine, "christmas", 2147483647)).toEqual({ ok: true });
-    expect(store.writes).toHaveLength(1);
-  });
-
-  it("refuses negative or fractional cents", async () => {
-    const { store, mine } = setup();
-    expect((await setBudget(store, mine, "christmas", -1)).ok).toBe(false);
-    expect((await setBudget(store, mine, "christmas", 1.5)).ok).toBe(false);
+  it("says the person wasn't found for someone else's person, and saves nothing", async () => {
+    const { store, theirs } = setup();
+    expect(await saveBudgets(store, vi.fn(), theirs, { any: 7500 })).toEqual({ ok: false, error: "That person wasn't found." });
     expect(store.writes).toEqual([]);
+  });
+
+  it("says the person wasn't found when the database refuses them (P0002)", async () => {
+    const { store, mine } = setup();
+    vi.spyOn(store, "saveBudgets").mockRejectedValue(Object.assign(new Error("Person not found"), { code: "P0002" }));
+    expect(await saveBudgets(store, vi.fn(), mine, { any: 7500 })).toEqual({ ok: false, error: "That person wasn't found." });
+  });
+});
+
+describe("parseBudgetForm (ALL-120)", () => {
+  function form(fields: Record<string, string>): FormData {
+    const f = new FormData();
+    for (const [k, v] of Object.entries(fields)) f.set(k, v);
+    return f;
+  }
+
+  it("reads the base and each sent occasion; an empty field is null", () => {
+    expect(parseBudgetForm(form({ any: "75", christmas: "", mothers_day: "50.50" }))).toEqual({
+      ok: true,
+      amounts: { any: 7500, christmas: null, mothers_day: 5050 },
+    });
+  });
+
+  it("ignores fields that aren't budget kinds, and kinds that weren't sent", () => {
+    expect(parseBudgetForm(form({ any: "75", bogus: "10", id: "x" }))).toEqual({ ok: true, amounts: { any: 7500 } });
+  });
+
+  it("returns a message for each bad field", () => {
+    expect(parseBudgetForm(form({ any: "abc", christmas: "99999999999", birthday: "20" }))).toEqual({
+      ok: false,
+      errors: { any: "Enter an amount like 75 or 75.50.", christmas: "That amount is too large." },
+    });
   });
 });
 
@@ -337,7 +363,7 @@ describe("another user's person, or nobody", () => {
   const calls: [string, (s: FakePeopleStore, id: string) => Promise<{ ok: boolean }>][] = [
     ["updatePerson", (s, id) => updatePerson(s, id, input({ birthday: { month: 1, day: 1 } }))],
     ["setOccasionEnabled", (s, id) => setOccasionEnabled(s, id, "christmas", false)],
-    ["setBudget", (s, id) => setBudget(s, id, "christmas", 100)],
+    ["saveBudgets", (s, id) => saveBudgets(s, () => {}, id, { christmas: 100 })],
     ["linkList", (s, id) => { s.lists.set(TOKEN, "x"); return linkList(s, id, TOKEN); }],
     ["unlinkList", (s, id) => unlinkList(s, id)],
     ["setPhoto", (s, id) => setPhoto(s, id, `${ME}/${id}/a.jpg`)],

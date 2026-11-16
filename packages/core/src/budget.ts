@@ -8,6 +8,9 @@
 // The checkout service's per-order fee is a setting, not a constant (T23):
 // callers read it from `concierge.app_settings` and pass it in as `feeCents`.
 
+/** A person's base budget is stored as a budgets row of this kind (ALL-120, T73). */
+export const BASE_BUDGET_KIND = "any";
+
 export type BudgetFit = "within" | "over" | "dropped";
 
 function checkCents(value: number, what: string): void {

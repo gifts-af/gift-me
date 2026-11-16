@@ -327,6 +327,19 @@ describe.skipIf(!dbUp)("Zinc connect (real local database, fake Zinc)", () => {
     expect(status.lookahead).toEqual({ cents: 6100, atLeast: false });
   });
 
+  it("sizes the suggested minimum from a base budget, past a null occasion row (ALL-120)", async () => {
+    const userId = await newUser(true);
+    await connected(userId);
+    const person = await pg.query("insert into public.people (user_id, name, relationship) values ($1, 'P', 'friend') returning id", [userId]);
+    const personId = person.rows[0].id;
+    // A null row sorts first in "largest first"; it mustn't hide the amounts.
+    await pg.query("insert into concierge.budgets (user_id, person_id, occasion_kind, amount_cents) values ($1, $2, 'christmas', null)", [userId, personId]);
+    await pg.query("insert into concierge.budgets (user_id, person_id, occasion_kind, amount_cents) values ($1, $2, 'birthday', 4000)", [userId, personId]);
+    await pg.query("insert into concierge.budgets (user_id, person_id, occasion_kind, amount_cents) values ($1, $2, 'any', 15000)", [userId, personId]);
+    const status = (await getPaymentStatus(userId, zinc().deps)) as Connected;
+    expect(status.suggestedMinimumCents).toBe(15100); // the base + the $1 fee
+  });
+
   it("saves a phone as 10 digits and rejects short input (AC-8)", async () => {
     const userId = await newUser(true);
     const z = await connected(userId);

@@ -24,7 +24,7 @@ import {
   updateFact,
   type Db,
   parseAddressForm,
-  parseBudget,
+  parseBudgetForm,
   parseImportRows,
   parsePersonForm,
   deletePerson,
@@ -35,7 +35,7 @@ import {
   parseSavedGiftForm,
   removeSavedGift,
   saveGift,
-  setBudget,
+  saveBudgets,
   setOccasionEnabled,
   setPhoto,
   unlinkList,
@@ -127,13 +127,16 @@ export async function setOccasionEnabledAction(_previous: SaveResult | null, for
   return refresh(await setOccasionEnabled(id, kind, text(formData, "enabled") === "true"), id);
 }
 
-export async function setBudgetAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
+// The Budget screen's one Save (ALL-120): the base and each switched-on
+// occasion, all or nothing. Each bad field gets its own message.
+export async function saveBudgetsAction(
+  _previous: unknown,
+  formData: FormData,
+): Promise<{ ok: true } | { ok: false; error?: string; errors?: Record<string, string> }> {
   const id = text(formData, "id");
-  const kind = kindOf(formData);
-  if (!kind) return BAD_FORM;
-  const budget = parseBudget(text(formData, "budget"));
-  if (!budget.ok) return budget;
-  return refresh(await setBudget(id, kind, budget.cents), id);
+  const parsed = parseBudgetForm(formData);
+  if (!parsed.ok) return { ok: false, errors: parsed.errors };
+  return refresh(await saveBudgets(id, parsed.amounts), id);
 }
 
 export async function linkListAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {

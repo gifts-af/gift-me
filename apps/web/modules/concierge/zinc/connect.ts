@@ -107,7 +107,8 @@ async function countOrders(userId: string, deps: ZincDeps, statuses: string[]): 
 async function largestBudgetCents(userId: string, deps: ZincDeps): Promise<number | null> {
   const concierge = deps.db.schema("concierge");
   const [budgets, defaults] = await Promise.all([
-    concierge.from("budgets").select("amount_cents").eq("user_id", userId).order("amount_cents", { ascending: false }).limit(1),
+    // Not null: Postgres sorts nulls first in "largest first" (ALL-120). The base budget (kind any) counts like any other.
+    concierge.from("budgets").select("amount_cents").eq("user_id", userId).not("amount_cents", "is", null).order("amount_cents", { ascending: false }).limit(1),
     concierge.from("budget_defaults").select("base_amount_cents").eq("user_id", userId).order("base_amount_cents", { ascending: false }).limit(1),
   ]);
   if (budgets.error) fail("Reading budgets failed", budgets.error);

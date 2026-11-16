@@ -74,7 +74,10 @@ export interface PeopleStore {
   moveOccasion(occasionId: string, month: number, day: number): Promise<boolean>;
   removeOccasion(occasionId: string): Promise<void>;
   setEnabled(occasionId: string, enabled: boolean): Promise<boolean>;
-  upsertBudget(personId: string, kind: string, cents: number | null): Promise<void>;
+  /** concierge.save_budgets: a number upserts, null removes. Throws P0002 for a person that isn't live and the caller's (ALL-120). */
+  saveBudgets(personId: string, amounts: Record<string, number | null>): Promise<void>;
+  /** The caller's default budget for a relationship (budget_defaults), or null. */
+  relationshipDefault(relationship: string): Promise<number | null>;
   /** Throws with code P0002 (no such list) or 22023 (your own list). */
   linkList(token: string, personId: string): Promise<void>;
   unlinkList(personId: string): Promise<void>;
@@ -270,14 +273,19 @@ export function createSupabasePeopleStore(): PeopleStore {
       return (data ?? []).length > 0;
     },
 
-    async upsertBudget(personId, kind, cents) {
-      const { error } = await (await db())
-        .from("budgets")
-        .upsert(
-          { person_id: personId, occasion_kind: kind, amount_cents: cents },
-          { onConflict: "person_id,occasion_kind" },
-        );
-      check(error, "Saving a budget failed");
+    async saveBudgets(personId, amounts) {
+      const { error } = await (await db()).rpc("save_budgets", { p_person_id: personId, p_amounts: amounts });
+      check(error, "Saving budgets failed");
+    },
+
+    async relationshipDefault(relationship) {
+      const { data, error } = await (await db())
+        .from("budget_defaults")
+        .select("base_amount_cents")
+        .eq("relationship", relationship)
+        .maybeSingle();
+      check(error, "Loading the default budget failed");
+      return data?.base_amount_cents ?? null;
     },
 
     async linkList(token, personId) {

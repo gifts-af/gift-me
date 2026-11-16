@@ -12,7 +12,7 @@ insert into concierge.occasions (person_id, kind, month, day) values (:'mom', 'b
 
 select lives_ok(
   format($$insert into concierge.budgets (person_id, occasion_kind, amount_cents) values (%L, 'birthday', null)$$, :'mom'),
-  'a person can have no budget for an occasion'
+  'a null occasion row is still accepted; it now means the same as no row (T73)'
 );
 select throws_ok(
   format($$update concierge.budgets set amount_cents = -1 where person_id = %L$$, :'mom'),

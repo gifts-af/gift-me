@@ -18,7 +18,8 @@ async function rpc(user: Credentials, profile: "concierge" | "lists", name: stri
     body: JSON.stringify(args),
   });
   if (!res.ok) throw new Error(`${name} failed: ${res.status} ${await res.text()}`);
-  return res.json();
+  // A function that returns nothing answers 204 with no body.
+  return res.status === 204 ? null : res.json();
 }
 
 /** Adds a mother, with the occasions the Add form starts her with. Returns her id. */
@@ -54,4 +55,9 @@ export async function addSavedGift(user: Credentials, personId: string, name: st
     body: JSON.stringify({ person_id: personId, name, price_cents: 4900, product_url: "https://www.amazon.com/dp/B0TESTREEL" }),
   });
   if (!res.ok) throw new Error(`saving a gift failed: ${res.status} ${await res.text()}`);
+}
+
+/** Saves budgets as the Budget screen does: the base ("any") and occasions (ALL-120). */
+export async function saveBudgets(user: Credentials, personId: string, amounts: Record<string, number | null>): Promise<void> {
+  await rpc(user, "concierge", "save_budgets", { p_person_id: personId, p_amounts: amounts });
 }

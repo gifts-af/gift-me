@@ -256,3 +256,30 @@ export function parseAddressForm(
   const checked = checkAddress(Object.fromEntries(ADDRESS_FIELDS.map((k) => [k, field(f, k)])));
   return checked.ok ? checked : { ok: false, error: "Check the address below.", fields: checked.errors };
 }
+
+/** The largest budget the database's integer column holds, in cents. */
+export const MAX_BUDGET_CENTS = 2147483647;
+
+/** The Budget screen's fields (ALL-120): the base ("any") and every occasion kind. */
+const BUDGET_FIELDS = ["any", "birthday", "anniversary", "christmas", "valentines_day", "mothers_day", "fathers_day"] as const;
+
+/**
+ * The Budget screen's form. Reads only the known fields that were sent, so a
+ * switched-off occasion's budget is left alone and nothing else can be named.
+ * An empty field is null: it removes that kind's own budget.
+ */
+export function parseBudgetForm(
+  formData: FormData,
+): { ok: true; amounts: Record<string, number | null> } | { ok: false; errors: Record<string, string> } {
+  const amounts: Record<string, number | null> = {};
+  const errors: Record<string, string> = {};
+  for (const key of BUDGET_FIELDS) {
+    if (!formData.has(key)) continue;
+    const raw = formData.get(key);
+    const parsed = parseBudget(typeof raw === "string" ? raw : "");
+    if (!parsed.ok) errors[key] = parsed.error;
+    else if (parsed.cents !== null && parsed.cents > MAX_BUDGET_CENTS) errors[key] = "That amount is too large.";
+    else amounts[key] = parsed.cents;
+  }
+  return Object.keys(errors).length > 0 ? { ok: false, errors } : { ok: true, amounts };
+}

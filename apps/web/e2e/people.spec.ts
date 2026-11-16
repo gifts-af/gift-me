@@ -3,7 +3,7 @@ import { localSupabase } from "./local-supabase";
 import { SECOND_USER, TEST_USER } from "./test-user";
 import { createFreshUser } from "./fresh-user";
 import { phoneLayoutProblems } from "./phone-layout";
-import { addMother, addSavedGift } from "./seed";
+import { addMother, addSavedGift, saveBudgets } from "./seed";
 import { session, signIn } from "./sign-in";
 
 // ALL-21: add someone, see their card, switch occasions and budgets, link their
@@ -76,9 +76,15 @@ test("the Add form, Home with a card, and a person's page fit the screen", { tag
   await page.goto("/");
   await expect(page.getByRole("link", { name: "Mom", exact: true })).toBeVisible();
   await check("Home");
+  // A long Budget row (ALL-120): it's cut short, never pushed off the screen.
+  await saveBudgets(user, personId, { any: 7500, christmas: 12500, mothers_day: 5050 });
   await page.goto(`/people/${personId}`);
-  await expect(page.getByRole("region", { name: "Your budget" })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Budget/ })).toContainText("$75 · Christmas $125 · Mother's Day $50.50");
   await check("Person page");
+  // The Budget screen (ALL-120).
+  await page.goto(`/people/${personId}/budget`);
+  await expect(page.getByRole("textbox", { name: "Any occasion" })).toBeVisible();
+  await check("Budget screen");
   expect(problems).toEqual([]);
 });
 
@@ -104,7 +110,8 @@ test("add Mom, set her occasions and budget, link her list, delete her", async (
   await expect(card).toContainText(/Christmas|Mother's Day/);
   await expect(card).toContainText("We suggest ideas");
 
-  // 3. Her page: Christmas off, a $75 Mother's Day budget, then cleared.
+  // 3. Her page: Christmas off; a $75 base and a $50 Mother's Day, then
+  // Mother's Day emptied so it uses the base again (ALL-120).
   await momLink.click();
   await expect(page).toHaveURL(/\/people\/[0-9a-f-]{36}$/);
   const christmas = page.getByRole("switch", { name: "Christmas" });
@@ -112,17 +119,26 @@ test("add Mom, set her occasions and budget, link her list, delete her", async (
   await christmas.click();
   await expect(christmas).not.toBeChecked();
 
-  const budgets = page.getByRole("region", { name: "Your budget" });
-  await budgets.getByRole("button", { name: "Set Mother's Day budget" }).click();
-  await budgets.getByLabel("Mother's Day budget").fill("75");
-  await budgets.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(budgets.getByText("$75", { exact: true })).toBeVisible();
+  const budgetRow = page.getByRole("link", { name: /^Budget/ });
+  await expect(budgetRow).toContainText("Not set");
+  await budgetRow.click();
+  await expect(page).toHaveURL(/\/budget$/);
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
+  await page.getByRole("textbox", { name: "Any occasion" }).fill("75");
+  await page.getByRole("textbox", { name: "Mother's Day" }).fill("50");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page).toHaveURL(/\/people\/[0-9a-f-]{36}$/);
+  await expect(budgetRow).toContainText("$75 · Mother's Day $50");
 
-  await budgets.getByRole("button", { name: "Edit Mother's Day budget" }).click();
-  await budgets.getByLabel("Mother's Day budget").fill("");
-  await budgets.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(budgets.getByRole("listitem").filter({ hasText: "Mother's Day" }).getByText("Not set")).toBeVisible();
-  await expect(budgets.getByRole("button", { name: "Set Mother's Day budget" })).toBeVisible();
+  await budgetRow.click();
+  await expect(page).toHaveURL(/\/budget$/);
+  await expect(page.getByRole("textbox", { name: "Mother's Day" })).toHaveValue("50");
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
+  await page.getByRole("textbox", { name: "Mother's Day" }).fill("");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page).toHaveURL(/\/people\/[0-9a-f-]{36}$/);
+  await expect(budgetRow).toContainText("$75");
+  await expect(budgetRow).not.toContainText("Mother's Day");
 
   // 4. SECOND_USER's list, linked by its share link: "Their own list".
   const sharePath = await secondUserShareLink();

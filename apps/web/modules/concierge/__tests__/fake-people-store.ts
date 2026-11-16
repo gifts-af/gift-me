@@ -29,6 +29,8 @@ export class FakePeopleStore implements PeopleStore {
   rows = new Map<string, PersonRow>();
   occasionRows: OccasionRow[] = [];
   budgetRows: BudgetRow[] = [];
+  /** The caller's relationship defaults (budget_defaults), cents by relationship. */
+  defaults = new Map<string, number>();
   lists = new Map<string, string>(); // share token -> owner
   signed: string[][] = [];
   writes: string[] = [];
@@ -169,12 +171,18 @@ export class FakePeopleStore implements PeopleStore {
     return true;
   }
 
-  async upsertBudget(personId: string, kind: string, cents: number | null) {
-    this.write("upsertBudget", personId, kind, cents);
-    if (!this.mine(personId)) throw dbError("row-level security", "42501");
-    const existing = this.budgetRows.find((b) => b.personId === personId && b.kind === kind);
-    if (existing) existing.cents = cents;
-    else this.budgetRows.push({ personId, kind, cents });
+  /** Like concierge.save_budgets: a number upserts, null removes (ALL-120). */
+  async saveBudgets(personId: string, amounts: Record<string, number | null>) {
+    this.write("saveBudgets", personId, JSON.stringify(amounts));
+    if (!this.mine(personId)) throw dbError("Person not found", "P0002");
+    for (const [kind, cents] of Object.entries(amounts)) {
+      this.budgetRows = this.budgetRows.filter((b) => !(b.personId === personId && b.kind === kind));
+      if (cents !== null) this.budgetRows.push({ personId, kind, cents });
+    }
+  }
+
+  async relationshipDefault(relationship: string) {
+    return this.defaults.get(relationship) ?? null;
   }
 
   async linkList(token: string, personId: string) {

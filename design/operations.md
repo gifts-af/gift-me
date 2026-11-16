@@ -221,6 +221,10 @@ Code and migration ship together. If the code is rolled back with Vercel's insta
 
 **What the buyer may see:** the older engine doesn't read the new `fail:<order id>` keys, so while it runs, a round whose failure was already told can get the older single failure email again. Rolling forward sends no repeats: `untold_failures` counts an older `fail:<n>:notice` key as telling every failure that happened before it. Rounds are off on production until ALL-29 (decision 53), so only test and admin buyers can see a repeat. **[Claude's call]**
 
+### Rolling back ALL-120 (base budget)
+
+Vercel's instant rollback brings back the old budget section, which can't show or clear a base budget, while `round_candidates` keeps using it. After the rollback, run `delete from concierge.budgets where occasion_kind = 'any';` on the database. This deletes base budgets people typed, for good, which is fine before launch. Occasion budgets are untouched (T73).
+
 ## Inbound notes (ALL-31)
 
 Users email a note to `notes@in.giftsaf.com` and it is filed on the right person (T70). Spec: [design/plans/ALL-31-email-capture.md](plans/ALL-31-email-capture.md).

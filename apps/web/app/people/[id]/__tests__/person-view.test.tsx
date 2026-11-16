@@ -63,7 +63,9 @@ describe("PersonView", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Dad" })).toBeInTheDocument();
     expect(screen.getByText("No list of their own, so we suggest ideas")).toBeInTheDocument();
     const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
-    expect(headings).toEqual(["What we know", "Edit", "Occasions", "Your budget", "Shipping address", "Saved gifts", "Link to their list"]);
+    expect(headings).toEqual(["What we know", "Edit", "Occasions", "Shipping address", "Saved gifts", "Link to their list"]);
+    // Budget is a row that opens its own screen (ALL-120, T71).
+    expect(screen.getByRole("link", { name: /Budget/ })).toHaveAttribute("href", "/people/p1/budget");
     expect(getProfile.mock.calls[0].slice(1)).toEqual(["p1", false]);
     expect(screen.getByRole("button", { name: "Delete Dad" })).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();

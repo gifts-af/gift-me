@@ -179,7 +179,7 @@ A clickable, phone-first prototype, published as a private shareable artifact pa
 | Screen | Shows | PRD |
 |---|---|---|
 | Give (mock-up "home") | The people you buy for, each with their next occasion and status. Someone who keeps their own list (Mom) is marked "Her own list" and is the ideal case; someone without one (Dad) is marked "we suggest ideas". An empty state for a new user | P-1, P-3, decision 37 |
-| Person profile | What the app knows about them (facts, sizes, likes), with edit and delete, one readiness line, whether they keep a list, and your optional budget per occasion as its own section | C-6, C-7, decision 36 |
+| Person profile | What the app knows about them (facts, sizes, likes), with edit and delete, one readiness line, whether they keep a list, and a **Budget** row (T71) showing the base and any occasion amounts, which opens the Budget screen: "Any occasion", an optional amount per switched-on occasion ("Uses $75" when empty) and one Save (ALL-120) | C-6, C-7, decision 36, T73 |
 | "Here's what I learned" | The facts pulled from a capture, each to keep or drop | C-3 |
 | Pick from their list (Mom) | Gifts from the person's own list, with when each was added and arrive-by date; one already claimed by someone else; pick one or several. **Your budget** is a separate, optional field: only when it's filled in do over-budget labels and the confirm step appear | A-1, B-4, decisions 36, 37 |
 | Suggested ideas (Dad) | Generated ideas with the reason each fits, the same optional budget, and "None of these" with a reason | A-1, B-4, G-3, decision 36 |
