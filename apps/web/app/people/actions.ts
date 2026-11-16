@@ -32,6 +32,9 @@ import {
   removeAddress,
   saveAddress,
   linkList,
+  parseSavedGiftForm,
+  removeSavedGift,
+  saveGift,
   setBudget,
   setOccasionEnabled,
   setPhoto,
@@ -42,6 +45,7 @@ import {
   type ImportResult,
   type SaveResult,
 } from "@/modules/concierge";
+import { cleanGiftLink, readGiftLinkForUser, type GiftLinkRead } from "@/modules/lists";
 
 // Server actions for the people screens, shaped for useActionState:
 // (previous result, form data) -> result. Forms send the person as a hidden
@@ -229,4 +233,29 @@ export async function readCapturesAction(_previous: SaveResult | null, formData:
   // Some may have been read even when another failed, so refresh either way.
   revalidatePath(`/people/${personId}`);
   return result;
+}
+
+// Saved gifts on a person's page (ALL-93). Reading a pasted link fills the
+// form; Save cleans the link again on the server, so a Save tapped before
+// the read finished still stores a clean link, or refuses a bad one.
+export async function readGiftLinkAction(url: string): Promise<GiftLinkRead> {
+  return readGiftLinkForUser(url);
+}
+
+export async function saveGiftAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
+  const id = text(formData, "id");
+  const link = text(formData, "link").trim();
+  if (link) {
+    const clean = await cleanGiftLink(link);
+    if (!clean.ok) return clean;
+    formData.set("link", clean.productUrl);
+  }
+  const parsed = parseSavedGiftForm(formData);
+  if (!parsed.ok) return parsed;
+  return refresh(await saveGift(id, parsed.value), id);
+}
+
+export async function removeSavedGiftAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
+  const id = text(formData, "id");
+  return refresh(await removeSavedGift(id, text(formData, "gift")), id);
 }

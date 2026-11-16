@@ -7,15 +7,19 @@ import { PageTitle } from "@/components/app-shell/page-frame";
 import { appSettingInt } from "@/lib/app-settings";
 import { createClient } from "@/lib/supabase/server";
 import { todayForRequest } from "@/lib/today";
-import { getPerson, getProfile, type Db } from "@/modules/concierge";
+import { getPerson, getProfile, listSavedGifts, type Db } from "@/modules/concierge";
+import { storeName } from "@/modules/lists";
 import {
   deleteFactAction,
   deletePersonAction,
   editFactAction,
   linkListAction,
+  readGiftLinkAction,
   readCapturesAction,
   removeAddressAction,
+  removeSavedGiftAction,
   saveAddressAction,
+  saveGiftAction,
   setBudgetAction,
   setFactActiveAction,
   setOccasionEnabledAction,
@@ -31,6 +35,7 @@ import { DeletePerson } from "./delete-person";
 import { ListLink } from "./list-link";
 import { Occasions } from "./occasions";
 import { ReadinessBanner } from "./readiness";
+import { SavedGifts } from "./saved-gifts";
 import { WhatWeKnow } from "./what-we-know";
 
 const text = (n: number | undefined) => (n === undefined ? "" : String(n));
@@ -55,10 +60,11 @@ export async function PersonView({
   if (!userId) redirect("/");
   const person = await getPerson(id, await todayForRequest());
   if (!person) notFound();
-  const [maxUploadBytes, px, profile] = await Promise.all([
+  const [maxUploadBytes, px, profile, savedGifts] = await Promise.all([
     appSettingInt("person_photo_max_upload_bytes"),
     appSettingInt("person_photo_px"),
     getProfile(supabase as unknown as Db, person.id, person.keepsList),
+    listSavedGifts(person.id),
   ]);
 
   return (
@@ -140,6 +146,14 @@ export async function PersonView({
         startOpen={openAddress}
         saveAction={saveAddressAction}
         removeAction={removeAddressAction}
+      />
+      <SavedGifts
+        personId={person.id}
+        name={person.name}
+        gifts={savedGifts.map((g) => ({ ...g, store: g.productUrl ? storeName(g.productUrl) : null }))}
+        readAction={readGiftLinkAction}
+        saveAction={saveGiftAction}
+        removeAction={removeSavedGiftAction}
       />
       <ListLink
         personId={person.id}

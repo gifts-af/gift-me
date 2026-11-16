@@ -1007,6 +1007,40 @@ export type Database = {
           },
         ];
       };
+      saved_gifts: {
+        Row: {
+          created_at: string;
+          id: string;
+          image_url: string | null;
+          name: string;
+          person_id: string;
+          price_cents: number | null;
+          product_url: string | null;
+          user_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          id?: string;
+          image_url?: string | null;
+          name: string;
+          person_id: string;
+          price_cents?: number | null;
+          product_url?: string | null;
+          user_id?: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: string;
+          image_url?: string | null;
+          name?: string;
+          person_id?: string;
+          price_cents?: number | null;
+          product_url?: string | null;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       zinc_connect_attempts: {
         Row: {
           created_at: string;

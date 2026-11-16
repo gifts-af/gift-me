@@ -63,9 +63,9 @@ export type AddResult = { ok: true; id: string } | { ok: false; error: string };
 // The largest value of the database's integer column: a true constant.
 const MAX_BUDGET_CENTS = 2147483647;
 
-const NOT_FOUND = "That person wasn't found.";
-const SESSION_ENDED = "Your session ended. Sign in again.";
-const TRY_AGAIN = "That couldn't be saved. Try again.";
+export const NOT_FOUND = "That person wasn't found.";
+export const SESSION_ENDED = "Your session ended. Sign in again.";
+export const TRY_AGAIN = "That couldn't be saved. Try again.";
 const DATED_KINDS: OccasionKind[] = ["birthday", "anniversary"];
 // Any of these can be switched on for anyone; relationships only set the start.
 const HOLIDAYS: OccasionKind[] = ["christmas", "valentines_day", "mothers_day", "fathers_day"];

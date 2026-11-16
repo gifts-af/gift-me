@@ -62,6 +62,10 @@ export {
 } from "./people/people";
 export type { AddResult, ImportResult, PersonAddress, PersonCard, PersonDetail } from "./people/people";
 export { parseAddressForm, parseBudget, parseImportRows, parsePersonForm, parseShareToken } from "./people/rules";
+// Saved gifts for someone, private to the buyer (ALL-93).
+export { listSavedGifts, removeSavedGift, saveGift } from "./saved-gifts/saved-gifts";
+export { parseSavedGiftForm } from "./saved-gifts/rules";
+export type { SavedGift, SavedGiftInput } from "./saved-gifts/rules";
 export type { AddressSaveResult, ImportAddress, ImportRow, PersonInput } from "./people/rules";
 
 // The round engine (ALL-28): the daily tick, advancing one round, and resuming

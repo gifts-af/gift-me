@@ -38,3 +38,20 @@ export async function saveOneGiftList(user: Credentials): Promise<void> {
     p_items: [{ id: null, name: "Wool socks", price_cents: 1200, image_url: null, product_url: null, asin: null, source: "manual", added_at: null }],
   });
 }
+
+/** Saves a gift for one of the user's people, as the Saved gifts form does (ALL-93). */
+export async function addSavedGift(user: Credentials, personId: string, name: string): Promise<void> {
+  const { url, publishableKey } = localSupabase();
+  const { access_token } = await session(user);
+  const res = await fetch(`${url}/rest/v1/saved_gifts`, {
+    method: "POST",
+    headers: {
+      apikey: publishableKey,
+      Authorization: `Bearer ${access_token}`,
+      "Content-Type": "application/json",
+      "Content-Profile": "concierge",
+    },
+    body: JSON.stringify({ person_id: personId, name, price_cents: 4900, product_url: "https://www.amazon.com/dp/B0TESTREEL" }),
+  });
+  if (!res.ok) throw new Error(`saving a gift failed: ${res.status} ${await res.text()}`);
+}
