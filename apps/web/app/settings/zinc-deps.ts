@@ -6,6 +6,7 @@ import { siteUrl } from "@/lib/site-url";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   advanceRound,
+  clearUnfiledNotes,
   createStubGenerateIdeas,
   createSupabaseNotifyStore,
   createSupabaseRoundStore,
@@ -71,6 +72,7 @@ export async function buyingWiring(
     now,
     generateIdeas: createStubGenerateIdeas({ production: env.VERCEL_ENV === "production" }),
     zinc: null,
+    clearUnfiledNotes: () => clearUnfiledNotes(db),
   };
   const wiring = await zincWiring(db, env);
   if (!wiring) {

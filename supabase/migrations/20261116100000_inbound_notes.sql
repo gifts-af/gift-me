@@ -26,6 +26,7 @@ create table concierge.inbound_events (
   created_at timestamptz not null default now()
 );
 create index inbound_events_user_id_created_at_idx on concierge.inbound_events (user_id, created_at);
+create index inbound_events_created_at_idx on concierge.inbound_events (created_at);
 alter table concierge.inbound_events enable row level security;
 revoke all on concierge.inbound_events from public, anon, authenticated;
 grant all on concierge.inbound_events to service_role;
@@ -153,12 +154,58 @@ begin
 end;
 $$;
 
+-- The daily tick's housekeeping. Clears the subject, body and image of
+-- "asking" messages none of whose file_note buttons can still be tapped
+-- (all expired, none used), and returns the stored image paths so the tick
+-- can delete the files. A filed message is never touched: its image_path is
+-- the capture's screenshot. A message with no buttons at all is cleared once
+-- it is older than inbound_link_hours (the buttons are made right after it).
+-- Also prunes inbound_seen and inbound_events older than inbound_prune_days.
+create function concierge.clear_unfiled_inbound()
+returns table (message_id uuid, image_path text)
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_prune_days integer := concierge.setting_int('inbound_prune_days');
+  v_link_hours integer := concierge.setting_int('inbound_link_hours');
+begin
+  delete from concierge.inbound_seen where created_at < now() - make_interval(days => v_prune_days);
+  delete from concierge.inbound_events where created_at < now() - make_interval(days => v_prune_days);
+
+  return query
+  with due as (
+    select m.id, m.image_path as old_path
+      from concierge.inbound_messages m
+     where m.status = 'asking'
+       and (m.subject is not null or m.body is not null or m.image_path is not null)
+       and not exists (select 1 from concierge.action_links l
+                        where l.inbound_message_id = m.id and l.action = 'file_note'
+                          and (l.used_at is not null or l.expires_at > now()))
+       and (exists (select 1 from concierge.action_links l
+                     where l.inbound_message_id = m.id and l.action = 'file_note')
+            or m.created_at < now() - make_interval(hours => v_link_hours))
+       for update of m
+  ), cleared as (
+    update concierge.inbound_messages m
+       set subject = null, body = null, image_path = null, image_type = null
+      from due
+     where m.id = due.id
+    returning m.id
+  )
+  select due.id, due.old_path from due join cleared on cleared.id = due.id;
+end;
+$$;
+
 revoke all on function concierge.claim_inbound_flag(uuid, text) from public, anon, authenticated;
 revoke all on function concierge.inbound_count_today(uuid) from public, anon, authenticated;
 revoke all on function concierge.file_inbound_message(uuid, uuid, uuid) from public, anon, authenticated;
+revoke all on function concierge.clear_unfiled_inbound() from public, anon, authenticated;
 grant execute on function concierge.claim_inbound_flag(uuid, text) to service_role;
 grant execute on function concierge.inbound_count_today(uuid) to service_role;
 grant execute on function concierge.file_inbound_message(uuid, uuid, uuid) to service_role;
+grant execute on function concierge.clear_unfiled_inbound() to service_role;
 
 -- ─── settings ───────────────────────────────────────────────────────────────
 insert into concierge.app_settings (key, value, description) values
@@ -167,5 +214,6 @@ insert into concierge.app_settings (key, value, description) values
   ('inbound_max_per_user_per_day', '20', 'Most emailed notes accepted plus emails sent back per user per day; more are dropped.'),
   ('inbound_link_hours', '72', 'Hours the "Who is this about?" buttons keep working.'),
   ('inbound_thread_lookup_max', '10', 'Most recent sent emails whose Message-ID is read back from Resend when a reply matches none (one Resend call each).'),
-  ('inbound_thread_lookup_days', '60', 'How many days back a reply''s In-Reply-To is looked for among sent emails with no Message-ID yet.')
+  ('inbound_thread_lookup_days', '60', 'How many days back a reply''s In-Reply-To is looked for among sent emails with no Message-ID yet.'),
+  ('inbound_prune_days', '7', 'Days the daily tick keeps the seen Resend email ids and the daily-cap events before deleting them.')
 on conflict (key) do nothing;

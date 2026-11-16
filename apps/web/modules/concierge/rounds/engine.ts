@@ -61,6 +61,8 @@ export type EngineDeps = {
   zinc: EngineZinc | null;
   /** Milliseconds, for the placing budget; Date.now when left out. */
   clock?: () => number;
+  /** The daily clear-out of unfiled emailed notes (ALL-31), bound by the caller (E3). */
+  clearUnfiledNotes?: () => Promise<{ cleared: number; imagesRemoved: number }>;
 };
 
 export type TickSummary = { enabled: boolean; created: number; advanced: number; failed: number };
@@ -100,6 +102,17 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
     await retryOrderedEmails(deps);
   } catch (err) {
     logEvent("order.ordered_retry_failed", { ...errorFields(err) });
+  }
+
+  // Emailed notes nobody filed are cleared, and old dedupe rows pruned. Housekeeping, so it runs
+  // whatever round_engine_enabled says, and its failure never stops the tick.
+  if (deps.clearUnfiledNotes) {
+    try {
+      const result = await deps.clearUnfiledNotes();
+      if (result.cleared > 0) logEvent("inbound.notes_cleared", { ...result });
+    } catch (err) {
+      logEvent("inbound.notes_clear_failed", { ...errorFields(err) });
+    }
   }
 
   const s = await store.scheduleSettings();

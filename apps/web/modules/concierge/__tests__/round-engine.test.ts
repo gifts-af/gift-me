@@ -1937,3 +1937,41 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
   });
 
 });
+
+describe("runTick: clearing unfiled notes (ALL-31)", () => {
+  it("runs the clear-out, with the engine on or off, and logs how many it cleared", async () => {
+    for (const on of [1, 0]) {
+      const h = harness();
+      h.store.settings.set("round_engine_enabled", on);
+      const clear = vi.fn(async () => ({ cleared: 2, imagesRemoved: 1 }));
+      await runTick({ ...h.deps(at("2027-01-01")), clearUnfiledNotes: clear });
+      expect(clear).toHaveBeenCalledTimes(1);
+    }
+    expect(named("inbound.notes_cleared")).toEqual([
+      expect.objectContaining({ cleared: 2, imagesRemoved: 1 }),
+      expect.objectContaining({ cleared: 2, imagesRemoved: 1 }),
+    ]);
+  });
+
+  it("logs a failed clear-out and still runs the rest of the tick", async () => {
+    const h = harness();
+    const clear = vi.fn(async () => {
+      throw new Error("storage down for someone@example.com");
+    });
+    h.store.candidateRows = [
+      { userId: USER, personId: PERSON, occasionId: OCCASION, rule: { kind: "birthday", month: 3, day: 20 }, budgetCents: 5000 },
+    ];
+    const summary = await runTick({ ...h.deps(at("2027-02-11")), clearUnfiledNotes: clear });
+
+    expect(summary).toMatchObject({ enabled: true, created: 1, failed: 0 });
+    const failed = named("inbound.notes_clear_failed");
+    expect(failed).toHaveLength(1);
+    expect(JSON.stringify(failed)).not.toContain("someone@example.com");
+  });
+
+  it("does nothing when no clear-out is wired", async () => {
+    const h = harness();
+    await expect(runTick(h.deps(at("2027-01-01")))).resolves.toMatchObject({ enabled: true });
+    expect(named("inbound.notes_clear_failed")).toHaveLength(0);
+  });
+});

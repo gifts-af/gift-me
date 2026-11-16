@@ -70,6 +70,8 @@ export { advanceRound, resumeRoundsForPerson, runTick, tellOrdered } from "./rou
 export type { AdvanceResult, EngineDeps, EngineZinc, GenerateIdeas, TickSummary } from "./rounds/engine";
 export { createSupabaseRoundStore } from "./rounds/store";
 export type { Candidate, ClaimedRound, NewRoundRow, RoundContext, RoundFinish, RoundOrder, RoundStore } from "./rounds/store";
+export { clearUnfiledNotes } from "./inbound/cleanup";
+export type { InboundCleanup } from "./inbound/cleanup";
 export { createStubGenerateIdeas } from "./rounds/ideas";
 
 // Paying for gifts from the user's own Zinc wallet (ALL-32): connect, phone, disconnect, Settings status.

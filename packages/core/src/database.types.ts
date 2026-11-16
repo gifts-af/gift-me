@@ -1252,6 +1252,10 @@ export type Database = {
         Args: { p_round_id: string };
         Returns: string[];
       };
+      clear_unfiled_inbound: {
+        Args: never;
+        Returns: { image_path: string; message_id: string }[];
+      };
       claim_inbound_flag: {
         Args: { p_flag: string; p_user_id: string };
         Returns: boolean;
