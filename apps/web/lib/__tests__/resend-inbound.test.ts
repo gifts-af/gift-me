@@ -100,7 +100,7 @@ describe("fetchReceivedEmail", () => {
   });
 
   it("encodes the id in the path and coerces odd header values", async () => {
-    const f = vi.fn(async (_url: string) => json({ ...email, headers: { A: 5, B: null } }));
+    const f = vi.fn(async (url: string) => json({ ...email, url, headers: { A: 5, B: null } }));
     const out = await fetchReceivedEmail("a/b", { apiKey: "k", fetch: f as unknown as typeof fetch });
     expect(f.mock.calls[0][0]).toBe("https://api.resend.com/emails/receiving/a%2Fb");
     expect(out.headers).toEqual({ a: "5" });
