@@ -1332,6 +1332,7 @@ export type Database = {
         Args: { p_round_id: string };
         Returns: undefined;
       };
+      forget_inbound_images: { Args: { p_message_ids: string[] }; Returns: undefined };
       delete_occasion: { Args: { p_occasion_id: string }; Returns: undefined };
       enable_owner_rls: { Args: { p_table: unknown }; Returns: undefined };
       fail_order: {

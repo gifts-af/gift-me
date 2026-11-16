@@ -4,7 +4,7 @@
 -- and only the server can do any of it.
 begin;
 \ir _helpers.psql
-select plan(37);
+select plan(39);
 
 select tests.create_user('notes-a@example.com') as a \gset
 select tests.create_user('notes-b@example.com') as b \gset
@@ -78,8 +78,8 @@ select is((select count(*)::int from concierge.captures where user_id = :'a'), 1
 select is((select status from concierge.inbound_messages where id = :'m2'), 'asking', 'a refused message stays asking');
 
 -- ─── the daily clear-out ────────────────────────────────────────────────────
--- Seven asking messages: expired buttons (cleared), a live button, a used
--- button, one live and one expired (kept), no buttons and young, no buttons
+-- Asking messages: expired buttons (cleared), a live button (kept), a used
+-- and expired button, still asking (cleared), one live and one expired (kept), no buttons and young, no buttons
 -- and old (cleared). Plus a filed message, which is never touched.
 delete from concierge.inbound_messages where user_id = :'a';
 select tests.act_as_server();
@@ -113,27 +113,38 @@ delete from concierge.inbound_events;
 insert into concierge.inbound_events (user_id, created_at) values (:'a', now() - interval '8 days'), (:'a', now() - interval '6 days');
 
 select is((select array_agg(image_path order by image_path) from concierge.clear_unfiled_inbound()),
-  array[:'a' || '/expired.png', :'a' || '/old.png'],
+  array[:'a' || '/expired.png', :'a' || '/old.png', :'a' || '/used.png'],
   'the clear-out returns the image paths of the messages it cleared');
 select tests.reset_role();
 
 select is((select array_agg(id::text order by id) from concierge.inbound_messages where user_id = :'a' and subject is null and status = 'asking'),
-  (select array_agg(i::text order by i) from unnest(array[:'x_exp'::uuid, :'x_old'::uuid]) i),
-  'only the expired-button message and the old button-less message are cleared');
+  (select array_agg(i::text order by i) from unnest(array[:'x_exp'::uuid, :'x_old'::uuid, :'x_used'::uuid]) i),
+  'expired, used-but-unfiled and old button-less messages lose their subject and body');
 select is((select row(subject, body, image_path, image_type)::text from concierge.inbound_messages where id = :'x_exp'),
-  row(null::text, null::text, null::text, null::text)::text, 'a cleared message has no subject, body or image');
-select is((select count(*)::int from concierge.inbound_messages where id in (:'x_live', :'x_used', :'x_mixed', :'x_young') and subject = 's' and body = 'b'),
-  4, 'a live button, a used button, a mix, or a young button-less message keeps its content');
-select is((select image_path from concierge.inbound_messages where id = :'x_live'), :'a' || '/live.png', 'a kept message keeps its image');
+  row(null::text, null::text, :'a' || '/expired.png', 'image/png')::text,
+  'a cleared message keeps its image path until the file is deleted');
+select is((select count(*)::int from concierge.inbound_messages where id in (:'x_live', :'x_mixed', :'x_young') and subject = 's' and body = 'b'),
+  3, 'a live button, a mix, or a young button-less message keeps its content');
+select tests.act_as_server();
+select is((select array_agg(image_path order by image_path) from concierge.clear_unfiled_inbound()),
+  array[:'a' || '/expired.png', :'a' || '/old.png', :'a' || '/used.png'],
+  'a failed file delete is retried: the next run returns the same paths');
+select concierge.forget_inbound_images(array[:'x_exp'::uuid, :'x_old'::uuid, :'x_used'::uuid, :'x_live'::uuid, :'x_filed'::uuid]);
+select tests.reset_role();
+select is((select count(*)::int from concierge.inbound_messages where id in (:'x_exp', :'x_old', :'x_used') and image_path is null and image_type is null),
+  3, 'once the files are deleted the image columns are cleared');
+select is((select image_path from concierge.inbound_messages where id = :'x_live'), :'a' || '/live.png',
+  'forgetting images leaves a message that still has live buttons alone');
 select is((select image_path from concierge.inbound_messages where id = :'x_filed'), :'a' || '/filed.png',
   'a filed message keeps its image: it is the capture''s screenshot');
 select is((select array_agg(provider_email_id) from concierge.inbound_seen where provider_email_id in ('old_em', 'new_em')), array['new_em'],
   'seen ids older than 7 days are pruned');
 select is((select count(*)::int from concierge.inbound_events), 1, 'events older than 7 days are pruned');
 select tests.act_as_server();
-select is((select count(*)::int from concierge.clear_unfiled_inbound()), 0, 'running it again clears nothing');
+select is((select count(*)::int from concierge.clear_unfiled_inbound()), 0, 'once forgotten, running it again returns nothing');
 select tests.reset_role();
 select ok(not has_function_privilege('authenticated', 'concierge.clear_unfiled_inbound()', 'execute')
+      and not has_function_privilege('authenticated', 'concierge.forget_inbound_images(uuid[])', 'execute')
       and not has_function_privilege('anon', 'concierge.clear_unfiled_inbound()', 'execute'),
   'signed-in users and visitors can''t run the clear-out');
 

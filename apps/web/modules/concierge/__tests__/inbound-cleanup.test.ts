@@ -8,7 +8,7 @@ import { clearUnfiledNotes } from "../inbound/cleanup";
 // supabase/tests/inbound_notes.test.sql. This covers what the app does with what it returns.
 
 function fakeDb(rows: { message_id: string; image_path: string | null }[], removeError?: string) {
-  const rpc = vi.fn(async () => ({ data: rows, error: null }));
+  const rpc = vi.fn(async (name: string) => ({ data: name === "clear_unfiled_inbound" ? rows : null, error: null }));
   const remove = vi.fn(async () => ({ data: null, error: removeError ? { message: removeError } : null }));
   const from = vi.fn(() => ({ remove }));
   const db = { schema: () => ({ rpc }), storage: { from } } as unknown as SupabaseClient<Database>;
@@ -32,19 +32,28 @@ describe("clearUnfiledNotes", () => {
     expect(f.rpc).toHaveBeenCalledWith("clear_unfiled_inbound");
     expect(f.from).toHaveBeenCalledWith("captures");
     expect(f.remove).toHaveBeenCalledWith(["u1/a.png", "u2/b.jpg"]);
+    // Only after the files are gone are the image paths forgotten.
+    expect(f.rpc).toHaveBeenLastCalledWith("forget_inbound_images", { p_message_ids: ["m1", "m3"] });
   });
 
   it("touches no storage when nothing was cleared or nothing had an image", async () => {
     const f = fakeDb([{ message_id: "m1", image_path: null }]);
     await expect(clearUnfiledNotes(f.db)).resolves.toEqual({ cleared: 1, imagesRemoved: 0 });
     expect(f.remove).not.toHaveBeenCalled();
+    expect(f.rpc).not.toHaveBeenCalledWith("forget_inbound_images", expect.anything());
   });
 
-  it("logs the files left behind, then throws, when storage fails", async () => {
-    const f = fakeDb([{ message_id: "m1", image_path: "u1/a.png" }], "bucket down");
-    await expect(clearUnfiledNotes(f.db)).rejects.toThrow(/Removing 1 cleared note images failed/);
-    expect(log).toHaveBeenCalledWith(expect.stringContaining('"event":"inbound.note_images_left"'));
-    expect(log).toHaveBeenCalledWith(expect.stringContaining("u1/a.png"));
+  it("keeps the image paths when storage fails, and logs a count and the paths in chunks", async () => {
+    const rows = Array.from({ length: 45 }, (_, i) => ({ message_id: `m${i}`, image_path: `u1/${i}.png` }));
+    const f = fakeDb(rows, "bucket down");
+    await expect(clearUnfiledNotes(f.db)).rejects.toThrow(/Removing 45 cleared note images failed/);
+    expect(f.rpc).not.toHaveBeenCalledWith("forget_inbound_images", expect.anything());
+    const lines = log.mock.calls.map((c) => JSON.parse(String(c[0])) as Record<string, unknown>);
+    expect(lines.filter((l) => l.event === "inbound.note_images_left")).toEqual([expect.objectContaining({ count: 45 })]);
+    const chunks = lines.filter((l) => l.event === "inbound.note_images_left_paths");
+    expect(chunks).toHaveLength(3);
+    expect(String(chunks[0].paths).split(",")).toHaveLength(20);
+    expect(String(chunks[2].paths).split(",")).toHaveLength(5);
   });
 
   it("throws when the clear-out itself fails", async () => {

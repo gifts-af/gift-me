@@ -15,6 +15,7 @@ create table concierge.inbound_seen (
 alter table concierge.inbound_seen enable row level security;
 revoke all on concierge.inbound_seen from public, anon, authenticated;
 grant all on concierge.inbound_seen to service_role;
+create index inbound_seen_created_at_idx on concierge.inbound_seen (created_at);
 
 -- ─── inbound_events ─────────────────────────────────────────────────────────
 -- One row per accepted message and per email sent back, for the per-user
@@ -154,13 +155,18 @@ begin
 end;
 $$;
 
--- The daily tick's housekeeping. Clears the subject, body and image of
--- "asking" messages none of whose file_note buttons can still be tapped
--- (all expired, none used), and returns the stored image paths so the tick
--- can delete the files. A filed message is never touched: its image_path is
--- the capture's screenshot. A message with no buttons at all is cleared once
--- it is older than inbound_link_hours (the buttons are made right after it).
--- Also prunes inbound_seen and inbound_events older than inbound_prune_days.
+-- The daily tick's housekeeping, in two steps so a failed file delete is
+-- retried the next day instead of orphaning a private image.
+-- 1. clear_unfiled_inbound clears the subject and body of "asking" messages
+--    none of whose file_note buttons can still be tapped (every expires_at has
+--    passed, whether or not one was used), and returns the stored image paths
+--    for the tick to delete. image_path stays set until step 2. A filed
+--    message is never touched: its image_path is the capture's screenshot. A
+--    message with no buttons at all counts once it is older than
+--    inbound_link_hours. The row lock keeps a filing in flight from racing it.
+--    It also prunes inbound_seen and inbound_events older than inbound_prune_days.
+-- 2. forget_inbound_images nulls image_path/image_type for those messages once
+--    the files are gone.
 create function concierge.clear_unfiled_inbound()
 returns table (message_id uuid, image_path text)
 language plpgsql
@@ -176,36 +182,50 @@ begin
 
   return query
   with due as (
-    select m.id, m.image_path as old_path
+    select m.id
       from concierge.inbound_messages m
      where m.status = 'asking'
        and (m.subject is not null or m.body is not null or m.image_path is not null)
        and not exists (select 1 from concierge.action_links l
                         where l.inbound_message_id = m.id and l.action = 'file_note'
-                          and (l.used_at is not null or l.expires_at > now()))
+                          and l.expires_at > now())
        and (exists (select 1 from concierge.action_links l
                      where l.inbound_message_id = m.id and l.action = 'file_note')
             or m.created_at < now() - make_interval(hours => v_link_hours))
        for update of m
   ), cleared as (
     update concierge.inbound_messages m
-       set subject = null, body = null, image_path = null, image_type = null
+       set subject = null, body = null
       from due
      where m.id = due.id
-    returning m.id
+    returning m.id, m.image_path
   )
-  select due.id, due.old_path from due join cleared on cleared.id = due.id;
+  select cleared.id, cleared.image_path from cleared where cleared.image_path is not null;
 end;
+$$;
+
+-- Step 2: only for messages still asking and already cleared.
+create function concierge.forget_inbound_images(p_message_ids uuid[])
+returns void
+language sql
+security definer
+set search_path = ''
+as $$
+  update concierge.inbound_messages
+     set image_path = null, image_type = null
+   where id = any (p_message_ids) and status = 'asking' and subject is null and body is null;
 $$;
 
 revoke all on function concierge.claim_inbound_flag(uuid, text) from public, anon, authenticated;
 revoke all on function concierge.inbound_count_today(uuid) from public, anon, authenticated;
 revoke all on function concierge.file_inbound_message(uuid, uuid, uuid) from public, anon, authenticated;
 revoke all on function concierge.clear_unfiled_inbound() from public, anon, authenticated;
+revoke all on function concierge.forget_inbound_images(uuid[]) from public, anon, authenticated;
 grant execute on function concierge.claim_inbound_flag(uuid, text) to service_role;
 grant execute on function concierge.inbound_count_today(uuid) to service_role;
 grant execute on function concierge.file_inbound_message(uuid, uuid, uuid) to service_role;
 grant execute on function concierge.clear_unfiled_inbound() to service_role;
+grant execute on function concierge.forget_inbound_images(uuid[]) to service_role;
 
 -- ─── settings ───────────────────────────────────────────────────────────────
 insert into concierge.app_settings (key, value, description) values
