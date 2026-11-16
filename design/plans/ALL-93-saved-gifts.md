@@ -79,4 +79,135 @@ None left.
 
 ## Plan
 
-Written after the spec's adversarial review.
+**Architecture:** a new `concierge.saved_gifts` table holds the rules itself: owner-only policies, no updates, checks and a cap trigger. A small `modules/concierge/saved-gifts/` folder (rules, store, service, bound wrapper) reads and writes it as the signed-in user. It sits beside `people/` rather than inside it, so ALL-27's edits to the people files don't collide. The person page gets one `<SavedGifts>` section. Reading a pasted link goes through one new server-side export from `@/modules/lists`.
+
+**Tech stack:** Postgres migration and pgTAP; Next.js server actions; a React client component; Vitest; one Playwright journey.
+
+**Global constraints**
+- Setting `saved_gifts_max` = `100` in `concierge.app_settings` (T23). No fallback constant in code.
+- Limits, in the database and mirrored in the form parser: name 1–200 characters; `product_url` and `image_url` at most 2048 characters and starting `http://` or `https://`; `price_cents` null or 0–10,000,000.
+- Price is optional **[Claude's call]**: a spotted gift may have no known price. It shows as "No price".
+- Copy: heading "Saved gifts"; note "Only you see these. {name} never does."; empty state "Keep gifts you spot for {name} here."; button "Save"; the list section's note "You don't need their list to buy for them."
+- Events: `saved_gifts.save` and `saved_gifts.remove`, with `user_id` and `person_id` only (E6).
+- Migration file `supabase/migrations/20261116120000_saved_gifts.sql`, renamed later than `main`'s latest if needed when this merges.
+
+### Task 1: the table and its rules (AC-8, AC-9, AC-10)
+
+**Files:** create `supabase/migrations/20261116120000_saved_gifts.sql` and `supabase/tests/saved_gifts.test.sql`; regenerate `packages/core/src/database.types.ts` (`pnpm db:types`).
+
+**Produces:** `concierge.saved_gifts (id uuid pk default gen_random_uuid(), user_id uuid not null default auth.uid() references auth.users on delete cascade, person_id uuid not null, name text not null, price_cents integer, product_url text, image_url text, created_at timestamptz not null default now(), foreign key (person_id, user_id) references public.people (id, user_id) on delete cascade)`, with an index on `(person_id, created_at desc)`.
+
+- [ ] **Step 1: pgTAP first.** In `saved_gifts.test.sql` (pattern: `supabase/tests/person_links.test.sql`), with users buyer, other and dad:
+  - buyer inserts a gift for their person: lives_ok; reads it back: 1 row.
+  - other selects buyer's rows: 0 rows. Other's delete of buyer's row removes nothing. Other inserting with buyer's `person_id` throws.
+  - `tests.act_as_anon()` select throws permission denied.
+  - dad, after buyer links dad's list with `lists.link_person` as in `person_links.test.sql`, reads 0 rows.
+  - buyer's `update` of their own row throws permission denied.
+  - a 201-character `name`, `product_url` `javascript:alert(1)` and `price_cents` -1 each throw a check violation.
+  - with `saved_gifts_max` set to 2 for the test, a third insert for the same person throws with message `saved_gifts_max`; a gift for a second person still saves.
+  - after `public.delete_person` and a hard delete of the person row as server, the gifts are gone.
+- [ ] **Step 2:** `pnpm db:test` fails (no table).
+- [ ] **Step 3: the migration.** The table, with check constraints from Global constraints. Row level security on, and three policies written by hand (select, insert, delete, each `user_id = (select auth.uid())`). Don't use `concierge.enable_owner_rls`: it adds an update policy and an `updated_at` trigger. `revoke update on concierge.saved_gifts from authenticated`. A `before insert` trigger function `concierge.saved_gifts_cap()` (`security definer`, `set search_path = ''`, execute revoked from public) raises `'saved_gifts_max'` with errcode `P0001` once the person already has `concierge.setting_int('saved_gifts_max')` rows. Insert the setting row with a description.
+- [ ] **Step 4:** `pnpm db:test` passes; run `pnpm db:types`.
+- [ ] **Step 5:** commit `feat(db): saved gifts table, private to the buyer (ALL-93)`.
+
+### Task 2: reading a gift link, from the lists module (AC-2) [P]
+
+**Files:** create `apps/web/modules/lists/lib/gift-link.ts` and `apps/web/modules/lists/lib/__tests__/gift-link.test.ts`; modify `apps/web/modules/lists/index.ts` (one export).
+
+**Produces:** `readGiftLink(url: string, readPage: (url: string) => Promise<LookupStorePageResult | { ok: false; reason: "signed_out" }>): Promise<GiftLinkRead>`, where `GiftLinkRead = { ok: true; name: string | null; priceCents: number | null; imageUrl: string | null; productUrl: string } | { ok: false; error: string }`. Exported from `@/modules/lists` with its type. The caller passes `readStorePage` from `actions/store-page.ts` as `readPage` (E3).
+
+- [ ] **Step 1: tests.**
+  - An Amazon link `https://www.amazon.com/Fly-Reel/dp/B0TESTREEL` gives `productUrl` `https://www.amazon.com/dp/B0TESTREEL`, a name from the slug, a null `priceCents` and an image URL. `readPage` is never called.
+  - A store link whose `readPage` returns `{ ok: true, product: { name: "Mug", priceCents: 1200, imageUrl: "https://x/i.jpg" } }` gives those three values.
+  - A store link whose `readPage` returns `{ ok: false, reason: "blocked" }`, or throws, still gives `ok: true` with the slug name and a null price.
+  - `"not a link"` gives `ok: false` with `lookupProductLink`'s message.
+- [ ] **Step 2:** the tests fail.
+- [ ] **Step 3:** implement with `lookupProductLink`, overlaying the page's non-null fields as `AddGiftPanel`'s `withStorePage` does.
+- [ ] **Step 4:** the tests pass.
+- [ ] **Step 5:** commit `feat(lists): read a gift link for other modules (ALL-93)`.
+
+### Task 3: the saved-gifts service (AC-3, AC-6, AC-7, AC-10, AC-12)
+
+**Files:** create `apps/web/modules/concierge/saved-gifts/{rules,store,service,saved-gifts}.ts`, `apps/web/modules/concierge/__tests__/saved-gifts.test.ts` and `apps/web/modules/concierge/__tests__/fake-saved-gifts-store.ts`; modify `apps/web/modules/concierge/index.ts` (exports).
+
+**Produces (from `@/modules/concierge`):**
+- `type SavedGift = { id: string; name: string; priceCents: number | null; productUrl: string | null; imageUrl: string | null; store: string | null }`, where `store` is the link's hostname without `www.`.
+- `parseSavedGiftForm(formData: FormData): { ok: true; value: SavedGiftInput } | { ok: false; error: string }`, with fields `name`, `price` (via `parseBudget`), `link` and `image`.
+- `listSavedGifts(personId: string): Promise<SavedGift[]>`, newest first; `[]` for a person who isn't the caller's.
+- `saveGift(personId: string, input: SavedGiftInput): Promise<SaveResult>` and `removeSavedGift(personId: string, giftId: string): Promise<SaveResult>`.
+
+- [ ] **Step 1: tests**, against the fake store.
+  - `parseSavedGiftForm`: an empty name gives "Give the gift a name."; price "abc" gives `parseBudget`'s error; link `ftp://x` gives "That link doesn't look right."; a 201-character name gives an error.
+  - `saveGift` for a person the store doesn't return (another user's, or soft-deleted) gives `{ ok: false }` with the people module's not-found text, and nothing is stored.
+  - `saveGift` when the store throws `{ message: "saved_gifts_max", code: "P0001" }` gives "You've saved as many gifts for them as we keep. Remove one to add another."
+  - `saveGift` and `removeSavedGift` each log exactly one event, whose fields are `{ user_id, person_id }` only.
+  - `removeSavedGift` for a gift that's already gone returns ok.
+  - `listSavedGifts` maps `www.amazon.com` to store `amazon.com`, and a null link to a null store.
+- [ ] **Step 2:** the tests fail.
+- [ ] **Step 3:** implement. Before inserting, the store checks the person with `people.select("id").eq("id", personId).is("deleted_at", null)` (AC-10).
+- [ ] **Step 4:** the tests pass.
+- [ ] **Step 5:** commit `feat: saved gifts service (ALL-93)`.
+
+### Task 4: the Saved gifts section and the list wording (AC-1–7, AC-11)
+
+**Files:** create `apps/web/app/people/[id]/saved-gifts.tsx` and `apps/web/app/people/[id]/__tests__/saved-gifts.test.tsx`; modify:
+- `apps/web/app/people/actions.ts`: three actions.
+- `apps/web/app/people/[id]/person-view.tsx`: load the gifts, and render the section just above `<ListLink>`.
+- `apps/web/app/people/[id]/list-link.tsx` and its test: the note under the heading when no list is linked.
+
+**Consumes:** Task 2's `readGiftLink` and Task 3's functions.
+**Produces:** `readGiftLinkAction(url: string): Promise<GiftLinkRead>`, which wraps `readGiftLink(url, readStorePage)`; `saveGiftAction(_prev: SaveResult | null, formData: FormData): Promise<SaveResult>`; and `removeSavedGiftAction(_prev: SaveResult | null, formData: FormData): Promise<SaveResult>`. Each revalidates the person page, as `refresh()` does.
+
+- [ ] **Step 1: component tests**, with fake actions as in `list-link.test.tsx`.
+  - With no gifts: the heading, the privacy note with the name, and the empty-state line.
+  - Pasting a link calls `readAction` and fills in the name and price. A failed read leaves a typed name alone.
+  - Save returning `{ ok: false, error: "x" }` shows "x" in a `role="alert"` and keeps the name and price in the fields (AC-7).
+  - Save returning `{ ok: true }` clears the form. A second click while saving doesn't call the action twice.
+  - A gift with a link renders a link to `productUrl` with `target="_blank"` and `rel="noopener noreferrer"`. Remove calls `removeAction` with the gift's id.
+  - `ListLink` with no list linked shows "You don't need their list to buy for them."
+- [ ] **Step 2:** the tests fail.
+- [ ] **Step 3:** implement with `Input` and `Button`, in the card style of the person form. Format money with `Intl.NumberFormat("en-US", { style: "currency", currency: "USD" })`. Show the photo as a plain `<img alt="">`, like the gift cards. Read the inputs from `FormData` on submit, as `list-link.tsx` does, so a paste before hydration isn't lost.
+- [ ] **Step 4:** the tests pass.
+- [ ] **Step 5:** commit `feat: Saved gifts on a person's page (ALL-93)`.
+
+### Task 5: the journey, layout and docs (AC-1–6, AC-11)
+
+**Files:** modify `apps/web/e2e/people.spec.ts`; `apps/web/e2e/gallery.shots.ts` if the person page shot needs a saved gift; `design/technical-design.md` (the table among the concierge's tables, and decision 54); and `design/ui.md` only if the section adds a pattern.
+
+- [ ] **Step 1:** in `people.spec.ts`, add the test "save a gift for someone, then remove it":
+  1. A fresh user with `addMother`. Wait for Save to be enabled before typing (ALL-110).
+  2. Paste `https://www.amazon.com/Fly-Reel/dp/B0TESTREEL` and check the name fills in. Type price `49` and Save.
+  3. Add "Coffee sampler" by hand, with price `20`.
+  4. Reload. Both show, newest first, with "$49.00". The reel's link has the `href` `https://www.amazon.com/dp/B0TESTREEL`.
+  5. Remove the sampler and reload. It's gone.
+- [ ] **Step 2:** the existing `@layout` test adds a saved gift with a 120-character name before checking the person page, so `phoneLayoutProblems` covers the section on all three browsers.
+- [ ] **Step 3:** `pnpm lint && pnpm typecheck && pnpm test && pnpm build` pass, as do `pnpm db:test` and the e2e specs. Run `pnpm gallery`, then republish the screens page.
+- [ ] **Step 4:** update the docs, then commit `test: saved gifts journey, and docs (ALL-93)`.
+
+## Before coding: consistency check
+
+- [x] Every acceptance criterion maps to a task:
+  - AC-1–7: Tasks 4 and 5
+  - AC-2: also Task 2
+  - AC-8–10: Task 1 (AC-10's soft delete is also in Task 3)
+  - AC-11: Task 4
+  - AC-12: Task 3
+- [x] Every task traces back to a story or criterion.
+- [x] No open questions are left.
+- [ ] Adversarial review of the plan.
+
+## Review focus
+
+1. **A pasted link to one of our own pages, or to a private address.** `readStorePage` already refuses those (ALL-10's checks), and Task 2 goes through it, not around it.
+2. **The same gift saved twice by a double tap.** Save is disabled while pending (Task 4 test).
+3. **Removing a gift that's already gone,** from two tabs. `removeSavedGift` returns ok and the page refreshes (Task 3 test).
+4. **A long name or a big photo breaking the phone layout.** Task 5's `@layout` check uses a 120-character name.
+5. **A person deleted in another tab while the form is open.** Save returns the not-found error (Task 3 test).
+
+## Done: evidence on the ticket (T44)
+
+- [ ] Tests added, shown failing first, with suite and CI results.
+- [ ] Screenshots of the section at phone width in light and dark mode and at desktop width, plus the mock-up.
+- [ ] Live check on production with the test account: save, reload, remove.
+- [ ] Every acceptance-criteria box ticked, each with a pointer to its evidence.

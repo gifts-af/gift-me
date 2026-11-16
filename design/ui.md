@@ -162,7 +162,7 @@ A button in the server's HTML shows before its click handler is attached, and a 
 - **Fields that are only valid together**, like a shipping address: one Save for the group.
 - **Money or anything that can't be undone:** an explicit button, plus a confirm where it's needed.
 
-**Screens where you mostly look and change one thing at a time** (Settings first; a person's details may follow) are a list of rows. Each row shows its current value and opens its own detail screen, the way phone settings work. The list itself has no main button.
+**Screens where you mostly look and change one thing at a time** (Settings first; a person's details may follow) are a list of rows. Each row shows its current value and opens its own detail screen, the way phone settings work. A single choice (like the time zone) can instead open the browser's own picker right on its row and save when picked. The list itself has no main button.
 
 **Where a new setting goes:** in the Settings section it belongs to (You, Reminders, Gift ideas, Paying for gifts) as a row with its value. A new section only when none fits.
 
