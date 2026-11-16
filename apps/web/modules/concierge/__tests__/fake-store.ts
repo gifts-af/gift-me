@@ -1,5 +1,5 @@
 import type { NotificationKind } from "../notify/templates";
-import type { LinkRow, NewLink, NotifyStore } from "../notify/store";
+import type { FiledNote, LinkRow, NewLink, NotifyStore } from "../notify/store";
 
 export type FakeNotification = {
   id: string;
@@ -37,6 +37,33 @@ export class FakeStore implements NotifyStore {
     return { cancelled: 1, ordering: 0, onItsWay: 0 };
   }
 
+  /** Live people by id (ALL-31 file_note); a deleted person is simply absent. */
+  people = new Map<string, { userId: string; name: string }>();
+  /** Asking notes by id: subject and body until filed. */
+  asking = new Map<string, { userId: string; text: string; filedTo: string | null }>();
+  /** Captures created by fileInboundMessage, as "capture:person". */
+  filed: string[] = [];
+  /** Hands each filed note to the capture store, so the action can read it. */
+  onFiled?: (note: FiledNote & { personId: string }) => void;
+
+  async personName(userId: string, personId: string) {
+    const p = this.people.get(personId);
+    return p && p.userId === userId ? p.name : null;
+  }
+
+  // Like file_inbound_message: check and set with no await in between, so only the first wins.
+  async fileInboundMessage(userId: string, messageId: string, personId: string) {
+    const m = this.asking.get(messageId);
+    if (!m || m.userId !== userId || m.filedTo !== null) return null;
+    if ((await this.personName(userId, personId)) === null) return null;
+    if (m.filedTo !== null) return null;
+    m.filedTo = personId;
+    const note = { captureId: `cap-${this.filed.length + 1}`, text: m.text };
+    this.filed.push(`${note.captureId}:${personId}`);
+    this.onFiled?.({ ...note, personId });
+    return note;
+  }
+
   async recipient(userId: string) {
     return this.recipients.get(userId) ?? { email: null, timezone: null };
   }
@@ -50,7 +77,13 @@ export class FakeStore implements NotifyStore {
   async insertLinks(rows: NewLink[]) {
     for (const r of rows) {
       if (this.links.some((l) => l.hash === r.hash)) throw new Error("duplicate token_hash");
-      this.links.push({ ...r, usedAt: null, notificationId: null });
+      this.links.push({
+        ...r,
+        personId: r.personId ?? null,
+        inboundMessageId: r.inboundMessageId ?? null,
+        usedAt: null,
+        notificationId: null,
+      });
     }
   }
 
@@ -112,5 +145,7 @@ function toRow(l: FakeLink): LinkRow {
     action: l.action,
     expiresAt: l.expiresAt,
     usedAt: l.usedAt,
+    personId: l.personId,
+    inboundMessageId: l.inboundMessageId,
   };
 }

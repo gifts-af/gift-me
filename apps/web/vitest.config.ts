@@ -10,6 +10,7 @@ const LOCAL_DB_TESTS = [
   "app/settings/__tests__/zinc-deps.test.ts",
   "modules/concierge/__tests__/capture-store-scope.test.ts",
   "modules/concierge/__tests__/inbound-store.test.ts",
+  "modules/concierge/__tests__/notify-store.test.ts",
   "modules/concierge/__tests__/placing-race.test.ts",
   "modules/concierge/__tests__/purchase.test.ts",
   "modules/concierge/__tests__/round-engine.test.ts",

@@ -16,6 +16,9 @@ export type LinkRow = {
   action: ActionName;
   expiresAt: Date;
   usedAt: Date | null;
+  /** A file_note link: the person it files to and the asking message it files (ALL-31). */
+  personId: string | null;
+  inboundMessageId: string | null;
 };
 
 /** A new action link. Only the token's hash is ever stored (AC-14). */
@@ -60,9 +63,20 @@ export interface NotifyStore {
    * round. What it did (for the done page), or null when the round isn't theirs.
    */
   cancelHeldGift(roundId: string, userId: string): Promise<CancelOutcome | null>;
+  /** The name of this user's person, or null when they were deleted or aren't the user's (ALL-31). */
+  personName(userId: string, personId: string): Promise<string | null>;
+  /**
+   * The file_note action (ALL-31 AC-4): file_inbound_message, so only the first call files the
+   * asking message. The new capture and the note's text (subject and body, which filing moves
+   * onto the capture), or null when it was already filed or the person is gone.
+   */
+  fileInboundMessage(userId: string, messageId: string, personId: string): Promise<FiledNote | null>;
 }
 
-const LINK_COLUMNS = "user_id, round_id, action, expires_at, used_at";
+/** A note just filed by file_note: its capture, and its subject and body for the cancel check. */
+export type FiledNote = { captureId: string; text: string };
+
+const LINK_COLUMNS = "user_id, round_id, action, expires_at, used_at, person_id, inbound_message_id";
 
 type LinkDbRow = {
   user_id: string;
@@ -70,6 +84,8 @@ type LinkDbRow = {
   action: string;
   expires_at: string;
   used_at: string | null;
+  person_id: string | null;
+  inbound_message_id: string | null;
 };
 
 function toLinkRow(r: LinkDbRow): LinkRow {
@@ -79,6 +95,8 @@ function toLinkRow(r: LinkDbRow): LinkRow {
     action: r.action as ActionName,
     expiresAt: new Date(r.expires_at),
     usedAt: r.used_at ? new Date(r.used_at) : null,
+    personId: r.person_id,
+    inboundMessageId: r.inbound_message_id,
   };
 }
 
@@ -220,6 +238,36 @@ export function createSupabaseNotifyStore(db: SupabaseClient<Database> = createA
         ordering: after.data.filter((o) => o.status === "placing" || o.status === "unconfirmed").length,
         onItsWay: after.data.filter((o) => ["placed", "shipped", "delivered"].includes(o.status)).length,
       };
+    },
+
+    async personName(userId, personId) {
+      const { data, error } = await db
+        .from("people")
+        .select("name")
+        .eq("id", personId)
+        .eq("user_id", userId)
+        .is("deleted_at", null)
+        .maybeSingle();
+      if (error) fail("Loading the person failed", error);
+      return data?.name ?? null;
+    },
+
+    async fileInboundMessage(userId, messageId, personId) {
+      const filed = await concierge.rpc("file_inbound_message", {
+        p_user_id: userId,
+        p_message_id: messageId,
+        p_person_id: personId,
+      });
+      if (filed.error) fail("Filing the note failed", filed.error);
+      if (!filed.data) return null;
+      // Filing cleared the message's subject and body; the capture holds them now.
+      const { data, error } = await concierge
+        .from("captures")
+        .select("page_title, text_excerpt")
+        .eq("id", filed.data)
+        .single();
+      if (error) fail("Loading the filed note failed", error);
+      return { captureId: filed.data, text: [data.page_title, data.text_excerpt].filter(Boolean).join("\n") };
     },
   };
 }

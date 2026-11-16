@@ -1,7 +1,13 @@
 // The things a one-time email link can do (ALL-23). Each action brings its own
 // words for the confirm page and the result page, and the work it does once the
 // owner presses confirm. Real actions (ALL-28 and later) add entries here.
-import type { NotifyStore } from "./store";
+import type { Extract } from "@/lib/ai/extract";
+import { errorFields, logEvent } from "@/lib/log";
+import { processCapture } from "../capture/extract";
+import type { CaptureStore } from "../capture/store";
+import { looksLikeCancel } from "../inbound/parse";
+import { notify, type NotifyDeps } from "./notify";
+import type { LinkRow, NotifyStore } from "./store";
 
 export type ActionName =
   | "test"
@@ -46,14 +52,47 @@ export function cancelDone(o: CancelOutcome): { title: string; body: string } {
   return { title: "Nothing to cancel", body: "There was no gift waiting to be bought for this occasion." };
 }
 
+/**
+ * What file_note needs beyond the database (ALL-31): the capture store for the link's user (on
+ * the service-role client), the model that reads it, and notify for the "can't cancel" email.
+ * Built by the confirm route; a caller without them can't run file_note.
+ */
+export type NoteDeps = {
+  captureStore(userId: string): CaptureStore;
+  extract: Extract;
+  notify: NotifyDeps;
+};
+
+export type ActionCtx = {
+  userId: string;
+  roundId: string | null;
+  personId: string | null;
+  inboundMessageId: string | null;
+  store: NotifyStore;
+  notes?: NoteDeps;
+};
+
 export type Action = {
   confirm: { title: string; body: string; button: string };
+  /** The confirm page's words when they depend on the link (e.g. naming its person); else `confirm`. */
+  confirmFor?(link: LinkRow, store: NotifyStore): Promise<Action["confirm"]>;
   done: { title: string; body: string };
-  run(ctx: { userId: string; roundId: string | null; store: NotifyStore }): Promise<ActionResult>;
+  run(ctx: ActionCtx): Promise<ActionResult>;
   /** Where the done page's button goes instead of home, when the action knows (e.g. "/people/<id>"). */
-  next?(roundId: string | null, store: NotifyStore): Promise<string | null>;
+  next?(link: Pick<LinkRow, "userId" | "roundId" | "personId">, store: NotifyStore): Promise<string | null>;
   /** Go to `next` right after confirming, with no done page in between. */
   straight?: true;
+};
+
+/** file_note's done pages when it didn't file (ALL-31 AC-4). */
+const NOTE_ALREADY_FILED = {
+  title: "Already filed",
+  body: "This note was already added to someone's page, so nothing changed.",
+};
+
+const NOTE_PERSON_GONE = {
+  title: "They were removed",
+  body: "That person was removed, so the note wasn't filed. Use another button in the email, or add them again first.",
 };
 
 export const ACTIONS: Record<ActionName, Action> = {
@@ -89,7 +128,7 @@ export const ACTIONS: Record<ActionName, Action> = {
     async run() {
       return { ok: true };
     },
-    async next(roundId, store) {
+    async next({ roundId }, store) {
       // A removed person's page is gone: home (Give) instead (ALL-116, owner).
       const personId = roundId ? await store.roundPersonId(roundId, { skipRemoved: true }) : null;
       return personId ? `/people/${personId}` : null;
@@ -111,7 +150,7 @@ export const ACTIONS: Record<ActionName, Action> = {
     async run() {
       return { ok: true };
     },
-    async next(roundId, store) {
+    async next({ roundId }, store) {
       const personId = roundId ? await store.roundPersonId(roundId) : null;
       return personId ? `/people/${personId}?address=open#address` : null;
     },
@@ -131,7 +170,7 @@ export const ACTIONS: Record<ActionName, Action> = {
     async run() {
       return { ok: true };
     },
-    async next(roundId, store) {
+    async next({ roundId }, store) {
       const personId = roundId ? await store.roundPersonId(roundId) : null;
       return personId ? `/people/${personId}/questions` : null;
     },
@@ -196,19 +235,58 @@ export const ACTIONS: Record<ActionName, Action> = {
       const outcome = await store.cancelHeldGift(roundId, userId);
       return outcome ? { ok: true, done: cancelDone(outcome) } : { ok: false, error: "No such round for this user." };
     },
-    async next(roundId, store) {
+    async next({ roundId }, store) {
       const personId = roundId ? await store.roundPersonId(roundId) : null;
       return personId ? `/people/${personId}` : null;
     },
   },
 
-  // TODO(ALL-31 Task 8): the real file_note action (file_inbound_message for the link's message and
-  // person). A placeholder so who_is_this links type-check; it refuses until then.
+  // A "Who is this about?" button (ALL-31 AC-4): files the asking note to the link's person and
+  // reads it. file_inbound_message lets only the first button win; any later one says so.
   file_note: {
-    confirm: { title: "File your note", body: "Confirm to add your note to this person's page.", button: "File it" },
+    confirm: { title: "File this note?", body: "Confirm to add your note to this person's page.", button: "File it" },
+    async confirmFor(link, store) {
+      const name = link.personId ? await store.personName(link.userId, link.personId) : null;
+      // Removed since the email: the generic words; confirming says they were removed.
+      if (!name) return ACTIONS.file_note.confirm;
+      return {
+        title: `File this note to ${name}?`,
+        body: `We'll add it to ${name}'s page and read it for gift ideas.`,
+        button: "File it",
+      };
+    },
     done: { title: "Filed", body: "Your note is on their page." },
-    async run() {
-      return { ok: false, error: "not built yet" };
+    async run({ userId, personId, inboundMessageId, store, notes }) {
+      if (!personId || !inboundMessageId) return { ok: false, error: "The link has no note or person." };
+      if (!notes) return { ok: false, error: "Filing a note needs the capture and notify deps." };
+      if (!(await store.personName(userId, personId))) return { ok: true, done: NOTE_PERSON_GONE };
+
+      const filed = await store.fileInboundMessage(userId, inboundMessageId, personId);
+      if (!filed) return { ok: true, done: NOTE_ALREADY_FILED };
+      const ids = { user_id: userId, person_id: personId, inbound_message_id: inboundMessageId, capture_id: filed.captureId };
+      logEvent("inbound.filed", { ...ids, matched_by: "choice" });
+
+      try {
+        await processCapture(notes.captureStore(userId), notes.extract, filed.captureId);
+      } catch (err) {
+        // The capture stays filed and unread; "Try again" on the person's page reads it.
+        logEvent("inbound.read_failed", { ...ids, ...errorFields(err) });
+      }
+
+      // AC-14 for a note that was asked about: filed, plus the "replies can't cancel" email.
+      if (looksLikeCancel(filed.text)) {
+        try {
+          const sent = await notify({ userId, kind: "notes_cant_cancel", data: {}, links: {} }, notes.notify);
+          if (!sent.ok) logEvent("inbound.reply_failed", { ...ids, kind: "notes_cant_cancel" });
+        } catch (err) {
+          logEvent("inbound.reply_failed", { ...ids, kind: "notes_cant_cancel", ...errorFields(err) });
+        }
+      }
+      return { ok: true };
+    },
+    async next({ userId, personId }, store) {
+      // A removed person has no page: home instead.
+      return personId && (await store.personName(userId, personId)) ? `/people/${personId}` : null;
     },
   },
 };
