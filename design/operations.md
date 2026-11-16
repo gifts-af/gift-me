@@ -225,7 +225,7 @@ Code and migration ship together. If the code is rolled back with Vercel's insta
 
 Users email a note to `notes@in.giftsaf.com` and it is filed on the right person (T70). Spec: [design/plans/ALL-31-email-capture.md](plans/ALL-31-email-capture.md).
 
-**Deploy order:** apply the migration to prod before this code deploys, because action links now read new columns.
+**Ship order:** the migration PR merges first and its CI `migrate` job must finish green on dev and prod before the code PR merges.
 
 **Setup**
 1. Resend dashboard > Webhooks > add endpoint `https://giftsaf.com/api/inbound/resend`, event `email.received`. The free plan has one webhook endpoint.
@@ -243,11 +243,31 @@ Users email a note to `notes@in.giftsaf.com` and it is filed on the right person
 | `inbound_link_hours` | 72 | How long the buttons work |
 | `inbound_thread_lookup_max` | 10 | Sent emails checked when matching a reply |
 | `inbound_thread_lookup_days` | 60 | How far back those are checked |
-| `inbound_prune_days` | 7 | Days before `inbound_seen` rows are cleared |
+| `inbound_prune_days` | 7 | Days before `inbound_seen` and `inbound_events` rows are pruned |
 
 **Turn it off:** set `inbound_email_enabled` to 0. Mail is then ignored; no deploy needed.
 
-**Events to look for:** `inbound.filed`, `inbound.asking`, `inbound.ignored` (with a reason), `inbound.reply_capped`, `inbound.failed`, `inbound.misconfigured` (missing secret or address).
+**Events** (ids and a reason only, E6)
+
+| Event | Means |
+|---|---|
+| `inbound.filed` | A note was filed to a person (`matched_by`: reply, name or choice) |
+| `inbound.asking` | A note was saved and "Who is this about?" sent |
+| `inbound.ask_capped` | "Who is this about?" was over the daily cap, so the waiting note and its image were deleted (with error fields if that delete failed; the daily clear-out then catches it) |
+| `inbound.ignored` | A message was dropped, with a `reason` (disabled, auto_reply, unverified, unknown_sender, capped, unpaid) |
+| `inbound.reply_capped` | An email back wasn't sent because of the daily cap |
+| `inbound.reply_failed` | An email back failed to send |
+| `inbound.read_failed` | A note was filed but reading it failed; "Try again" on the person's page reads it |
+| `inbound.image_failed` | A note's image couldn't be downloaded or stored; the note was kept without it |
+| `inbound.tip_failed` | The "Did you know?" tip failed to send |
+| `inbound.failed` | Accepting or filing a message failed |
+| `inbound.misconfigured` | `RESEND_WEBHOOK_SECRET` or `INBOUND_NOTES_ADDRESS` is missing |
+| `inbound.notes_cleared` | The daily tick cleared unfiled notes (counts) |
+| `inbound.notes_clear_failed` | The daily clear-out failed; it retries on the next tick |
+| `inbound.note_images_left` | Deleting cleared notes' images failed (count); the next tick retries |
+| `inbound.note_images_left_paths` | The storage paths still waiting, a few per line |
+
+**A note can be lost:** the webhook claims the email (an `inbound_seen` row) before fetching it from Resend. If that fetch fails after the claim, Resend has already had its 200 and any repeat delivery is skipped as seen, so the note is gone; it's logged as `inbound.failed` with the `email_id`, and the user can send it again.
 
 **Testing in dev:** run a tunnel to the local app and point the Resend endpoint at `https://<tunnel>/api/inbound/resend`, with the secret in `.env.local`. With one endpoint on the free plan, switch it back to production afterwards.
 
