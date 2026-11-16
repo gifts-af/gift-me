@@ -59,11 +59,20 @@ export function SavedGifts({
   const [draft, setDraft] = useState(EMPTY);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  // Each paste and each save bumps this; a read that comes back to an older
-  // number is dropped, so it can't refill a form that moved on.
+  // Each edit of the link, each read and each save bumps this; a read that
+  // comes back to an older number is dropped, so it can't refill a form that
+  // moved on.
   const latest = useRef(0);
+  // The link is read once: when it's pasted, or when the buyer leaves the
+  // field, never on every keystroke (each read can fetch a store's page).
+  const pasted = useRef(false);
+  const lastRead = useRef("");
+  // What the last read filled in, so a new link can replace it but never
+  // what the buyer typed.
+  const filled = useRef({ name: "", price: "" });
 
   async function readLink(link: string) {
+    lastRead.current = link;
     if (!looksLikeLink(link)) return;
     const mine = ++latest.current;
     let read: LinkRead;
@@ -73,13 +82,31 @@ export function SavedGifts({
       return;
     }
     if (mine !== latest.current || !read.ok) return;
+    const name = read.name ?? "";
+    const price = read.priceCents === null ? "" : (read.priceCents / 100).toFixed(2);
+    setDraft((d) => {
+      const next = { ...d, name: d.name || name, price: d.price || price, image: read.imageUrl ?? "" };
+      filled.current = { name: d.name ? "" : name, price: d.price ? "" : price };
+      return next;
+    });
+  }
+
+  function changeLink(link: string) {
+    latest.current++;
+    // A new link starts over: what the old one filled in, and its photo, go.
+    const was = filled.current;
+    filled.current = { name: "", price: "" };
     setDraft((d) => ({
       ...d,
-      // Only fills what the buyer hasn't typed.
-      name: d.name || (read.name ?? ""),
-      price: d.price || (read.priceCents === null ? "" : (read.priceCents / 100).toFixed(2)),
-      image: read.imageUrl ?? "",
+      link,
+      name: was.name && d.name === was.name ? "" : d.name,
+      price: was.price && d.price === was.price ? "" : d.price,
+      image: "",
     }));
+    if (pasted.current) {
+      pasted.current = false;
+      void readLink(link);
+    }
   }
 
   async function run(action: Action, form: FormData): Promise<boolean> {
@@ -131,10 +158,12 @@ export function SavedGifts({
             autoComplete="off"
             inputMode="url"
             value={draft.link}
-            onChange={(e) => {
-              const link = e.target.value;
-              setDraft((d) => ({ ...d, link }));
-              void readLink(link);
+            onPaste={() => {
+              pasted.current = true;
+            }}
+            onChange={(e) => changeLink(e.target.value)}
+            onBlur={(e) => {
+              if (e.target.value !== lastRead.current) void readLink(e.target.value);
             }}
           />
         </div>

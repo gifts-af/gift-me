@@ -46,9 +46,16 @@ as $$
 declare
   v_max integer;
 begin
+  -- Before anything else: this runs with the owner's rights and before the
+  -- row's policy is checked, so a save as someone else must learn nothing
+  -- about their people (whether one exists, is deleted or is at the cap).
+  if new.user_id is distinct from auth.uid() then
+    raise exception 'Not allowed' using errcode = '42501';
+  end if;
+
   perform 1 from public.people p
    where p.id = new.person_id and p.user_id = new.user_id and p.deleted_at is null
-   for update;
+   for no key update;
   if not found then
     raise exception 'Person not found' using errcode = 'P0002';
   end if;

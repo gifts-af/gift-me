@@ -172,6 +172,8 @@ test("save a gift for someone, then remove it", async ({ page }) => {
 
   // 1. By link: the name comes from the link, the price is typed.
   await saved.getByLabel("Link").fill("https://www.amazon.com/Fly-Reel/dp/B0TESTREEL?ref=abc");
+  // The link is read when you leave the field (or paste), not on each keystroke.
+  await saved.getByLabel("Link").blur();
   await expect(saved.getByLabel("Gift")).not.toHaveValue("");
   await saved.getByLabel("Gift").fill("Fly-fishing reel");
   await saved.getByLabel("Price").fill("49");

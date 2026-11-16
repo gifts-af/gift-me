@@ -22,7 +22,7 @@ const REEL: ShownGift = {
 
 function setup({
   gifts = [] as ShownGift[],
-  read = vi.fn(async (): Promise<Read> => ({ ok: true, name: "Mug", priceCents: 1200, imageUrl: null, productUrl: "https://shop.example/mug" })),
+  read = vi.fn(async (...a: [string]): Promise<Read> => (void a, { ok: true, name: "Mug", priceCents: 1200, imageUrl: null, productUrl: "https://shop.example/mug" })),
   save = vi.fn(async (...a: [unknown, FormData]): Promise<Result> => (void a, { ok: true })),
   remove = vi.fn(async (...a: [unknown, FormData]): Promise<Result> => (void a, { ok: true })),
 } = {}) {
@@ -42,18 +42,60 @@ describe("SavedGifts", () => {
     expect(screen.getByText("Keep gifts you spot for Dad here.")).toBeInTheDocument();
   });
 
-  it("fills the name and price from a pasted link", async () => {
+  it("fills the name and price from a pasted link, reading it once", async () => {
     const { read } = setup();
-    await userEvent.type(linkField(), "https://shop.example/mug");
+    await userEvent.click(linkField());
+    await userEvent.paste("https://shop.example/mug");
     await waitFor(() => expect(nameField().value).toBe("Mug"));
     expect(priceField().value).toBe("12.00");
-    expect(read).toHaveBeenLastCalledWith("https://shop.example/mug");
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(read).toHaveBeenCalledWith("https://shop.example/mug");
+  });
+
+  it("reads a typed link once, when you leave the field, not on every keystroke", async () => {
+    const { read } = setup();
+    await userEvent.type(linkField(), "https://shop.example/mug");
+    expect(read).not.toHaveBeenCalled();
+    await userEvent.tab();
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+    expect(read).toHaveBeenCalledWith("https://shop.example/mug");
+  });
+
+  it("lets a second link replace what the first one filled in, photo included", async () => {
+    const read = vi.fn(
+      async (url: string): Promise<Read> =>
+        url.endsWith("/a")
+          ? { ok: true, name: "Mug A", priceCents: 100, imageUrl: "https://shop.example/a.jpg", productUrl: url }
+          : { ok: true, name: "Mug B", priceCents: 200, imageUrl: null, productUrl: url },
+    );
+    setup({ read });
+    await userEvent.click(linkField());
+    await userEvent.paste("https://shop.example/a");
+    await waitFor(() => expect(nameField().value).toBe("Mug A"));
+    await userEvent.clear(linkField());
+    await userEvent.paste("https://shop.example/b");
+    await waitFor(() => expect(nameField().value).toBe("Mug B"));
+    expect(priceField().value).toBe("2.00");
+    expect((document.querySelector('input[name="image"]') as HTMLInputElement).value).toBe("");
+  });
+
+  it("drops the old link's photo once the link is cleared", async () => {
+    setup({
+      read: vi.fn(async (): Promise<Read> => ({ ok: true, name: "Mug", priceCents: 100, imageUrl: "https://shop.example/m.jpg", productUrl: "https://shop.example/mug" })),
+    });
+    await userEvent.click(linkField());
+    await userEvent.paste("https://shop.example/mug");
+    const image = () => (document.querySelector('input[name="image"]') as HTMLInputElement).value;
+    await waitFor(() => expect(image()).toBe("https://shop.example/m.jpg"));
+    await userEvent.clear(linkField());
+    expect(image()).toBe("");
   });
 
   it("leaves a typed name alone when the read fails or comes back", async () => {
     setup({ read: vi.fn(async (): Promise<Read> => ({ ok: false, error: "nope" })) });
     await userEvent.type(nameField(), "My name");
-    await userEvent.type(linkField(), "https://shop.example/mug");
+    await userEvent.click(linkField());
+    await userEvent.paste("https://shop.example/mug");
     await waitFor(() => expect(linkField().value).toBe("https://shop.example/mug"));
     expect(nameField().value).toBe("My name");
   });
@@ -61,7 +103,8 @@ describe("SavedGifts", () => {
   it("doesn't overwrite a name typed before the read came back", async () => {
     setup();
     await userEvent.type(nameField(), "Blue mug for Dad");
-    await userEvent.type(linkField(), "https://shop.example/mug");
+    await userEvent.click(linkField());
+    await userEvent.paste("https://shop.example/mug");
     await waitFor(() => expect(priceField().value).toBe("12.00"));
     expect(nameField().value).toBe("Blue mug for Dad");
   });

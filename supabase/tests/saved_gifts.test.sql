@@ -3,7 +3,7 @@
 -- the cap and live people, so a script using the API can't skip them.
 begin;
 \ir _helpers.psql
-select plan(20);
+select plan(22);
 
 select tests.create_user('buyer@example.com', 'Buyer') as buyer \gset
 select tests.create_user('other@example.com', 'Other') as other \gset
@@ -101,6 +101,22 @@ select public.delete_person(:'mom');
 select throws_ok(
   format($q$insert into concierge.saved_gifts (person_id, name) values (%L, 'Too late')$q$, :'mom'),
   'P0002', null, 'nothing saves against a deleted person'
+);
+
+-- Saving as someone else tells nothing about their people: not whether one
+-- is deleted (P0002) or at the cap (P0001), only "not allowed".
+select tests.act_as(:'other');
+select throws_ok(
+  format($q$insert into concierge.saved_gifts (person_id, user_id, name) values (%L, %L, 'Probe')$q$, :'mom', :'buyer'),
+  '42501', null, 'saving as the buyer against their deleted person says only "not allowed"'
+);
+select tests.reset_role();
+update concierge.app_settings set value = '0' where key = 'saved_gifts_max';
+insert into concierge.app_settings (key, value, description) values ('saved_gifts_max', '0', 'test') on conflict (key) do update set value = '0';
+select tests.act_as(:'other');
+select throws_ok(
+  format($q$insert into concierge.saved_gifts (person_id, user_id, name) values (%L, %L, 'Probe')$q$, :'person', :'buyer'),
+  '42501', null, 'saving as the buyer against their person at the cap says only "not allowed"'
 );
 
 select tests.act_as_server();

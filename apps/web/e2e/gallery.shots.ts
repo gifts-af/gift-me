@@ -2,10 +2,10 @@ import { execSync } from "node:child_process";
 import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { createFreshUser } from "./fresh-user";
 import { localSupabase } from "./local-supabase";
-import { addMother, saveOneGiftList } from "./seed";
+import { addMother, addSavedGift, saveOneGiftList } from "./seed";
 import { signIn, session, type Credentials } from "./sign-in";
 
 // Screenshots for the gallery (ALL-000, see playwright.gallery.config.ts).
@@ -15,6 +15,8 @@ const GALLERY_DIR = path.resolve(__dirname, "../gallery");
 async function shoot(page: Page, name: string) {
   // Not "networkidle": the Turnstile widget keeps Chromium busy on the form pages.
   await page.waitForLoadState("load");
+  // Streamed pages show "Loading…" first; shoot what follows it.
+  await expect(page.getByText("Loading…", { exact: true })).toHaveCount(0, { timeout: 15_000 });
   await page.evaluate(() => document.fonts.ready);
   const file = path.join(GALLERY_DIR, test.info().project.name, `${name}.png`);
   await page.screenshot({ path: file, fullPage: true, animations: "disabled" });
@@ -30,7 +32,7 @@ const SIGNED_OUT: [name: string, url: string][] = [
   ["forgot-password", "/auth/forgot-password"],
 ];
 
-// Filled in by beforeAll: a fresh account with one person and a one-gift list.
+// Filled in by beforeAll: a fresh account with one person (with a saved gift) and a one-gift list.
 type Seeded = { user: Credentials; personId: string; shareToken: string };
 const SIGNED_IN: [name: string, url: (s: Seeded) => string][] = [
   ["home", () => "/"],
@@ -55,6 +57,7 @@ test.describe("signed in", () => {
   test.beforeAll(async () => {
     const user = await createFreshUser();
     const personId = await addMother(user, "Mom");
+    await addSavedGift(user, personId, "Fly-fishing reel");
     await saveOneGiftList(user);
     seeded = { user, personId, shareToken: await shareToken(user) };
   });
