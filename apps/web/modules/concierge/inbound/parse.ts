@@ -34,14 +34,15 @@ export function stripQuoted(text: string): string {
   return kept.join("\n").trim();
 }
 
-const FORWARD_MARKER = /^-{2,}\s*(Forwarded message|Original Message)\s*-{2,}$/i;
+// Gmail and Outlook dashes, Apple Mail's "Begin forwarded message:", new Outlook's underscore line.
+const FORWARD_MARKER = /^(-{2,}\s*(Forwarded message|Original Message)\s*-{2,}|Begin forwarded message:|_{10,})$/i;
 const FORWARD_HEADER = /^(From|To|Cc|Bcc|Sent|Date|Subject):/i;
 const EMAIL_ADDRESS = /[\p{L}\p{N}._%+'-]+@[\p{L}\p{N}-]+(\.[\p{L}\p{N}-]+)+/giu;
 
 /**
  * Keeps other people's details out of the saved note and the AI (T42): drops the header lines
- * (From:, To:, Cc:, Bcc:, Sent:, Date:, Subject:) right after a "Forwarded message" or
- * "Original Message" line, and turns every email address left in the text into "[email]".
+ * (From:, To:, Cc:, Bcc:, Sent:, Date:, Subject:) right after a forward marker ("Forwarded message",
+ * "Original Message", "Begin forwarded message:" or a line of underscores), and turns every email address left in the text into "[email]".
  */
 export function redactForwardHeaders(text: string): string {
   const kept: string[] = [];
@@ -60,7 +61,12 @@ export function redactForwardHeaders(text: string): string {
     }
     kept.push(line);
   }
-  return kept.join("\n").replace(EMAIL_ADDRESS, "[email]");
+  return redactEmailAddresses(kept.join("\n"));
+}
+
+/** Every email address in the text becomes "[email]" (T42). */
+export function redactEmailAddresses(text: string): string {
+  return text.replace(EMAIL_ADDRESS, "[email]");
 }
 
 const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");

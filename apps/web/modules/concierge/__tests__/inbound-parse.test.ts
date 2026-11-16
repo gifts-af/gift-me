@@ -61,6 +61,16 @@ describe("redactForwardHeaders (T42)", () => {
     expect(redactForwardHeaders(text)).toBe(["Idea", "-----Original Message-----", "Scarves on sale"].join("\n"));
   });
 
+  it("drops the header lines of an Apple Mail forward", () => {
+    const text = ["For Mom", "", "Begin forwarded message:", "", "From: Ann Lee <ann@shop.example>", "Subject: Scarves", "Date: November 16, 2026", "To: Me <me@example.com>", "", "Scarves on sale"].join("\n");
+    expect(redactForwardHeaders(text)).toBe(["For Mom", "", "Begin forwarded message:", "", "", "Scarves on sale"].join("\n"));
+  });
+
+  it("drops the header lines after new Outlook's underscore separator", () => {
+    const text = ["For Mom", "________________________________", "From: Ann Lee <ann@shop.example>", "Sent: Monday", "To: Me", "Cc: Jim Smith", "Subject: Scarves", "", "Scarves on sale"].join("\n");
+    expect(redactForwardHeaders(text)).toBe(["For Mom", "________________________________", "", "Scarves on sale"].join("\n"));
+  });
+
   it("keeps header-like lines outside a forwarded block", () => {
     const text = ["To: Mom", "Subject: her birthday"].join("\n");
     expect(redactForwardHeaders(text)).toBe(text);

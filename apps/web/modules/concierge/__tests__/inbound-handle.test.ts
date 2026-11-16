@@ -226,6 +226,11 @@ describe("handleInbound: filing", () => {
     expect(row.text).not.toMatch(/^From:/m);
   });
 
+  it("redacts addresses in the subject before it becomes the capture title (T42)", async () => {
+    expect(await receive("e1", email({ subject: "Fwd: ann@shop.example", text: "Dad wants a new fly rod" }))).toBe("filed");
+    expect(captures.rows[0].title).toBe("Fwd: [email]");
+  });
+
   it("cuts the text to the capture limit", async () => {
     captures.limitValues = { ...captures.limitValues, textMaxChars: 10 };
     await receive("e1", email({ text: "Dad wants a new fly rod" }));
@@ -363,6 +368,11 @@ describe("handleInbound: asking", () => {
     const text = ["a fly rod", "---------- Forwarded message ----------", "From: shop@example.com", "To: me@example.com", "In stock, ask help@shop.example"].join("\n");
     expect(await receive("e1", email({ text }))).toBe("asking");
     expect(store.asking[0].body).toBe(["a fly rod", "---------- Forwarded message ----------", "In stock, ask [email]"].join("\n"));
+  });
+
+  it("redacts addresses in the subject of an asking note (T42)", async () => {
+    expect(await receive("e1", email({ subject: "Fwd: from ann@shop.example", text: "a fly rod" }))).toBe("asking");
+    expect(store.asking[0].subject).toBe("Fwd: from [email]");
   });
 
   it("cuts the asking body to the capture limit", async () => {

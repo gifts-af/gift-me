@@ -13,6 +13,7 @@ import {
   isAutoReply,
   looksLikeCancel,
   matchPeople,
+  redactEmailAddresses,
   redactForwardHeaders,
   senderVerified,
   stripQuoted,
@@ -107,7 +108,8 @@ async function accept(ctx: Ctx, email: ReceivedEmail): Promise<InboundOutcome> {
   const { deps, emailId, userId, settings } = ctx;
   const captures = deps.captureStore(userId);
   const limits = await captures.limits();
-  const subject = email.subject.trim();
+  // The title of a filed note and the subject of an asking one: no addresses either (T42).
+  const subject = redactEmailAddresses(email.subject.trim());
   // Saved for both filing and asking, and later read by the AI: no forwarded headers or addresses.
   const text = redactForwardHeaders(stripQuoted(email.text)).slice(0, limits.textMaxChars);
   const image = await loadImage(ctx, email.attachments, limits.screenshotMaxBytes);
