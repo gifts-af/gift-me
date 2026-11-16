@@ -37,7 +37,8 @@ async function readZone(userId: string): Promise<string | null> {
 
 // The Settings row for a label (a link row, or the time zone row's picker).
 const zoneRow = (page: Page) => page.getByLabel("Time zone");
-const zoneValue = (page: Page) => page.locator("span[id$=\"-value\"]");
+// The value text inside the time zone row (the select's parent), not any other span.
+const zoneValue = (page: Page) => zoneRow(page).locator("xpath=..").locator("span[id$=\"-value\"]");
 
 for (const saved of [true, false]) {
   test(`@layout settings loads without a hydration error ${saved ? "with" : "without"} a saved zone`, async ({ page }) => {
@@ -111,9 +112,9 @@ test("picking a time zone saves it", async ({ page }) => {
   await page.goto("/settings");
   await zoneRow(page).selectOption("Asia/Tokyo");
   await expect(page.getByText("Saved", { exact: true })).toBeVisible();
-  await expect(page.locator("span[id$=\"-value\"]", { hasText: "Asia/Tokyo" })).toBeVisible();
+  await expect(zoneValue(page)).toHaveText("Asia/Tokyo");
   await page.reload();
-  await expect(page.locator("span[id$=\"-value\"]", { hasText: "Asia/Tokyo" })).toBeVisible();
+  await expect(zoneValue(page)).toHaveText("Asia/Tokyo");
   expect(await readZone((await session(user)).user.id)).toBe("Asia/Tokyo");
 });
 
