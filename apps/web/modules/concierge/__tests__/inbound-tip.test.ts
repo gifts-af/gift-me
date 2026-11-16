@@ -32,6 +32,7 @@ function deps(): TipDeps {
 
 beforeEach(() => {
   inbound = new FakeInboundStore();
+  inbound.paid.add(USER);
   notifyStore = new FakeStore();
   notifyStore.recipients.set(USER, { email: "me@example.com", timezone: "America/New_York" });
   sent = [];
@@ -54,6 +55,20 @@ describe("sendNotesTipOnce (AC-15)", () => {
     await sendNotesTipOnce(USER, { id: "p1", name: "Dad" }, deps());
     await sendNotesTipOnce(USER, { id: "p2", name: "Mom" }, deps());
     expect(sent).toHaveLength(1);
+  });
+
+  it("sends nothing to an unpaid account and leaves the flag unclaimed", async () => {
+    inbound.paid.delete(USER);
+    await sendNotesTipOnce(USER, { id: "p1", name: "Dad" }, deps());
+    expect(sent).toHaveLength(0);
+    expect(inbound.flags.size).toBe(0);
+  });
+
+  it("sends nothing while inbound email is off and leaves the flag unclaimed", async () => {
+    inbound.isEnabled = false;
+    await sendNotesTipOnce(USER, { id: "p1", name: "Dad" }, deps());
+    expect(sent).toHaveLength(0);
+    expect(inbound.flags.size).toBe(0);
   });
 
   it("logs a failed send and does not throw", async () => {
