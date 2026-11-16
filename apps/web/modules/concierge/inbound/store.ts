@@ -9,6 +9,10 @@ export type InboundSettings = {
   maxPerDay: number;
   /** inbound_link_hours: how long the "Who is this about?" buttons work. */
   linkHours: number;
+  /** inbound_thread_lookup_max: most sent emails read back from Resend to match a reply. */
+  threadLookupMax: number;
+  /** inbound_thread_lookup_days: how far back those sent emails go. */
+  threadLookupDays: number;
 };
 
 /** A note waiting on "Who is this about?". `body` is already cut to the capture text limit. */

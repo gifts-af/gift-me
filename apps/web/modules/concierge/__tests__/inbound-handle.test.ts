@@ -276,6 +276,34 @@ describe("handleInbound: filing", () => {
     expect(store.events).toEqual([USER, USER]);
   });
 
+  it("reads back only as many sent emails as inbound_thread_lookup_max allows", async () => {
+    store.config = { ...store.config, threadLookupMax: 1 };
+    store.notifications.push(
+      { id: "n1", userId: USER, personId: BOB, providerMessageId: "r1", messageId: null },
+      { id: "n2", userId: USER, personId: DAD, providerMessageId: "r2", messageId: null },
+    );
+    messageIds.set("r1", "<bob@ses.example>");
+    messageIds.set("r2", "<dad@ses.example>");
+    await receive("e1", email({ text: "socks please", headers: { "In-Reply-To": "<dad@ses.example>" } }));
+    expect(fetched).not.toContain("https://api.resend.com/emails/r2");
+    expect(store.calls).toContain("people");
+  });
+
+  it("fails, not ignores, when saving the capture fails", async () => {
+    captures.failInsert = true;
+    expect(await receive("e1", email())).toBe("failed");
+    expect(events("inbound.failed")).toMatchObject([{ email_id: "e1", user_id: USER, status: 500 }]);
+    expect(events("inbound.ignored")).toEqual([]);
+  });
+
+  it("fails when a store call throws after accepting", async () => {
+    store.people = async () => {
+      throw new Error("db down");
+    };
+    expect(await receive("e1", email({ text: "a fly rod" }))).toBe("failed");
+    expect(events("inbound.failed")).toMatchObject([{ email_id: "e1", user_id: USER, name: "Error" }]);
+  });
+
   it("keeps a filed note when reading it fails", async () => {
     extract.mockRejectedValue(new Error("model down"));
     expect(await receive("e1", email())).toBe("filed");
@@ -319,6 +347,16 @@ describe("handleInbound: asking", () => {
     expect(notifyStore.links).toMatchObject([{ personId: DAD }]);
   });
 
+  it("asks with only \"Someone else\" when the user has no people", async () => {
+    store.peopleOf.set(USER, []);
+    expect(await receive("e1", email({ text: "a fly rod" }))).toBe("asking");
+    expect(notifyStore.links).toEqual([]);
+    expect(sent).toHaveLength(1);
+    expect(sent[0].text).toContain("Someone else");
+    expect(sent[0].text).toContain("https://giftsaf.test/people");
+    expect(sent[0].text).not.toContain("/a/");
+  });
+
   it("cuts the asking body to the capture limit", async () => {
     captures.limitValues = { ...captures.limitValues, textMaxChars: 5 };
     await receive("e1", email({ text: "a fly rod" }));
@@ -327,6 +365,14 @@ describe("handleInbound: asking", () => {
 });
 
 describe("handleInbound: mail loops", () => {
+  it("doesn't send a reply that would go over the daily cap (AC-11)", async () => {
+    for (let i = 0; i < 19; i++) await store.recordEvent(USER);
+    expect(await receive("e1", email({ text: "Don't buy Dad socks anymore" }))).toBe("cancel_reply");
+    expect(store.events.length).toBeLessThanOrEqual(20);
+    expect(sent).toEqual([]);
+    expect(events("inbound.reply_capped")).toMatchObject([{ email_id: "e1", kind: "notes_cant_cancel" }]);
+  });
+
   it("sends at most the daily cap back across 25 messages (AC-11)", async () => {
     for (let i = 0; i < 25; i++) await receive(`e${i}`, email({ text: "no names here" }));
     expect(sent.length).toBeLessThanOrEqual(20);

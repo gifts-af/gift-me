@@ -4,7 +4,7 @@
 -- and only the server can do any of it.
 begin;
 \ir _helpers.psql
-select plan(24);
+select plan(26);
 
 select tests.create_user('notes-a@example.com') as a \gset
 select tests.create_user('notes-b@example.com') as b \gset
@@ -27,6 +27,8 @@ select is(concierge.setting_int('inbound_email_enabled'), 1, 'inbound_email_enab
 select is(concierge.setting_int('inbound_match_max_choices'), 5, 'inbound_match_max_choices is 5');
 select is(concierge.setting_int('inbound_max_per_user_per_day'), 20, 'inbound_max_per_user_per_day is 20');
 select is(concierge.setting_int('inbound_link_hours'), 72, 'inbound_link_hours is 72');
+select is(concierge.setting_int('inbound_thread_lookup_max'), 10, 'inbound_thread_lookup_max is 10');
+select is(concierge.setting_int('inbound_thread_lookup_days'), 60, 'inbound_thread_lookup_days is 60');
 
 -- ─── one-time account flags ─────────────────────────────────────────────────
 insert into concierge.accounts (user_id) values (:'b');

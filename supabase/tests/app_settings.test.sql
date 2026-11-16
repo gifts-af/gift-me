@@ -43,7 +43,8 @@ select set_eq(
     'zinc_timeout_ms', 'zinc_poll_claim_seconds', 'placing_stale_minutes', 'zinc_place_budget_ms',
     'zinc_retry_attempts', 'zinc_retry_base_ms', 'zinc_webhook_max_bytes',
     'zinc_topup_fee_bps', 'zinc_topup_fee_fixed_cents', 'check_address_link_days', 'check_address_retry_days',
-    'inbound_email_enabled', 'inbound_match_max_choices', 'inbound_max_per_user_per_day', 'inbound_link_hours'
+    'inbound_email_enabled', 'inbound_match_max_choices', 'inbound_max_per_user_per_day', 'inbound_link_hours',
+    'inbound_thread_lookup_max', 'inbound_thread_lookup_days'
   ],
   'every fee, limit, default and schedule setting is seeded'
 );

@@ -37,6 +37,8 @@ export function createSupabaseInboundStore(db: SupabaseClient<Database>): Inboun
         maxChoices: await setting("inbound_match_max_choices"),
         maxPerDay: await setting("inbound_max_per_user_per_day"),
         linkHours: await setting("inbound_link_hours"),
+        threadLookupMax: await setting("inbound_thread_lookup_max"),
+        threadLookupDays: await setting("inbound_thread_lookup_days"),
       };
     },
 

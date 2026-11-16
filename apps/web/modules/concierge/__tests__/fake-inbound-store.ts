@@ -5,7 +5,7 @@ type FakeNotification = { id: string; userId: string; personId: string | null; p
 /** In-memory InboundStore for unit tests. The Supabase one is tested against the local database. */
 export class FakeInboundStore implements InboundStore {
   isEnabled = true;
-  config: InboundSettings = { maxChoices: 5, maxPerDay: 20, linkHours: 72 };
+  config: InboundSettings = { maxChoices: 5, maxPerDay: 20, linkHours: 72, threadLookupMax: 10, threadLookupDays: 60 };
   /** Lower-case email -> user id. */
   accounts = new Map<string, string>();
   paid = new Set<string>();

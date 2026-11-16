@@ -2,19 +2,28 @@ import { randomUUID } from "node:crypto";
 import type { Extract } from "@/lib/ai/extract";
 import { errorFields, logEvent } from "@/lib/log";
 import { fetchMessageId } from "@/lib/resend";
-import { fetchAttachment, fetchReceivedEmail, type Deps as ResendDeps } from "@/lib/resend-inbound";
+import { fetchAttachment, fetchReceivedEmail, type Deps as ResendDeps, type ReceivedEmail } from "@/lib/resend-inbound";
 import { IMAGE_EXTENSIONS, saveNoteCapture } from "../capture/capture";
 import { processCapture } from "../capture/extract";
 import type { CaptureStore } from "../capture/store";
 import { notify, type LinkSpec, type NotifyDeps, type NotifyInput } from "../notify/notify";
 import type { NotificationKind } from "../notify/templates";
 import { firstImage, isAutoReply, looksLikeCancel, matchPeople, senderVerified, stripQuoted } from "./parse";
-import type { InboundStore } from "./store";
+import type { InboundSettings, InboundStore } from "./store";
 
 // One emailed note, start to finish (ALL-31): decide whether to take it, then file it to
 // a person, ask who it's about, or drop it. Events carry ids and a reason only (E6).
 
-export type InboundOutcome = "filed" | "asking" | "ignored" | "unpaid" | "capped" | "cancel_reply" | "disabled";
+export type InboundOutcome =
+  | "filed"
+  | "asking"
+  | "ignored"
+  | "unpaid"
+  | "capped"
+  | "cancel_reply"
+  | "disabled"
+  /** Accepted, but saving it failed; logged as inbound.failed. */
+  | "failed";
 
 export type InboundDeps = {
   store: InboundStore;
@@ -27,14 +36,11 @@ export type InboundDeps = {
   notify: NotifyDeps;
 };
 
-/**
- * How far back a reply's In-Reply-To is looked for among notifications whose Message-ID was
- * never read back: Resend sets it about a second after sending, so most rows have none. Bounded
- * because each candidate is one Resend call; a reply to anything older falls back to names.
- */
-const THREAD_LOOKUP = { maxNotifications: 10, maxAgeDays: 60 } as const;
+/** What every step after the sender is known needs. */
+type Ctx = { deps: InboundDeps; emailId: string; userId: string; settings: InboundSettings };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
 
 export async function handleInbound(emailId: string, deps: InboundDeps): Promise<InboundOutcome> {
   const { store } = deps;
@@ -67,41 +73,52 @@ export async function handleInbound(emailId: string, deps: InboundDeps): Promise
     ignored("capped", userId);
     return "capped";
   }
+  const ctx: Ctx = { deps, emailId, userId, settings };
 
   // Reading costs money (ALL-94): nothing is kept, and the user is told once ever.
   if (!(await store.hasPaidFeatures(userId))) {
     ignored("unpaid", userId);
     if (await store.claimFlag(userId, "notes_unpaid_reply_sent_at")) {
-      await sendBack(deps, emailId, { userId, kind: "notes_not_read", data: {}, links: {} });
+      await sendBack(ctx, { userId, kind: "notes_not_read", data: {}, links: {} });
     }
     return "unpaid";
   }
 
   await store.recordEvent(userId);
+  try {
+    return await accept(ctx, email);
+  } catch (err) {
+    logEvent("inbound.failed", { email_id: emailId, user_id: userId, ...errorFields(err) });
+    return "failed";
+  }
+}
 
+/** An accepted note: file it to the one person it's about, or ask who. */
+async function accept(ctx: Ctx, email: ReceivedEmail): Promise<InboundOutcome> {
+  const { deps, emailId, userId, settings } = ctx;
   const captures = deps.captureStore(userId);
   const limits = await captures.limits();
   const subject = email.subject.trim();
   const text = stripQuoted(email.text).slice(0, limits.textMaxChars);
-  const image = await loadImage(deps, emailId, userId, email.attachments, limits.screenshotMaxBytes);
+  const image = await loadImage(ctx, email.attachments, limits.screenshotMaxBytes);
 
-  let personId = email.inReplyTo ? await personForReply(deps, userId, email.inReplyTo) : null;
+  let personId = email.inReplyTo ? await personForReply(ctx, email.inReplyTo) : null;
   const matchedBy = personId ? "reply" : "name";
   if (!personId) {
-    const people = await store.people(userId);
+    const people = await deps.store.people(userId);
     const matched = matchPeople(subject, text, people);
     if (matched.length === 1) personId = matched[0];
     else {
       // Several names: offer those. None: offer everyone.
       const offered = matched.length > 1 ? people.filter((p) => matched.includes(p.id)) : people;
-      return ask(deps, emailId, userId, settings, { subject, text, image }, offered.slice(0, settings.maxChoices));
+      return ask(ctx, { subject, text, image }, offered.slice(0, settings.maxChoices));
     }
   }
 
   const saved = await saveNoteCapture(captures, { personId, title: subject, text, image });
   if (!saved.ok) {
-    logEvent("inbound.save_failed", { email_id: emailId, user_id: userId, person_id: personId, status: saved.status });
-    return "ignored";
+    logEvent("inbound.failed", { email_id: emailId, user_id: userId, person_id: personId, status: saved.status });
+    return "failed";
   }
   logEvent("inbound.filed", {
     email_id: emailId,
@@ -119,7 +136,7 @@ export async function handleInbound(emailId: string, deps: InboundDeps): Promise
   }
 
   if (looksLikeCancel(`${subject}\n${text}`)) {
-    await sendBack(deps, emailId, { userId, kind: "notes_cant_cancel", data: {}, links: {} });
+    await sendBack(ctx, { userId, kind: "notes_cant_cancel", data: {}, links: {} });
     return "cancel_reply";
   }
   return "filed";
@@ -129,35 +146,35 @@ type Image = { bytes: Uint8Array; type: string };
 
 /** The first image under the size limit, or null. A failed download files the note without it. */
 async function loadImage(
-  deps: InboundDeps,
-  emailId: string,
-  userId: string,
+  ctx: Ctx,
   attachments: { id: string; content_type: string; size: number }[],
   maxBytes: number,
 ): Promise<Image | null> {
   const ref = firstImage(attachments, maxBytes);
   if (!ref) return null;
   try {
-    const { bytes } = await fetchAttachment(emailId, ref.id, deps.resend, maxBytes);
+    const { bytes } = await fetchAttachment(ctx.emailId, ref.id, ctx.deps.resend, maxBytes);
     return { bytes, type: ref.content_type };
   } catch (err) {
-    logEvent("inbound.image_failed", { email_id: emailId, user_id: userId, ...errorFields(err) });
+    logEvent("inbound.image_failed", { email_id: ctx.emailId, user_id: ctx.userId, ...errorFields(err) });
     return null;
   }
 }
 
 /**
- * The person on the notification this email replies to. Our sent notifications usually have no
- * Message-ID saved yet, so on a miss the recent ones are read back from Resend, saved, and the
- * lookup is tried again.
+ * The person on the notification this email replies to. Resend sets an email's Message-ID a
+ * moment after sending, so most notifications have none saved: on a miss the recent ones
+ * (inbound_thread_lookup_max, within inbound_thread_lookup_days) are read back from Resend,
+ * saved, and the lookup is tried again. A reply to anything older falls back to names.
  */
-async function personForReply(deps: InboundDeps, userId: string, inReplyTo: string): Promise<string | null> {
+async function personForReply(ctx: Ctx, inReplyTo: string): Promise<string | null> {
+  const { deps, userId, settings } = ctx;
   const { store } = deps;
   const found = await store.personForMessageId(userId, inReplyTo);
   if (found) return found;
 
-  const since = new Date(deps.notify.now.getTime() - THREAD_LOOKUP.maxAgeDays * DAY_MS);
-  const pending = await store.unthreadedNotifications(userId, since, THREAD_LOOKUP.maxNotifications);
+  const since = new Date(deps.notify.now.getTime() - settings.threadLookupDays * DAY_MS);
+  const pending = await store.unthreadedNotifications(userId, since, settings.threadLookupMax);
   let backfilled = false;
   for (const n of pending) {
     const messageId = await fetchMessageId(n.providerMessageId, deps.resend);
@@ -170,13 +187,11 @@ async function personForReply(deps: InboundDeps, userId: string, inReplyTo: stri
 
 /** Saves the note as asking, with its image in storage, and sends "Who is this about?". */
 async function ask(
-  deps: InboundDeps,
-  emailId: string,
-  userId: string,
-  settings: { linkHours: number },
+  ctx: Ctx,
   note: { subject: string; text: string; image: Image | null },
   choices: { id: string; name: string }[],
 ): Promise<InboundOutcome> {
+  const { deps, emailId, userId, settings } = ctx;
   const { store } = deps;
   let imagePath: string | null = null;
   if (note.image) {
@@ -198,12 +213,12 @@ async function ask(
   });
   logEvent("inbound.asking", { email_id: emailId, user_id: userId, inbound_message_id: messageId, choices: choices.length });
 
-  const expiresAt = new Date(deps.notify.now.getTime() + settings.linkHours * 60 * 60 * 1000);
+  const expiresAt = new Date(deps.notify.now.getTime() + settings.linkHours * HOUR_MS);
   const links: Record<string, LinkSpec> = { someoneElse: { path: "/people" } };
   choices.forEach((c, i) => {
     links[`choice${i}`] = { action: "file_note", expiresAt, personId: c.id, inboundMessageId: messageId };
   });
-  await sendBack(deps, emailId, {
+  await sendBack(ctx, {
     userId,
     kind: "who_is_this",
     data: { subject: note.subject, choices: choices.map((c) => ({ name: c.name })) },
@@ -213,13 +228,19 @@ async function ask(
 }
 
 /**
- * Every email sent back counts toward the daily cap, counted before sending so a failing send
- * can't loop uncounted. A failed send is logged; the note itself is already handled.
+ * Every email sent back counts toward the daily cap, so a reply that would go over it isn't
+ * sent (AC-11). It's counted before sending so a failing send can't loop uncounted. A failed
+ * send is logged; the note itself is already handled.
  */
-async function sendBack<K extends NotificationKind>(deps: InboundDeps, emailId: string, input: NotifyInput<K>) {
-  const ids = { email_id: emailId, user_id: input.userId, kind: input.kind };
+async function sendBack<K extends NotificationKind>(ctx: Ctx, input: NotifyInput<K>) {
+  const { deps, emailId, userId, settings } = ctx;
+  const ids = { email_id: emailId, user_id: userId, kind: input.kind };
   try {
-    await deps.store.recordEvent(input.userId);
+    if ((await deps.store.countToday(userId)) >= settings.maxPerDay) {
+      logEvent("inbound.reply_capped", ids);
+      return;
+    }
+    await deps.store.recordEvent(userId);
     const result = await notify(input, deps.notify);
     if (!result.ok) logEvent("inbound.reply_failed", ids);
   } catch (err) {

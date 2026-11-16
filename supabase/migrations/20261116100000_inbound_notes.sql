@@ -165,5 +165,7 @@ insert into concierge.app_settings (key, value, description) values
   ('inbound_email_enabled', '1', '1 accepts notes emailed to the notes address; 0 answers the webhook and only logs (off switch).'),
   ('inbound_match_max_choices', '5', 'Most people offered as buttons in a "Who is this about?" email.'),
   ('inbound_max_per_user_per_day', '20', 'Most emailed notes accepted plus emails sent back per user per day; more are dropped.'),
-  ('inbound_link_hours', '72', 'Hours the "Who is this about?" buttons keep working.')
+  ('inbound_link_hours', '72', 'Hours the "Who is this about?" buttons keep working.'),
+  ('inbound_thread_lookup_max', '10', 'Most recent sent emails whose Message-ID is read back from Resend when a reply matches none (one Resend call each).'),
+  ('inbound_thread_lookup_days', '60', 'How many days back a reply''s In-Reply-To is looked for among sent emails with no Message-ID yet.')
 on conflict (key) do nothing;

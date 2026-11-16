@@ -135,7 +135,7 @@ describe.skipIf(!dbUp)("createSupabaseInboundStore", () => {
 
   it("reads its settings", async () => {
     const s = store();
-    expect(await s.settings()).toEqual({ maxChoices: 5, maxPerDay: 20, linkHours: 72 });
+    expect(await s.settings()).toEqual({ maxChoices: 5, maxPerDay: 20, linkHours: 72, threadLookupMax: 10, threadLookupDays: 60 });
     expect(typeof (await s.enabled())).toBe("boolean");
   });
 });
