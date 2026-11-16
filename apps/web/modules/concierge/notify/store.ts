@@ -49,10 +49,9 @@ export interface NotifyStore {
     kind: NotificationKind;
     channel: string;
   }): Promise<string>;
-  /** `messageId`: the Message-ID header it went out with, when known (ALL-31; nothing passes it yet). */
   finishNotification(
     id: string,
-    result: { sentAt: Date; providerMessageId: string; messageId?: string | null } | { error: string },
+    result: { sentAt: Date; providerMessageId: string } | { error: string },
   ): Promise<void>;
   attachLinks(hashes: string[], notificationId: string): Promise<void>;
   findLink(hash: string): Promise<LinkRow | null>;
@@ -172,11 +171,7 @@ export function createSupabaseNotifyStore(db: SupabaseClient<Database> = createA
       const update =
         "error" in result
           ? { error: result.error }
-          : {
-              sent_at: result.sentAt.toISOString(),
-              provider_message_id: result.providerMessageId,
-              ...(result.messageId ? { message_id: result.messageId } : {}),
-            };
+          : { sent_at: result.sentAt.toISOString(), provider_message_id: result.providerMessageId };
       const { error } = await concierge.from("notifications").update(update).eq("id", id);
       if (error) fail("Updating the notification failed", error);
     },

@@ -55,7 +55,7 @@
 
 ### What changes in the code and schema
 
-- `concierge.inbound_messages` stores only messages waiting on "Who is this about?" (`asking`, then `filed`); add `notification_id`, `capture_id`, `image_path`, `image_type`; drop `from_address`. Dedupe is a separate `inbound_seen` table with no personal data. Subject and body are cleared when filed, and unfiled ones when their links expire.
+- `concierge.inbound_messages` stores only messages waiting on "Who is this about?" (`asking`, then `filed`); add `capture_id`, `image_path`, `image_type`; drop `from_address`. Dedupe is a separate `inbound_seen` table with no personal data. Subject and body are cleared when filed, and unfiled ones when their links expire.
 - `action_links`: add `inbound_message_id` and `person_id`, and a `file_note` action whose `run` gets them.
 - Capture saving: a server-side path that sets `user_id` itself (the webhook has no signed-in user), allows no URL and no screenshot, and records the image's real type. Capture reading passes the image's real media type instead of always `image/jpeg`.
 - `notifications`: a reply's `In-Reply-To` is looked up against the provider message id we already store.
@@ -123,7 +123,7 @@
 - [ ] Run it inside one rolled-back transaction in the `supabase_db_gift-me` container; expect failures.
 - [ ] Write the migration:
   - `concierge.inbound_seen (provider_email_id text primary key, created_at timestamptz default now())`, no personal data, service role only. The tick prunes rows older than 7 days (Task 10).
-  - `inbound_messages`: add `notification_id`, `capture_id` (`on delete set null`), `image_path`, `image_type`; drop `from_address` and `attachments`; status check `in ('asking','filed')` (only asking messages are stored).
+  - `inbound_messages`: add `capture_id` (`on delete set null`), `image_path`, `image_type`; drop `from_address` and `attachments`; status check `in ('asking','filed')` (only asking messages are stored).
   - `notifications`: add `person_id uuid` with FK `(person_id, user_id)` to `public.people` `on delete set null (person_id)`, and `message_id text unique` (the `Message-ID` header we set). `provider_message_id` keeps meaning Resend's id.
   - `action_links`: add `inbound_message_id uuid references concierge.inbound_messages on delete cascade` and `person_id uuid` with FK `(person_id, user_id)` to `public.people` `on delete cascade`.
   - `captures`: add `screenshot_type text` (null means `image/jpeg`, as today).

@@ -10,7 +10,6 @@ export type FakeNotification = {
   channel: string;
   sentAt: Date | null;
   providerMessageId: string | null;
-  messageId: string | null;
   error: string | null;
 };
 
@@ -95,13 +94,13 @@ export class FakeStore implements NotifyStore {
     channel: string;
   }) {
     const id = `n${this.notifications.length + 1}`;
-    this.notifications.push({ id, ...row, sentAt: null, providerMessageId: null, messageId: null, error: null });
+    this.notifications.push({ id, ...row, sentAt: null, providerMessageId: null, error: null });
     return id;
   }
 
   async finishNotification(
     id: string,
-    result: { sentAt: Date; providerMessageId: string; messageId?: string | null } | { error: string },
+    result: { sentAt: Date; providerMessageId: string } | { error: string },
   ) {
     const n = this.notifications.find((x) => x.id === id);
     if (!n) throw new Error(`No notification ${id}`);
@@ -109,7 +108,6 @@ export class FakeStore implements NotifyStore {
     else {
       n.sentAt = result.sentAt;
       n.providerMessageId = result.providerMessageId;
-      n.messageId = result.messageId ?? null;
     }
   }
 

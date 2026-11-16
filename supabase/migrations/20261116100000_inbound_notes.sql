@@ -38,7 +38,6 @@ grant all on concierge.inbound_events to service_role;
 alter table concierge.inbound_messages
   drop column from_address,
   drop column attachments,
-  add column notification_id uuid references concierge.notifications (id) on delete set null,
   add column capture_id uuid references concierge.captures (id) on delete set null,
   add column image_path text,
   add column image_type text,
