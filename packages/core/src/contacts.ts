@@ -139,6 +139,8 @@ const WHOLE_ONLY: [Relationship, string[]][] = [
   ["grandfather", ["poppy"]],
 ];
 
+const IN_LAW: Partial<Record<Relationship, Relationship>> = { mother: "mother_in_law", father: "father_in_law" };
+
 const words = (s: string) => s.toLowerCase().split(/[^\p{L}]+/u).filter(Boolean);
 
 /** "Mom" → mother, "Grandma Jo" → grandmother; null when the name gives no hint. */
@@ -148,6 +150,11 @@ export function guessRelationship(name: string, nickname: string | null): Relati
     const w = words(candidate);
     if (w.length === 0) continue;
     const first = HINTS.find(([, list]) => list.includes(w[0]));
+    // "Mom in law" or "Mom inlaw" is an in-law, not the parent (ALL-121). An
+    // in-law we have no option for ("Grandma in law") gets no guess at all,
+    // rather than falling back to the other name.
+    const inLaw = (w[1] === "in" && w[2] === "law") || w[1] === "inlaw";
+    if (first && inLaw) return IN_LAW[first[0]] ?? null;
     if (first) return first[0];
     const whole = w.length === 1 && WHOLE_ONLY.find(([, list]) => list.includes(w[0]));
     if (whole) return whole[0];

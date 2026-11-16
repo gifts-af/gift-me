@@ -7,7 +7,9 @@ describe("relationships", () => {
   it("lists them in order", () => {
     expect(RELATIONSHIPS).toEqual([
       "mother", "father", "wife", "husband", "girlfriend", "boyfriend", "partner", "son",
-      "daughter", "grandmother", "grandfather", "sister", "brother", "best_friend", "friend", "other",
+      "daughter", "grandmother", "grandfather", "sister", "brother",
+      "mother_in_law", "father_in_law", "sister_in_law", "brother_in_law", "daughter_in_law", "son_in_law",
+      "best_friend", "friend", "other",
     ]);
   });
 
@@ -19,7 +21,20 @@ describe("relationships", () => {
   it("labels them for people", () => {
     expect(relationshipLabel("mother")).toBe("Mother");
     expect(relationshipLabel("best_friend")).toBe("Best friend");
-    expect(RELATIONSHIPS.map(relationshipLabel).every((l) => /^[A-Z][a-z ]+$/.test(l))).toBe(true);
+    expect(RELATIONSHIPS.map(relationshipLabel).every((l) => /^[A-Z][a-z -]+$/.test(l))).toBe(true);
+  });
+
+  // ALL-121: in-laws read with hyphens, and sit after Brother and before Best friend.
+  it("labels the in-laws with hyphens", () => {
+    expect(relationshipLabel("mother_in_law")).toBe("Mother-in-law");
+    expect(relationshipLabel("father_in_law")).toBe("Father-in-law");
+    expect(relationshipLabel("sister_in_law")).toBe("Sister-in-law");
+    expect(relationshipLabel("brother_in_law")).toBe("Brother-in-law");
+    expect(relationshipLabel("daughter_in_law")).toBe("Daughter-in-law");
+    expect(relationshipLabel("son_in_law")).toBe("Son-in-law");
+    const at = (r: string) => (RELATIONSHIPS as readonly string[]).indexOf(r);
+    expect(at("mother_in_law")).toBe(at("brother") + 1);
+    expect(at("son_in_law")).toBe(at("best_friend") - 1);
   });
 });
 
@@ -33,6 +48,14 @@ describe("startingOccasions", () => {
   it("gives a father and grandfather Father's Day", () => {
     expect(startingOccasions("father", none)).toEqual(["christmas", "fathers_day"]);
     expect(startingOccasions("grandfather", none)).toEqual(["christmas", "fathers_day"]);
+  });
+  // ALL-121 [Claude's call]: in-law parents start with Mother's and Father's Day.
+  it("gives a mother-in-law Mother's Day and a father-in-law Father's Day", () => {
+    expect(startingOccasions("mother_in_law", none)).toEqual(["christmas", "mothers_day"]);
+    expect(startingOccasions("father_in_law", none)).toEqual(["christmas", "fathers_day"]);
+  });
+  it("gives other in-laws just Christmas and a birthday", () => {
+    expect(startingOccasions("sister_in_law", { birthday: true, anniversary: false })).toEqual(["christmas", "birthday"]);
   });
   it("gives a wife everything when both dates are given", () => {
     expect(startingOccasions("wife", { birthday: true, anniversary: true }).sort()).toEqual(

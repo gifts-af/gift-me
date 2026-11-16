@@ -17,6 +17,20 @@ for (const style of ["display:none", "visibility:hidden"]) {
   });
 }
 
+// ALL-109: a link stretched over its card with an inset-0 ::after is tapped
+// anywhere on the card, but a decorative ::after (an underline) doesn't count.
+const AFTER = `<style>.stretch::after{content:"";position:absolute;inset:0}.line::after{content:"";position:absolute;left:0;bottom:0;width:100%;height:1px}</style>`;
+
+test("measures a link stretched over its card by the card", { tag: "@layout" }, async ({ page }) => {
+  await page.setContent(`${AFTER}<div style="position:relative;height:80px"><a class="stretch" href="#">Mom</a></div>`);
+  expect(await phoneLayoutProblems(page)).toEqual([]);
+});
+
+test("still flags a short link whose ::after is only decoration", { tag: "@layout" }, async ({ page }) => {
+  await page.setContent(`${AFTER}<div style="position:relative;height:400px"><a class="line" href="#" style="display:inline-block;height:20px">Help</a></div>`);
+  expect(await phoneLayoutProblems(page)).toEqual(['"Help" is 20.0px tall, under 44px to tap']);
+});
+
 // T62: a layout check runs on all three browsers only when its test is tagged
 // @layout, so the helpers refuse to run in an untagged test (ALL-107). The title
 // can't say "@layout": Playwright reads any @word in a title as a tag.

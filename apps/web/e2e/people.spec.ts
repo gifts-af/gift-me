@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 import { localSupabase } from "./local-supabase";
 import { SECOND_USER, TEST_USER } from "./test-user";
 import { createFreshUser } from "./fresh-user";
-import { scrollsSideways } from "./phone-layout";
+import { phoneLayoutProblems } from "./phone-layout";
 import { addMother } from "./seed";
 import { session, signIn } from "./sign-in";
 
@@ -64,15 +64,20 @@ test("the Add form, Home with a card, and a person's page fit the screen", { tag
   const user = await createFreshUser();
   const personId = await addMother(user, "Mom");
   await signIn(page, user);
+  // The full phone check (ALL-109): sideways scroll, small links, text past the edge.
+  // Collected for every screen, so one run lists them all.
+  const problems: string[] = [];
+  const check = async (screen: string) => problems.push(...(await phoneLayoutProblems(page)).map((p) => `${screen}: ${p}`));
   await page.goto("/people/new");
   await expect(page.getByLabel("Name")).toBeVisible();
-  expect(await scrollsSideways(page)).toBe(0);
+  await check("Add form");
   await page.goto("/");
   await expect(page.getByRole("link", { name: "Mom", exact: true })).toBeVisible();
-  expect(await scrollsSideways(page)).toBe(0);
+  await check("Home");
   await page.goto(`/people/${personId}`);
   await expect(page.getByRole("region", { name: "Your budget" })).toBeVisible();
-  expect(await scrollsSideways(page)).toBe(0);
+  await check("Person page");
+  expect(problems).toEqual([]);
 });
 
 test("add Mom, set her occasions and budget, link her list, delete her", async ({ page }) => {
@@ -131,4 +136,23 @@ test("add Mom, set her occasions and budget, link her list, delete her", async (
   await page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole("link", { name: mom, exact: true })).toHaveCount(0);
+});
+
+// ALL-121: an in-law saves through the real form and reads with hyphens on
+// their page, starting with the parent's day.
+test("add a mother-in-law", async ({ page }) => {
+  await signIn(page, await createFreshUser());
+  await page.goto("/people/new");
+  // Typed before the page is ready, the name isn't in the button yet.
+  await expect(page.getByRole("button", { name: "Add someone" })).toBeEnabled();
+  await page.getByLabel("Name").fill("Linda");
+  await page.getByLabel("Who are they to you?").selectOption({ label: "Mother-in-law" });
+  await page.getByRole("button", { name: "Add Linda" }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await page.getByRole("link", { name: "Linda", exact: true }).click();
+  // The line under her name: "Mother-in-law · Christmas, …".
+  await expect(page.getByText(/^Mother-in-law ·/)).toBeVisible();
+  await expect(page.getByRole("switch", { name: "Mother's Day" })).toBeChecked();
+  // Saved and read back: the Edit form has her relationship selected.
+  await expect(page.getByLabel("Who are they to you?")).toHaveValue("mother_in_law");
 });
