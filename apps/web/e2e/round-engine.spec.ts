@@ -219,7 +219,8 @@ test("a round starts without an address, resumes when one is saved, and is skipp
   await page.goto(`/a/${linkToken}`);
   await page.getByRole("button", { name: "Add an address", exact: true }).click();
   await page.getByRole("link", { name: "Open their page" }).click();
-  await expect(page).toHaveURL(new RegExp(`/people/${personId}\\?address=open`));
+  // The link still says ?address=open; it lands on the address screen, open (ALL-127 AC-19).
+  await expect(page).toHaveURL(new RegExp(`/people/${personId}/address\\?open=1`));
 
   const section = page.locator("#address");
   await expect(section.getByLabel("Street address")).toHaveValue("1 Test Street");
@@ -269,7 +270,7 @@ async function personFor(buyerId: string): Promise<string> {
 }
 
 async function linkOnPage(page: Page, personId: string, base: string, token: string) {
-  await page.goto(`/people/${personId}`);
+  await page.goto(`/people/${personId}/list`);
   const linkField = page.getByLabel("Their list link");
   await linkField.fill(`${base}/share/${token}`);
   await expect.poll(() => linkField.evaluate((el) => Object.keys(el).some((k) => k.startsWith("__reactProps")))).toBe(true);
