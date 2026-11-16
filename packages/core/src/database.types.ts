@@ -1582,6 +1582,10 @@ export type Database = {
         Args: Record<PropertyKey, never>;
         Returns: string[];
       };
+      save_budgets: {
+        Args: { p_amounts: Json; p_person_id: string };
+        Returns: undefined;
+      };
       set_emailed_balance: {
         Args: { p_cents: number; p_round_id: string };
         Returns: undefined;
