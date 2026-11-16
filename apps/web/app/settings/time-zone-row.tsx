@@ -37,13 +37,15 @@ export function TimeZoneRow({
 
   // Next keeps visited routes in the page, hidden, with their state: clear the
   // tick and error on leaving. A pick still waiting is left to send.
-  useLayoutEffect(
-    () => () => {
+  const visible = useRef(true);
+  useLayoutEffect(() => {
+    visible.current = true;
+    return () => {
+      visible.current = false;
       setDone(false);
       setError(null);
-    },
-    [],
-  );
+    };
+  }, []);
 
   async function send(zone: string, attempt: number) {
     let result: SaveResult;
@@ -53,6 +55,11 @@ export function TimeZoneRow({
       result = { ok: false, error: TRY_AGAIN };
     }
     if (attempt !== latest.current) return;
+    if (!visible.current) {
+      // Hidden while saving: show nothing on return, but a failed pick goes back to what's saved.
+      if (!result.ok) setPicked(saved);
+      return;
+    }
     if (result.ok) setDone(true);
     else setError(result.error);
   }
@@ -70,7 +77,10 @@ export function TimeZoneRow({
 
   return (
     <div>
-      <div className="relative flex min-h-11 items-center justify-between gap-3">
+      <div
+        aria-disabled={!hydrated}
+        className="relative flex min-h-11 items-center justify-between gap-3 aria-disabled:opacity-45"
+      >
         <span id={`${id}-label`} className="text-[15px]">
           Time zone
         </span>
@@ -85,7 +95,7 @@ export function TimeZoneRow({
           aria-disabled={!hydrated}
           value={picked ?? ""}
           onChange={(event) => pick(event.target.value)}
-          className="absolute inset-0 size-full cursor-pointer opacity-0 aria-disabled:opacity-0"
+          className="absolute inset-0 size-full cursor-pointer opacity-0"
         >
           {!picked && <option value="" disabled hidden />}
           {zones.map((zone) => (
@@ -95,11 +105,9 @@ export function TimeZoneRow({
           ))}
         </select>
       </div>
-      {done && (
-        <p role="status" className="text-[13px] text-success">
-          Saved
-        </p>
-      )}
+      <p role="status" className="text-[13px] text-success">
+        {done ? "Saved" : ""}
+      </p>
       {error && (
         <p role="alert" className="text-[13px] text-destructive">
           {error}

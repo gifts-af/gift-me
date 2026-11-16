@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { Activity } from "react";
+import { renderToString } from "react-dom/server";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { TimeZoneRow } from "../time-zone-row";
 
@@ -53,7 +55,7 @@ describe("TimeZoneRow", () => {
     await wait(400);
     expect(screen.getByRole("alert")).toHaveTextContent("Pick a real zone.");
     expect(screen.getByRole("combobox")).toHaveValue("Europe/London");
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
   });
 
   it("ignores a late result from an older pick", async () => {
@@ -93,5 +95,44 @@ describe("TimeZoneRow", () => {
     await pick("Europe/London");
     await wait(400);
     expect(screen.getByRole("alert")).toHaveTextContent("That didn't save. Try again.");
+  });
+
+  it("sends a pick made before hiding, and shows no result on return", async () => {
+    const action = vi.fn().mockResolvedValue({ ok: true });
+    const ui = (mode: "visible" | "hidden") => (
+      <Activity mode={mode}>
+        <TimeZoneRow zones={zones} saved="America/New_York" fallback={null} action={action} />
+      </Activity>
+    );
+    const { rerender } = render(ui("visible"));
+    await pick("Europe/London");
+    rerender(ui("hidden"));
+    await wait(400);
+    expect(action).toHaveBeenCalledWith("Europe/London");
+    rerender(ui("visible"));
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("puts the saved zone back when a save fails while hidden", async () => {
+    const action = vi.fn().mockResolvedValue({ ok: false, error: "nope" });
+    const ui = (mode: "visible" | "hidden") => (
+      <Activity mode={mode}>
+        <TimeZoneRow zones={zones} saved="America/New_York" fallback={null} action={action} />
+      </Activity>
+    );
+    const { rerender } = render(ui("visible"));
+    await pick("Europe/London");
+    rerender(ui("hidden"));
+    await wait(400);
+    rerender(ui("visible"));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("combobox")).toHaveValue("America/New_York");
+  });
+
+  it("is faded and aria-disabled before the page has loaded", () => {
+    const html = renderToString(<TimeZoneRow zones={zones} saved="America/New_York" fallback={null} action={vi.fn()} />);
+    expect(html).toContain('aria-disabled="true"');
+    expect(html).toContain("aria-disabled:opacity-45");
   });
 });
