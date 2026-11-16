@@ -91,6 +91,21 @@ describe("fetchReceivedEmail", () => {
     });
   });
 
+  it("takes the last angle group, so a display name cannot impersonate", async () => {
+    const f = vi.fn(async () =>
+      json({ ...email, from: '"ann@victim.com <ann@victim.com>" <Evil@Attacker.com>' }),
+    );
+    const out = await fetchReceivedEmail("e1", { apiKey: "k", fetch: f as unknown as typeof fetch });
+    expect(out.from).toBe("evil@attacker.com");
+  });
+
+  it("encodes the id in the path and coerces odd header values", async () => {
+    const f = vi.fn(async (_url: string) => json({ ...email, headers: { A: 5, B: null } }));
+    const out = await fetchReceivedEmail("a/b", { apiKey: "k", fetch: f as unknown as typeof fetch });
+    expect(f.mock.calls[0][0]).toBe("https://api.resend.com/emails/receiving/a%2Fb");
+    expect(out.headers).toEqual({ a: "5" });
+  });
+
   it("handles a bare from, missing text/headers/attachments", async () => {
     const f = vi.fn(async () =>
       json({ id: "e1", from: "Bob@X.com", subject: "s", text: null, authentication: { spf: "none", dkim: "none", dmarc: "none" } }),
@@ -119,8 +134,25 @@ describe("fetchAttachment", () => {
       headers: { Authorization: "Bearer k" },
     });
     expect(f.mock.calls[1][0]).toBe("https://cdn.resend.app/x");
+    expect(f.mock.calls[1]).toHaveLength(1); // no init, so no Authorization header to the CDN
     expect(Array.from(out.bytes)).toEqual([1, 2, 3]);
     expect(out.contentType).toBe("image/png");
+  });
+
+  it("throws when the download is over maxBytes", async () => {
+    const f = vi.fn(async (url: string) =>
+      url.endsWith("/attachments") ? json(list) : new Response(new Uint8Array([1, 2, 3])),
+    );
+    await expect(
+      fetchAttachment("e1", "a1", { apiKey: "k", fetch: f as unknown as typeof fetch }, 2),
+    ).rejects.toThrow("limit");
+  });
+
+  it("says so when the attachment may be on a later page", async () => {
+    const f = vi.fn(async () => json({ has_more: true, data: [] }));
+    await expect(fetchAttachment("e1", "a1", { apiKey: "k", fetch: f as unknown as typeof fetch })).rejects.toThrow(
+      "first page",
+    );
   });
 
   it("throws when the attachment is not listed", async () => {
