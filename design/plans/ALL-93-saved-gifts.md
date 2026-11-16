@@ -59,7 +59,7 @@ None left.
 | Who sees them? | Only the buyer who saved them. Mom and you each keep your own for Dad | Carried over from 52's **[Claude's call]**, plain in 54 |
 | Its own table, or Jim's `gift_ideas`? | Its own: `concierge.saved_gifts` **[Claude's call]** | ALL-27 deletes a person's previous on-demand ideas on every run, and is reworking that table now |
 | Reuse My list's paste box (`AddGiftPanel`)? | **No.** A small form of the concierge's own **[Claude's call]** | Its `onAdd` is fire-and-forget: it clears the form and says "Added" before anything is saved, which only works on My list because a separate Save button persists the list. Changing it means changing Jim's lists component. The new form saves for real and keeps the input on failure (AC-7) |
-| How is a link read? | One new server-side export from `@/modules/lists`, `readGiftLink(url)`, that wraps what My list already uses (`lookupProductLink` for Amazon, `lookupStorePage` for other stores) and returns name, price, photo and a clean link **[Claude's call]** | One way to read a link (E2), through the lists module's public interface (T19). No list component changes. Called from a server action in `app/people/actions.ts`, so no client code imports the lists barrel |
+| How is a link read? | Two server actions exported from `@/modules/lists`: `readGiftLinkForUser(url)`, which wraps what My list already uses (`lookupProductLink` for Amazon, `readStorePage` for other stores) and returns name, price, photo and a clean link; and `cleanGiftLink(url)`, which only cleans the link. Plus `storeName` **[Claude's call]** | One way to read a link (E2), through the lists module's public interface (T19). No list component changes. The server page passes them to the section as props, so no client code imports the lists barrel |
 | Where are the rules enforced? | In the database: check constraints for lengths, price and `http(s)` links; a before-insert trigger for the cap via `concierge.setting_int('saved_gifts_max')`; select, insert and delete policies for the owner only, and no update grant. The server action also refuses a soft-deleted person | Default privileges let any signed-in user write new concierge tables through the API, so checks only in the action would be skipped by a script (E4, T26) |
 | A cap on how many? | `saved_gifts_max` = 100 per person **[Claude's call]** | Stops a runaway script filling a table. Far above real use |
 | Store name stored? | No: worked out from the link with `storeName()` | One less field to keep in sync (E2) |
@@ -71,7 +71,7 @@ None left.
 
 - **Simplest version?** One table, one section, one small form. Cut: a list page, share links, editing, Home card changes, rounds, and reworking My list's paste box.
 - **Hard-coded values?** `saved_gifts_max` in `concierge.app_settings`.
-- **Product boundaries?** The concierge calls one new server-side export, `readGiftLink`, from `@/modules/lists`. No list tables are read or written, and no lists component changes.
+- **Product boundaries?** The person page uses three new exports from `@/modules/lists` (`readGiftLinkForUser`, `cleanGiftLink`, `storeName`). No list tables are read or written, and no lists component changes.
 - **New personal data?** The gift's name, price, photo and link, which the buyer typed or pasted for this feature. Not sent anywhere except the store page read that My list already does. Events carry ids only.
 - **E9:** seen working on production by a live check (save, reload, remove, as the production test account). Turned off with Vercel's instant rollback: no money moves, and the table is harmless left behind.
 - **Collisions with ALL-27:** both touch `person-view.tsx`, `app/people/actions.ts`, `database.types.ts`, and add a migration. Saved gifts stay one line in `person-view.tsx`. ALL-27's migration (dated 2026-11-15 in its plan) is already earlier than `main`'s latest (2026-11-16), so it needs a later timestamp whichever merges first; told Jim on ALL-27.
@@ -85,7 +85,8 @@ None left.
 
 **Global constraints**
 - Setting `saved_gifts_max` = `100` in `concierge.app_settings` (T23). No fallback constant in code.
-- Limits, in the database and mirrored in the form parser: name 1–200 characters; `product_url` and `image_url` at most 2048 characters and starting `http://` or `https://`; `price_cents` null or 0–10,000,000.
+- Limits, in the database and mirrored in the form parser: name 1–200 characters; `product_url` and `image_url` at most 2048 characters and starting `http://` or `https://`; `price_cents` null or 0–10,000,000. These are fixed column limits, like `profile_facts`' 500 characters, not business numbers, so they aren't settings (T23).
+- A technical decision **T72** in `design/decisions.md` records the own table, rules enforced in the database, and the lists module's new exports (principle 7).
 - Price is optional **[Claude's call]**: a spotted gift may have no known price. It shows as "No price".
 - Copy: heading "Saved gifts"; note "Only you see these. {name} never does."; empty state "Keep gifts you spot for {name} here."; button "Save"; the list section's note "You don't need their list to buy for them."
 - Events: `saved_gifts.save` and `saved_gifts.remove`, with `user_id` and `person_id` only (E6).
@@ -105,25 +106,38 @@ None left.
   - buyer's `update` of their own row throws permission denied.
   - a 201-character `name`, `product_url` `javascript:alert(1)` and `price_cents` -1 each throw a check violation.
   - with `saved_gifts_max` set to 2 for the test, a third insert for the same person throws with message `saved_gifts_max`; a gift for a second person still saves.
-  - after `public.delete_person` and a hard delete of the person row as server, the gifts are gone.
+  - with the `saved_gifts_max` row deleted, an insert throws (a missing setting never turns the cap off).
+  - after `public.delete_person`, an insert for that person throws with errcode `P0002`.
+  - after a hard delete of the person row as server, the gifts are gone.
 - [ ] **Step 2:** `pnpm db:test` fails (no table).
-- [ ] **Step 3: the migration.** The table, with check constraints from Global constraints. Row level security on, and three policies written by hand (select, insert, delete, each `user_id = (select auth.uid())`). Don't use `concierge.enable_owner_rls`: it adds an update policy and an `updated_at` trigger. `revoke update on concierge.saved_gifts from authenticated`. A `before insert` trigger function `concierge.saved_gifts_cap()` (`security definer`, `set search_path = ''`, execute revoked from public) raises `'saved_gifts_max'` with errcode `P0001` once the person already has `concierge.setting_int('saved_gifts_max')` rows. Insert the setting row with a description.
+- [ ] **Step 3: the migration.** The table, with check constraints from Global constraints. Row level security on, and three policies written by hand (select, insert, delete, each `user_id = (select auth.uid())`). Don't use `concierge.enable_owner_rls`: it adds an update policy and an `updated_at` trigger. `revoke update on concierge.saved_gifts from authenticated`. A `before insert` trigger function `concierge.saved_gifts_check()` (`security definer`, because it reads `people`; `set search_path = ''`; execute revoked from public) does three things in order:
+  1. `select 1 from public.people where id = new.person_id and user_id = new.user_id and deleted_at is null for update`. With no row, it raises errcode `P0002`. The row lock also serializes parallel inserts for one person, so the cap can't be overshot by a race.
+  2. Reads `concierge.setting_int('saved_gifts_max')`, and raises when it's null.
+  3. Raises `'saved_gifts_max'` with errcode `P0001` once the person already has that many rows.
+
+  Insert the setting row with a description.
 - [ ] **Step 4:** `pnpm db:test` passes; run `pnpm db:types`.
 - [ ] **Step 5:** commit `feat(db): saved gifts table, private to the buyer (ALL-93)`.
 
 ### Task 2: reading a gift link, from the lists module (AC-2) [P]
 
-**Files:** create `apps/web/modules/lists/lib/gift-link.ts` and `apps/web/modules/lists/lib/__tests__/gift-link.test.ts`; modify `apps/web/modules/lists/index.ts` (one export).
+**Files:** create `apps/web/modules/lists/lib/gift-link.ts`, `apps/web/modules/lists/lib/__tests__/gift-link.test.ts` and `apps/web/modules/lists/actions/gift-link.ts` (`"use server"`); modify `apps/web/modules/lists/index.ts`.
 
-**Produces:** `readGiftLink(url: string, readPage: (url: string) => Promise<LookupStorePageResult | { ok: false; reason: "signed_out" }>): Promise<GiftLinkRead>`, where `GiftLinkRead = { ok: true; name: string | null; priceCents: number | null; imageUrl: string | null; productUrl: string } | { ok: false; error: string }`. Exported from `@/modules/lists` with its type. The caller passes `readStorePage` from `actions/store-page.ts` as `readPage` (E3).
+**Produces:**
+- In `lib/gift-link.ts` (pure, tested): `readGiftLink(url: string, readPage: ((url: string) => Promise<LookupStorePageResult | { ok: false; reason: "signed_out" }>) | null): Promise<GiftLinkRead>`, where `GiftLinkRead = { ok: true; name: string | null; priceCents: number | null; imageUrl: string | null; productUrl: string } | { ok: false; error: string }`. With `readPage` null it only cleans the link: the same `productUrl` with no page read.
+- In `actions/gift-link.ts`: `readGiftLinkForUser(url: unknown): Promise<GiftLinkRead>`, which binds `readStorePage` (E3), and `cleanGiftLink(url: unknown): Promise<GiftLinkRead>`, which passes null.
+- From `@/modules/lists`: `readGiftLinkForUser`, `cleanGiftLink`, `storeName` (from `lib/product-link.js`), and the `GiftLinkRead` type. `app/` imports only these, never a lists internal path (T19, `boundaries/entry-point`).
 
 - [ ] **Step 1: tests.**
   - An Amazon link `https://www.amazon.com/Fly-Reel/dp/B0TESTREEL` gives `productUrl` `https://www.amazon.com/dp/B0TESTREEL`, a name from the slug, a null `priceCents` and an image URL. `readPage` is never called.
   - A store link whose `readPage` returns `{ ok: true, product: { name: "Mug", priceCents: 1200, imageUrl: "https://x/i.jpg" } }` gives those three values.
-  - A store link whose `readPage` returns `{ ok: false, reason: "blocked" }`, or throws, still gives `ok: true` with the slug name and a null price.
+  - A page that reads a name but no price keeps the slug's null price, and a page with no name keeps the slug name: **only the page's non-null fields replace the link's** (unlike `withStorePage`, which takes null price and image too).
+  - A store link whose `readPage` returns `{ ok: false, reason: "blocked_address" }`, or throws, still gives `ok: true` with the slug name and a null price.
+  - A page name of 300 characters comes back cut to 200, and an image URL over 2048 characters comes back null.
+  - `readPage` null on `https://www.amazon.com/x/dp/B0TESTREEL?ref=abc` gives the clean `productUrl` and doesn't read anything.
   - `"not a link"` gives `ok: false` with `lookupProductLink`'s message.
 - [ ] **Step 2:** the tests fail.
-- [ ] **Step 3:** implement with `lookupProductLink`, overlaying the page's non-null fields as `AddGiftPanel`'s `withStorePage` does.
+- [ ] **Step 3:** implement with `lookupProductLink`.
 - [ ] **Step 4:** the tests pass.
 - [ ] **Step 5:** commit `feat(lists): read a gift link for other modules (ALL-93)`.
 
@@ -132,20 +146,22 @@ None left.
 **Files:** create `apps/web/modules/concierge/saved-gifts/{rules,store,service,saved-gifts}.ts`, `apps/web/modules/concierge/__tests__/saved-gifts.test.ts` and `apps/web/modules/concierge/__tests__/fake-saved-gifts-store.ts`; modify `apps/web/modules/concierge/index.ts` (exports).
 
 **Produces (from `@/modules/concierge`):**
-- `type SavedGift = { id: string; name: string; priceCents: number | null; productUrl: string | null; imageUrl: string | null; store: string | null }`, where `store` is the link's hostname without `www.`.
-- `parseSavedGiftForm(formData: FormData): { ok: true; value: SavedGiftInput } | { ok: false; error: string }`, with fields `name`, `price` (via `parseBudget`), `link` and `image`.
+- `type SavedGift = { id: string; name: string; priceCents: number | null; productUrl: string | null; imageUrl: string | null }`. The page works out the store's name with `storeName()` from `@/modules/lists`, so it reads "Amazon" as on My list.
+- `parseSavedGiftForm(formData: FormData): { ok: true; value: SavedGiftInput } | { ok: false; error: string }`, with fields `name`, `price` (via `parseBudget`, plus the upper limit, which `parseBudget` doesn't have), `link` and `image`. A bad or over-long `image` is dropped, not an error, since the buyer can't see or fix it.
+- `NOT_FOUND` is exported from `people/service.ts` and reused, so the wording can't drift.
 - `listSavedGifts(personId: string): Promise<SavedGift[]>`, newest first; `[]` for a person who isn't the caller's.
 - `saveGift(personId: string, input: SavedGiftInput): Promise<SaveResult>` and `removeSavedGift(personId: string, giftId: string): Promise<SaveResult>`.
 
 - [ ] **Step 1: tests**, against the fake store.
-  - `parseSavedGiftForm`: an empty name gives "Give the gift a name."; price "abc" gives `parseBudget`'s error; link `ftp://x` gives "That link doesn't look right."; a 201-character name gives an error.
-  - `saveGift` for a person the store doesn't return (another user's, or soft-deleted) gives `{ ok: false }` with the people module's not-found text, and nothing is stored.
+  - `parseSavedGiftForm`: an empty name gives "Give the gift a name."; price "abc" gives `parseBudget`'s error; price "100001" gives an error; link `ftp://x` gives "That link doesn't look right."; a 201-character name gives an error; an `image` of `javascript:x` is dropped and the rest parses.
+  - `saveGift` or `removeSavedGift` with a person id or gift id that isn't a UUID (`isId`) gives the not-found text without calling the store.
+  - `saveGift` when the store throws errcode `P0002` (another user's person, or soft-deleted: the trigger decides) gives `{ ok: false }` with `NOT_FOUND`.
   - `saveGift` when the store throws `{ message: "saved_gifts_max", code: "P0001" }` gives "You've saved as many gifts for them as we keep. Remove one to add another."
   - `saveGift` and `removeSavedGift` each log exactly one event, whose fields are `{ user_id, person_id }` only.
   - `removeSavedGift` for a gift that's already gone returns ok.
-  - `listSavedGifts` maps `www.amazon.com` to store `amazon.com`, and a null link to a null store.
+  - `listSavedGifts` returns the store's rows in the order given (the store sorts newest first).
 - [ ] **Step 2:** the tests fail.
-- [ ] **Step 3:** implement. Before inserting, the store checks the person with `people.select("id").eq("id", personId).is("deleted_at", null)` (AC-10).
+- [ ] **Step 3:** implement. The store just inserts: the database trigger refuses another user's or a soft-deleted person (AC-10, Task 1), so there's no pre-check query. The fake store mirrors only the two error codes, and pgTAP covers the real ones.
 - [ ] **Step 4:** the tests pass.
 - [ ] **Step 5:** commit `feat: saved gifts service (ALL-93)`.
 
@@ -155,15 +171,21 @@ None left.
 - `apps/web/app/people/actions.ts`: three actions.
 - `apps/web/app/people/[id]/person-view.tsx`: load the gifts, and render the section just above `<ListLink>`.
 - `apps/web/app/people/[id]/list-link.tsx` and its test: the note under the heading when no list is linked.
+- `apps/web/app/people/[id]/__tests__/person-view.test.tsx`: its fixed mocks of `@/modules/concierge` and `../../actions` gain `listSavedGifts` and the new actions.
 
-**Consumes:** Task 2's `readGiftLink` and Task 3's functions.
-**Produces:** `readGiftLinkAction(url: string): Promise<GiftLinkRead>`, which wraps `readGiftLink(url, readStorePage)`; `saveGiftAction(_prev: SaveResult | null, formData: FormData): Promise<SaveResult>`; and `removeSavedGiftAction(_prev: SaveResult | null, formData: FormData): Promise<SaveResult>`. Each revalidates the person page, as `refresh()` does.
+**Consumes:** Task 2's `readGiftLinkForUser`, `cleanGiftLink` and `storeName`, and Task 3's functions.
+**Produces:** `saveGiftAction(_prev: SaveResult | null, formData: FormData): Promise<SaveResult>` and `removeSavedGiftAction(_prev: SaveResult | null, formData: FormData): Promise<SaveResult>`, each revalidating the person page as `refresh()` does. `saveGiftAction` runs the `link` field through `cleanGiftLink` before parsing, so a Save tapped before the read finishes still stores a clean link (or refuses a bad one). The section calls `readGiftLinkForUser` directly as its read action.
+
+**When the read runs:** on the link field's `change` once the value looks like a URL (`fill` in Playwright fires it), with a request-id guard as in `AddGiftPanel`. A result is dropped if a newer paste or a Save happened since. It fills only fields that are still empty. Save is enabled once the page has loaded (ALL-110's `useHydrated`), not tied to the name; an empty name gets the parser's message.
 
 - [ ] **Step 1: component tests**, with fake actions as in `list-link.test.tsx`.
   - With no gifts: the heading, the privacy note with the name, and the empty-state line.
-  - Pasting a link calls `readAction` and fills in the name and price. A failed read leaves a typed name alone.
+  - Pasting a link calls `readAction` and fills in the name and price. A failed read leaves a typed name alone, and a successful one doesn't overwrite a name typed first.
+  - A read that resolves after Save has cleared the form doesn't refill it.
   - Save returning `{ ok: false, error: "x" }` shows "x" in a `role="alert"` and keeps the name and price in the fields (AC-7).
+  - Save whose action rejects shows "That didn't save. Try again." and keeps the fields (AC-7's network case).
   - Save returning `{ ok: true }` clears the form. A second click while saving doesn't call the action twice.
+  - A gift with a link shows "Amazon" as its store.
   - A gift with a link renders a link to `productUrl` with `target="_blank"` and `rel="noopener noreferrer"`. Remove calls `removeAction` with the gift's id.
   - `ListLink` with no list linked shows "You don't need their list to buy for them."
 - [ ] **Step 2:** the tests fail.
@@ -173,7 +195,7 @@ None left.
 
 ### Task 5: the journey, layout and docs (AC-1–6, AC-11)
 
-**Files:** modify `apps/web/e2e/people.spec.ts`; `apps/web/e2e/gallery.shots.ts` if the person page shot needs a saved gift; `design/technical-design.md` (the table among the concierge's tables, and decision 54); and `design/ui.md` only if the section adds a pattern.
+**Files:** modify `apps/web/e2e/people.spec.ts` and `apps/web/e2e/seed.ts`; `apps/web/e2e/gallery.shots.ts` if the person page shot needs a saved gift; `design/technical-design.md` (the table among the concierge's tables, and decision 54); `design/decisions.md` (T72); and `design/ui.md` only if the section adds a pattern.
 
 - [ ] **Step 1:** in `people.spec.ts`, add the test "save a gift for someone, then remove it":
   1. A fresh user with `addMother`. Wait for Save to be enabled before typing (ALL-110).
@@ -181,7 +203,7 @@ None left.
   3. Add "Coffee sampler" by hand, with price `20`.
   4. Reload. Both show, newest first, with "$49.00". The reel's link has the `href` `https://www.amazon.com/dp/B0TESTREEL`.
   5. Remove the sampler and reload. It's gone.
-- [ ] **Step 2:** the existing `@layout` test adds a saved gift with a 120-character name before checking the person page, so `phoneLayoutProblems` covers the section on all three browsers.
+- [ ] **Step 2:** the existing `@layout` test adds a saved gift with a 120-character name through the API (a seed helper beside `addMother` in `e2e/seed.ts`) before checking the person page, so `phoneLayoutProblems` covers the section on all three browsers.
 - [ ] **Step 3:** `pnpm lint && pnpm typecheck && pnpm test && pnpm build` pass, as do `pnpm db:test` and the e2e specs. Run `pnpm gallery`, then republish the screens page.
 - [ ] **Step 4:** update the docs, then commit `test: saved gifts journey, and docs (ALL-93)`.
 
@@ -195,7 +217,7 @@ None left.
   - AC-12: Task 3
 - [x] Every task traces back to a story or criterion.
 - [x] No open questions are left.
-- [ ] Adversarial review of the plan.
+- [x] Adversarial review of the plan (2026-11-16): 1 blocker (a lists internal import), 10 should-fixes and 8 nits, all folded in above. No owner decisions.
 
 ## Review focus
 
