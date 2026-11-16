@@ -91,7 +91,7 @@ async function main() {
         title: s.source,
         text: "",
         note: null,
-        screenshot: new Uint8Array(readFileSync(file)),
+        screenshot: { bytes: new Uint8Array(readFileSync(file)), type: file.endsWith(".png") ? "image/png" : "image/jpeg" },
         known: [],
       }, { timeoutMs: TIMEOUT_MS }),
     );

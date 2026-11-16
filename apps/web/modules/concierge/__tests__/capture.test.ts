@@ -1,8 +1,8 @@
 // @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
-import { parseCaptureForm, saveCapture } from "../capture/capture";
-import type { CaptureInput } from "../capture/capture";
+import { parseCaptureForm, saveCapture, saveNoteCapture } from "../capture/capture";
+import type { CaptureInput, NoteCaptureInput } from "../capture/capture";
 import { FakeCaptureStore } from "./fake-capture-store";
 
 let store: FakeCaptureStore;
@@ -57,9 +57,11 @@ describe("saveCapture", () => {
     const r = await saveCapture(store, input({ note: "for dad" }));
     expect(r).toEqual({ ok: true, id: "cap-1" });
     expect(store.uploads.has("user-1/cap-1.jpg")).toBe(true);
+    expect(store.uploadTypes.get("user-1/cap-1.jpg")).toBe("image/jpeg");
     expect(store.rows[0]).toMatchObject({
       note: "for dad",
       screenshotPath: "user-1/cap-1.jpg",
+      screenshotType: "image/jpeg",
     });
   });
 
@@ -114,6 +116,78 @@ describe("saveCapture", () => {
   it("logs nothing when the save succeeds", async () => {
     await saveCapture(store, input());
     expect(consoleError).not.toHaveBeenCalled();
+  });
+});
+
+describe("saveNoteCapture", () => {
+  function note(over: Partial<NoteCaptureInput> = {}): NoteCaptureInput {
+    return { personId: "p1", title: "Emailed note", text: "He wants a new vise", image: null, ...over };
+  }
+
+  it("with no image saves a capture with no URL and no screenshot", async () => {
+    const r = await saveNoteCapture(store, note());
+    expect(r).toEqual({ ok: true, id: "cap-1" });
+    expect(store.rows[0]).toMatchObject({
+      personId: "p1",
+      url: null,
+      title: "Emailed note",
+      text: "He wants a new vise",
+      note: null,
+      screenshotPath: null,
+      screenshotType: null,
+    });
+    expect(store.uploads.size).toBe(0);
+  });
+
+  it("uploads a PNG to {userId}/{id}.png and records its type", async () => {
+    const bytes = new Uint8Array([137, 80, 78, 71]);
+    const r = await saveNoteCapture(store, note({ image: { bytes, type: "image/png" } }));
+    expect(r).toEqual({ ok: true, id: "cap-1" });
+    expect(store.uploadTypes.get("user-1/cap-1.png")).toBe("image/png");
+    expect(new Uint8Array(await store.uploads.get("user-1/cap-1.png")!.arrayBuffer())).toEqual(bytes);
+    expect(store.rows[0]).toMatchObject({ screenshotPath: "user-1/cap-1.png", screenshotType: "image/png" });
+  });
+
+  it.each([
+    ["image/jpeg", "jpg"],
+    ["image/webp", "webp"],
+    ["image/gif", "gif"],
+  ])("names a %s file .%s", async (type, ext) => {
+    await saveNoteCapture(store, note({ image: { bytes: new Uint8Array([1]), type } }));
+    expect(store.rows[0].screenshotPath).toBe(`user-1/cap-1.${ext}`);
+  });
+
+  it("cuts the text to textMaxChars", async () => {
+    store.limitValues.textMaxChars = 10;
+    await saveNoteCapture(store, note({ text: "a".repeat(50) }));
+    expect(store.rows[0].text).toHaveLength(10);
+  });
+
+  it("returns 404 for someone else's person and writes nothing", async () => {
+    const r = await saveNoteCapture(store, note({ personId: "someone-else" }));
+    expect(r).toMatchObject({ ok: false, status: 404 });
+    expect(store.rows).toHaveLength(0);
+  });
+
+  it("rejects an image over the limit with 413 and writes nothing", async () => {
+    store.limitValues.screenshotMaxBytes = 2;
+    const r = await saveNoteCapture(store, note({ image: { bytes: new Uint8Array([1, 2, 3]), type: "image/png" } }));
+    expect(r).toMatchObject({ ok: false, status: 413 });
+    expect(store.rows).toHaveLength(0);
+  });
+
+  it("refuses an image type it can't name, before writing anything", async () => {
+    const r = await saveNoteCapture(store, note({ image: { bytes: new Uint8Array([1]), type: "image/tiff" } }));
+    expect(r).toMatchObject({ ok: false, status: 500 });
+    expect(store.rows).toHaveLength(0);
+    expect(consoleError).toHaveBeenCalledWith("capture: image type failed", "image/tiff");
+  });
+
+  it("deletes the row when the upload fails", async () => {
+    store.failUpload = true;
+    const r = await saveNoteCapture(store, note({ image: { bytes: new Uint8Array([1]), type: "image/png" } }));
+    expect(r).toMatchObject({ ok: false, status: 500 });
+    expect(store.rows).toHaveLength(0);
   });
 });
 

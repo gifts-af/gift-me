@@ -1,4 +1,4 @@
-import type { CaptureStore } from "./store";
+import type { CaptureStore, NewCaptureRow } from "./store";
 
 export type CaptureInput = {
   personId: string;
@@ -23,14 +23,57 @@ function logFailure(step: string, err: unknown): void {
   console.error(`capture: ${step} failed`, err);
 }
 
+/** An emailed note (ALL-31): no page, and at most one image of any of these types. */
+export type NoteCaptureInput = {
+  personId: string;
+  title: string;
+  text: string;
+  image: { bytes: Uint8Array; type: string } | null;
+};
+
+/** File extension for each image type a capture can hold. */
+const IMAGE_EXTENSIONS: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+};
+
+type Image = { blob: Blob; type: string; ext: string };
+
+/** Saves one capture from the browser extension; its screenshot is always a JPEG. */
+export function saveCapture(store: CaptureStore, input: CaptureInput): Promise<SaveResult> {
+  return persist(
+    store,
+    { personId: input.personId, url: input.url, title: input.title, text: input.text, note: input.note },
+    { blob: input.screenshot, type: "image/jpeg", ext: "jpg" },
+  );
+}
+
+/** Saves an emailed note for one person, with its image if it had one. */
+export async function saveNoteCapture(store: CaptureStore, input: NoteCaptureInput): Promise<SaveResult> {
+  let image: Image | null = null;
+  if (input.image) {
+    const ext = IMAGE_EXTENSIONS[input.image.type];
+    if (!ext) {
+      // The type is a MIME string, never personal data.
+      logFailure("image type", input.image.type);
+      return { ok: false, status: 500, error: SAVE_FAILED };
+    }
+    image = { blob: new Blob([input.image.bytes as BlobPart], { type: input.image.type }), type: input.image.type, ext };
+  }
+  return persist(
+    store,
+    { personId: input.personId, url: null, title: input.title, text: input.text, note: null },
+    image,
+  );
+}
+
 /**
- * Saves one capture: limits, size check, person check, insert, upload, set path.
+ * Limits, size check, person check, insert, then upload and set path when there's an image.
  * If the upload or the path update fails the row is deleted again.
  */
-export async function saveCapture(
-  store: CaptureStore,
-  input: CaptureInput,
-): Promise<SaveResult> {
+async function persist(store: CaptureStore, row: NewCaptureRow, image: Image | null): Promise<SaveResult> {
   let limits: Awaited<ReturnType<CaptureStore["limits"]>>;
   try {
     limits = await store.limits();
@@ -39,12 +82,12 @@ export async function saveCapture(
     return { ok: false, status: 500, error: SAVE_FAILED };
   }
 
-  if (input.screenshot.size > limits.screenshotMaxBytes) {
+  if (image && image.blob.size > limits.screenshotMaxBytes) {
     return { ok: false, status: 413, error: "The screenshot is too large." };
   }
 
   try {
-    if (!(await store.personExists(input.personId))) {
+    if (!(await store.personExists(row.personId))) {
       return { ok: false, status: 404, error: "That person wasn't found." };
     }
   } catch (err) {
@@ -54,24 +97,20 @@ export async function saveCapture(
 
   let created: { id: string; userId: string };
   try {
-    created = await store.insertCapture({
-      personId: input.personId,
-      url: input.url,
-      title: input.title,
-      text: input.text.slice(0, limits.textMaxChars),
-      note: input.note,
-    });
+    created = await store.insertCapture({ ...row, text: row.text.slice(0, limits.textMaxChars) });
   } catch (err) {
     logFailure("insert", err);
     return { ok: false, status: 500, error: SAVE_FAILED };
   }
 
-  const path = `${created.userId}/${created.id}.jpg`;
+  if (!image) return { ok: true, id: created.id };
+
+  const path = `${created.userId}/${created.id}.${image.ext}`;
   let step = "upload";
   try {
-    await store.uploadScreenshot(path, input.screenshot);
+    await store.uploadScreenshot(path, image.blob, image.type);
     step = "set path";
-    await store.setScreenshotPath(created.id, path);
+    await store.setScreenshotPath(created.id, path, image.type);
   } catch (err) {
     logFailure(step, err);
     try {

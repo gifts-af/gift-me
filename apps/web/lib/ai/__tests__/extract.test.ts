@@ -87,9 +87,17 @@ describe("createExtractor", () => {
 
   it("sends the screenshot as an image when there is one", async () => {
     const model = modelReturning({ facts: [] });
-    await createExtractor(model)({ ...input, screenshot: new Uint8Array([1, 2, 3]) }, opts);
+    await createExtractor(model)({ ...input, screenshot: { bytes: new Uint8Array([1, 2, 3]), type: "image/jpeg" } }, opts);
     const user = model.doGenerateCalls[0].prompt.find((m) => m.role === "user");
     expect(JSON.stringify(user)).toContain("image/jpeg");
+  });
+
+  it("sends the screenshot with its own media type", async () => {
+    const model = modelReturning({ facts: [] });
+    await createExtractor(model)({ ...input, screenshot: { bytes: new Uint8Array([1, 2, 3]), type: "image/png" } }, opts);
+    const user = JSON.stringify(model.doGenerateCalls[0].prompt.find((m) => m.role === "user"));
+    expect(user).toContain("image/png");
+    expect(user).not.toContain("image/jpeg");
   });
 
   it("sends no image when there is no screenshot", async () => {

@@ -49,7 +49,12 @@ export function captureStoreFor(supabase: SupabaseClient<Database>, userId: stri
       };
     },
     async personExists(personId) {
-      const { data: row, error: err } = await supabase.from("people").select("id").eq("id", personId).maybeSingle();
+      const { data: row, error: err } = await supabase
+        .from("people")
+        .select("id")
+        .eq("id", personId)
+        .eq("user_id", userId)
+        .maybeSingle();
       if (err) throw err;
       return row !== null;
     },
@@ -69,18 +74,22 @@ export function captureStoreFor(supabase: SupabaseClient<Database>, userId: stri
       if (err) throw err;
       return { id: created.id, userId: created.user_id };
     },
-    async uploadScreenshot(path, jpeg) {
+    async uploadScreenshot(path, image, type) {
       const { error: err } = await supabase.storage
         .from("captures")
-        .upload(path, jpeg, { contentType: "image/jpeg", upsert: false });
+        .upload(path, image, { contentType: type, upsert: false });
       if (err) throw err;
     },
-    async setScreenshotPath(id, path) {
-      const { error: err } = await concierge().from("captures").update({ screenshot_path: path }).eq("id", id);
+    async setScreenshotPath(id, path, type) {
+      const { error: err } = await concierge()
+        .from("captures")
+        .update({ screenshot_path: path, screenshot_type: type })
+        .eq("id", id)
+        .eq("user_id", userId);
       if (err) throw err;
     },
     async deleteCapture(id) {
-      const { error: err } = await concierge().from("captures").delete().eq("id", id);
+      const { error: err } = await concierge().from("captures").delete().eq("id", id).eq("user_id", userId);
       if (err) throw err;
     },
 
@@ -98,8 +107,9 @@ export function captureStoreFor(supabase: SupabaseClient<Database>, userId: stri
     async loadCapture(id) {
       const { data: c, error: err } = await concierge()
         .from("captures")
-        .select("id, person_id, status, source_url, page_title, text_excerpt, note, screenshot_path")
+        .select("id, person_id, status, source_url, page_title, text_excerpt, note, screenshot_path, screenshot_type")
         .eq("id", id)
+        .eq("user_id", userId)
         .maybeSingle();
       if (err?.code === INVALID_TEXT) return null;
       if (err) throw err;
@@ -109,6 +119,7 @@ export function captureStoreFor(supabase: SupabaseClient<Database>, userId: stri
         .from("people")
         .select("relationship")
         .eq("id", c.person_id)
+        .eq("user_id", userId)
         .maybeSingle();
       if (personErr) throw personErr;
       if (!person) return null;
@@ -122,6 +133,8 @@ export function captureStoreFor(supabase: SupabaseClient<Database>, userId: stri
         text: c.text_excerpt ?? "",
         note: c.note,
         screenshotPath: c.screenshot_path,
+        // Null is what the extension's captures have always been (migration 20261116100000).
+        screenshotType: c.screenshot_type ?? "image/jpeg",
       };
     },
     async downloadScreenshot(path) {
@@ -134,6 +147,7 @@ export function captureStoreFor(supabase: SupabaseClient<Database>, userId: stri
         .from("profile_facts")
         .select("category, value")
         .eq("person_id", personId)
+        .eq("user_id", userId)
         .order("created_at");
       if (err) throw err;
       return rows.map((r) => ({ category: r.category as FactCategory, value: r.value }));
@@ -144,6 +158,7 @@ export function captureStoreFor(supabase: SupabaseClient<Database>, userId: stri
         .select("id, category, value")
         .eq("source", "capture")
         .eq("source_id", captureId)
+        .eq("user_id", userId)
         .eq("active", true)
         .order("created_at");
       if (err) throw err;
@@ -171,7 +186,7 @@ export function captureStoreFor(supabase: SupabaseClient<Database>, userId: stri
       return rows.map((r) => ({ id: r.id, category: r.category as FactCategory, value: r.value }));
     },
     async setCaptureStatus(id, status) {
-      let query = concierge().from("captures").update({ status }).eq("id", id);
+      let query = concierge().from("captures").update({ status }).eq("id", id).eq("user_id", userId);
       if (status === "failed") query = query.neq("status", "extracted");
       const { error: err } = await query;
       if (err) throw err;
