@@ -84,13 +84,14 @@ export {
   disconnect as disconnectZinc,
   fundingLookahead,
   getPaymentStatus,
+  getPaymentSummary,
   getZincWallet,
   hasZincConnection,
   pollConnect,
   savePhone,
   startConnect,
 } from "./zinc/connect";
-export type { DisconnectDeps, PaymentResult, PaymentStatus } from "./zinc/connect";
+export type { DisconnectDeps, PaymentResult, PaymentStatus, PaymentSummary } from "./zinc/connect";
 export type { PlaceAddressHeld, PlaceHeld, ZincDeps } from "./zinc/types";
 export { handleZincWebhook } from "./zinc/events";
 export { readWebhookBody } from "./zinc/guard";
