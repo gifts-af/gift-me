@@ -53,9 +53,10 @@ test("over-budget saves when Back is tapped straight away", async ({ page }) => 
   await page.goto("/settings/over-budget");
   const field = page.getByRole("textbox", { name: "Over-budget allowance" });
   await field.fill("15");
-  await page.getByRole("link", { name: "Settings" }).first().click();
+  await page.getByRole("main").getByRole("link", { name: "Settings" }).click();
   await page.waitForURL("**/settings");
-  // Let Settings finish loading, so the next goto isn't interrupting it.
+  // Let Settings finish loading, so the next goto isn't interrupting it. This also
+  // waits for the hide-time save to land.
   await page.waitForLoadState("networkidle");
   await page.goto("/settings/over-budget");
   await expect(page.getByRole("textbox", { name: "Over-budget allowance" })).toHaveValue("15");

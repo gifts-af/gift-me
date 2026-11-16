@@ -22,6 +22,7 @@ export function OverBudgetField({ initial, action }: { initial: number; action: 
 
   async function send(value: string) {
     if (value === sent.current) return;
+    const prev = sent.current;
     sent.current = value;
     let result: SaveResult;
     try {
@@ -29,6 +30,8 @@ export function OverBudgetField({ initial, action }: { initial: number; action: 
     } catch {
       result = { ok: false, error: TRY_AGAIN };
     }
+    // A failed save can be tried again, by blur, Enter or leaving.
+    if (!result.ok && sent.current === value) sent.current = prev;
     if (!visible.current) return;
     if (result.ok) {
       setDone(true);
@@ -77,6 +80,7 @@ export function OverBudgetField({ initial, action }: { initial: number; action: 
             }
           }}
           aria-describedby={`${id}-hint`}
+          aria-invalid={error ? true : undefined}
           className="num max-w-28"
         />
         <span aria-hidden="true">%</span>

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { Activity } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { OverBudgetField } from "../over-budget-field";
 
@@ -56,5 +57,42 @@ describe("OverBudgetField", () => {
     await act(async () => fireEvent.blur(field()));
     unmount();
     expect(action).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries on the next blur after a failed save", async () => {
+    const action = vi.fn().mockResolvedValueOnce({ ok: false, error: "Try again." }).mockResolvedValue({ ok: true });
+    render(<OverBudgetField initial={10} action={action} />);
+    type("15");
+    await act(async () => fireEvent.blur(field()));
+    expect(field()).toHaveAttribute("aria-invalid", "true");
+    await act(async () => fireEvent.blur(field()));
+    expect(action).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("status")).toHaveTextContent("Saved");
+  });
+
+  it("can send again after a save that threw", async () => {
+    const action = vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue({ ok: true });
+    render(<OverBudgetField initial={10} action={action} />);
+    type("15");
+    await act(async () => fireEvent.blur(field()));
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    await act(async () => fireEvent.blur(field()));
+    expect(action).toHaveBeenCalledTimes(2);
+  });
+
+  it("can send again after a failed save while hidden", async () => {
+    const action = vi.fn().mockResolvedValueOnce({ ok: false, error: "Try again." }).mockResolvedValue({ ok: true });
+    const ui = (mode: "visible" | "hidden") => (
+      <Activity mode={mode}>
+        <OverBudgetField initial={10} action={action} />
+      </Activity>
+    );
+    const { rerender } = render(ui("visible"));
+    type("15");
+    await act(async () => rerender(ui("hidden")));
+    expect(action).toHaveBeenCalledTimes(1);
+    await act(async () => rerender(ui("visible")));
+    await act(async () => fireEvent.blur(field()));
+    expect(action).toHaveBeenCalledTimes(2);
   });
 });
