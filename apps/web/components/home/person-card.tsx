@@ -28,7 +28,7 @@ export function PersonCard({ person }: { person: Card }) {
         </p>
         {!person.hasBirthday && (
           <Link
-            href={`/people/${person.id}#birthday`}
+            href={`/people/${person.id}/about`}
             className="relative z-10 mt-1 inline-flex min-h-11 items-center text-[13px] font-semibold text-primary underline-offset-2 hover:underline"
           >
             Add birthday

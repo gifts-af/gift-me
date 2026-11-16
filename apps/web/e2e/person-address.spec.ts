@@ -82,7 +82,11 @@ test("add, fix, change and remove a person's address", async ({ page }, info) =>
   await deletePeople(name);
   const personId = await addPerson(name);
   await signIn(page);
+  // Its own screen since ALL-127, opened from the Shipping address row.
   await page.goto(`/people/${personId}`);
+  await expect(page.getByRole("link", { name: /^Shipping address/ })).toContainText("Not added");
+  await page.getByRole("link", { name: /^Shipping address/ }).click();
+  await expect(page).toHaveURL(new RegExp(`/people/${personId}/address$`));
   const section = page.locator("#address");
 
   // AC-1: no address is normal; nothing to fill in yet.
@@ -118,6 +122,11 @@ test("add, fix, change and remove a person's address", async ({ page }, info) =>
   await section.getByRole("button", { name: "Save address" }).click();
   await expect(section.getByText("Orlando, FL 33602")).toBeVisible();
   expect((await stored(personId)).city).toBe("Orlando");
+
+  // The row on their page sums it up with the street.
+  await page.getByRole("link", { name: name, exact: true }).click();
+  await expect(page.getByRole("link", { name: /^Shipping address/ })).toContainText("12 Oak Lane");
+  await page.getByRole("link", { name: /^Shipping address/ }).click();
 
   // AC-6: Remove asks first; Cancel keeps it, confirming clears it.
   await section.getByRole("button", { name: "Remove" }).click();

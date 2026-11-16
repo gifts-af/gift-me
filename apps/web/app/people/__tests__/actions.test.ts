@@ -14,15 +14,32 @@ vi.mock("next/cache", () => ({ revalidatePath }));
 vi.mock("next/navigation", () => ({ redirect }));
 vi.mock("@/lib/today", () => ({ todayForRequest: async () => "2026-11-01" }));
 // The Zinc wiring is server-only glue; these tests never place an order.
-vi.mock("@/app/settings/zinc-deps", () => ({ placeHeld: async () => {} }));
+const buyingWiring = vi.hoisted(() => vi.fn());
+vi.mock("@/app/settings/zinc-deps", () => ({ placeHeld: async () => {}, placeAddressHeld: async () => {}, buyingWiring }));
 vi.mock("@/lib/app-settings", () => ({ appSettingInt: async () => 20 }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({}) }));
+const renamePerson = vi.hoisted(() => vi.fn());
+const setRelationship = vi.hoisted(() => vi.fn());
+const setBirthYear = vi.hoisted(() => vi.fn());
+const setDatedOccasion = vi.hoisted(() => vi.fn());
+const removeDatedOccasion = vi.hoisted(() => vi.fn());
 vi.mock("@/modules/concierge", async () => {
   const rules = await vi.importActual<typeof import("@/modules/concierge/people/rules")>("@/modules/concierge/people/rules");
-  return { deletePerson, addPerson, parsePersonForm: rules.parsePersonForm };
+  return {
+    deletePerson, addPerson, renamePerson, setRelationship, setBirthYear, setDatedOccasion, removeDatedOccasion,
+    parsePersonForm: rules.parsePersonForm, parseMonthDay: rules.parseMonthDay, parseBirthYear: rules.parseBirthYear,
+  };
 });
 
-import { addPersonAction, deletePersonAction } from "../actions";
+import {
+  addPersonAction,
+  deletePersonAction,
+  removeDatedOccasionAction,
+  renamePersonAction,
+  setBirthYearAction,
+  setDatedOccasionAction,
+  setRelationshipAction,
+} from "../actions";
 
 const form = (id: string) => {
   const f = new FormData();
@@ -82,5 +99,85 @@ describe("addPersonAction (AC-15)", () => {
     addPerson.mockResolvedValue({ ok: false, error: "nope" });
     await addPersonAction(null, person());
     expect(scheduleNotesTip).not.toHaveBeenCalled();
+  });
+});
+
+// About's fields (ALL-127): each action saves one field, refreshes the pages
+// that show it, and never builds the buying wiring that resumes rounds.
+describe("one field at a time", () => {
+  const ID = "3f2b8c1e-9d4a-4e6b-8a1f-0c5d7e9b2a46";
+  beforeEach(() => {
+    for (const fn of [renamePerson, setRelationship, setBirthYear, setDatedOccasion, removeDatedOccasion]) {
+      fn.mockReset();
+      fn.mockResolvedValue({ ok: true });
+    }
+    buyingWiring.mockClear();
+    revalidatePath.mockClear();
+  });
+
+  it("renames, and refreshes Home and the person's pages", async () => {
+    expect(await renamePersonAction(ID, "Mama")).toEqual({ ok: true });
+    expect(renamePerson).toHaveBeenCalledWith(ID, "Mama");
+    const paths = revalidatePath.mock.calls.map((c) => c[0]);
+    expect(paths).toEqual(expect.arrayContaining(["/", "/people", `/people/${ID}`]));
+  });
+
+  it("sets the relationship", async () => {
+    expect(await setRelationshipAction(ID, "aunt")).toEqual({ ok: true });
+    expect(setRelationship).toHaveBeenCalledWith(ID, "aunt");
+  });
+
+  it("sets a date from the month and day picked", async () => {
+    expect(await setDatedOccasionAction(ID, "birthday", "11", "30")).toEqual({ ok: true });
+    expect(setDatedOccasion).toHaveBeenCalledWith(ID, "birthday", { month: 11, day: 30 });
+  });
+
+  it("refuses a date that doesn't exist, or cleared fields, without saving", async () => {
+    const bad = { ok: false, error: "That date doesn't exist." };
+    expect(await setDatedOccasionAction(ID, "birthday", "2", "31")).toEqual(bad);
+    expect(await setDatedOccasionAction(ID, "anniversary", "", "")).toEqual(bad);
+    expect(await setDatedOccasionAction(ID, "anniversary", "6", "")).toEqual(bad);
+    expect(setDatedOccasion).not.toHaveBeenCalled();
+  });
+
+  it("sets the birth year from its text; empty clears it", async () => {
+    await setBirthYearAction(ID, "1960");
+    await setBirthYearAction(ID, " ");
+    expect(setBirthYear.mock.calls).toEqual([[ID, 1960, 2026], [ID, null, 2026]]);
+    expect(await setBirthYearAction(ID, "19x0")).toEqual({ ok: false, error: "Enter a birth year between 1900 and this year." });
+    expect(setBirthYear).toHaveBeenCalledTimes(2);
+  });
+
+  it("removes a birthday or anniversary", async () => {
+    await removeDatedOccasionAction(ID, "birthday");
+    await removeDatedOccasionAction(ID, "anniversary");
+    expect(removeDatedOccasion.mock.calls).toEqual([[ID, "birthday"], [ID, "anniversary"]]);
+  });
+
+  it("refuses anything that isn't a birthday or anniversary, or isn't text", async () => {
+    const badForm = { ok: false, error: "That didn't go through. Reload and try again." };
+    expect(await setDatedOccasionAction(ID, "christmas", "12", "25")).toEqual(badForm);
+    expect(await removeDatedOccasionAction(ID, "christmas")).toEqual(badForm);
+    expect(await renamePersonAction(ID, 5 as unknown as string)).toEqual(badForm);
+    expect(await setRelationshipAction({} as unknown as string, "aunt")).toEqual(badForm);
+    expect(setDatedOccasion).not.toHaveBeenCalled();
+    expect(removeDatedOccasion).not.toHaveBeenCalled();
+    expect(renamePerson).not.toHaveBeenCalled();
+    expect(setRelationship).not.toHaveBeenCalled();
+  });
+
+  it("doesn't refresh anything when the save fails", async () => {
+    renamePerson.mockResolvedValue({ ok: false, error: "nope" });
+    expect(await renamePersonAction(ID, "Mama")).toEqual({ ok: false, error: "nope" });
+    expect(revalidatePath).not.toHaveBeenCalled();
+  });
+
+  it("never builds the buying wiring, so no round is resumed", async () => {
+    await renamePersonAction(ID, "Mama");
+    await setRelationshipAction(ID, "aunt");
+    await setDatedOccasionAction(ID, "birthday", "11", "30");
+    await setBirthYearAction(ID, "1960");
+    await removeDatedOccasionAction(ID, "birthday");
+    expect(buyingWiring).not.toHaveBeenCalled();
   });
 });

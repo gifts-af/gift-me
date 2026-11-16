@@ -1,6 +1,5 @@
-import { ChevronRight } from "lucide-react";
-import Link from "next/link";
 import { OCCASION_NAMES } from "@/components/occasion-format";
+import { SettingsRow } from "@/app/settings/settings-row";
 import type { PersonDetail } from "@/modules/concierge";
 import { money } from "./money";
 
@@ -19,11 +18,7 @@ export function budgetSummary(baseCents: number | null, defaultCents: number | n
   return parts.length > 0 ? parts.join(" · ") : "Not set";
 }
 
-/**
- * Budget on a person's page, as a row that opens the Budget screen (T71).
- * Looks like Settings' rows (ALL-115's SettingsRow); share one component once
- * both have landed.
- */
+/** Budget on a person's page, as a row that opens the Budget screen (T71), in the Gifts group (ALL-127). */
 export function BudgetRow({
   personId,
   baseCents,
@@ -36,15 +31,6 @@ export function BudgetRow({
   occasions: Occasion[];
 }) {
   return (
-    <Link
-      href={`/people/${personId}/budget`}
-      className="flex min-h-11 items-center justify-between gap-3 rounded-xl border border-border px-4"
-    >
-      <span className="text-[15px]">Budget</span>
-      <span className="flex min-w-0 items-center gap-1">
-        <span className="truncate text-[15px] text-muted-foreground">{budgetSummary(baseCents, defaultCents, occasions)}</span>
-        <ChevronRight className="size-5 flex-none text-muted-foreground" aria-hidden="true" />
-      </span>
-    </Link>
+    <SettingsRow href={`/people/${personId}/budget`} label="Budget" value={budgetSummary(baseCents, defaultCents, occasions)} />
   );
 }

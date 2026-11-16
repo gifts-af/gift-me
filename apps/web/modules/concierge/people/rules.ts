@@ -26,7 +26,7 @@ export type PersonInput = {
 
 type Result<T> = { ok: true; value: T } | { ok: false; error: string };
 
-const BAD_DATE = "That date doesn't exist.";
+export const BAD_DATE = "That date doesn't exist.";
 const BAD_BIRTH_YEAR = "Enter a birth year between 1900 and this year.";
 const MIN_BIRTH_YEAR = 1900;
 const MAX_NAME_LENGTH = 120;
@@ -42,57 +42,82 @@ function wholeNumber(s: string): number | null {
   return /^\d{1,4}$/.test(s) ? Number(s) : null;
 }
 
+/** True when this month and day happen in some year (29 February counts). */
+export function isRealMonthDay(d: MonthDay): boolean {
+  if (!Number.isInteger(d.month) || !Number.isInteger(d.day)) return false;
+  try {
+    toDate(LEAP_YEAR, d.month, d.day);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 // Both parts empty: not given. Only one, or an impossible date: an error.
-function parseMonthDay(month: string, day: string): Result<MonthDay | null> {
+export function parseMonthDay(month: string, day: string): Result<MonthDay | null> {
   if (month === "" && day === "") return { ok: true, value: null };
   const m = wholeNumber(month);
   const d = wholeNumber(day);
-  if (m === null || d === null) return { ok: false, error: BAD_DATE };
-  try {
-    toDate(LEAP_YEAR, m, d);
-  } catch {
-    return { ok: false, error: BAD_DATE };
-  }
+  if (m === null || d === null || !isRealMonthDay({ month: m, day: d })) return { ok: false, error: BAD_DATE };
   return { ok: true, value: { month: m, day: d } };
+}
+
+/** A name as saved: trimmed, 1 to 120 characters. */
+export function checkName(text: string): Result<string> {
+  const name = text.trim();
+  return name.length < 1 || name.length > MAX_NAME_LENGTH ? { ok: false, error: "Enter a name." } : { ok: true, value: name };
+}
+
+export function checkRelationship(text: string): Result<Relationship> {
+  const relationship = RELATIONSHIPS.find((r) => r === text);
+  return relationship ? { ok: true, value: relationship } : { ok: false, error: "Pick a relationship." };
+}
+
+/** A birth year from 1900 to this year; null (no year) is fine. */
+export function checkBirthYear(year: number | null, currentYear: number): Result<number | null> {
+  if (year === null) return { ok: true, value: null };
+  return Number.isInteger(year) && year >= MIN_BIRTH_YEAR && year <= currentYear
+    ? { ok: true, value: year }
+    : { ok: false, error: BAD_BIRTH_YEAR };
+}
+
+/** The birth year field's text: empty is no year. */
+export function parseBirthYear(text: string, currentYear: number): Result<number | null> {
+  const trimmed = text.trim();
+  if (trimmed === "") return { ok: true, value: null };
+  const year = wholeNumber(trimmed);
+  return year === null ? { ok: false, error: BAD_BIRTH_YEAR } : checkBirthYear(year, currentYear);
 }
 
 export function parsePersonForm(
   f: FormData,
   currentYear: number = new Date().getFullYear(),
-  options: { anyAnniversary?: boolean } = {},
 ): Result<PersonInput> {
-  const name = field(f, "name");
-  if (name.length < 1 || name.length > MAX_NAME_LENGTH) return { ok: false, error: "Enter a name." };
+  const name = checkName(field(f, "name"));
+  if (!name.ok) return name;
 
-  const relationship = RELATIONSHIPS.find((r) => r === field(f, "relationship"));
-  if (!relationship) return { ok: false, error: "Pick a relationship." };
+  const relationship = checkRelationship(field(f, "relationship"));
+  if (!relationship.ok) return relationship;
 
   const birthday = parseMonthDay(field(f, "birthdayMonth"), field(f, "birthdayDay"));
   if (!birthday.ok) return birthday;
 
-  let birthYear: number | null = null;
-  const yearText = field(f, "birthYear");
-  if (yearText !== "") {
-    birthYear = wholeNumber(yearText);
-    if (birthYear === null || birthYear < MIN_BIRTH_YEAR || birthYear > currentYear) {
-      return { ok: false, error: BAD_BIRTH_YEAR };
-    }
-  }
+  const birthYear = parseBirthYear(field(f, "birthYear"), currentYear);
+  if (!birthYear.ok) return birthYear;
 
-  // Validated for everyone. Kept only for a wife or husband when adding; when
-  // editing (anyAnniversary) it is kept for anyone, so changing a relationship
-  // never drops an anniversary.
+  // Validated for everyone, kept only for a wife or husband (the Add form
+  // shows it only for them; About sets one for anyone, ALL-127).
   const anniversary = parseMonthDay(field(f, "anniversaryMonth"), field(f, "anniversaryDay"));
   if (!anniversary.ok) return anniversary;
-  const keepAnniversary = options.anyAnniversary || relationship === "wife" || relationship === "husband";
+  const keepAnniversary = relationship.value === "wife" || relationship.value === "husband";
 
   return {
     ok: true,
     value: {
-      name,
-      relationship,
+      name: name.value,
+      relationship: relationship.value,
       birthday: birthday.value,
-      birthYear,
+      birthYear: birthYear.value,
       anniversary: keepAnniversary ? anniversary.value : null,
     },
   };

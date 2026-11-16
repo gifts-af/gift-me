@@ -16,10 +16,13 @@ test("save a gift for someone, then remove it", async ({ page }) => {
   await page.getByRole("link", { name: person, exact: true }).click();
   await expect(page).toHaveURL(/\/people\/[0-9a-f-]{36}$/);
 
+  const personPage = page.url();
   try {
+    // Saved gifts has its own screen, opened from its row (ALL-127).
+    await page.getByRole("link", { name: /^Saved gifts/ }).click();
+    await expect(page).toHaveURL(/\/saved-gifts$/);
     const saved = page.getByRole("region", { name: "Saved gifts" });
     await expect(saved.getByText(/^Only you see these\./)).toBeVisible();
-    await expect(page.getByText("You don't need their list to buy for them.")).toBeVisible();
     await expect(saved.getByRole("button", { name: "Save" })).toBeEnabled();
 
     const gift = `Gift ${stamp}`;
@@ -36,6 +39,7 @@ test("save a gift for someone, then remove it", async ({ page }) => {
     await page.reload();
     await expect(saved.getByText(gift)).toHaveCount(0);
   } finally {
+    await page.goto(personPage);
     await page.getByRole("button", { name: `Delete ${person}` }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click();
     await expect(page).toHaveURL(/\/$/);

@@ -39,6 +39,9 @@ export type ScheduleDays = {
 
 export type MonthDayRow = { month: number; day: number };
 
+/** A person's own columns that About changes, one at a time. */
+export type PersonFields = Partial<{ name: string; relationship: string; birthYear: number | null }>;
+
 /** A person's address columns as stored; every field may be empty (ALL-81). */
 export type StoredAddress = AddressDraft & { country: string | null; checkedAt: string | null };
 
@@ -69,7 +72,8 @@ export interface PeopleStore {
   signPhotos(paths: string[]): Promise<Map<string, string>>;
 
   createPerson(p: NewPerson): Promise<string>;
-  updatePerson(id: string, p: { name: string; relationship: string; birthYear: number | null }): Promise<boolean>;
+  /** Writes only the fields given (ALL-127: each field on About saves on its own). */
+  updatePersonFields(id: string, p: PersonFields): Promise<boolean>;
   addOccasion(personId: string, o: { kind: OccasionKind; month: number | null; day: number | null }): Promise<void>;
   moveOccasion(occasionId: string, month: number, day: number): Promise<boolean>;
   removeOccasion(occasionId: string): Promise<void>;
@@ -230,11 +234,15 @@ export function createSupabasePeopleStore(): PeopleStore {
       return data;
     },
 
-    async updatePerson(id, p) {
+    async updatePersonFields(id, p) {
       const supabase = await createClient();
       const { data, error } = await supabase
         .from("people")
-        .update({ name: p.name, relationship: p.relationship, birth_year: p.birthYear })
+        .update({
+          ...(p.name !== undefined && { name: p.name }),
+          ...(p.relationship !== undefined && { relationship: p.relationship }),
+          ...(p.birthYear !== undefined && { birth_year: p.birthYear }),
+        })
         .eq("id", id)
         .select("id");
       check(error, "Updating a person failed");

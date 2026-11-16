@@ -162,9 +162,37 @@ A button in the server's HTML shows before its click handler is attached, and a 
 - **Fields that are only valid together**, like a shipping address: one Save for the group.
 - **Money or anything that can't be undone:** an explicit button, plus a confirm where it's needed.
 
-**Screens where you mostly look and change one thing at a time** (Settings first; a person's details may follow) are a list of rows. Each row shows its current value and opens its own detail screen, the way phone settings work. A single choice (like the time zone) can instead open the browser's own picker right on its row and save when picked. The list itself has no main button.
+**Screens where you mostly look and change one thing at a time** (Settings, and a person's page since ALL-127) are a list of rows. Each row shows its current value and opens its own detail screen, the way phone settings work. A single choice (like the time zone) can instead open the browser's own picker right on its row and save when picked. The list itself has no main button.
 
 **Where a new setting goes:** in the Settings section it belongs to (You, Reminders, Gift ideas, Paying for gifts) as a row with its value. A new section only when none fits.
+
+## A person's page (ALL-127)
+
+**A person's page is what we know about them, then a short list of rows.** Each row shows its value and opens its own screen, like Settings (T71). There's no Edit form on the page any more. On a computer it's the same centred column. Plan: [`plans/ALL-127-save-as-you-go.md`](plans/ALL-127-save-as-you-go.md).
+
+| On Mom's page (`/people/[id]`), top to bottom | Shows | Opens |
+|---|---|---|
+| Header | Photo, name, "Mother · next occasion", where ideas come from, the readiness banner. A failed photo from the Add form says so here | — |
+| What we know | The facts, as before | Facts are changed in place |
+| About Mom | "Mother · Birthday Mar 14" (no birthday: just "Mother") | About Mom |
+| Occasions | Each occasion with its switch, date and order-by date, as rows | Switches save when flipped |
+| Gifts: Budget | The base and occasion amounts (ALL-120) | Budget |
+| Gifts: Saved gifts | How many, or "None" | Saved gifts |
+| Gifts: Their list | "Linked" or "Not linked" | Their list |
+| Gifts: Shipping address | The street, "Something's missing", a shared list's city, or "Not added" | Shipping address |
+| Delete Mom | Behind a confirm, as before | — |
+
+**About Mom** (`/people/[id]/about`) is one screen where each field saves on its own, with a small "Saved" by it and no Save button (the shared `useAutosave` hook):
+- **Photo:** the photo picker, which saves on pick.
+- **Name:** saves on leaving the field, on Enter, or on leaving the page in the app. An empty name shows "Enter a name." and keeps the saved one.
+- **Who are they to you?** The phone's own picker; saves when picked.
+- **Birthday:** month and day save together **when you leave the date fields**, so a date passed through on the way to another is never saved (a passing date could let the daily tick start a round). Only a real date saves; "February 31" shows "That date doesn't exist." Changing it moves the same occasion, so an open round stays. Clearing the fields saves nothing; **Remove birthday** (with a confirm) removes it and the birth year. The year stays off until there's a date, and saves on leaving it.
+- **Anniversary:** the same, without a year, with **Remove anniversary**. Offered for anyone, so changing a relationship never drops one.
+- Every field is off until the page has loaded (ALL-110). None of these saves restarts a round waiting for an address; only saving an address does.
+
+**Saved gifts, Their list and Shipping address** moved to screens of their own (`/people/[id]/saved-gifts`, `/list`, `/address`), unchanged inside, each with a back link to the person. The address keeps its one Save (fields only valid together) and its 300 s time limit, since saving it can place held gifts. The "Add an address" email's old link (`/people/[id]?address=open`) lands on the address screen with the form open, and Home's "Add birthday" opens About.
+
+**Pages kept in the background:** Next keeps visited screens in the page, hidden. Leaving About saves a change still waiting (a bad one is dropped), and leaving the address screen closes its form, so coming back shows what's saved.
 
 ## Mock-ups
 
@@ -179,7 +207,7 @@ A clickable, phone-first prototype, published as a private shareable artifact pa
 | Screen | Shows | PRD |
 |---|---|---|
 | Give (mock-up "home") | The people you buy for, each with their next occasion and status. Someone who keeps their own list (Mom) is marked "Her own list" and is the ideal case; someone without one (Dad) is marked "we suggest ideas". An empty state for a new user | P-1, P-3, decision 37 |
-| Person profile | What the app knows about them (facts, sizes, likes), with edit and delete, one readiness line, whether they keep a list, and a **Budget** row (T71) showing the base and any occasion amounts, which opens the Budget screen: "Any occasion", an optional amount per switched-on occasion ("Uses $75" when empty) and one Save (ALL-120) | C-6, C-7, decision 36, T73 |
+| Person profile | What the app knows about them (facts, sizes, likes), with edit and delete, one readiness line, whether they keep a list, and rows for About, occasions and gifts (ALL-127, see A person's page above), including a **Budget** row (T71) showing the base and any occasion amounts, which opens the Budget screen: "Any occasion", an optional amount per switched-on occasion ("Uses $75" when empty) and one Save (ALL-120) | C-6, C-7, decision 36, T73 |
 | "Here's what I learned" | The facts pulled from a capture, each to keep or drop | C-3 |
 | Pick from their list (Mom) | Gifts from the person's own list, with when each was added and arrive-by date; one already claimed by someone else; pick one or several. **Your budget** is a separate, optional field: only when it's filled in do over-budget labels and the confirm step appear | A-1, B-4, decisions 36, 37 |
 | Suggested ideas (Dad) | Generated ideas with the reason each fits, the same optional budget, and "None of these" with a reason | A-1, B-4, G-3, decision 36 |
