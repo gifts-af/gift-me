@@ -19,6 +19,7 @@ export function ThemeToggle() {
   const label = !hydrated ? "Switch theme" : dark ? "Switch to light mode" : "Switch to dark mode";
   return (
     <Button
+      type="button"
       variant="ghost"
       size="icon"
       className="size-11"

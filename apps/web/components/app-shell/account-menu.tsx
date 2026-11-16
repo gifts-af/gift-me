@@ -30,7 +30,7 @@ export function AccountMenu({ email }: { email?: string | null }) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" aria-label="Account">
+        <Button type="button" variant="ghost" size="icon" aria-label="Account">
           <User aria-hidden="true" />
         </Button>
       </DropdownMenuTrigger>

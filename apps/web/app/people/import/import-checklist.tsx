@@ -76,6 +76,7 @@ export function ImportChecklist({
           </p>
         )}
         <Button
+          type="button"
           className="self-start"
           onClick={connect}
           disabled={stage.kind === "loading"}
@@ -250,7 +251,7 @@ function Finished({ result, onAgain }: { result: Extract<ImportResult, { ok: tru
         See them on Give
       </Link>
       {onAgain && (
-        <Button variant="outline" className="self-start" onClick={onAgain}>
+        <Button type="button" variant="outline" className="self-start" onClick={onAgain}>
           Import more people
         </Button>
       )}

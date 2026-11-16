@@ -57,7 +57,8 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     // can't send its form the browser's own way (ALL-60); any other button
     // gets aria-disabled, so a keyboard can still reach it.
     const early = !hydrated;
-    const submit = props.type === "submit";
+    // No type means submit, as the browser treats it.
+    const submit = props.type !== "button" && props.type !== "reset";
     return (
       <button
         className={cn(buttonVariants({ variant, size, className }))}

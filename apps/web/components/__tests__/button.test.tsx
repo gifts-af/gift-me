@@ -19,7 +19,11 @@ function serverHtml(ui: ReactElement) {
 
 describe("Button before the page can respond", () => {
   it("marks a plain button not ready, but keeps it reachable by keyboard", async () => {
-    const { container, hydrate } = serverHtml(<Button onClick={() => {}}>Go</Button>);
+    const { container, hydrate } = serverHtml(
+      <Button type="button" onClick={() => {}}>
+        Go
+      </Button>,
+    );
     const button = () => within(container).getByRole("button", { name: "Go" });
     expect(button()).toHaveAttribute("aria-disabled", "true");
     expect(button()).toBeEnabled();
@@ -31,6 +35,18 @@ describe("Button before the page can respond", () => {
     const { container, hydrate } = serverHtml(
       <form>
         <Button type="submit">Save</Button>
+      </form>,
+    );
+    const button = () => within(container).getByRole("button", { name: "Save" });
+    expect(button()).toBeDisabled();
+    await hydrate();
+    expect(button()).toBeEnabled();
+  });
+
+  it("treats a button with no type as submit, as the browser does", async () => {
+    const { container, hydrate } = serverHtml(
+      <form>
+        <Button>Save</Button>
       </form>,
     );
     const button = () => within(container).getByRole("button", { name: "Save" });
@@ -59,7 +75,11 @@ describe("Button before the page can respond", () => {
   });
 
   it("lets the caller's own aria-disabled win", async () => {
-    const { container, hydrate } = serverHtml(<Button aria-disabled>Busy</Button>);
+    const { container, hydrate } = serverHtml(
+      <Button type="button" aria-disabled>
+        Busy
+      </Button>,
+    );
     await hydrate();
     expect(within(container).getByRole("button", { name: "Busy" })).toHaveAttribute("aria-disabled", "true");
   });
