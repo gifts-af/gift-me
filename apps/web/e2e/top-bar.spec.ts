@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { createFreshUser } from "./fresh-user";
 import { phoneLayoutProblems } from "./phone-layout";
-import { addMother } from "./seed";
+import { addMother, saveOneGiftList } from "./seed";
 import { signIn } from "./sign-in";
 
 // ALL-95: one bar with Get and Give on every signed-in page.
@@ -153,11 +153,14 @@ test.describe("at 320 px, the narrowest phone", { tag: "@layout" }, () => {
   // No people on purpose: PersonCard's name link is short by itself (its tap
   // area is a ::after), which phoneLayoutProblems flags, and that's not the bar.
   test("every signed-in page fits", async ({ page }) => {
-    await signIn(page, await createFreshUser());
+    // A list, so Settings shows My address and its page doesn't redirect.
+    const user = await createFreshUser();
+    await saveOneGiftList(user);
+    await signIn(page, user);
     await page.goto("/");
     await expect(page.getByRole("link", { name: /^You/ })).toBeVisible();
     expect(await phoneLayoutProblems(page)).toEqual([]);
-    for (const path of ["/lists", "/settings"]) {
+    for (const path of ["/lists", "/settings", "/settings/over-budget", "/settings/reminders", "/settings/paying", "/settings/address"]) {
       await page.goto(path);
       await expect(page.getByRole("button", { name: "Account" })).toBeVisible();
       expect(await phoneLayoutProblems(page)).toEqual([]);
