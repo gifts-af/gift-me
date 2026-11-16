@@ -76,13 +76,17 @@ test.describe("a remove held for Undo is sent when the page goes (AC-17)", () =>
     await expect(page.getByText("Removed Kettle", { exact: true })).toBeVisible();
   }
 
-  // The send can land just after the next page loads, so look again until it has.
+  // The send can land just after the next page loads, so look again until it
+  // has. Look from a second tab: reloading the first while its save is still
+  // on the way would rightly ask before leaving.
   async function expectGone(page: Page) {
+    const check = await page.context().newPage();
     await expect(async () => {
-      await page.goto("/lists");
-      await expect(gift(page, "Novel")).toBeVisible();
-      await expect(gift(page, "Kettle")).toHaveCount(0);
+      await check.goto("/lists");
+      await expect(gift(check, "Novel")).toBeVisible();
+      await expect(gift(check, "Kettle")).toHaveCount(0);
     }).toPass({ timeout: 10_000 });
+    await check.close();
   }
 
   test("left in the app, without asking", async ({ page }) => {
