@@ -1,7 +1,9 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
+import { isTimeZone } from "@/lib/time-zones";
 import { errorFields, logEvent } from "@/lib/log";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -25,7 +27,7 @@ import { placeHeld, zincWiring } from "./zinc-deps";
 // concierge's (T26).
 export async function saveSettings(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
   const timezone = String(formData.get("timezone") ?? "");
-  if (!Intl.supportedValuesOf("timeZone").includes(timezone)) {
+  if (!isTimeZone(timezone)) {
     return { ok: false, error: "Pick a time zone from the list." };
   }
 
@@ -42,6 +44,25 @@ export async function saveSettings(_previous: SaveResult | null, formData: FormD
     console.error("saving the time zone failed", error);
     return { ok: false, error: "Your settings couldn't be saved. Try again." };
   }
+  return { ok: true };
+}
+
+// Saves the time zone on its own, as the picker on Settings needs (ALL-115). Replaces the
+// time zone half of saveSettings, which goes away with the old form.
+export async function saveTimezone(zone: string): Promise<SaveResult> {
+  if (!isTimeZone(String(zone))) return { ok: false, error: "Pick a time zone from the list." };
+
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getClaims();
+  const userId = auth?.claims?.sub;
+  if (!userId) return { ok: false, error: "Your session ended. Sign in again." };
+
+  const { error } = await supabase.from("profiles").update({ timezone: zone }).eq("id", userId);
+  if (error) {
+    logEvent("settings.timezone_save_failed", { user_id: userId, ...errorFields(error) });
+    return { ok: false, error: "Your time zone couldn't be saved. Try again." };
+  }
+  revalidatePath("/settings");
   return { ok: true };
 }
 
