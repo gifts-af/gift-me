@@ -13,6 +13,7 @@ import type { SavedIdea } from "../ideas/store";
 vi.mock("server-only", () => ({}));
 const { onDemandIdeas } = await import("../ideas/read");
 const { createSupabaseIdeaStore } = await import("../ideas/store");
+const { runIdeas } = await import("../ideas/run");
 
 const stack = await localStack({ api: true });
 const dbUp = stack !== null;
@@ -256,6 +257,57 @@ describe.skipIf(!dbUp)("createSupabaseIdeaStore", () => {
     const got = await store().inputs({ userId: buyer.id, personId: dad, roundId: null });
     expect(got?.excluded).toEqual(["B0MUG"]);
     expect(got?.avoidTitles).toEqual(["Stoneware mug"]);
+  });
+
+  // S4: the checks before a run, on the real store. Both vendors are spies that fail the test if
+  // called, so nothing here can reach the AI Gateway or Zinc.
+  async function runWithSpies(userId: string, personId: string) {
+    const gateway = vi.fn(async () => new Response("{}", { status: 500 }));
+    const zinc = vi.fn(async () => new Response("{}", { status: 500 }));
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const outcome = await runIdeas(
+        { userId, personId, roundId: null, signal: new AbortController().signal },
+        {
+          store: store(),
+          gateway: { base: "http://127.0.0.1:9", apiKey: "gw-test", fetch: gateway as unknown as typeof fetch },
+          zinc: { http: { base: "http://127.0.0.1:9", timeoutMs: 1000, fetch: zinc as unknown as typeof fetch }, key: "zn-test" },
+          today: "2026-11-17",
+          clock: Date.now,
+          sleep: async () => {},
+        },
+      );
+      const runs = await pg.query("select count(*)::int as n from concierge.idea_runs where person_id = $1", [personId]);
+      return { outcome, gatewayCalls: gateway.mock.calls.length, zincCalls: zinc.mock.calls.length, runs: runs.rows[0].n as number };
+    } finally {
+      log.mockRestore();
+    }
+  }
+
+  it("with idea_engine_enabled 0, or an unpaid buyer, a run calls no vendor and writes no idea_runs row", async () => {
+    const before = (await pg.query("select value from concierge.app_settings where key = 'idea_engine_enabled'")).rows[0].value;
+    try {
+      const buyer = await newUser("Jim");
+      const person = await newPerson(buyer.id, "Dad");
+      await addFact(buyer.id, person, "Loves fishing");
+
+      await pg.query("update concierge.app_settings set value = '0' where key = 'idea_engine_enabled'");
+      expect(await runWithSpies(buyer.id, person)).toEqual({ outcome: { status: "off" }, gatewayCalls: 0, zincCalls: 0, runs: 0 });
+
+      await pg.query("update concierge.app_settings set value = '1' where key = 'idea_engine_enabled'");
+      const unpaid = await newUser("Unpaid");
+      await pg.query("update concierge.accounts set paid_features = false where user_id = $1", [unpaid.id]);
+      const theirs = await newPerson(unpaid.id, "Mum");
+      await addFact(unpaid.id, theirs, "Loves gardening");
+      expect(await runWithSpies(unpaid.id, theirs)).toEqual({
+        outcome: { status: "refused", reason: "not_paid" },
+        gatewayCalls: 0,
+        zincCalls: 0,
+        runs: 0,
+      });
+    } finally {
+      await pg.query("update concierge.app_settings set value = $1 where key = 'idea_engine_enabled'", [before]);
+    }
   });
 
   it("onDemandIdeas shows only the signed-in user's ideas", async () => {
