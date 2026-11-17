@@ -677,7 +677,7 @@ export const TEMPLATES: {
       button: { label: `Tell us more about ${d.personName}`, url: links.questions },
       footer: d.again
         ? // No retry is promised: the one extra run may already be spent.
-          `What happens next: we'll skip this occasion unless you pick something yourself. Telling us more about ${d.personName} helps us next time.`
+          `What happens next: we'll skip this occasion. Telling us more about ${d.personName} helps us next time.`
         : `What happens next: telling us more about ${d.personName} helps. We'll try once more after you add something. Otherwise, we'll let you know before the date passes.`,
     }),
   }),

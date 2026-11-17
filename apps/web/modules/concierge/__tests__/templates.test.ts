@@ -553,7 +553,7 @@ describe("no_ideas (ALL-27 AC-9)", () => {
     expect(mail.text).toContain("haven't been charged");
     // It promises no retry: the extra run may already be spent.
     expect(mail.text).toContain(
-      "What happens next: we'll skip this occasion unless you pick something yourself. Telling us more about Mom helps us next time.",
+      "What happens next: we'll skip this occasion. Telling us more about Mom helps us next time.",
     );
     expect(mail.text).not.toMatch(/try (one last time|once more|again after)/);
     expect(mail.text).toContain("Tell us more about Mom");
