@@ -2,7 +2,7 @@
 -- saving ideas, exclusions, the fact trigger and paid-only rounds.
 begin;
 \ir _helpers.psql
-select plan(26);
+select plan(29);
 
 select tests.create_user('a@example.com') as a \gset
 select tests.create_user('b@example.com') as b \gset
@@ -210,6 +210,24 @@ select ok(
   (select budget_cents from concierge.round_candidates('2027-01-01') where person_id = :'p_c') = 12000
   and (select budget_cents from concierge.round_candidates('2027-01-01') where person_id = :'p_lim') = 7500,
   'round_candidates keeps the base budget order'
+);
+
+-- ─── Missing limits refuse, never allow ─────────────────────────────────────
+select tests.reset_role();
+delete from concierge.app_settings where key = 'idea_round_runs_max';
+select tests.act_as_server();
+select throws_ok(
+  format($q$select * from concierge.start_idea_run(%L, %L, null, now())$q$, :'a', :'p_excl'),
+  'P0001', null, 'start_idea_run refuses when the round run limit setting is missing'
+);
+select is((select runs_left from concierge.round_idea_state(:'r_excl')), false, 'round_idea_state has no runs left when the setting is missing');
+select tests.reset_role();
+insert into concierge.app_settings (key, value, description) values ('idea_round_runs_max', '2', 'x');
+delete from concierge.app_settings where key = 'idea_run_lease_ms';
+select tests.act_as_server();
+select throws_ok(
+  format($q$select * from concierge.start_idea_run(%L, %L, null, now())$q$, :'a', :'p_excl'),
+  'P0001', null, 'start_idea_run refuses when the lease setting is missing'
 );
 
 select * from finish();

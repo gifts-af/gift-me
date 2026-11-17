@@ -75,7 +75,9 @@ as $$
   select
     exists (select 1 from concierge.profile_facts f
              where f.person_id = r.person_id and f.user_id = r.user_id and f.active),
+    -- A missing setting means no runs left: refuse, never allow.
     case
+      when concierge.setting_int('idea_round_runs_max') is null then false
       when n.runs >= concierge.setting_int('idea_round_runs_max') + 1 then false
       when n.runs >= concierge.setting_int('idea_round_runs_max') then exists (
         select 1 from concierge.profile_facts f
@@ -102,7 +104,14 @@ set search_path = ''
 as $$
 declare
   v_id uuid;
+  v_lease_ms integer := concierge.setting_int('idea_run_lease_ms');
+  v_runs_max integer := concierge.setting_int('idea_round_runs_max');
 begin
+  -- The limits guard AI spend: a missing setting stops the run, never allows it.
+  if v_lease_ms is null or v_runs_max is null then
+    raise exception 'Idea run settings are missing';
+  end if;
+
   perform pg_advisory_xact_lock(hashtext(p_person_id::text));
 
   perform 1 from public.people p
@@ -133,7 +142,7 @@ begin
   if exists (
     select 1 from concierge.idea_runs u
      where u.person_id = p_person_id and u.finished_at is null
-       and u.started_at > p_now - make_interval(secs => concierge.setting_int('idea_run_lease_ms') / 1000.0)
+       and u.started_at > p_now - make_interval(secs => v_lease_ms / 1000.0)
   ) then
     return query select null::uuid, 'busy'::text;
     return;
