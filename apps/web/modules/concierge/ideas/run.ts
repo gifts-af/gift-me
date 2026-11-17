@@ -184,7 +184,7 @@ async function attempt(req: IdeaRequest, deps: IdeaDeps, t: Tally): Promise<Idea
         facts,
         avoidTitles: inputs.avoidTitles.map((title) => redactNames(title, names)),
       },
-      { candidates: s.candidates, maxSearches: s.maxSearches, maxTokens: s.aiMaxTokens, prices, signal },
+      { candidates: s.candidates, maxSearches: s.maxSearches, maxTokens: s.aiMaxTokens, overBudgetPct: inputs.overBudgetPct, prices, signal },
     ),
   );
   t.spent += b.costCents;
@@ -285,9 +285,9 @@ async function attempt(req: IdeaRequest, deps: IdeaDeps, t: Tally): Promise<Idea
     facts,
     options: found.map((f) => ({ id: f.c.id, title: redactNames(f.hit.title, names), totalCents: f.totalCents, fit: f.fit })),
   };
-  const worst = rankWorstCents(prices, s.aiMaxTokens, rankInputTokensMax(rankInput));
+  const worst = rankWorstCents(prices, s.aiMaxTokens, rankInputTokensMax(rankInput, s));
   if (!canAffordRank(t.spent, worst, s.runMaxCents)) return end("cost_cap");
-  const r = await ai((signal) => rank(deps.gateway, rankInput, { maxTokens: s.aiMaxTokens, prices, signal }));
+  const r = await ai((signal) => rank(deps.gateway, rankInput, { maxTokens: s.aiMaxTokens, keepMin: s.keepMin, keepMax: s.keepMax, prices, signal }));
   t.spent += r.costCents;
   t.stage = "ranked";
   await store.progress(runId, "ranked", cents(t.spent));

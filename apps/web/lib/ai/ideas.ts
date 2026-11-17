@@ -24,7 +24,7 @@ export type RankInput = {
   options: { id: string; title: string; totalCents: number; fit: "within" | "over" }[];
 };
 
-const brainstormSystem = (candidates: number) => `You are a thoughtful gift concierge. You get a profile of one person and the occasion.
+const brainstormSystem = (candidates: number, overBudgetPct: number) => `You are a thoughtful gift concierge. You get a profile of one person and the occasion.
 Use web search to check that ideas are real, currently sold, and fit the budget.
 Propose ${candidates} distinct gift concepts that this specific person would be glad to receive.
 
@@ -33,7 +33,7 @@ Rules:
 - Not something they already own or said they dislike. Respect every constraint.
 - Don't repeat any idea listed under "Already suggested".
 - Physical items that can be bought online and shipped (Amazon, Walmart, Target, Best Buy, or a brand's own store).
-- Price including likely shipping within the budget, except at most one idea up to 15% over.
+- Price including likely shipping within the budget, except at most one idea up to ${overBudgetPct}% over.
 - Prefer one great, specific thing over generic gift baskets or novelty items.
 - Stock items only: no personalization, engraving or made-to-order.
 - Strongly prefer Amazon, Walmart, Target or Best Buy. Use a brand's own store only if the item isn't sold at those.
@@ -51,8 +51,8 @@ Return JSON only: {"ideas": [{"title", "search", "brand", "why"}]}.
 "brand" is the maker's name, or null when there isn't one.
 Don't invent product URLs.`;
 
-const RANK_SYSTEM = `You pick the best gifts from a list of options for one person.
-Put the options in order, best first, and keep the top 3 to 5. Drop anything generic, risky, or weakly grounded.
+const rankSystem = (keepMin: number, keepMax: number) => `You pick the best gifts from a list of options for one person.
+Put the options in order, best first, and keep the top ${keepMin} to ${keepMax}. Drop anything generic, risky, or weakly grounded.
 An option marked "over" is over the budget: keep it only if it is clearly the best fit.
 For each kept option write a one-line reason a busy adult would read on a phone,
 in plain words, starting with the person's connection to it (e.g. "His old vise just died...").
@@ -105,7 +105,7 @@ const dollars = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 export async function brainstorm(
   h: GatewayHttp,
   input: BrainstormInput,
-  o: { candidates: number; maxSearches: number; maxTokens: number; prices: GatewayPrices; signal: AbortSignal },
+  o: { candidates: number; maxSearches: number; maxTokens: number; overBudgetPct: number; prices: GatewayPrices; signal: AbortSignal },
 ): Promise<{ candidates: IdeaCandidate[]; costCents: number }> {
   const user = [
     `Occasion: ${input.occasion ?? "none given"}`,
@@ -120,7 +120,7 @@ export async function brainstorm(
     {
       model: AI_MODELS.ideas,
       max_tokens: o.maxTokens,
-      system: brainstormSystem(o.candidates),
+      system: brainstormSystem(o.candidates, o.overBudgetPct),
       tools: [{ type: "web_search_20250305", name: "web_search", max_uses: o.maxSearches }],
       messages: [{ role: "user", content: user }],
     },
@@ -157,21 +157,21 @@ function rankUserText(input: RankInput): string {
  * The most input tokens a rank call can use: its prompt's size in UTF-8 bytes. A token is
  * never less than one byte, so this is a true upper bound (S3), with no ratio to tune.
  */
-export function rankInputTokensMax(input: RankInput): number {
-  return new TextEncoder().encode(RANK_SYSTEM + rankUserText(input)).length;
+export function rankInputTokensMax(input: RankInput, keep: { keepMin: number; keepMax: number }): number {
+  return new TextEncoder().encode(rankSystem(keep.keepMin, keep.keepMax) + rankUserText(input)).length;
 }
 
 export async function rank(
   h: GatewayHttp,
   input: RankInput,
-  o: { maxTokens: number; prices: GatewayPrices; signal: AbortSignal },
+  o: { maxTokens: number; keepMin: number; keepMax: number; prices: GatewayPrices; signal: AbortSignal },
 ): Promise<{ order: { id: string; reason: string }[]; costCents: number }> {
   const { text, costCents } = await sendMessages(
     h,
     {
       model: AI_MODELS.ideas,
       max_tokens: o.maxTokens,
-      system: RANK_SYSTEM,
+      system: rankSystem(o.keepMin, o.keepMax),
       messages: [{ role: "user", content: rankUserText(input) }],
     },
     o.prices,

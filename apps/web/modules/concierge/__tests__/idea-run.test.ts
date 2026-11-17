@@ -334,6 +334,15 @@ describe("runIdeas: results", () => {
     expect(event("ideas.candidate_dropped")).toMatchObject({ reason: "late" });
   });
 
+  it("the prompts carry the account's over-budget allowance and the keep settings", async () => {
+    world([2000, 2000], { zinc, gateway });
+    store.in = inputs({ overBudgetPct: 25 });
+    store.s = settings({ keepMin: 2, keepMax: 4 });
+    await runIdeas(req(), deps());
+    expect(gateway.bodies[0].system).toContain("up to 25% over");
+    expect(gateway.bodies[1].system).toContain("keep the top 2 to 4.");
+  });
+
   it("two searches that find the same product save it once", async () => {
     world([2000, 2000, 2000], { zinc, gateway });
     zinc.search.set("thing 2", [{ product_id: "P1", title: "Acme thing 1", price: 2000 }]);

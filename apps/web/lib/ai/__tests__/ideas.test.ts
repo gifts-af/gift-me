@@ -22,7 +22,8 @@ const input: BrainstormInput = {
   facts: ["wants: a rotary vise"],
   avoidTitles: ["Old idea"],
 };
-const bo = { candidates: 8, maxSearches: 5, maxTokens: 6000, prices, signal };
+const bo = { candidates: 8, maxSearches: 5, maxTokens: 6000, overBudgetPct: 15, prices, signal };
+const keep = { keepMin: 3, keepMax: 5 };
 
 describe("brainstorm", () => {
   it("sends web_search with max_uses and exactly the input it was given", async () => {
@@ -36,6 +37,7 @@ describe("brainstorm", () => {
     expect(body.max_tokens).toBe(6000);
     expect(body.model).toBe("anthropic/claude-sonnet-5.5");
     expect(body.system).toContain("Propose 8 distinct");
+    expect(body.system).toContain("except at most one idea up to 15% over");
     const user = body.messages[0].content as string;
     expect(user).toBe(
       ["Occasion: birthday", "Budget: $75.00", "Buying for their father.", "Facts:", "- wants: a rotary vise", "Already suggested:", "- Old idea"].join("\n"),
@@ -83,7 +85,7 @@ describe("brainstorm", () => {
     expect(error.kind).toBe("malformed");
     expect(error.costCents).toBeCloseTo(1000 * 0.001 + 200 * 0.005 + 3 * 1);
     const { h: h2 } = http(() => messagesReply('{"other":1}'));
-    expect((await rank(h2, { relationship: "x", facts: [], options: [] }, { maxTokens: 1, prices, signal }).catch((e) => e)).costCents).toBeGreaterThan(0);
+    expect((await rank(h2, { relationship: "x", facts: [], options: [] }, { maxTokens: 1, ...keep, prices, signal }).catch((e) => e)).costCents).toBeGreaterThan(0);
   });
 
   it("reads JSON after prose with brackets, and from a fenced block", async () => {
@@ -119,6 +121,24 @@ describe("brainstorm", () => {
   });
 });
 
+describe("prompt numbers come from settings", () => {
+  it("brainstorm says the account's over-budget allowance", async () => {
+    const { h, fetch } = http(() => messagesReply(JSON.stringify({ ideas: [] })));
+    await brainstorm(h, input, { ...bo, overBudgetPct: 22 });
+    const body = JSON.parse((fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body as string);
+    expect(body.system).toContain("except at most one idea up to 22% over");
+    expect(body.system).not.toContain("15%");
+  });
+
+  it("rank keeps the top idea_keep_min to idea_keep_max", async () => {
+    const { h, fetch } = http(() => messagesReply(JSON.stringify({ order: [] })));
+    await rank(h, { relationship: "x", facts: [], options: [] }, { maxTokens: 800, keepMin: 2, keepMax: 7, prices, signal });
+    const body = JSON.parse((fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body as string);
+    expect(body.system).toContain("keep the top 2 to 7.");
+    expect(body.system).not.toContain("3 to 5");
+  });
+});
+
 describe("rank", () => {
   const rankInput = {
     relationship: "father",
@@ -136,7 +156,7 @@ describe("rank", () => {
       { id: "c1", reason: "Old vise died" },
     ];
     const { h, fetch } = http(() => messagesReply(JSON.stringify({ order })));
-    const out = await rank(h, rankInput, { maxTokens: 800, prices, signal });
+    const out = await rank(h, rankInput, { maxTokens: 800, ...keep, prices, signal });
     expect(out.order).toEqual([
       { id: "c2", reason: "Light helps" },
       { id: "c1", reason: "Old vise died" },
@@ -152,10 +172,10 @@ describe("rankInputTokensMax", () => {
   it("is the UTF-8 size of the prompt rank sends, so it bounds the input tokens", async () => {
     const withAccent = { relationship: "father", facts: ["wants: a mug"], options: [{ id: "c1", title: "Café mug", totalCents: 1500, fit: "within" as const }] };
     const { h, fetch } = http(() => messagesReply(JSON.stringify({ order: [] })));
-    await rank(h, withAccent, { maxTokens: 800, prices, signal });
+    await rank(h, withAccent, { maxTokens: 800, ...keep, prices, signal });
     const body = JSON.parse((fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body as string);
     const bytes = new TextEncoder().encode(body.system + body.messages[0].content).length;
-    expect(rankInputTokensMax(withAccent)).toBe(bytes);
+    expect(rankInputTokensMax(withAccent, keep)).toBe(bytes);
     expect(bytes).toBeGreaterThan((body.system + body.messages[0].content).length);
   });
 });
