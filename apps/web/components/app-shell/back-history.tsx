@@ -9,15 +9,17 @@ import { Suspense, createContext, useCallback, useContext, useEffect, useMemo, u
 // not to its top (ALL-131). A link back, like "‹ Mom", opens the page as a new
 // visit, which starts at the top. Going back in history would keep your place
 // but can show the page as it was before you saved, so instead we open it as
-// usual, fresh, and scroll it to where you left it.
+// usual, fresh, and put the row you tapped back where it was on the screen,
+// with focus on it, as the browser's own Back does.
 
+type Spot = { href: string; top: number };
 type Memory = {
   /** The page before this one. */
   previous: { current: string | null };
-  /** Where you were on each page when you last tapped something on it. */
-  positions: Map<string, number>;
+  /** On each page, the last link you tapped and how far down the screen it was. */
+  spots: Map<string, Spot>;
   /** A page we're opening that should land where you left it. */
-  restore: { current: { path: string; y: number } | null };
+  restore: { current: { path: string; spot: Spot } | null };
 };
 
 const BackContext = createContext<{ memory: Memory; open: (href: string) => void } | null>(null);
@@ -26,7 +28,7 @@ const BackContext = createContext<{ memory: Memory; open: (href: string) => void
 export function BackHistory({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const memory = useMemo<Memory>(
-    () => ({ previous: { current: null }, positions: new Map(), restore: { current: null } }),
+    () => ({ previous: { current: null }, spots: new Map(), restore: { current: null } }),
     [],
   );
   const value = useMemo(
@@ -44,15 +46,23 @@ export function BackHistory({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** The link on the showing page with this href. Pages the app keeps hidden have it too. */
+function shownLink(href: string): HTMLElement | undefined {
+  return Array.from(document.links).find((a) => a.getAttribute("href") === href && a.getClientRects().length > 0);
+}
+
 function TrackPath({ memory }: { memory: Memory }) {
   const pathname = usePathname();
   const current = useRef<string | null>(null);
 
-  // Every way off a page by hand starts with a click (Enter on a link clicks
-  // it too), so note your place on the page as you tap.
+  // Leaving a page by hand starts with a tap on a link (Enter on a link
+  // clicks it too), so note which one and where it was on the screen.
   useEffect(() => {
-    const note = () => {
-      if (current.current) memory.positions.set(current.current, window.scrollY);
+    const note = (event: MouseEvent) => {
+      const link = event.target instanceof Element ? event.target.closest("a[href]") : null;
+      const href = link?.getAttribute("href");
+      if (!current.current || !link || !href?.startsWith("/")) return;
+      memory.spots.set(current.current, { href, top: link.getBoundingClientRect().top });
     };
     document.addEventListener("click", note, true);
     return () => document.removeEventListener("click", note, true);
@@ -65,18 +75,34 @@ function TrackPath({ memory }: { memory: Memory }) {
     const restore = memory.restore.current;
     memory.restore.current = null;
     if (restore?.path !== pathname) return;
-    // The page may still be growing to its full height, so try for a moment.
-    let frames = 0;
-    let id = 0;
-    const step = () => {
-      window.scrollTo(0, restore.y);
-      if (Math.abs(window.scrollY - restore.y) > 1 && ++frames < 30) id = requestAnimationFrame(step);
+    const { href, top } = restore.spot;
+
+    // The page can still be loading, so wait for the row to show. Stop if you
+    // start scrolling yourself, or leave.
+    const place = () => {
+      const link = shownLink(href);
+      if (!link) return false;
+      window.scrollBy(0, link.getBoundingClientRect().top - top);
+      link.focus({ preventScroll: true });
+      return true;
     };
-    step();
-    return () => cancelAnimationFrame(id);
+    if (place()) return;
+    const watch = new MutationObserver(() => {
+      if (place()) stop();
+    });
+    const stop = () => {
+      watch.disconnect();
+      for (const type of GIVE_UP_ON) window.removeEventListener(type, stop, true);
+    };
+    watch.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "hidden"] });
+    for (const type of GIVE_UP_ON) window.addEventListener(type, stop, { capture: true, passive: true });
+    return stop;
   }, [pathname, memory]);
   return null;
 }
+
+/** Things you do that mean you've moved on, so we stop trying to put you back. */
+const GIVE_UP_ON = ["wheel", "touchstart", "keydown", "pointerdown"] as const;
 
 /**
  * Returns a click handler for a link or button that leads back to `href`.
@@ -87,9 +113,9 @@ export function useGoBack(href: string): () => boolean {
   const context = useContext(BackContext);
   return useCallback(() => {
     if (!context || context.memory.previous.current !== href) return false;
-    const y = context.memory.positions.get(href);
-    if (y === undefined) return false;
-    context.memory.restore.current = { path: href, y };
+    const spot = context.memory.spots.get(href);
+    if (!spot) return false;
+    context.memory.restore.current = { path: href, spot };
     context.open(href);
     return true;
   }, [context, href]);

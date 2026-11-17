@@ -22,6 +22,8 @@ async function openAndComeBack(page: Page, row: RegExp, detailUrl: RegExp, back:
   await page.getByRole("link", { name: back, exact: true }).click();
   await expect(link).toBeVisible();
   await expect.poll(() => scrollY(page)).toBeGreaterThanOrEqual(before - 2);
+  // Focus goes back to the row you tapped, as the browser's own Back does.
+  await expect(link).toBeFocused();
 }
 
 test("back from a person's detail keeps your place on their page (ALL-131)", async ({ page }) => {
@@ -50,6 +52,32 @@ test("going back shows what you just changed (ALL-131)", async ({ page }) => {
   await expect(page).toHaveURL(new RegExp(`/people/${personId}$`));
   await expect(page.getByRole("heading", { level: 1, name: "Mum" })).toBeVisible();
   await expect(page.getByRole("link", { name: /^About Mum/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^About Mum/ })).toBeFocused();
+});
+
+test("on a slow connection, it waits for the page before putting you back (ALL-131)", async ({ page }) => {
+  const user = await createFreshUser();
+  const personId = await addMother(user, "Mom");
+  await signIn(page, user);
+  await page.goto(`/people/${personId}`);
+  const row = page.getByRole("link", { name: /^Budget/ });
+  await row.scrollIntoViewIfNeeded();
+  const before = await scrollY(page);
+  expect(before).toBeGreaterThan(0);
+  await row.click();
+  await expect(page).toHaveURL(new RegExp(`/people/${personId}/budget$`));
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
+  // From here, every page the app fetches takes 1.5 s longer.
+  await page.route("**/*", async (route) => {
+    if (route.request().headers()["rsc"]) await new Promise((done) => setTimeout(done, 1500));
+    await route.continue();
+  });
+  await page.getByRole("textbox", { name: "Any occasion" }).fill("60");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page).toHaveURL(new RegExp(`/people/${personId}$`));
+  await expect(row).toContainText("$60");
+  await expect.poll(() => scrollY(page)).toBeGreaterThanOrEqual(before - 2);
+  await expect(row).toBeFocused();
 });
 
 test("saving a budget comes back to your place, showing the new budget (ALL-131)", async ({ page }) => {
