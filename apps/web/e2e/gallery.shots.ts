@@ -61,6 +61,7 @@ const SIGNED_IN: [name: string, url: (s: Seeded) => string][] = [
   ["person-saved-gifts", (s) => `/people/${s.personId}/saved-gifts`],
   ["person-list", (s) => `/people/${s.personId}/list`],
   ["person-address", (s) => `/people/${s.personId}/address`],
+  ["person-ideas", (s) => `/people/${s.personId}/ideas`],
   ["add-person", () => "/people/new"],
   ["import-people", () => "/people/import"],
   ["settings", () => "/settings"],
@@ -85,6 +86,7 @@ test.describe("signed in", () => {
     const personId = await addMother(user, "Mom");
     await addSavedGift(user, personId, "Fly-fishing reel");
     await saveBudgets(user, personId, { any: 7500, mothers_day: 5000 });
+    await addOnDemandIdeas(user, personId);
     await saveOneGiftList(user);
     seeded = { user, personId, shareToken: await shareToken(user) };
   });
@@ -108,6 +110,42 @@ test("emails", async ({ page }) => {
     await shoot(page, `email-${file.replace(/\.html$/, "")}`);
   }
 });
+
+// Two on-demand ideas (one over budget), written as the engine would save them, so the Gift ideas
+// screen shows its rows without a run (a run spends money; ALL-27). The engine stays off, so the
+// screen's off line shows above them.
+async function addOnDemandIdeas(user: Credentials, personId: string): Promise<void> {
+  const { url, serviceRoleKey } = localSupabase();
+  const { user: me } = await session(user);
+  const row = (rank: number, title: string, cents: number, over: boolean, reason: string) => ({
+    user_id: me.id,
+    person_id: personId,
+    title,
+    retailer: "amazon",
+    product_url: `https://www.amazon.com/dp/B0GALLERY${rank}`,
+    retailer_product_id: `B0GALLERY${rank}`,
+    price_cents: cents,
+    est_total_cents: cents + 500,
+    arrive_by: "2026-12-10",
+    reason,
+    over_budget: over,
+    rank,
+  });
+  const res = await fetch(`${url}/rest/v1/gift_ideas`, {
+    method: "POST",
+    headers: {
+      apikey: serviceRoleKey,
+      Authorization: `Bearer ${serviceRoleKey}`,
+      "Content-Type": "application/json",
+      "Content-Profile": "concierge",
+    },
+    body: JSON.stringify([
+      row(1, "Fly-tying vise", 6900, false, "She mentioned wanting to tie her own flies."),
+      row(2, "Waterproof wading boots", 9400, true, "Hers are worn through, and the season starts soon."),
+    ]),
+  });
+  if (!res.ok) throw new Error(`saving ideas failed: ${res.status} ${await res.text()}`);
+}
 
 async function shareToken(user: Credentials): Promise<string> {
   const { url, publishableKey } = localSupabase();
