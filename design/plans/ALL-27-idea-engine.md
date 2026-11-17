@@ -126,6 +126,7 @@ The daily tick is one function call with a 300 s limit. Since ALL-32 it also swe
 | Where does the button live? | A "Gift ideas" row in the person page's Gifts group, showing how many ideas there are, opens `/people/{id}/ideas` with the button, the money notice beside it, and the results **[Claude's call]** | The person page is a list of rows since ALL-127 (T71); a spending action gets its own screen, like saved gifts |
 | What happens when Zinc or the AI is down in a round? | The run counts and the round tries again on the next tick, with no email. Only when the runs are used up does the one email go, worded so it's true either way | Jim, 2026-11-17. A short outage shouldn't email the buyer, but the occasion must never pass in silence |
 | Does editing or turning a fact back on allow the extra run? | Yes. Any fact added, edited or turned back on after the round's last run allows the one extra run **[Claude's call]** | It's new information from the buyer, which is what the extra run is for |
+| Can testing spend money? | **No** (Jim, 2026-11-17). The engine ships switched off (`idea_engine_enabled` = 0) everywhere. Every test uses fake AI and Zinc servers. Vendor shapes come from the spike's recorded responses. The eval and the dev checks that need real calls (AC-22, AC-23 with real ideas, AC-28) wait for Jim's go-ahead and stay under Still open until then | A paid call is easy to make by accident in a test; the switch keeps dev and prod from spending even after merge |
 | Is a dev-only "generate ideas now" button still needed? | No | The on-demand button does the job |
 | Over-budget slot | Kept from the prompt rules: a stated want above the budget can use it, inside `over_budget_pct` | Prompt v3, design §7 |
 
@@ -135,7 +136,7 @@ All in `concierge.app_settings`, with no fallback in code.
 
 | Setting | Default | What it does |
 |---|---|---|
-| `idea_engine_enabled` | 1 | 0 stops all runs (off switch) |
+| `idea_engine_enabled` | 0 | 1 lets runs happen. Ships as 0 on every environment (no money while testing, Jim 2026-11-17); tests set it to 1 with fake vendors |
 | `idea_candidates` | 8 | Candidates per brainstorm |
 | `idea_max_searches` | 3 | Web searches per brainstorm |
 | `idea_keep_min` | 3 | Fewer survivors than this is logged as a shortfall |
@@ -204,6 +205,7 @@ The update also covers what merged since: the person page as rows, base budgets 
 - **What leaves the app:** the AI never sees a name, email or address, including in `avoidTitles`. Zinc gets only search text and product ids (AC-21).
 - **Copy:** plain words. The money notice uses the `design/ui.md` style, and emails use the ALL-116 tone.
 - **Migration:** expand-only (E7). It's named `20261117100000_idea_engine.sql` and is re-dated past `main`'s newest migration just before merge, because `db push` refuses migrations out of order. Don't push it to dev before merge (ALL-32 rule). Test against local Supabase.
+- **No money while testing (Jim, 2026-11-17):** no step calls the real AI Gateway or a Zinc key that can charge. The migration ships `idea_engine_enabled` = 0 on every environment. Tests turn it on locally, with fake vendors. Paid checks wait for Jim's go-ahead.
 - **Fakes (E5, T67):** the AI and Zinc are faked in unit and browser tests. The database is always real for privacy, ownership and run limits.
 - **Before the PR:** `pnpm lint && pnpm typecheck && pnpm test && pnpm test:db && pnpm db:test && pnpm build`.
 
@@ -245,26 +247,24 @@ The update also covers what merged since: the person page as rows, base budgets 
 
 ---
 
-### Task 1: Confirm vendor shapes (no code)
+### Task 1: Vendor shapes from recorded data (no code, no calls)
 
 **Files:** `design/spikes/checkout.md` (Zinc), `design/spikes/ai.md` (Gateway).
 
-- [ ] **Step 1: Check which Zinc key can look up products (S8).**
-  - Dev's `ZINC_API_KEY` in `apps/web/.env.development.local` is a `zn_test_` key. Make one `GET /products/search?retailer=amazon&query=lodge%20cast%20iron` with it.
-  - If the test key returns real products, dev uses it. If it doesn't, ask an admin to set the live app key on dev too and to top up that account (about $10, T17).
-  - Record which key each environment uses for lookups.
-- [ ] **Step 2: Record the product fields.** Make one `GET /products/{id}/offers?retailer=amazon` with the key from Step 1. Record:
-  - the list field (`results` or `products`)
-  - `product_id`, `title`, `brand`, `price`
-  - `available`, `condition`, `buy_box_winner`
-  - `seller.name`, `seller.first_party`
-  - `handling_days`, `shipping_options[].{price,delivery_days}`
-- [ ] **Step 3: Record where the AI cost comes back.** Make one Gateway `POST /v1/messages` with `web_search` (`max_uses: 1`).
-  - Record whether the reply carries a cost, in a header or the body.
-  - If it doesn't, record the `usage` fields and where `GET /v1/models` lists prices, including the per-search price.
-- [ ] **Step 4: Write it down and commit.** Put both under "ALL-27 shapes" in the two spike docs, then commit (`docs: Zinc product and Gateway cost shapes for ALL-27`).
+No live calls: no money while testing.
 
-Tasks 4 and 5 use these field names. If one differs, only that task's schema changes.
+- [ ] **Step 1: Zinc offers.** Take the fields from the spike's recorded raw replies in `spikes/ai/out/resolve.json` (`offers_raw`):
+  - The top level is `{ status, asin, retailer, offers: [...] }`.
+  - Each offer has `price` (cents), `available`, `condition`, `buy_box_winner`, `offer_id` and `seller.{name, first_party}`.
+  - It also has `handling_days.{min,max}` and `shipping_options[].{price, delivery_days.{min,max}}`.
+- [ ] **Step 2: Zinc search.** No raw reply was saved. The spike read `results ?? products`, and each hit has `product_id`, `title` and `price` in cents, with no brand field.
+  - The schema accepts either list key.
+  - `matchHit` matches the brand against the title.
+  - Mark the list key **[Verify]** for the first paid check.
+- [ ] **Step 3: AI cost.** Cost is worked out from `usage` (`input_tokens`, `output_tokens`, `server_tool_use.web_search_requests`), using prices from the Gateway's `GET /v1/models`, as the spike did in `spikes/ai/run.mjs`. That listing is free.
+  - The recorded brainstorm text has `<cite index=…>` tags around web-search quotes, so text is cleaned before use (Task 5).
+  - Mark the cost math **[Verify]** against the Gateway's own spend report at the first paid check.
+- [ ] **Step 4: Write it down and commit.** Put both under "ALL-27 shapes" in the spike docs, then commit (`docs: Zinc product and Gateway shapes for ALL-27, from recorded spike data`).
 
 ### Task 2: Schema, run limits and pgTAP
 
@@ -382,7 +382,7 @@ Tasks 4 and 5 use these field names. If one differs, only that task's schema cha
 
 **Produces:**
 ```ts
-export type ZincHit = { productId: string; title: string; brand: string | null; priceCents: number | null };
+export type ZincHit = { productId: string; title: string; priceCents: number | null };  // brand is matched against the title
 export type ZincOffer = { offerId: string | null; priceCents: number; shippingCents: number; available: boolean;
   condition: string; buyBox: boolean; firstParty: boolean; sellerName: string | null;
   handlingDaysMax: number; deliveryDaysMin: number; deliveryDaysMax: number };
@@ -408,7 +408,7 @@ export const IDEA_RUN_OFF: string;
 
 - [ ] **Step 1: Write the failing tests.**
   - **`matchHit`:**
-    - picks the first hit whose brand matches, ignoring case
+    - picks the first hit whose title contains the brand, ignoring case
     - returns null when no brand matches
     - takes the first hit when there's no brand
   - **`pickOffer`:**
@@ -448,7 +448,7 @@ export const IDEA_RUN_OFF: string;
 export function searchProducts(h: ZincHttp, key: string, query: string, signal: AbortSignal): Promise<ZincHit[]>;
 export function productOffers(h: ZincHttp, key: string, productId: string, signal: AbortSignal): Promise<ZincOffer[]>;
 ```
-- Both use `call()` with zod schemas shaped from Task 1.
+- Both use `call()` with zod schemas shaped from Task 1. The search schema accepts `results` or `products`.
 - Paths: `/products/search` with `retailer=amazon` and `query`, and `/products/{id}/offers` with `retailer=amazon`.
 - Prices become cents here, and Zinc's shape stops here (E4).
 
@@ -496,6 +496,7 @@ export function rankWorstCents(prices: GatewayPrices, maxTokens: number, inputTo
   - `bad JSON throws malformed, with no body text in the message`
   - `a 5xx throws unavailable, with no body text in the message`
   - `rank drops ids it wasn't given`
+  - `strips <cite> tags from titles, reasons and why` (the recorded replies have them)
   - `an aborted signal rejects`
   - `rankWorstCents is input plus maxTokens at the output price`
 - [ ] **Step 2: Watch them fail.** Expected: FAIL.
@@ -742,7 +743,7 @@ export function onDemandIdeas(db: Db, personId: string): Promise<ShownIdea[]>;  
   - Check AC-2, AC-5 and AC-6 on each kept idea with the core rules.
   - Print the cost per run, split into AI and Zinc.
   - Fail on any failed check, or when a run's AI cost passes `--ai-cents-max`. The default is 25, the top of the spec's 20–25¢ (S10). This is a script argument, not app code.
-- [ ] **Step 2: Run it by hand** once Task 1's key and top-up are done. Save the output for evidence. It never runs in CI.
+- [ ] **Step 2: Don't run it yet.** No money while testing. Check that it starts and refuses without `AI_GATEWAY_API_KEY`. It runs by hand only after Jim's go-ahead, and never in CI.
 - [ ] **Step 3: Commit** `test(ai): idea eval against the five fixture profiles (ALL-27)`.
 
 ### Task 10: Docs, pages, evidence and PR
@@ -761,8 +762,9 @@ export function onDemandIdeas(db: Db, personId: string): Promise<ShownIdea[]>;  
   - The body answers E9:
     - **Seeing it work:** `ideas.run` events, and the screen working for test and admin users.
     - **Turning it off:** `idea_engine_enabled = 0`, or a Vercel rollback.
+  - The PR says ideas are off everywhere until Jim allows spending.
   - Run the adversarial review (T55), and read PR feedback (T59).
-- [ ] **Step 5: After merge, with Jim's approval.** The Action takes the migration to dev and prod. Then, on dev:
+- [ ] **Step 5: After merge, with Jim's approval.** The Action takes the migration to dev and prod, where ideas stay off (`idea_engine_enabled` = 0). On dev, with the engine still off, check that the Gift ideas screen and the off message show. The paid checks below wait for Jim's go-ahead to spend, and stay under **Still open** until then:
   - one round through the test clock, with real ideas in the heads-up (AC-23)
   - timings for one round run and one on-demand run (AC-28), posted on ALL-27 and ALL-125
   - the eval output (AC-22)
