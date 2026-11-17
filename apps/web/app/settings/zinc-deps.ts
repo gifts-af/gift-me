@@ -83,13 +83,16 @@ export async function onDemandIdeaDeps(today: CalendarDate, env: Env = process.e
   return ideaDeps(createAdminClient(), env, today);
 }
 
-/** The tick's idea runs. With the vendors not set up here, every run fails and `ideas.not_configured` says why. */
+/**
+ * The tick's idea runs. With the vendors not set up here, every run fails, uncounted, and
+ * `ideas.not_configured` alerts (design/operations.md > Alerts): the rounds would otherwise go quiet.
+ */
 function ideaWiring(db: SupabaseClient<Database>, env: Env, now: Date): GenerateIdeas {
   return async (round, signal) => {
     // The engine's day: the tick's UTC day.
     const deps = await ideaDeps(db, env, now.toISOString().slice(0, 10));
     if (!deps) {
-      logEvent("ideas.not_configured", { round_id: round.id, user_id: round.userId, person_id: round.personId });
+      logEvent("ideas.not_configured", { round_id: round.id, user_id: round.userId, person_id: round.personId, alert: true });
       return { status: "failed" };
     }
     return runIdeas({ userId: round.userId, personId: round.personId, roundId: round.id, signal }, deps);

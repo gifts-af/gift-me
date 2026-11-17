@@ -170,7 +170,9 @@ describe.skipIf(!supabase)("Zinc and engine wiring (real local database and engi
       try {
         expect(await engine.generateIdeas(round, AbortSignal.timeout(1000))).toEqual({ status: "failed" });
         const told = events(log).filter((e) => e.event === "ideas.not_configured");
-        expect(told).toEqual([expect.objectContaining({ round_id: round.id, user_id: round.userId, person_id: round.personId })]);
+        expect(told).toEqual([
+          expect.objectContaining({ round_id: round.id, user_id: round.userId, person_id: round.personId, alert: true }),
+        ]);
         expect(JSON.stringify(told)).not.toContain("gw-test");
         expect(JSON.stringify(told)).not.toContain("zn-test");
       } finally {

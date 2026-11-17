@@ -425,10 +425,13 @@ describe("runIdeas: vendor trouble", () => {
     expect(store.finished).toEqual([{ outcome: "failed", cost: 14 + zinc.calls.length }]);
   });
 
-  it("a pricing failure ends failed without counting a run", async () => {
+  it("a pricing failure is a counted, failed run that spends nothing", async () => {
     gateway.fetch = (async () => json({}, 500)) as typeof fetch;
     expect(await runIdeas(req(), deps())).toEqual({ status: "failed" });
-    expect(store.started).toEqual([]);
+    expect(store.started).toHaveLength(1);
+    expect(store.finished).toEqual([{ outcome: "failed", cost: 0 }]);
+    expect(zinc.calls).toEqual([]);
+    expect(event("ideas.run")).toMatchObject({ run_id: "run-1", outcome: "failed", stage: "started" });
   });
 });
 

@@ -137,8 +137,6 @@ async function attempt(req: IdeaRequest, deps: IdeaDeps, t: Tally): Promise<Idea
   const inputs = await store.inputs(req);
   if (inputs === null) return refuse("not_found");
   if (inputs.facts.length === 0) return { status: "no_facts" };
-  // The price listing is free, so a failure here counts no run.
-  const prices = await gatewayPrices(deps.gateway, AI_MODELS.ideas, req.signal);
   const plan = occasionPlan(inputs, deps.today, s.schedule);
 
   const started = await store.start(req, new Date(deps.clock()));
@@ -148,6 +146,8 @@ async function attempt(req: IdeaRequest, deps: IdeaDeps, t: Tally): Promise<Idea
   t.stage = "started";
   t.keepMin = s.keepMin;
   logEvent("ideas.run_started", ids(req, runId));
+  // After start, so a failure here is a counted, failed run (retried, then no_ideas) rather than a silent round.
+  const prices = await gatewayPrices(deps.gateway, AI_MODELS.ideas, req.signal);
 
   const end = async (outcome: RunEnd): Promise<IdeaOutcome> => {
     await store.finish(runId, outcome, cents(t.spent));
