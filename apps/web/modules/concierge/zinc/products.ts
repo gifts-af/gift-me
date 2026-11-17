@@ -4,20 +4,30 @@ import type { ZincHit, ZincOffer } from "@gifts-af/core";
 import { z } from "zod";
 import { call, type ZincHttp } from "./client";
 
-const hit = z.object({ product_id: z.string(), title: z.string(), price: z.number().int().nullish() });
-const search = z
-  .object({ results: z.array(hit).optional(), products: z.array(hit).optional() })
+// Each hit is checked on its own, like offers: a bad hit is dropped and never fails the search.
+// The search price is only a hint (offers set the real one), so one we can't read is kept as null.
+const hit = z.object({ product_id: z.string(), title: z.string(), price: z.unknown().optional() });
+const searchReply = z
+  .object({ results: z.array(z.unknown()).optional(), products: z.array(z.unknown()).optional() })
   .refine((r) => r.results !== undefined || r.products !== undefined);
+const cents = z.number().int().min(0);
 
 export async function searchProducts(h: ZincHttp, key: string, query: string, signal: AbortSignal): Promise<ZincHit[]> {
-  const r = await call(h, "GET", "/products/search", search, { key, query: { retailer: "amazon", query }, signal });
-  return (r.results ?? r.products ?? []).map((x) => ({ productId: x.product_id, title: x.title, priceCents: x.price ?? null }));
+  const r = await call(h, "GET", "/products/search", searchReply, { key, query: { retailer: "amazon", query }, signal });
+  const out: ZincHit[] = [];
+  for (const raw of r.results ?? r.products ?? []) {
+    const p = hit.safeParse(raw);
+    if (!p.success) continue;
+    const price = cents.safeParse(p.data.price);
+    out.push({ productId: p.data.product_id, title: p.data.title, priceCents: price.success ? price.data : null });
+  }
+  return out;
 }
 
 const days = z.number().int().min(0);
 const offer = z.object({
   offer_id: z.string().nullish(),
-  price: z.number().int(),
+  price: cents,
   available: z.boolean(),
   condition: z.string(),
   buy_box_winner: z.boolean().nullish(),

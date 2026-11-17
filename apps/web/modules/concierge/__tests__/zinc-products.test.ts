@@ -82,11 +82,46 @@ describe("searchProducts", () => {
     await expect(searchProducts(h, KEY, "x", signal())).rejects.toMatchObject({ kind: "unauthorized", status: 401 });
   });
 
-  it("a schema mismatch throws rejected", async () => {
-    const { h } = fake([{ status: 200, body: { results: [{ product_id: 7 }] } }]);
-    const err = await searchProducts(h, KEY, "x", signal()).catch((e) => e);
-    expect(err).toBeInstanceOf(ZincError);
-    expect(err).toMatchObject({ kind: "rejected" });
+  it("drops a bad hit and keeps the rest", async () => {
+    const { h } = fake([
+      {
+        status: 200,
+        body: { results: [{ product_id: 7 }, { title: "No id" }, "junk", { product_id: "B01", title: "Tea Kettle", price: 3500 }] },
+      },
+    ]);
+    expect(await searchProducts(h, KEY, "x", signal())).toEqual([{ productId: "B01", title: "Tea Kettle", priceCents: 3500 }]);
+  });
+
+  it("keeps a hit whose price it can't read, with no price", async () => {
+    const { h } = fake([
+      {
+        status: 200,
+        body: {
+          results: [
+            { product_id: "B01", title: "Half cent", price: 12.5 },
+            { product_id: "B02", title: "Text", price: "$35.00" },
+            { product_id: "B03", title: "Negative", price: -100 },
+            { product_id: "B04", title: "Null", price: null },
+          ],
+        },
+      },
+    ]);
+    const r = await searchProducts(h, KEY, "x", signal());
+    expect(r.map((x) => [x.productId, x.priceCents])).toEqual([
+      ["B01", null],
+      ["B02", null],
+      ["B03", null],
+      ["B04", null],
+    ]);
+  });
+
+  it("a reply with the wrong top-level shape throws rejected", async () => {
+    for (const body of [{ results: "nope" }, { nothing: [] }]) {
+      const { h } = fake([{ status: 200, body }]);
+      const err = await searchProducts(h, KEY, "x", signal()).catch((e) => e);
+      expect(err).toBeInstanceOf(ZincError);
+      expect(err).toMatchObject({ kind: "rejected" });
+    }
   });
 
   it("an aborted signal throws unavailable and the signal reports aborted", async () => {
@@ -135,12 +170,13 @@ describe("productOffers", () => {
     expect(r.map((o) => [o.buyBox, o.firstParty, o.sellerName])).toEqual([[false, true, null], [false, false, null]]);
   });
 
-  it("drops an offer with a bad day count or no shipping option, keeping the rest", async () => {
+  it("drops an offer with a bad day count, no shipping option or a negative price, keeping the rest", async () => {
     const { h } = fake([
       offersReply([
         offer({ offer_id: "bad_days", handling_days: { min: 0, max: -1 } }),
         offer({ offer_id: "frac", handling_days: { min: 0, max: 1.5 } }),
         offer({ offer_id: "no_ship", shipping_options: [] }),
+        offer({ offer_id: "neg_price", price: -1 }),
         offer({ offer_id: "good" }),
       ]),
     ]);
