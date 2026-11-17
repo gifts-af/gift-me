@@ -345,7 +345,7 @@ flowchart LR
    - **Price comes only from the offer.** The AI's estimate was off by up to half in the spike, so budget checks use the live price plus shipping.
    - Offers don't include tax, so tax stays estimated (§4.2). Anything unavailable, too late in the slowest case, over the over-budget limit, or already given or rejected is dropped.
 4. **Rank:** the AI model ranks the survivors and writes the one-line reasons, **referring to candidates by id** (it shortens titles, so matching on titles fails). The top 3–5 within budget are kept, plus at most one over-budget idea.
-5. **One attempt per run** (T68). If fewer than 3 survive, the app saves what it has and notes the shortfall. If none survive, a round tries again on a later tick: at most `idea_round_runs_max` (2) runs, plus one after a new fact, then one "couldn't find gifts" email (ALL-27 AC-9). Each run is counted in `concierge.idea_runs` before it spends, and stops once its spend reaches `idea_run_max_cents`.
+5. **One attempt per run** (T68). If fewer than 3 survive, the app saves what it has and notes the shortfall. If none survive, a round tries again on a later tick: at most `idea_round_runs_max` (2) runs, plus one after a new fact, then one "couldn't get gift ideas" email (ALL-27 AC-9). Each run is counted in `concierge.idea_runs` before it spends, and stops once its spend reaches `idea_run_max_cents`.
 6. Results are saved as `gift_ideas`, and the heads-up is sent.
 
 ### 6.4 Notifications and one-tap actions
