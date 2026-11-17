@@ -143,21 +143,37 @@ export async function brainstorm(
   return { candidates, costCents };
 }
 
-export async function rank(
-  h: GatewayHttp,
-  input: RankInput,
-  o: { maxTokens: number; prices: GatewayPrices; signal: AbortSignal },
-): Promise<{ order: { id: string; reason: string }[]; costCents: number }> {
-  const user = [
+function rankUserText(input: RankInput): string {
+  return [
     `Buying for their ${input.relationship}.`,
     "Facts:",
     ...input.facts.map((f) => `- ${f}`),
     "Options:",
     ...input.options.map((p) => `- id ${p.id}: ${p.title}, ${dollars(p.totalCents)} delivered (${p.fit} budget)`),
   ].join("\n");
+}
+
+/**
+ * The most input tokens a rank call can use: its prompt's size in UTF-8 bytes. A token is
+ * never less than one byte, so this is a true upper bound (S3), with no ratio to tune.
+ */
+export function rankInputTokensMax(input: RankInput): number {
+  return new TextEncoder().encode(RANK_SYSTEM + rankUserText(input)).length;
+}
+
+export async function rank(
+  h: GatewayHttp,
+  input: RankInput,
+  o: { maxTokens: number; prices: GatewayPrices; signal: AbortSignal },
+): Promise<{ order: { id: string; reason: string }[]; costCents: number }> {
   const { text, costCents } = await sendMessages(
     h,
-    { model: AI_MODELS.ideas, max_tokens: o.maxTokens, system: RANK_SYSTEM, messages: [{ role: "user", content: user }] },
+    {
+      model: AI_MODELS.ideas,
+      max_tokens: o.maxTokens,
+      system: RANK_SYSTEM,
+      messages: [{ role: "user", content: rankUserText(input) }],
+    },
     o.prices,
     o.signal,
   );

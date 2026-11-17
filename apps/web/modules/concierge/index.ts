@@ -124,3 +124,10 @@ export { createSupabaseInboundStore } from "./inbound/supabase-store";
 export type { InboundStore } from "./inbound/store";
 export { sendNotesTipOnce } from "./inbound/tip";
 export { captureStoreFor } from "./capture/supabase-store";
+// The gift idea engine (ALL-27): one run, its database glue, and what the Gift ideas screen reads.
+export { runIdeas } from "./ideas/run";
+export type { IdeaDeps, IdeaOutcome, IdeaRequest } from "./ideas/run";
+export { createSupabaseIdeaStore } from "./ideas/store";
+export type { AdminDb, IdeaInputs, IdeaRefusal, IdeaSettings, IdeaStore, SavedIdea } from "./ideas/store";
+export { onDemandIdeas } from "./ideas/read";
+export type { ShownIdea } from "./ideas/read";

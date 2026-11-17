@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { AiError, gatewayPrices, sendMessages, type GatewayHttp, type GatewayPrices } from "../messages";
-import { brainstorm, rank, rankWorstCents, type BrainstormInput } from "../ideas";
+import { brainstorm, rank, rankInputTokensMax, rankWorstCents, type BrainstormInput } from "../ideas";
 import recorded from "./ideas.fixture.json";
 
 const prices: GatewayPrices = { inputCentsPerToken: 0.001, outputCentsPerToken: 0.005, searchCents: 1 };
@@ -145,6 +145,18 @@ describe("rank", () => {
     expect(body.tools).toBeUndefined();
     expect(body.messages[0].content).toContain("id c1: Vise, $55.00 delivered (within budget)");
     expect(out.costCents).toBeGreaterThan(0);
+  });
+});
+
+describe("rankInputTokensMax", () => {
+  it("is the UTF-8 size of the prompt rank sends, so it bounds the input tokens", async () => {
+    const withAccent = { relationship: "father", facts: ["wants: a mug"], options: [{ id: "c1", title: "Café mug", totalCents: 1500, fit: "within" as const }] };
+    const { h, fetch } = http(() => messagesReply(JSON.stringify({ order: [] })));
+    await rank(h, withAccent, { maxTokens: 800, prices, signal });
+    const body = JSON.parse((fetch.mock.calls[0] as unknown as [string, RequestInit])[1].body as string);
+    const bytes = new TextEncoder().encode(body.system + body.messages[0].content).length;
+    expect(rankInputTokensMax(withAccent)).toBe(bytes);
+    expect(bytes).toBeGreaterThan((body.system + body.messages[0].content).length);
   });
 });
 
