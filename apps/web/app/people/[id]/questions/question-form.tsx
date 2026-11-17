@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useGoBack } from "@/components/app-shell/back-history";
 import type { GuidedQuestion } from "@gifts-af/core";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -31,6 +32,8 @@ export function QuestionForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ message: string; key?: string } | null>(null);
   const router = useRouter();
+  // Back to where you were on their page, if you came from it (ALL-131).
+  const goBack = useGoBack(`/people/${personId}`);
 
   async function run(action: Action, form: FormData): Promise<boolean> {
     if (busy) return false;
@@ -56,7 +59,7 @@ export function QuestionForm({
     // Next keeps this page's state for a later visit, so forget the answers: a
     // fact deleted later mustn't be waiting here, one tap from coming back.
     setText({});
-    router.push(`/people/${personId}`);
+    if (!goBack()) router.push(`/people/${personId}`);
   }
 
   function skip(key: string) {
