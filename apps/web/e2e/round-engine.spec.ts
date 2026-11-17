@@ -12,6 +12,10 @@ import { TEST_USER } from "./test-user";
 // The tick is global: it also starts rounds for people other specs seed. So every
 // assertion is scoped to this person's round id. The spec switches the engine on
 // and always switches it back off.
+// Ideas (ALL-27) come from the fake Gateway and the fake Zinc (global-setup.ts), for a buyer
+// with paid features and a person with one fact. This turns the idea engine on (it ships 0);
+// global-setup.ts's teardown turns it off once every spec has finished, since
+// suggest-ideas.spec.ts needs it at the same time.
 // One browser only: it has no @layout tag, so only the iphone project runs it
 // (playwright.config.ts), and the hooks below can't run in another worker and undo it.
 // A server tested through E2E_BASE_URL must have been started with
@@ -48,6 +52,31 @@ async function setEngine(on: boolean) {
     body: JSON.stringify({ value: on ? 1 : 0 }),
   });
   if (!res.ok) throw new Error(`Couldn't set round_engine_enabled: ${res.status} ${await res.text()}`);
+}
+
+async function ideasOn() {
+  const res = await fetch(`${supabase.url}/rest/v1/app_settings?key=eq.idea_engine_enabled`, {
+    method: "PATCH",
+    headers: concierge,
+    body: JSON.stringify({ value: 1 }),
+  });
+  if (!res.ok) throw new Error(`Couldn't set idea_engine_enabled: ${res.status} ${await res.text()}`);
+}
+
+/** What an idea run needs: the buyer's paid features, and one fact about the person. */
+async function readyForIdeas(userId: string, personId: string) {
+  const paid = await fetch(`${supabase.url}/rest/v1/accounts?on_conflict=user_id`, {
+    method: "POST",
+    headers: { ...concierge, Prefer: "resolution=merge-duplicates" },
+    body: JSON.stringify({ user_id: userId, paid_features: true }),
+  });
+  if (!paid.ok) throw new Error(`Couldn't set paid features: ${paid.status} ${await paid.text()}`);
+  const fact = await fetch(`${supabase.url}/rest/v1/profile_facts`, {
+    method: "POST",
+    headers: concierge,
+    body: JSON.stringify({ user_id: userId, person_id: personId, category: "wants", value: "a new fly-tying vise", source: "note" }),
+  });
+  if (!fact.ok) throw new Error(`Couldn't add a fact: ${fact.status} ${await fact.text()}`);
 }
 
 // Rounds and notifications cascade from the person.
@@ -90,6 +119,7 @@ async function notificationsFor(roundId: string): Promise<{ kind: string; sent_a
 test.beforeAll(async () => {
   await setEngine(false); // in case a crashed run left it on
   await deletePerson();
+  await ideasOn();
 });
 
 test.afterAll(async () => {
@@ -174,6 +204,7 @@ test("a round starts without an address, resumes when one is saved, and is skipp
   });
   if (!added.ok) throw new Error(`Couldn't add the test person: ${added.status} ${await added.text()}`);
   const personId = (await added.json()) as string;
+  await readyForIdeas((await signInApi()).id, personId);
 
   // An imported-style address (ALL-24 saves addresses unchecked): no recipient
   // names and a state written out. It fails the format check, so it counts as
@@ -258,7 +289,11 @@ test("a round starts without an address, resumes when one is saved, and is skipp
   await section.getByRole("button", { name: "Save address" }).click();
   await expect(section.getByText("Portland, OR 97201")).toBeVisible();
 
-  await expect.poll(async () => (await roundsFor(personId))[0].status).toBe("awaiting_approval");
+  // The page doesn't wait for the engine (ALL-27 AC-26): a needs_address round is looked at
+  // again on the next day's tick, whose own idea pass finds ideas and sends the heads-up.
+  expect((await roundsFor(personId))[0].status).toBe("needs_address");
+  await tick(base, new Date(Date.now() + DAY_MS).toISOString().slice(0, 10));
+  expect((await roundsFor(personId))[0].status).toBe("awaiting_approval");
   expect((await notificationsFor(round.id)).filter((n) => n.kind === "heads_up")).toHaveLength(1);
 
   // 3. The deadline day: nothing was approved, so the round is skipped and she is told.
@@ -292,6 +327,7 @@ async function personFor(buyerId: string): Promise<string> {
     body: JSON.stringify({ user_id: buyerId, person_id: personId, kind: "birthday", month: birthday.getUTCMonth() + 1, day: birthday.getUTCDate() }),
   });
   if (!occasion.ok) throw new Error(`Couldn't add an occasion: ${occasion.status} ${await occasion.text()}`);
+  await readyForIdeas(buyerId, personId);
   return personId;
 }
 

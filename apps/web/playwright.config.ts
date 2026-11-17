@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
-import { FAKE_ZINC_URL } from "./e2e/fake-zinc";
+import { FAKE_GATEWAY_KEY, FAKE_GATEWAY_URL } from "./e2e/fake-gateway";
+import { FAKE_ZINC_APP_KEY, FAKE_ZINC_URL } from "./e2e/fake-zinc";
 import { localSupabase } from "./e2e/local-supabase";
 
 // Browser tests (ALL-20). They need the local Supabase running
@@ -71,6 +72,11 @@ export default defineConfig({
           ZINC_ENV: "live",
           ZINC_API_BASE: FAKE_ZINC_URL,
           ZINC_WALLET_URL: `${FAKE_ZINC_URL}/wallet`,
+          // The idea engine (ALL-27), against the fake Gateway and the fake Zinc's product lookups:
+          // no test reaches the real AI or Zinc, so none spends money.
+          AI_GATEWAY_BASE: FAKE_GATEWAY_URL,
+          AI_GATEWAY_API_KEY: FAKE_GATEWAY_KEY,
+          ZINC_API_KEY: FAKE_ZINC_APP_KEY,
         },
       },
 });

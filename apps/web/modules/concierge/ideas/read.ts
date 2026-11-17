@@ -1,4 +1,5 @@
 import type { CalendarDate } from "@gifts-af/core";
+import { hasPaidFeatures } from "../paid-features";
 import type { Db } from "../profile/profile";
 
 // A person's on-demand ideas for the Gift ideas screen (ALL-27). Read with the
@@ -38,4 +39,24 @@ export async function onDemandIdeas(db: Db, personId: string): Promise<ShownIdea
     reason: i.reason,
     overBudget: i.over_budget,
   }));
+}
+
+async function setting(db: Db, key: string): Promise<number> {
+  const { data, error } = await db.schema("concierge").rpc("setting_int", { p_key: key });
+  if (error) throw new Error(`Reading setting ${key} failed: ${error.message}`);
+  if (typeof data !== "number") throw new Error(`Setting ${key} is missing.`);
+  return data;
+}
+
+/**
+ * What the Suggest button's money notice says (AC-14), as captureReadOffer does for reading
+ * captures: null, so no button, unless the engine is on and the signed-in buyer has paid features.
+ */
+export async function ideaRunOffer(db: Db): Promise<{ estimateCents: number; maxCents: number } | null> {
+  const userId = (await db.auth.getClaims()).data?.claims?.sub;
+  if (!userId) return null;
+  const [on, paid] = await Promise.all([setting(db, "idea_engine_enabled"), hasPaidFeatures(db, userId)]);
+  if (on !== 1 || !paid) return null;
+  const [estimateCents, maxCents] = await Promise.all([setting(db, "idea_run_estimate_cents"), setting(db, "idea_run_max_cents")]);
+  return { estimateCents, maxCents };
 }

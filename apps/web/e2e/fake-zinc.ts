@@ -1,12 +1,30 @@
 import { createServer, type Server } from "node:http";
+import { FAKE_IDEAS } from "./fake-gateway";
 
 // A stand-in for Zinc's API for the browser tests (ALL-32): the device-code sign-in, the wallet,
 // and our webhook endpoint. It listens on a fixed port, which playwright.config.ts passes to the
 // app as ZINC_API_BASE. The tests play the part of "the user clicks Allow at Zinc" through two
-// control routes: POST /__approve?user_code=… and GET /__state.
+// control routes: POST /__approve?user_code=… and GET /__state. For the idea engine (ALL-27) it
+// also answers product search and offers on the app's key, from fake-gateway.ts's FAKE_IDEAS.
 export const FAKE_ZINC_PORT = 4599;
 export const FAKE_ZINC_URL = `http://127.0.0.1:${FAKE_ZINC_PORT}`;
 export const FAKE_ZINC_KEY = "zn_live_E2E_FAKE_KEY";
+/** The app's own key for product lookups (ZINC_API_KEY). */
+export const FAKE_ZINC_APP_KEY = "zn_live_E2E_FAKE_APP_KEY";
+
+/** One new, in-stock offer from Amazon itself: free shipping, here within a week. */
+function offerFor(priceCents: number) {
+  return {
+    offer_id: "e2e-offer",
+    price: priceCents,
+    available: true,
+    condition: "New",
+    buy_box_winner: true,
+    seller: { name: "Amazon.com", first_party: true },
+    handling_days: { max: 1 },
+    shipping_options: [{ price: 0, delivery_days: { min: 2, max: 4 } }],
+  };
+}
 
 type State = { issued: number; approved: Set<string>; webhook: string | null; webhookCleared: number };
 
@@ -49,6 +67,17 @@ export function startFakeZinc(): Promise<Server> {
       if (route === "DELETE /webhooks/endpoint") {
         state.webhookCleared++;
         return send(204);
+      }
+      if (route === "GET /products/search") {
+        if (req.headers.authorization !== `Bearer ${FAKE_ZINC_APP_KEY}`) return send(401, { error: { code: "unauthorized" } });
+        const found = FAKE_IDEAS.filter((i) => i.search === url.searchParams.get("query"));
+        return send(200, { results: found.map((i) => ({ product_id: i.productId, title: i.productTitle, price: i.priceCents })) });
+      }
+      const offers = /^GET \/products\/([^/]+)\/offers$/.exec(route);
+      if (offers) {
+        if (req.headers.authorization !== `Bearer ${FAKE_ZINC_APP_KEY}`) return send(401, { error: { code: "unauthorized" } });
+        const idea = FAKE_IDEAS.find((i) => i.productId === decodeURIComponent(offers[1]));
+        return idea ? send(200, { offers: [offerFor(idea.priceCents)] }) : send(404, { error: { code: "not_found" } });
       }
       if (route === "GET /wallet/me") return send(200, { spendable_balance: 4000 });
       if (route === "POST /sandbox/keys") return send(201, { api_key: "zn_test_E2E_FAKE_KEY" });

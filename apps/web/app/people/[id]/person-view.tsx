@@ -6,7 +6,7 @@ import { PersonAvatar } from "@/components/person-avatar";
 import { PageTitle } from "@/components/app-shell/page-frame";
 import { createClient } from "@/lib/supabase/server";
 import { todayForRequest } from "@/lib/today";
-import { getPerson, countSavedGifts, getProfile, type Db, type PersonDetail } from "@/modules/concierge";
+import { getPerson, countSavedGifts, getProfile, onDemandIdeas, type Db, type PersonDetail } from "@/modules/concierge";
 import { SettingsRow } from "@/components/settings-row";
 import {
   deleteFactAction,
@@ -57,9 +57,10 @@ export async function PersonView({ id, photoFailed }: { id: string; photoFailed:
   if (!userId) redirect("/");
   const person = await getPerson(id, await todayForRequest());
   if (!person) notFound();
-  const [profile, savedGifts] = await Promise.all([
+  const [profile, savedGifts, ideas] = await Promise.all([
     getProfile(supabase as unknown as Db, person.id, person.keepsList),
     countSavedGifts(person.id),
+    onDemandIdeas(supabase as unknown as Db, person.id),
   ]);
   const base = `/people/${person.id}`;
 
@@ -116,6 +117,7 @@ export async function PersonView({ id, photoFailed }: { id: string; photoFailed:
           defaultCents={person.defaultBudgetCents}
           occasions={person.occasions}
         />
+        <SettingsRow href={`${base}/ideas`} label="Gift ideas" value={ideas.length > 0 ? String(ideas.length) : "None"} />
         <SettingsRow
           href={`${base}/saved-gifts`}
           label="Saved gifts"

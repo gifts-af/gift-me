@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { GUIDED_QUESTIONS, parseDate, type OccasionKind } from "@gifts-af/core";
+import { GUIDED_QUESTIONS, IDEA_RUN_OFF, ideaRunWorstMs, parseDate, type OccasionKind } from "@gifts-af/core";
 import { createExtractor } from "@/lib/ai/extract";
 import { AI_MODELS } from "@/lib/ai/models";
 import { appSettingInt } from "@/lib/app-settings";
@@ -10,12 +10,16 @@ import { errorFields, logEvent } from "@/lib/log";
 import { createClient } from "@/lib/supabase/server";
 import { todayForRequest } from "@/lib/today";
 import { scheduleNotesTip } from "./notes-tip";
-import { placeAddressHeld } from "@/app/settings/zinc-deps";
+import { onDemandIdeaDeps, placeAddressHeld } from "@/app/settings/zinc-deps";
+import { IDEA_MESSAGES, NO_FACTS } from "./[id]/ideas/messages";
 import {
   addPerson,
   answerQuestions,
   confirmFact,
   deleteFact,
+  getPerson,
+  runIdeas,
+  type IdeaOutcome,
   importPeople,
   isId,
   parseAnswers,
@@ -311,4 +315,58 @@ export async function saveGiftAction(_previous: SaveResult | null, formData: For
 export async function removeSavedGiftAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
   const id = text(formData, "id");
   return refresh(await removeSavedGift(id, text(formData, "gift")), id);
+}
+
+// The Gift ideas screen's button (ALL-27): one on-demand run for a person on the buyer's own
+// list, within the run's worst-case time (two AI and two Zinc timeouts). The page has 300 s.
+type SuggestResult = { ok: true; count: number } | { ok: false; error: string };
+
+function suggestResult(outcome: IdeaOutcome): SuggestResult {
+  switch (outcome.status) {
+    case "saved":
+      return { ok: true, count: outcome.count };
+    case "none":
+      return { ok: false, error: IDEA_MESSAGES.none };
+    case "no_facts":
+      return { ok: false, error: NO_FACTS };
+    case "off":
+      return { ok: false, error: IDEA_MESSAGES.off };
+    case "refused":
+      if (outcome.reason === "busy") return { ok: false, error: IDEA_MESSAGES.busy };
+      if (outcome.reason === "not_paid") return { ok: false, error: IDEA_RUN_OFF };
+      if (outcome.reason === "not_found") return { ok: false, error: IDEA_MESSAGES.notFound };
+      // "done" and "limit" are a round's; an on-demand run never gets them.
+      return { ok: false, error: IDEA_MESSAGES.failed };
+    default:
+      // failed, deadline, cost_cap
+      return { ok: false, error: IDEA_MESSAGES.failed };
+  }
+}
+
+export async function suggestIdeasAction(personId: string): Promise<SuggestResult> {
+  const gone: SuggestResult = { ok: false, error: IDEA_MESSAGES.notFound };
+  if (typeof personId !== "string" || !isId(personId)) return gone;
+  const userId = (await (await createClient()).auth.getClaims()).data?.claims?.sub;
+  if (!userId) return gone;
+  const today = await todayForRequest();
+  // RLS: only the buyer's own, undeleted person.
+  if (!(await getPerson(personId, today))) return gone;
+  try {
+    const deps = await onDemandIdeaDeps(today);
+    if (!deps) {
+      logEvent("ideas.not_configured", { user_id: userId, person_id: personId });
+      return { ok: false, error: IDEA_MESSAGES.failed };
+    }
+    const [aiMs, zincMs] = await Promise.all([appSettingInt("idea_ai_timeout_ms"), appSettingInt("idea_zinc_timeout_ms")]);
+    const outcome = await runIdeas(
+      { userId, personId, roundId: null, signal: AbortSignal.timeout(ideaRunWorstMs(aiMs, zincMs)) },
+      deps,
+    );
+    revalidatePath(`/people/${personId}/ideas`);
+    revalidatePath(`/people/${personId}`);
+    return suggestResult(outcome);
+  } catch (e) {
+    logEvent("ideas.action_failed", { user_id: userId, person_id: personId, ...errorFields(e) });
+    return { ok: false, error: IDEA_MESSAGES.failed };
+  }
 }
