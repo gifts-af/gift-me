@@ -49,14 +49,18 @@ async function setting(db: Db, key: string): Promise<number> {
 }
 
 /**
- * What the Suggest button's money notice says (AC-14), as captureReadOffer does for reading
- * captures: null, so no button, unless the engine is on and the signed-in buyer has paid features.
+ * Whether the Gift ideas screen offers a run (AC-14): "ready" with what the money notice says,
+ * "off" while idea_engine_enabled is 0 (for everyone), or "not_paid" for a buyer without paid
+ * features. Only "ready" shows the button.
  */
-export async function ideaRunOffer(db: Db): Promise<{ estimateCents: number; maxCents: number } | null> {
+export type IdeaRunOffer = { kind: "ready"; estimateCents: number; maxCents: number } | { kind: "off" } | { kind: "not_paid" };
+
+export async function ideaRunOffer(db: Db): Promise<IdeaRunOffer> {
   const userId = (await db.auth.getClaims()).data?.claims?.sub;
-  if (!userId) return null;
+  if (!userId) return { kind: "not_paid" };
   const [on, paid] = await Promise.all([setting(db, "idea_engine_enabled"), hasPaidFeatures(db, userId)]);
-  if (on !== 1 || !paid) return null;
+  if (on !== 1) return { kind: "off" };
+  if (!paid) return { kind: "not_paid" };
   const [estimateCents, maxCents] = await Promise.all([setting(db, "idea_run_estimate_cents"), setting(db, "idea_run_max_cents")]);
-  return { estimateCents, maxCents };
+  return { kind: "ready", estimateCents, maxCents };
 }

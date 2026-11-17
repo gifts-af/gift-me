@@ -128,5 +128,5 @@ export { runIdeas } from "./ideas/run";
 export type { IdeaDeps, IdeaOutcome, IdeaRequest } from "./ideas/run";
 export { createSupabaseIdeaStore } from "./ideas/store";
 export type { AdminDb, IdeaInputs, IdeaRefusal, IdeaSettings, IdeaStore, SavedIdea } from "./ideas/store";
-export { ideaRunOffer, onDemandIdeas } from "./ideas/read";
+export { ideaRunOffer, onDemandIdeas, type IdeaRunOffer } from "./ideas/read";
 export type { ShownIdea } from "./ideas/read";

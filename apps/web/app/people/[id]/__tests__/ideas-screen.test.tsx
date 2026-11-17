@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { IDEA_RUN_OFF, ideaRunNotice } from "@gifts-af/core";
-import type { ShownIdea } from "@/modules/concierge";
+import type { IdeaRunOffer, ShownIdea } from "@/modules/concierge";
 import { IdeasScreen } from "../ideas/ideas-screen";
 import { IDEA_MESSAGES, NO_FACTS } from "../ideas/messages";
 
@@ -23,11 +23,11 @@ const VISE: ShownIdea = {
   reason: "They want a new vise.",
   overBudget: false,
 };
-const OFFER = { estimateCents: 40, maxCents: 100 };
+const OFFER: IdeaRunOffer = { kind: "ready", estimateCents: 40, maxCents: 100 };
 
 function setup({
   ideas = [VISE],
-  offer = OFFER as typeof OFFER | null,
+  offer = OFFER,
   action = vi.fn(async (...a: [string]): Promise<Result> => (void a, { ok: true, count: 3 })),
 } = {}) {
   render(<IdeasScreen personId="p1" personName="Dad" offer={offer} ideas={ideas} action={action} />);
@@ -44,9 +44,18 @@ describe("IdeasScreen", () => {
     expect(screen.queryByText(IDEA_RUN_OFF)).toBeNull();
   });
 
-  it("shows the off line and no button without it", () => {
-    setup({ offer: null });
+  it("says suggestions are switched off, with no button, while the engine is off", () => {
+    setup({ offer: { kind: "off" } });
+    expect(screen.getByText("Suggestions are switched off right now.")).toBeInTheDocument();
+    expect(screen.queryByText(IDEA_RUN_OFF)).toBeNull();
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.queryByRole("note")).toBeNull();
+  });
+
+  it("says ideas aren't on the account, with no button, for a buyer without paid features", () => {
+    setup({ offer: { kind: "not_paid" } });
     expect(screen.getByText(IDEA_RUN_OFF)).toBeInTheDocument();
+    expect(screen.queryByText("Suggestions are switched off right now.")).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();
     expect(screen.queryByRole("note")).toBeNull();
   });

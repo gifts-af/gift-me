@@ -232,7 +232,7 @@ Vercel's instant rollback brings back the old budget section, which can't show o
 
 The engine finds gift ideas for a round and on demand (a person's Gift ideas screen). Spec and plan: [design/plans/ALL-27-idea-engine.md](plans/ALL-27-idea-engine.md). **It ships off on every environment** (`idea_engine_enabled` = 0) until Jim allows spending, because every run costs real money.
 
-**Turning it off:** set `idea_engine_enabled` to `0` in `concierge.app_settings` (Supabase SQL editor as allensforever711, no deploy), or roll back in Vercel. Off means no AI or Zinc call, no run counted, and no email; a round waits and tries again on the next tick, and the Gift ideas screen says suggestions are switched off. Rounds themselves are off in production anyway (`round_engine_enabled` = 0).
+**Turning it off:** set `idea_engine_enabled` to `0` in `concierge.app_settings` (Supabase SQL editor as allensforever711, no deploy), or roll back in Vercel. Off means no AI or Zinc call, no run counted, and no email; a round waits and tries again on the next tick, and the Gift ideas screen shows no button, just "Suggestions are switched off right now." (a buyer without paid features sees "Gift ideas aren't available on your account yet." instead). Rounds themselves are off in production anyway (`round_engine_enabled` = 0).
 
 **Environment variables** (listed in `apps/web/.env.example`):
 

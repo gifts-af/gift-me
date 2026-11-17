@@ -5,9 +5,9 @@ import Link from "next/link";
 import { IDEA_RUN_OFF, ideaRunNotice } from "@gifts-af/core";
 import { shortDate } from "@/components/occasion-format";
 import { Button } from "@/components/ui/button";
-import type { ShownIdea } from "@/modules/concierge";
+import type { IdeaRunOffer, ShownIdea } from "@/modules/concierge";
 import { money } from "../money";
-import { NO_FACTS } from "./messages";
+import { IDEA_MESSAGES, NO_FACTS } from "./messages";
 
 // A person's Gift ideas screen (ALL-27): the Suggest button with its money notice beside it
 // (design/ui.md > Money notice), then the ideas from the last run. Each idea keeps its product
@@ -29,8 +29,8 @@ export function IdeasScreen({
 }: {
   personId: string;
   personName: string;
-  /** What a run costs, from settings; null when the buyer can't run one. */
-  offer: { estimateCents: number; maxCents: number } | null;
+  /** What a run costs, from settings, when the buyer can run one; otherwise why not. */
+  offer: IdeaRunOffer;
   ideas: ShownIdea[];
   /** `suggestIdeasAction` */
   action: (personId: string) => Promise<Result>;
@@ -53,7 +53,7 @@ export function IdeasScreen({
 
   return (
     <>
-      {offer ? (
+      {offer.kind === "ready" ? (
         <div className="flex flex-col gap-2">
           <Button type="button" className="self-start" disabled={pending} onClick={suggest}>
             {`Suggest ideas for ${personName}`}
@@ -68,7 +68,7 @@ export function IdeasScreen({
           )}
         </div>
       ) : (
-        <p className="text-[13px] text-muted-foreground">{IDEA_RUN_OFF}</p>
+        <p className="text-[13px] text-muted-foreground">{offer.kind === "off" ? IDEA_MESSAGES.off : IDEA_RUN_OFF}</p>
       )}
 
       {error && (
