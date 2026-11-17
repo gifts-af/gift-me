@@ -6,51 +6,91 @@ import { usePathname, useRouter } from "next/navigation";
 import { Suspense, createContext, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 
 // Going back to the page you came from returns you to where you were on it,
-// not to its top (ALL-131). A link to the page before, like "‹ Mom", opens it
-// as a new visit, and a new visit starts at the top; the browser's own Back
-// keeps your place. So when the page a link goes back to is the one you just
-// came from, we go back in history instead.
+// not to its top (ALL-131). A link back, like "‹ Mom", opens the page as a new
+// visit, which starts at the top. Going back in history would keep your place
+// but can show the page as it was before you saved, so instead we open it as
+// usual, fresh, and scroll it to where you left it.
 
-type Back = { previous: { current: string | null }; back: () => void };
-const BackContext = createContext<Back | null>(null);
+type Memory = {
+  /** The page before this one. */
+  previous: { current: string | null };
+  /** Where you were on each page when you last tapped something on it. */
+  positions: Map<string, number>;
+  /** A page we're opening that should land where you left it. */
+  restore: { current: { path: string; y: number } | null };
+};
 
-/** Remembers the page before this one, for `useGoBack`. Wraps the whole app. */
+const BackContext = createContext<{ memory: Memory; open: (href: string) => void } | null>(null);
+
+/** Remembers the page before this one and your place on it, for `useGoBack`. Wraps the whole app. */
 export function BackHistory({ children }: { children: React.ReactNode }) {
-  const previous = useRef<string | null>(null);
   const router = useRouter();
-  const value = useMemo(() => ({ previous, back: () => router.back() }), [router]);
+  const memory = useMemo<Memory>(
+    () => ({ previous: { current: null }, positions: new Map(), restore: { current: null } }),
+    [],
+  );
+  const value = useMemo(
+    () => ({ memory, open: (href: string) => router.push(href, { scroll: false }) }),
+    [memory, router],
+  );
   return (
     <BackContext.Provider value={value}>
       {children}
       {/* Reading the address makes a page dynamic, so only this reads it. */}
       <Suspense fallback={null}>
-        <TrackPath previous={previous} />
+        <TrackPath memory={memory} />
       </Suspense>
     </BackContext.Provider>
   );
 }
 
-function TrackPath({ previous }: { previous: { current: string | null } }) {
+function TrackPath({ memory }: { memory: Memory }) {
   const pathname = usePathname();
   const current = useRef<string | null>(null);
+
+  // Every way off a page by hand starts with a click (Enter on a link clicks
+  // it too), so note your place on the page as you tap.
+  useEffect(() => {
+    const note = () => {
+      if (current.current) memory.positions.set(current.current, window.scrollY);
+    };
+    document.addEventListener("click", note, true);
+    return () => document.removeEventListener("click", note, true);
+  }, [memory]);
+
   useEffect(() => {
     if (pathname === current.current) return;
-    previous.current = current.current;
+    memory.previous.current = current.current;
     current.current = pathname;
-  }, [pathname, previous]);
+    const restore = memory.restore.current;
+    memory.restore.current = null;
+    if (restore?.path !== pathname) return;
+    // The page may still be growing to its full height, so try for a moment.
+    let frames = 0;
+    let id = 0;
+    const step = () => {
+      window.scrollTo(0, restore.y);
+      if (Math.abs(window.scrollY - restore.y) > 1 && ++frames < 30) id = requestAnimationFrame(step);
+    };
+    step();
+    return () => cancelAnimationFrame(id);
+  }, [pathname, memory]);
   return null;
 }
 
 /**
  * Returns a click handler for a link or button that leads back to `href`.
- * If `href` is the page you came from, it goes back in history and says so
- * by returning true; otherwise it returns false and the caller goes there.
+ * If `href` is the page you came from, it opens it where you left it and
+ * returns true; otherwise it returns false and the caller goes there itself.
  */
 export function useGoBack(href: string): () => boolean {
   const context = useContext(BackContext);
   return useCallback(() => {
-    if (!context || context.previous.current !== href) return false;
-    context.back();
+    if (!context || context.memory.previous.current !== href) return false;
+    const y = context.memory.positions.get(href);
+    if (y === undefined) return false;
+    context.memory.restore.current = { path: href, y };
+    context.open(href);
     return true;
   }, [context, href]);
 }

@@ -117,7 +117,7 @@ One responsive website, designed phone-first and installable to the home screen 
 | Top bar | Logo, Get, Give, account menu (fits 320 px, T58) | The same. Back links live in the page, not the bar |
 | Grids | One card per row | **Only home and the gift list** widen (up to 1024 px): 2 cards per row from 768 px, 3 from 1024 px |
 
-**Back links keep your place (ALL-131).** A back link ("‹ Mom", "‹ Settings") and a detail screen's Save go back in history when the page they lead to is the one you came from, so you land where you were on it, not at its top. Reached any other way, say from an email link, they open that page as a new visit.
+**Back links keep your place (ALL-131).** A back link ("‹ Mom", "‹ Settings") and a detail screen's Save open the page you came from as usual, fresh, then scroll it to where you were, rather than to its top. They don't go back in history, which can show the page as it was before you saved. Reached any other way, say from an email link, they open that page at its top.
 
 - **Approving** happens mostly on a phone, from the approval email, so the approval screen is designed for the phone first.
 - **Capturing** happens on a computer, in the Chrome extension's popup (about 360 px wide). It uses the same tokens.
