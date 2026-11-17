@@ -334,6 +334,15 @@ describe("runIdeas: results", () => {
     expect(event("ideas.candidate_dropped")).toMatchObject({ reason: "late" });
   });
 
+  it("two searches that find the same product save it once", async () => {
+    world([2000, 2000, 2000], { zinc, gateway });
+    zinc.search.set("thing 2", [{ product_id: "P1", title: "Acme thing 1", price: 2000 }]);
+    expect(await runIdeas(req(), deps())).toEqual({ status: "saved", count: 2 });
+    expect(store.saved.map((i) => i.retailerProductId)).toEqual(["P1", "P3"]);
+    expect(event("ideas.candidate_dropped")).toMatchObject({ reason: "duplicate" });
+    expect(event("ideas.run")).toMatchObject({ resolved: 2 });
+  });
+
   it("a run with nothing left saves nothing and returns none", async () => {
     world([9000, 9000], { zinc, gateway });
     expect(await runIdeas(req(), deps())).toEqual({ status: "none" });
@@ -390,6 +399,30 @@ describe("runIdeas: vendor trouble", () => {
     }) as typeof fetch;
     expect(await runIdeas(req(), deps())).toEqual({ status: "failed" });
     expect(store.finished).toEqual([{ outcome: "failed", cost: 20 }]);
+  });
+
+  it("a non-Zinc failure in one lookup starts no more lookups, and counts every one that started", async () => {
+    world([2000, 2000, 2000], { zinc, gateway });
+    store.s = settings({ zincRequestsPerSecond: 1 });
+    // Every Zinc reply takes a moment, so slower candidates are still going when one fails.
+    zinc.onCall = () => new Promise((r) => setTimeout(r, 1));
+    let sleeps = 0;
+    const d = deps();
+    d.sleep = async (ms) => {
+      // The second candidate's wait fails with an error that isn't Zinc's.
+      if (++sleeps === 1) throw new TypeError("boom");
+      t += ms;
+    };
+    let callsAtFinish = -1;
+    const finish = store.finish.bind(store);
+    store.finish = async (runId, outcome, cost) => {
+      callsAtFinish = zinc.calls.length;
+      return finish(runId, outcome, cost);
+    };
+    expect(await runIdeas(req(), d)).toEqual({ status: "failed" });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(zinc.calls.length).toBe(callsAtFinish);
+    expect(store.finished).toEqual([{ outcome: "failed", cost: 14 + zinc.calls.length }]);
   });
 
   it("a pricing failure ends failed without counting a run", async () => {

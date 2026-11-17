@@ -228,11 +228,23 @@ export function createSupabaseIdeaStore(db: AdminDb): IdeaStore {
       const excluded = excludedRows.data;
       let avoidTitles: string[] = [];
       if (excluded.length > 0) {
+        // This person's ideas only (T42: another person's title may hold their name). Ideas
+        // saved before person_id existed belong to the person through their round, as in
+        // excluded_products.
+        const { data: rounds, error: roundsError } = await concierge
+          .from("gift_rounds")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("person_id", personId);
+        if (roundsError) fail("Loading the person's rounds failed", roundsError);
+        const owner = [`person_id.eq.${personId}`];
+        if (rounds.length > 0) owner.push(`and(person_id.is.null,round_id.in.(${rounds.map((r) => r.id).join(",")}))`);
         const { data: titles, error: titleError } = await concierge
           .from("gift_ideas")
           .select("title")
           .eq("user_id", userId)
-          .in("retailer_product_id", excluded);
+          .in("retailer_product_id", excluded)
+          .or(owner.join(","));
         if (titleError) fail("Loading excluded titles failed", titleError);
         avoidTitles = [...new Set(titles.map((t) => t.title))];
       }

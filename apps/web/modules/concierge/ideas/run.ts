@@ -186,10 +186,12 @@ async function attempt(req: IdeaRequest, deps: IdeaDeps, t: Tally): Promise<Idea
   // ─── resolve, all candidates at once (B2), capped by cost and rate ──
   const limit = limiter(s.zincRequestsPerSecond, deps.clock, deps.sleep);
   let capped = false;
+  // Set when a lookup fails with an error that ends the run: no new paid call starts after it.
+  let stopping = false;
   const lookup = async <T>(call: () => Promise<T>): Promise<T | "stop"> => {
-    if (capped || req.signal.aborted) return "stop";
+    if (capped || stopping || req.signal.aborted) return "stop";
     await limit();
-    if (req.signal.aborted) return "stop";
+    if (stopping || req.signal.aborted) return "stop";
     if (t.spent + s.zincLookupCents > s.runMaxCents) {
       capped = true;
       return "stop";
@@ -221,15 +223,28 @@ async function attempt(req: IdeaRequest, deps: IdeaDeps, t: Tally): Promise<Idea
       return { found: { c, hit, offer, totalCents: v.totalCents, fit: v.fit, arriveBy: v.arriveBy } };
     } catch (e) {
       if (e instanceof ZincError) return { drop: "vendor_error", kind: e.kind };
+      stopping = true;
       throw e;
     }
   };
-  const results = await Promise.all(searchable.map(resolveOne));
+  // Settled, not Promise.all: every call that started is counted before the run can finish.
+  const settled = await Promise.allSettled(searchable.map(resolveOne));
+  const failure = settled.find((r) => r.status === "rejected");
+  if (failure) throw failure.reason;
   const found: Found[] = [];
   const drops: { drop: DropReason; kind?: ZincErrorKind }[] = [];
-  for (const r of results) {
-    if ("found" in r) found.push(r.found);
-    else if ("drop" in r) {
+  const products = new Set<string>();
+  for (const one of settled) {
+    if (one.status !== "fulfilled") continue;
+    const r = one.value;
+    // Two searches can land on one product; it's saved once (the first candidate keeps it).
+    if ("found" in r && products.has(r.found.hit.productId)) {
+      drops.push({ drop: "duplicate" });
+      dropped("duplicate");
+    } else if ("found" in r) {
+      products.add(r.found.hit.productId);
+      found.push(r.found);
+    } else if ("drop" in r) {
       drops.push(r);
       dropped(r.drop, r.kind);
     }
@@ -360,7 +375,8 @@ function limiter(perSecond: number, clock: () => number, sleep: (ms: number) => 
         await sleep(starts[0] + SECOND_MS - now);
       }
     });
-    queue = turn;
+    // One caller's failure mustn't decide the others' turns; the run's own stop flag does that.
+    queue = turn.catch(() => {});
     return turn;
   };
 }

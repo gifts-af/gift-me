@@ -229,6 +229,35 @@ describe.skipIf(!dbUp)("createSupabaseIdeaStore", () => {
     expect(got?.avoidTitles).toEqual(["Old kettle"]);
   });
 
+  it("avoidTitles are this person's own, including old round ideas without a person", async () => {
+    const buyer = await newUser("Jim");
+    const dad = await newPerson(buyer.id, "Dad");
+    const mom = await newPerson(buyer.id, "Mom");
+    const occasion = (
+      await pg.query(
+        "insert into concierge.occasions (user_id, person_id, kind) values ($1, $2, 'christmas') returning id",
+        [buyer.id, dad],
+      )
+    ).rows[0].id as string;
+    const round = (
+      await pg.query(
+        `insert into concierge.gift_rounds (user_id, person_id, occasion_id, occasion_year, occasion_date, ship_by_deadline, status)
+         values ($1, $2, $3, 2025, '2025-12-25', '2025-12-16', 'skipped') returning id`,
+        [buyer.id, dad, occasion],
+      )
+    ).rows[0].id as string;
+    // The same product rejected for Mom, under a title naming her, and for Dad in an old round idea.
+    await pg.query(
+      `insert into concierge.gift_ideas (user_id, person_id, round_id, title, retailer_product_id, price_cents, est_total_cents, rank, status)
+       values ($1, $2, null, 'Mug for Mom Allen', 'B0MUG', 1000, 1000, 1, 'rejected'),
+              ($1, null, $3, 'Stoneware mug', 'B0MUG', 1000, 1000, 1, 'rejected')`,
+      [buyer.id, mom, round],
+    );
+    const got = await store().inputs({ userId: buyer.id, personId: dad, roundId: null });
+    expect(got?.excluded).toEqual(["B0MUG"]);
+    expect(got?.avoidTitles).toEqual(["Stoneware mug"]);
+  });
+
   it("onDemandIdeas shows only the signed-in user's ideas", async () => {
     const buyer = await newUser("Jim");
     const stranger = await newUser("Stranger");

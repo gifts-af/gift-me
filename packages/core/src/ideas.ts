@@ -31,7 +31,8 @@ export type DropReason =
   | "given_or_rejected"
   | "sensitive"
   | "names"
-  | "vendor_error";
+  | "vendor_error"
+  | "duplicate";
 
 /** The first hit whose title contains the brand (any case); with no brand, the first hit. */
 export function matchHit(hits: ZincHit[], brand: string | null): ZincHit | null {
