@@ -197,6 +197,7 @@ My list saves as you go too, with no Save button and no "Unsaved changes" bar. W
 | Gifts: Saved gifts | How many, or "None" | Saved gifts |
 | Gifts: Their list | "Linked" or "Not linked" | Their list |
 | Gifts: Shipping address | The street, "Something's missing", a shared list's city, or "Not added" | Shipping address |
+| Gifts: Gift ideas | How many ideas the last on-demand run saved, or "None" (ALL-27) | Gift ideas |
 | Delete Mom | Behind a confirm, as before | — |
 
 **About Mom** (`/people/[id]/about`) is one screen where each field saves on its own, with a small "Saved" by it and no Save button (the shared `useAutosave` hook):
@@ -206,6 +207,12 @@ My list saves as you go too, with no Save button and no "Unsaved changes" bar. W
 - **Birthday:** month and day save together **when you leave the date fields**, so a date passed through on the way to another is never saved (a passing date could let the daily tick start a round). On an iPhone, closing the month wheel moves focus nowhere, so the date then waits 1.5 s (`DATE_SETTLE_MS`) for the day to be picked before it saves. Only a real date saves; "February 31" shows "That date doesn't exist." Changing it moves the same occasion, so an open round stays. Clearing the fields saves nothing; **Remove birthday** (with a confirm) removes it and the birth year. The year stays off until a date is saved, and saves on leaving it.
 - **Anniversary:** the same, without a year, with **Remove anniversary**. Offered for anyone, so changing a relationship never drops one.
 - Every field is off until the page has loaded (ALL-110). None of these saves restarts a round waiting for an address; only saving an address does.
+
+**Gift ideas** (`/people/[id]/ideas`, ALL-27) is where a buyer asks for ideas without waiting for a round:
+- **Top:** a "Suggest ideas for Mom" button with the money notice always visible beside it ("Suggesting ideas uses AI and live product lookups, which cost real money: usually about 40¢, at most $1", from settings; the style of [Money notice](#money-notice-decision-53-all-94), no "Alpha:"). While it runs, the button is off and a line says it takes about a minute. If the engine is off or the buyer isn't paid yet, there is no button, just a line saying suggestions aren't available.
+- **A run that finds nothing:** a plain line, never a blank. "Tell us a bit about them first" (with an "Answer a few questions" link) when there are no facts, "We couldn't find anything suitable this time", or "Couldn't get ideas. Try again."
+- **Each idea** is a row: the title (a link to the product), the price including shipping and estimated tax and the store ("$74.00 · Amazon"), "Arrives by Dec 10 if ordered today", and a one-line reason it fits. At most one idea per run is over budget, and it carries an **Over budget** label (also shown in the round emails). With no budget, nothing is labelled.
+- A new run replaces the last on-demand set. Ideas made inside a round aren't shown here.
 
 **Saved gifts, Their list and Shipping address** moved to screens of their own (`/people/[id]/saved-gifts`, `/list`, `/address`), unchanged inside, each with a back link to the person. The address keeps its one Save (fields only valid together) and its 300 s time limit, since saving it can place held gifts. The "Add an address" email's old link (`/people/[id]?address=open`) lands on the address screen with the form open, and Home's "Add birthday" opens About.
 
