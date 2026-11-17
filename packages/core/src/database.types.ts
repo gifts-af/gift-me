@@ -280,13 +280,14 @@ export type Database = {
           list_item_id: string | null;
           offer_id: string | null;
           over_budget: boolean;
+          person_id: string | null;
           price_cents: number;
           product_url: string | null;
           rank: number;
           reason: string | null;
           retailer: string | null;
           retailer_product_id: string | null;
-          round_id: string;
+          round_id: string | null;
           seller_name: string | null;
           source: string;
           status: string;
@@ -309,13 +310,14 @@ export type Database = {
           list_item_id?: string | null;
           offer_id?: string | null;
           over_budget?: boolean;
+          person_id?: string | null;
           price_cents: number;
           product_url?: string | null;
           rank: number;
           reason?: string | null;
           retailer?: string | null;
           retailer_product_id?: string | null;
-          round_id: string;
+          round_id?: string | null;
           seller_name?: string | null;
           source?: string;
           status?: string;
@@ -337,13 +339,14 @@ export type Database = {
           list_item_id?: string | null;
           offer_id?: string | null;
           over_budget?: boolean;
+          person_id?: string | null;
           price_cents?: number;
           product_url?: string | null;
           rank?: number;
           reason?: string | null;
           retailer?: string | null;
           retailer_product_id?: string | null;
-          round_id?: string;
+          round_id?: string | null;
           seller_name?: string | null;
           source?: string;
           status?: string;
@@ -444,6 +447,51 @@ export type Database = {
             columns: ["occasion_id", "user_id"];
             isOneToOne: false;
             referencedRelation: "occasions";
+            referencedColumns: ["id", "user_id"];
+          },
+        ];
+      };
+      idea_runs: {
+        Row: {
+          cost_cents: number;
+          finished_at: string | null;
+          id: string;
+          outcome: string | null;
+          person_id: string;
+          round_id: string | null;
+          stage: string | null;
+          started_at: string;
+          user_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          cost_cents?: number;
+          finished_at?: string | null;
+          id?: string;
+          outcome?: string | null;
+          person_id: string;
+          round_id?: string | null;
+          stage?: string | null;
+          started_at?: string;
+          user_id: string;
+        };
+        Update: {
+          cost_cents?: number;
+          finished_at?: string | null;
+          id?: string;
+          outcome?: string | null;
+          person_id?: string;
+          round_id?: string | null;
+          stage?: string | null;
+          started_at?: string;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "idea_runs_round_id_user_id_fkey";
+            columns: ["round_id", "user_id"];
+            isOneToOne: false;
+            referencedRelation: "gift_rounds";
             referencedColumns: ["id", "user_id"];
           },
         ];
@@ -1361,6 +1409,7 @@ export type Database = {
       };
       delete_occasion: { Args: { p_occasion_id: string }; Returns: undefined };
       enable_owner_rls: { Args: { p_table: unknown }; Returns: undefined };
+      excluded_products: { Args: { p_person_id: string }; Returns: string[] };
       fail_order: {
         Args: { p_failure_type: string; p_order_id: string };
         Returns: Database["concierge"]["Enums"]["round_status"];
@@ -1574,6 +1623,13 @@ export type Database = {
         }[];
       };
       round_fail_count: { Args: { p_round_id: string }; Returns: number };
+      round_idea_state: {
+        Args: { p_round_id: string };
+        Returns: {
+          has_facts: boolean;
+          runs_left: boolean;
+        }[];
+      };
       rounds_missing_late_failure_email: {
         Args: Record<PropertyKey, never>;
         Returns: string[];
@@ -1585,6 +1641,10 @@ export type Database = {
       save_budgets: {
         Args: { p_amounts: Json; p_person_id: string };
         Returns: undefined;
+      };
+      save_ideas: {
+        Args: { p_ideas: Json; p_run_id: string };
+        Returns: number;
       };
       set_emailed_balance: {
         Args: { p_cents: number; p_round_id: string };
@@ -1658,6 +1718,18 @@ export type Database = {
           isOneToOne: false;
           isSetofReturn: true;
         };
+      };
+      start_idea_run: {
+        Args: {
+          p_now: string;
+          p_person_id: string;
+          p_round_id: string;
+          p_user_id: string;
+        };
+        Returns: {
+          refusal: string;
+          run_id: string;
+        }[];
       };
       untold_failures: { Args: { p_round_id: string }; Returns: string[] };
       zinc_claim_poll: {

@@ -6,6 +6,8 @@ begin;
 select plan(21);
 
 select tests.create_user('a@example.com') as a \gset
+-- Rounds are for paid users only (ALL-27).
+insert into concierge.accounts (user_id, paid_features) values (:'a', true);
 select tests.create_user('b@example.com') as b \gset
 
 select tests.act_as(:'a');
