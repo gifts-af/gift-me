@@ -8,12 +8,12 @@ import { LOCAL_DB, localStack } from "../../../test/local-db";
 import type { Channel } from "../notify/channels";
 import { confirmActionLink } from "../notify/links";
 import { createSupabaseNotifyStore } from "../notify/store";
+import type { IdeaOutcome } from "../ideas/run";
 import { approveAndBuy } from "../purchase/approve";
 import { placeRound, sweepStalePlacing } from "../purchase/place";
 import type { PurchaseDeps } from "../purchase/store";
 import {
   advanceRound,
-  resumeRoundsForPerson,
   retryOrderedEmails,
   runTick,
   tellOrdered,
@@ -21,6 +21,7 @@ import {
   tellOwnersOfRejections,
   type EngineDeps,
   type EngineZinc,
+  type GenerateIdeas,
 } from "../rounds/engine";
 import { createSupabaseRoundStore } from "../rounds/store";
 import { FakeRoundStore } from "./fake-round-store";
@@ -59,6 +60,11 @@ function harness(opts: { hasAddress?: boolean; candidateFrom?: CalendarDate; zin
   store.settings.set("round_lock_minutes", 10);
   store.settings.set("round_max_attempts", 3);
   store.settings.set("zinc_place_budget_ms", 45_000);
+  // The idea pass (ALL-27): the shipped timings, and room for several rounds a tick.
+  store.settings.set("tick_deadline_ms", 270_000);
+  store.settings.set("idea_rounds_per_tick", 5);
+  store.settings.set("idea_ai_timeout_ms", 60_000);
+  store.settings.set("idea_zinc_timeout_ms", 15_000);
   store.schedule = SCHEDULE;
   store.people.set(PERSON, { name: NAME, hasAddress: opts.hasAddress ?? true });
   store.occasionKinds.set(OCCASION, "birthday");
@@ -84,13 +90,15 @@ function harness(opts: { hasAddress?: boolean; candidateFrom?: CalendarDate; zin
       return { ok: true as const, id: `msg-${emails.length}` };
     },
   };
-  const generateIdeas = vi.fn(async (roundId: string) => {
-    if (!store.ideas.has(roundId)) {
-      store.ideas.set(roundId, [
+  /** A run that saves two ideas, as runIdeas does (a fake: the run itself is idea-run.test.ts). */
+  const generateIdeas = vi.fn<GenerateIdeas>(async (round) => {
+    if (!store.ideas.has(round.id)) {
+      store.ideas.set(round.id, [
         { title: "Stoneware mug set", totalCents: 4200 },
         { title: "Herb planter", totalCents: 3850 },
       ]);
     }
+    return { status: "saved", count: 2 };
   });
   const deps = (now: Date): EngineDeps => ({
     store,
@@ -320,7 +328,7 @@ describe("runTick", () => {
   });
 });
 
-describe("resumeRoundsForPerson", () => {
+describe("an address arriving", () => {
   it("a share arriving after the last tick before the deadline still skips, with the skip email (ALL-63 AC-21)", async () => {
     const h = harness({ hasAddress: false });
     await h.runDays("2027-02-11", "2027-03-10");
@@ -348,17 +356,16 @@ describe("resumeRoundsForPerson", () => {
     expect(h.sent()).toEqual(["needs_address@2027-02-11", "heads_up@2027-02-14"]);
   });
 
-  it("sends the heads-up as soon as the address arrives and restarts the reminders (AC-9)", async () => {
+  it("sends the heads-up on the next tick after the address arrives and restarts the reminders (AC-9)", async () => {
     const h = harness({ hasAddress: false });
     await h.runDays("2027-02-11", "2027-02-19");
     h.store.people.get(PERSON)!.hasAddress = true;
 
-    h.today = "2027-02-20";
-    await resumeRoundsForPerson(PERSON, h.deps(at("2027-02-20", "09:30:00")));
+    await h.tick("2027-02-20");
     expect(h.store.rounds[0].status).toBe("awaiting_approval");
     expect(h.store.rounds[0].headsUpOn).toBe("2027-02-20");
 
-    await h.runDays("2027-02-20", "2027-03-20");
+    await h.runDays("2027-02-21", "2027-03-20");
     expect(h.sent()).toEqual([
       "needs_address@2027-02-11",
       "needs_address@2027-02-16",
@@ -377,17 +384,19 @@ describe("resumeRoundsForPerson", () => {
     ]);
   });
 
-  it("does nothing when the engine is off", async () => {
+  it("saving an address doesn't generate: outside the tick, the round is left due for the next tick", async () => {
     const h = harness({ hasAddress: false });
     await h.tick("2027-02-11");
-    h.store.settings.set("round_engine_enabled", 0);
     h.store.people.get(PERSON)!.hasAddress = true;
-    const writes = h.store.writes.length;
+    // Moving a waiting round on outside the tick (an address save used to) runs no idea run.
+    h.today = "2027-02-12";
+    expect(await advanceRound("round-1", h.deps(at("2027-02-12", "09:00:00")))).toBe("advanced");
+    expect(h.generateIdeas).not.toHaveBeenCalled();
+    expect(h.store.rounds[0]).toMatchObject({ status: "needs_address", nextActionAt: at("2027-02-12", "09:00:00"), lockedUntil: null });
 
-    await resumeRoundsForPerson(PERSON, h.deps(at("2027-02-12")));
-
-    expect(h.store.writes).toHaveLength(writes);
-    expect(h.store.rounds[0].status).toBe("needs_address");
+    await h.tick("2027-02-12");
+    expect(h.generateIdeas).toHaveBeenCalledTimes(1);
+    expect(h.sent()).toEqual(["needs_address@2027-02-11", "heads_up@2027-02-12"]);
   });
 });
 
@@ -546,9 +555,10 @@ describe("failures", () => {
     const h = harness();
     h.store.people.set("person-2", { name: "Other", hasAddress: true });
     h.store.occasionKinds.set("occasion-2", "birthday");
-    h.generateIdeas.mockImplementation(async (roundId: string) => {
-      if (roundId === "round-1") throw new Error("ideas failed");
-      h.store.ideas.set(roundId, [{ title: "Book", totalCents: 2000 }]);
+    h.generateIdeas.mockImplementation(async (round) => {
+      if (round.id === "round-1") throw new Error("ideas failed");
+      h.store.ideas.set(round.id, [{ title: "Book", totalCents: 2000 }]);
+      return { status: "saved", count: 1 };
     });
     // Two people with a birthday the same day.
     const rule = { kind: "birthday" as const, month: 3, day: 20 };
@@ -597,8 +607,6 @@ describe("events (AC-14)", () => {
     h.refuseOn = new Set(["2027-02-16", "2027-02-17", "2027-02-18", "2027-02-19"]);
     await h.runDays("2027-02-11", "2027-02-19");
     h.store.people.get(PERSON)!.hasAddress = true;
-    h.today = "2027-02-20";
-    await resumeRoundsForPerson(PERSON, h.deps(at("2027-02-20", "09:00:00")));
     await h.runDays("2027-02-20", "2027-03-12");
 
     const allowed = new Set([
@@ -685,6 +693,292 @@ describe("heads-up funding warning (AC-11)", () => {
   });
 });
 
+// ─── ALL-27: the idea pass, after everything else in the tick ───────────────
+
+describe("the idea pass (ALL-27)", () => {
+  const rule = { kind: "birthday" as const, month: 3, day: 20 };
+  /** Two people with birthdays: Zelda on 03-20 (ship by 03-11) and Other on `otherDay` of March. */
+  function two(otherDay = 20) {
+    const h = harness();
+    h.store.people.set("person-2", { name: "Other", hasAddress: true });
+    h.store.occasionKinds.set("occasion-2", "birthday");
+    h.today = "2027-02-11";
+    h.store.candidateRows = [
+      { userId: USER, personId: PERSON, occasionId: OCCASION, rule, budgetCents: 5000 },
+      { userId: USER, personId: "person-2", occasionId: "occasion-2", rule: { ...rule, day: otherDay }, budgetCents: null },
+    ];
+    return h;
+  }
+  const saved = (h: ReturnType<typeof harness>) => async (round: { id: string }): Promise<IdeaOutcome> => {
+    h.store.ideas.set(round.id, [{ title: "Book", totalCents: 2000 }]);
+    return { status: "saved", count: 1 };
+  };
+
+  it("ideas run after the money path and rejection notices", async () => {
+    const order: string[] = [];
+    const zinc: EngineZinc = {
+      placeRound: vi.fn(async () => {}),
+      sweep: async () => order.push("sweep"),
+      wallet: async () => ({ balanceCents: null, autoTopUp: null }),
+      lookahead: async () => ({ cents: 0, atLeast: false }),
+      walletUrl: "https://zinc.test/wallet",
+    };
+    const h = harness({ zinc });
+    vi.spyOn(h.store, "roundsWithRejectedAddresses").mockImplementation(async () => {
+      order.push("rejections");
+      return [];
+    });
+    const claimDue = h.store.claimDue.bind(h.store);
+    vi.spyOn(h.store, "claimDue").mockImplementation(async (now) => {
+      order.push("rounds");
+      return claimDue(now);
+    });
+    h.generateIdeas.mockImplementation(async (round) => {
+      order.push("ideas");
+      h.store.ideas.set(round.id, [{ title: "Book", totalCents: 2000 }]);
+      return { status: "saved", count: 1 };
+    });
+
+    await h.tick("2027-02-11");
+
+    expect(order).toEqual(["sweep", "rounds", "rejections", "ideas"]);
+    expect(h.sent()).toEqual(["heads_up@2027-02-11"]);
+  });
+
+  it("a round that already has ideas sends the heads-up without a run (B1)", async () => {
+    const h = harness();
+    h.generateIdeas.mockResolvedValueOnce({ status: "none" });
+    await h.tick("2027-02-11");
+    expect(h.store.rounds[0].status).toBe("generating");
+    // A run saved them, and its heads-up never went (a crash, say).
+    h.store.ideas.set("round-1", [{ title: "Book", totalCents: 2000 }]);
+
+    await h.tick("2027-02-12");
+
+    expect(h.generateIdeas).toHaveBeenCalledTimes(1);
+    expect(h.sent()).toEqual(["heads_up@2027-02-12"]);
+    expect(h.store.rounds[0].status).toBe("awaiting_approval");
+  });
+
+  it("only idea_rounds_per_tick rounds generate; the rest are released uncounted", async () => {
+    const h = two();
+    h.store.settings.set("idea_rounds_per_tick", 1);
+    h.generateIdeas.mockImplementation(saved(h));
+
+    const summary = await runTick(h.deps(at("2027-02-11")));
+
+    expect(h.generateIdeas).toHaveBeenCalledTimes(1);
+    expect(summary).toEqual({ enabled: true, created: 2, advanced: 1, failed: 0 });
+    const waiting = h.store.rounds.find((r) => r.status !== "awaiting_approval")!;
+    expect(waiting).toMatchObject({ status: "scheduled", lockedUntil: null, attempts: 0 });
+    expect(h.store.writes).toContain(`release:${waiting.id}`);
+
+    // The next tick gives it its turn.
+    await runTick(h.deps(at("2027-02-12")));
+    expect(h.generateIdeas).toHaveBeenCalledTimes(2);
+    expect(h.store.rounds.map((r) => r.status)).toEqual(["awaiting_approval", "awaiting_approval"]);
+  });
+
+  it("a refusal doesn't use the slot", async () => {
+    const h = two();
+    h.store.settings.set("idea_rounds_per_tick", 1);
+    h.generateIdeas.mockResolvedValueOnce({ status: "refused", reason: "busy" }).mockImplementation(saved(h));
+
+    await runTick(h.deps(at("2027-02-11")));
+
+    expect(h.generateIdeas).toHaveBeenCalledTimes(2);
+    const [busy, ran] = h.generateIdeas.mock.calls.map((c) => h.store.round(c[0].id));
+    // Busy: released as it was, for the next tick.
+    expect(busy).toMatchObject({ status: "generating", lockedUntil: null });
+    expect(ran.status).toBe("awaiting_approval");
+  });
+
+  it("rounds nearest their deadline go first", async () => {
+    // Other's birthday is 03-15, so their round ships by 03-06, before Zelda's 03-11.
+    const h = two(15);
+    h.store.settings.set("idea_rounds_per_tick", 1);
+    h.generateIdeas.mockImplementation(saved(h));
+
+    await runTick(h.deps(at("2027-02-11")));
+
+    expect(h.generateIdeas).toHaveBeenCalledTimes(1);
+    expect(h.generateIdeas.mock.calls[0][0]).toMatchObject({ userId: USER, personId: "person-2" });
+  });
+
+  it("no run starts when the time left is under the worst case", async () => {
+    const h = harness();
+    // The worst case is 2 × 60s + 2 × 15s = 150s; the tick has 100s.
+    h.store.settings.set("tick_deadline_ms", 100_000);
+    h.today = "2027-02-11";
+    h.store.candidateRows = [{ userId: USER, personId: PERSON, occasionId: OCCASION, rule, budgetCents: 5000 }];
+
+    await runTick({ ...h.deps(at("2027-02-11")), clock: () => 1_000 });
+
+    expect(h.generateIdeas).not.toHaveBeenCalled();
+    expect(h.store.rounds[0]).toMatchObject({ status: "scheduled", lockedUntil: null });
+    expect(h.sent()).toEqual([]);
+  });
+
+  it("gives the run a signal that aborts at the tick's deadline", async () => {
+    const h = harness();
+    await h.tick("2027-02-11");
+    const signal = h.generateIdeas.mock.calls[0][1];
+    expect(signal).toBeInstanceOf(AbortSignal);
+    expect(signal.aborted).toBe(false);
+  });
+
+  it("claimed rounds past the tick deadline are released", async () => {
+    const h = harness();
+    await h.tick("2027-02-11"); // heads-up
+    let looks = 0;
+    // The tick starts at 0; by its first look at a round, its 270s are long gone.
+    const clock = () => (looks++ === 0 ? 0 : 1_000_000);
+    h.today = "2027-02-16";
+    h.store.candidateRows = [];
+    const summary = await runTick({ ...h.deps(at("2027-02-16")), clock });
+
+    expect(summary).toMatchObject({ advanced: 0, failed: 0 });
+    expect(h.store.writes).toContain("release:round-1");
+    expect(h.store.rounds[0]).toMatchObject({ status: "awaiting_approval", lockedUntil: null });
+    expect(h.sent()).toEqual(["heads_up@2027-02-11"]);
+    expect(named("round_tick_out_of_time")).toEqual([expect.objectContaining({ released: 1 })]);
+
+    // The next tick sends the reminder that was due.
+    await h.tick("2027-02-16", "13:00:00");
+    expect(h.sent()).toEqual(["heads_up@2027-02-11", "reminder@2027-02-16"]);
+  });
+
+  it("a run that saves none stays generating", async () => {
+    const h = harness();
+    h.generateIdeas.mockResolvedValue({ status: "none" });
+
+    await h.tick("2027-02-11");
+
+    expect(h.store.rounds[0]).toMatchObject({ status: "generating", nextActionAt: at("2027-02-11"), lockedUntil: null });
+    expect(h.sent()).toEqual([]);
+    // Runs are left, so the next tick runs again.
+    await h.tick("2027-02-12");
+    expect(h.generateIdeas).toHaveBeenCalledTimes(2);
+  });
+
+  it.each(["failed", "deadline", "cost_cap"] as const)("a run that ends %s stays generating for the next tick", async (status) => {
+    const h = harness();
+    h.generateIdeas.mockResolvedValue({ status });
+    await h.tick("2027-02-11");
+    expect(h.store.rounds[0]).toMatchObject({ status: "generating", nextActionAt: at("2027-02-11"), lockedUntil: null });
+    expect(h.sent()).toEqual([]);
+  });
+
+  it("saved with count 0 sends no heads-up", async () => {
+    const h = harness();
+    h.generateIdeas.mockResolvedValue({ status: "saved", count: 0 });
+
+    await h.tick("2027-02-11");
+
+    // The person was removed mid-run: nothing more until the deadline closes the round.
+    expect(h.store.rounds[0]).toMatchObject({ status: "generating", nextActionAt: at("2027-03-11", "00:00:00") });
+    expect(h.sent()).toEqual([]);
+  });
+
+  it.each(["not_paid", "not_found"] as const)("refused %s waits for the deadline, which skips", async (reason) => {
+    const h = harness();
+    h.generateIdeas.mockResolvedValue({ status: "refused", reason });
+    await h.tick("2027-02-11");
+    expect(h.store.rounds[0]).toMatchObject({ status: "generating", nextActionAt: at("2027-03-11", "00:00:00") });
+    await h.runDays("2027-02-12", "2027-03-11");
+    expect(h.generateIdeas).toHaveBeenCalledTimes(1);
+    expect(h.store.rounds[0].status).toBe("skipped");
+    expect(h.sent()).toEqual([]);
+  });
+
+  it("off releases the round, for a tick once the engine is on", async () => {
+    const h = harness();
+    h.generateIdeas.mockResolvedValueOnce({ status: "off" });
+    await h.tick("2027-02-11");
+    expect(h.store.rounds[0]).toMatchObject({ status: "generating", lockedUntil: null });
+    expect(h.sent()).toEqual([]);
+    await h.tick("2027-02-12");
+    expect(h.sent()).toEqual(["heads_up@2027-02-12"]);
+  });
+
+  it("refused limit or no facts: the plan sends no_ideas on the next tick", async () => {
+    for (const outcome of [{ status: "refused", reason: "limit" }, { status: "no_facts" }] as IdeaOutcome[]) {
+      const h = harness();
+      h.generateIdeas.mockImplementation(async (round) => {
+        h.store.ideaState.set(round.id, outcome.status === "no_facts" ? { hasFacts: false } : { ideaRunsLeft: false });
+        return outcome;
+      });
+      await h.tick("2027-02-11");
+      expect(h.store.rounds[0]).toMatchObject({ status: "generating", nextActionAt: at("2027-02-11") });
+      await h.tick("2027-02-12");
+      expect(h.sent()).toEqual(["no_ideas@2027-02-12"]);
+      expect(h.generateIdeas).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it("a skip after no_ideas is emailed", async () => {
+    const h = harness();
+    h.store.ideaState.set("round-1", { hasFacts: false });
+    await h.runDays("2027-02-11", "2027-03-20");
+
+    expect(h.generateIdeas).not.toHaveBeenCalled();
+    expect(h.sent()).toEqual(["no_ideas@2027-02-11", "skipped@2027-03-11"]);
+    const sorry = h.emails[0];
+    expect(sorry.subject).toBe(`Sorry, we couldn't get gift ideas for ${NAME} yet`);
+    expect(h.notifyStore.links[0]).toMatchObject({ action: "answer_questions", roundId: "round-1" });
+  });
+
+  it("runs spent: no_ideas once; after the extra run finds nothing too, no_ideas_again", async () => {
+    const h = harness();
+    h.generateIdeas.mockImplementation(async (round) => {
+      const runs = h.generateIdeas.mock.calls.length;
+      // Two runs a round; the third is the extra one a new fact allowed.
+      h.store.ideaState.set(round.id, { ideaRunsLeft: runs < 2, ranSinceNoIdeas: runs > 2 });
+      return { status: "none" };
+    });
+    await h.runDays("2027-02-11", "2027-02-15");
+    expect(h.generateIdeas).toHaveBeenCalledTimes(2);
+    expect(h.sent()).toEqual(["no_ideas@2027-02-13"]);
+    expect(h.store.rounds[0].nextActionAt).toEqual(at("2027-03-11", "00:00:00"));
+
+    // A new fact: the trigger makes the round due, and one more run is allowed.
+    h.store.ideaState.set("round-1", { ideaRunsLeft: true });
+    h.store.rounds[0].nextActionAt = at("2027-02-16", "00:00:00");
+    await h.runDays("2027-02-16", "2027-02-20");
+    expect(h.generateIdeas).toHaveBeenCalledTimes(3);
+    // Both are the no_ideas email; the second is the again version.
+    expect(h.sent()).toEqual(["no_ideas@2027-02-13", "no_ideas@2027-02-17"]);
+    expect([...h.store.sends.get("round-1")!]).toEqual(["no_ideas", "no_ideas_again"]);
+    expect(h.emails[1].text).toContain("We tried again with what you added");
+  });
+
+  it("an over-budget idea is labeled in the heads-up", async () => {
+    const h = harness();
+    h.generateIdeas.mockImplementation(async (round) => {
+      h.store.ideas.set(round.id, [
+        { title: "Book", totalCents: 2000 },
+        { title: "Espresso machine", totalCents: 5500, overBudget: true },
+      ]);
+      return { status: "saved", count: 2 };
+    });
+    await h.tick("2027-02-11");
+    expect(h.emails[0].text).toContain("- Espresso machine · $55 (Over budget)");
+    expect(h.emails[0].text).not.toContain("Book · $20 (Over budget)");
+  });
+
+  it("logs ids, counts and outcomes only", async () => {
+    const h = harness();
+    h.generateIdeas.mockResolvedValue({ status: "none" });
+    await h.runDays("2027-02-11", "2027-02-14");
+    for (const e of events()) {
+      const text = JSON.stringify(e);
+      expect(text).not.toContain(NAME);
+      expect(text).not.toContain(EMAIL);
+    }
+    expect(named("round_step")).toContainEqual(expect.objectContaining({ round_id: "round-1", step: "ideas:none" }));
+  });
+});
+
 // ─── ALL-32: held rounds, against the real local database (E5); only Zinc is faked ───
 
 
@@ -761,7 +1055,7 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
       store: createSupabaseRoundStore(db),
       notify: { store: createSupabaseNotifyStore(db), channels: [channel], baseUrl: BASE, now },
       now,
-      generateIdeas: async () => {},
+      generateIdeas: async () => ({ status: "off" }),
       zinc:
         o.zinc === false
           ? null
@@ -1946,6 +2240,80 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     expect(inbox(u)).toEqual(["Sorry, Mary's gift is out of stock@2"]);
   });
 
+
+  // ─── ALL-27: a round's idea runs, counted in the real database ───────────
+
+  it("a fact saved after the runs are spent gets one more run on the next tick", async () => {
+    const u = await newUser();
+    const person = (
+      await pg.query(
+        `insert into public.people (user_id, name, relationship, recipient_first_name, recipient_last_name, address_line1, city, state, zip, country)
+         values ($1, 'Mary', 'friend', 'Mary', 'Allen', '12 Oak St', 'Dayton', 'OH', '45402', 'US') returning id`,
+        [u.userId],
+      )
+    ).rows[0].id as string;
+    const addFact = (value: string) =>
+      pg.query("insert into concierge.profile_facts (user_id, person_id, category, value, source) values ($1, $2, 'interest', $3, 'question')", [
+        u.userId,
+        person,
+        value,
+      ]);
+    await addFact("fly fishing");
+    const occasion = await pg.query("insert into concierge.occasions (user_id, person_id, kind) values ($1, $2, 'christmas') returning id", [
+      u.userId,
+      person,
+    ]);
+    const roundId = (
+      await pg.query(
+        `insert into concierge.gift_rounds (user_id, person_id, occasion_id, occasion_year, occasion_date, ship_by_deadline, budget_cents, status, next_action_at)
+         values ($1, $2, $3, 2030, current_date + 40, current_date + 30, 20000, 'scheduled', now()) returning id`,
+        [u.userId, person, occasion.rows[0].id],
+      )
+    ).rows[0].id as string;
+
+    // Each run is counted the way start_idea_run counts it, and finds nothing.
+    const generateIdeas = vi.fn(async (round: { id: string; userId: string; personId: string }): Promise<IdeaOutcome> => {
+      await pg.query(
+        "insert into concierge.idea_runs (user_id, person_id, round_id, finished_at, outcome) values ($1, $2, $3, now(), 'none')",
+        [round.userId, round.personId, round.id],
+      );
+      return { status: "none" };
+    });
+    // The real store and SQL, with the tick kept to this one round: other files' rounds stay as they are.
+    const tick = async () => {
+      const now = new Date(Date.now() + 1000);
+      const { engine: deps } = wiring(now, { zinc: false });
+      const real = deps.store;
+      const store = {
+        ...real,
+        candidates: async () => [],
+        claimDue: async (at: Date) => [await real.claim(roundId, at)].filter((r) => r !== null),
+        roundsWithRejectedAddresses: async () => [],
+        roundsMissingOrderedEmail: async () => [],
+      };
+      return runTick({ ...deps, store, generateIdeas, clock: Date.now });
+    };
+
+    await tick(); // run 1: nothing; runs are left
+    await tick(); // run 2: nothing; the runs are spent
+    await tick(); // no_ideas
+    await tick(); // waits for the deadline
+    expect(generateIdeas).toHaveBeenCalledTimes(2);
+    expect(await sends(roundId)).toEqual(["no_ideas"]);
+    expect(inbox(u)).toEqual(["Sorry, we couldn't get gift ideas for Mary yet@0"]);
+    expect((await roundRow(roundId)).status).toBe("generating");
+
+    // A new fact brings the round forward (the fact trigger), and allows one more run.
+    await addFact("loves hiking");
+    await tick(); // run 3: nothing again
+    await tick(); // no_ideas_again
+    await tick(); // no more runs, ever
+    expect(generateIdeas).toHaveBeenCalledTimes(3);
+    expect(await sends(roundId)).toEqual(["no_ideas", "no_ideas_again"]);
+    expect(textFor(u)[1]).toContain("We tried again with what you added about Mary");
+    const runs = await pg.query("select count(*)::int as n from concierge.idea_runs where round_id = $1", [roundId]);
+    expect(runs.rows[0].n).toBe(3);
+  });
 });
 
 describe("runTick: clearing unfiled notes (ALL-31)", () => {

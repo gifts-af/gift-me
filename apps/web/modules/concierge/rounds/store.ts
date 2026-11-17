@@ -93,8 +93,17 @@ export type RoundContext = {
   hasSharedAddress: boolean;
   /** Guided questions open for the person (ALL-26); the emails link them when above 0. */
   openQuestions: number;
-  /** Proposed ideas, best first. */
-  ideas: { title: string; totalCents: number }[];
+  /** Proposed ideas, best first; `overBudget`: above the budget but within the allowance. */
+  ideas: { title: string; totalCents: number; overBudget: boolean }[];
+  /**
+   * The idea checks (ALL-27, round_idea_state): the person has an active fact, and the round may
+   * start another run. Only read before ideas are found (scheduled, needs_address, generating);
+   * true otherwise, so a failed read can't hold up the money path.
+   */
+  hasFacts: boolean;
+  ideaRunsLeft: boolean;
+  /** A run started after the `no_ideas` email went (round-plan, ranSinceNoIdeas). */
+  ranSinceNoIdeas: boolean;
   /** The round's orders, oldest first, with their idea's title (ALL-32). */
   orders: RoundOrder[];
   /** The person was removed (soft-deleted): emails don't link their page (ALL-116). */
@@ -162,11 +171,6 @@ export interface RoundStore {
   /** Removes what's left of the round's rejected addresses (T42, decision 43). */
   clearRejectedAddresses(roundId: string): Promise<void>;
   roundContext(roundId: string): Promise<RoundContext>;
-  /**
-   * The person's `needs_address` rounds, made due at `now` so they can be
-   * claimed straight away (their next reminder may be days ahead).
-   */
-  waitingRoundsForPerson(personId: string, now: Date): Promise<string[]>;
 
   // ─── The money path (ALL-32): reconcile_round owns these rounds' status, never finish. ───
   /** The round's fields as they are now, keeping the lease. */
@@ -260,6 +264,25 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
     if (error) fail(`Reading setting ${key} failed`, error);
     if (typeof data !== "number") throw new Error(`Setting ${key} is missing.`);
     return data;
+  }
+
+  async function readIdeaState(roundId: string): Promise<Pick<RoundContext, "hasFacts" | "ideaRunsLeft" | "ranSinceNoIdeas">> {
+    const [state, told, lastRun] = await Promise.all([
+      concierge.rpc("round_idea_state", { p_round_id: roundId }),
+      concierge.from("round_sends").select("created_at").eq("round_id", roundId).eq("step", "no_ideas").maybeSingle(),
+      concierge.from("idea_runs").select("started_at").eq("round_id", roundId).order("started_at", { ascending: false }).limit(1),
+    ]);
+    if (state.error) fail("Reading the round's idea state failed", state.error);
+    if (told.error) fail("Reading the round's no_ideas email failed", told.error);
+    if (lastRun.error) fail("Reading the round's idea runs failed", lastRun.error);
+    const row = state.data[0];
+    if (!row) throw new Error("The round's idea state is missing");
+    const started = lastRun.data[0]?.started_at;
+    return {
+      hasFacts: row.has_facts,
+      ideaRunsLeft: row.runs_left,
+      ranSinceNoIdeas: told.data !== null && started !== undefined && Date.parse(started) > Date.parse(told.data.created_at),
+    };
   }
 
   return {
@@ -400,7 +423,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
         concierge.from("occasions").select("kind").eq("id", round.occasion_id).single(),
         concierge
           .from("gift_ideas")
-          .select("title, est_total_cents")
+          .select("title, est_total_cents, over_budget")
           .eq("round_id", roundId)
           .eq("status", "proposed")
           .order("rank"),
@@ -438,6 +461,9 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
         if (read.data && typeof read.data === "object") shared = read.data as AddressColumns;
       }
       const a: AddressColumns = shared ?? p;
+      const ideaState = round.status === "scheduled" || round.status === "needs_address" || round.status === "generating"
+        ? await readIdeaState(roundId)
+        : { hasFacts: true, ideaRunsLeft: true, ranSinceNoIdeas: false };
       const draftOf = (x: AddressColumns) => ({
         firstName: x.recipient_first_name,
         lastName: x.recipient_last_name,
@@ -459,7 +485,8 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
         hasAddress: isShippableAddress(draftOf(a)),
         hasSharedAddress: shared !== null && isShippableAddress(draftOf(shared)),
         openQuestions: open.length,
-        ideas: ideas.data.map((i) => ({ title: i.title, totalCents: i.est_total_cents })),
+        ideas: ideas.data.map((i) => ({ title: i.title, totalCents: i.est_total_cents, overBudget: i.over_budget })),
+        ...ideaState,
         orders: orders.data.map((o) => ({
           id: o.id,
           ideaId: o.idea_id,
@@ -495,17 +522,6 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
     async clearRejectedAddresses(roundId) {
       const { error } = await concierge.rpc("clear_rejected_addresses", { p_round_id: roundId });
       if (error) fail("Clearing rejected addresses failed", error);
-    },
-
-    async waitingRoundsForPerson(personId, now) {
-      const { data, error } = await concierge
-        .from("gift_rounds")
-        .update({ next_action_at: now.toISOString() })
-        .eq("person_id", personId)
-        .eq("status", "needs_address")
-        .select("id");
-      if (error) fail("Loading the person's waiting rounds failed", error);
-      return data.map((r) => r.id);
     },
 
     async refresh(round) {

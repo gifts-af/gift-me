@@ -82,15 +82,14 @@ export { parseSavedGiftForm } from "./saved-gifts/rules";
 export type { SavedGift, SavedGiftInput } from "./saved-gifts/rules";
 export type { AddressSaveResult, ImportAddress, ImportRow, PersonInput } from "./people/rules";
 
-// The round engine (ALL-28): the daily tick, advancing one round, and resuming
-// rounds that waited for an address. The idea stub stands in for ALL-27.
-export { advanceRound, resumeRoundsForPerson, runTick, tellOrdered } from "./rounds/engine";
+// The round engine (ALL-28): the daily tick and advancing one round. Ideas come from the
+// idea engine below (ALL-27), bound in app/settings/zinc-deps.ts.
+export { advanceRound, runTick, tellOrdered } from "./rounds/engine";
 export type { AdvanceResult, EngineDeps, EngineZinc, GenerateIdeas, TickSummary } from "./rounds/engine";
 export { createSupabaseRoundStore } from "./rounds/store";
 export type { Candidate, ClaimedRound, NewRoundRow, RoundContext, RoundFinish, RoundOrder, RoundStore } from "./rounds/store";
 export { clearUnfiledNotes } from "./inbound/cleanup";
 export type { InboundCleanup } from "./inbound/cleanup";
-export { createStubGenerateIdeas } from "./rounds/ideas";
 
 // Paying for gifts from the user's own Zinc wallet (ALL-32): connect, phone, disconnect, Settings status.
 export {

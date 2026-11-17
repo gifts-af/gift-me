@@ -7,7 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   advanceRound,
   clearUnfiledNotes,
-  createStubGenerateIdeas,
+  createSupabaseIdeaStore,
   createSupabaseNotifyStore,
   createSupabaseRoundStore,
   defaultChannels,
@@ -17,8 +17,10 @@ import {
   placeAddressHeldFor,
   placeHeldForUser,
   placeRound,
+  runIdeas,
   sweepStalePlacing,
   type EngineDeps,
+  type GenerateIdeas,
   type PlaceAddressHeld,
   type PlaceHeld,
   type PurchaseDeps,
@@ -54,6 +56,40 @@ async function settingInt(db: SupabaseClient<Database>, key: string): Promise<nu
 }
 
 /**
+ * The tick's idea runs (ALL-27): runIdeas with the AI Gateway (AI_GATEWAY_BASE, AI_GATEWAY_API_KEY)
+ * and Zinc's product lookups on the app's own key (ZINC_API_BASE, ZINC_API_KEY, T17). With any of
+ * them missing here, every run fails without spending, and `ideas.not_configured` says why.
+ */
+function ideaWiring(db: SupabaseClient<Database>, env: Env, now: Date): GenerateIdeas {
+  const gatewayBase = env.AI_GATEWAY_BASE;
+  const gatewayKey = env.AI_GATEWAY_API_KEY;
+  const zincBase = env.ZINC_API_BASE;
+  const zincKey = env.ZINC_API_KEY;
+  if (!gatewayBase || !gatewayKey || !zincBase || !zincKey) {
+    return async (round) => {
+      logEvent("ideas.not_configured", { round_id: round.id, user_id: round.userId, person_id: round.personId });
+      return { status: "failed" };
+    };
+  }
+  const store = createSupabaseIdeaStore(db);
+  return async (round, signal) => {
+    const timeoutMs = await settingInt(db, "idea_zinc_timeout_ms");
+    return runIdeas(
+      { userId: round.userId, personId: round.personId, roundId: round.id, signal },
+      {
+        store,
+        gateway: { base: gatewayBase, apiKey: gatewayKey, fetch },
+        zinc: { http: { base: zincBase, timeoutMs, fetch }, key: zincKey },
+        // The engine's day: the tick's UTC day.
+        today: now.toISOString().slice(0, 10),
+        clock: Date.now,
+        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      },
+    );
+  };
+}
+
+/**
  * The round engine and the buying side, wired to each other (ALL-32 Task 7): the engine
  * places held rounds and sweeps through the real placeRound and sweepStalePlacing, and an
  * approval or webhook tells the buyer through the engine's advanceRound. With Zinc off here
@@ -70,7 +106,7 @@ export async function buyingWiring(
     store: createSupabaseRoundStore(db),
     notify: { store: createSupabaseNotifyStore(db), channels: defaultChannels(env), baseUrl: siteUrl(env), now },
     now,
-    generateIdeas: createStubGenerateIdeas({ production: env.VERCEL_ENV === "production" }),
+    generateIdeas: ideaWiring(db, env, now),
     zinc: null,
     clearUnfiledNotes: () => clearUnfiledNotes(db),
   };

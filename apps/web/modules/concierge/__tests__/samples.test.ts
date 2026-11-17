@@ -10,6 +10,7 @@ describe("sampleEmails", () => {
       "heads_up-reminder",
       "heads_up-auto_buy",
       "heads_up-funding",
+      "heads_up-over_budget",
       "reminder",
       "reminder-questions",
       "final_notice",
@@ -39,6 +40,8 @@ describe("sampleEmails", () => {
       "who_is_this",
       "notes_not_read",
       "notes_cant_cancel",
+      "no_ideas",
+      "no_ideas-again",
     ]);
   });
 

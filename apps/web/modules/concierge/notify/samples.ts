@@ -26,6 +26,8 @@ export function sampleEmails(link: string): SampleEmail[] {
       add("heads_up-auto_buy", kind, autoBuy, { ...links, skip: link });
       const funding = { dueText: "$160", haveText: "$40", atLeast: false, windowText: "the next 3 weeks", walletUrl: link };
       add("heads_up-funding", kind, { ...base, funding }, links);
+      const overBudget = [...base.ideas.slice(0, 2), { title: "Espresso machine", price: "$95", overBudget: true }];
+      add("heads_up-over_budget", kind, { ...base, ideas: overBudget }, links);
       continue;
     }
     add(kind, kind, data, links);
@@ -43,6 +45,7 @@ export function sampleEmails(link: string): SampleEmail[] {
       ];
       add("failed_late-several", kind, { ...SAMPLE_DATA.failed_late.data, failed: two, onItsWay: ["Cast-iron herb planter"] }, links);
     }
+    if (kind === "no_ideas") add("no_ideas-again", kind, { ...SAMPLE_DATA.no_ideas.data, again: true }, links);
     if (kind === "hold_funds") {
       add("hold_funds-still", kind, { ...SAMPLE_DATA.hold_funds.data, still: true, placedTitle: "Linen apron" }, links);
     }

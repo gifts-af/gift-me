@@ -10,7 +10,7 @@ import { errorFields, logEvent } from "@/lib/log";
 import { createClient } from "@/lib/supabase/server";
 import { todayForRequest } from "@/lib/today";
 import { scheduleNotesTip } from "./notes-tip";
-import { buyingWiring, placeAddressHeld } from "@/app/settings/zinc-deps";
+import { placeAddressHeld } from "@/app/settings/zinc-deps";
 import {
   addPerson,
   answerQuestions,
@@ -103,11 +103,8 @@ async function tipAfterAdd(person: { id: string; name: string }): Promise<void> 
   }
 }
 
-/** The round engine with the real buying side, for rounds that go on once an address arrives. */
-const engineNow = async () => (await buyingWiring(new Date())).engine;
-
 // About (ALL-127): each field saves on its own through useAutosave, so these
-// take plain values, not forms. None resumes rounds; only the address does.
+// take plain values, not forms. None moves rounds on.
 const DATED: DatedKind[] = ["birthday", "anniversary"];
 const isText = (...values: unknown[]) => values.every((v) => typeof v === "string");
 
@@ -153,13 +150,13 @@ export async function removeDatedOccasionAction(id: string, kind: string): Promi
   return refreshPerson(await removeDatedOccasion(id, dated), id);
 }
 
-/** The Shipping address form (ALL-81): checked by format, then saved; a waiting round goes on. */
+/** The Shipping address form (ALL-81): checked by format, then saved; a waiting round goes on at the next tick. */
 export async function saveAddressAction(_previous: AddressSaveResult | null, formData: FormData): Promise<AddressSaveResult> {
   const parsed = parseAddressForm(formData);
   if (!parsed.ok) return parsed;
   const id = text(formData, "id");
-  // This person's gifts held for an address are tried again (ALL-32); both come from the Zinc wiring.
-  return refresh(await saveAddress(id, parsed.value, { placeAddressHeld, engine: engineNow }), id);
+  // This person's gifts held for an address are tried again (ALL-32), through the Zinc wiring.
+  return refresh(await saveAddress(id, parsed.value, { placeAddressHeld }), id);
 }
 
 export async function removeAddressAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {

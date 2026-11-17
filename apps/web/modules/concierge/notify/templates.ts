@@ -30,7 +30,9 @@ export type NotificationKind =
   | "notes_tip"
   | "who_is_this"
   | "notes_not_read"
-  | "notes_cant_cancel";
+  | "notes_cant_cancel"
+  // ALL-27: a round couldn't get gift ideas (once, and `again` after the extra run).
+  | "no_ideas";
 
 /**
  * The kinds whose replies are notes, so they may carry the notes address as Reply-To. Only the
@@ -43,7 +45,7 @@ export type NotesReplyKind = (typeof REPLIES_ARE_NOTES)[number];
 export type RenderedEmail = { subject: string; html: string; text: string };
 
 // Everything is already formatted by the caller (dates, prices).
-export type IdeaRow = { title: string; price: string };
+export type IdeaRow = { title: string; price: string; overBudget?: boolean };
 
 type Occasion = { personName: string; occasion: string; dateText: string };
 
@@ -127,6 +129,8 @@ export type TemplateData = {
   who_is_this: { subject: string; choices: { name: string }[] };
   notes_not_read: Record<string, never>;
   notes_cant_cancel: Record<string, never>;
+  /** `again`: the extra run a new fact allowed found nothing too. */
+  no_ideas: { personName: string; again: boolean };
 };
 
 export type TemplateLinks = {
@@ -158,9 +162,11 @@ export type TemplateLinks = {
   who_is_this: { [choice: `choice${number}`]: string; someoneElse: string };
   notes_not_read: Record<string, never>;
   notes_cant_cancel: Record<string, never>;
+  no_ideas: { questions: string };
 };
 
-const rowsOf = (ideas: IdeaRow[]) => ideas.map((i) => ({ title: `${i.title} · ${i.price}` }));
+const rowsOf = (ideas: IdeaRow[]) =>
+  ideas.map((i) => ({ title: `${i.title} · ${i.price}`, ...(i.overBudget ? { detail: "Over budget" } : {}) }));
 
 const PRICES_NOTE = "Prices include shipping and tax.";
 
@@ -659,6 +665,23 @@ export const TEMPLATES: {
       ],
     }),
   }),
+
+  // True whether nothing fit or a service was down (ALL-27 AC-9), in the ALL-116 tone.
+  no_ideas: (d, links) => ({
+    subject: `Sorry, we couldn't get gift ideas for ${d.personName} yet`,
+    ...renderEmail({
+      heading: `Sorry, we couldn't get gift ideas for ${d.personName} yet`,
+      paragraphs: d.again
+        ? [
+            `We're sorry. We tried again with what you added about ${d.personName}, and still couldn't find a good fit. You haven't been charged.`,
+          ]
+        : [`We're sorry. We couldn't find gifts that fit ${d.personName} this time. You haven't been charged.`],
+      button: { label: `Tell us more about ${d.personName}`, url: links.questions },
+      footer: d.again
+        ? `What happens next: we'll skip this occasion unless you pick something yourself.`
+        : `What happens next: telling us more about ${d.personName} helps. We'll try once more after you add something. Otherwise, we'll let you know before the date passes.`,
+    }),
+  }),
 };
 
 const IDEAS: IdeaRow[] = [
@@ -759,4 +782,5 @@ export const SAMPLE_DATA: {
   },
   notes_not_read: { data: {}, links: {} },
   notes_cant_cancel: { data: {}, links: {} },
+  no_ideas: { data: { personName: "Mom", again: false }, links: { questions: "https://example.com/a/questions-token" } },
 };

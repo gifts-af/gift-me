@@ -23,11 +23,13 @@ const setRelationship = vi.hoisted(() => vi.fn());
 const setBirthYear = vi.hoisted(() => vi.fn());
 const setDatedOccasion = vi.hoisted(() => vi.fn());
 const removeDatedOccasion = vi.hoisted(() => vi.fn());
+const saveAddress = vi.hoisted(() => vi.fn());
 vi.mock("@/modules/concierge", async () => {
   const rules = await vi.importActual<typeof import("@/modules/concierge/people/rules")>("@/modules/concierge/people/rules");
   return {
-    deletePerson, addPerson, renamePerson, setRelationship, setBirthYear, setDatedOccasion, removeDatedOccasion,
+    deletePerson, addPerson, renamePerson, setRelationship, setBirthYear, setDatedOccasion, removeDatedOccasion, saveAddress,
     parsePersonForm: rules.parsePersonForm, parseMonthDay: rules.parseMonthDay, parseBirthYear: rules.parseBirthYear,
+    parseAddressForm: rules.parseAddressForm,
   };
 });
 
@@ -36,6 +38,7 @@ import {
   deletePersonAction,
   removeDatedOccasionAction,
   renamePersonAction,
+  saveAddressAction,
   setBirthYearAction,
   setDatedOccasionAction,
   setRelationshipAction,
@@ -103,7 +106,7 @@ describe("addPersonAction (AC-15)", () => {
 });
 
 // About's fields (ALL-127): each action saves one field, refreshes the pages
-// that show it, and never builds the buying wiring that resumes rounds.
+// that show it, and never builds the buying wiring.
 describe("one field at a time", () => {
   const ID = "3f2b8c1e-9d4a-4e6b-8a1f-0c5d7e9b2a46";
   beforeEach(() => {
@@ -176,12 +179,38 @@ describe("one field at a time", () => {
     expect(revalidatePath).not.toHaveBeenCalled();
   });
 
-  it("never builds the buying wiring, so no round is resumed", async () => {
+  it("never builds the buying wiring", async () => {
     await renamePersonAction(ID, "Mama");
     await setRelationshipAction(ID, "aunt");
     await setDatedOccasionAction(ID, "birthday", "11", "30");
     await setBirthYearAction(ID, "1960");
     await removeDatedOccasionAction(ID, "birthday");
+    expect(buyingWiring).not.toHaveBeenCalled();
+  });
+});
+
+// ALL-27: a saved address no longer moves rounds on; the next daily tick finds ideas for them.
+describe("saveAddressAction", () => {
+  it("saves the address and builds no round engine, so no idea run starts", async () => {
+    saveAddress.mockResolvedValue({ ok: true });
+    buyingWiring.mockClear();
+    const f = new FormData();
+    for (const [k, v] of Object.entries({
+      id: "3f2b8c1e-9d4a-4e6b-8a1f-0c5d7e9b2a46",
+      firstName: "Rita",
+      lastName: "Engine",
+      line1: "1 Test Street",
+      city: "Portland",
+      state: "OR",
+      zip: "97201",
+      country: "US",
+    })) {
+      f.set(k, v);
+    }
+    expect(await saveAddressAction(null, f)).toEqual({ ok: true });
+    expect(saveAddress).toHaveBeenCalledWith("3f2b8c1e-9d4a-4e6b-8a1f-0c5d7e9b2a46", expect.anything(), {
+      placeAddressHeld: expect.any(Function),
+    });
     expect(buyingWiring).not.toHaveBeenCalled();
   });
 });

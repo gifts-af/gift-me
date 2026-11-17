@@ -45,7 +45,7 @@ insert into concierge.app_settings (key, value, description) values
   ('idea_candidates', '8', 'How many product ideas the AI is asked for in one run.'),
   ('idea_max_searches', '3', 'How many searches the AI may run for one person in one run.'),
   ('idea_ai_max_tokens', '6000', 'The most tokens one AI answer may use.'),
-  ('idea_keep_min', '3', 'The fewest ideas worth saving for a person; fewer than this counts as none.'),
+  ('idea_keep_min', '3', 'Fewer survivors than this is logged as a shortfall.'),
   ('idea_keep_max', '5', 'The most ideas saved for one person in one run.'),
   ('idea_ai_timeout_ms', '60000', 'How long to wait for the AI, in milliseconds.'),
   ('idea_zinc_timeout_ms', '15000', 'How long to wait for one Zinc lookup, in milliseconds.'),
