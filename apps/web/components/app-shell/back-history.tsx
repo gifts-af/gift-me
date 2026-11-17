@@ -92,14 +92,23 @@ function TrackPath({ memory }: { memory: Memory }) {
     });
     const stop = () => {
       watch.disconnect();
+      clearTimeout(timer);
       for (const type of GIVE_UP_ON) window.removeEventListener(type, stop, true);
     };
     watch.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["style", "hidden"] });
+    const timer = setTimeout(stop, RESTORE_WAIT_MS);
     for (const type of GIVE_UP_ON) window.addEventListener(type, stop, { capture: true, passive: true });
     return stop;
   }, [pathname, memory]);
   return null;
 }
+
+/**
+ * How long to wait for the row you tapped to show again. Past this, the page is
+ * stuck or the row is gone, and moving the page later would only surprise you.
+ * A UI timing, like the Undo window, not a business value (T23).
+ */
+export const RESTORE_WAIT_MS = 10_000;
 
 /** Things you do that mean you've moved on, so we stop trying to put you back. */
 const GIVE_UP_ON = ["wheel", "touchstart", "keydown", "pointerdown"] as const;
