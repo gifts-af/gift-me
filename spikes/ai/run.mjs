@@ -28,7 +28,7 @@ const PRICE = await (async () => {
   return { in: Number(p.input), out: Number(p.output), search: Number(p.web_search) / 1000 };
 })();
 
-const people = JSON.parse(readFileSync(here('./fixtures/people.json'), 'utf8'));
+const people = JSON.parse(readFileSync(here('../../apps/web/lib/ai/fixtures/people.json'), 'utf8'));
 const captures = JSON.parse(readFileSync(here('./fixtures/captures.json'), 'utf8'));
 mkdirSync(here('./out'), { recursive: true });
 

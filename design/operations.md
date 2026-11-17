@@ -80,6 +80,7 @@ pnpm live-check        # signed-in checks on giftsaf.com with the shared test ac
 pnpm gallery          # screenshot the main screens (phone, phone dark, desktop) and every email into apps/web/gallery/index.html, for reviewing by eye. Needs `pnpm supabase start`; builds like the browser tests (E2E_PORT works too)
 pnpm extension:package # build the prod extension and zip it for the Chrome Web Store (apps/extension/README.md > Release a new version)
 pnpm ai:eval           # check capture extraction against the fixtures with the real model (~10¢, needs AI_GATEWAY_API_KEY; not in CI)
+pnpm ai:eval --ideas   # idea engine on the 5 fixture people, real AI and Zinc; checks AC-2/5/6, prints AI and Zinc cents per run; --ai-cents-max N (default 25). **SPENDS MONEY (about 20-25¢ AI per person plus Zinc lookups): run only with Jim's go-ahead, never in CI.** Needs AI_GATEWAY_BASE, AI_GATEWAY_API_KEY, ZINC_API_BASE, ZINC_API_KEY; refuses before any call without them
 ```
 
 Write new migrations with `pnpm supabase migration new <name>` and test them locally before they go to `dev` or `prod`. Local settings live in `supabase/config.toml`. Every new user-owned table needs `user_id`, its privacy rule and a test in `supabase/tests/` (see `design/decisions.md` T26). CI runs `pnpm db:test` and fails if the generated types are stale.
