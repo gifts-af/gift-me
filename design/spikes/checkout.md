@@ -98,3 +98,17 @@ Short answer: **we can find an order by our own reference (put it in `metadata`,
 | 7 | Other gotchas | **Rate limit:** 10 requests per second per key (`RateLimit` headers); 429 `rate_limit_exceeded` with `Retry-After`. **Retry guidance:** retry timeouts, connection resets and 5xx with the **same** key and backoff (1s, 2s, 4s); do not retry 4xx/402. `POST /orders` returned in about 200 ms (no per-call timeout seen; no 5xx seen). **Error shape:** live errors are nested, `{"error": {"code", "message", "details"}}`, not the flat shape in the docs. **List quirk:** `retailer_credentials_id` shows a value in list results but `null` on the order itself (sandbox oddity, ignore). | Live calls; docs: [Idempotency](https://www.zinc.com/docs/v2/api-reference/introduction/idempotency.md), [Error handling](https://www.zinc.com/docs/v2/api-reference/introduction/error-handling.md) |
 
 **Design impact:** keep our own reference in `metadata` on every order (the adapter's "did this already go through?" lookup), and treat `409 already_exists` as "placed, find it by `metadata`". Do not rely on the 409 body for the order id.
+
+## ALL-27 shapes: product search and offers (2026-11-17)
+
+Taken from the spike's recorded raw replies (`spikes/ai/out/resolve.json`). No new calls were made, because there's no money while testing (Jim, 2026-11-17). ALL-27's adapter is `apps/web/modules/concierge/zinc/products.ts`.
+
+- **Offers** (`GET /products/{id}/offers?retailer=amazon`): `{ status, asin, retailer, offers: [...] }`. Each offer has:
+  - `price` in cents
+  - `available`, `condition` (`"New"`, …), `buy_box_winner` (true, or null), `offer_id`
+  - `seller.{name, first_party}`
+  - `handling_days.{min,max}`
+  - `shipping_options[].{price, delivery_days.{min,max}}`, where price is in cents
+  - an `optimistic` block for Prime, which we ignore
+- **Search** (`GET /products/search?retailer=amazon&query=…`): no raw reply was kept. The spike read the list as `results` or `products`. Each hit has `product_id`, `title` and `price` in cents, and there's no brand field, so the brand is matched against the title. **[Verify]** at the first paid check: which list key it is.
+- **Cost:** $0.01 per search or offers call (Answers, above).

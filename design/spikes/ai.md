@@ -131,3 +131,11 @@ Vision works through the gateway with a data URL in Chat Completions. A bare pro
 - [x] **Resolve through Zinc:** done, see [Resolve through Zinc](#resolve-through-zinc-all-42). The app account's leftover 56¢ was enough; no funding needed.
 - [x] Update design §7 with real costs and the corrected model ID
 - [x] Gateway key: the spike now uses the shared dev key (T39). Rotation isn't needed (owner's call, 2026-11-01); the old `gift-concierge-ai-spike` key is just unused and can be deleted.
+
+## ALL-27 shapes: brainstorm and rank (2026-11-17)
+
+From the recorded runs in `spikes/ai/out/` and `spikes/ai/run.mjs`. No new calls were made, because there's no money while testing (Jim, 2026-11-17).
+
+- **Endpoint:** the Gateway's Anthropic-compatible `POST /v1/messages`, with headers `x-api-key` and `anthropic-version: 2023-06-01`, and the tool `{ type: "web_search_20250305", name: "web_search", max_uses }`. Chat Completions has no server-side web search.
+- **Cost:** `/v1/messages` doesn't report its own cost. It's worked out from `usage.input_tokens`, `usage.output_tokens` and `usage.server_tool_use.web_search_requests`, times the model's prices from `GET /v1/models` (`pricing.input` and `pricing.output` per token, and `pricing.web_search` per 1,000 searches). That listing is free. **[Verify]** the sum against the Gateway's spend report at the first paid check.
+- **Answer text:** the JSON is in the last text block. Text taken from web results comes wrapped in `<cite index="…">…</cite>` tags, which must be stripped before saving or showing it.
