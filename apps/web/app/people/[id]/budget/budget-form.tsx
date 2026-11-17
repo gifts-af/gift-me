@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { useGoBack } from "@/components/app-shell/back-history";
 import { useEffect, useRef, useState } from "react";
 import { OCCASION_NAMES } from "@/components/occasion-format";
 import { Button } from "@/components/ui/button";
@@ -81,6 +82,8 @@ export function BudgetForm({
   action: (previous: null, formData: FormData) => Promise<BudgetsResult>;
 }) {
   const router = useRouter();
+  // Back to where you were on their page, if you came from it (ALL-131).
+  const goBack = useGoBack(`/people/${personId}`);
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -116,7 +119,7 @@ export function BudgetForm({
     // Ready again either way: the app can keep this screen and show it again.
     setBusy(false);
     if (result.ok) {
-      router.push(`/people/${personId}`);
+      if (!goBack()) router.push(`/people/${personId}`);
       return;
     }
     setErrors(result.errors ?? {});
