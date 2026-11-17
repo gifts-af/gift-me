@@ -11,7 +11,11 @@ export type GatewayPrices = { inputCentsPerToken: number; outputCentsPerToken: n
 
 /** The message is always a fixed phrase: never request or response text (T42, S5). */
 export class AiError extends Error {
-  constructor(public kind: "unavailable" | "malformed") {
+  /** What a reply we received and priced cost before it failed, so the caller still counts it. A number, never text. */
+  constructor(
+    public kind: "unavailable" | "malformed",
+    public costCents?: number,
+  ) {
     super(kind === "unavailable" ? "AI request failed" : "AI reply was not understood");
     this.name = "AiError";
   }
@@ -37,18 +41,29 @@ const modelsReply = z.object({
   data: z.array(
     z.object({
       id: z.string(),
-      pricing: z.object({ input: z.coerce.number(), output: z.coerce.number(), web_search: z.coerce.number() }).partial().optional(),
+      pricing: z.object({ input: z.unknown(), output: z.unknown(), web_search: z.unknown() }).partial().optional(),
     }),
   ),
 });
+
+function price(v: unknown): number | null {
+  if (typeof v !== "number" && typeof v !== "string") return null;
+  if (typeof v === "string" && v.trim() === "") return null;
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
 
 /** Reads the free GET /v1/models listing: dollars per token, and dollars per 1,000 searches. */
 export async function gatewayPrices(h: GatewayHttp, model: string, signal: AbortSignal): Promise<GatewayPrices> {
   const parsed = modelsReply.safeParse(await call(h, "/v1/models", { signal }));
   if (!parsed.success) throw new AiError("malformed");
   const p = parsed.data.data.find((m) => m.id === model)?.pricing;
-  if (p?.input === undefined || p.output === undefined || p.web_search === undefined) throw new AiError("unavailable");
-  return { inputCentsPerToken: p.input * 100, outputCentsPerToken: p.output * 100, searchCents: (p.web_search * 100) / 1000 };
+  // A missing, empty, null or zero price must never read as free, or the cost cap is defeated.
+  const input = price(p?.input);
+  const output = price(p?.output);
+  const search = price(p?.web_search);
+  if (input === null || output === null || search === null) throw new AiError("unavailable");
+  return { inputCentsPerToken: input * 100, outputCentsPerToken: output * 100, searchCents: (search * 100) / 1000 };
 }
 
 const messagesReply = z.object({
@@ -77,10 +92,10 @@ export async function sendMessages(
   if (!parsed.success) throw new AiError("malformed");
   const texts = parsed.data.content.filter((b) => b.type === "text" && b.text !== undefined);
   const text = texts.at(-1)?.text;
-  if (text === undefined) throw new AiError("malformed");
   const u = parsed.data.usage;
   const searches = u.server_tool_use?.web_search_requests ?? 0;
   const costCents =
     u.input_tokens * prices.inputCentsPerToken + u.output_tokens * prices.outputCentsPerToken + searches * prices.searchCents;
+  if (text === undefined) throw new AiError("malformed", costCents);
   return { text, costCents };
 }

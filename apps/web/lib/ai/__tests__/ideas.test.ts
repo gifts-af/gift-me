@@ -77,6 +77,23 @@ describe("brainstorm", () => {
     expect(error.message).not.toContain("SECRET-BODY");
   });
 
+  it("an unreadable priced reply throws malformed carrying its cost", async () => {
+    const { h } = http(() => messagesReply("not json"));
+    const error = await brainstorm(h, input, bo).catch((e) => e);
+    expect(error.kind).toBe("malformed");
+    expect(error.costCents).toBeCloseTo(1000 * 0.001 + 200 * 0.005 + 3 * 1);
+    const { h: h2 } = http(() => messagesReply('{"other":1}'));
+    expect((await rank(h2, { relationship: "x", facts: [], options: [] }, { maxTokens: 1, prices, signal }).catch((e) => e)).costCents).toBeGreaterThan(0);
+  });
+
+  it("reads JSON after prose with brackets, and from a fenced block", async () => {
+    const json = JSON.stringify({ ideas: [{ title: "A", search: "a", brand: null, why: "w" }] });
+    for (const text of [`Here are [3] ideas: ${json} Enjoy.`, "Sure:\n```json\n" + json + "\n```\nDone [1]"]) {
+      const { h } = http(() => messagesReply(text));
+      expect((await brainstorm(h, input, bo)).candidates).toHaveLength(1);
+    }
+  });
+
   it("a reply with no ideas array throws malformed", async () => {
     const { h } = http(() => messagesReply('{"other":1}'));
     await expect(brainstorm(h, input, bo)).rejects.toMatchObject({ kind: "malformed" });
@@ -152,6 +169,13 @@ describe("gatewayPrices", () => {
     expect(p.inputCentsPerToken).toBeCloseTo(0.0003);
     expect(p.outputCentsPerToken).toBeCloseTo(0.0015);
     expect(p.searchCents).toBeCloseTo(0.001);
+  });
+  it("never reads an empty, null, zero or non-numeric price as free", async () => {
+    for (const bad of ["", null, 0, "0", "abc"]) {
+      const l = { data: [{ id: "m", pricing: { input: "0.1", output: bad, web_search: "1" } }] };
+      const { h } = http(() => new Response(JSON.stringify(l)));
+      await expect(gatewayPrices(h, "m", signal)).rejects.toMatchObject({ kind: "unavailable" });
+    }
   });
   it("throws unavailable when the model has no pricing", async () => {
     const { h } = http(() => new Response(JSON.stringify(listing)));

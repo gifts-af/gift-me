@@ -61,16 +61,34 @@ Return JSON only: {"order": [{"id", "reason"}]}, using only the ids you were giv
 // Text taken from web results comes wrapped in <cite index="..."> tags.
 const stripCites = (s: string) => s.replace(/<\/?cite[^>]*>/g, "").trim();
 
-// Models sometimes wrap JSON in prose or fences; take the outermost JSON value.
+// Models sometimes wrap JSON in prose or a fence. Try the whole text, then a
+// fenced block, then the outermost braces (both replies are objects).
 function parseJson(text: string): unknown {
-  const start = text.search(/[[{]/);
-  const end = Math.max(text.lastIndexOf("}"), text.lastIndexOf("]"));
-  if (start < 0 || end < start) throw new AiError("malformed");
-  try {
-    return JSON.parse(text.slice(start, end + 1));
-  } catch {
-    throw new AiError("malformed");
+  const t = text.trim();
+  const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(t)?.[1];
+  const braces = t.indexOf("{") >= 0 && t.lastIndexOf("}") > t.indexOf("{") ? t.slice(t.indexOf("{"), t.lastIndexOf("}") + 1) : undefined;
+  for (const candidate of [t, fenced, braces]) {
+    if (candidate === undefined) continue;
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      // try the next form
+    }
   }
+  throw new AiError("malformed");
+}
+
+/** Parses a reply we already paid for; if it's unreadable, the error carries the cost. */
+function readReply<T>(text: string, costCents: number, schema: z.ZodType<T>): T {
+  let json: unknown;
+  try {
+    json = parseJson(text);
+  } catch {
+    throw new AiError("malformed", costCents);
+  }
+  const parsed = schema.safeParse(json);
+  if (!parsed.success) throw new AiError("malformed", costCents);
+  return parsed.data;
 }
 
 const ideaSchema = z.object({
@@ -109,10 +127,9 @@ export async function brainstorm(
     o.prices,
     o.signal,
   );
-  const parsed = brainstormReply.safeParse(parseJson(text));
-  if (!parsed.success) throw new AiError("malformed");
+  const reply = readReply(text, costCents, brainstormReply);
   const candidates: IdeaCandidate[] = [];
-  for (const raw of parsed.data.ideas) {
+  for (const raw of reply.ideas) {
     const idea = ideaSchema.safeParse(raw);
     if (!idea.success) continue;
     candidates.push({
@@ -144,10 +161,9 @@ export async function rank(
     o.prices,
     o.signal,
   );
-  const parsed = rankReply.safeParse(parseJson(text));
-  if (!parsed.success) throw new AiError("malformed");
+  const reply = readReply(text, costCents, rankReply);
   const given = new Set(input.options.map((p) => p.id));
-  const order = parsed.data.order
+  const order = reply.order
     .filter((r) => given.has(r.id))
     .map((r) => ({ id: r.id, reason: stripCites(r.reason) }));
   return { order, costCents };
