@@ -1627,6 +1627,7 @@ export type Database = {
         Args: { p_round_id: string };
         Returns: {
           has_facts: boolean;
+          paid: boolean;
           runs_left: boolean;
         }[];
       };

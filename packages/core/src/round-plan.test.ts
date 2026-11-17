@@ -25,6 +25,8 @@ const NO_HOLD = {
   hasFacts: true,
   ideaRunsLeft: true,
   ranSinceNoIdeas: false,
+  paid: true,
+  ideaEngineOn: true,
 } as const;
 
 const rule = { kind: "birthday", month: 3, day: 31 } as const;
@@ -284,6 +286,28 @@ describe("nextAction: no ideas (ALL-27 AC-9, AC-13)", () => {
     expect(nextAction(round({ hasAddress: false }), "2027-02-22", s)).toEqual({ do: "request_address", send: "address_request" });
   });
 
+  it("with the idea engine off, no no_ideas email: the round goes on as if it could run", () => {
+    for (const over of [{ hasFacts: false }, { ideaRunsLeft: false }, { ideaRunsLeft: false, ranSinceNoIdeas: true, sent: sent("no_ideas") }]) {
+      expect(nextAction(round({ ...over, ideaEngineOn: false }), "2027-02-22", s)).toEqual({ do: "generate" });
+      expect(nextAction(round({ ...over, ideaEngineOn: false, status: "generating" }), "2027-02-22", s)).toEqual({ do: "generate" });
+    }
+    // The address is still asked for as before.
+    expect(nextAction(round({ hasFacts: false, hasAddress: false, ideaEngineOn: false }), "2027-02-22", s)).toEqual({
+      do: "request_address",
+      send: "address_request",
+    });
+  });
+
+  it("an unpaid round sends nothing and waits for its deadline, which skips it", () => {
+    for (const over of [{}, { hasFacts: false }, { ideaRunsLeft: false }, { hasAddress: false }, { ideaEngineOn: false }]) {
+      for (const status of ["scheduled", "needs_address", "generating"] as const) {
+        const r = round({ ...over, status, headsUpOn: "2027-02-22", paid: false });
+        expect(nextAction(r, "2027-02-23", s)).toEqual({ do: "wait", until: "2027-03-22" });
+        expect(nextAction(r, "2027-03-22", s)).toEqual({ do: "skip", send: "skipped" });
+      }
+    }
+  });
+
   it("leaves rounds past generating alone", () => {
     const approving = round({ status: "awaiting_approval", headsUpOn: "2027-02-22", hasFacts: false, ideaRunsLeft: false });
     expect(nextAction(approving, "2027-02-23", s)).toEqual({ do: "wait", until: "2027-02-27" });
@@ -306,6 +330,8 @@ describe("nextAction: money holds (AC-20, AC-22, AC-23)", () => {
     hasFacts: true,
     ideaRunsLeft: true,
     ranSinceNoIdeas: false,
+    paid: true,
+    ideaEngineOn: true,
     ...over,
   });
   // The rest of a run, once it has tried placing today: the reminders come after the try,

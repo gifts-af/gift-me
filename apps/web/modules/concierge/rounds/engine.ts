@@ -144,7 +144,14 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
     return summary;
   }
   // The whole tick stops starting work here (tick_deadline_ms), so it ends inside its function's time.
-  const tickDeadline = startedMs + (await store.setting("tick_deadline_ms"));
+  // An ideas setting never stops the money path: unreadable, there's no deadline for the rounds
+  // below, and the idea pass is skipped (its rounds are released for the next tick).
+  let tickDeadline: number | null = null;
+  try {
+    tickDeadline = startedMs + (await store.setting("tick_deadline_ms"));
+  } catch (err) {
+    logEvent("round_tick_deadline_unreadable", { ...errorFields(err) });
+  }
   const { created, failed: createFailed } = await createDueRounds(deps, s);
 
   // One after another, each on its own: one failing round can't stop the rest.
@@ -156,7 +163,7 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
   let outOfTime = 0;
   for (const round of await store.claimDue(now)) {
     // Out of time: the rest go back, for the next tick.
-    if (clock() >= tickDeadline) {
+    if (tickDeadline !== null && clock() >= tickDeadline) {
       outOfTime++;
       await releaseQuietly(round, deps);
       continue;
@@ -170,9 +177,13 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
   await tellOwnersOfRejections(deps);
 
   // Last, so a slow AI or Zinc call can't hold up the money path or the emails above.
-  const ideas = await ideaPass(ideaTurns, deps, s, tickDeadline);
-  advanced += ideas.advanced;
-  failed += ideas.failed;
+  if (tickDeadline === null) {
+    for (const round of ideaTurns) await releaseQuietly(round, deps);
+  } else {
+    const ideas = await ideaPass(ideaTurns, deps, s, tickDeadline);
+    advanced += ideas.advanced;
+    failed += ideas.failed;
+  }
 
   const summary = { enabled: true, created, advanced, failed };
   logEvent("round_tick", summary);
@@ -946,6 +957,8 @@ function view(round: ClaimedRound, ctx: RoundContext, sent: Set<StepKey>, placeT
     hasFacts: hasIdeas || ctx.hasFacts,
     ideaRunsLeft: hasIdeas || ctx.ideaRunsLeft,
     ranSinceNoIdeas: ctx.ranSinceNoIdeas,
+    paid: ctx.paid,
+    ideaEngineOn: ctx.ideaEngineOn,
   };
 }
 
@@ -1028,19 +1041,25 @@ async function ideaPass(
 /** What a round does after its idea run (S1); `round` is generating, with its lease. */
 async function afterIdeaRun(round: ClaimedRound, outcome: IdeaOutcome, deps: EngineDeps, s: ScheduleSettings): Promise<void> {
   const { store } = deps;
-  const atDeadline = () => finishAt(round, startOf(round.shipByDeadline), deps, outcome.status);
+  // What the run came to, for round_step: "none", "refused:busy" (a reason, never text).
+  const ended = outcome.status === "refused" ? `refused:${outcome.reason}` : outcome.status;
+  const atDeadline = () => finishAt(round, startOf(round.shipByDeadline), deps, ended);
+  const release = async () => {
+    await releaseQuietly(round, deps);
+    logEvent("round_step", { round_id: round.id, user_id: round.userId, status: round.status, next_status: round.status, step: `ideas:${ended}` });
+  };
   switch (outcome.status) {
     case "saved":
       // None saved: the person was removed mid-run. The deadline closes the round.
       return outcome.count > 0 ? sendHeadsUp(round, deps, s) : atDeadline();
     case "off":
-      return releaseQuietly(round, deps);
+      return release();
     case "refused":
       switch (outcome.reason) {
         case "done":
           return sendHeadsUp(round, deps, s);
         case "busy":
-          return releaseQuietly(round, deps);
+          return release();
         case "not_paid":
         case "not_found":
           return atDeadline();
@@ -1058,7 +1077,7 @@ async function afterIdeaRun(round: ClaimedRound, outcome: IdeaOutcome, deps: Eng
   // Read again: the run used up a run, or found the facts gone.
   const ctx = await store.roundContext(round.id);
   const sent = await store.sentSteps(round.id);
-  return finishStep(round, ctx, sent, { status: "generating" }, deps, s, `ideas:${outcome.status}`);
+  return finishStep(round, ctx, sent, { status: "generating" }, deps, s, `ideas:${ended}`);
 }
 
 /** Finishes the round at its status, to be looked at again at `at`. */

@@ -61,12 +61,14 @@ insert into concierge.app_settings (key, value, description) values
 on conflict (key) do nothing;
 
 -- ─── the limits ──────────────────────────────────────────────────────────────
--- What start_idea_run uses, readable on its own for the round screen. A round
+-- What start_idea_run uses, readable on its own for the round engine. `paid`:
+-- the round's user has paid features (round_candidates only makes rounds for
+-- them, but an older round, or a user who lost them, may still be open). A round
 -- can run idea_round_runs_max times. After that one more run is allowed if an
 -- active fact changed since the last run started (adding, editing or turning
 -- on a fact all touch updated_at), and never more than one extra.
 create function concierge.round_idea_state(p_round_id uuid)
-returns table (has_facts boolean, runs_left boolean)
+returns table (has_facts boolean, runs_left boolean, paid boolean)
 language sql
 stable
 security definer
@@ -84,7 +86,8 @@ as $$
          where f.person_id = r.person_id and f.user_id = r.user_id and f.active
            and f.updated_at > n.last_started)
       else true
-    end
+    end,
+    concierge.has_paid_features(r.user_id)
   from concierge.gift_rounds r
   cross join lateral (
     select count(*) as runs, max(u.started_at) as last_started

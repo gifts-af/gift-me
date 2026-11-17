@@ -535,11 +535,12 @@ describe("no_ideas (ALL-27 AC-9)", () => {
     const mail = TEMPLATES.no_ideas({ personName: "Mom", again: false }, links);
     expect(mail.subject).toBe("Sorry, we couldn't get gift ideas for Mom yet");
     expect(mail.text).toMatch(/sorry/i);
-    expect(mail.text).toContain("couldn't find gifts that fit");
+    // True whether nothing fit, a service was down, or we know too little about them.
+    expect(mail.text).toContain("We don't have gift ideas for Mom yet.");
+    expect(mail.text).not.toContain("couldn't find");
     expect(mail.text).toContain("haven't been charged");
-    expect(mail.text).toContain("What happens next:");
+    expect(mail.text).toContain("What happens next: telling us more about Mom helps. We'll try once more after you add something.");
     expect(mail.text).toContain("Tell us more about Mom");
-    expect(mail.text).toContain("try once more");
     expect(mail.text).toContain("before the date passes");
     expect(mail.html).toContain('href="https://x.test/a/questions"');
     expect(mail.html.match(/background:#0f766e/g)).toHaveLength(1);
@@ -548,10 +549,13 @@ describe("no_ideas (ALL-27 AC-9)", () => {
   it("the again version says it tried with the new facts", () => {
     const mail = TEMPLATES.no_ideas({ personName: "Mom", again: true }, links);
     expect(mail.subject).toBe("Sorry, we couldn't get gift ideas for Mom yet");
-    expect(mail.text).toContain("We tried again with what you added");
-    expect(mail.text).toContain("still couldn't find a good fit");
+    expect(mail.text).toContain("We tried again and still couldn't find a good fit for Mom.");
     expect(mail.text).toContain("haven't been charged");
-    expect(mail.text).toContain("skip this occasion unless you pick something yourself");
+    expect(mail.text).toContain(
+      "What happens next: if you tell us a little more, we'll try one last time. Otherwise, we'll skip this occasion unless you pick something yourself.",
+    );
+    expect(mail.text).toContain("Tell us more about Mom");
+    expect(mail.html).toContain('href="https://x.test/a/questions"');
     expect(mail.text).not.toContain("try once more");
   });
 });

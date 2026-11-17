@@ -22,7 +22,7 @@ export type FakeRound = Omit<NewRoundRow, "nextActionAt"> & {
 export type FakePerson = { name: string; hasAddress: boolean; openQuestions?: number };
 
 /** round_idea_state for one round, and whether a run started after its no_ideas email (ALL-27). */
-export type FakeIdeaState = { hasFacts: boolean; ideaRunsLeft: boolean; ranSinceNoIdeas: boolean };
+export type FakeIdeaState = { hasFacts: boolean; ideaRunsLeft: boolean; ranSinceNoIdeas: boolean; paid: boolean; ideaEngineOn: boolean };
 
 const FINISHED: RoundStatus[] = ["complete", "skipped", "ordered", "delivered"];
 
@@ -205,6 +205,8 @@ export class FakeRoundStore implements RoundStore {
       hasFacts: true,
       ideaRunsLeft: true,
       ranSinceNoIdeas: false,
+      paid: true,
+      ideaEngineOn: true,
       ...this.ideaState.get(roundId),
       orders: [],
       personRemoved: false,

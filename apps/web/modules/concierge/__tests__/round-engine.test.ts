@@ -949,7 +949,73 @@ describe("the idea pass (ALL-27)", () => {
     // Both are the no_ideas email; the second is the again version.
     expect(h.sent()).toEqual(["no_ideas@2027-02-13", "no_ideas@2027-02-17"]);
     expect([...h.store.sends.get("round-1")!]).toEqual(["no_ideas", "no_ideas_again"]);
-    expect(h.emails[1].text).toContain("We tried again with what you added");
+    expect(h.emails[1].text).toContain("We tried again and still couldn't find a good fit");
+  });
+
+  it("with the idea engine off, nobody gets no_ideas: the round is released each tick and skips silently", async () => {
+    for (const state of [{ hasFacts: false }, { ideaRunsLeft: false }, {}]) {
+      const h = harness();
+      const silentBefore = named("round_skipped_silently").length;
+      h.store.ideaState.set("round-1", { ...state, ideaEngineOn: false });
+      // What runIdeas says with idea_engine_enabled = 0, before any facts check.
+      h.generateIdeas.mockResolvedValue({ status: "off" });
+      await h.runDays("2027-02-11", "2027-03-20");
+
+      expect(h.sent()).toEqual([]);
+      expect(h.store.sends.get("round-1") ?? new Set()).not.toContain("no_ideas");
+      expect(h.generateIdeas).toHaveBeenCalledTimes(28); // each day from 02-11 to 03-10
+      expect(h.store.rounds[0].status).toBe("skipped");
+      expect(named("round_skipped_silently")).toHaveLength(silentBefore + 1);
+    }
+  });
+
+  it("an unpaid round runs nothing, sends nothing and skips silently at its deadline", async () => {
+    for (const state of [{}, { hasFacts: false }, { ideaRunsLeft: false }]) {
+      const h = harness();
+      h.store.ideaState.set("round-1", { ...state, paid: false });
+      await h.runDays("2027-02-11", "2027-03-20");
+
+      expect(h.generateIdeas).not.toHaveBeenCalled();
+      expect(h.sent()).toEqual([]);
+      expect(h.store.rounds[0]).toMatchObject({ status: "skipped" });
+      expect(h.store.rounds[0].history).toEqual(["scheduled", "skipped"]);
+    }
+  });
+
+  it("an unreadable tick_deadline_ms never stops the other rounds: no deadline for them, and no idea runs", async () => {
+    const h = harness();
+    await h.tick("2027-02-11"); // round-1: heads-up
+    h.store.people.set("person-2", { name: "Other", hasAddress: true });
+    h.store.occasionKinds.set("occasion-2", "birthday");
+    h.store.settings.delete("tick_deadline_ms");
+    h.today = "2027-02-16";
+    h.store.candidateRows = [
+      { userId: USER, personId: "person-2", occasionId: "occasion-2", rule: { kind: "birthday", month: 3, day: 20 }, budgetCents: null },
+    ];
+
+    await runTick(h.deps(at("2027-02-16")));
+
+    // Round 1's reminder still goes; round 2 waits, released, with no run.
+    expect(h.sent()).toEqual(["heads_up@2027-02-11", "reminder@2027-02-16"]);
+    expect(h.generateIdeas).toHaveBeenCalledTimes(1);
+    expect(h.store.round("round-2")).toMatchObject({ status: "scheduled", lockedUntil: null });
+    const unreadable = named("round_tick_deadline_unreadable");
+    expect(unreadable).toHaveLength(1);
+    // The error's name only: no message, no setting value.
+    expect(unreadable[0]).toMatchObject({ name: "Error" });
+    for (const key of Object.keys(unreadable[0])) expect(["event", "at", "name"]).toContain(key);
+  });
+
+  it.each([
+    [{ status: "refused", reason: "busy" }, "ideas:refused:busy"],
+    [{ status: "refused", reason: "not_paid" }, "ideas:refused:not_paid"],
+    [{ status: "refused", reason: "limit" }, "ideas:refused:limit"],
+    [{ status: "off" }, "ideas:off"],
+  ] as [IdeaOutcome, string][])("logs what the run came to, with a refusal's reason (%o)", async (outcome, step) => {
+    const h = harness();
+    h.generateIdeas.mockResolvedValue(outcome);
+    await h.tick("2027-02-11");
+    expect(named("round_step")).toContainEqual(expect.objectContaining({ round_id: "round-1", step }));
   });
 
   it("an over-budget idea is labeled in the heads-up", async () => {
@@ -996,7 +1062,8 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
   let today: CalendarDate;
   let clockDay: CalendarDate;
 
-  const SHARED = ["zinc_ordering_enabled", "round_engine_enabled"];
+  // idea_engine_enabled ships 0; on here so a round's idea runs (a fake) are counted and told.
+  const SHARED = ["zinc_ordering_enabled", "round_engine_enabled", "idea_engine_enabled"];
   beforeAll(async () => {
     pg = new Client({ connectionString: LOCAL_DB });
     await pg.connect();
@@ -2310,9 +2377,48 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     await tick(); // no more runs, ever
     expect(generateIdeas).toHaveBeenCalledTimes(3);
     expect(await sends(roundId)).toEqual(["no_ideas", "no_ideas_again"]);
-    expect(textFor(u)[1]).toContain("We tried again with what you added about Mary");
+    expect(textFor(u)[1]).toContain("We tried again and still couldn't find a good fit for Mary.");
     const runs = await pg.query("select count(*)::int as n from concierge.idea_runs where round_id = $1", [roundId]);
     expect(runs.rows[0].n).toBe(3);
+  });
+
+  it("held gifts are still placed when tick_deadline_ms can't be read, and no idea run starts", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    zinc.balance = 1000;
+    await approve(u, r); // held for funds
+    zinc.balance = 100_000;
+    const waiting = (
+      await pg.query(
+        `insert into concierge.gift_rounds (user_id, person_id, occasion_id, occasion_year, occasion_date, ship_by_deadline, budget_cents, status, next_action_at)
+         select user_id, person_id, occasion_id, 2031, current_date + 40, current_date + 30, 20000, 'scheduled', now() from concierge.gift_rounds where id = $1
+         returning id`,
+        [r.roundId],
+      )
+    ).rows[0].id as string;
+    const generateIdeas = vi.fn(async (): Promise<IdeaOutcome> => ({ status: "none" }));
+
+    const now = dayAt(23);
+    const { engine: deps } = wiring(now);
+    const real = deps.store;
+    // The real store, kept to these two rounds, with the ideas setting broken.
+    const store = {
+      ...real,
+      setting: async (key: string) => {
+        if (key === "tick_deadline_ms") throw new Error("Setting tick_deadline_ms is missing.");
+        return real.setting(key);
+      },
+      candidates: async () => [],
+      claimDue: async (at: Date) => (await Promise.all([r.roundId, waiting].map((id) => real.claim(id, at)))).filter((x) => x !== null),
+      roundsWithRejectedAddresses: async () => [],
+      roundsMissingOrderedEmail: async () => [],
+    };
+    await runTick({ ...deps, store, generateIdeas, zinc: { ...deps.zinc!, sweep: async () => 0 } });
+
+    expect(await roundRow(r.roundId)).toMatchObject({ status: "ordered", locked_until: null });
+    expect(zinc.posts).toHaveLength(1);
+    expect(generateIdeas).not.toHaveBeenCalled();
+    expect(await roundRow(waiting)).toMatchObject({ status: "scheduled", locked_until: null });
   });
 });
 

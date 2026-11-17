@@ -2,7 +2,7 @@
 -- saving ideas, exclusions, the fact trigger and paid-only rounds.
 begin;
 \ir _helpers.psql
-select plan(29);
+select plan(31);
 
 select tests.create_user('a@example.com') as a \gset
 select tests.create_user('b@example.com') as b \gset
@@ -47,7 +47,14 @@ values (:'a', :'p_save', :'o_save', 2030, '2030-12-25', '2030-12-15', 5000) retu
 insert into concierge.gift_rounds (user_id, person_id, occasion_id, occasion_year, occasion_date, ship_by_deadline, budget_cents)
 values (:'a', :'p_excl', :'o_excl', 2030, '2030-12-25', '2030-12-15', 5000) returning id as r_excl \gset
 
+insert into concierge.gift_rounds (user_id, person_id, occasion_id, occasion_year, occasion_date, ship_by_deadline, budget_cents)
+values (:'b', :'p_b', :'o_b', 2030, '2030-12-25', '2030-12-15', 5000) returning id as r_b \gset
+
 select now() - interval '1 day' as base \gset
+
+-- ─── round_idea_state: paid ──────────────────────────────────────────────────
+select is((select paid from concierge.round_idea_state(:'r_done')), true, 'round_idea_state says a paid user''s round is paid');
+select is((select paid from concierge.round_idea_state(:'r_b')), false, 'round_idea_state says a round of a user without paid features is unpaid');
 
 -- ─── Ownership and access ────────────────────────────────────────────────────
 select tests.act_as_server();

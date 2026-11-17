@@ -108,6 +108,13 @@ export type RoundView = {
    * `no_ideas_again` would follow straight after a `no_ideas` sent because the runs were spent.
    */
   ranSinceNoIdeas: boolean;
+  /** The round's user has paid features (round_idea_state). Unpaid: nothing is sent, and the deadline skips it. */
+  paid: boolean;
+  /**
+   * The idea engine is switched on (idea_engine_enabled). Off: no no_ideas email; the round goes
+   * on as if it could run, and the run says "off".
+   */
+  ideaEngineOn: boolean;
 };
 
 export type NextAction =
@@ -206,6 +213,10 @@ function holdAction(r: RoundView, today: CalendarDate, s: ScheduleSettings): Nex
  * for its deadline, unless a new fact brings it back sooner (the fact trigger). null: it can run.
  */
 function noIdeasAction(r: RoundView): NextAction | null {
+  // Like a run refused not_paid: no email, and the deadline closes it silently.
+  if (!r.paid) return { do: "wait", until: r.shipByDeadline };
+  // The engine is off: nothing is sorry about ideas we never looked for.
+  if (!r.ideaEngineOn) return null;
   if (r.hasFacts && r.ideaRunsLeft) return null;
   if (!r.sent.has("no_ideas")) return { do: "send", send: "no_ideas" };
   if (!r.ideaRunsLeft && r.ranSinceNoIdeas && !r.sent.has("no_ideas_again")) return { do: "send", send: "no_ideas_again" };
@@ -222,7 +233,8 @@ export function nextAction(r: RoundView, today: CalendarDate, s: ScheduleSetting
   if (actionable.includes(r.status) && compareDates(r.shipByDeadline, today) <= 0) {
     return { do: "skip", send: "skipped" };
   }
-  // Before the address: a round that can't get ideas doesn't ask for one (ALL-27 AC-13).
+  // Before the address: a round that can't get ideas doesn't ask for one (ALL-27 AC-13), and an
+  // unpaid round asks nothing at all.
   if (["scheduled", "needs_address", "generating"].includes(r.status)) {
     const noIdeas = noIdeasAction(r);
     if (noIdeas) return noIdeas;

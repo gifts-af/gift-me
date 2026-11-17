@@ -666,19 +666,17 @@ export const TEMPLATES: {
     }),
   }),
 
-  // True whether nothing fit or a service was down (ALL-27 AC-9), in the ALL-116 tone.
+  // True whether nothing fit, a service was down, or we know too little (ALL-27 AC-9), in the ALL-116 tone.
   no_ideas: (d, links) => ({
     subject: `Sorry, we couldn't get gift ideas for ${d.personName} yet`,
     ...renderEmail({
       heading: `Sorry, we couldn't get gift ideas for ${d.personName} yet`,
       paragraphs: d.again
-        ? [
-            `We're sorry. We tried again with what you added about ${d.personName}, and still couldn't find a good fit. You haven't been charged.`,
-          ]
-        : [`We're sorry. We couldn't find gifts that fit ${d.personName} this time. You haven't been charged.`],
+        ? [`We're sorry. We tried again and still couldn't find a good fit for ${d.personName}. You haven't been charged.`]
+        : [`We're sorry. We don't have gift ideas for ${d.personName} yet. You haven't been charged.`],
       button: { label: `Tell us more about ${d.personName}`, url: links.questions },
       footer: d.again
-        ? `What happens next: we'll skip this occasion unless you pick something yourself.`
+        ? "What happens next: if you tell us a little more, we'll try one last time. Otherwise, we'll skip this occasion unless you pick something yourself."
         : `What happens next: telling us more about ${d.personName} helps. We'll try once more after you add something. Otherwise, we'll let you know before the date passes.`,
     }),
   }),
