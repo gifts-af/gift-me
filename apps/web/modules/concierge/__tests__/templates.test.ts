@@ -551,9 +551,11 @@ describe("no_ideas (ALL-27 AC-9)", () => {
     expect(mail.subject).toBe("Sorry, we couldn't get gift ideas for Mom yet");
     expect(mail.text).toContain("We tried again and still couldn't find a good fit for Mom.");
     expect(mail.text).toContain("haven't been charged");
+    // It promises no retry: the extra run may already be spent.
     expect(mail.text).toContain(
-      "What happens next: if you tell us a little more, we'll try one last time. Otherwise, we'll skip this occasion unless you pick something yourself.",
+      "What happens next: we'll skip this occasion unless you pick something yourself. Telling us more about Mom helps us next time.",
     );
+    expect(mail.text).not.toMatch(/try (one last time|once more|again after)/);
     expect(mail.text).toContain("Tell us more about Mom");
     expect(mail.html).toContain('href="https://x.test/a/questions"');
     expect(mail.text).not.toContain("try once more");
