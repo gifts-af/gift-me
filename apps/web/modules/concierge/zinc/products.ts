@@ -41,19 +41,21 @@ export async function productOffers(h: ZincHttp, key: string, productId: string,
     const p = offer.safeParse(raw);
     if (!p.success) continue;
     const o = p.data;
-    const fastest = o.shipping_options.reduce((a, b) => (b.delivery_days.max < a.delivery_days.max ? b : a));
+    // Orders don't choose a shipping method, so judge the worst case: the slowest delivery and the highest shipping price.
+    const slowest = o.shipping_options.reduce((a, b) => (b.delivery_days.max > a.delivery_days.max ? b : a));
+    const shippingCents = Math.max(...o.shipping_options.map((s) => s.price));
     out.push({
       offerId: o.offer_id ?? null,
       priceCents: o.price,
-      shippingCents: fastest.price,
+      shippingCents,
       available: o.available,
       condition: o.condition,
       buyBox: o.buy_box_winner === true,
       firstParty: o.seller.first_party === true,
       sellerName: o.seller.name ?? null,
       handlingDaysMax: o.handling_days.max,
-      deliveryDaysMin: fastest.delivery_days.min,
-      deliveryDaysMax: fastest.delivery_days.max,
+      deliveryDaysMin: slowest.delivery_days.min,
+      deliveryDaysMax: slowest.delivery_days.max,
     });
   }
   return out;

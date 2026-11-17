@@ -104,7 +104,7 @@ describe("searchProducts", () => {
 });
 
 describe("productOffers", () => {
-  it("offers map price, shipping and the fastest delivery", async () => {
+  it("offers map price, the highest shipping and the slowest delivery", async () => {
     const { h, calls } = fake([offersReply([offer()])]);
     expect(await productOffers(h, KEY, "B0TEST", signal())).toEqual([
       {
@@ -117,8 +117,8 @@ describe("productOffers", () => {
         firstParty: false,
         sellerName: "Acme",
         handlingDaysMax: 1,
-        deliveryDaysMin: 2,
-        deliveryDaysMax: 3,
+        deliveryDaysMin: 5,
+        deliveryDaysMax: 8,
       },
     ]);
     const url = new URL(calls[0].url);
