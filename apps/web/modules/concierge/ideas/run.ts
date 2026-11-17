@@ -70,6 +70,8 @@ type Tally = {
   keepMin: number | null;
   refusal: IdeaRefusal | null;
   error: { name: string; kind: string | null } | null;
+  /** An AI call was cut off (timeout or the tick's deadline), so what it used was never reported. */
+  costUnknown: boolean;
 };
 
 type Found = { c: IdeaCandidate; hit: ZincHit; offer: ZincOffer; totalCents: number; fit: "within" | "over"; arriveBy: CalendarDate | null };
@@ -90,6 +92,7 @@ export async function runIdeas(req: IdeaRequest, deps: IdeaDeps): Promise<IdeaOu
     keepMin: null,
     refusal: null,
     error: null,
+    costUnknown: false,
   };
   let outcome: IdeaOutcome = { status: "failed" };
   try {
@@ -114,6 +117,7 @@ export async function runIdeas(req: IdeaRequest, deps: IdeaDeps): Promise<IdeaOu
       cost_cents: cents(t.spent),
       ms: deps.clock() - startedMs,
       ...(t.error ? { error: t.error.name, error_kind: t.error.kind } : {}),
+      ...(t.costUnknown ? { costUnknown: true } : {}),
     });
   }
   return outcome;
@@ -160,17 +164,28 @@ async function attempt(req: IdeaRequest, deps: IdeaDeps, t: Tally): Promise<Idea
   const names = inputs.names;
   const relationship = relationshipLabel(inputs.relationship).toLowerCase();
   const facts = inputs.facts.map((f) => redactNames(`${f.category}: ${f.value}${f.source === "capture" ? " (captured)" : ""}`, names));
-  const aiSignal = () => AbortSignal.any([req.signal, AbortSignal.timeout(s.aiTimeoutMs)]);
-  const b = await brainstorm(
-    deps.gateway,
-    {
-      relationship,
-      occasion: plan.occasion,
-      budgetCents: plan.budgetCents,
-      facts,
-      avoidTitles: inputs.avoidTitles.map((title) => redactNames(title, names)),
-    },
-    { candidates: s.candidates, maxSearches: s.maxSearches, maxTokens: s.aiMaxTokens, prices, signal: aiSignal() },
+  // An AI call cut off mid-way may have spent, but no reply says how much: the run's cost is then unknown.
+  const ai = async <T>(call: (signal: AbortSignal) => Promise<T>): Promise<T> => {
+    const signal = AbortSignal.any([req.signal, AbortSignal.timeout(s.aiTimeoutMs)]);
+    try {
+      return await call(signal);
+    } catch (e) {
+      if (signal.aborted) t.costUnknown = true;
+      throw e;
+    }
+  };
+  const b = await ai((signal) =>
+    brainstorm(
+      deps.gateway,
+      {
+        relationship,
+        occasion: plan.occasion,
+        budgetCents: plan.budgetCents,
+        facts,
+        avoidTitles: inputs.avoidTitles.map((title) => redactNames(title, names)),
+      },
+      { candidates: s.candidates, maxSearches: s.maxSearches, maxTokens: s.aiMaxTokens, prices, signal },
+    ),
   );
   t.spent += b.costCents;
   t.candidates = b.candidates.length;
@@ -272,7 +287,7 @@ async function attempt(req: IdeaRequest, deps: IdeaDeps, t: Tally): Promise<Idea
   };
   const worst = rankWorstCents(prices, s.aiMaxTokens, rankInputTokensMax(rankInput));
   if (!canAffordRank(t.spent, worst, s.runMaxCents)) return end("cost_cap");
-  const r = await rank(deps.gateway, rankInput, { maxTokens: s.aiMaxTokens, prices, signal: aiSignal() });
+  const r = await ai((signal) => rank(deps.gateway, rankInput, { maxTokens: s.aiMaxTokens, prices, signal }));
   t.spent += r.costCents;
   t.stage = "ranked";
   await store.progress(runId, "ranked", cents(t.spent));

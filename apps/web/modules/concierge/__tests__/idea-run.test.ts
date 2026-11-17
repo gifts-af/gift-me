@@ -425,6 +425,26 @@ describe("runIdeas: vendor trouble", () => {
     expect(store.finished).toEqual([{ outcome: "failed", cost: 14 + zinc.calls.length }]);
   });
 
+  it("an AI call cut off by its timeout marks the run's cost unknown", async () => {
+    world([2000], { zinc, gateway });
+    store.s = settings({ aiTimeoutMs: 5 });
+    const prices = gateway.fetch;
+    gateway.fetch = (async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/v1/models")) return prices(url, init);
+      // The brainstorm never answers: the timeout cuts it off, so what it used is never known.
+      return new Promise((_res, rej) => init?.signal?.addEventListener("abort", () => rej(init.signal!.reason)));
+    }) as typeof fetch;
+    expect(await runIdeas(req(), deps())).toEqual({ status: "failed" });
+    expect(store.finished).toEqual([{ outcome: "failed", cost: 0 }]);
+    expect(event("ideas.run")).toMatchObject({ outcome: "failed", costUnknown: true });
+  });
+
+  it("a run whose AI calls all answered doesn't say its cost is unknown", async () => {
+    world([2000], { zinc, gateway });
+    await runIdeas(req(), deps());
+    expect(event("ideas.run")).not.toHaveProperty("costUnknown");
+  });
+
   it("a pricing failure is a counted, failed run that spends nothing", async () => {
     gateway.fetch = (async () => json({}, 500)) as typeof fetch;
     expect(await runIdeas(req(), deps())).toEqual({ status: "failed" });

@@ -262,7 +262,7 @@ The engine finds gift ideas for a round and on demand (a person's Gift ideas scr
 | `zinc_lookup_cents` | 1 | Cost of one Zinc lookup, for the cost figure and cap |
 | `zinc_requests_per_second` | 10 | Zinc's limit per key; a run never calls faster |
 
-**Keep the brainstorm's worst case under `idea_run_max_cents`.** There is no check before the brainstorm call: `idea_ai_max_tokens`, `idea_max_searches` and the AI's prices set what it can cost (about 12¢ at the defaults). Raise any of them only after working out that worst case against the cap.
+**Keep the brainstorm's worst case under `idea_run_max_cents`.** There is no check before the brainstorm call. Its output and searches are capped by settings (`idea_ai_max_tokens`, `idea_max_searches`), but the search results come back to the AI as input tokens, and no setting caps those, so we don't yet know its real worst case. The AC-28 runs on dev will give the real figure **[Verify]**. Raise any of these settings only after checking that figure against the cap.
 
 **The tick and ideas.** Each tick does the money pass first (placing orders, the stale-order sweep, rejection notices). Then the idea pass runs, bounded by `tick_deadline_ms` and `idea_rounds_per_tick`. If `tick_deadline_ms` can't be read, money rounds run with no deadline and the idea pass is skipped. Rounds that don't get a turn before the deadline are released for the next tick, including held (`needs_attention`) rounds.
 
@@ -270,7 +270,7 @@ The engine finds gift ideas for a round and on demand (a person's Gift ideas scr
 
 **Zinc offers are judged on the worst case:** orders don't choose a shipping method, so each offer is judged on its slowest delivery and its highest shipping price.
 
-**How we see it working:** the events `ideas.run_started` and `ideas.run` in the Vercel logs, with ids, counts, stage, outcome and cents (AI plus Zinc), never names or gift text. Each run is also a row in `concierge.idea_runs`.
+**How we see it working:** the events `ideas.run_started` and `ideas.run` in the Vercel logs, with ids, counts, stage, outcome and cents (AI plus Zinc), never names or gift text. `costUnknown: true` on `ideas.run` means an AI call was cut off by its timeout or the tick's deadline, so its cost never came back and `cost_cents` is too low; check the Gateway's own spend for that time. Each run is also a row in `concierge.idea_runs`.
 
 **Tests and money.** Browser tests use the fake Gateway (`apps/web/e2e/fake-gateway.ts`) and the fake Zinc (`e2e/fake-zinc.ts`), so they spend nothing. `pnpm ai:eval --ideas` is the only command that calls the real AI and Zinc for ideas; it spends money, so run it only with Jim's go-ahead, never in CI.
 
