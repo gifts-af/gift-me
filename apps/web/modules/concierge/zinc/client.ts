@@ -34,6 +34,8 @@ type SendOptions = {
   query?: Record<string, string>;
   /** Statuses (or "4xx") handed back to the caller instead of thrown. */
   tolerate?: number[] | "4xx";
+  /** Caller's cancel signal, combined with the timeout. */
+  signal?: AbortSignal;
 };
 
 function fail(kind: ZincErrorKind, status: number, method: string, path: string, code?: string): ZincError {
@@ -53,7 +55,7 @@ export async function send(h: ZincHttp, method: string, path: string, o: SendOpt
         ...(o.key ? { Authorization: `Bearer ${o.key}` } : {}),
       },
       body: o.body === undefined ? undefined : JSON.stringify(o.body),
-      signal: AbortSignal.timeout(h.timeoutMs),
+      signal: o.signal ? AbortSignal.any([AbortSignal.timeout(h.timeoutMs), o.signal]) : AbortSignal.timeout(h.timeoutMs),
     });
   } catch {
     // Network error or timeout. Drop the original error: it may echo the request.
