@@ -59,7 +59,8 @@ in plain words, starting with the person's connection to it (e.g. "His old vise 
 Return JSON only: {"order": [{"id", "reason"}]}, using only the ids you were given.`;
 
 // Text taken from web results comes wrapped in <cite index="..."> tags.
-const stripCites = (s: string) => s.replace(/<\/?cite[^>]*>/g, "").trim();
+// Only cite tags: \b keeps a word like <citation> in the text.
+const stripCites = (s: string) => s.replace(/<\/?cite\b[^>]*>/g, "").trim();
 
 // Models sometimes wrap JSON in prose or a fence. Try the whole text, then a
 // fenced block, then the outermost braces (both replies are objects).
@@ -132,11 +133,14 @@ export async function brainstorm(
   for (const raw of reply.ideas) {
     const idea = ideaSchema.safeParse(raw);
     if (!idea.success) continue;
+    const search = stripCites(idea.data.search);
+    // Nothing left to search for once the tags are gone.
+    if (!search) continue;
     candidates.push({
       id: `c${candidates.length + 1}`,
       title: stripCites(idea.data.title),
-      search: idea.data.search.trim(),
-      brand: idea.data.brand?.trim() || null,
+      search,
+      brand: idea.data.brand ? stripCites(idea.data.brand) || null : null,
       why: stripCites(idea.data.why),
     });
   }

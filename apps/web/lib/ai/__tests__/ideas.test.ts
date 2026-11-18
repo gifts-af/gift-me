@@ -121,6 +121,26 @@ describe("brainstorm", () => {
   });
 });
 
+describe("cite tags", () => {
+  it("are stripped from search and brand too, and only real cite tags are", async () => {
+    const reply = {
+      ideas: [
+        {
+          title: "<cite index=\"1-2\">Vise</cite>",
+          search: "<cite index=\"3\">Griffin Montana Pro vise</cite>",
+          brand: "<cite index=\"4\">Griffin</cite>",
+          why: "Fits <citation> notes",
+        },
+        { title: "Only tags", search: "<cite index=\"5\"></cite>", brand: null, why: "no search left" },
+      ],
+    };
+    const { h } = http(() => messagesReply(JSON.stringify(reply)));
+    const out = await brainstorm(h, input, bo);
+    expect(out.candidates[0]).toMatchObject({ title: "Vise", search: "Griffin Montana Pro vise", brand: "Griffin", why: "Fits <citation> notes" });
+    expect(out.candidates).toHaveLength(1);
+  });
+});
+
 describe("prompt numbers come from settings", () => {
   it("brainstorm says the account's over-budget allowance", async () => {
     const { h, fetch } = http(() => messagesReply(JSON.stringify({ ideas: [] })));
