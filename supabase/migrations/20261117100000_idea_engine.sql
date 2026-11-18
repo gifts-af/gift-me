@@ -50,7 +50,7 @@ insert into concierge.app_settings (key, value, description) values
   ('idea_ai_timeout_ms', '60000', 'How long to wait for the AI, in milliseconds.'),
   ('idea_zinc_timeout_ms', '15000', 'How long to wait for one Zinc lookup, in milliseconds.'),
   ('idea_tax_estimate_pct', '8', 'The tax percentage added to an idea''s estimated total.'),
-  ('idea_run_estimate_cents', '40', 'The rough cost of one idea run, in cents, used to check the wallet first.'),
+  ('idea_run_estimate_cents', '40', 'The rough cost of one idea run, in cents, shown in the money notice beside the Suggest ideas button.'),
   ('idea_run_max_cents', '100', 'A run stops once it has cost this much, in cents.'),
   ('idea_round_runs_max', '2', 'How many runs a round gets, before new facts about the person earn one more (never more than one extra).'),
   ('idea_rounds_per_tick', '1', 'How many rounds the daily tick looks for ideas in each time it runs.'),
