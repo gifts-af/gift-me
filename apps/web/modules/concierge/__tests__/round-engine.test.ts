@@ -793,6 +793,21 @@ describe("the idea pass (ALL-27)", () => {
     expect(ran.status).toBe("awaiting_approval");
   });
 
+  it("a round turned away by the daily limit is released, still due, and the limit is logged with ids only (ALL-125)", async () => {
+    const h = harness();
+    h.generateIdeas.mockResolvedValue({ status: "refused", reason: "daily_limit" });
+
+    await h.tick("2027-02-11");
+
+    expect(h.store.round("round-1")).toMatchObject({ status: "generating", lockedUntil: null });
+    expect(h.store.writes).toContain("release:round-1");
+    expect(named("round_step")).toContainEqual(expect.objectContaining({ round_id: "round-1", step: "ideas:refused:daily_limit" }));
+    const limited = named("ideas.daily_limit_reached");
+    expect(limited).toHaveLength(1);
+    expect(limited[0]).toMatchObject({ round_id: "round-1", user_id: USER, alert: true });
+    for (const key of Object.keys(limited[0])) expect(["event", "at", "round_id", "user_id", "alert"]).toContain(key);
+  });
+
   it("rounds nearest their deadline go first", async () => {
     // Other's birthday is 03-15, so their round ships by 03-06, before Zelda's 03-11.
     const h = two(15);

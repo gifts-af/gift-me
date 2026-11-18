@@ -1056,6 +1056,10 @@ async function afterIdeaRun(round: ClaimedRound, outcome: IdeaOutcome, deps: Eng
           return sendHeadsUp(round, deps, s);
         case "busy":
           return release();
+        case "daily_limit":
+          // Today's runs are used up. Nothing failed, so the round stays due for the next tick.
+          logEvent("ideas.daily_limit_reached", { round_id: round.id, user_id: round.userId, alert: true });
+          return release();
         case "not_paid":
         case "not_found":
           return atDeadline();

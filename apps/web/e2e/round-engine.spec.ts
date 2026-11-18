@@ -140,9 +140,13 @@ async function notificationsFor(roundId: string): Promise<{ kind: string; sent_a
 
 // The tick is global: rounds other specs seed also want an idea turn, so idea_rounds_per_tick is
 // raised for this spec (each test's round gets its turn whatever else is due) and put back after.
-// The fakes answer at once, so a high limit is still well inside the tick's deadline.
+// The fakes answer at once, so a high limit is still well inside the tick's deadline. The same goes
+// for idea_round_runs_per_day (ALL-125): every round run of the day counts, and each run of this
+// spec adds some, so a second run in a row would otherwise be turned away.
 const ROUNDS_PER_TICK = 100;
+const ROUND_RUNS_PER_DAY = 100;
 let roundsPerTickBefore: string | null = null;
+let runsPerDayBefore: string | null = null;
 let testUserPaidBefore: boolean | null = null;
 
 test.beforeAll(async () => {
@@ -150,14 +154,17 @@ test.beforeAll(async () => {
   await deletePerson();
   await ideasOn();
   roundsPerTickBefore = await settingValue("idea_rounds_per_tick");
+  runsPerDayBefore = await settingValue("idea_round_runs_per_day");
   testUserPaidBefore = await paidFeatures((await signInApi()).id);
   await setSetting("idea_rounds_per_tick", ROUNDS_PER_TICK);
+  await setSetting("idea_round_runs_per_day", ROUND_RUNS_PER_DAY);
 });
 
 test.afterAll(async () => {
   await setEngine(false);
   await deletePerson();
   if (roundsPerTickBefore !== null) await setSetting("idea_rounds_per_tick", roundsPerTickBefore);
+  if (runsPerDayBefore !== null) await setSetting("idea_round_runs_per_day", runsPerDayBefore);
   if (testUserPaidBefore !== null) await setPaidFeatures((await signInApi()).id, testUserPaidBefore);
 });
 

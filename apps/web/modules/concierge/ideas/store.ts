@@ -11,7 +11,7 @@ import { activeFacts, type ActiveFact } from "../profile/profile";
 
 export type AdminDb = ReturnType<typeof createAdminClient>;
 
-export type IdeaRefusal = "not_found" | "not_paid" | "done" | "busy" | "limit";
+export type IdeaRefusal = "not_found" | "not_paid" | "done" | "busy" | "limit" | "daily_limit";
 
 /** Every number a run uses, from concierge.app_settings (T23). */
 export type IdeaSettings = {
