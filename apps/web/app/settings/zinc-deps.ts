@@ -1,13 +1,13 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { Database } from "@gifts-af/core";
+import type { CalendarDate, Database } from "@gifts-af/core";
 import { logEvent } from "@/lib/log";
 import { siteUrl } from "@/lib/site-url";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   advanceRound,
   clearUnfiledNotes,
-  createStubGenerateIdeas,
+  createSupabaseIdeaStore,
   createSupabaseNotifyStore,
   createSupabaseRoundStore,
   defaultChannels,
@@ -17,8 +17,11 @@ import {
   placeAddressHeldFor,
   placeHeldForUser,
   placeRound,
+  runIdeas,
   sweepStalePlacing,
   type EngineDeps,
+  type GenerateIdeas,
+  type IdeaDeps,
   type PlaceAddressHeld,
   type PlaceHeld,
   type PurchaseDeps,
@@ -54,6 +57,49 @@ async function settingInt(db: SupabaseClient<Database>, key: string): Promise<nu
 }
 
 /**
+ * runIdeas' deps (ALL-27): the AI Gateway (AI_GATEWAY_BASE, AI_GATEWAY_API_KEY) and Zinc's
+ * product lookups on the app's own key (ZINC_API_BASE, ZINC_API_KEY, T17). Null when any of
+ * them is missing here, so the caller fails the run without spending and says why.
+ */
+async function ideaDeps(db: SupabaseClient<Database>, env: Env, today: CalendarDate): Promise<IdeaDeps | null> {
+  const gatewayBase = env.AI_GATEWAY_BASE;
+  const gatewayKey = env.AI_GATEWAY_API_KEY;
+  const zincBase = env.ZINC_API_BASE;
+  const zincKey = env.ZINC_API_KEY;
+  if (!gatewayBase || !gatewayKey || !zincBase || !zincKey) return null;
+  const timeoutMs = await settingInt(db, "idea_zinc_timeout_ms");
+  return {
+    store: createSupabaseIdeaStore(db),
+    gateway: { base: gatewayBase, apiKey: gatewayKey, fetch },
+    zinc: { http: { base: zincBase, timeoutMs, fetch }, key: zincKey },
+    today,
+    clock: Date.now,
+    sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  };
+}
+
+/** The Gift ideas screen's run (suggestIdeasAction): the same deps, on the buyer's own day. */
+export async function onDemandIdeaDeps(today: CalendarDate, env: Env = process.env): Promise<IdeaDeps | null> {
+  return ideaDeps(createAdminClient(), env, today);
+}
+
+/**
+ * The tick's idea runs. With the vendors not set up here, every run fails, uncounted, and
+ * `ideas.not_configured` alerts (design/operations.md > Alerts): the rounds would otherwise go quiet.
+ */
+function ideaWiring(db: SupabaseClient<Database>, env: Env, now: Date): GenerateIdeas {
+  return async (round, signal) => {
+    // The engine's day: the tick's UTC day.
+    const deps = await ideaDeps(db, env, now.toISOString().slice(0, 10));
+    if (!deps) {
+      logEvent("ideas.not_configured", { round_id: round.id, user_id: round.userId, person_id: round.personId, alert: true });
+      return { status: "failed" };
+    }
+    return runIdeas({ userId: round.userId, personId: round.personId, roundId: round.id, signal }, deps);
+  };
+}
+
+/**
  * The round engine and the buying side, wired to each other (ALL-32 Task 7): the engine
  * places held rounds and sweeps through the real placeRound and sweepStalePlacing, and an
  * approval or webhook tells the buyer through the engine's advanceRound. With Zinc off here
@@ -70,7 +116,7 @@ export async function buyingWiring(
     store: createSupabaseRoundStore(db),
     notify: { store: createSupabaseNotifyStore(db), channels: defaultChannels(env), baseUrl: siteUrl(env), now },
     now,
-    generateIdeas: createStubGenerateIdeas({ production: env.VERCEL_ENV === "production" }),
+    generateIdeas: ideaWiring(db, env, now),
     zinc: null,
     clearUnfiledNotes: () => clearUnfiledNotes(db),
   };

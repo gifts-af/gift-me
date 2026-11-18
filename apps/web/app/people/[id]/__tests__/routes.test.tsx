@@ -21,6 +21,7 @@ vi.mock("@/lib/app-settings", () => ({ appSettingInt: async () => 1 }));
 
 const personPage = await import("../page");
 const addressPage = await import("../address/page");
+const ideasPage = await import("../ideas/page");
 
 /** The page's streamed part: the async component inside its Suspense. */
 function loaded(node: ReactNode): ReactElement<Record<string, unknown>> {
@@ -48,6 +49,11 @@ describe("a person's routes", () => {
   it("keeps 300 s on the address screen and the person's page", () => {
     expect(addressPage.maxDuration).toBe(300);
     expect((personPage as { maxDuration?: number }).maxDuration).toBe(300);
+  });
+
+  // ALL-27: an idea run can take two AI and two Zinc timeouts (150 s as shipped).
+  it("keeps 300 s on the Gift ideas screen", () => {
+    expect(ideasPage.maxDuration).toBe(300);
   });
 
   it("sends the old address email link to the address screen, open (AC-19)", async () => {

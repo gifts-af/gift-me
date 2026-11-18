@@ -6,7 +6,8 @@ const getProfile = vi.hoisted(() =>
   vi.fn(async (...args: unknown[]) => (void args, { groups: [], off: [], unread: 0, openCount: 0, readiness: null as unknown })),
 );
 const countSavedGifts = vi.hoisted(() => vi.fn(async (...args: unknown[]) => (void args, 0)));
-vi.mock("@/modules/concierge", () => ({ getPerson, getProfile, countSavedGifts }));
+const onDemandIdeas = vi.hoisted(() => vi.fn(async (...args: unknown[]) => (void args, [] as unknown[])));
+vi.mock("@/modules/concierge", () => ({ getPerson, getProfile, countSavedGifts, onDemandIdeas }));
 vi.mock("@/lib/today", () => ({ todayForRequest: async () => "2026-11-01" }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ auth: { getClaims: async () => ({ data: { claims: { sub: "u1" } } }) } }),
@@ -97,6 +98,22 @@ describe("PersonView", () => {
     expect(row(/^Their list/)).toHaveTextContent("Not linked");
     expect(row(/^Shipping address/)).toHaveAttribute("href", "/people/p1/address");
     expect(row(/^Shipping address/)).toHaveTextContent("Not added");
+  });
+
+  // ALL-27: after Budget, how many on-demand ideas there are.
+  it("the Gifts group has a Gift ideas row with the count", async () => {
+    getPerson.mockResolvedValue(dad);
+    const { unmount } = await show();
+    const row = () => screen.getByRole("link", { name: /^Gift ideas/ });
+    expect(row()).toHaveAttribute("href", "/people/p1/ideas");
+    expect(row()).toHaveTextContent("None");
+    const labels = screen.getAllByRole("link").map((l) => l.firstChild?.textContent);
+    expect(labels.indexOf("Gift ideas")).toBe(labels.indexOf("Budget") + 1);
+    expect(onDemandIdeas.mock.calls[0][1]).toBe("p1");
+    unmount();
+    onDemandIdeas.mockResolvedValueOnce([{ id: "i1" }, { id: "i2" }, { id: "i3" }]);
+    await show();
+    expect(row()).toHaveTextContent("3");
   });
 
   it("counts saved gifts, and says Linked for someone with a list", async () => {

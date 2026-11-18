@@ -21,7 +21,7 @@ describe.skipIf(!supabase)("Zinc and engine wiring (real local database and engi
   let wiring: typeof import("../zinc-deps");
   const users: string[] = [];
   const envBefore = { ...process.env };
-  const SHARED = ["round_engine_enabled"];
+  const SHARED = ["round_engine_enabled", "idea_engine_enabled"];
   const settingsBefore = new Map<string, string>();
 
   beforeAll(async () => {
@@ -156,6 +156,41 @@ describe.skipIf(!supabase)("Zinc and engine wiring (real local database and engi
     expect(await purchase!.advanceRound(roundId)).toBe("advanced");
     log.mockRestore();
     expect(await sends(roundId)).toEqual(["hold:1:notice"]);
+  });
+
+  // ALL-27. Nothing here reaches the AI Gateway or Zinc: the addresses point nowhere.
+  const ideaEnv = { ...base, AI_GATEWAY_BASE: "http://127.0.0.1:9", AI_GATEWAY_API_KEY: "gw-test", ZINC_API_KEY: "zn-test", EMAIL_OUTBOX: "log" };
+  const round = { id: randomUUID(), userId: randomUUID(), personId: randomUUID() };
+
+  it.each(["AI_GATEWAY_BASE", "AI_GATEWAY_API_KEY", "ZINC_API_BASE", "ZINC_API_KEY"])(
+    "with %s missing, idea runs fail without spending and say so (ids only)",
+    async (key) => {
+      const { engine } = await wiring.buyingWiring(new Date(), { ...ideaEnv, [key]: undefined });
+      const log = vi.spyOn(console, "log").mockImplementation(() => {});
+      try {
+        expect(await engine.generateIdeas(round, AbortSignal.timeout(1000))).toEqual({ status: "failed" });
+        const told = events(log).filter((e) => e.event === "ideas.not_configured");
+        expect(told).toEqual([
+          expect.objectContaining({ round_id: round.id, user_id: round.userId, person_id: round.personId, alert: true }),
+        ]);
+        expect(JSON.stringify(told)).not.toContain("gw-test");
+        expect(JSON.stringify(told)).not.toContain("zn-test");
+      } finally {
+        log.mockRestore();
+      }
+    },
+  );
+
+  it("configured, idea runs go through the real idea engine, which is off as it ships", async () => {
+    await pg.query("update concierge.app_settings set value = '0' where key = 'idea_engine_enabled'");
+    const { engine } = await wiring.buyingWiring(new Date(), ideaEnv);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      expect(await engine.generateIdeas(round, AbortSignal.timeout(1000))).toEqual({ status: "off" });
+      expect(events(log).filter((e) => e.event === "ideas.not_configured")).toEqual([]);
+    } finally {
+      log.mockRestore();
+    }
   });
 
   it("placeHeld places nothing and says so once, with the user id, when Zinc is off here", async () => {

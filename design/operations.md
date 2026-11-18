@@ -80,6 +80,7 @@ pnpm live-check        # signed-in checks on giftsaf.com with the shared test ac
 pnpm gallery          # screenshot the main screens (phone, phone dark, desktop) and every email into apps/web/gallery/index.html, for reviewing by eye. Needs `pnpm supabase start`; builds like the browser tests (E2E_PORT works too)
 pnpm extension:package # build the prod extension and zip it for the Chrome Web Store (apps/extension/README.md > Release a new version)
 pnpm ai:eval           # check capture extraction against the fixtures with the real model (~10¢, needs AI_GATEWAY_API_KEY; not in CI)
+pnpm ai:eval --ideas   # idea engine on the 5 fixture people, real AI and Zinc; checks AC-2/5/6, prints AI and Zinc cents per run; --ai-cents-max N (default 25). **SPENDS MONEY (about 20-25¢ AI per person plus Zinc lookups): run only with Jim's go-ahead, never in CI.** Needs AI_GATEWAY_BASE, AI_GATEWAY_API_KEY, ZINC_API_BASE, ZINC_API_KEY; refuses before any call without them
 ```
 
 Write new migrations with `pnpm supabase migration new <name>` and test them locally before they go to `dev` or `prod`. Local settings live in `supabase/config.toml`. Every new user-owned table needs `user_id`, its privacy rule and a test in `supabase/tests/` (see `design/decisions.md` T26). CI runs `pnpm db:test` and fails if the generated types are stale.
@@ -214,6 +215,8 @@ update concierge.app_settings set value = '0' where key = 'zinc_ordering_enabled
 | `round_failure_email_failed` | The email telling the buyer that a gift (or several) couldn't be bought was refused (ALL-116). Nothing is lost: the failures go back to untold, the round's other work (placing a held gift) still runs, and the next look sends it. If the round closes first, the "we couldn't buy it" email tells them instead. | Nothing if it clears on the next look. If it repeats for the same `round_id`, check Resend (status, key, a bounced address). |
 | `order.ordered_email_failed` | The "your gift is ordered" email failed. | Check Resend. It is retried on the next tick. |
 | `order.failed_late_email_failed` | The "we couldn't buy it" email failed. It tells every failure the buyer hasn't heard about once a round has closed, in one email: a gift still placing at the deadline that failed, an unconfirmed one settled as failed, or a failure untold when the round closed (the deadline, the cancel link, the person removed or the occasion turned off). | Check Resend. It is retried on the next tick until it goes. |
+| `ideas.not_configured` | A round's idea run couldn't start because the AI Gateway or Zinc isn't set up on this environment. No run is counted and nothing is spent, so without this the round would wait silently until it skips at its deadline. The event carries `round_id`, `user_id` and `person_id`. | Ideas can't run on this environment: set `AI_GATEWAY_BASE`, `AI_GATEWAY_API_KEY`, `ZINC_API_KEY` and `ZINC_API_BASE` on it (Vercel environment variables, then redeploy), or turn `idea_engine_enabled` off (**Gift idea engine** below). |
+| `ideas.zinc_unauthorized` | Zinc refused the app's own key on every product lookup in an idea run, so the run failed. Buyers stop getting ideas until it's fixed. | Check `ZINC_API_KEY` on that environment (it must be the app's key, T17, not a user's) and the app account's balance in Zinc's dashboard. The round tries again on a later tick. |
 
 ### Rolling back ALL-116 (failure emails)
 
@@ -224,6 +227,52 @@ Code and migration ship together. If the code is rolled back with Vercel's insta
 ### Rolling back ALL-120 (base budget)
 
 Vercel's instant rollback brings back the old budget section, which can't show or clear a base budget, while `round_candidates` keeps using it. After the rollback, run `delete from concierge.budgets where occasion_kind = 'any';` on the database. This deletes base budgets people typed, for good, which is fine before launch. Occasion budgets are untouched (T73).
+
+## Gift idea engine (ALL-27)
+
+The engine finds gift ideas for a round and on demand (a person's Gift ideas screen). Spec and plan: [design/plans/ALL-27-idea-engine.md](plans/ALL-27-idea-engine.md). **It ships off on every environment** (`idea_engine_enabled` = 0) until Jim allows spending, because every run costs real money.
+
+**Turning it off:** set `idea_engine_enabled` to `0` in `concierge.app_settings` (Supabase SQL editor as allensforever711, no deploy), or roll back in Vercel. Off means no AI or Zinc call, no run counted, and no email; a round waits and tries again on the next tick, and the Gift ideas screen shows no button, just "Suggestions are switched off right now." (a buyer without paid features sees "Gift ideas aren't available on your account yet." instead). Rounds themselves are off in production anyway (`round_engine_enabled` = 0).
+
+**Environment variables** (listed in `apps/web/.env.example`):
+
+| Variable | What it does |
+|---|---|
+| `AI_GATEWAY_BASE`, `AI_GATEWAY_API_KEY` | The AI Gateway address and key for the brainstorm and ranking. **Still open:** not yet set on Vercel preview or production, so set them (and turn the engine on) only with Jim's go-ahead **[Verify]** |
+| `ZINC_API_BASE`, `ZINC_API_KEY` | Product lookups use the **app-owned Zinc key** (T17), never a user's wallet. `ZINC_API_KEY` is the app's key on each environment; a user's own key (Settings) is only for buying |
+
+**Settings** (rows in `concierge.app_settings`; change them in the SQL editor, no deploy):
+
+| Key | Default | What it does |
+|---|---|---|
+| `idea_engine_enabled` | 0 | 1 lets runs happen. Tests set it to 1 with fake vendors |
+| `idea_candidates` | 8 | Candidates per brainstorm |
+| `idea_max_searches` | 3 | Web searches per brainstorm |
+| `idea_keep_min` / `idea_keep_max` | 3 / 5 | Fewer survivors than the first is logged as a shortfall; the second is the most ideas kept within budget (plus one over budget) |
+| `idea_ai_timeout_ms` | 60000 | Per AI call |
+| `idea_zinc_timeout_ms` | 15000 | Per Zinc call |
+| `idea_ai_max_tokens` | 6000 | Output limit per AI call, which bounds the cost of the call in flight |
+| `idea_tax_estimate_pct` | 8 | Flat tax estimate (needs no address) |
+| `idea_run_estimate_cents` | 40 | The usual cost shown in the money notice |
+| `idea_run_max_cents` | 100 | The most one run may spend (AI plus Zinc), shown in the notice. A run stops resolving at this figure and skips ranking if its worst case wouldn't fit (`stopped: cost_cap`) |
+| `idea_round_runs_max` | 2 | Runs a round may use before it stops and emails the buyer. A new fact allows one more |
+| `idea_rounds_per_tick` | 1 | Most rounds that make ideas in one tick. Raise it only with timings from `ideas.run` events (AC-28) |
+| `idea_run_lease_ms` | 600000 | How long an unfinished on-demand run blocks another for the same person |
+| `tick_deadline_ms` | 270000 | The idea pass starts no run after this, and runs are cut off at it, leaving 30 s of Vercel's 300 s. It never holds up placing orders or any other step |
+| `zinc_lookup_cents` | 1 | Cost of one Zinc lookup, for the cost figure and cap |
+| `zinc_requests_per_second` | 10 | Zinc's limit per key; a run never calls faster |
+
+**Keep the brainstorm's worst case under `idea_run_max_cents`.** There is no check before the brainstorm call. Its output and searches are capped by settings (`idea_ai_max_tokens`, `idea_max_searches`), but the search results come back to the AI as input tokens, and no setting caps those, so we don't yet know its real worst case. The AC-28 runs on dev will give the real figure **[Verify]**. Raise any of these settings only after checking that figure against the cap.
+
+**The tick and ideas.** Each tick does the money pass first (placing orders, the stale-order sweep, rejection notices). Then the idea pass runs, bounded by `tick_deadline_ms` and `idea_rounds_per_tick`. The deadline bounds only the idea pass: held (`needs_attention`) rounds and every other step run first with no deadline, as before. Rounds that don't get an idea turn before the deadline are released for the next tick. If `tick_deadline_ms` can't be read, the idea pass is skipped.
+
+**Emails.** When a round gets no ideas, the buyer gets one "We don't have gift ideas for {name} yet" email (`no_ideas`), then a second after a new fact brings one more run, and the second promises no retry. Nothing is sent while the engine is off or the buyer isn't paid; the round skips silently at its deadline.
+
+**Zinc offers are judged on the worst case:** orders don't choose a shipping method, so each offer is judged on its slowest delivery and its highest shipping price.
+
+**How we see it working:** the events `ideas.run_started` and `ideas.run` in the Vercel logs, with ids, counts, stage, outcome and cents (AI plus Zinc), never names or gift text. `costUnknown: true` on `ideas.run` means an AI call was cut off by its timeout or the tick's deadline, so its cost never came back and `cost_cents` is too low; check the Gateway's own spend for that time. Each run is also a row in `concierge.idea_runs`.
+
+**Tests and money.** Browser tests use the fake Gateway (`apps/web/e2e/fake-gateway.ts`) and the fake Zinc (`e2e/fake-zinc.ts`), so they spend nothing. `pnpm ai:eval --ideas` is the only command that calls the real AI and Zinc for ideas; it spends money, so run it only with Jim's go-ahead, never in CI.
 
 ## My list saving (ALL-127)
 

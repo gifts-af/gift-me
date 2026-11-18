@@ -3,4 +3,5 @@
 // GET https://ai-gateway.vercel.sh/v1/models (dots, not dashes).
 export const AI_MODELS = {
   extraction: "anthropic/claude-sonnet-5.5",
+  ideas: "anthropic/claude-sonnet-5.5",
 } as const;

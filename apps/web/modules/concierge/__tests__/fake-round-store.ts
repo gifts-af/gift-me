@@ -21,6 +21,9 @@ export type FakeRound = Omit<NewRoundRow, "nextActionAt"> & {
 
 export type FakePerson = { name: string; hasAddress: boolean; openQuestions?: number };
 
+/** round_idea_state for one round, and whether a run started after its no_ideas email (ALL-27). */
+export type FakeIdeaState = { hasFacts: boolean; ideaRunsLeft: boolean; ranSinceNoIdeas: boolean; paid: boolean; ideaEngineOn: boolean };
+
 const FINISHED: RoundStatus[] = ["complete", "skipped", "ordered", "delivered"];
 
 /**
@@ -37,7 +40,9 @@ export class FakeRoundStore implements RoundStore {
   occasionKinds = new Map<string, OccasionKind>();
   rounds: FakeRound[] = [];
   sends = new Map<string, Set<StepKey>>();
-  ideas = new Map<string, { title: string; totalCents: number }[]>();
+  ideas = new Map<string, { title: string; totalCents: number; overBudget?: boolean }[]>();
+  /** Per round; a round not in here has facts and runs left. */
+  ideaState = new Map<string, Partial<FakeIdeaState>>();
   writes: string[] = [];
 
   async setting(key: string) {
@@ -196,20 +201,17 @@ export class FakeRoundStore implements RoundStore {
       hasAddress: person.hasAddress,
       hasSharedAddress: false,
       openQuestions: person.openQuestions ?? 0,
-      ideas: this.ideas.get(roundId) ?? [],
+      ideas: (this.ideas.get(roundId) ?? []).map((i) => ({ ...i, overBudget: i.overBudget ?? false })),
+      hasFacts: true,
+      ideaRunsLeft: true,
+      ranSinceNoIdeas: false,
+      paid: true,
+      ideaEngineOn: true,
+      ...this.ideaState.get(roundId),
       orders: [],
       personRemoved: false,
       closedEarly: false,
     };
-  }
-
-  async waitingRoundsForPerson(personId: string, now: Date) {
-    const waiting = this.rounds.filter((r) => r.personId === personId && r.status === "needs_address");
-    for (const r of waiting) {
-      this.writes.push(`due:${r.id}`);
-      r.nextActionAt = now;
-    }
-    return waiting.map((r) => r.id);
   }
 
   // The money path runs against the real database (round-engine-holds.test.ts, E5);
@@ -220,8 +222,14 @@ export class FakeRoundStore implements RoundStore {
   async reconcile(): Promise<RoundStatus | null> {
     throw new Error("The money path isn't in the fake store");
   }
-  async release(): Promise<boolean> {
-    throw new Error("The money path isn't in the fake store");
+  /** Like release_round: gives the lease back, leaving status and next_action_at as they are. */
+  async release(roundId: string, lock: Date): Promise<boolean> {
+    const r = this.round(roundId);
+    if (r.lockedUntil?.getTime() !== lock.getTime()) return false;
+    this.writes.push(`release:${roundId}`);
+    r.lockedUntil = null;
+    r.attempts = 0;
+    return true;
   }
   async cancelHeld(): Promise<RoundStatus | null> {
     throw new Error("The money path isn't in the fake store");

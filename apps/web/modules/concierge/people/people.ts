@@ -4,7 +4,6 @@ import type { SaveResult } from "../settings";
 import type { PlaceAddressHeld } from "../zinc/types";
 import type { ImportRow, MonthDay, PersonInput } from "./rules";
 import { logEvent } from "@/lib/log";
-import { resumeRoundsForPerson, type EngineDeps } from "../rounds/engine";
 import * as service from "./service";
 import { createSupabasePeopleStore } from "./store";
 
@@ -25,20 +24,7 @@ export function addPerson(input: PersonInput): Promise<service.AddResult> {
   return service.addPerson(createSupabasePeopleStore(), input);
 }
 
-/** The round engine's deps, built by the caller (app/settings/zinc-deps.ts, E3). */
-export type EngineWiring = () => Promise<EngineDeps>;
-
-// A new address can unpause a round waiting on one (ALL-28). Never affects the save.
-async function resumeWaitingRounds(id: string, engine: EngineWiring): Promise<void> {
-  try {
-    await resumeRoundsForPerson(id, await engine());
-  } catch {
-    logEvent("round_resume_failed", { person_id: id });
-  }
-}
-
-// About's fields, one at a time (ALL-127). None of these resumes rounds:
-// only an address can unpause one, and resuming can place orders.
+// About's fields, one at a time (ALL-127). None of these moves rounds on.
 export function renamePerson(id: string, name: string): Promise<SaveResult> {
   return service.renamePerson(createSupabasePeopleStore(), id, name);
 }
@@ -60,17 +46,12 @@ export function removeDatedOccasion(id: string, kind: service.DatedKind): Promis
 }
 
 /**
- * Saves a checked address (ALL-81); a round waiting in needs_address goes on at once, and
- * this person's gifts held for an address are placed through `placeAddressHeld` (ALL-32).
+ * Saves a checked address (ALL-81), and this person's gifts held for an address are placed
+ * through `placeAddressHeld` (ALL-32). A round waiting in needs_address goes on at the next
+ * daily tick, which has the time for its idea run (ALL-27).
  */
-export async function saveAddress(
-  id: string,
-  address: Address,
-  wiring: { placeAddressHeld: PlaceAddressHeld; engine: EngineWiring },
-): Promise<SaveResult> {
-  const result = await service.saveAddress(createSupabasePeopleStore(), id, address, new Date(), wiring.placeAddressHeld);
-  if (result.ok) await resumeWaitingRounds(id, wiring.engine);
-  return result;
+export async function saveAddress(id: string, address: Address, wiring: { placeAddressHeld: PlaceAddressHeld }): Promise<SaveResult> {
+  return service.saveAddress(createSupabasePeopleStore(), id, address, new Date(), wiring.placeAddressHeld);
 }
 
 export function removeAddress(id: string): Promise<SaveResult> {

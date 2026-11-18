@@ -228,8 +228,8 @@ async function onOwnPerson(
 const notFound = (): SaveResult => ({ ok: false, error: NOT_FOUND });
 
 // ─── About: one field at a time (ALL-127, T71) ─────────────────────────────
-// Each saves only its own field and never resumes rounds (only an address
-// save does, in people.ts): a name or a date can't place an order.
+// Each saves only its own field and never moves rounds on: a name or a date
+// can't place an order.
 
 export type DatedKind = "birthday" | "anniversary";
 

@@ -33,7 +33,10 @@ export type StepKey =
   // Once per order that failed after its round closed (the "we couldn't buy it" email).
   | `late_fail:${string}`
   // Once per round: the list owner was asked to check their shared address (ALL-112).
-  | "shared_address";
+  | "shared_address"
+  // The round couldn't get gift ideas (ALL-27 AC-9): once, and once more after the extra run.
+  | "no_ideas"
+  | "no_ideas_again";
 
 /** Why an order is held; `unconfirmed` is a round reason only. */
 export type HoldReason = "funds" | "setup" | "address" | "paused" | "not_allowed" | "retry";
@@ -96,6 +99,22 @@ export type RoundView = {
    * topping up wouldn't buy anything, so a funds hold gets no emails while it's off.
    */
   orderingPaused?: boolean;
+  /** The person has at least one active fact, so a run has something to go on (ALL-27 AC-13). */
+  hasFacts: boolean;
+  /** The round may start another idea run (round_idea_state). */
+  ideaRunsLeft: boolean;
+  /**
+   * An idea run started after `no_ideas` was sent: the extra run a new fact allows. Without it,
+   * `no_ideas_again` would follow straight after a `no_ideas` sent because the runs were spent.
+   */
+  ranSinceNoIdeas: boolean;
+  /** The round's user has paid features (round_idea_state). Unpaid: nothing is sent, and the deadline skips it. */
+  paid: boolean;
+  /**
+   * The idea engine is switched on (idea_engine_enabled). Off: no no_ideas email; the round goes
+   * on as if it could run, and the run says "off".
+   */
+  ideaEngineOn: boolean;
 };
 
 export type NextAction =
@@ -189,6 +208,22 @@ function holdAction(r: RoundView, today: CalendarDate, s: ScheduleSettings): Nex
 }
 
 /**
+ * A round that can't run (no facts, or no runs left) tells the buyer once (`no_ideas`), and once
+ * more if the extra run a new fact allowed also found nothing (`no_ideas_again`). Then it waits
+ * for its deadline, unless a new fact brings it back sooner (the fact trigger). null: it can run.
+ */
+function noIdeasAction(r: RoundView): NextAction | null {
+  // Like a run refused not_paid: no email, and the deadline closes it silently.
+  if (!r.paid) return { do: "wait", until: r.shipByDeadline };
+  // The engine is off: nothing is sorry about ideas we never looked for.
+  if (!r.ideaEngineOn) return null;
+  if (r.hasFacts && r.ideaRunsLeft) return null;
+  if (!r.sent.has("no_ideas")) return { do: "send", send: "no_ideas" };
+  if (!r.ideaRunsLeft && r.ranSinceNoIdeas && !r.sent.has("no_ideas_again")) return { do: "send", send: "no_ideas_again" };
+  return { do: "wait", until: r.shipByDeadline };
+}
+
+/**
  * Statuses the engine doesn't act on (ordered, delivered, complete, skipped)
  * return `wait` until the deadline, so a caller never has to special-case them.
  */
@@ -197,6 +232,12 @@ export function nextAction(r: RoundView, today: CalendarDate, s: ScheduleSetting
   // The deadline skip comes first, so a stuck round still ends on time.
   if (actionable.includes(r.status) && compareDates(r.shipByDeadline, today) <= 0) {
     return { do: "skip", send: "skipped" };
+  }
+  // Before the address: a round that can't get ideas doesn't ask for one (ALL-27 AC-13), and an
+  // unpaid round asks nothing at all.
+  if (["scheduled", "needs_address", "generating"].includes(r.status)) {
+    const noIdeas = noIdeasAction(r);
+    if (noIdeas) return noIdeas;
   }
   switch (r.status) {
     case "scheduled":

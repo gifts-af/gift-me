@@ -113,6 +113,7 @@ describe.each([
   "hold_address",
   "hold_trouble",
   "hold_unconfirmed",
+  "no_ideas",
 ] as const)("bad news: %s", (name) => {
   const mail = (() => {
     const s = SAMPLE_DATA.skipped;
@@ -522,5 +523,63 @@ describe("notes emails (ALL-31)", () => {
       expect(out).toMatch(/can(&#39;|')t cancel a gift/);
       expect(out).toContain("use the button in the email about it");
     }
+  });
+});
+
+// ─── ALL-27: a round that couldn't get gift ideas, and ideas over the budget ───
+
+describe("no_ideas (ALL-27 AC-9)", () => {
+  const links = { questions: "https://x.test/a/questions" };
+
+  it("no_ideas says sorry, nothing was charged, and links the questions", () => {
+    const mail = TEMPLATES.no_ideas({ personName: "Mom", again: false }, links);
+    expect(mail.subject).toBe("Sorry, we couldn't get gift ideas for Mom yet");
+    expect(mail.text).toMatch(/sorry/i);
+    // True whether nothing fit, a service was down, or we know too little about them.
+    expect(mail.text).toContain("We don't have gift ideas for Mom yet.");
+    expect(mail.text).not.toContain("couldn't find");
+    expect(mail.text).toContain("haven't been charged");
+    expect(mail.text).toContain("What happens next: telling us more about Mom helps. We'll try once more after you add something.");
+    expect(mail.text).toContain("Tell us more about Mom");
+    expect(mail.text).toContain("before the date passes");
+    expect(mail.html).toContain('href="https://x.test/a/questions"');
+    expect(mail.html.match(/background:#0f766e/g)).toHaveLength(1);
+  });
+
+  it("the again version says it tried with the new facts", () => {
+    const mail = TEMPLATES.no_ideas({ personName: "Mom", again: true }, links);
+    expect(mail.subject).toBe("Sorry, we couldn't get gift ideas for Mom yet");
+    expect(mail.text).toContain("We tried again and still couldn't find a good fit for Mom.");
+    expect(mail.text).toContain("haven't been charged");
+    // It promises no retry: the extra run may already be spent.
+    expect(mail.text).toContain(
+      "What happens next: we'll skip this occasion. Telling us more about Mom helps us next time.",
+    );
+    expect(mail.text).not.toMatch(/try (one last time|once more|again after)/);
+    expect(mail.text).toContain("Tell us more about Mom");
+    expect(mail.html).toContain('href="https://x.test/a/questions"');
+    expect(mail.text).not.toContain("try once more");
+  });
+});
+
+describe("over-budget ideas (ALL-27)", () => {
+  const ideas = [
+    { title: "Stoneware mug set", price: "$42" },
+    { title: "Espresso machine", price: "$95", overBudget: true },
+  ];
+
+  it("an over-budget idea is labeled in the heads-up", () => {
+    const s = SAMPLE_DATA.heads_up;
+    const mail = TEMPLATES.heads_up({ ...s.data, mode: "reminder", ideas }, s.links);
+    expect(mail.text).toContain("- Espresso machine · $95 (Over budget)");
+    expect(mail.text).toContain("- Stoneware mug set · $42\n");
+    expect(mail.html).toContain("Over budget");
+  });
+
+  it("and in the reminders", () => {
+    const s = SAMPLE_DATA.reminder;
+    expect(TEMPLATES.reminder({ ...s.data, ideas }, s.links).text).toContain("Espresso machine · $95 (Over budget)");
+    const f = SAMPLE_DATA.final_notice;
+    expect(TEMPLATES.final_notice({ ...f.data, ideas }, f.links).text).toContain("Espresso machine · $95 (Over budget)");
   });
 });

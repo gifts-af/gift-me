@@ -25,3 +25,9 @@ export function zincFeeNotice(feeCents: number): string {
 export function topUpFeeLabel(bps: number, fixedCents: number): string {
   return `${bps / 100}% + ${centsLabel(fixedCents)}`;
 }
+
+export function ideaRunNotice(estimateCents: number, maxCents: number): string {
+  return `Suggesting ideas uses AI and live product lookups, which cost real money: usually about ${centsLabel(estimateCents)}, at most ${dollarsLabel(maxCents)}.`;
+}
+
+export const IDEA_RUN_OFF = "Gift ideas aren't available on your account yet.";

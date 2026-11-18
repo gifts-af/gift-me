@@ -4,6 +4,8 @@ begin;
 select plan(23);
 
 select tests.create_user('a@example.com') as a \gset
+-- Rounds are for paid users only (ALL-27).
+insert into concierge.accounts (user_id, paid_features) values (:'a', true);
 select tests.act_as(:'a');
 insert into public.people (name, relationship) values ('Mom', 'parent'), ('Pal', 'friend'), ('Gone', 'friend');
 select id as mom from public.people where name = 'Mom' \gset

@@ -6,6 +6,12 @@
 // design/operations.md > Environments). The two real-page screenshots aren't committed (the
 // repo is public); `node spikes/ai/screens.mjs` recreates them, and missing
 // ones are skipped with a note.
+//
+// `pnpm ai:eval --ideas [--ai-cents-max N]` (ALL-27, AC-22) runs the idea engine on the five
+// people in lib/ai/fixtures/people.json with the REAL Gateway and Zinc, and checks AC-2, AC-5
+// and AC-6 on every idea kept. IT SPENDS MONEY (about 20-25 cents of AI plus Zinc lookups per
+// person): run it by hand, only with Jim's go-ahead, never in CI. It needs AI_GATEWAY_BASE,
+// AI_GATEWAY_API_KEY, ZINC_API_BASE and ZINC_API_KEY, and refuses before any network call without them.
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { createExtractor, type CandidateFact } from "../lib/ai/extract";
@@ -25,7 +31,7 @@ if (!process.env.AI_GATEWAY_API_KEY) {
 const MIN_CONFIDENCE_PCT = 60;
 // The app's capture_extract_timeout_ms.
 const TIMEOUT_MS = 40000;
-// The spike's people (spikes/ai/fixtures/people.json), by relationship only.
+// The spike's people (lib/ai/fixtures/people.json), by relationship only.
 const RELATIONSHIP: Record<string, string> = { dad: "father", maya: "sister", june: "grandmother", sam: "brother", priya: "friend" };
 
 type Capture = { id: string; person_id: string; source_url: string; page_title: string; text_excerpt: string };
@@ -63,6 +69,10 @@ async function check(id: string, run: () => Promise<CandidateFact[]>) {
 }
 
 async function main() {
+  if (process.argv.includes("--ideas")) {
+    const { runIdeasEval } = await import("./ai-eval-ideas");
+    process.exit(await runIdeasEval(process.argv.slice(2), process.env));
+  }
   for (const c of captures) {
     await check(c.id, () =>
       extract({
