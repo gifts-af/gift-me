@@ -84,8 +84,8 @@ export type { AddressSaveResult, ImportAddress, ImportRow, PersonInput } from ".
 
 // The round engine (ALL-28): the daily tick and advancing one round. Ideas come from the
 // idea engine below (ALL-27), bound in app/settings/zinc-deps.ts.
-export { advanceRound, runTick, tellOrdered } from "./rounds/engine";
-export type { AdvanceResult, EngineDeps, EngineZinc, GenerateIdeas, TickSummary } from "./rounds/engine";
+export { advanceRound, runRoundJob, runTick, tellOrdered } from "./rounds/engine";
+export type { AdvanceResult, EngineDeps, EngineZinc, GenerateIdeas, JobResult, TickSummary } from "./rounds/engine";
 export { planJobs } from "./rounds/fanout";
 export type { JobMessage, QueuedJob, SendJobs } from "./rounds/fanout";
 export { createSupabaseRoundStore } from "./rounds/store";

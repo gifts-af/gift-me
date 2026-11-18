@@ -1,4 +1,4 @@
-import { compareDates, type CalendarDate, type OccasionKind, type RoundStatus, type ScheduleSettings, type StepKey } from "@gifts-af/core";
+import { compareDates, type AttentionReason, type CalendarDate, type OccasionKind, type RoundStatus, type ScheduleSettings, type StepKey } from "@gifts-af/core";
 import type {
   Candidate,
   ClaimedRound,
@@ -17,6 +17,8 @@ export type FakeRound = Omit<NewRoundRow, "nextActionAt"> & {
   attempts: number;
   /** Every status the round has had, oldest first. */
   history: RoundStatus[];
+  /** A needs_attention round's reason (ALL-125 tests); null when left out. */
+  attentionReason?: AttentionReason | null;
 };
 
 export type FakePerson = { name: string; hasAddress: boolean; openQuestions?: number };
@@ -107,7 +109,7 @@ export class FakeRoundStore implements RoundStore {
       late: r.late,
       attempts: r.attempts,
       lockedUntil: new Date(r.lockedUntil.getTime()),
-      attentionReason: null,
+      attentionReason: r.attentionReason ?? null,
       holdCount: 0,
       seenBalanceCents: null,
       emailedBalanceCents: null,
