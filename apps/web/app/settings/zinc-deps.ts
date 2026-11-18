@@ -61,7 +61,7 @@ async function settingInt(db: SupabaseClient<Database>, key: string): Promise<nu
  * product lookups on the app's own key (ZINC_API_BASE, ZINC_API_KEY, T17). Null when any of
  * them is missing here, so the caller fails the run without spending and says why.
  */
-async function ideaDeps(db: SupabaseClient<Database>, env: Env, today: CalendarDate): Promise<IdeaDeps | null> {
+async function ideaDeps(db: SupabaseClient<Database>, env: Env, today: CalendarDate, zincShare = 1): Promise<IdeaDeps | null> {
   const gatewayBase = env.AI_GATEWAY_BASE;
   const gatewayKey = env.AI_GATEWAY_API_KEY;
   const zincBase = env.ZINC_API_BASE;
@@ -73,6 +73,7 @@ async function ideaDeps(db: SupabaseClient<Database>, env: Env, today: CalendarD
     gateway: { base: gatewayBase, apiKey: gatewayKey, fetch },
     zinc: { http: { base: zincBase, timeoutMs, fetch }, key: zincKey },
     today,
+    zincShare,
     clock: Date.now,
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   };
@@ -87,10 +88,10 @@ export async function onDemandIdeaDeps(today: CalendarDate, env: Env = process.e
  * The tick's idea runs. With the vendors not set up here, every run fails, uncounted, and
  * `ideas.not_configured` alerts (design/operations.md > Alerts): the rounds would otherwise go quiet.
  */
-function ideaWiring(db: SupabaseClient<Database>, env: Env, now: Date): GenerateIdeas {
+function ideaWiring(db: SupabaseClient<Database>, env: Env, now: Date, zincShare = 1): GenerateIdeas {
   return async (round, signal) => {
     // The engine's day: the tick's UTC day.
-    const deps = await ideaDeps(db, env, now.toISOString().slice(0, 10));
+    const deps = await ideaDeps(db, env, now.toISOString().slice(0, 10), zincShare);
     if (!deps) {
       logEvent("ideas.not_configured", { round_id: round.id, user_id: round.userId, person_id: round.personId, alert: true });
       return { status: "failed" };

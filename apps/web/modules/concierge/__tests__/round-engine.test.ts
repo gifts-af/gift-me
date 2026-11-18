@@ -2338,6 +2338,40 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
   });
 
 
+  // ─── ALL-125: dueRounds reads what claimDue would take, and takes nothing ─
+
+  it("dueRounds lists due, unleased rounds as DueRound and leaves the lease and attempts alone (ALL-125)", async () => {
+    const u = await newUser();
+    const person = (
+      await pg.query(
+        `insert into public.people (user_id, name, relationship, recipient_first_name, recipient_last_name, address_line1, city, state, zip, country)
+         values ($1, 'Mary', 'friend', 'Mary', 'Allen', '12 Oak St', 'Dayton', 'OH', '45402', 'US') returning id`,
+        [u.userId],
+      )
+    ).rows[0].id as string;
+    const occasion = (
+      await pg.query("insert into concierge.occasions (user_id, person_id, kind) values ($1, $2, 'christmas') returning id", [u.userId, person])
+    ).rows[0].id as string;
+    const insert = async (year: number, deadlineDays: number, status: string, lock: string) =>
+      (
+        await pg.query(
+          `insert into concierge.gift_rounds (user_id, person_id, occasion_id, occasion_year, occasion_date, ship_by_deadline, budget_cents, status, next_action_at, locked_until)
+           values ($1, $2, $3, $4, current_date + 90, current_date + $5::int, 20000, $6, now() - interval '1 hour', ${lock}) returning id`,
+          [u.userId, person, occasion, year, deadlineDays, status],
+        )
+      ).rows[0].id as string;
+    const due = await insert(2031, 30, "scheduled", "null");
+    const leased = await insert(2032, 20, "scheduled", "now() + interval '10 minutes'");
+    const deadline = (await pg.query("select ship_by_deadline::text as d from concierge.gift_rounds where id = $1", [due])).rows[0].d as string;
+
+    const rows = (await wiring(new Date(Date.now() + 1000), { zinc: false }).engine.store.dueRounds(new Date(Date.now() + 1000))).filter((r) =>
+      [due, leased].includes(r.id),
+    );
+    expect(rows).toEqual([{ id: due, userId: u.userId, status: "scheduled", attentionReason: null, shipByDeadline: deadline }]);
+    const after = await pg.query("select locked_until, attempts from concierge.gift_rounds where id = $1", [due]);
+    expect(after.rows[0]).toEqual({ locked_until: null, attempts: 0 });
+  });
+
   // ─── ALL-27: a round's idea runs, counted in the real database ───────────
 
   it("a fact saved after the runs are spent gets one more run on the next tick", async () => {
