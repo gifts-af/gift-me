@@ -40,6 +40,7 @@ import type { ClaimedRound, RoundContext, RoundFinish, RoundOrder, RoundStore } 
 // its lease while the tick finishes everything else, money path first. Then the idea pass runs
 // the rounds nearest their deadline, idea_rounds_per_tick at most, and only while the run's
 // worst case still fits before tick_deadline_ms. The rest are released for the next tick.
+// The deadline bounds only the idea pass: it never releases a held or other money round.
 
 /** One idea run for a round (runIdeas, bound by the caller); `signal` aborts it at the tick's deadline. */
 export type GenerateIdeas = (
@@ -135,22 +136,16 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
     let advanced = 0;
     let failed = 0;
     for (const round of await store.claimDueMoney(now)) {
-      if (await advanceClaimed(round, deps, s, false, placeBy)) advanced++;
-      else failed++;
+      const result = await advanceClaimed(round, deps, s, false, placeBy);
+      if (result === "failed") failed++;
+      else advanced++;
+      // Money rounds never need ideas; if one ever did, its lease goes back rather than being held.
+      if (typeof result === "object") await releaseQuietly(result.generate, deps);
     }
     await tellOwnersOfRejections(deps);
     const summary = { enabled: false, created: 0, advanced, failed };
     logEvent("round_tick", summary);
     return summary;
-  }
-  // The whole tick stops starting work here (tick_deadline_ms), so it ends inside its function's time.
-  // An ideas setting never stops the money path: unreadable, there's no deadline for the rounds
-  // below, and the idea pass is skipped (its rounds are released for the next tick).
-  let tickDeadline: number | null = null;
-  try {
-    tickDeadline = startedMs + (await store.setting("tick_deadline_ms"));
-  } catch (err) {
-    logEvent("round_tick_deadline_unreadable", { ...errorFields(err) });
   }
   const { created, failed: createFailed } = await createDueRounds(deps, s);
 
@@ -160,23 +155,24 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
   let advanced = 0;
   let failed = createFailed;
   const ideaTurns: ClaimedRound[] = [];
-  let outOfTime = 0;
+  // No deadline here: held gifts and every other step run as they always have (controller ruling).
   for (const round of await store.claimDue(now)) {
-    // Out of time: the rest go back, for the next tick.
-    if (tickDeadline !== null && clock() >= tickDeadline) {
-      outOfTime++;
-      await releaseQuietly(round, deps);
-      continue;
-    }
     const result = await advanceClaimed(round, deps, s, false, placeBy);
     if (result === "advanced") advanced++;
     else if (result === "failed") failed++;
     else ideaTurns.push(result.generate);
   }
-  if (outOfTime > 0) logEvent("round_tick_out_of_time", { released: outOfTime });
   await tellOwnersOfRejections(deps);
 
   // Last, so a slow AI or Zinc call can't hold up the money path or the emails above.
+  // tick_deadline_ms bounds only this pass: no run starts past it, and each run's signal ends at it.
+  // Unreadable, the idea pass is skipped (its rounds are released for the next tick).
+  let tickDeadline: number | null = null;
+  try {
+    tickDeadline = startedMs + (await store.setting("tick_deadline_ms"));
+  } catch (err) {
+    logEvent("round_tick_deadline_unreadable", { ...errorFields(err) });
+  }
   if (tickDeadline === null) {
     for (const round of ideaTurns) await releaseQuietly(round, deps);
   } else {

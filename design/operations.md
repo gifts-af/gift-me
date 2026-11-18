@@ -258,13 +258,13 @@ The engine finds gift ideas for a round and on demand (a person's Gift ideas scr
 | `idea_round_runs_max` | 2 | Runs a round may use before it stops and emails the buyer. A new fact allows one more |
 | `idea_rounds_per_tick` | 1 | Most rounds that make ideas in one tick. Raise it only with timings from `ideas.run` events (AC-28) |
 | `idea_run_lease_ms` | 600000 | How long an unfinished on-demand run blocks another for the same person |
-| `tick_deadline_ms` | 270000 | The tick starts no new work after this, leaving 30 s of Vercel's 300 s |
+| `tick_deadline_ms` | 270000 | The idea pass starts no run after this, and runs are cut off at it, leaving 30 s of Vercel's 300 s. It never holds up placing orders or any other step |
 | `zinc_lookup_cents` | 1 | Cost of one Zinc lookup, for the cost figure and cap |
 | `zinc_requests_per_second` | 10 | Zinc's limit per key; a run never calls faster |
 
 **Keep the brainstorm's worst case under `idea_run_max_cents`.** There is no check before the brainstorm call. Its output and searches are capped by settings (`idea_ai_max_tokens`, `idea_max_searches`), but the search results come back to the AI as input tokens, and no setting caps those, so we don't yet know its real worst case. The AC-28 runs on dev will give the real figure **[Verify]**. Raise any of these settings only after checking that figure against the cap.
 
-**The tick and ideas.** Each tick does the money pass first (placing orders, the stale-order sweep, rejection notices). Then the idea pass runs, bounded by `tick_deadline_ms` and `idea_rounds_per_tick`. If `tick_deadline_ms` can't be read, money rounds run with no deadline and the idea pass is skipped. Rounds that don't get a turn before the deadline are released for the next tick, including held (`needs_attention`) rounds.
+**The tick and ideas.** Each tick does the money pass first (placing orders, the stale-order sweep, rejection notices). Then the idea pass runs, bounded by `tick_deadline_ms` and `idea_rounds_per_tick`. The deadline bounds only the idea pass: held (`needs_attention`) rounds and every other step run first with no deadline, as before. Rounds that don't get an idea turn before the deadline are released for the next tick. If `tick_deadline_ms` can't be read, the idea pass is skipped.
 
 **Emails.** When a round gets no ideas, the buyer gets one "We don't have gift ideas for {name} yet" email (`no_ideas`), then a second after a new fact brings one more run, and the second promises no retry. Nothing is sent while the engine is off or the buyer isn't paid; the round skips silently at its deadline.
 

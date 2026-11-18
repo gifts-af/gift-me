@@ -827,25 +827,40 @@ describe("the idea pass (ALL-27)", () => {
     expect(signal.aborted).toBe(false);
   });
 
-  it("claimed rounds past the tick deadline are released", async () => {
+  // Controller ruling: tick_deadline_ms only bounds the idea pass, never the rounds before it.
+  it("past the tick deadline, claimed rounds still take their step; only the idea run waits", async () => {
     const h = harness();
-    await h.tick("2027-02-11"); // heads-up
+    await h.tick("2027-02-11"); // round-1: heads-up
+    h.store.people.set("person-2", { name: "Other", hasAddress: true });
+    h.store.occasionKinds.set("occasion-2", "birthday");
     let looks = 0;
     // The tick starts at 0; by its first look at a round, its 270s are long gone.
     const clock = () => (looks++ === 0 ? 0 : 1_000_000);
     h.today = "2027-02-16";
-    h.store.candidateRows = [];
+    h.store.candidateRows = [
+      { userId: USER, personId: "person-2", occasionId: "occasion-2", rule: { kind: "birthday", month: 3, day: 20 }, budgetCents: null },
+    ];
     const summary = await runTick({ ...h.deps(at("2027-02-16")), clock });
 
-    expect(summary).toMatchObject({ advanced: 0, failed: 0 });
-    expect(h.store.writes).toContain("release:round-1");
-    expect(h.store.rounds[0]).toMatchObject({ status: "awaiting_approval", lockedUntil: null });
-    expect(h.sent()).toEqual(["heads_up@2027-02-11"]);
-    expect(named("round_tick_out_of_time")).toEqual([expect.objectContaining({ released: 1 })]);
-
-    // The next tick sends the reminder that was due.
-    await h.tick("2027-02-16", "13:00:00");
+    // Round 1's reminder goes; round 2 needs ideas, so it's released with no run.
+    expect(summary).toMatchObject({ advanced: 1, failed: 0 });
     expect(h.sent()).toEqual(["heads_up@2027-02-11", "reminder@2027-02-16"]);
+    expect(h.generateIdeas).toHaveBeenCalledTimes(1);
+    expect(h.store.round("round-2")).toMatchObject({ status: "scheduled", lockedUntil: null });
+    expect(named("round_tick_out_of_time")).toEqual([]);
+  });
+
+  it("with the engine off, a money round that fails is counted as failed", async () => {
+    const h = harness();
+    await h.tick("2027-02-11");
+    h.store.settings.set("round_engine_enabled", 0);
+    h.store.rounds[0].status = "needs_attention";
+    h.store.rounds[0].nextActionAt = at("2027-02-12", "00:00:00");
+    vi.spyOn(h.store, "roundContext").mockRejectedValue(new Error("database down"));
+
+    const summary = await h.tick("2027-02-12");
+
+    expect(summary).toEqual({ enabled: false, created: 0, advanced: 0, failed: 1 });
   });
 
   it("a run that saves none stays generating", async () => {
@@ -2406,6 +2421,46 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
       ...real,
       setting: async (key: string) => {
         if (key === "tick_deadline_ms") throw new Error("Setting tick_deadline_ms is missing.");
+        return real.setting(key);
+      },
+      candidates: async () => [],
+      claimDue: async (at: Date) => (await Promise.all([r.roundId, waiting].map((id) => real.claim(id, at)))).filter((x) => x !== null),
+      roundsWithRejectedAddresses: async () => [],
+      roundsMissingOrderedEmail: async () => [],
+    };
+    await runTick({ ...deps, store, generateIdeas, zinc: { ...deps.zinc!, sweep: async () => 0 } });
+
+    expect(await roundRow(r.roundId)).toMatchObject({ status: "ordered", locked_until: null });
+    expect(zinc.posts).toHaveLength(1);
+    expect(generateIdeas).not.toHaveBeenCalled();
+    expect(await roundRow(waiting)).toMatchObject({ status: "scheduled", locked_until: null });
+  });
+
+  // Controller ruling: the tick's deadline never releases a held round; it only bounds the idea pass.
+  it("held gifts are still placed when the tick's deadline has already passed, and no idea run starts", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    zinc.balance = 1000;
+    await approve(u, r); // held for funds
+    zinc.balance = 100_000;
+    const waiting = (
+      await pg.query(
+        `insert into concierge.gift_rounds (user_id, person_id, occasion_id, occasion_year, occasion_date, ship_by_deadline, budget_cents, status, next_action_at)
+         select user_id, person_id, occasion_id, 2031, current_date + 40, current_date + 30, 20000, 'scheduled', now() from concierge.gift_rounds where id = $1
+         returning id`,
+        [r.roundId],
+      )
+    ).rows[0].id as string;
+    const generateIdeas = vi.fn(async (): Promise<IdeaOutcome> => ({ status: "none" }));
+
+    const now = dayAt(23);
+    const { engine: deps } = wiring(now);
+    const real = deps.store;
+    // The real store, kept to these two rounds, with no time at all before the tick's deadline.
+    const store = {
+      ...real,
+      setting: async (key: string) => {
+        if (key === "tick_deadline_ms") return 0;
         return real.setting(key);
       },
       candidates: async () => [],

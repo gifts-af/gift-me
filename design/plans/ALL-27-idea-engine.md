@@ -617,7 +617,7 @@ export function onDemandIdeas(db: Db, personId: string): Promise<ShownIdea[]>;  
 - **Template kind `no_ideas`,** with `TemplateData` `{ personName; again: boolean }` and the `answer_questions` link.
   - The subject is "Sorry, we couldn't get gift ideas for {name} yet".
   - The body follows the ALL-116 pattern: sorry, what it means, nothing was charged, and "What happens next".
-- **`runTick`** sets `tickDeadline = clock() + tick_deadline_ms`. The claimed-round loop also stops advancing once the deadline has passed, and releases the rest.
+- **`runTick`** sets `tickDeadline = clock() + tick_deadline_ms`. ~~The claimed-round loop also stops advancing once the deadline has passed, and releases the rest.~~ Revised in the final review (controller ruling): the deadline bounds only the idea pass; the claimed-round loop runs as before, with no deadline.
 - **`runStep`'s generate case** doesn't run the engine:
   - If `ctx.ideas.length > 0`, it sends the heads-up straight away (B1).
   - Otherwise it adds the round to the idea pass and returns `"deferred"`, keeping its lock.
