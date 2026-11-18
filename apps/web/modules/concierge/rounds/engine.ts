@@ -18,6 +18,7 @@ import type { IdeaOutcome } from "../ideas/run";
 import { notify, type NotifyDeps, type NotifyResult } from "../notify/notify";
 import { endedAddressReason } from "../notify/templates";
 import type { FailedGift, Funding } from "../notify/templates";
+import { planJobs, type SendJobs } from "./fanout";
 import type { ClaimedRound, RoundContext, RoundFinish, RoundOrder, RoundStore } from "./store";
 
 // The round engine (ALL-28, design §5.1). The daily tick creates rounds that
@@ -75,6 +76,10 @@ export type EngineDeps = {
   clock?: () => number;
   /** The daily clear-out of unfiled emailed notes (ALL-31), bound by the caller (E3). */
   clearUnfiledNotes?: () => Promise<{ cleared: number; imagesRemoved: number }>;
+  /** Queues due rounds for their own function calls (ALL-125); the tick runs them itself without it. */
+  sendJobs?: SendJobs;
+  /** A test clock: queued messages carry the tick's `now`. */
+  testClock?: boolean;
 };
 
 export type TickSummary = { enabled: boolean; created: number; advanced: number; failed: number };
@@ -127,6 +132,30 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
     } catch (err) {
       logEvent("inbound.notes_clear_failed", { ...errorFields(err) });
     }
+  }
+
+  // Fan-out (ALL-125): with the switch on, due rounds go to the queue and jobs run them. An
+  // unreadable switch means off.
+  let fanout = false;
+  // Without sendJobs the switch isn't read, so callers that don't fan out run exactly as before.
+  if (deps.sendJobs) {
+    try {
+      fanout = (await store.setting("round_fanout_enabled")) === 1;
+    } catch {
+      logEvent("round_fanout_setting_unreadable", {});
+    }
+  }
+  if (fanout && deps.sendJobs) {
+    const s = await store.scheduleSettings();
+    const { created, failed: createFailed } = on ? await createDueRounds(deps, s) : { created: 0, failed: 0 };
+    await tellOwnersOfRejections(deps);
+    const due = await store.dueRounds(now);
+    const result = await deps.sendJobs(planJobs(due, on, now, deps.testClock ?? false));
+    logEvent("round_fanout", { enabled: on, due: due.length, sent: result.sent, failed: result.failed });
+    if (result.failed > 0) logEvent("round_fanout_send_failed", { count: result.failed, alert: true });
+    const summary = { enabled: on, created, advanced: 0, failed: createFailed + result.failed };
+    logEvent("round_tick", summary);
+    return summary;
   }
 
   const s = await store.scheduleSettings();

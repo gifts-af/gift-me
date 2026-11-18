@@ -86,6 +86,8 @@ export type { AddressSaveResult, ImportAddress, ImportRow, PersonInput } from ".
 // idea engine below (ALL-27), bound in app/settings/zinc-deps.ts.
 export { advanceRound, runTick, tellOrdered } from "./rounds/engine";
 export type { AdvanceResult, EngineDeps, EngineZinc, GenerateIdeas, TickSummary } from "./rounds/engine";
+export { planJobs } from "./rounds/fanout";
+export type { JobMessage, QueuedJob, SendJobs } from "./rounds/fanout";
 export { createSupabaseRoundStore } from "./rounds/store";
 export type { Candidate, ClaimedRound, NewRoundRow, RoundContext, RoundFinish, RoundOrder, RoundStore } from "./rounds/store";
 export { clearUnfiledNotes } from "./inbound/cleanup";
