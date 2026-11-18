@@ -63,14 +63,36 @@ async function ideasOn() {
   if (!res.ok) throw new Error(`Couldn't set idea_engine_enabled: ${res.status} ${await res.text()}`);
 }
 
-/** What an idea run needs: the buyer's paid features, and one fact about the person. */
-async function readyForIdeas(userId: string, personId: string) {
-  const paid = await fetch(`${supabase.url}/rest/v1/accounts?on_conflict=user_id`, {
+async function settingValue(key: string): Promise<string> {
+  const res = await fetch(`${supabase.url}/rest/v1/app_settings?select=value&key=eq.${key}`, { headers: concierge });
+  if (!res.ok) throw new Error(`Couldn't read ${key}: ${res.status} ${await res.text()}`);
+  return ((await res.json()) as { value: string }[])[0].value;
+}
+
+async function setSetting(key: string, value: string | number) {
+  const res = await fetch(`${supabase.url}/rest/v1/app_settings?key=eq.${key}`, { method: "PATCH", headers: concierge, body: JSON.stringify({ value }) });
+  if (!res.ok) throw new Error(`Couldn't set ${key}: ${res.status} ${await res.text()}`);
+}
+
+/** TEST_USER's paid_features, so afterAll can put it back (no accounts row reads as false, the default). */
+async function paidFeatures(userId: string): Promise<boolean> {
+  const res = await fetch(`${supabase.url}/rest/v1/accounts?select=paid_features&user_id=eq.${userId}`, { headers: concierge });
+  if (!res.ok) throw new Error(`Couldn't read paid features: ${res.status} ${await res.text()}`);
+  return ((await res.json()) as { paid_features: boolean }[])[0]?.paid_features ?? false;
+}
+
+async function setPaidFeatures(userId: string, paid: boolean) {
+  const res = await fetch(`${supabase.url}/rest/v1/accounts?on_conflict=user_id`, {
     method: "POST",
     headers: { ...concierge, Prefer: "resolution=merge-duplicates" },
-    body: JSON.stringify({ user_id: userId, paid_features: true }),
+    body: JSON.stringify({ user_id: userId, paid_features: paid }),
   });
-  if (!paid.ok) throw new Error(`Couldn't set paid features: ${paid.status} ${await paid.text()}`);
+  if (!res.ok) throw new Error(`Couldn't set paid features: ${res.status} ${await res.text()}`);
+}
+
+/** What an idea run needs: the buyer's paid features, and one fact about the person. */
+async function readyForIdeas(userId: string, personId: string) {
+  await setPaidFeatures(userId, true);
   const fact = await fetch(`${supabase.url}/rest/v1/profile_facts`, {
     method: "POST",
     headers: concierge,
@@ -116,15 +138,27 @@ async function notificationsFor(roundId: string): Promise<{ kind: string; sent_a
   return (await res.json()) as { kind: string; sent_at: string | null }[];
 }
 
+// The tick is global: rounds other specs seed also want an idea turn, so idea_rounds_per_tick is
+// raised for this spec (each test's round gets its turn whatever else is due) and put back after.
+// The fakes answer at once, so a high limit is still well inside the tick's deadline.
+const ROUNDS_PER_TICK = 100;
+let roundsPerTickBefore: string | null = null;
+let testUserPaidBefore: boolean | null = null;
+
 test.beforeAll(async () => {
   await setEngine(false); // in case a crashed run left it on
   await deletePerson();
   await ideasOn();
+  roundsPerTickBefore = await settingValue("idea_rounds_per_tick");
+  testUserPaidBefore = await paidFeatures((await signInApi()).id);
+  await setSetting("idea_rounds_per_tick", ROUNDS_PER_TICK);
 });
 
 test.afterAll(async () => {
   await setEngine(false);
   await deletePerson();
+  if (roundsPerTickBefore !== null) await setSetting("idea_rounds_per_tick", roundsPerTickBefore);
+  if (testUserPaidBefore !== null) await setPaidFeatures((await signInApi()).id, testUserPaidBefore);
 });
 
 // ALL-63: a list owner sharing their address, on a fresh account so no other spec sees it.
