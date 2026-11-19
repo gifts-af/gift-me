@@ -25,6 +25,7 @@ import {
   type PlaceAddressHeld,
   type PlaceHeld,
   type PurchaseDeps,
+  type SendJobs,
   type ZincDeps,
 } from "@/modules/concierge";
 
@@ -111,13 +112,20 @@ export async function buyingWiring(
   now: Date,
   env: Env = process.env,
   ids: { user_id?: string } = {},
+  // The tick sends jobs to the queue (`sendJobs`, `testClock`); a job's idea runs share Zinc's
+  // rate (`zincShare`, the queue's maxConcurrency).
+  opts: { sendJobs?: SendJobs; testClock?: boolean; zincShare?: number } = {},
 ): Promise<{ engine: EngineDeps; purchase: PurchaseDeps | null }> {
   const db = createAdminClient();
+  const zincShare = opts.zincShare ?? 1;
+  if (!Number.isInteger(zincShare) || zincShare < 1) throw new Error("zincShare must be at least 1.");
   const engine: EngineDeps = {
     store: createSupabaseRoundStore(db),
     notify: { store: createSupabaseNotifyStore(db), channels: defaultChannels(env), baseUrl: siteUrl(env), now },
     now,
-    generateIdeas: ideaWiring(db, env, now),
+    generateIdeas: ideaWiring(db, env, now, zincShare),
+    ...(opts.sendJobs ? { sendJobs: opts.sendJobs } : {}),
+    ...(opts.testClock !== undefined ? { testClock: opts.testClock } : {}),
     zinc: null,
     clearUnfiledNotes: () => clearUnfiledNotes(db),
   };

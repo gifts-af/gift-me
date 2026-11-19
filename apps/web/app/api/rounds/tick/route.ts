@@ -1,6 +1,7 @@
 import { buyingWiring } from "@/app/settings/zinc-deps";
 import { runTick } from "@/modules/concierge";
-import { handleTick } from "./tick";
+import { queueSendJobs } from "../queue";
+import { handleTick, isTestClock } from "./tick";
 
 // Placing gifts at Zinc can run for a while: one zinc_place_budget_ms (45 s by default) for the
 // run, plus a request already in flight with its retries. 300 s is the most Vercel's Fluid
@@ -13,6 +14,6 @@ export const maxDuration = 300;
 export async function GET(request: Request) {
   const vercelEnv = process.env.VERCEL_ENV;
   return handleTick(request, { cronSecret: process.env.CRON_SECRET, vercelEnv }, async (now) =>
-    runTick((await buyingWiring(now)).engine),
+    runTick((await buyingWiring(now, process.env, {}, { sendJobs: queueSendJobs, testClock: isTestClock(vercelEnv) })).engine),
   );
 }

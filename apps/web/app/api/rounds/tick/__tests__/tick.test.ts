@@ -1,6 +1,14 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
-import { handleTick } from "../tick";
+import { handleTick, isTestClock } from "../tick";
+
+describe("isTestClock", () => {
+  it("is false on production and true elsewhere", () => {
+    expect(isTestClock("production")).toBe(false);
+    expect(isTestClock("preview")).toBe(true);
+    expect(isTestClock(undefined)).toBe(true);
+  });
+});
 
 const SECRET = "s3cret";
 const SUMMARY = { enabled: true, created: 1, advanced: 2, failed: 0 };
