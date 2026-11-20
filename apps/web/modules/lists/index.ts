@@ -11,3 +11,5 @@ export { removeGifts } from "./lib/save-list";
 export { cleanGiftLink, readGiftLinkForUser } from "./actions/gift-link";
 export type { GiftLinkRead } from "./lib/gift-link";
 export { storeName } from "./lib/product-link.js";
+// The daily tick deletes the stored photos of removed gifts (ALL-78).
+export { removeDeletedPhotos } from "./lib/photo-cleanup";

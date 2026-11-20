@@ -246,17 +246,24 @@ as $$
   on conflict (path) do nothing;
 $$;
 
+-- Paths queued at least p_older_than ago, oldest first, skipping any whose gift
+-- exists again (an add re-using the id after the file was queued) and any row
+-- another run holds.
 create function lists.take_photo_deletions(p_limit integer, p_older_than interval)
 returns setof text
 language sql
-stable
+volatile
 security invoker
 set search_path = ''
 as $$
-  select path from lists.photo_deletions
-   where queued_at <= now() - p_older_than
-   order by queued_at, path
-   limit p_limit;
+  select d.path from lists.photo_deletions d
+   where d.queued_at <= now() - p_older_than
+     and not exists (
+       select 1 from lists.list_items i where i.id::text || '.jpg' = d.path
+     )
+   order by d.queued_at, d.path
+   limit p_limit
+   for update of d skip locked;
 $$;
 
 create function lists.forget_photo_deletions(p_paths text[])

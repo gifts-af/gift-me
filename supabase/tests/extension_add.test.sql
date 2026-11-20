@@ -5,7 +5,7 @@
 -- match-key-cases.json is checked there too.
 begin;
 \ir _helpers.psql
-select plan(60);
+select plan(63);
 
 select tests.create_user('a@example.com') as a \gset
 select tests.create_user('b@example.com') as b \gset
@@ -239,6 +239,27 @@ select tests.act_as_server();
 insert into storage.objects (bucket_id, name) values ('list-photos', :'i8' || '.jpg');
 select tests.act_as(:'a');
 select is((select count(*)::int from storage.objects where bucket_id = 'list-photos'), 0, 'a signed-in user can''t list list-photos');
+
+-- ─── take_photo_deletions ───────────────────────────────────────────────────
+
+select tests.act_as(:'a');
+select gen_random_uuid() as live \gset
+select lists.add_item(:'live', 'Live gift', 100, 'https://shop.example.com/live', null, :'photo' || :'live' || '.jpg', false, 500);
+select tests.reset_role();
+insert into lists.photo_deletions (path, queued_at) values
+  ('old-gone.jpg', now() - interval '2 hours'),
+  ('new-gone.jpg', now() - interval '5 minutes'),
+  (:'live' || '.jpg', now() - interval '2 hours');
+select tests.act_as_server();
+select is(
+  (select array_agg(p order by p) from lists.take_photo_deletions(500, interval '1 hour') p),
+  array['old-gone.jpg'],
+  'only a path queued over an hour ago whose gift is gone is taken'
+);
+select is((select count(*)::int from lists.take_photo_deletions(1, interval '0 seconds')), 1, 'the limit is honoured');
+select lists.forget_photo_deletions(array['old-gone.jpg']);
+select is((select count(*)::int from lists.photo_deletions where path = 'old-gone.jpg'), 0, 'forgotten paths leave the queue');
+select tests.reset_role();
 
 -- ─── recent_people ──────────────────────────────────────────────────────────
 
