@@ -1,3 +1,8 @@
+import { MAX_PRICE_CENTS } from '@gifts-af/core/store-page'
+
+// The limit lives in core, with the store-page reader that also enforces it.
+export { MAX_PRICE_CENTS }
+
 const CURRENCY = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
 
 // Prices are carried as integer cents everywhere, so the list total is exact.
@@ -6,8 +11,6 @@ export function formatCents(cents) {
   if (!Number.isFinite(cents)) return '--'
   return CURRENCY.format(cents / 100)
 }
-
-export const MAX_PRICE_CENTS = 100_000_000 // $1,000,000
 
 export function parsePriceToCents(raw) {
   if (typeof raw !== 'string') return null

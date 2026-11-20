@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readProductFromHtml } from "../store-page";
+import { readProductFromHtml } from "./read";
 
 // Trimmed copies of the shapes real store pages served on 2026-11-03 (ALL-10).
 // Only the tags the reader looks at are kept.
@@ -34,12 +34,17 @@ const TARGET = `<html><head>
 <meta content="https://target.scene7.com/is/image/Target/GUEST_87fa1d15" property="og:image" data-next-head=""/>
 </head><body><div>Loading price…</div></body></html>`;
 
+const NOTHING = { isProduct: false, name: null, priceCents: null, imageUrl: null, productId: null, canonicalUrl: null };
+
 describe("readProductFromHtml (ALL-10)", () => {
   it("reads Walmart's name and photo from its share tags and the price from its page data", () => {
     expect(readProductFromHtml(WALMART, WALMART_URL)).toEqual({
       name: "Great Value Long Grain Enriched Rice, 32 oz (2 lb)",
       priceCents: 182,
       imageUrl: "https://i5.walmartimages.com/seo/Great-Value-Rice_d67beb52.jpeg",
+      isProduct: true,
+      productId: null,
+      canonicalUrl: null,
     });
   });
 
@@ -53,6 +58,9 @@ describe("readProductFromHtml (ALL-10)", () => {
       name: "Slim Rapid Movement Chino",
       priceCents: 1997,
       imageUrl: "https://content.gapinc.com/b/0028/063/070/cn28063070.png?width=520",
+      isProduct: true,
+      productId: null,
+      canonicalUrl: null,
     });
   });
 
@@ -61,17 +69,23 @@ describe("readProductFromHtml (ALL-10)", () => {
       name: "Men's - Wizard of Oz - Scarecrow Long Sleeve Graphic T-Shirt",
       priceCents: null,
       imageUrl: "https://target.scene7.com/is/image/Target/GUEST_87fa1d15",
+      isProduct: false,
+      productId: null,
+      canonicalUrl: null,
     });
   });
 
-  it("finds the product inside an @graph and an AggregateOffer", () => {
+  it("finds the product inside an @graph, and gives no price for a price range (T77)", () => {
     const html = `<script type="application/ld+json">{"@graph":[{"@type":"WebSite"},
       {"@type":["Product"],"name":"Blue Mug","image":{"@type":"ImageObject","url":"/img/mug.jpg"},
        "offers":{"@type":"AggregateOffer","lowPrice":12,"highPrice":20,"priceCurrency":"USD"}}]}</script>`;
     expect(readProductFromHtml(html, "https://shop.example.com/products/blue-mug")).toEqual({
       name: "Blue Mug",
-      priceCents: 1200,
+      priceCents: null,
       imageUrl: "https://shop.example.com/img/mug.jpg",
+      isProduct: true,
+      productId: null,
+      canonicalUrl: null,
     });
   });
 
@@ -85,6 +99,9 @@ describe("readProductFromHtml (ALL-10)", () => {
       name: "Wool Socks",
       priceCents: 102450,
       imageUrl: "https://cdn.example.com/socks.jpg",
+      isProduct: true,
+      productId: null,
+      canonicalUrl: null,
     });
   });
 
@@ -95,6 +112,9 @@ describe("readProductFromHtml (ALL-10)", () => {
       name: "Candle",
       priceCents: 2400,
       imageUrl: null,
+      isProduct: true,
+      productId: null,
+      canonicalUrl: null,
     });
   });
 
@@ -111,8 +131,82 @@ describe("readProductFromHtml (ALL-10)", () => {
 
   it("returns nothing from a captcha page or broken product data, without guessing", () => {
     const captcha = `<html><head><title>Robot or human?</title></head><body>Activate and hold the button</body></html>`;
-    expect(readProductFromHtml(captcha, WALMART_URL)).toEqual({ name: null, priceCents: null, imageUrl: null });
+    expect(readProductFromHtml(captcha, WALMART_URL)).toEqual({ ...NOTHING });
     const broken = `<script type="application/ld+json">{"@type":"Product",</script>`;
-    expect(readProductFromHtml(broken, "https://example.com/x")).toEqual({ name: null, priceCents: null, imageUrl: null });
+    expect(readProductFromHtml(broken, "https://example.com/x")).toEqual({ ...NOTHING });
+  });
+
+  it("gives a flat low price when low and high agree", () => {
+    const html = `<script type="application/ld+json">{"@type":"Product","name":"Pen",
+      "offers":{"@type":"AggregateOffer","lowPrice":"3.00","highPrice":"3.00","priceCurrency":"USD"}}</script>`;
+    expect(readProductFromHtml(html, "https://example.com/pen").priceCents).toBe(300);
+  });
+});
+
+describe("readProductFromHtml product signals and ids (ALL-78)", () => {
+  const jsonLd = (obj: object) => `<script type="application/ld+json">${JSON.stringify(obj)}</script>`;
+  const PAGE = "https://shop.example.com/p/mug";
+
+  it("reads productId from JSON-LD sku", () => {
+    const html = jsonLd({ "@type": "Product", name: "Mug", sku: "MUG-1", gtin13: "123" });
+    expect(readProductFromHtml(html, PAGE)).toMatchObject({ isProduct: true, productId: "MUG-1" });
+  });
+
+  it("falls through gtin, mpn and productID in order", () => {
+    expect(readProductFromHtml(jsonLd({ "@type": "Product", gtin12: "0123" }), PAGE).productId).toBe("0123");
+    expect(readProductFromHtml(jsonLd({ "@type": "Product", mpn: "M9" }), PAGE).productId).toBe("M9");
+    expect(readProductFromHtml(jsonLd({ "@type": "Product", productID: "P7" }), PAGE).productId).toBe("P7");
+    expect(readProductFromHtml(jsonLd({ "@type": "Product", sku: 42 }), PAGE).productId).toBe("42");
+  });
+
+  it("reads productId from microdata when JSON-LD has none", () => {
+    const html = `<div itemscope itemtype="https://schema.org/Product"><h1 itemprop="name">Mug</h1>
+      <meta itemprop="sku" content="MD-5"></div>`;
+    expect(readProductFromHtml(html, PAGE)).toMatchObject({ isProduct: true, productId: "MD-5" });
+  });
+
+  it("keeps a canonical link on the same host, ignoring www.", () => {
+    const html = `<link rel="canonical" href="https://shop.example.com/p/mug-canonical">` + jsonLd({ "@type": "Product" });
+    expect(readProductFromHtml(html, "https://www.shop.example.com/p/mug?utm=1").canonicalUrl).toBe(
+      "https://shop.example.com/p/mug-canonical",
+    );
+  });
+
+  it("drops a canonical link on another host", () => {
+    const html = `<link rel="canonical" href="https://evil.example.org/p/mug">` + jsonLd({ "@type": "Product" });
+    expect(readProductFromHtml(html, PAGE).canonicalUrl).toBeNull();
+  });
+
+  it("falls back to og:url, then JSON-LD url, for the canonical link", () => {
+    const og = `<meta property="og:url" content="https://shop.example.com/og">`;
+    expect(readProductFromHtml(og, PAGE).canonicalUrl).toBe("https://shop.example.com/og");
+    const ld = jsonLd({ "@type": "Product", url: "/ld-url" });
+    expect(readProductFromHtml(ld, PAGE).canonicalUrl).toBe("https://shop.example.com/ld-url");
+  });
+
+  it("takes offers.price, not the list price, for a sale item", () => {
+    const html = jsonLd({
+      "@type": "Product",
+      name: "Mug",
+      offers: { "@type": "Offer", price: "15.00", priceCurrency: "USD", priceSpecification: [{ price: "20.00", priceCurrency: "USD" }] },
+    });
+    expect(readProductFromHtml(html, PAGE).priceCents).toBe(1500);
+  });
+
+  it("is not a product with only og:title and og:image", () => {
+    const html = `<meta property="og:title" content="Holiday photo"><meta property="og:image" content="https://x.com/a.jpg">`;
+    expect(readProductFromHtml(html, "https://www.instagram.com/p/abc")).toMatchObject({ isProduct: false, name: "Holiday photo" });
+  });
+
+  it("counts og:type product, product.item, a product:price tag and microdata as product signals", () => {
+    expect(readProductFromHtml(`<meta property="og:type" content="product">`, PAGE).isProduct).toBe(true);
+    expect(readProductFromHtml(`<meta property="og:type" content="product.item">`, PAGE).isProduct).toBe(true);
+    expect(readProductFromHtml(`<meta property="og:type" content="article">`, PAGE).isProduct).toBe(false);
+    expect(readProductFromHtml(`<meta property="product:price:amount" content="5">`, PAGE).isProduct).toBe(true);
+    expect(readProductFromHtml(`<div itemtype="http://schema.org/Product"></div>`, PAGE).isProduct).toBe(true);
+  });
+
+  it("counts a ProductGroup as a product", () => {
+    expect(readProductFromHtml(jsonLd({ "@type": "ProductGroup", name: "Shirt" }), PAGE).isProduct).toBe(true);
   });
 });

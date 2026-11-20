@@ -12,7 +12,7 @@
 // private network of ours, so there is nothing inside to reach.
 
 import { BlockList, isIP } from "node:net";
-import { readProductFromHtml, type PageProduct } from "./store-page";
+import { readProductFromHtml, type PageProduct } from "@gifts-af/core/store-page";
 
 export type StorePageDeps = {
   fetch: (url: string, init: RequestInit & { headers: Record<string, string> }) => Promise<Response>;

@@ -6,6 +6,8 @@ import { readGiftLink } from "../gift-link";
 
 const REEL = "https://www.amazon.com/Fly-Reel/dp/B0TESTREEL";
 const MUG = "https://www.example-store.com/products/blue-mug";
+// The fields the extension reads; this module ignores them.
+const BASE = { isProduct: true, productId: null, canonicalUrl: null };
 
 describe("readGiftLink", () => {
   it("reads an Amazon link from the link itself, with no page read", async () => {
@@ -21,7 +23,7 @@ describe("readGiftLink", () => {
   it("takes name, price and photo from a store page that could be read", async () => {
     const readPage = vi.fn(async () => ({
       ok: true as const,
-      product: { name: "Mug", priceCents: 1200, imageUrl: "https://x.example/i.jpg" },
+      product: { ...BASE, name: "Mug", priceCents: 1200, imageUrl: "https://x.example/i.jpg" },
     }));
     const read = await readGiftLink(MUG, readPage);
     expect(read).toMatchObject({ ok: true, name: "Mug", priceCents: 1200, imageUrl: "https://x.example/i.jpg" });
@@ -29,7 +31,7 @@ describe("readGiftLink", () => {
   });
 
   it("only lets the page's non-null fields replace what the link gave", async () => {
-    const readPage = vi.fn(async () => ({ ok: true as const, product: { name: null, priceCents: 900, imageUrl: null } }));
+    const readPage = vi.fn(async () => ({ ok: true as const, product: { ...BASE, name: null, priceCents: 900, imageUrl: null } }));
     const read = await readGiftLink(MUG, readPage);
     expect(read).toMatchObject({ ok: true, name: "Blue Mug", priceCents: 900, imageUrl: null });
   });
@@ -46,7 +48,7 @@ describe("readGiftLink", () => {
   it("cuts a long page name to 200 characters and drops an over-long photo link", async () => {
     const read = await readGiftLink(MUG, async () => ({
       ok: true,
-      product: { name: "n".repeat(300), priceCents: 100, imageUrl: `https://x.example/${"i".repeat(2100)}` },
+      product: { ...BASE, name: "n".repeat(300), priceCents: 100, imageUrl: `https://x.example/${"i".repeat(2100)}` },
     }));
     if (!read.ok) throw new Error("expected ok");
     expect(read.name).toHaveLength(200);
