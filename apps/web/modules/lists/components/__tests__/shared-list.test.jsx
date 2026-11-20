@@ -91,7 +91,7 @@ describe("SharedList", () => {
   });
 
   describe("heading (ALL-123)", () => {
-    const base = { isOwner: false, viewer: guest, items: [item("a", "Board game")] };
+    const base = { isOwner: false, cardEnabled: true, viewer: guest, items: [item("a", "Board game")] };
     const heading = () => screen.getByRole("heading", { level: 1 });
 
     it("names the owner", () => {
@@ -109,6 +109,21 @@ describe("SharedList", () => {
     it("says Their list with no name", () => {
       render(<SharedList token="t" list={{ ...base, title: "My list", ownerName: null, linkedPerson: null }} />);
       expect(heading()).toHaveTextContent("Their list");
+    });
+
+    it("names nobody with the switch off, not even a linked person (AC-25)", () => {
+      render(
+        <SharedList
+          token="t"
+          list={{ ...base, cardEnabled: false, title: "My list", ownerName: "Sam Lee", linkedPerson: { id: "p", name: "Sammy" } }}
+        />,
+      );
+      expect(heading()).toHaveTextContent(/^Their list$/);
+    });
+
+    it("still shows the owner their own title with the switch off", () => {
+      render(<SharedList token="t" list={{ ...base, cardEnabled: false, isOwner: true, title: "Birthday", ownerName: "Sam Lee", linkedPerson: null }} />);
+      expect(heading()).toHaveTextContent(/^Birthday$/);
     });
 
     it("shows the owner their own title", () => {

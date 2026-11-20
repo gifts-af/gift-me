@@ -39,8 +39,9 @@ export default function SharedList({ list, token, nav, top }) {
   const loginHref = `/auth/login?next=${encodeURIComponent(`/share/${token}`)}`
 
   // The owner sees their own title; everyone else sees whose list it is, with
-  // a custom title as a smaller line (ALL-123).
-  const name = list.linkedPerson?.name ?? list.ownerName
+  // a custom title as a smaller line (ALL-123). With the switch off it names
+  // nobody, not even your own linked person (AC-25).
+  const name = list.cardEnabled ? (list.linkedPerson?.name ?? list.ownerName) : null
   const heading = list.isOwner ? list.title : name ? `${name}'s list` : 'Their list'
   const showTitle = !list.isOwner && list.title !== DEFAULT_LIST_TITLE
 
