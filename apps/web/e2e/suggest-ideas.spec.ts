@@ -90,9 +90,21 @@ test("Suggest finds three checked ideas, and a second run replaces them", async 
   // ALL-128: Save copies an idea into the person's saved gifts, so the next run doesn't lose it.
   const vise = FAKE_IDEAS[0];
   const viseItem = page.locator(`li[data-retailer-product-id="${vise.productId}"]`);
+  // A second tab opened before the save still offers Save.
+  const otherTab = await page.context().newPage();
+  await otherTab.goto(`/people/${personId}/ideas`);
+  const otherSave = otherTab.getByRole("button", { name: `Save ${vise.productTitle}` });
+  await expect(otherSave).toBeVisible();
+
   await viseItem.getByRole("button", { name: `Save ${vise.productTitle}` }).click();
   await expect(viseItem).toContainText("Saved");
   await expect(viseItem.getByRole("button", { name: /^Save / })).toHaveCount(0);
+
+  // Saving again from the stale tab is "Saved", with no error and no second copy (checked below).
+  await otherSave.click();
+  await expect(otherTab.locator(`li[data-retailer-product-id="${vise.productId}"]`)).toContainText("Saved");
+  await expect(otherTab.getByRole("main").getByRole("alert")).toHaveCount(0);
+  await otherTab.close();
 
   // Again: the set is replaced, not added to.
   await expect(suggest).toBeEnabled();

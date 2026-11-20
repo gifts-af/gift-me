@@ -217,6 +217,20 @@ describe("saveIdea", () => {
     expect(store.rows[0].name).toBe(`${"x".repeat(199)}…`);
   });
 
+  it("cuts by characters, never through an emoji", async () => {
+    const store = storeWithIdea({ title: `${"x".repeat(198)}🎣🎣🎣` });
+    await saveIdea(store, vi.fn(), MY_PERSON, IDEA);
+    expect(store.rows[0].name).toBe(`${"x".repeat(198)}🎣…`);
+  });
+
+  it("says Saved, not the cap message, when a stale tab saves a product already saved at the cap", async () => {
+    const store = storeWithIdea();
+    await saveIdea(store, vi.fn(), MY_PERSON, IDEA);
+    store.max = 1;
+    expect(await saveIdea(store, vi.fn(), MY_PERSON, IDEA)).toEqual({ ok: true });
+    expect(store.rows).toHaveLength(1);
+  });
+
   it("says the idea was replaced when a newer run removed it", async () => {
     const store = new FakeSavedGiftsStore();
     expect(await saveIdea(store, vi.fn(), MY_PERSON, IDEA)).toEqual({ ok: false, error: IDEA_REPLACED });
@@ -224,10 +238,12 @@ describe("saveIdea", () => {
     expect(store.writes).toEqual([]);
   });
 
-  it("doesn't copy an idea for another person, even one of the buyer's own", async () => {
+  it("doesn't copy an idea for another person, and logs the mismatch", async () => {
     const store = storeWithIdea({ person_id: NOT_MINE });
-    expect(await saveIdea(store, vi.fn(), MY_PERSON, IDEA)).toEqual({ ok: false, error: IDEA_REPLACED });
+    const log = vi.fn();
+    expect(await saveIdea(store, log, MY_PERSON, IDEA)).toEqual({ ok: false, error: IDEA_REPLACED });
     expect(store.writes).toEqual([]);
+    expect(log).toHaveBeenCalledWith("saved_gifts.save_idea_wrong_person", { user_id: ME, person_id: MY_PERSON, idea_id: IDEA });
   });
 
   it("treats a second save of the same product as already saved", async () => {

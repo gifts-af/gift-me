@@ -93,8 +93,15 @@ export async function saveIdea(store: SavedGiftsStore, log: Log, personId: strin
   const userId = await store.userId();
   if (!userId) return { ok: false, error: SESSION_ENDED };
   const idea = await store.idea(ideaId);
-  if (!idea || idea.person_id !== personId) return { ok: false, error: IDEA_REPLACED };
-  const name = idea.title.length > MAX_NAME ? `${idea.title.slice(0, MAX_NAME - 1)}…` : idea.title;
+  if (!idea) return { ok: false, error: IDEA_REPLACED };
+  if (idea.person_id !== personId) {
+    // Only a hand-made request gets here; the screen always sends the idea's own person.
+    log("saved_gifts.save_idea_wrong_person", { user_id: userId, person_id: personId, idea_id: ideaId });
+    return { ok: false, error: IDEA_REPLACED };
+  }
+  // By characters, so an emoji is never cut in half.
+  const chars = Array.from(idea.title);
+  const name = chars.length > MAX_NAME ? `${chars.slice(0, MAX_NAME - 1).join("")}…` : idea.title;
   try {
     await store.insert({
       person_id: personId,
@@ -108,7 +115,13 @@ export async function saveIdea(store: SavedGiftsStore, log: Log, personId: strin
     const code = errorCode(e);
     if (code === "23505") return { ok: true };
     if (code === "P0002") return { ok: false, error: NOT_FOUND };
-    if (code === "P0001" && errorMessage(e) === "saved_gifts_max") return { ok: false, error: AT_CAP };
+    if (code === "P0001" && errorMessage(e) === "saved_gifts_max") {
+      // The cap is checked before the one-copy index, so a stale tab re-saving a saved product
+      // at the cap lands here: that's still "Saved".
+      const pid = idea.retailer_product_id;
+      if (pid && (await store.savedProductIds(personId)).includes(pid)) return { ok: true };
+      return { ok: false, error: AT_CAP };
+    }
     log("saved_gifts.save_idea_failed", { user_id: userId, person_id: personId, idea_id: ideaId, code: code ?? null });
     return { ok: false, error: TRY_AGAIN };
   }

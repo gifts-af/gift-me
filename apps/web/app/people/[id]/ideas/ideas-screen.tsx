@@ -50,7 +50,8 @@ function SaveIdea({
       try {
         result = await saveAction(personId, idea.id);
       } catch {
-        result = { ok: false, error: "Couldn't save it. Try again." };
+        // The same words as the server's TRY_AGAIN (modules/concierge/people/service.ts).
+        result = { ok: false, error: "That couldn't be saved. Try again." };
       }
       if (result.ok) setDone(true);
       else setError(result.error);
