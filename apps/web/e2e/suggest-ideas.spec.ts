@@ -87,6 +87,25 @@ test("Suggest finds three checked ideas, and a second run replaces them", async 
     await expect(item).not.toContainText("Arrives by");
   }
 
+  // ALL-128: Save copies an idea into the person's saved gifts, so the next run doesn't lose it.
+  const vise = FAKE_IDEAS[0];
+  const viseItem = page.locator(`li[data-retailer-product-id="${vise.productId}"]`);
+  // A second tab opened before the save still offers Save.
+  const otherTab = await page.context().newPage();
+  await otherTab.goto(`/people/${personId}/ideas`);
+  const otherSave = otherTab.getByRole("button", { name: `Save ${vise.productTitle}` });
+  await expect(otherSave).toBeVisible();
+
+  await viseItem.getByRole("button", { name: `Save ${vise.productTitle}` }).click();
+  await expect(viseItem).toContainText("Saved");
+  await expect(viseItem.getByRole("button", { name: /^Save / })).toHaveCount(0);
+
+  // Saving again from the stale tab is "Saved", with no error and no second copy (checked below).
+  await otherSave.click();
+  await expect(otherTab.locator(`li[data-retailer-product-id="${vise.productId}"]`)).toContainText("Saved");
+  await expect(otherTab.getByRole("main").getByRole("alert")).toHaveCount(0);
+  await otherTab.close();
+
   // Again: the set is replaced, not added to.
   await expect(suggest).toBeEnabled();
   await suggest.click();
@@ -95,8 +114,15 @@ test("Suggest finds three checked ideas, and a second run replaces them", async 
   // Scoped to the page's own content: Next's route announcer is an empty alert too.
   await expect(page.getByRole("main").getByRole("alert")).toHaveCount(0);
   await expect(ideas).toHaveCount(3);
+  // The new run's copy of the same product still shows as saved; the others can still be saved.
+  await expect(viseItem).toContainText("Saved");
+  await expect(page.getByRole("button", { name: /^Save / })).toHaveCount(2);
   await page.goto(`/people/${personId}`);
   await expect(page.getByRole("link", { name: /^Gift ideas/ })).toHaveText(/3/);
+  await page.goto(`/people/${personId}/saved-gifts`);
+  const savedGifts = page.getByRole("region", { name: "Saved gifts" }).getByRole("listitem");
+  await expect(savedGifts).toHaveCount(1);
+  await expect(savedGifts).toContainText(vise.productTitle);
 });
 
 test("without paid features there's no button, only the line saying why", async ({ page }) => {

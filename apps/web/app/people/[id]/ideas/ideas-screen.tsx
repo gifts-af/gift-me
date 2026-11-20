@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
+import { Check } from "lucide-react";
 import { IDEA_RUN_OFF, ideaRunNotice } from "@gifts-af/core";
 import { shortDate } from "@/components/occasion-format";
 import { Button } from "@/components/ui/button";
@@ -10,10 +11,66 @@ import { money } from "../money";
 import { IDEA_MESSAGES, NO_FACTS } from "./messages";
 
 // A person's Gift ideas screen (ALL-27): the Suggest button with its money notice beside it
-// (design/ui.md > Money notice), then the ideas from the last run. Each idea keeps its product
-// id on the page, so Save (ALL-128) can be added without another read.
+// (design/ui.md > Money notice), then the ideas from the last run, each with Save (ALL-128),
+// which copies it into the person's saved gifts so the next run doesn't lose it.
 
 type Result = { ok: true; count: number } | { ok: false; error: string };
+type SaveResult = { ok: true } | { ok: false; error: string };
+
+/** Save on one idea, or "Saved" once that product is in the person's saved gifts. */
+function SaveIdea({
+  personId,
+  idea,
+  saved,
+  saveAction,
+}: {
+  personId: string;
+  idea: ShownIdea;
+  saved: boolean;
+  saveAction: (personId: string, ideaId: string) => Promise<SaveResult>;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (saved || done) {
+    return (
+      <span className="flex flex-none items-center gap-1 text-[13px] font-semibold text-muted-foreground">
+        <Check className="size-4" aria-hidden />
+        Saved
+      </span>
+    );
+  }
+
+  function save() {
+    if (pending) return;
+    setError(null);
+    startTransition(async () => {
+      let result: SaveResult;
+      try {
+        result = await saveAction(personId, idea.id);
+      } catch {
+        // The same words as the server's TRY_AGAIN (modules/concierge/people/service.ts).
+        result = { ok: false, error: "That couldn't be saved. Try again." };
+      }
+      if (result.ok) setDone(true);
+      else setError(result.error);
+    });
+  }
+
+  return (
+    <div className="flex flex-none flex-col items-end gap-1">
+      <Button type="button" variant="outline" size="sm" disabled={pending} onClick={save} aria-label={`Save ${idea.title}`}>
+        Save
+      </Button>
+      {error && (
+        <p role="alert" className="max-w-48 text-right text-[13px] text-destructive">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
 
 /** "Amazon" from the stored "amazon". */
 function storeLabel(retailer: string | null): string | null {
@@ -26,6 +83,8 @@ export function IdeasScreen({
   offer,
   ideas,
   action,
+  savedProductIds,
+  saveAction,
 }: {
   personId: string;
   personName: string;
@@ -34,7 +93,12 @@ export function IdeasScreen({
   ideas: ShownIdea[];
   /** `suggestIdeasAction` */
   action: (personId: string) => Promise<Result>;
+  /** Products already in the person's saved gifts. */
+  savedProductIds: string[];
+  /** `saveIdeaAction` */
+  saveAction: (personId: string, ideaId: string) => Promise<SaveResult>;
 }) {
+  const saved = new Set(savedProductIds);
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
@@ -99,10 +163,13 @@ export function IdeasScreen({
                   ) : (
                     <span className="text-[15px] font-semibold [overflow-wrap:anywhere]">{idea.title}</span>
                   )}
-                  {idea.overBudget && (
-                    <span className="flex-none rounded-md bg-warning-soft px-2 py-0.5 text-xs font-semibold text-warning">Over budget</span>
+                  {idea.retailerProductId && (
+                    <SaveIdea personId={personId} idea={idea} saved={saved.has(idea.retailerProductId)} saveAction={saveAction} />
                   )}
                 </div>
+                {idea.overBudget && (
+                  <span className="self-start rounded-md bg-warning-soft px-2 py-0.5 text-xs font-semibold text-warning">Over budget</span>
+                )}
                 <p className="text-[13px] text-muted-foreground">
                   {store ? `${money(idea.totalCents)} · ${store}` : money(idea.totalCents)}
                 </p>

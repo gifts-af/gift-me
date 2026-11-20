@@ -82,6 +82,9 @@ for (const [name, url] of SIGNED_OUT) {
 test.describe("signed in", () => {
   let seeded: Seeded;
   test.beforeAll(async () => {
+    // Every worker seeds its own user with several sign-ins at once, which ran close to the
+    // default 30 s on a laptop even before ALL-128 added a saved idea.
+    test.setTimeout(60_000);
     const user = await createFreshUser();
     const personId = await addMother(user, "Mom");
     await addSavedGift(user, personId, "Fly-fishing reel");
@@ -115,8 +118,8 @@ test("emails", async ({ page }) => {
 // screen shows its rows without a run (a run spends money; ALL-27). The engine stays off, so the
 // screen's off line shows above them.
 async function addOnDemandIdeas(user: Credentials, personId: string): Promise<void> {
-  const { url, serviceRoleKey } = localSupabase();
-  const { user: me } = await session(user);
+  const { url, serviceRoleKey, publishableKey } = localSupabase();
+  const { user: me, access_token } = await session(user);
   const row = (rank: number, title: string, cents: number, over: boolean, reason: string) => ({
     user_id: me.id,
     person_id: personId,
@@ -145,6 +148,25 @@ async function addOnDemandIdeas(user: Credentials, personId: string): Promise<vo
     ]),
   });
   if (!res.ok) throw new Error(`saving ideas failed: ${res.status} ${await res.text()}`);
+  // The vise is already in her saved gifts, so the screen shows both Save and Saved (ALL-128).
+  // As the buyer: the saved-gifts trigger checks who's saving.
+  const saved = await fetch(`${url}/rest/v1/saved_gifts`, {
+    method: "POST",
+    headers: {
+      apikey: publishableKey,
+      Authorization: `Bearer ${access_token}`,
+      "Content-Type": "application/json",
+      "Content-Profile": "concierge",
+    },
+    body: JSON.stringify({
+      person_id: personId,
+      name: "Fly-tying vise",
+      price_cents: 6900,
+      product_url: "https://www.amazon.com/dp/B0GALLERY1",
+      retailer_product_id: "B0GALLERY1",
+    }),
+  });
+  if (!saved.ok) throw new Error(`saving the vise failed: ${saved.status} ${await saved.text()}`);
 }
 
 async function shareToken(user: Credentials): Promise<string> {

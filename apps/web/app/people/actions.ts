@@ -40,6 +40,7 @@ import {
   parseSavedGiftForm,
   removeSavedGift,
   saveGift,
+  saveIdea,
   saveBudgets,
   setOccasionEnabled,
   setPhoto,
@@ -315,6 +316,15 @@ export async function saveGiftAction(_previous: SaveResult | null, formData: For
 export async function removeSavedGiftAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
   const id = text(formData, "id");
   return refresh(await removeSavedGift(id, text(formData, "gift")), id);
+}
+
+// Save on a suggested idea (ALL-128): only the idea's id comes from the browser; the server copies
+// the idea itself. The person's page shows the new saved-gifts count.
+export async function saveIdeaAction(personId: string, ideaId: string): Promise<SaveResult> {
+  if (!isText(personId, ideaId)) return BAD_FORM;
+  const result = await saveIdea(personId, ideaId);
+  if (result.ok) revalidatePath(`/people/${personId}/ideas`);
+  return refresh(result, personId);
 }
 
 // The Gift ideas screen's button (ALL-27): one on-demand run for a person on the buyer's own

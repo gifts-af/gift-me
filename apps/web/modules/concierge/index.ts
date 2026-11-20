@@ -77,7 +77,7 @@ export {
   parseShareToken,
 } from "./people/rules";
 // Saved gifts for someone, private to the buyer (ALL-93).
-export { countSavedGifts, listSavedGifts, removeSavedGift, saveGift } from "./saved-gifts/saved-gifts";
+export { countSavedGifts, listSavedGifts, removeSavedGift, saveGift, saveIdea, savedProductIds } from "./saved-gifts/saved-gifts";
 export { parseSavedGiftForm } from "./saved-gifts/rules";
 export type { SavedGift, SavedGiftInput } from "./saved-gifts/rules";
 export type { AddressSaveResult, ImportAddress, ImportRow, PersonInput } from "./people/rules";
