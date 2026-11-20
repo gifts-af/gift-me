@@ -1,5 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "ignoreCommand": "node ../../scripts/vercel-ignore-build.mjs",
   "crons": [
     { "path": "/api/keepalive", "schedule": "0 12 * * *" },
     { "path": "/api/rounds/tick", "schedule": "0 12 * * *" }
