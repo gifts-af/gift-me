@@ -191,13 +191,6 @@ describe("addFromExtension", () => {
     expect(calls.at(-1)).toBe("delete");
   });
 
-  it("treats a unique violation from add_item as a duplicate", async () => {
-    const { store } = fakeStore(Object.assign(new Error("add_item failed"), { code: "23505" }));
-    expect(await addFromExtension(store, input({ photo: JPEG() }))).toEqual({ status: 200, body: { outcome: "duplicate" } });
-    expect(store.deletePhoto).toHaveBeenCalledWith(ITEM);
-    expect(events()).toEqual([expect.objectContaining({ event: "list.extension_add", outcome: "duplicate" })]);
-  });
-
   it.each([
     ["not a JPEG", new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: "image/png" })],
     ["JPEG-typed but not JPEG bytes", new Blob(["<svg/>"], { type: "image/jpeg" })],
@@ -209,11 +202,12 @@ describe("addFromExtension", () => {
     expect(calls).toEqual([]);
   });
 
-  it("deletes the photo and logs failed when add_item throws", async () => {
+  it("keeps the photo and logs failed when add_item throws: the add may have committed, so the tick decides", async () => {
     const { store, calls } = fakeStore(Object.assign(new Error("boom: Yeti Mug https://shop.test/mug"), { code: "23514" }));
     const result = await addFromExtension(store, input({ photo: JPEG() }));
     expect(result).toEqual({ status: 500, body: { error: "Couldn't add that gift. Try again." } });
-    expect(calls).toEqual(["queue", "upload", "add", "delete"]);
+    expect(calls).toEqual(["queue", "upload", "add"]);
+    expect(store.deletePhoto).not.toHaveBeenCalled();
     expect(events()).toEqual([
       { event: "list.extension_add", at: expect.any(String), outcome: "failed", user_id: "user-1", item_id: ITEM, error: "Error", code: "23514" },
     ]);

@@ -10,9 +10,11 @@ import { cleanUrl, MAX_ITEMS, MAX_NAME_LENGTH } from "./save-list";
 // vars or builds clients (E3).
 //
 // A photo is queued for deletion before it is uploaded, and add_item takes it
-// off the queue only when the gift is added. So a duplicate, a full list or an
-// error deletes the upload here straight away, and a crash in between leaves a
-// queue row the daily tick clears after an hour (AC-9c).
+// off the queue only when the gift is added. So a duplicate, a full list or a
+// failed upload deletes the upload here straight away. An add_item that throws
+// may still have committed, so its upload is left to the daily tick, which
+// skips a path whose gift exists; a crash in between is cleared the same way
+// (AC-9c).
 
 /** The form's shape version. Bump it when the form changes; an older build is then told to update (E4, AC-21). */
 const SHAPE_VERSION = "1";
@@ -181,13 +183,15 @@ function toResult(row: AddItemRow, itemId: string): ExtensionAddResult {
 
 /**
  * Adds one gift to the top of the user's list. With a photo: queue it, upload
- * it, then add; any outcome but "added", or an error, deletes the upload.
+ * it, then add; any outcome but "added", or an error before the add, deletes
+ * the upload.
  * Logs one list.extension_add event, ids only (AC-22, E6).
  */
 export async function addFromExtension(store: ExtensionAddStore, input: ExtensionAddInput): Promise<ExtensionAddResult> {
   const { itemId } = input;
   const ids = { user_id: store.userId };
   let uploaded = false;
+  let addStarted = false;
 
   const dropPhoto = async () => {
     if (!uploaded) return;
@@ -210,23 +214,19 @@ export async function addFromExtension(store: ExtensionAddStore, input: Extensio
       photoUrl = await store.uploadPhoto(itemId, jpeg);
     }
 
-    let row: AddItemRow;
-    try {
-      row = await store.addItem({
-        itemId,
-        name: input.name,
-        priceCents: input.priceCents,
-        productUrl: input.link,
-        productId: input.productId,
-        photoUrl,
-        confirmLikely: input.confirmLikely,
-        maxItems: MAX_ITEMS,
-      });
-    } catch (e) {
-      // A unique violation is two adds of one product racing past the check.
-      if (errorCode(e) !== "23505") throw e;
-      row = { outcome: "duplicate", listId: null, itemId: null, existing: null };
-    }
+    // From here an error can't tell whether the add committed, so the upload
+    // is left to the daily tick, which never deletes a gift's own photo.
+    addStarted = true;
+    const row = await store.addItem({
+      itemId,
+      name: input.name,
+      priceCents: input.priceCents,
+      productUrl: input.link,
+      productId: input.productId,
+      photoUrl,
+      confirmLikely: input.confirmLikely,
+      maxItems: MAX_ITEMS,
+    });
 
     const result = toResult(row, itemId);
     if (row.outcome !== "added") await dropPhoto();
@@ -238,7 +238,7 @@ export async function addFromExtension(store: ExtensionAddStore, input: Extensio
     });
     return result;
   } catch (e) {
-    await dropPhoto();
+    if (!addStarted) await dropPhoto();
     // E6: the error's type and Postgres code only; its message can quote the gift.
     logEvent("list.extension_add", {
       outcome: "failed",
