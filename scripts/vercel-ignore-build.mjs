@@ -8,9 +8,9 @@
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
-// Folders (from the repo root) that never reach the built app, plus Markdown
+// Folders (from the repo root) that never reach the deployed app, plus Markdown
 // outside apps/ and packages/.
-const DOCS_FOLDERS = [
+const NOT_DEPLOYED = [
   "design/",
   "planning/",
   ".claude/",
@@ -19,7 +19,7 @@ const DOCS_FOLDERS = [
 ];
 
 const isDocs = (file) =>
-  DOCS_FOLDERS.some((dir) => file.startsWith(dir)) ||
+  NOT_DEPLOYED.some((dir) => file.startsWith(dir)) ||
   (file.endsWith(".md") &&
     !file.startsWith("apps/") &&
     !file.startsWith("packages/"));
@@ -36,14 +36,21 @@ export function decide(files) {
   };
 }
 
-function changedFiles() {
-  const prev = process.env.VERCEL_GIT_PREVIOUS_SHA;
+/**
+ * Files changed between `prev` and HEAD, from the repo root, or null if unknown.
+ * --no-renames lists a moved file under its old path too, so moving code out of
+ * the app into a docs folder still builds.
+ * @param {string | undefined} prev
+ * @param {string} [cwd]
+ */
+export function changedFiles(prev, cwd) {
   if (!prev) return null;
   try {
-    const out = execFileSync("git", ["diff", "--name-only", prev, "HEAD"], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "ignore"],
-    });
+    const out = execFileSync(
+      "git",
+      ["diff", "--name-only", "--no-renames", prev, "HEAD"],
+      { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+    );
     return out.split("\n").filter(Boolean);
   } catch {
     return null; // the earlier commit isn't in Vercel's shallow clone
@@ -54,7 +61,9 @@ if (
   process.argv[1] &&
   import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
-  const { action, reason } = decide(changedFiles());
+  const { action, reason } = decide(
+    changedFiles(process.env.VERCEL_GIT_PREVIOUS_SHA),
+  );
   console.log(`${action === "skip" ? "Skipping" : "Building"}: ${reason}`);
   process.exit(action === "skip" ? 0 : 1);
 }
