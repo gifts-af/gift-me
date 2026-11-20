@@ -19,5 +19,16 @@
   { "url": "https://www.amazon.com/product/B08N5WRWNW", "key": "amazon:B08N5WRWNW", "host": "amazon" },
   { "url": "https://www.amazon.com/exec/obidos/asin/B08N5WRWNW/ref=x", "key": "amazon:B08N5WRWNW", "host": "amazon" },
   { "url": "https://www.amazon.com/exec/obidos/ASIN/product/b08n5wrwnw", "key": "amazon:B08N5WRWNW", "host": "amazon" },
-  { "url": "https://amazon.evil.com/dp/B08N5WRWNW", "key": "amazon.evil.com/dp/B08N5WRWNW", "host": "amazon.evil.com" }
+  { "url": "https://amazon.evil.com/dp/B08N5WRWNW", "key": "amazon.evil.com/dp/B08N5WRWNW", "host": "amazon.evil.com" },
+  { "url": "https://shop.com:8080/p/1", "key": "shop.com/p/1", "host": "shop.com" },
+  { "url": "https://shop.com/p/1", "key": "shop.com/p/1", "host": "shop.com" },
+  { "url": "https://shop.com/p?id=2&id=1", "key": "shop.com/p?id=1&id=2", "host": "shop.com" },
+  { "url": "https://shop.com/p?variant=", "key": "shop.com/p?variant=", "host": "shop.com" },
+  { "url": "https://shop.com/p?size", "key": "shop.com/p?size=", "host": "shop.com" },
+  { "url": "https://shop.com/?id=1", "key": "shop.com?id=1", "host": "shop.com" },
+  { "url": "https://www.amazon.com/DP/B08N5WRWNW", "key": "amazon:B08N5WRWNW", "host": "amazon" },
+  { "url": "https://www.amazon.com/gp/help/customer?th=1", "key": "amazon.com/gp/help/customer", "host": "amazon" },
+  { "url": "https://www.com/p", "key": "www.com/p", "host": "www.com" },
+  { "url": "https://m.com/p", "key": "m.com/p", "host": "m.com" },
+  { "url": "not a link", "key": "not a link", "host": "" }
 ]

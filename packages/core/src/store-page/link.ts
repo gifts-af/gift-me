@@ -9,12 +9,20 @@
 //     amazon:<UPPER-CASE ASIN>
 //   Everything else:
 //     <host><path>[?<k>=<v>&<k>=<v>...]
-//   - host: lower case, leading "www." then "m." removed
+//   - host: lower case, leading "www." then "m." removed, each only when a dot
+//     is still left after it (www.com and m.com stay as they are)
 //   - path: as written (case kept), one trailing "/" removed; a bare "/" is empty
 //   - params: only variant, sku, skuid, size, color, id, pid, productid, itemid
 //     (matched case-insensitively); keys lower-cased, values kept as written
-//     (not decoded); sorted by key, then value, in plain code-point order
+//     (not decoded, so percent-encoding is compared as-is); a bare key or an
+//     empty value both give "key="; repeated keys are all kept
+//   - params are sorted by key, then value, with plain JS string comparison
+//     (UTF-16 code units); Postgres needs COLLATE "C" to match
 //   - scheme, port, credentials, hash and all other params are ignored
+//   - not a URL at all: the key is the input unchanged, the host is ""
+//
+// Input is assumed to be already serialized by WHATWG `new URL` (every stored
+// product_url is). The SQL only has to mirror matchKey on such URLs.
 //
 // storeHost: the host as above; "amazon" for every Amazon host.
 
@@ -59,7 +67,7 @@ export function extractAsin(pathname: string): string | null {
 }
 
 function plainHost(url: URL): string {
-  return url.hostname.toLowerCase().replace(/^www\./, "").replace(/^m\./, "");
+  return url.hostname.toLowerCase().replace(/^www\.(?=[^.]+\.)/, "").replace(/^m\.(?=[^.]+\.)/, "");
 }
 
 export function cleanLink(url: string): string {
