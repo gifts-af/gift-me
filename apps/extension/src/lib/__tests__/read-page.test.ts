@@ -13,6 +13,8 @@ beforeEach(() => {
   Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 });
 });
 
+const deps = { imageWidth: async () => 2000 };
+
 function load(html: string, url: string) {
   jsdom.reconfigure({ url });
   document.documentElement.innerHTML = html;
@@ -65,7 +67,7 @@ describe("readProductPage: slim fragments read the same as the full page", () =>
   it.each(cases)("%s", async (_name, html, url) => {
     const expected = readProductFromHtml(html, url);
     load(html, url);
-    const page = await readProductPage(7);
+    const page = await readProductPage(7, deps);
     expect(page.product).toEqual(expected);
     expect(page.pageUrl).toBe(url);
   });
@@ -80,22 +82,51 @@ describe("readProductPage: slim fragments read the same as the full page", () =>
 });
 
 describe("readProductPage: what is read and sent along", () => {
-  it("takes one screenshot and returns the viewport width", async () => {
+  it("takes one screenshot and returns the viewport width and the crop scale", async () => {
     load(JSON_LD, "https://shop.test/mug");
-    const page = await readProductPage(7);
+    const page = await readProductPage(7, { imageWidth: async () => 2500 });
     expect(fake.tabs.captures).toHaveLength(1);
-    expect(page.screenshot.type).toBe("image/jpeg");
+    expect(page.screenshot?.type).toBe("image/jpeg");
     expect(page.viewportWidth).toBe(1000);
+    expect(page.scale).toBe(2.5);
+  });
+
+  it("a failed capture still returns the product, with no screenshot, scale or candidates", async () => {
+    load(JSON_LD, "https://shop.test/mug");
+    fake.tabs.captureVisibleTab = async () => {
+      throw new Error("not allowed");
+    };
+    const page = await readProductPage(7, deps);
+    expect(page.product.name).toBe("Stoneware mug");
+    expect(page.screenshot).toBeNull();
+    expect(page.scale).toBeNull();
+    expect(page.candidates).toEqual([]);
+  });
+
+  it("an undecodable screenshot is treated like a failed capture", async () => {
+    load(JSON_LD, "https://shop.test/mug");
+    const page = await readProductPage(7, {
+      imageWidth: async () => {
+        throw new Error("bad image");
+      },
+    });
+    expect(page.product.name).toBe("Stoneware mug");
+    expect(page.screenshot).toBeNull();
+  });
+
+  it("throws when the page script returns nothing", async () => {
+    fake.scripting.executeScript = async () => [{ result: undefined }];
+    await expect(readProductPage(7, deps)).rejects.toThrow();
   });
 
   it("does not read the page text into the fragments", async () => {
     load(JSON_LD, "https://shop.test/mug");
-    await readProductPage(7);
+    await readProductPage(7, deps);
     const fn = fake.scripting.calls[0].func as () => unknown;
     expect(JSON.stringify(fn())).not.toContain("Lots of body text");
   });
 
-  it("lists images 120px or more each way and mostly visible; skips data: images", async () => {
+  it("lists images 120px or more each way and at least half visible; skips data: images", async () => {
     load(
       `<body><img id="ok" src="https://shop.test/a.jpg"><img id="tiny" src="https://shop.test/t.gif"><img id="data" src="data:image/png;base64,AAAA">
        <img id="narrow" src="https://shop.test/n.jpg"><img id="off" src="https://shop.test/o.jpg"><img id="edge" src="https://shop.test/e.jpg"></body>`,
@@ -107,15 +138,18 @@ describe("readProductPage: what is read and sent along", () => {
     place(el("data"), 0, 0, 300, 300);
     place(el("narrow"), 0, 0, 119, 300);
     place(el("off"), -150, 0, 200, 200); // 50 of 200 wide visible
-    place(el("edge"), -100, 0, 200, 200); // exactly half visible, not more
-    const page = await readProductPage(7);
-    expect(page.candidates).toEqual([{ src: "https://shop.test/a.jpg", x: 100, y: 50, width: 300, height: 300 }]);
+    place(el("edge"), -100, 0, 200, 200); // exactly half visible still counts
+    const page = await readProductPage(7, deps);
+    expect(page.candidates).toEqual([
+      { src: "https://shop.test/a.jpg", x: 100, y: 50, width: 300, height: 300 },
+      { src: "https://shop.test/e.jpg", x: 0, y: 0, width: 100, height: 200 },
+    ]);
   });
 
   it("clips a mostly visible image to the viewport", async () => {
     load(`<body><img id="a" src="https://shop.test/a.jpg"></body>`, "https://shop.test/x");
     place(document.getElementById("a")!, -40, 650, 300, 200); // visible 260 x 150 of 300 x 200 = 65%
-    const page = await readProductPage(7);
+    const page = await readProductPage(7, deps);
     expect(page.candidates).toEqual([{ src: "https://shop.test/a.jpg", x: 0, y: 650, width: 260, height: 150 }]);
   });
 });

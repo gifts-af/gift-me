@@ -1,4 +1,4 @@
-import { canCapture, readProductPage, type ProductPage } from "../lib/page";
+import { readProductPage, type ProductPage } from "../lib/page";
 import { getSupabase } from "../lib/supabase";
 import type { Person } from "./PersonPicker";
 
@@ -20,6 +20,7 @@ export type Loaded = {
   /** The people captured for most recently, padded alphabetically to RECENT_COUNT. */
   recentPeople: Person[];
   tabId: number | null;
+  /** The page could be scripted and read (false on chrome:// pages and the like). */
   capturable: boolean;
   /** What the page showed when the popup opened; null when it can't be read. */
   page: ProductPage | null;
@@ -30,6 +31,21 @@ const RECENT_COUNT = 3;
 
 export type LoadResult = Loaded | { kind: "signedOut" } | { kind: "error" };
 
+async function readActiveTab(): Promise<{ tabId: number | null; page: ProductPage | null }> {
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tabId = tabs[0]?.id ?? null;
+    if (tabId === null) return { tabId, page: null };
+    try {
+      return { tabId, page: await readProductPage(tabId) };
+    } catch {
+      return { tabId, page: null };
+    }
+  } catch {
+    return { tabId: null, page: null };
+  }
+}
+
 // What the popup needs when it opens, including the page read in the tab. The
 // read stays on this device until the user saves (C-2).
 export async function loadPopup(): Promise<LoadResult> {
@@ -39,7 +55,10 @@ export async function loadPopup(): Promise<LoadResult> {
     const { data } = await supabase.auth.getSession();
     if (!data.session) return { kind: "signedOut" };
 
-    const [people, cap, shotCap, paid, estimate, photoWidth, photoQuality, recent, tabs] = await Promise.all([
+    // The tab is read while the settings load; a tab that can't be scripted
+    // (chrome://, Web Store) or a failed read gives page: null.
+    const tab = readActiveTab();
+    const [people, cap, shotCap, paid, estimate, photoWidth, photoQuality, recent] = await Promise.all([
       supabase.from("people").select("id, name").order("name"),
       supabase.schema("concierge").rpc("setting_int", { p_key: "capture_text_max_chars" }),
       supabase.schema("concierge").rpc("setting_int", { p_key: "capture_screenshot_max_bytes" }),
@@ -48,7 +67,6 @@ export async function loadPopup(): Promise<LoadResult> {
       supabase.schema("concierge").rpc("setting_int", { p_key: "list_photo_width_px" }),
       supabase.schema("concierge").rpc("setting_int", { p_key: "list_photo_jpeg_quality" }),
       supabase.schema("concierge").rpc("recent_people", { p_limit: RECENT_COUNT }),
-      chrome.tabs.query({ active: true, currentWindow: true }),
     ]);
     if (people.error || !people.data) return { kind: "error" };
     if (cap.error || typeof cap.data !== "number") return { kind: "error" };
@@ -71,16 +89,7 @@ export async function loadPopup(): Promise<LoadResult> {
     }
     recentPeople.length = Math.min(recentPeople.length, RECENT_COUNT);
 
-    const tabId = tabs[0]?.id ?? null;
-    const capturable = tabId !== null && (await canCapture(tabId));
-    let page: ProductPage | null = null;
-    if (tabId !== null && capturable) {
-      try {
-        page = await readProductPage(tabId);
-      } catch {
-        page = null;
-      }
-    }
+    const { tabId, page } = await tab;
     return {
       kind: "ready",
       people: people.data,
@@ -92,7 +101,7 @@ export async function loadPopup(): Promise<LoadResult> {
       photoJpegQuality: photoQuality.data,
       recentPeople,
       tabId,
-      capturable,
+      capturable: page !== null,
       page,
     };
   } catch {

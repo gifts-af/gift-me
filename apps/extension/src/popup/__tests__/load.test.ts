@@ -76,15 +76,24 @@ describe("loadPopup", () => {
     expect(r.page?.product.isProduct).toBe(false);
   });
 
-  it("a failed page read gives page: null, people still loaded", async () => {
+  it("a refused screenshot keeps the product: page without screenshot, scale or candidates", async () => {
     fake.tabs.captureVisibleTab = async () => {
       throw new Error("no capture");
     };
     const r = await loadPopup();
     if (r.kind !== "ready") throw new Error("not ready");
     expect(r.capturable).toBe(true);
-    expect(r.page).toBeNull();
+    expect(r.page).toMatchObject({ screenshot: null, scale: null, candidates: [] });
     expect(r.recentPeople).toHaveLength(3);
+  });
+
+  it("a page script that fails gives page: null and not capturable, people still loaded", async () => {
+    fake.scripting.executeScript = async () => [{ result: undefined }];
+    const r = await loadPopup();
+    if (r.kind !== "ready") throw new Error("not ready");
+    expect(r.capturable).toBe(false);
+    expect(r.page).toBeNull();
+    expect(r.people).toHaveLength(4);
   });
 
   it("falls back to alphabetical when recent people can't be read", async () => {

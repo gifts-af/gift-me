@@ -158,12 +158,12 @@ describe("Popup", () => {
     expect(screen.queryByRole("button", { name: "Dad" })).not.toBeInTheDocument();
   });
 
-  it("on open, probes the page and reads the product fragments; the page text is collected only on Save", async () => {
+  it("on open, reads only the product fragments in one script; the page text is collected only on Save", async () => {
     render(<App />);
     await screen.findByRole("button", { name: "Mom" });
     await waitFor(() => expect(fake.tabs.captures).toHaveLength(1));
-    expect(fake.scripting.calls).toHaveLength(2);
-    expect(fake.scripting.calls.map((c) => c.args)).toEqual([undefined, undefined]);
+    expect(fake.scripting.calls).toHaveLength(1);
+    expect(fake.scripting.calls[0].args).toBeUndefined();
     expect(fake.tabs.captures).toEqual([{ format: "png" }]);
   });
 
@@ -265,7 +265,7 @@ describe("Popup", () => {
     expect(form.get("note")).toBe("She loved this");
     expect(form.get("title")).toBe("Stoneware mug set");
     expect(fake.tabs.captures[1]).toEqual({ format: "jpeg", quality: 80 });
-    expect(fake.scripting.calls[2].args).toEqual([50_000]);
+    expect(fake.scripting.calls[1].args).toEqual([50_000]);
 
     await userEvent.click(screen.getByRole("button", { name: "Capture another" }));
     expect(screen.getByLabelText(/Note/)).toHaveValue("");
@@ -297,7 +297,7 @@ describe("Popup", () => {
     expect(sentForm(1).get("person_id")).toBe("p-mom");
     expect(sentForm(1).get("screenshot")).toEqual(sentForm(0).get("screenshot"));
     // Collected once: one probe plus one collection, one screenshot.
-    expect(fake.scripting.calls).toHaveLength(3);
+    expect(fake.scripting.calls).toHaveLength(2);
     expect(fake.tabs.captures).toHaveLength(2);
   });
 

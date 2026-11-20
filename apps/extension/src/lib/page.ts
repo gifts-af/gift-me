@@ -1,21 +1,11 @@
-// Reading the current tab. When the popup opens, canCapture probes the tab and
-// readProductPage reads the product from a few slim page fragments; nothing
-// from the page leaves the device until the user clicks Save (C-2).
+// Reading the current tab. When the popup opens, readProductPage reads the
+// product from a few slim page fragments; nothing from the page leaves the
+// device until the user clicks Save (C-2).
 
 import { readProductFromHtml, type PageProduct } from "@gifts-af/core/store-page";
 import type { PhotoBox } from "./photo";
 
 export type CollectedPage = { url: string; title: string; text: string; screenshot: Blob };
-
-/** Chrome refuses scripts on chrome://, the Web Store and similar pages. */
-export async function canCapture(tabId: number): Promise<boolean> {
-  try {
-    await chrome.scripting.executeScript({ target: { tabId }, func: () => true });
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 /** The screenshot stays over the server's size cap even after shrinking it. */
 export class ScreenshotTooLargeError extends Error {
@@ -106,10 +96,13 @@ function dataUrlToBlob(dataUrl: string): Blob {
 export type ProductPage = {
   product: PageProduct;
   pageUrl: string;
-  /** Lossless capture of the visible tab; the chosen photo is cropped from it. */
-  screenshot: Blob;
+  /** Lossless capture of the visible tab; the chosen photo is cropped from it. null when the capture failed. */
+  screenshot: Blob | null;
+  /** Screenshot pixel width ÷ viewportWidth: pass it straight to cropPhoto. null with no screenshot. */
+  scale: number | null;
+  /** Empty when there is no screenshot to crop from. */
   candidates: PhotoBox[];
-  /** CSS pixels; screenshot width ÷ this = the crop scale. */
+  /** CSS pixels. */
   viewportWidth: number;
 };
 
@@ -177,7 +170,7 @@ function readFragments(): Fragments {
     const top = Math.max(0, r.top);
     const width = Math.min(viewportWidth, r.right) - left;
     const height = Math.min(viewportHeight, r.bottom) - top;
-    if (width <= 0 || height <= 0 || width * height * 2 <= r.width * r.height) continue;
+    if (width <= 0 || height <= 0 || width * height * 2 < r.width * r.height) continue;
     boxes.push({ src, x: left, y: top, width, height });
   }
 
@@ -227,21 +220,36 @@ function fragmentsToHtml(f: Fragments): string {
   return `<html><head>${head.join("")}</head><body>${body.join("")}</body></html>`;
 }
 
+export type ReadDeps = { /** Pixel width of an image; defaults to createImageBitmap. */ imageWidth: (image: Blob) => Promise<number> };
+
+async function decodeWidth(image: Blob): Promise<number> {
+  const bitmap = await createImageBitmap(image);
+  try {
+    return bitmap.width;
+  } finally {
+    bitmap.close();
+  }
+}
+
 /**
  * Reads the product from the open tab: one script for the fragments, one
- * screenshot. Throws when the tab can't be scripted or captured.
+ * screenshot. Throws when the tab can't be scripted (chrome://, Web Store) or
+ * the script fails. A failed screenshot still returns the product, with
+ * screenshot and scale null and no candidates.
  */
-export async function readProductPage(tabId: number): Promise<ProductPage> {
+export async function readProductPage(tabId: number, deps: ReadDeps = { imageWidth: decodeWidth }): Promise<ProductPage> {
   const [injection] = await chrome.scripting.executeScript({ target: { tabId }, func: readFragments });
-  const fragments = injection.result as Fragments;
+  const fragments = injection?.result as Fragments | undefined;
+  if (!fragments) throw new Error("The page script returned nothing");
   const product = readProductFromHtml(fragmentsToHtml(fragments), fragments.url);
-  // PNG: no quality setting to choose; the crop is re-encoded at list_photo_jpeg_quality.
-  const dataUrl = await chrome.tabs.captureVisibleTab({ format: "png" });
-  return {
-    product,
-    pageUrl: fragments.url,
-    screenshot: dataUrlToBlob(dataUrl),
-    candidates: fragments.boxes,
-    viewportWidth: fragments.viewportWidth,
-  };
+  const base = { product, pageUrl: fragments.url, viewportWidth: fragments.viewportWidth };
+  try {
+    // PNG: no quality setting to choose; the crop is re-encoded at list_photo_jpeg_quality.
+    const screenshot = dataUrlToBlob(await chrome.tabs.captureVisibleTab({ format: "png" }));
+    const scale = (await deps.imageWidth(screenshot)) / fragments.viewportWidth;
+    if (!Number.isFinite(scale) || scale <= 0) throw new Error("Unusable screenshot size");
+    return { ...base, screenshot, scale, candidates: fragments.boxes };
+  } catch {
+    return { ...base, screenshot: null, scale: null, candidates: [] };
+  }
 }
