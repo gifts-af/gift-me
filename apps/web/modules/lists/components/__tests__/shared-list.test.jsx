@@ -35,6 +35,7 @@ describe("SharedList", () => {
         token="t"
         list={{
           title: "My list",
+          cardEnabled: true,
           ownerName: "Sam",
           linkedPerson: null,
           isOwner: false,

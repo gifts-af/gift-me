@@ -6,7 +6,7 @@
 -- the link preview carries only the owner's name and a gift count.
 begin;
 \ir _helpers.psql
-select plan(59);
+select plan(63);
 
 select tests.create_user('sam@example.com', 'Sam Lee') as sam \gset
 select tests.create_user('pat@example.com', 'Pat') as pat \gset
@@ -60,6 +60,7 @@ select is(lists.get_shared_list(:'token_a') ->> 'owner_name', 'Sam Lee', 'the ow
 select tests.act_as_anon();
 select is(lists.get_shared_list(:'token_a') ->> 'owner_name', 'Sam Lee', 'a signed-out visitor sees the owner''s name');
 select is(lists.get_shared_list(:'token_a') -> 'linked_person', 'null'::jsonb, 'a signed-out visitor has no linked person');
+select is(lists.get_shared_list(:'token_a') -> 'card_enabled', 'true'::jsonb, 'a signed-out visitor is told the card is on');
 
 -- ─── link_unlinked_person ───────────────────────────────────────────────────
 
@@ -289,10 +290,15 @@ select is(
   '1'::jsonb,
   'the card is on by default'
 );
+select tests.act_as(:'buyer');
+select is(lists.get_shared_list(:'token_a2') -> 'card_enabled', 'true'::jsonb, 'a signed-in buyer is told the card is on');
+select tests.reset_role();
 update concierge.app_settings set value = '0' where key = 'list_link_card_enabled';
 select tests.act_as(:'buyer');
 select is(lists.get_shared_list(:'token_a2') -> 'owner_name', 'null'::jsonb, 'with the switch off, the shared list has no owner name');
+select is(lists.get_shared_list(:'token_a2') -> 'card_enabled', 'false'::jsonb, 'with the switch off, the card is off');
 select tests.act_as_anon();
+select is(lists.get_shared_list(:'token_a2') -> 'card_enabled', 'false'::jsonb, 'and off for a signed-out visitor too');
 select is(
   lists.share_preview(:'token_a2'),
   '{"owner_name": null, "item_count": 3}'::jsonb,

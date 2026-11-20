@@ -149,6 +149,9 @@ export type SharedGift = Gift & { claim: GiftClaim | null };
 
 export type SharedList = {
   title: string;
+  // Whether the add/link card shows (app_settings.list_link_card_enabled,
+  // AC-25). From the database, because a signed-out visitor can't read settings.
+  cardEnabled: boolean;
   // The owner's display name; null when they have none or the card is off
   // (app_settings.list_link_card_enabled, ALL-123).
   ownerName: string | null;
@@ -183,6 +186,7 @@ export async function getSharedList(token: string): Promise<SharedList | null> {
   const shared = data as {
     title: string;
     is_owner: boolean;
+    card_enabled?: boolean;
     owner_name?: string | null;
     linked_person?: { id: string; name: string } | null;
     viewer?: { signed_in?: boolean; email?: string | null; name?: string | null };
@@ -190,6 +194,7 @@ export async function getSharedList(token: string): Promise<SharedList | null> {
   };
   return {
     title: shared.title,
+    cardEnabled: shared.card_enabled === true,
     ownerName: shared.owner_name ?? null,
     linkedPerson: shared.linked_person ?? null,
     isOwner: shared.is_owner === true,

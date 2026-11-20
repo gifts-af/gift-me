@@ -24,8 +24,8 @@ insert into concierge.app_settings (key, value, description) values
 on conflict (key) do nothing;
 
 -- ─── get_shared_list ────────────────────────────────────────────────────────
--- Same as 20261028120000_hide_claims_from_owner.sql, plus owner_name and
--- linked_person. `create or replace` keeps the grants (anon, authenticated).
+-- Same as 20261028120000_hide_claims_from_owner.sql, plus card_enabled,
+-- owner_name and linked_person. `create or replace` keeps the grants (anon, authenticated).
 
 create or replace function lists.get_shared_list(p_token uuid)
 returns jsonb
@@ -37,6 +37,9 @@ as $$
   select jsonb_build_object(
     'title', l.title,
     'is_owner', coalesce(l.owner_id = auth.uid(), false),
+    -- The off switch, for the page: a signed-out visitor can't read
+    -- app_settings, and this runs as its owner (AC-25).
+    'card_enabled', coalesce(concierge.setting_int('list_link_card_enabled'), 0) <> 0,
     'owner_name', case
       when coalesce(concierge.setting_int('list_link_card_enabled'), 0) = 1 then (
         select nullif(trim(pr.display_name), '') from public.profiles pr where pr.id = l.owner_id

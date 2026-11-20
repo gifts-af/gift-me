@@ -86,6 +86,15 @@ describe.skipIf(!dbUp)("linking a person to a shared list", () => {
     expect(await getSharePreview(randomUUID())).toBeNull();
   });
 
+  it("tells a signed-out visitor the card is on, which they can't read from app_settings (AC-25)", async () => {
+    const owner = await listWithToken();
+    current = createClient(s!.url, s!.publishableKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    const shared = await getSharedList(owner.token);
+    expect(shared?.viewer.signedIn).toBe(false);
+    // The switch at 0 is covered in pgTAP; flipping it here would race other tests on the shared stack.
+    expect(shared?.cardEnabled).toBe(true);
+  });
+
   it("says the person already has a list, and never replaces it", async () => {
     const first = await listWithToken();
     const second = await listWithToken();
