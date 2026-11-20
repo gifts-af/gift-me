@@ -15,8 +15,9 @@
 --   * share_preview gives a link preview the owner's name and a gift count,
 --     and never reads claims (decision 39).
 --
--- Off switch (E7): app_settings.list_link_card_enabled. At 0 the owner's
--- name is null on the list and in the preview; the app hides the card.
+-- Off switch (E7): app_settings.list_link_card_enabled. It's on only when the
+-- value is 1, here and in the app; at anything else the owner's name is null
+-- on the list and in the preview, and the app hides the card.
 
 insert into concierge.app_settings (key, value, description) values
   ('list_link_card_enabled', '1',
@@ -39,7 +40,7 @@ as $$
     'is_owner', coalesce(l.owner_id = auth.uid(), false),
     -- The off switch, for the page: a signed-out visitor can't read
     -- app_settings, and this runs as its owner (AC-25).
-    'card_enabled', coalesce(concierge.setting_int('list_link_card_enabled'), 0) <> 0,
+    'card_enabled', coalesce(concierge.setting_int('list_link_card_enabled'), 0) = 1,
     'owner_name', case
       when coalesce(concierge.setting_int('list_link_card_enabled'), 0) = 1 then (
         select nullif(trim(pr.display_name), '') from public.profiles pr where pr.id = l.owner_id
@@ -126,6 +127,8 @@ grant execute on function lists.person_share_token(uuid) to authenticated;
 -- Lock order: the person row, then the list row. Locking the list row
 -- serializes two adds to the same list (and waits out a token reset), so the
 -- "already linked" check below, a separate statement, sees the other's link.
+-- `for no key update` is enough for that and, unlike `for update`, doesn't
+-- block the owner adding items (their foreign key takes a key-share lock).
 
 create function lists.link_unlinked_person(p_token uuid, p_person_id uuid)
 returns jsonb
@@ -153,7 +156,7 @@ begin
   select l.id, l.owner_id into v_list_id, v_owner_id
     from lists.lists l
    where l.share_token = p_token
-     for update;
+     for no key update;
   if not found then
     raise exception 'List not found' using errcode = 'P0002';
   end if;

@@ -6,7 +6,7 @@
 -- the link preview carries only the owner's name and a gift count.
 begin;
 \ir _helpers.psql
-select plan(63);
+select plan(66);
 
 select tests.create_user('sam@example.com', 'Sam Lee') as sam \gset
 select tests.create_user('pat@example.com', 'Pat') as pat \gset
@@ -304,6 +304,14 @@ select is(
   '{"owner_name": null, "item_count": 3}'::jsonb,
   'and neither does the preview'
 );
+
+-- Only 1 means on: any other value is off everywhere, as in the app (=== 1).
+select tests.reset_role();
+update concierge.app_settings set value = '2' where key = 'list_link_card_enabled';
+select tests.act_as(:'buyer');
+select is(lists.get_shared_list(:'token_a2') -> 'card_enabled', 'false'::jsonb, 'a setting of 2 turns the card off');
+select is(lists.get_shared_list(:'token_a2') -> 'owner_name', 'null'::jsonb, 'a setting of 2 shows no owner name');
+select is(lists.share_preview(:'token_a2') -> 'owner_name', 'null'::jsonb, 'a setting of 2 gives the preview no owner name');
 
 select * from finish();
 rollback;
