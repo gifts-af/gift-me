@@ -41,6 +41,7 @@ const client = {
           ? { data: null, error: { message: "failed" } }
           : { data: db.paidFeatures, error: null };
       }
+      if (fn === "recent_people") return { data: [], error: null };
       if (fn === "add_person") {
         db.adds.push(args);
         return { data: `new-${args.p_name}`, error: null };
@@ -52,7 +53,11 @@ const client = {
             ? db.screenshotMax
             : args.p_key === "capture_read_estimate_cents"
               ? db.readEstimate
-              : null;
+              : args.p_key === "list_photo_width_px"
+                ? 400
+                : args.p_key === "list_photo_jpeg_quality"
+                  ? 80
+                  : null;
       return value === null ? { data: null, error: { message: "missing" } } : { data: value, error: null };
     }),
   })),
@@ -153,12 +158,13 @@ describe("Popup", () => {
     expect(screen.queryByRole("button", { name: "Dad" })).not.toBeInTheDocument();
   });
 
-  it("only probes the page on open; nothing is collected until Save", async () => {
+  it("on open, probes the page and reads the product fragments; the page text is collected only on Save", async () => {
     render(<App />);
     await screen.findByRole("button", { name: "Mom" });
-    await waitFor(() => expect(fake.scripting.calls).toHaveLength(1));
-    expect(fake.scripting.calls[0].args).toBeUndefined();
-    expect(fake.tabs.captures).toHaveLength(0);
+    await waitFor(() => expect(fake.tabs.captures).toHaveLength(1));
+    expect(fake.scripting.calls).toHaveLength(2);
+    expect(fake.scripting.calls.map((c) => c.args)).toEqual([undefined, undefined]);
+    expect(fake.tabs.captures).toEqual([{ format: "png" }]);
   });
 
   it("no people: shows the add form; adding Sam (friend) saves through add_person and selects Sam (AC-9)", async () => {
@@ -258,8 +264,8 @@ describe("Popup", () => {
     expect(form.get("person_id")).toBe("p-mom");
     expect(form.get("note")).toBe("She loved this");
     expect(form.get("title")).toBe("Stoneware mug set");
-    expect(fake.tabs.captures).toEqual([{ format: "jpeg", quality: 80 }]);
-    expect(fake.scripting.calls[1].args).toEqual([50_000]);
+    expect(fake.tabs.captures[1]).toEqual({ format: "jpeg", quality: 80 });
+    expect(fake.scripting.calls[2].args).toEqual([50_000]);
 
     await userEvent.click(screen.getByRole("button", { name: "Capture another" }));
     expect(screen.getByLabelText(/Note/)).toHaveValue("");
@@ -291,8 +297,8 @@ describe("Popup", () => {
     expect(sentForm(1).get("person_id")).toBe("p-mom");
     expect(sentForm(1).get("screenshot")).toEqual(sentForm(0).get("screenshot"));
     // Collected once: one probe plus one collection, one screenshot.
-    expect(fake.scripting.calls).toHaveLength(2);
-    expect(fake.tabs.captures).toHaveLength(1);
+    expect(fake.scripting.calls).toHaveLength(3);
+    expect(fake.tabs.captures).toHaveLength(2);
   });
 
   it("a 401 goes back to Sign in", async () => {
