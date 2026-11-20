@@ -74,6 +74,9 @@ export function cleanLink(url: string): string {
   const parsed = parse(url);
   if (!parsed) return url;
   parsed.hash = "";
+  // Credentials in a link are never shared on a list.
+  parsed.username = "";
+  parsed.password = "";
   for (const key of [...parsed.searchParams.keys()]) {
     const lower = key.toLowerCase();
     if (lower.startsWith("utm_") || TRACKING_PARAMS.has(lower)) parsed.searchParams.delete(key);

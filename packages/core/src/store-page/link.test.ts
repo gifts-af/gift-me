@@ -34,6 +34,10 @@ describe("cleanLink", () => {
     ).toBe("https://shop.com/p?id=5&variant=2");
   });
 
+  it("drops a user name and password from the link (S2)", () => {
+    expect(cleanLink("https://sam:secret@shop.com/p?id=5")).toBe("https://shop.com/p?id=5");
+  });
+
   it("leaves a link with nothing to clean alone", () => {
     expect(cleanLink("https://shop.com/p")).toBe("https://shop.com/p");
   });
