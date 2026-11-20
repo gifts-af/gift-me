@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { retryExtraction, uploadCapture, type CaptureInput } from "../upload";
+import { addToMyList, retryExtraction, uploadCapture, type AddInput, type CaptureInput } from "../upload";
 
 vi.mock("../config", () => ({ config: { appOrigin: "https://app.test" } }));
 
@@ -116,5 +116,73 @@ describe("retryExtraction", () => {
   it("says when the network is down", async () => {
     stubFetch(new TypeError("offline"));
     expect(await retryExtraction("tok", "c1")).toEqual({ ok: false, status: 0, error: "Couldn't reach GiftsAF. Check your connection." });
+  });
+});
+
+describe("addToMyList (ALL-78)", () => {
+  const add: AddInput = {
+    name: "YETI Rambler 20 oz Tumbler",
+    priceCents: 3500,
+    pageUrl: "https://www.rei.com/product/1?ref=x",
+    canonicalUrl: "https://www.rei.com/product/1",
+    productId: "SKU-1",
+    photo: new Blob([new Uint8Array([0xff, 0xd8, 0xff])], { type: "image/jpeg" }),
+  };
+
+  it("posts version 1 multipart with every field and the bearer token", async () => {
+    const fetchMock = stubFetch(json({ outcome: "added", itemId: "i1" }, 201));
+    expect(await addToMyList("tok", add)).toEqual({ ok: true, outcome: "added" });
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://app.test/api/lists/items");
+    expect(init.method).toBe("POST");
+    expect(init.headers).toEqual({ Authorization: "Bearer tok" });
+    const form = init.body as FormData;
+    expect(form.get("v")).toBe("1");
+    expect(form.get("name")).toBe("YETI Rambler 20 oz Tumbler");
+    expect(form.get("priceCents")).toBe("3500");
+    expect(form.get("pageUrl")).toBe("https://www.rei.com/product/1?ref=x");
+    expect(form.get("canonicalUrl")).toBe("https://www.rei.com/product/1");
+    expect(form.get("productId")).toBe("SKU-1");
+    expect(form.get("photo")).toBeInstanceOf(Blob);
+    expect(form.has("confirmLikely")).toBe(false);
+  });
+
+  it("leaves out what isn't there, and sends confirmLikely=1 when asked", async () => {
+    const fetchMock = stubFetch(json({ outcome: "added", itemId: "i1" }, 201));
+    await addToMyList("tok", { ...add, canonicalUrl: null, productId: null, photo: null, confirmLikely: true });
+    const form = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].body as FormData;
+    expect(form.has("canonicalUrl")).toBe(false);
+    expect(form.has("productId")).toBe(false);
+    expect(form.has("photo")).toBe(false);
+    expect(form.get("confirmLikely")).toBe("1");
+  });
+
+  it.each([
+    [{ outcome: "duplicate" }, { ok: true, outcome: "duplicate" }],
+    [{ outcome: "full" }, { ok: true, outcome: "full" }],
+    [
+      { outcome: "likely", existing: { name: "Rambler", priceCents: 3000, imageUrl: null } },
+      { ok: true, outcome: "likely", existing: { name: "Rambler", priceCents: 3000, imageUrl: null } },
+    ],
+  ])("reads the 200 outcome %j", async (body, expected) => {
+    stubFetch(json(body, 200));
+    expect(await addToMyList("tok", add)).toEqual(expected);
+  });
+
+  it("an unreadable likely answer is an error, not a guess", async () => {
+    stubFetch(json({ outcome: "likely", existing: { name: 3 } }, 200));
+    expect(await addToMyList("tok", add)).toEqual({ ok: false, status: 200, error: "Couldn't add that gift. Try again." });
+  });
+
+  it.each([404, 503])("a %i says adding is paused (the route is off or rolled back)", async (status) => {
+    stubFetch(new Response("<html>Not found</html>", { status }));
+    expect(await addToMyList("tok", add)).toEqual({ ok: false, status, error: "Adding from the extension is paused." });
+  });
+
+  it("passes on the server's error, and maps a network failure to status 0", async () => {
+    stubFetch(json({ error: "Sign in again." }, 401));
+    expect(await addToMyList("tok", add)).toEqual({ ok: false, status: 401, error: "Sign in again." });
+    stubFetch(new TypeError("Failed to fetch"));
+    expect(await addToMyList("tok", add)).toEqual({ ok: false, status: 0, error: "Couldn't reach GiftsAF. Check your connection." });
   });
 });

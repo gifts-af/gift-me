@@ -92,6 +92,8 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  document.head.innerHTML = "";
+  document.body.innerHTML = "";
 });
 
 function sentForm(call = 0): FormData {
@@ -109,7 +111,11 @@ describe("Popup", () => {
 
   it("lists people by name; picking one makes the button read Save to Mom", async () => {
     render(<App />);
-    expect(await screen.findByText("Capture for…")).toBeInTheDocument();
+    expect(
+      await screen.findByText("No product on this page, so there's nothing to add to your list. You can still save it for someone."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("GiftsAF")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add to my list" })).not.toBeInTheDocument();
     const mom = await screen.findByRole("button", { name: "Mom" });
     expect(screen.getByRole("button", { name: "Dad" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
@@ -135,10 +141,9 @@ describe("Popup", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Mom" }));
     expect(screen.queryByRole("note")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Save to Mom" }));
-    expect(
-      await screen.findByText("Saved to Mom. Reading captures costs real money, so for now it's only on for test accounts."),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/learn from it later/)).not.toBeInTheDocument();
+    expect(await screen.findByRole("note")).toHaveTextContent("Not read yet");
+    expect(screen.getByRole("status")).toHaveTextContent("Saved to Mom");
+    expect(screen.queryByText(/read it shortly/)).not.toBeInTheDocument();
   });
 
   it.each([
@@ -259,7 +264,8 @@ describe("Popup", () => {
     await userEvent.type(screen.getByLabelText(/Note/), "She loved this");
     await userEvent.click(screen.getByRole("button", { name: "Save to Mom" }));
 
-    expect(await screen.findByText("Saved to Mom. We'll show you what we learned.")).toBeInTheDocument();
+    expect(await screen.findByRole("status")).toHaveTextContent("Saved to Mom");
+    expect(screen.getByText("Capture for…")).toBeInTheDocument();
     const form = sentForm();
     expect(form.get("person_id")).toBe("p-mom");
     expect(form.get("note")).toBe("She loved this");
@@ -268,7 +274,7 @@ describe("Popup", () => {
     expect(fake.scripting.calls[1].args).toEqual([50_000]);
 
     await userEvent.click(screen.getByRole("button", { name: "Capture another" }));
-    expect(screen.getByLabelText(/Note/)).toHaveValue("");
+    expect(await screen.findByLabelText(/Note/)).toHaveValue("");
     expect(screen.getByRole("button", { name: "Mom" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getByRole("button", { name: "Dad" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
@@ -279,7 +285,7 @@ describe("Popup", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Mom" }));
     await userEvent.type(screen.getByLabelText(/Note/), "   ");
     await userEvent.click(screen.getByRole("button", { name: "Save to Mom" }));
-    await screen.findByText(/Saved to Mom/);
+    await screen.findByRole("link", { name: "See Mom's profile" });
     expect(sentForm().has("note")).toBe(false);
   });
 
@@ -292,7 +298,7 @@ describe("Popup", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't save the capture.");
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
 
-    expect(await screen.findByText(/Saved to Mom/)).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "See Mom's profile" })).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(sentForm(1).get("person_id")).toBe("p-mom");
     expect(sentForm(1).get("screenshot")).toEqual(sentForm(0).get("screenshot"));
@@ -334,16 +340,16 @@ describe("Here's what I learned (ALL-25)", () => {
     await capture();
     expect(await screen.findByText("Reading the page…")).toBeInTheDocument();
     answer(json({ id: "c1", extraction: { status: "extracted", facts } }, 201));
-    expect(await screen.findByText("Here's what I learned about Mom")).toBeInTheDocument();
+    expect(await screen.findByText("Here's what I learned")).toBeInTheDocument();
   });
 
   it("lists what was learned, owned things as Already has, and links to the person", async () => {
     fetchMock.mockResolvedValueOnce(json({ id: "c1", extraction: { status: "extracted", facts } }, 201));
     await capture();
-    expect(await screen.findByText("Here's what I learned about Mom")).toBeInTheDocument();
+    expect(await screen.findByText("Here's what I learned")).toBeInTheDocument();
     expect(screen.getByText("Wants: a ceramic pour-over set")).toBeInTheDocument();
     expect(screen.getByText("Already has: Owala water bottle")).toBeInTheDocument();
-    const link = screen.getByRole("link", { name: "See everything about Mom →" });
+    const link = screen.getByRole("link", { name: "See Mom's profile" });
     expect(link).toHaveAttribute("href", "https://app.test/people/p-mom");
     expect(link).toHaveAttribute("target", "_blank");
   });
@@ -351,8 +357,8 @@ describe("Here's what I learned (ALL-25)", () => {
   it("says so honestly when nothing confident was found", async () => {
     fetchMock.mockResolvedValueOnce(json({ id: "c1", extraction: { status: "extracted", facts: [] } }, 201));
     await capture();
-    expect(await screen.findByText("Nothing new to learn from this page. The capture is saved.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "See everything about Mom →" })).toBeInTheDocument();
+    expect(await screen.findByText("Nothing new to learn from this page. It's kept on Mom's profile.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "See Mom's profile" })).toBeInTheDocument();
   });
 
   it("a failed read offers Try again, which retries the read, not the upload", async () => {
@@ -360,7 +366,7 @@ describe("Here's what I learned (ALL-25)", () => {
       .mockResolvedValueOnce(json({ id: "c1", extraction: { status: "failed", facts: [] } }, 201))
       .mockResolvedValueOnce(json({ extraction: { status: "extracted", facts } }, 200));
     await capture();
-    expect(await screen.findByText("Couldn't read this page. The capture is saved.")).toBeInTheDocument();
+    expect(await screen.findByText("We couldn't read this page.")).toBeInTheDocument();
     expect(screen.getByRole("note")).toHaveTextContent("about 2¢ each"); // Trying again spends money too (ALL-94).
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByText("Wants: a ceramic pour-over set")).toBeInTheDocument();
@@ -371,7 +377,227 @@ describe("Here's what I learned (ALL-25)", () => {
   it("with reading switched off, says it'll learn later", async () => {
     fetchMock.mockResolvedValueOnce(json({ id: "c1", extraction: { status: "pending", facts: [] } }, 201));
     await capture();
-    expect(await screen.findByText("Saved. We'll learn from it later.")).toBeInTheDocument();
+    expect(await screen.findByText("We'll read it shortly. What we learn shows on Mom's profile.")).toBeInTheDocument();
   });
 });
 
+
+describe("Product page (ALL-78)", () => {
+  // What cropPhoto drew: the source rectangle of each crop.
+  let drawn: number[][];
+
+  function productPage({ price = "35.00" as string | null } = {}) {
+    const product = {
+      "@context": "https://schema.org",
+      "@type": "Product",
+      name: "YETI Rambler 20 oz Tumbler",
+      image: "https://img.rei.com/main.jpg",
+      sku: "SKU-1",
+      ...(price === null ? {} : { offers: { "@type": "Offer", price, priceCurrency: "USD" } }),
+    };
+    document.head.innerHTML = `<script type="application/ld+json">${JSON.stringify(product)}</script>`;
+    document.body.innerHTML = "";
+    // Two large images on screen: a big banner and the (smaller) product image.
+    const boxes: [string, DOMRect][] = [
+      ["https://img.rei.com/banner.jpg", { left: 0, top: 0, right: 600, bottom: 300, width: 600, height: 300 } as DOMRect],
+      ["https://img.rei.com/main.jpg", { left: 100, top: 320, right: 300, bottom: 520, width: 200, height: 200 } as DOMRect],
+    ];
+    for (const [src, rect] of boxes) {
+      const img = document.createElement("img");
+      img.src = src;
+      img.getBoundingClientRect = () => rect;
+      document.body.append(img);
+    }
+  }
+
+  beforeEach(() => {
+    drawn = [];
+    // jsdom has no image decoding or canvas: the screenshot is 2048px wide
+    // (innerWidth 1024, so scale 2), and the crop records what it drew.
+    vi.stubGlobal("createImageBitmap", async () => ({ width: 2048, height: 1536, close() {} }));
+    vi.stubGlobal(
+      "OffscreenCanvas",
+      class {
+        getContext() {
+          return { drawImage: (_b: unknown, ...rect: number[]) => drawn.push(rect.slice(0, 4)) };
+        }
+        async convertToBlob() {
+          return new Blob([new Uint8Array([0xff, 0xd8, 0xff])], { type: "image/jpeg" });
+        }
+      },
+    );
+    URL.createObjectURL = vi.fn(() => "blob:shot");
+    URL.revokeObjectURL = vi.fn();
+    productPage();
+  });
+
+  const addButton = () => screen.findByRole("button", { name: "Add to my list" });
+
+  it("shows the card, the recent people and Someone else…; nothing is sent before Add", async () => {
+    render(<App />);
+    await addButton();
+    expect(screen.getByText("GiftsAF")).toBeInTheDocument();
+    expect(screen.getByLabelText("Name")).toHaveValue("YETI Rambler 20 oz Tumbler");
+    expect(screen.getByLabelText("Price")).toHaveValue("$35.00");
+    expect(screen.getByText("1 of 2")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Dad" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Mom" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Someone else…" })).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("Add sends the edited gift with the product photo, version 1, and shows Added", async () => {
+    fetchMock.mockResolvedValueOnce(json({ outcome: "added", itemId: "i1" }, 201));
+    render(<App />);
+    await addButton();
+    await userEvent.clear(screen.getByLabelText("Name"));
+    await userEvent.type(screen.getByLabelText("Name"), "Rambler");
+    await userEvent.clear(screen.getByLabelText("Price"));
+    await userEvent.type(screen.getByLabelText("Price"), "30");
+    await userEvent.click(screen.getByRole("button", { name: "Add to my list" }));
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Added to your listRambler · $30.00");
+    const [url] = fetchMock.mock.calls[0] as unknown as [string];
+    expect(url).toBe("https://app.test/api/lists/items");
+    const form = sentForm();
+    expect(form.get("v")).toBe("1");
+    expect(form.get("name")).toBe("Rambler");
+    expect(form.get("priceCents")).toBe("3000");
+    expect(form.get("productId")).toBe("SKU-1");
+    expect(form.get("pageUrl")).toBe(location.href);
+    expect(form.get("photo")).toBeInstanceOf(Blob);
+    // The product image's box (100,320 200×200) at scale 2.
+    expect(drawn).toEqual([[200, 640, 400, 400]]);
+    // One screenshot, taken when the popup opened.
+    expect(fake.tabs.captures).toHaveLength(1);
+  });
+
+  it("› switches the photo, and the shown one is the one sent", async () => {
+    fetchMock.mockResolvedValueOnce(json({ outcome: "added", itemId: "i1" }, 201));
+    render(<App />);
+    await addButton();
+    await userEvent.click(screen.getByRole("button", { name: "Next photo" }));
+    expect(screen.getByText("2 of 2")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Add to my list" }));
+    await screen.findByText("Added to your list");
+    expect(drawn).toEqual([[0, 0, 1200, 600]]);
+  });
+
+  it("Done closes the popup", async () => {
+    const close = vi.spyOn(window, "close").mockImplementation(() => {});
+    fetchMock.mockResolvedValueOnce(json({ outcome: "added", itemId: "i1" }, 201));
+    render(<App />);
+    await userEvent.click(await addButton());
+    await userEvent.click(await screen.findByRole("button", { name: "Done" }));
+    expect(close).toHaveBeenCalled();
+    close.mockRestore();
+  });
+
+  it("already on the list says so", async () => {
+    fetchMock.mockResolvedValueOnce(json({ outcome: "duplicate" }, 200));
+    render(<App />);
+    await userEvent.click(await addButton());
+    expect(await screen.findByRole("status")).toHaveTextContent("Already on your list");
+    expect(screen.getByText("This link is on your list already, so nothing was added twice.")).toBeInTheDocument();
+  });
+
+  it("a likely duplicate asks; Add anyway resends with confirmLikely", async () => {
+    fetchMock
+      .mockResolvedValueOnce(json({ outcome: "likely", existing: { name: "Rambler", priceCents: 3000, imageUrl: null } }, 200))
+      .mockResolvedValueOnce(json({ outcome: "added", itemId: "i1" }, 201));
+    render(<App />);
+    await userEvent.click(await addButton());
+    expect(await screen.findByText("This looks like a gift already on your list")).toBeInTheDocument();
+    expect(sentForm(0).has("confirmLikely")).toBe(false);
+    await userEvent.click(screen.getByRole("button", { name: "Add anyway" }));
+    expect(await screen.findByText("Added to your list")).toBeInTheDocument();
+    expect(sentForm(1).get("confirmLikely")).toBe("1");
+  });
+
+  it("a likely duplicate: Don't add goes back to the card with the edits kept, and sends nothing more", async () => {
+    fetchMock.mockResolvedValueOnce(json({ outcome: "likely", existing: { name: "Rambler", priceCents: 3000, imageUrl: null } }, 200));
+    render(<App />);
+    await addButton();
+    await userEvent.type(screen.getByLabelText("Name"), " Blue");
+    await userEvent.click(screen.getByRole("button", { name: "Add to my list" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Don't add" }));
+    expect(screen.getByLabelText("Name")).toHaveValue("YETI Rambler 20 oz Tumbler Blue");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("a full list says so", async () => {
+    fetchMock.mockResolvedValueOnce(json({ outcome: "full" }, 200));
+    render(<App />);
+    await userEvent.click(await addButton());
+    expect(await screen.findByRole("alert")).toHaveTextContent("Your list is full");
+  });
+
+  it("a 401 on Add shows sign-in (AC-18)", async () => {
+    fetchMock.mockResolvedValueOnce(json({ error: "Sign in again." }, 401));
+    render(<App />);
+    await userEvent.click(await addButton());
+    expect(await screen.findByRole("button", { name: "Sign in" })).toBeInTheDocument();
+  });
+
+  it("no session on Add shows sign-in (AC-18)", async () => {
+    render(<App />);
+    const add = await addButton();
+    db.session = null;
+    await userEvent.click(add);
+    expect(await screen.findByRole("button", { name: "Sign in" })).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([404, 503])("a %i on Add says adding is paused, and the card stays (AC-20)", async (status) => {
+    fetchMock.mockResolvedValueOnce(new Response("off", { status }));
+    render(<App />);
+    await userEvent.click(await addButton());
+    expect(await screen.findByRole("alert")).toHaveTextContent("Adding from the extension is paused");
+    expect(screen.getByRole("button", { name: "Add to my list" })).toBeEnabled();
+  });
+
+  it("no price: the box is empty and focused, and Add is off", async () => {
+    productPage({ price: null });
+    render(<App />);
+    expect(await addButton()).toBeDisabled();
+    expect(screen.getByLabelText("Price")).toHaveValue("");
+    expect(screen.getByLabelText("Price")).toHaveFocus();
+    expect(screen.getByText("Not on the page. Type it in.")).toBeInTheDocument();
+  });
+
+  it("Someone else… opens the full list with Back; Back keeps the card's edits (AC-13)", async () => {
+    render(<App />);
+    await addButton();
+    await userEvent.type(screen.getByLabelText("Name"), " Blue");
+    await userEvent.click(screen.getByRole("button", { name: "Next photo" }));
+    await userEvent.click(screen.getByRole("button", { name: "Someone else…" }));
+
+    expect(screen.getByText("Save for someone")).toBeInTheDocument();
+    expect(screen.getByLabelText("Search people")).toHaveFocus();
+    expect(screen.getByText("YETI Rambler 20 oz Tumbler Blue")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Add to my list" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sign out" })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "‹ Back" }));
+    expect(screen.getByLabelText("Name")).toHaveValue("YETI Rambler 20 oz Tumbler Blue");
+    expect(screen.getByText("2 of 2")).toBeInTheDocument();
+  });
+
+  it("Someone else… then Save saves for that person", async () => {
+    render(<App />);
+    await userEvent.click(await screen.findByRole("button", { name: "Someone else…" }));
+    await userEvent.click(screen.getByRole("button", { name: "Mom" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save to Mom" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Saved to Mom");
+    expect(sentForm().get("person_id")).toBe("p-mom");
+  });
+
+  it("a recent person saves the page to them in one tap", async () => {
+    render(<App />);
+    await userEvent.click(await screen.findByRole("button", { name: "Dad" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Saved to Dad");
+    expect(sentForm().get("person_id")).toBe("p-dad");
+    expect((fetchMock.mock.calls[0] as unknown as [string])[0]).toBe("https://app.test/api/captures");
+    expect(screen.getByRole("button", { name: "Capture another" })).toBeInTheDocument();
+  });
+});

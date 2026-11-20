@@ -84,3 +84,62 @@ export async function retryExtraction(accessToken: string, captureId: string): P
   const error = typeof body?.error === "string" ? body.error : RETRY_ERROR;
   return { ok: false, status: response.status, error };
 }
+
+/** One gift for the signed-in user's own list (apps/web/app/api/lists/items/route.ts, ALL-78). */
+export type AddInput = {
+  name: string;
+  priceCents: number;
+  pageUrl: string;
+  canonicalUrl: string | null;
+  productId: string | null;
+  /** The JPEG cropped from the screenshot; null when there's no photo. */
+  photo: Blob | null;
+  /** Add even though the server said a gift on the list looks like this one. */
+  confirmLikely?: boolean;
+};
+
+export type LikelyGift = { name: string; priceCents: number; imageUrl: string | null };
+export type AddOutcome =
+  | { outcome: "added" }
+  | { outcome: "duplicate" }
+  | { outcome: "likely"; existing: LikelyGift }
+  | { outcome: "full" };
+export type AddResponse = ({ ok: true } & AddOutcome) | { ok: false; status: number; error: string };
+
+const ADD_ERROR = "Couldn't add that gift. Try again.";
+// 503 is the off switch (AC-20); 404 is a web app rolled back to before the route.
+const ADD_PAUSED = "Adding from the extension is paused.";
+
+function parseLikely(raw: unknown): LikelyGift | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const { name, priceCents, imageUrl } = raw as Record<string, unknown>;
+  if (typeof name !== "string" || typeof priceCents !== "number") return null;
+  if (imageUrl !== null && typeof imageUrl !== "string") return null;
+  return { name, priceCents, imageUrl };
+}
+
+export async function addToMyList(accessToken: string, input: AddInput): Promise<AddResponse> {
+  const form = new FormData();
+  form.set("v", "1");
+  form.set("name", input.name);
+  form.set("priceCents", String(input.priceCents));
+  form.set("pageUrl", input.pageUrl);
+  if (input.canonicalUrl) form.set("canonicalUrl", input.canonicalUrl);
+  if (input.productId) form.set("productId", input.productId);
+  if (input.confirmLikely) form.set("confirmLikely", "1");
+  if (input.photo) form.set("photo", input.photo, "photo.jpg");
+
+  const response = await post(`${config.appOrigin}/api/lists/items`, accessToken, form);
+  if (!response) return { ok: false, status: 0, error: NETWORK_ERROR };
+  if (response.status === 404 || response.status === 503) return { ok: false, status: response.status, error: ADD_PAUSED };
+
+  const body = (await response.json().catch(() => null)) as { outcome?: unknown; existing?: unknown; error?: unknown } | null;
+  if (response.status === 201 && body?.outcome === "added") return { ok: true, outcome: "added" };
+  if (response.status === 200) {
+    if (body?.outcome === "duplicate" || body?.outcome === "full") return { ok: true, outcome: body.outcome };
+    const existing = body?.outcome === "likely" ? parseLikely(body.existing) : null;
+    if (existing) return { ok: true, outcome: "likely", existing };
+  }
+  const error = typeof body?.error === "string" ? body.error : ADD_ERROR;
+  return { ok: false, status: response.status, error };
+}

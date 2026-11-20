@@ -1,6 +1,6 @@
 import { readProductPage, type ProductPage } from "../lib/page";
 import { getSupabase } from "../lib/supabase";
-import type { Person } from "./PersonPicker";
+import type { Person } from "./PeopleScreen";
 
 export type Loaded = {
   kind: "ready";
