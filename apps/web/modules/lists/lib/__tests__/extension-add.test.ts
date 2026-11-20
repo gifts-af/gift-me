@@ -90,6 +90,24 @@ describe("parseExtensionAddForm", () => {
     expect(parsed.ok && parsed.input).toMatchObject({ productId: null, confirmLikely: false, photo: null });
   });
 
+  it("keeps the page's variant on a Shopify-style canonical link, so two sizes are two links (B1)", () => {
+    const size = (variant: string) =>
+      parseExtensionAddForm(
+        form({ pageUrl: `https://www.tee.test/products/tee?variant=${variant}&utm_source=x`, canonicalUrl: "https://tee.test/products/tee" }),
+      );
+    const small = size("111");
+    const large = size("222");
+    expect(small.ok && small.input.link).toBe("https://tee.test/products/tee?variant=111");
+    expect(large.ok && large.input.link).toBe("https://tee.test/products/tee?variant=222");
+  });
+
+  it("uses a canonical link for another path as it is", () => {
+    const parsed = parseExtensionAddForm(
+      form({ pageUrl: "https://shop.test/sale/mug?variant=2", canonicalUrl: "https://shop.test/mug" }),
+    );
+    expect(parsed.ok && parsed.input.link).toBe("https://shop.test/mug");
+  });
+
   it("ignores a canonical link that isn't a web link", () => {
     const parsed = parseExtensionAddForm(form({ canonicalUrl: "javascript:alert(1)" }));
     expect(parsed.ok && parsed.input.link).toBe("https://shop.test/mug");

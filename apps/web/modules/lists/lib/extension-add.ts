@@ -1,4 +1,4 @@
-import { cleanLink } from "@gifts-af/core/store-page/link";
+import { productLink } from "@gifts-af/core/store-page/link";
 import { z } from "zod";
 import { logEvent } from "@/lib/log";
 import { MAX_PRICE_CENTS } from "./format.js";
@@ -24,7 +24,7 @@ export type ExtensionAddInput = {
   itemId: string;
   name: string;
   priceCents: number;
-  /** cleanLink(canonicalUrl ?? pageUrl), an http(s) link. */
+  /** productLink(pageUrl, canonicalUrl): the canonical link keeping the page's variant, an http(s) link. */
   link: string;
   productId: string | null;
   confirmLikely: boolean;
@@ -120,8 +120,9 @@ export function parseExtensionAddForm(form: FormData): ParseResult {
   const f = parsed.data;
 
   // The canonical link comes from the page, so one that isn't a web link is ignored.
-  const raw = cleanUrl(f.canonicalUrl) ?? cleanUrl(f.pageUrl);
-  const link = raw ? cleanUrl(cleanLink(raw)) : null;
+  const canonical = cleanUrl(f.canonicalUrl);
+  const page = cleanUrl(f.pageUrl) ?? canonical;
+  const link = page ? cleanUrl(productLink(page, canonical)) : null;
   if (!link) return { ok: false, status: 400, error: UNREADABLE };
 
   return {

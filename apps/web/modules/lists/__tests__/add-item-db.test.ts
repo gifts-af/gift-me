@@ -6,6 +6,7 @@
 // statement timeout turns a deadlock into a failure. Skipped when the local
 // database isn't running.
 import { randomUUID } from "node:crypto";
+import { productLink } from "@gifts-af/core/store-page/link";
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import cases from "../../../../../packages/core/src/store-page/match-key-cases.json";
@@ -101,6 +102,23 @@ describe.skipIf(!dbUp)("lists.add_item on local Supabase", () => {
     expect(rows.map(({ url, key, host }) => ({ url, key, host }))).toEqual(
       cases.map(({ url, key, host }) => ({ url, key, host })),
     );
+  });
+
+  it("adds two sizes of a Shopify-style product as two gifts, and the same size once (B1)", async () => {
+    const userId = await newUser();
+    const [c] = await connectMany(userId, 1);
+    const canonical = "https://tee.test/products/tee";
+    const size = (variant: string) => productLink(`https://www.tee.test/products/tee?variant=${variant}`, canonical);
+    try {
+      const outcomes = [];
+      for (const [url, name] of [[size("111"), "Tee S"], [size("222"), "Tee L"], [size("111"), "Tee S again"]]) {
+        outcomes.push((await addItem(c, url, name)).rows[0].outcome);
+      }
+      expect(outcomes).toEqual(["added", "added", "duplicate"]);
+    } finally {
+      await endAll([c]);
+    }
+    expect((await itemNames(userId)).sort()).toEqual(["Tee L", "Tee S"]);
   });
 
   it("adds one gift when ten adds of the same product race, on a user with no list", async () => {

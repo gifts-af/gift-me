@@ -112,3 +112,29 @@ export function matchKey(url: string): string {
     .map(([key, value]) => `${key}=${value}`);
   return `${host}${path}${pairs.length ? `?${pairs.join("&")}` : ""}`;
 }
+
+/**
+ * The link saved for a product page (ALL-78): the page's canonical link when
+ * there is one, else the page's own address, cleaned of tracking. A canonical
+ * link often drops the variant (Shopify's has no ?variant=), so when it names
+ * the same page (same host ignoring www./m., same path ignoring a trailing
+ * slash) the page's kept parameters (variant, size, id, ...) are carried onto
+ * it, replacing the canonical's own values for those keys. A canonical link
+ * for another host or path is used as it is.
+ */
+export function productLink(pageUrl: string, canonicalUrl: string | null): string {
+  if (!canonicalUrl) return cleanLink(pageUrl);
+  const page = parse(pageUrl);
+  const canonical = parse(canonicalUrl);
+  if (!page || !canonical) return cleanLink(canonicalUrl);
+  const path = (u: URL) => u.pathname.replace(/\/$/, "");
+  if (plainHost(page) !== plainHost(canonical) || path(page) !== path(canonical)) return cleanLink(canonicalUrl);
+
+  const kept = [...page.searchParams].filter(([key]) => KEPT_PARAMS.has(key.toLowerCase()));
+  const keptKeys = new Set(kept.map(([key]) => key.toLowerCase()));
+  for (const key of [...canonical.searchParams.keys()]) {
+    if (keptKeys.has(key.toLowerCase())) canonical.searchParams.delete(key);
+  }
+  for (const [key, value] of kept) canonical.searchParams.append(key, value);
+  return cleanLink(canonical.href);
+}
