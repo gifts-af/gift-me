@@ -1,6 +1,6 @@
 # GiftsAF Chrome extension
 
-Saves what's on screen to a person in GiftsAF. It is a Manifest V3 extension built with Vite, React and Tailwind. It asks Chrome for three permissions only: `activeTab`, `scripting` and `storage`. It shares `packages/core` with the web app, including the one relationship list that quick add uses.
+Saves gifts and gift ideas from any page to GiftsAF: add a product to your list, or save a page for a person. It is a Manifest V3 extension built with Vite, React and Tailwind. It asks Chrome for three permissions only: `activeTab`, `scripting` and `storage`. It shares `packages/core` with the web app, including the one relationship list that quick add uses.
 
 ## Build
 
@@ -54,23 +54,23 @@ Keep these in step with the privacy page (`apps/web/app/privacy/page.tsx`, gifts
 
 - **Visibility:** Unlisted.
 - **Category:** Shopping.
-- **Summary:** Save what's on screen to a person in GiftsAF, so it can learn what they'd like.
+- **Summary:** Save gifts and gift ideas from any page to GiftsAF: add to your list, or save for someone.
 - **Description:**
 
   > GiftsAF remembers the people you buy for and helps you pick gifts they'll love.
   >
-  > Seeing a friend's wishlist, a post about what they're into, or a product they mentioned? Click the GiftsAF button, pick the person, and Save. GiftsAF reads the page and adds what it learned to their profile as suggestions you can keep or remove.
+  > Found a product you'd like, or one a friend would? Click the GiftsAF icon. On a product page, one click adds it to your list, with its name, price and a photo. Or save the page for a person, and GiftsAF adds what it learned to their profile as suggestions you can keep or remove.
   >
-  > The extension does nothing until you click Save. It never reads your browsing history or runs in the background.
+  > When you click the icon, the extension reads the tab you're on, on your computer. Nothing leaves your computer until you press Add or Save. It never reads your browsing history or runs in the background.
   >
   > GiftsAF is invite only while in early alpha. Sign in with your GiftsAF account.
 
 - **Privacy policy:** https://giftsaf.com/privacy
-- **Single purpose:** Save the page the user is looking at to a person in their GiftsAF account.
+- **Single purpose:** Save gifts and gift ideas from any page to GiftsAF.
 - **Permission reasons:**
-  - `activeTab`: read the tab the user clicked Save on, only at that moment.
-  - `scripting`: get that tab's text when the user clicks Save, and check the tab can be captured when the popup opens.
+  - `activeTab`: read the tab the user opened the extension on, only when they click its icon.
+  - `scripting`: read that tab's product details (and its text, when the user saves it for a person) when the user clicks the icon, and check the tab can be captured.
   - `storage`: keep the user signed in to GiftsAF.
 - **Remote code:** No.
-- **Data collected:** Website content (page text and a screenshot, when the user clicks Save); Web history (the address of a page the user saves); Authentication information (the GiftsAF sign-in session); Personally identifiable information (names of the people the user saves to, and the user's email in the session). Nothing else.
+- **Data collected:** Website content (the product's name, price, a cropped photo and its text or screenshot, sent only when the user presses Add or Save); Web history (the address of a page the user adds or saves); Authentication information (the GiftsAF sign-in session); Personally identifiable information (names of the people the user saves to, the gifts on the user's list, and the user's email in the session). Nothing else.
 - **Certifications:** not sold to third parties; not used for anything unrelated to the single purpose; not used for creditworthiness or lending.

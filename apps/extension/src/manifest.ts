@@ -11,8 +11,8 @@ export function buildManifest(env: ManifestEnv) {
   return {
     manifest_version: 3 as const,
     name: env.name,
-    description: "Save what's on screen to a person in GiftsAF.",
-    version: "0.1.0",
+    description: "Save gifts and gift ideas from any page to GiftsAF",
+    version: "0.2.0",
     key: env.key,
     icons,
     permissions: ["activeTab", "scripting", "storage"],
