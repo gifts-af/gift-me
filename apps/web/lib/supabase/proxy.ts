@@ -20,8 +20,9 @@ export function isPublicPath(pathname: string) {
     pathname === "/api/keepalive" ||
     // The daily round tick checks its own cron secret (ALL-28).
     pathname === "/api/rounds/tick" ||
-    // Only Vercel's queue can call the round job route (ALL-125); a request with no queue
-    // delivery is refused by handleCallback.
+    // The queue calls the round job route without a session (ALL-125). Vercel makes trigger
+    // routes private, and the route checks an HMAC the tick signs each message with; the
+    // @vercel/queue SDK verifies nothing itself.
     pathname === "/api/rounds/job" ||
     // Resend posts received mail here; the route checks the Svix signature (ALL-31).
     pathname === "/api/inbound/resend" ||

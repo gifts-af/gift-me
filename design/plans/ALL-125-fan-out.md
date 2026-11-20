@@ -125,7 +125,7 @@ None left. See "What was decided".
 - Queue topic `round-jobs`; trigger `maxDeliveries` 3, `maxConcurrency` 5; job route `maxDuration` 300. These live only in `vercel.json` (Vercel reads them at deploy time); code reads `maxConcurrency` from that file.
 - Idempotency keys: `round:<round id>:<YYYY-MM-DD of the message's now>`, `buyer:<user id>:<YYYY-MM-DD>`.
 - `sendBatch` takes at most 100 messages a call (Vercel's limit, quoted in a comment, not a setting).
-- Events carry ids, counts, statuses and reasons only (E6). New events: `round_fanout {enabled, due, sent, failed}`, `round_fanout_send_failed {count, alert: true}`, `round_fanout_setting_unreadable {}`, `round_job {kind, result, round_id | user_id, rounds, delivery_count?, alert?}`, `ideas.daily_limit_reached {round_id, user_id, alert: true}`.
+- Events carry ids, counts, statuses and reasons only (E6). New events: `round_fanout {enabled, due, sent, failed}`, `round_fanout_send_failed {count, alert: true}`, `round_fanout_send_threw {count, name, kind?, code?, status?}`, `round_fanout_setting_unreadable {}`, `round_job {kind, result, round_id | user_id, rounds, delivery_count?, reason?, alert?}`, `ideas.daily_limit_reached {round_id, user_id, alert: true}`.
 - No paid calls in any test: AI Gateway, Zinc and the queue are faked (memory: no money while testing).
 - Migration timestamp after `main`'s newest when the PR merges.
 - Module code never imports `@vercel/queue` or reads `process.env` (E3); `fanout.ts` imports nothing from `engine.ts` (no import cycle).

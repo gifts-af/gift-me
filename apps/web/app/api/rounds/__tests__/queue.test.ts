@@ -1,7 +1,11 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import type { QueuedJob } from "@/modules/concierge";
-import { sendJobsWith } from "../queue";
+import { sendJobsWith as withSecret } from "../queue";
+import { verifyMessage } from "../sign";
+
+const SECRET = "s3cret";
+const sendJobsWith = (send: never) => withSecret(send, SECRET);
 
 const U = "0b6f7c3e-1a2b-4c5d-8e9f-001122334455";
 const jobs = (n: number): QueuedJob[] =>
@@ -18,7 +22,9 @@ describe("sendJobsWith", () => {
     const [topic, first] = sendBatch.mock.calls[0] as unknown as [string, { idempotencyKey: string; payload: unknown }[]];
     expect(topic).toBe("round-jobs");
     expect(first).toHaveLength(100);
-    expect(first[3]).toEqual({ payload: { kind: "round", roundId: U }, idempotencyKey: "k3" });
+    expect(first[3]).toEqual({ payload: { kind: "round", roundId: U, sig: expect.any(String) }, idempotencyKey: "k3" });
+    // Every message carries a signature the job route accepts.
+    for (const m of first) expect(verifyMessage(m.payload as { sig: string }, SECRET)).toBe(true);
     expect(sendBatch.mock.calls[1][1]).toHaveLength(50);
   });
 
@@ -50,5 +56,20 @@ describe("sendJobsWith", () => {
   it("counts a thrown batch's messages failed", async () => {
     const sendBatch = vi.fn().mockRejectedValueOnce(new Error("down")).mockResolvedValueOnce([ok]);
     expect(await sendJobsWith(sendBatch as never)(jobs(101))).toEqual({ sent: 1, failed: 100 });
+  });
+
+  it("counts messages the queue returned no result for as failed", async () => {
+    const sendBatch = vi.fn().mockResolvedValue([ok]);
+    expect(await sendJobsWith(sendBatch as never)(jobs(3))).toEqual({ sent: 1, failed: 2 });
+  });
+
+  it("logs a thrown batch with its error's name, never its message", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const sendBatch = vi.fn().mockRejectedValue(new TypeError("secret detail"));
+    await sendJobsWith(sendBatch as never)(jobs(1));
+    const line = String(log.mock.calls[0][0]);
+    expect(JSON.parse(line)).toMatchObject({ event: "round_fanout_send_threw", count: 1, name: "TypeError" });
+    expect(line).not.toContain("secret detail");
+    log.mockRestore();
   });
 });

@@ -14,6 +14,6 @@ export const maxDuration = 300;
 export async function GET(request: Request) {
   const vercelEnv = process.env.VERCEL_ENV;
   return handleTick(request, { cronSecret: process.env.CRON_SECRET, vercelEnv }, async (now) =>
-    runTick((await buyingWiring(now, process.env, {}, { sendJobs: queueSendJobs, testClock: isTestClock(vercelEnv) })).engine),
+    runTick((await buyingWiring(now, process.env, {}, { sendJobs: queueSendJobs(process.env.CRON_SECRET ?? ""), testClock: isTestClock(vercelEnv) })).engine),
   );
 }

@@ -256,6 +256,8 @@ type JobOutcome = { result: JobResult; rounds: number };
 async function roundJob(roundId: string, deps: EngineDeps, jobStartMs: number): Promise<JobOutcome> {
   const { store } = deps;
   if (!(await engineOn(store))) return { result: "off", rounds: 0 };
+  // Before the claim, so a failed read never leaves a lease held for round_lock_minutes.
+  const s = await store.scheduleSettings();
   const round = await store.claim(roundId, deps.now);
   if (!round) return { result: "busy", rounds: 0 };
   if (round.status === "needs_attention") {
@@ -263,7 +265,6 @@ async function roundJob(roundId: string, deps: EngineDeps, jobStartMs: number): 
     await releaseQuietly(round, deps);
     return { result: "busy", rounds: 0 };
   }
-  const s = await store.scheduleSettings();
   const step = await advanceClaimed(round, deps, s, false, 0);
   if (step === "advanced") return { result: "advanced", rounds: 1 };
   if (step === "failed") return { result: "failed", rounds: 0 };
@@ -287,7 +288,7 @@ async function roundJob(roundId: string, deps: EngineDeps, jobStartMs: number): 
  */
 async function buyerJob(roundIds: string[], deps: EngineDeps): Promise<JobOutcome> {
   const { store } = deps;
-  // Unreadable, the job fails (as the tick does) and the queue delivers it again.
+  // Unreadable, the job fails (as the tick does); the next tick picks the rounds up again.
   const on = await engineOn(store);
   const s = await store.scheduleSettings();
   const placeBy = await placeDeadline(deps);

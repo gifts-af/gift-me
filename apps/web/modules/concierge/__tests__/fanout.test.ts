@@ -293,6 +293,15 @@ describe("runRoundJob", () => {
     expect(placeRound).not.toHaveBeenCalled();
   });
 
+  it("reads the schedule settings before claiming, so a failed read leaves no lease held", async () => {
+    addRound("r1", { status: "awaiting_approval", attentionReason: null, headsUpOn: "2027-02-06" });
+    const claim = vi.spyOn(store, "claim");
+    vi.spyOn(store, "scheduleSettings").mockRejectedValue(new Error("db down"));
+    expect(await runRoundJob({ kind: "round", roundId: "r1" }, deps())).toBe("failed");
+    expect(claim).not.toHaveBeenCalled();
+    expect(store.round("r1").lockedUntil).toBeNull();
+  });
+
   it("with the engine off, a round message is off and a buyer message still places its held round", async () => {
     addRound("h1");
     addRound("r1", { status: "awaiting_approval", attentionReason: null, headsUpOn: "2027-02-06" });

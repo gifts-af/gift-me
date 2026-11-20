@@ -12,7 +12,7 @@ export const maxDuration = 300;
 const maxConcurrency = jobMaxConcurrency(vercelJson);
 
 export const POST = handleCallback(async (message, metadata) => {
-  await handleJob(message, metadata, { vercelEnv: process.env.VERCEL_ENV }, async (m, now) =>
+  await handleJob(message, metadata, { vercelEnv: process.env.VERCEL_ENV, cronSecret: process.env.CRON_SECRET }, async (m, now) =>
     runRoundJob(m, (await buyingWiring(now, process.env, {}, { zincShare: maxConcurrency })).engine),
   );
 });

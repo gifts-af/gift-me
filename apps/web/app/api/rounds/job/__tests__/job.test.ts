@@ -1,7 +1,12 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
 import vercelJson from "../../../../../vercel.json";
+import { signMessage } from "../../sign";
 import { handleJob, jobMaxConcurrency } from "../job";
+
+const SECRET = "s3cret";
+const ENV = { cronSecret: SECRET };
+const sign = (m: object) => signMessage(m, SECRET);
 
 const U = "0b6f7c3e-1a2b-4c5d-8e9f-001122334455";
 const events = (spy: { mock: { calls: unknown[][] } }) => spy.mock.calls.map((c) => JSON.parse(String(c[0])));
@@ -9,12 +14,13 @@ const events = (spy: { mock: { calls: unknown[][] } }) => spy.mock.calls.map((c)
 afterEach(() => vi.restoreAllMocks());
 
 describe("handleJob", () => {
-  it("runs a valid round and buyer message", async () => {
+  it("runs a valid signed round and buyer message, without the sig", async () => {
     const run = vi.fn().mockResolvedValue("advanced");
-    expect(await handleJob({ kind: "round", roundId: U }, { deliveryCount: 1 }, {}, run)).toBe("advanced");
+    expect(await handleJob(sign({ kind: "round", roundId: U }), { deliveryCount: 1 }, ENV, run)).toBe("advanced");
     expect(run.mock.calls[0][0]).toEqual({ kind: "round", roundId: U });
-    await handleJob({ kind: "buyer", userId: U, roundIds: [U] }, { deliveryCount: 1 }, {}, run);
+    await handleJob(sign({ kind: "buyer", userId: U, roundIds: [U] }), { deliveryCount: 1 }, ENV, run);
     expect(run).toHaveBeenCalledTimes(2);
+    expect(run.mock.calls[1][0]).toEqual({ kind: "buyer", userId: U, roundIds: [U] });
   });
 
   it.each([
@@ -26,25 +32,53 @@ describe("handleJob", () => {
   ])("acknowledges %s as invalid and logs it", async (_n, raw) => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     const run = vi.fn();
-    expect(await handleJob(raw, { deliveryCount: 1 }, {}, run)).toBe("invalid");
+    expect(await handleJob(raw && sign(raw), { deliveryCount: 1 }, ENV, run)).toBe("invalid");
     expect(run).not.toHaveBeenCalled();
     expect(events(log)).toContainEqual(expect.objectContaining({ event: "round_job", result: "invalid" }));
   });
 
+  describe("signature", () => {
+    const refused = async (raw: unknown, env: object) => {
+      const log = vi.spyOn(console, "log").mockImplementation(() => {});
+      const run = vi.fn();
+      expect(await handleJob(raw, { deliveryCount: 1 }, env, run)).toBe("invalid");
+      expect(run).not.toHaveBeenCalled();
+      expect(events(log)).toContainEqual(
+        expect.objectContaining({ event: "round_job", result: "invalid", reason: "bad_signature", alert: true }),
+      );
+    };
+    const V = "1b6f7c3e-1a2b-4c5d-8e9f-001122334455";
+
+    it("refuses a tampered body", async () => {
+      const signed = sign({ kind: "buyer", userId: U, roundIds: [U] });
+      await refused({ ...signed, roundIds: [V] }, ENV);
+    });
+    it("refuses a missing or malformed sig", async () => {
+      await refused({ kind: "round", roundId: U }, ENV);
+      await refused({ kind: "round", roundId: U, sig: "zz" }, ENV);
+    });
+    it("refuses a sig made with another secret", async () => {
+      await refused(signMessage({ kind: "round", roundId: U }, "other"), ENV);
+    });
+    it("refuses everything when CRON_SECRET is unset", async () => {
+      await refused(sign({ kind: "round", roundId: U }), {});
+    });
+  });
+
   it("ignores the message's now on production, uses it elsewhere (AC-13)", async () => {
     const run = vi.fn().mockResolvedValue("advanced");
-    const msg = { kind: "round", roundId: U, now: "2027-03-20T12:00:00.000Z" };
+    const msg = sign({ kind: "round", roundId: U, now: "2027-03-20T12:00:00.000Z" });
     const before = Date.now();
-    await handleJob(msg, { deliveryCount: 1 }, { vercelEnv: "production" }, run);
+    await handleJob(msg, { deliveryCount: 1 }, { ...ENV, vercelEnv: "production" }, run);
     expect(run.mock.calls[0][1].getTime()).toBeGreaterThanOrEqual(before);
-    await handleJob(msg, { deliveryCount: 1 }, { vercelEnv: "preview" }, run);
+    await handleJob(msg, { deliveryCount: 1 }, { ...ENV, vercelEnv: "preview" }, run);
     expect(run.mock.calls[1][1]).toEqual(new Date("2027-03-20T12:00:00.000Z"));
   });
 
   it("logs an alert and rethrows when run throws", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     const run = vi.fn().mockRejectedValue(new Error("wiring"));
-    await expect(handleJob({ kind: "round", roundId: U }, { deliveryCount: 2 }, {}, run)).rejects.toThrow("wiring");
+    await expect(handleJob(sign({ kind: "round", roundId: U }), { deliveryCount: 2 }, ENV, run)).rejects.toThrow("wiring");
     expect(events(log)).toContainEqual(
       expect.objectContaining({ event: "round_job", result: "failed", delivery_count: 2, alert: true }),
     );
