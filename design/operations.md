@@ -293,7 +293,21 @@ My list saves each change as it's made, through `lists.save_list_checked`, which
 
 **Rolling back:** Vercel's instant rollback brings back the old Save button, which still saves through the untouched `lists.save_list`. Nothing in the database needs undoing.
 
-**Cleanup still to do:** once this has been live without a rollback, a later migration drops `lists.save_list` (E7, expand then contract). Before it does, these must stop calling it: the tests in `supabase/tests/lists.test.sql` that call it or pin it as untouched, and `secondUserShareLink` in `apps/web/e2e/people.spec.ts`, which makes a list for a shared test user on every run (with `save_list_checked` it would need to reuse that user's list, so it was left for the cleanup). No app code calls it any more.
+**Cleanup still to do:** once this has been live without a rollback, a later migration drops `lists.save_list` (E7, expand then contract). Before it does, these must stop calling it: the tests in `supabase/tests/lists.test.sql` that call it or pin it as untouched, `secondUserShareLink` in `apps/web/e2e/people.spec.ts` and `ownerWithList` in `apps/web/e2e/add-from-list-link.spec.ts`, which make lists for the browser tests (with `save_list_checked` the first would need to reuse its shared test user's list, so both were left for the cleanup). No app code calls it any more.
+
+## Adding a list's owner from their link (ALL-123)
+
+A signed-in buyer who opens someone's share link sees whose list it is and a card to add the owner to their people or link someone they already have; a person with no list gets a prompt at the top of their page to paste one (T76). Spec: [design/plans/ALL-123-add-from-list-link.md](plans/ALL-123-add-from-list-link.md).
+
+| Setting (`concierge.app_settings`) | Default | What it does |
+|---|---|---|
+| `list_link_card_enabled` | 1 | Off switch. 0 hides the card and the person-page prompt, shows no owner name anywhere (the heading reads "Their list" and link previews are the generic card), and brings back the old paste screen at a person's Their list. |
+
+**Turn it off:** `update concierge.app_settings set value = '0' where key = 'list_link_card_enabled';` (Supabase SQL editor as allensforever711, no deploy). Links already made stay.
+
+**Seeing it work on production (E9):** events, ids only: `lists.linked_from_share` (a person linked from the card or the prompt), `lists.unlinked_from_share` (Remove on the card) and `people.added_from_share` (a person added and linked in one save). Failures log `person_link_failed`, `person_unlink_failed`, `person_share_token_failed`, `person.add_failed` and `share_preview_failed` with the Postgres code.
+
+**Rolling back:** Vercel's instant rollback. The migration replaces `add_person` with one that takes an optional 18th argument, so the old code's 17-argument calls still work, and otherwise only adds; nothing in the database needs undoing.
 
 ## Extension: Add to my list (ALL-78, T77)
 
