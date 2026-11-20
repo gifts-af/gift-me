@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
+import { NOT_FOUND } from "../people/service";
 import { parseSavedGiftForm } from "../saved-gifts/rules";
-import { countSavedGifts, listSavedGifts, removeSavedGift, saveGift } from "../saved-gifts/service";
-import { FakeSavedGiftsStore, ME, MY_PERSON, NOT_MINE } from "./fake-saved-gifts-store";
+import { IDEA_REPLACED, countSavedGifts, listSavedGifts, removeSavedGift, saveGift, saveIdea, savedProductIds } from "../saved-gifts/service";
+import { FakeSavedGiftsStore, IDEA, ME, MY_PERSON, NOT_MINE } from "./fake-saved-gifts-store";
 
 // Saved gifts for someone (ALL-93). The database's own rules are tested in
 // supabase/tests/saved_gifts.test.sql; this covers the form and the messages.
@@ -173,5 +174,99 @@ describe("countSavedGifts", () => {
     const count = vi.spyOn(store, "count");
     expect(await countSavedGifts(store, "nope")).toBe(0);
     expect(count).not.toHaveBeenCalled();
+  });
+});
+
+// "Save" on a suggested idea (ALL-128). The server copies the idea itself; the
+// browser sends only its id. The one-copy rule is the database's
+// (supabase/tests/saved_gifts.test.sql); the fake mirrors its 23505.
+describe("saveIdea", () => {
+  function storeWithIdea(overrides: Partial<FakeSavedGiftsStore["ideas"][string]> = {}) {
+    const store = new FakeSavedGiftsStore();
+    store.ideas[IDEA] = {
+      person_id: MY_PERSON,
+      title: "Fly-tying vise",
+      price_cents: 3999,
+      product_url: "https://www.amazon.com/dp/B0TESTVISE",
+      retailer_product_id: "B0TESTVISE",
+      ...overrides,
+    };
+    return store;
+  }
+
+  it("copies the idea's title, item price, link and product id, and logs ids only", async () => {
+    const store = storeWithIdea();
+    const log = vi.fn();
+    expect(await saveIdea(store, log, MY_PERSON, IDEA)).toEqual({ ok: true });
+    expect(store.rows).toEqual([
+      expect.objectContaining({
+        person_id: MY_PERSON,
+        name: "Fly-tying vise",
+        price_cents: 3999,
+        product_url: "https://www.amazon.com/dp/B0TESTVISE",
+        image_url: null,
+        retailer_product_id: "B0TESTVISE",
+      }),
+    ]);
+    expect(log).toHaveBeenCalledWith("saved_gifts.save_idea", { user_id: ME, person_id: MY_PERSON, idea_id: IDEA });
+  });
+
+  it("cuts a long product title to the 200 characters a saved gift keeps", async () => {
+    const store = storeWithIdea({ title: `${"x".repeat(199)}yz` });
+    await saveIdea(store, vi.fn(), MY_PERSON, IDEA);
+    expect(store.rows[0].name).toBe(`${"x".repeat(199)}…`);
+  });
+
+  it("says the idea was replaced when a newer run removed it", async () => {
+    const store = new FakeSavedGiftsStore();
+    expect(await saveIdea(store, vi.fn(), MY_PERSON, IDEA)).toEqual({ ok: false, error: IDEA_REPLACED });
+    expect(IDEA_REPLACED).toBe("This idea was replaced. Refresh to see the new ones.");
+    expect(store.writes).toEqual([]);
+  });
+
+  it("doesn't copy an idea for another person, even one of the buyer's own", async () => {
+    const store = storeWithIdea({ person_id: NOT_MINE });
+    expect(await saveIdea(store, vi.fn(), MY_PERSON, IDEA)).toEqual({ ok: false, error: IDEA_REPLACED });
+    expect(store.writes).toEqual([]);
+  });
+
+  it("treats a second save of the same product as already saved", async () => {
+    const store = storeWithIdea();
+    await saveIdea(store, vi.fn(), MY_PERSON, IDEA);
+    expect(await saveIdea(store, vi.fn(), MY_PERSON, IDEA)).toEqual({ ok: true });
+    expect(store.rows).toHaveLength(1);
+  });
+
+  it("refuses at the cap with the saved-gifts message", async () => {
+    const store = storeWithIdea();
+    store.max = 0;
+    expect(await saveIdea(store, vi.fn(), MY_PERSON, IDEA)).toEqual({
+      ok: false,
+      error: "You've saved as many gifts for them as we keep. Remove one to add another.",
+    });
+  });
+
+  it("refuses ids that aren't ids, and a signed-out caller, without reading", async () => {
+    const store = storeWithIdea();
+    const idea = vi.spyOn(store, "idea");
+    expect(await saveIdea(store, vi.fn(), MY_PERSON, "nope")).toEqual({ ok: false, error: NOT_FOUND });
+    expect(await saveIdea(store, vi.fn(), "nope", IDEA)).toEqual({ ok: false, error: NOT_FOUND });
+    store.caller = null;
+    expect((await saveIdea(store, vi.fn(), MY_PERSON, IDEA)).ok).toBe(false);
+    expect(idea).not.toHaveBeenCalled();
+  });
+});
+
+describe("savedProductIds", () => {
+  it("lists the product ids saved for a person, skipping gifts typed in by hand", async () => {
+    const store = new FakeSavedGiftsStore();
+    store.ideas[IDEA] = { person_id: MY_PERSON, title: "Vise", price_cents: 3999, product_url: null, retailer_product_id: "B0TESTVISE" };
+    await saveIdea(store, vi.fn(), MY_PERSON, IDEA);
+    await saveGift(store, vi.fn(), MY_PERSON, REEL);
+    expect(await savedProductIds(store, MY_PERSON)).toEqual(["B0TESTVISE"]);
+  });
+
+  it("is empty for an id that isn't one", async () => {
+    expect(await savedProductIds(new FakeSavedGiftsStore(), "nope")).toEqual([]);
   });
 });

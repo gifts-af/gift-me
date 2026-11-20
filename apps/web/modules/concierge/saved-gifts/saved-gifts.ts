@@ -23,3 +23,11 @@ export function saveGift(personId: string, input: SavedGiftInput): Promise<SaveR
 export function removeSavedGift(personId: string, giftId: string): Promise<SaveResult> {
   return service.removeSavedGift(createSupabaseSavedGiftsStore(), logEvent, personId, giftId);
 }
+
+export function savedProductIds(personId: string): Promise<string[]> {
+  return service.savedProductIds(createSupabaseSavedGiftsStore(), personId);
+}
+
+export function saveIdea(personId: string, ideaId: string): Promise<SaveResult> {
+  return service.saveIdea(createSupabaseSavedGiftsStore(), logEvent, personId, ideaId);
+}
