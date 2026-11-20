@@ -2,6 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { logEvent } from "@/lib/log";
 import { createClient } from "@/lib/supabase/server";
 
+export { DEFAULT_LIST_TITLE } from "./list-title";
+
 // The shape the gift components already work with (see modules/lists/components).
 export type Gift = {
   id: string;

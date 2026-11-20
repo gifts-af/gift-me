@@ -34,7 +34,9 @@ describe("SharedList", () => {
       <SharedList
         token="t"
         list={{
-          title: "Sam's list",
+          title: "My list",
+          ownerName: "Sam",
+          linkedPerson: null,
           isOwner: false,
           viewer: guest,
           items: [item("a", "Board game"), item("b", "Speaker", { name: "Alex", mine: false })],
@@ -85,5 +87,64 @@ describe("SharedList", () => {
     await userEvent.click(within(dialog).getByRole("button", { name: "Claim gift" }));
     expect(await within(dialog).findByText("Someone else just claimed this. Pick another gift.")).toBeInTheDocument();
     expect(within(dialog).queryByRole("button", { name: "Claim gift" })).not.toBeInTheDocument();
+  });
+
+  describe("heading (ALL-123)", () => {
+    const base = { isOwner: false, viewer: guest, items: [item("a", "Board game")] };
+    const heading = () => screen.getByRole("heading", { level: 1 });
+
+    it("names the owner", () => {
+      render(<SharedList token="t" list={{ ...base, title: "My list", ownerName: "Sam Lee", linkedPerson: null }} />);
+      expect(heading()).toHaveTextContent("Sam Lee's list");
+    });
+
+    it("prefers the linked person's name", () => {
+      render(
+        <SharedList token="t" list={{ ...base, title: "My list", ownerName: "Sam Lee", linkedPerson: { id: "p", name: "Sammy" } }} />,
+      );
+      expect(heading()).toHaveTextContent("Sammy's list");
+    });
+
+    it("says Their list with no name", () => {
+      render(<SharedList token="t" list={{ ...base, title: "My list", ownerName: null, linkedPerson: null }} />);
+      expect(heading()).toHaveTextContent("Their list");
+    });
+
+    it("shows the owner their own title", () => {
+      render(<SharedList token="t" list={{ ...base, isOwner: true, title: "Birthday", ownerName: "Sam Lee", linkedPerson: null }} />);
+      expect(heading()).toHaveTextContent("Birthday");
+    });
+
+    it.each([
+      ["James", "James's list"],
+      ["O'Neil", "O'Neil's list"],
+    ])("handles apostrophes for %s", (name, expected) => {
+      render(<SharedList token="t" list={{ ...base, title: "My list", ownerName: name, linkedPerson: null }} />);
+      expect(heading()).toHaveTextContent(expected);
+    });
+
+    it("shows a custom title as a smaller line, not the default", () => {
+      const { unmount } = render(
+        <SharedList token="t" list={{ ...base, title: "Birthday wishes", ownerName: "Sam", linkedPerson: null }} />,
+      );
+      expect(screen.getByText("Birthday wishes")).toBeInTheDocument();
+      unmount();
+      render(<SharedList token="t" list={{ ...base, title: "My list", ownerName: "Sam", linkedPerson: null }} />);
+      expect(screen.queryByText("My list")).not.toBeInTheDocument();
+    });
+
+    it("renders top before the heading", () => {
+      render(
+        <SharedList token="t" top={<p>Top card</p>} list={{ ...base, title: "My list", ownerName: "Sam", linkedPerson: null }} />,
+      );
+      expect(screen.getByText("Top card").compareDocumentPosition(heading()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it("puts nav in the top bar", () => {
+      render(
+        <SharedList token="t" nav={<span>Nav here</span>} list={{ ...base, title: "My list", ownerName: "Sam", linkedPerson: null }} />,
+      );
+      expect(screen.getByText("Nav here")).toBeInTheDocument();
+    });
   });
 });

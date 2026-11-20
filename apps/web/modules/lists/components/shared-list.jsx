@@ -6,6 +6,7 @@ import { useState } from 'react'
 import { claimGift, unclaimGift } from '@/modules/lists/actions/claims'
 import { PageFrame } from '@/components/app-shell/page-frame'
 import { TopBar } from '@/components/app-shell/top-bar'
+import { DEFAULT_LIST_TITLE } from '@/modules/lists/lib/list-title'
 import ClaimDialog from './claim-dialog.jsx'
 import GiftList from './gift-list.jsx'
 import GiftSummary from './gift-summary.jsx'
@@ -13,9 +14,11 @@ import { Banner, buttonClass } from './ui.jsx'
 import ViewDialog from './view-dialog.jsx'
 
 /**
- * @param {{ list: import('@/modules/lists/lib/lists').SharedList, token: string }} props
+ * `nav` fills the top bar (the page builds it; this is a client component), and
+ * `top` renders above the heading.
+ * @param {{ list: import('@/modules/lists/lib/lists').SharedList, token: string, nav?: import('react').ReactNode, top?: import('react').ReactNode }} props
  */
-export default function SharedList({ list, token }) {
+export default function SharedList({ list, token, nav, top }) {
   const router = useRouter()
   // Claims change here without a reload. A refresh hands down a new
   // list.items, which replaces the local copy (React's "adjust state when a
@@ -34,6 +37,12 @@ export default function SharedList({ list, token }) {
   const [announcement, setAnnouncement] = useState('')
 
   const loginHref = `/auth/login?next=${encodeURIComponent(`/share/${token}`)}`
+
+  // The owner sees their own title; everyone else sees whose list it is, with
+  // a custom title as a smaller line (ALL-123).
+  const name = list.linkedPerson?.name ?? list.ownerName
+  const heading = list.isOwner ? list.title : name ? `${name}'s list` : 'Their list'
+  const showTitle = !list.isOwner && list.title !== DEFAULT_LIST_TITLE
 
   function setClaim(itemId, claim) {
     setItems((prev) => prev.map((gift) => (gift.id === itemId ? { ...gift, claim } : gift)))
@@ -116,8 +125,9 @@ export default function SharedList({ list, token }) {
 
   return (
     <>
-      <TopBar />
+      <TopBar>{nav}</TopBar>
       <PageFrame wide className="gap-4">
+        {top}
         {list.isOwner && (
           <Banner tone="accent">
             This is your list. Claims are hidden from you, so your gifts stay a surprise.
@@ -125,8 +135,9 @@ export default function SharedList({ list, token }) {
         )}
         <div className="flex flex-col gap-1">
           <h1 id="list-heading" className="text-[22px] font-bold leading-tight [overflow-wrap:anywhere]">
-            {list.title}
+            {heading}
           </h1>
+          {showTitle && <p className="text-[15px] text-muted-foreground [overflow-wrap:anywhere]">{list.title}</p>}
           <GiftSummary gifts={items} />
           {!list.isOwner && (
             <p className="text-[13px] text-muted-foreground">
