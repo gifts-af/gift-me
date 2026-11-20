@@ -12,7 +12,8 @@
 --   * lists.photo_deletions, a queue of photos whose gift is gone, emptied by
 --     the daily tick;
 --   * concierge.recent_people for the popup's "recent people" buttons;
---   * the four settings the extension route and popup read.
+--   * the four settings the extension route and popup read, and the two the
+--     daily photo cleanup reads.
 --
 -- Expand only (E7): nothing existing changes shape, so code rolled back on
 -- Vercel keeps working. The off switch is the extension_add_enabled setting.
@@ -428,5 +429,7 @@ insert into concierge.app_settings (key, value, description) values
   ('list_photo_width_px', '400', 'Widest gift photo the extension stores, in pixels.'),
   ('list_photo_jpeg_quality', '80', 'JPEG quality (1-100) of gift photos from the extension.'),
   ('list_photo_max_bytes', '200000', 'Largest gift photo the extension route accepts, in bytes. Keep it below the list-photos bucket''s 1 MB file_size_limit.'),
-  ('extension_add_enabled', '1', 'Switch for "Add to my list" in the extension: 1 on, 0 refuses adds (saving for a person still works).')
+  ('extension_add_enabled', '1', 'Switch for "Add to my list" in the extension: 1 on, 0 refuses adds (saving for a person still works).'),
+  ('list_photo_cleanup_batch', '500', 'Most removed-gift photos the daily tick deletes in one run; the rest wait for the next day.'),
+  ('list_photo_cleanup_min_age_minutes', '60', 'Minutes a removed-gift photo waits in the queue before the daily tick deletes it, so an add still in flight keeps its photo.')
 on conflict (key) do nothing;

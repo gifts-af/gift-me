@@ -2,19 +2,33 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@gifts-af/core";
 import { logEvent } from "@/lib/log";
 
-/** Paths taken per run; a bigger backlog carries over to the next day. */
-const BATCH = 500;
-/** An add still in flight may have just queued its own photo, so only older rows are taken. */
-const MIN_AGE = "1 hour";
-
 /**
- * The daily clear-out of photos whose gift is gone (ALL-78): takes the paths queued over an hour
- * ago, removes them from the list-photos bucket, and only then forgets them. A file that is
- * already missing counts as removed. A failed remove forgets nothing, so tomorrow retries.
+ * The daily clear-out of photos whose gift is gone (ALL-78): takes up to
+ * list_photo_cleanup_batch paths queued at least list_photo_cleanup_min_age_minutes
+ * ago (an add still in flight may have just queued its own photo), removes them
+ * from the list-photos bucket, and only then forgets them. A bigger backlog
+ * carries over to the next day. A file that is already missing counts as
+ * removed. A failed remove forgets nothing, so tomorrow retries. A setting that
+ * can't be read skips the day (T23: no fallback in code).
  */
-export async function removeDeletedPhotos(db: SupabaseClient<Database>): Promise<{ removed: number }> {
+export async function removeDeletedPhotos(
+  db: SupabaseClient<Database>,
+  readSetting: (key: string) => Promise<number>,
+): Promise<{ removed: number }> {
+  let batch: number;
+  let minAgeMinutes: number;
+  try {
+    [batch, minAgeMinutes] = await Promise.all([
+      readSetting("list_photo_cleanup_batch"),
+      readSetting("list_photo_cleanup_min_age_minutes"),
+    ]);
+  } catch {
+    logEvent("list.photo_cleanup_skipped", { reason: "settings" });
+    return { removed: 0 };
+  }
+
   const lists = db.schema("lists");
-  const taken = await lists.rpc("take_photo_deletions", { p_limit: BATCH, p_older_than: MIN_AGE });
+  const taken = await lists.rpc("take_photo_deletions", { p_limit: batch, p_older_than: `${minAgeMinutes} minutes` });
   if (taken.error) throw new Error(`Taking queued photos failed: ${taken.error.message}`);
   const paths = taken.data ?? [];
   if (paths.length === 0) return { removed: 0 };

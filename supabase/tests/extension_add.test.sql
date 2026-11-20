@@ -5,7 +5,7 @@
 -- match-key-cases.json is checked there too.
 begin;
 \ir _helpers.psql
-select plan(63);
+select plan(65);
 
 select tests.create_user('a@example.com') as a \gset
 select tests.create_user('b@example.com') as b \gset
@@ -30,6 +30,8 @@ select is(concierge.setting_int('list_photo_width_px'), 400, 'photo width settin
 select is(concierge.setting_int('list_photo_jpeg_quality'), 80, 'photo quality setting');
 select is(concierge.setting_int('list_photo_max_bytes'), 200000, 'photo size setting');
 select is(concierge.setting_int('extension_add_enabled'), 1, 'extension add switch is on');
+select is(concierge.setting_int('list_photo_cleanup_batch'), 500, 'photo cleanup batch setting');
+select is(concierge.setting_int('list_photo_cleanup_min_age_minutes'), 60, 'photo cleanup minimum age setting');
 
 -- ─── add_item outcomes ──────────────────────────────────────────────────────
 

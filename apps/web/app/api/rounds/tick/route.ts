@@ -1,4 +1,5 @@
 import { buyingWiring } from "@/app/settings/zinc-deps";
+import { appSettingInt } from "@/lib/app-settings";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { runTick } from "@/modules/concierge";
 import { removeDeletedPhotos } from "@/modules/lists";
@@ -19,6 +20,9 @@ export async function GET(request: Request) {
     { cronSecret: process.env.CRON_SECRET, vercelEnv },
     async (now) => runTick((await buyingWiring(now)).engine),
     // Photos of removed gifts (ALL-78), after the rounds so a storage problem can't touch them.
-    () => removeDeletedPhotos(createAdminClient()),
+    () => {
+      const admin = createAdminClient();
+      return removeDeletedPhotos(admin, (key) => appSettingInt(key, admin));
+    },
   );
 }
