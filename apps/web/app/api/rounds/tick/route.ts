@@ -13,7 +13,11 @@ export const maxDuration = 300;
 // are placed and their emails sent. With Zinc off here it still runs, placing nothing.
 export async function GET(request: Request) {
   const vercelEnv = process.env.VERCEL_ENV;
-  return handleTick(request, { cronSecret: process.env.CRON_SECRET, vercelEnv }, async (now) =>
-    runTick((await buyingWiring(now, process.env, {}, { sendJobs: queueSendJobs(process.env.CRON_SECRET ?? ""), testClock: isTestClock(vercelEnv) })).engine),
-  );
+  const cronSecret = process.env.CRON_SECRET;
+  return handleTick(request, { cronSecret, vercelEnv }, async (now) => {
+    // handleTick refuses the call when the secret is unset; it also signs the queue messages.
+    if (!cronSecret) throw new Error("CRON_SECRET is unset");
+    const sendJobs = queueSendJobs(cronSecret);
+    return runTick((await buyingWiring(now, process.env, {}, { sendJobs, testClock: isTestClock(vercelEnv) })).engine);
+  });
 }

@@ -8,11 +8,9 @@ import { handleJob, jobMaxConcurrency } from "./job";
 export const maxDuration = 300;
 
 // Vercel's queue calls this (the trigger is in vercel.json), once per message. Idea runs share
-// Zinc's rate by the trigger's maxConcurrency, read from that same file.
-const maxConcurrency = jobMaxConcurrency(vercelJson);
-
+// Zinc's rate by the trigger's maxConcurrency, read from that same file inside the call (E3).
 export const POST = handleCallback(async (message, metadata) => {
   await handleJob(message, metadata, { vercelEnv: process.env.VERCEL_ENV, cronSecret: process.env.CRON_SECRET }, async (m, now) =>
-    runRoundJob(m, (await buyingWiring(now, process.env, {}, { zincShare: maxConcurrency })).engine),
+    runRoundJob(m, (await buyingWiring(now, process.env, {}, { zincShare: jobMaxConcurrency(vercelJson) })).engine),
   );
 });
