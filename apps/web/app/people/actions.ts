@@ -91,7 +91,9 @@ export async function addPersonAction(_previous: AddResult | null, formData: For
   const currentYear = parseDate(await todayForRequest()).year;
   const parsed = parsePersonForm(formData, currentYear);
   if (!parsed.ok) return parsed;
-  const result = await addPerson(parsed.value);
+  // From a shared list's "Add … to your people" (ALL-123): link it in the same save.
+  const list = text(formData, "list").trim();
+  const result = await addPerson(parsed.value, list === "" ? undefined : list);
   if (result.ok) {
     revalidatePath("/people");
     await tipAfterAdd({ id: result.id, name: parsed.value.name });
