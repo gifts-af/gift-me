@@ -33,7 +33,7 @@ test("back from a person's detail keeps your place on their page (ALL-131)", asy
   await page.goto(`/people/${personId}`);
   await openAndComeBack(page, /^Shipping address/, new RegExp(`/people/${personId}/address$`), "Mom");
   // And again, so a second trip down and back works too.
-  await openAndComeBack(page, /^Their list/, new RegExp(`/people/${personId}/list$`), "Mom");
+  await openAndComeBack(page, /^Saved gifts/, new RegExp(`/people/${personId}/saved-gifts$`), "Mom");
 });
 
 test("going back shows what you just changed (ALL-131)", async ({ page }) => {

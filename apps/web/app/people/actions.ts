@@ -37,6 +37,7 @@ import {
   removeAddress,
   saveAddress,
   linkList,
+  parseShareToken,
   parseSavedGiftForm,
   removeSavedGift,
   saveGift,
@@ -58,7 +59,7 @@ import {
   type ImportResult,
   type SaveResult,
 } from "@/modules/concierge";
-import { cleanGiftLink, readGiftLinkForUser, type GiftLinkRead } from "@/modules/lists";
+import { cleanGiftLink, linkUnlinkedPerson, readGiftLinkForUser, type GiftLinkRead } from "@/modules/lists";
 
 // Server actions for the people screens, shaped for useActionState:
 // (previous result, form data) -> result. Forms send the person as a hidden
@@ -193,6 +194,19 @@ export async function saveBudgetsAction(
 export async function linkListAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
   const id = text(formData, "id");
   return refresh(await linkList(id, text(formData, "link")), id);
+}
+
+// The prompt at the top of a person's page (ALL-123). Unlike linkListAction it never replaces a
+// link, because the link decides where a held gift ships.
+export async function linkUnlinkedListAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
+  const id = text(formData, "id");
+  const token = parseShareToken(text(formData, "link"));
+  if (!token) return { ok: false, error: "Paste the share link from their GiftsAF list." };
+  const result = await linkUnlinkedPerson(token, id);
+  if (!result.ok) return { ok: false, error: result.error };
+  const userId = (await (await createClient()).auth.getClaims()).data?.claims?.sub ?? null;
+  logEvent("lists.linked_from_share", { user_id: userId, person_id: id, list_id: result.listId });
+  return refresh({ ok: true }, id);
 }
 
 export async function unlinkListAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {

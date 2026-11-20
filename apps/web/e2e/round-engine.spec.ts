@@ -366,12 +366,12 @@ async function personFor(buyerId: string): Promise<string> {
 }
 
 async function linkOnPage(page: Page, personId: string, base: string, token: string) {
-  await page.goto(`/people/${personId}/list`);
+  await page.goto(`/people/${personId}`);
   const linkField = page.getByLabel("Their list link");
   await linkField.fill(`${base}/share/${token}`);
   await expect.poll(() => linkField.evaluate((el) => Object.keys(el).some((k) => k.startsWith("__reactProps")))).toBe(true);
   await linkField.press("Enter");
-  await expect(page.getByText("Linked.", { exact: false })).toBeVisible();
+  await expect(page.getByRole("link", { name: /^Their list/ })).toContainText("Linked");
 }
 
 const dayFromNow = (n: number) => new Date(Date.now() + n * DAY_MS).toISOString().slice(0, 10);

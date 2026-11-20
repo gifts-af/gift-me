@@ -42,7 +42,7 @@ async function Loaded({ params }: { params: Promise<{ id: string }> }) {
       <PageFrame>
         <BackLink href={`/people/${person.id}`} label={person.name} />
         <PageTitle>{person.name}&apos;s list</PageTitle>
-        <ListLink personId={person.id} keepsList={person.keepsList} linkAction={linkListAction} unlinkAction={unlinkListAction} />
+        <ListLink variant="page" name={person.name} personId={person.id} keepsList={person.keepsList} linkAction={linkListAction} unlinkAction={unlinkListAction} />
       </PageFrame>
     </>
   );
