@@ -5,8 +5,8 @@ import { BackLink, PageFrame, PageTitle } from "@/components/app-shell/page-fram
 import { TopBar } from "@/components/app-shell/top-bar";
 import { createClient } from "@/lib/supabase/server";
 import { todayForRequest } from "@/lib/today";
-import { getPerson, ideaRunOffer, onDemandIdeas, type Db } from "@/modules/concierge";
-import { suggestIdeasAction } from "../../actions";
+import { getPerson, ideaRunOffer, onDemandIdeas, savedProductIds, type Db } from "@/modules/concierge";
+import { saveIdeaAction, suggestIdeasAction } from "../../actions";
 import { IdeasScreen } from "./ideas-screen";
 
 // A person's Gift ideas screen (ALL-27), opened from its row on their page. A run can
@@ -34,13 +34,21 @@ async function Loaded({ params }: { params: Promise<{ id: string }> }) {
   const person = await getPerson(id, await todayForRequest());
   if (!person) notFound();
   const db = (await createClient()) as unknown as Db;
-  const [ideas, offer] = await Promise.all([onDemandIdeas(db, person.id), ideaRunOffer(db)]);
+  const [ideas, offer, saved] = await Promise.all([onDemandIdeas(db, person.id), ideaRunOffer(db), savedProductIds(person.id)]);
 
   return (
     <>
       <BackLink href={`/people/${person.id}`} label={person.name} />
       <PageTitle>Gift ideas for {person.name}</PageTitle>
-      <IdeasScreen personId={person.id} personName={person.name} offer={offer} ideas={ideas} action={suggestIdeasAction} />
+      <IdeasScreen
+        personId={person.id}
+        personName={person.name}
+        offer={offer}
+        ideas={ideas}
+        action={suggestIdeasAction}
+        savedProductIds={saved}
+        saveAction={saveIdeaAction}
+      />
     </>
   );
 }

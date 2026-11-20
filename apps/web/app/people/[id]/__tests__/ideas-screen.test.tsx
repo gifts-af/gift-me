@@ -6,10 +6,11 @@ import type { IdeaRunOffer, ShownIdea } from "@/modules/concierge";
 import { IdeasScreen } from "../ideas/ideas-screen";
 import { IDEA_MESSAGES, NO_FACTS } from "../ideas/messages";
 
-// The Gift ideas screen (ALL-27). The action is faked here; the real one runs in
-// e2e/suggest-ideas.spec.ts against the fake Gateway and fake Zinc.
+// The Gift ideas screen (ALL-27) and Save on an idea (ALL-128). The actions are faked here; the
+// real ones run in e2e/suggest-ideas.spec.ts against the fake Gateway and fake Zinc.
 
 type Result = { ok: true; count: number } | { ok: false; error: string };
+type SaveResult = { ok: true } | { ok: false; error: string };
 
 const VISE: ShownIdea = {
   id: "i1",
@@ -29,9 +30,21 @@ function setup({
   ideas = [VISE],
   offer = OFFER,
   action = vi.fn(async (...a: [string]): Promise<Result> => (void a, { ok: true, count: 3 })),
+  saved = [] as string[],
+  saveAction = vi.fn(async (...a: [string, string]): Promise<SaveResult> => (void a, { ok: true })),
 } = {}) {
-  render(<IdeasScreen personId="p1" personName="Dad" offer={offer} ideas={ideas} action={action} />);
-  return { action };
+  render(
+    <IdeasScreen
+      personId="p1"
+      personName="Dad"
+      offer={offer}
+      ideas={ideas}
+      action={action}
+      savedProductIds={saved}
+      saveAction={saveAction}
+    />,
+  );
+  return { action, saveAction };
 }
 
 const suggest = () => screen.getByRole("button", { name: "Suggest ideas for Dad" });
@@ -48,7 +61,7 @@ describe("IdeasScreen", () => {
     setup({ offer: { kind: "off" } });
     expect(screen.getByText("Suggestions are switched off right now.")).toBeInTheDocument();
     expect(screen.queryByText(IDEA_RUN_OFF)).toBeNull();
-    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Suggest/ })).toBeNull();
     expect(screen.queryByRole("note")).toBeNull();
   });
 
@@ -56,7 +69,7 @@ describe("IdeasScreen", () => {
     setup({ offer: { kind: "not_paid" } });
     expect(screen.getByText(IDEA_RUN_OFF)).toBeInTheDocument();
     expect(screen.queryByText("Suggestions are switched off right now.")).toBeNull();
-    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Suggest/ })).toBeNull();
     expect(screen.queryByRole("note")).toBeNull();
   });
 
@@ -75,7 +88,15 @@ describe("IdeasScreen", () => {
   it("shows each error message", async () => {
     for (const error of [...Object.values(IDEA_MESSAGES), IDEA_RUN_OFF]) {
       const { unmount } = render(
-        <IdeasScreen personId="p1" personName="Dad" offer={OFFER} ideas={[]} action={async () => ({ ok: false, error })} />,
+        <IdeasScreen
+          personId="p1"
+          personName="Dad"
+          offer={OFFER}
+          ideas={[]}
+          action={async () => ({ ok: false, error })}
+          savedProductIds={[]}
+          saveAction={async () => ({ ok: true })}
+        />,
       );
       await userEvent.click(suggest());
       expect(await screen.findByRole("alert")).toHaveTextContent(error);
@@ -110,5 +131,52 @@ describe("IdeasScreen", () => {
   it("no arrival date without an occasion", () => {
     setup({ ideas: [{ ...VISE, arriveBy: null }] });
     expect(screen.getByRole("listitem")).not.toHaveTextContent("Arrives by");
+  });
+});
+
+describe("Save on an idea (ALL-128)", () => {
+  const save = () => screen.getByRole("button", { name: "Save Rotary fly-tying vise" });
+
+  it("saves the idea by its id and then shows it as saved", async () => {
+    const { saveAction } = setup();
+    await userEvent.click(save());
+    expect(saveAction).toHaveBeenCalledWith("p1", "i1");
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Save Rotary fly-tying vise" })).toBeNull();
+  });
+
+  it("shows Saved, with no button, for a product already in saved gifts", () => {
+    setup({ saved: ["B0FAKEVISE"] });
+    expect(screen.getByText("Saved")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Save / })).toBeNull();
+  });
+
+  it("can't be tapped twice while saving", async () => {
+    let finish: (r: SaveResult) => void = () => {};
+    const saveAction = vi.fn((...a: [string, string]) => (void a, new Promise<SaveResult>((done) => (finish = done))));
+    setup({ saveAction });
+    await userEvent.click(save());
+    await waitFor(() => expect(save()).toBeDisabled());
+    await userEvent.click(save());
+    expect(saveAction).toHaveBeenCalledTimes(1);
+    finish({ ok: true });
+    expect(await screen.findByText("Saved")).toBeInTheDocument();
+  });
+
+  it("shows the error under the idea and keeps the button", async () => {
+    setup({ saveAction: vi.fn(async () => ({ ok: false as const, error: "This idea was replaced. Refresh to see the new ones." })) });
+    await userEvent.click(save());
+    expect(await screen.findByRole("alert")).toHaveTextContent("This idea was replaced. Refresh to see the new ones.");
+    expect(save()).toBeEnabled();
+  });
+
+  it("still offers Save while suggestions are switched off", () => {
+    setup({ offer: { kind: "off" } });
+    expect(save()).toBeEnabled();
+  });
+
+  it("offers no Save for an idea with no product id", () => {
+    setup({ ideas: [{ ...VISE, retailerProductId: null }] });
+    expect(screen.queryByRole("button", { name: /^Save / })).toBeNull();
   });
 });
