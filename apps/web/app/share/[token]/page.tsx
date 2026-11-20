@@ -1,17 +1,31 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { connection } from "next/server";
 import { Suspense } from "react";
 import { AppNav } from "@/components/app-shell/app-nav";
 import { PageFrame } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
+import { APP_NAME } from "@/lib/brand";
 import { todayForRequest } from "@/lib/today";
 import { getPerson, listPeople } from "@/modules/concierge";
-import { SharedList, getSharedList, type SharedListData } from "@/modules/lists";
+import { SharedList, getSharedList, getSharePreview, type SharedListData } from "@/modules/lists";
 import { linkFromShareAction, unlinkFromShareAction } from "./actions";
 import { ListCard } from "./list-card";
 
 // A share link is private to whoever has it: keep it out of search (ALL-123).
-export const metadata: Metadata = { robots: { index: false, follow: false } };
+const ROBOTS = { index: false, follow: false } as const;
+
+// The chat preview names the owner and nothing else (ALL-123). Unknown or
+// reset link, no name, or the setting off: the generic title (the image does
+// the same). Read per request, so a reset link stops showing the name.
+export async function generateMetadata({ params }: PageProps<"/share/[token]">): Promise<Metadata> {
+  await connection();
+  const { token } = await params;
+  const preview = await getSharePreview(token);
+  if (!preview?.ownerName) return { title: APP_NAME, robots: ROBOTS };
+  const title = `${preview.ownerName}'s wish list on ${APP_NAME}`;
+  return { title, openGraph: { title, siteName: APP_NAME, type: "website" }, twitter: { title }, robots: ROBOTS };
+}
 
 // The card above the list (ALL-123): nothing for the owner or when the
 // setting is off (AC-25, E7). Otherwise sign in, add or link, or remove.
