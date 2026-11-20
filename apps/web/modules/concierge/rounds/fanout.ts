@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { DueRound } from "./store";
 
 // Fan-out (ALL-125): the tick sends each due round to a queue and a job runs it on its own.
@@ -8,7 +9,11 @@ export type JobMessage =
   | { kind: "round"; roundId: string; now?: string }
   | { kind: "buyer"; userId: string; roundIds: string[]; now?: string };
 
-/** A message and its idempotency key, so two sends the same day make one delivery. */
+/**
+ * A message and its idempotency key, so two identical sends the same day make one delivery. A
+ * buyer key also carries a hash of its round ids, so a same-day re-run that finds a newly held
+ * round sends it.
+ */
 export type QueuedJob = { message: JobMessage; idempotencyKey: string };
 
 /** Sends the jobs; `failed` counts the ones the queue refused. Bound by the caller (E3). */
@@ -34,7 +39,15 @@ export function planJobs(due: DueRound[], engineOn: boolean, now: Date, testCloc
   }
   const held: QueuedJob[] = [...buyers].map(([userId, roundIds]) => ({
     message: { kind: "buyer", userId, roundIds, ...stamp },
-    idempotencyKey: `buyer:${userId}:${day}`,
+    idempotencyKey: `buyer:${userId}:${day}:${roundsHash(roundIds)}`,
   }));
   return [...held, ...others];
+}
+
+/** The first 12 hex of sha256 of the sorted round ids, comma-joined: stable for the same set. */
+function roundsHash(roundIds: string[]): string {
+  return createHash("sha256")
+    .update([...roundIds].sort().join(","))
+    .digest("hex")
+    .slice(0, 12);
 }

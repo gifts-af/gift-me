@@ -31,13 +31,24 @@ describe("planJobs", () => {
   it("groups held rounds per buyer in due order and sends the others one each", () => {
     const jobs = planJobs(list, true, NOW, false);
     expect(jobs.map((j) => j.idempotencyKey)).toEqual([
-      "buyer:A:2027-02-11",
-      "buyer:B:2027-02-11",
+      // The buyer key ends with the first 12 hex of sha256 of the sorted round ids, comma-joined.
+      "buyer:A:2027-02-11:2de267a78f52",
+      "buyer:B:2027-02-11:f998fe06afa0",
       "round:r1:2027-02-11",
       "round:r2:2027-02-11",
     ]);
     expect(jobs[0]!.message).toEqual({ kind: "buyer", userId: "A", roundIds: ["h1", "h3"] });
     expect(jobs[2]!.message).toEqual({ kind: "round", roundId: "r1" });
+  });
+
+  it("gives a buyer the same key for the same held rounds in any order, and a new key when one more is held", () => {
+    const key = (rounds: DueRound[]) => planJobs(rounds, true, NOW, false)[0]!.idempotencyKey;
+    const a = due("h1", "A", "needs_attention");
+    const b = due("h3", "A", "needs_attention");
+    expect(key([a, b])).toBe(key([b, a]));
+    // A same-day re-run that finds a newly held round sends it; an identical one still dedupes.
+    expect(key([a, b, due("h9", "A", "needs_attention")])).not.toBe(key([a, b]));
+    expect(key([a])).toMatch(/^buyer:A:2027-02-11:[0-9a-f]{12}$/);
   });
 
   it("puts every held round of one buyer in one message, no cap", () => {
