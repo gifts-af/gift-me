@@ -25,6 +25,7 @@ const db = {
   paidFeatures: true as boolean | null,
   checkedUser: null as string | null,
   adds: [] as unknown[],
+  recent: [] as { person_id: string }[],
 };
 const client = {
   auth: { getSession: vi.fn(async () => ({ data: { session: db.session }, error: null })) },
@@ -41,7 +42,7 @@ const client = {
           ? { data: null, error: { message: "failed" } }
           : { data: db.paidFeatures, error: null };
       }
-      if (fn === "recent_people") return { data: [], error: null };
+      if (fn === "recent_people") return { data: db.recent, error: null };
       if (fn === "add_person") {
         db.adds.push(args);
         return { data: `new-${args.p_name}`, error: null };
@@ -84,6 +85,7 @@ beforeEach(() => {
   db.paidFeatures = true;
   db.checkedUser = null;
   db.adds = [];
+  db.recent = [];
   fetchMock = vi.fn(async () => json({ id: "c1" }, 201));
   vi.stubGlobal("fetch", fetchMock);
   document.title = "Stoneware mug set";
@@ -592,12 +594,33 @@ describe("Product page (ALL-78)", () => {
     expect(sentForm().get("person_id")).toBe("p-mom");
   });
 
-  it("a recent person saves the page to them in one tap", async () => {
+  it("a recent person opens the full list with them picked; nothing is saved until Save", async () => {
     render(<App />);
     await userEvent.click(await screen.findByRole("button", { name: "Dad" }));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(screen.getByText("Save for someone")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "‹ Back" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Dad/ })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.type(screen.getByLabelText("Note (optional)"), "His size");
+    await userEvent.click(screen.getByRole("button", { name: "Save to Dad" }));
     expect(await screen.findByRole("status")).toHaveTextContent("Saved to Dad");
     expect(sentForm().get("person_id")).toBe("p-dad");
-    expect((fetchMock.mock.calls[0] as unknown as [string])[0]).toBe("https://app.test/api/captures");
-    expect(screen.getByRole("button", { name: "Capture another" })).toBeInTheDocument();
+    expect(sentForm().get("note")).toBe("His size");
+  });
+
+  it("only people from recent_people are tagged recent, not the alphabetical fill-ins", async () => {
+    db.people = [
+      { id: "p-ann", name: "Ann" },
+      { id: "p-dad", name: "Dad" },
+      { id: "p-mom", name: "Mom" },
+      { id: "p-sam", name: "Sam" },
+    ];
+    db.recent = [{ person_id: "p-mom" }];
+    render(<App />);
+    const chips = (await screen.findByRole("button", { name: "Someone else…" })).parentElement!;
+    expect(Array.from(chips.querySelectorAll("button")).map((b) => b.textContent)).toEqual(["Mom", "Ann", "Dad", "Someone else…"]);
+    await userEvent.click(screen.getByRole("button", { name: "Someone else…" }));
+    const list = screen.getByRole("list", { name: "People" });
+    expect(Array.from(list.querySelectorAll("button")).map((b) => b.textContent)).toEqual(["Momrecent", "Ann", "Dad", "Sam"]);
   });
 });

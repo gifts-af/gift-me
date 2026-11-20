@@ -53,6 +53,8 @@ describe("loadPopup", () => {
     if (r.kind !== "ready") throw new Error("not ready");
     expect(db.recentLimit).toBe(3);
     expect(r.recentPeople.map((p) => p.name)).toEqual(["Cy", "Ann", "Bo"]);
+    // Only Cy and Ann came from recent_people; Bo is an alphabetical fill-in.
+    expect(r.recentCount).toBe(2);
     expect(r.people).toHaveLength(4);
     expect(r.photoWidthPx).toBe(400);
     expect(r.photoJpegQuality).toBe(80);
@@ -102,6 +104,7 @@ describe("loadPopup", () => {
     const r = await loadPopup();
     if (r.kind !== "ready") throw new Error("not ready");
     expect(r.recentPeople.map((p) => p.name)).toEqual(["Ann", "Bo", "Cy"]);
+    expect(r.recentCount).toBe(0);
   });
 
   it("errors when a photo setting can't be read (T23)", async () => {

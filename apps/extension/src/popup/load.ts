@@ -19,6 +19,8 @@ export type Loaded = {
   photoJpegQuality: number;
   /** The people captured for most recently, padded alphabetically to RECENT_COUNT. */
   recentPeople: Person[];
+  /** How many of recentPeople, from the start, came from recent_people; the rest are fill-ins. */
+  recentCount: number;
   tabId: number | null;
   /** The page could be scripted and read (false on chrome:// pages and the like). */
   capturable: boolean;
@@ -83,11 +85,12 @@ export async function loadPopup(): Promise<LoadResult> {
       const person = byId.get(row.person_id);
       if (person && !recentPeople.includes(person)) recentPeople.push(person);
     }
+    recentPeople.length = Math.min(recentPeople.length, RECENT_COUNT);
+    const recentCount = recentPeople.length;
     for (const person of people.data) {
       if (recentPeople.length >= RECENT_COUNT) break;
       if (!recentPeople.includes(person)) recentPeople.push(person);
     }
-    recentPeople.length = Math.min(recentPeople.length, RECENT_COUNT);
 
     const { tabId, page } = await tab;
     return {
@@ -100,6 +103,7 @@ export async function loadPopup(): Promise<LoadResult> {
       photoWidthPx: photoWidth.data,
       photoJpegQuality: photoQuality.data,
       recentPeople,
+      recentCount,
       tabId,
       capturable: page !== null,
       page,

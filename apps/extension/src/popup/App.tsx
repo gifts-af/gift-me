@@ -111,7 +111,7 @@ function Capture({
   onPeopleChange: (people: Person[]) => void;
   onSignedOut: () => void;
 }) {
-  const { people, recentPeople, textMax, screenshotMaxBytes, paidFeatures, readEstimateCents, tabId, capturable, page } =
+  const { people, recentPeople, recentCount, textMax, screenshotMaxBytes, paidFeatures, readEstimateCents, tabId, capturable, page } =
     loaded;
   const product = page?.product.isProduct ? page : null;
 
@@ -189,10 +189,12 @@ function Capture({
     }
   }
 
-  // One tap on a recent person saves the page to them, with no note (AC-11).
-  function saveToRecent(person: Person) {
-    if (selected?.id !== person.id) select(person);
-    void save(person, "");
+  // A recent person opens the full list with them picked, so the note and
+  // "Save to {name}" are right there and one mis-tap can't save (AC-11).
+  function openPeople(person: Person | null) {
+    if (person && selected?.id !== person.id) select(person);
+    setError(null);
+    setPeopleOpen(true);
   }
 
   async function add(confirmLikely: boolean) {
@@ -316,33 +318,7 @@ function Capture({
               {addError}
             </p>
           )}
-          <RecentPeople
-            people={recentPeople}
-            busy={busy}
-            onPick={saveToRecent}
-            onSomeoneElse={() => {
-              setError(null);
-              setPeopleOpen(true);
-            }}
-          />
-          {moneyNotice && (
-            <p role="note" className="m-0 rounded-md bg-warning-soft px-2.5 py-1.5 text-[13px] text-warning">
-              {moneyNotice}
-            </p>
-          )}
-          {busy && (
-            <p className="m-0 text-sm text-muted-foreground" role="status">
-              Reading the page…
-            </p>
-          )}
-          {error && selected && (
-            <div role="alert" className="flex items-center justify-between gap-2 text-sm text-destructive">
-              <span>{error}</span>
-              <button className="btn-link shrink-0" type="button" disabled={busy} onClick={() => void save(selected, "")}>
-                Try again
-              </button>
-            </div>
-          )}
+          <RecentPeople people={recentPeople} onPick={openPeople} onSomeoneElse={() => openPeople(null)} />
         </div>
       </>
     );
@@ -375,7 +351,7 @@ function Capture({
       <PeopleScreen
         top={top}
         people={people}
-        recent={recentPeople}
+        recent={recentPeople.slice(0, recentCount)}
         selectedId={selected?.id ?? null}
         onSelect={select}
         onAdded={personAdded}
