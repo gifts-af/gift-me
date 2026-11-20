@@ -18,10 +18,10 @@
 -- Vercel keeps working. The off switch is the extension_add_enabled setting.
 
 -- ─── Match keys ─────────────────────────────────────────────────────────────
--- These mirror matchKey() and storeHost() in packages/core/src/store-page/link.ts
--- exactly; its header comment is the rule, and every case in
--- match-key-cases.json is checked against these functions by
--- apps/web/modules/lists/__tests__/add-item-db.test.ts. Change both together.
+-- The rule is written in the header of packages/core/src/store-page/link.ts
+-- (the only implementation is here), and every case in
+-- apps/web/modules/lists/__tests__/match-key-cases.json is checked against
+-- these functions by add-item-db.test.ts. Change them together.
 -- They are immutable because the stored columns below are computed by them:
 -- changing one later needs the columns recomputed in the same migration.
 

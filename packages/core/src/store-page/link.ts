@@ -1,35 +1,44 @@
-// Link cleaning and the match key (ALL-78). No dependencies, so it runs in the
-// web app, the browser extension and tests alike. The SQL duplicate check
-// (ALL-78 task 3) reproduces matchKey() exactly and is tested against the same
-// fixture, match-key-cases.json.
+// Link cleaning (ALL-78). No dependencies, so it runs in the web app, the
+// browser extension and tests alike: cleanLink, productLink, extractAsin and
+// isAmazonHost.
+//
+// The duplicate check's match key and store host are computed by the database
+// only (lists.match_key and lists.store_host in
+// supabase/migrations/20261121100000_extension_add.sql), as stored generated
+// columns. This comment is their written rule; the examples in
+// apps/web/modules/lists/__tests__/match-key-cases.json are checked against
+// the SQL by add-item-db.test.ts. Change the rule, the SQL and the examples
+// together.
 //
 // Match key format:
-//   Amazon (any Amazon host, ASIN found in /dp/, /gp/product/, /gp/aw/d/,
-//   /product/ or /exec/obidos/asin/, optionally followed by /product/):
+//   Amazon (any Amazon host, see isAmazonHost; ASIN found in /dp/,
+//   /gp/product/, /gp/aw/d/, /product/ or /exec/obidos/asin/, optionally
+//   followed by /product/, see extractAsin):
 //     amazon:<UPPER-CASE ASIN>
 //   Everything else:
 //     <host><path>[?<k>=<v>&<k>=<v>...]
 //   - host: lower case, leading "www." then "m." removed, each only when a dot
 //     is still left after it (www.com and m.com stay as they are)
 //   - path: as written (case kept), one trailing "/" removed; a bare "/" is empty
-//   - params: only variant, sku, skuid, size, color, id, pid, productid, itemid
-//     (matched case-insensitively); keys lower-cased, values kept as written
-//     (not decoded, so percent-encoding is compared as-is); a bare key or an
-//     empty value both give "key="; repeated keys are all kept
-//   - params are sorted by key, then value, with plain JS string comparison
-//     (UTF-16 code units); Postgres needs COLLATE "C" to match
+//   - params: only the KEPT_PARAMS below (variant, sku, skuid, size, color, id,
+//     pid, productid, itemid), matched case-insensitively; keys lower-cased,
+//     values kept as written (not decoded, so percent-encoding is compared
+//     as-is); a bare key or an empty value both give "key="; repeated keys
+//     are all kept
+//   - params are sorted by key, then value, by code unit (COLLATE "C")
 //   - scheme, port, credentials, hash and all other params are ignored
 //   - not a URL at all: the key is the input unchanged, the host is ""
 //
-// Input is assumed to be already serialized by WHATWG `new URL` (every stored
-// product_url is). The SQL only has to mirror matchKey on such URLs.
+// Store host: the host as above; "amazon" for every Amazon host.
 //
-// storeHost: the host as above; "amazon" for every Amazon host.
+// Input is a link already serialized by WHATWG `new URL` (every stored
+// product_url is).
 
 const TRACKING_PARAMS = new Set([
   "gclid", "fbclid", "msclkid", "mc_eid", "mc_cid", "_kx", "mkt_tok",
   "_hsenc", "_hsmi", "srsltid", "si", "spm", "ref_",
 ]);
+/** The match key's kept parameters: variants and query product ids. */
 const KEPT_PARAMS = new Set([
   "variant", "sku", "skuid", "size", "color", "id", "pid", "productid", "itemid",
 ]);
@@ -84,37 +93,7 @@ export function cleanLink(url: string): string {
   return parsed.href;
 }
 
-export function storeHost(url: string): string {
-  const parsed = parse(url);
-  if (!parsed) return "";
-  const host = plainHost(parsed);
-  return isAmazonHost(host) ? "amazon" : host;
-}
 
-export function matchKey(url: string): string {
-  const parsed = parse(url);
-  if (!parsed) return url;
-  const host = plainHost(parsed);
-  if (isAmazonHost(host)) {
-    const asin = extractAsin(parsed.pathname);
-    if (asin) return `amazon:${asin}`;
-  }
-  const path = parsed.pathname.replace(/\/$/, "");
-  const pairs = parsed.search
-    .slice(1)
-    .split("&")
-    .filter(Boolean)
-    .map((pair) => {
-      const eq = pair.indexOf("=");
-      return eq === -1
-        ? [pair.toLowerCase(), ""]
-        : [pair.slice(0, eq).toLowerCase(), pair.slice(eq + 1)];
-    })
-    .filter(([key]) => KEPT_PARAMS.has(key))
-    .sort(([ak, av], [bk, bv]) => (ak < bk ? -1 : ak > bk ? 1 : av < bv ? -1 : av > bv ? 1 : 0))
-    .map(([key, value]) => `${key}=${value}`);
-  return `${host}${path}${pairs.length ? `?${pairs.join("&")}` : ""}`;
-}
 
 /**
  * The link saved for a product page (ALL-78): the page's canonical link when

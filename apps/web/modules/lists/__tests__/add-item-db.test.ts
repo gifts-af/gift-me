@@ -1,7 +1,7 @@
 // @vitest-environment node
 // lists.add_item against the real local database (E5, ALL-78): the match key in
-// SQL gives the same answers as core's matchKey for every case in
-// match-key-cases.json, and adds racing each other or a My list save on many
+// SQL gives the written answer (the rule is in core's link.ts header) for every
+// case in match-key-cases.json, and adds racing each other or a My list save on many
 // connections leave one gift, one list and a stale save refused. A 5 s
 // statement timeout turns a deadlock into a failure. Skipped when the local
 // database isn't running.
@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto";
 import { productLink } from "@gifts-af/core/store-page/link";
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import cases from "../../../../../packages/core/src/store-page/match-key-cases.json";
+import cases from "./match-key-cases.json";
 import { LOCAL_DB, localStack } from "../../../test/local-db";
 
 const dbUp = (await localStack({ api: false })) !== null;
@@ -93,7 +93,7 @@ describe.skipIf(!dbUp)("lists.add_item on local Supabase", () => {
       )
     ).rows.map((r) => r.name as string);
 
-  it("gives the same match key and store host as core for every fixture case", async () => {
+  it("gives the written match key and store host for every fixture case", async () => {
     const { rows } = await admin.query<{ url: string; key: string | null; host: string | null }>(
       `select c.url, lists.match_key(c.url, null) as key, lists.store_host(c.url) as host
          from jsonb_to_recordset($1::jsonb) as c (url text)`,
