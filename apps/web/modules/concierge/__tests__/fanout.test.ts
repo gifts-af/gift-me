@@ -6,6 +6,7 @@ import { runRoundJob, runTick, type EngineDeps, type EngineZinc, type GenerateId
 import type { DueRound } from "../rounds/store";
 import { FakeRoundStore, type FakeRound } from "./fake-round-store";
 import { FakeStore } from "./fake-store";
+import { strayKeys } from "@/test/fanout-event-keys";
 
 vi.mock("server-only", () => ({}));
 
@@ -174,6 +175,19 @@ describe("runTick with fan-out", () => {
     expect(sendJobs).not.toHaveBeenCalled();
     expect(events().filter((e) => e.event === "round_fanout_setting_unreadable")).toHaveLength(1);
     expect(events().some((e) => e.event === "round_tick")).toBe(true);
+  });
+
+  it("logs only ids, counts, flags and enums (AC-17, E6)", async () => {
+    await runTick(deps());
+    sendJobs.mockResolvedValue({ sent: 1, failed: 2 });
+    await runTick(deps());
+    store.settings.delete("round_fanout_enabled");
+    await runTick(deps());
+    const mine = events().filter((e) => e.event.startsWith("round_fanout"));
+    expect(new Set(mine.map((e) => e.event))).toEqual(
+      new Set(["round_fanout", "round_fanout_send_failed", "round_fanout_setting_unreadable"]),
+    );
+    expect(strayKeys(mine)).toEqual([]);
   });
 
   it("runs today's path when the switch is 0 or there is no sendJobs", async () => {
@@ -418,5 +432,28 @@ describe("runRoundJob", () => {
     });
     expect(await runRoundJob({ kind: "buyer", userId: "U1", roundIds: ["h1", "h2"] }, deps())).toBe("failed");
     expect(jobEvents()).toEqual([expect.objectContaining({ kind: "buyer", result: "failed", user_id: "U1", rounds: 1 })]);
+  });
+
+  it("logs only ids, counts, flags and enums (AC-17, E6)", async () => {
+    addRound("h1");
+    addRound("h2");
+    addRound("r1", { status: "scheduled", attentionReason: null, headsUpOn: null });
+    addRound("r2", { status: "scheduled", attentionReason: null, headsUpOn: null });
+    await runRoundJob({ kind: "round", roundId: "r1" }, deps());
+    await runRoundJob({ kind: "buyer", userId: "U1", roundIds: ["h1"] }, deps());
+    // The daily limit.
+    generateIdeas.mockResolvedValueOnce({ status: "refused", reason: "daily_limit" });
+    await runRoundJob({ kind: "round", roundId: "r2" }, deps());
+    // A failure carries the error's fields, never its message.
+    vi.spyOn(store, "roundContext").mockRejectedValue(Object.assign(new Error("Zelda at 1 Main St"), { code: "57P01" }));
+    await runRoundJob({ kind: "buyer", userId: "U1", roundIds: ["h2"] }, deps());
+    // Off.
+    store.settings.set("round_fanout_enabled", 0);
+    await runRoundJob({ kind: "round", roundId: "r1" }, deps());
+    const mine = events().filter((e) => e.event === "round_job" || e.event === "ideas.daily_limit_reached");
+    expect(mine.map((e) => e.event)).toContain("ideas.daily_limit_reached");
+    expect(mine.filter((e) => e.result === "failed")).toHaveLength(1);
+    expect(strayKeys(mine)).toEqual([]);
+    expect(JSON.stringify(mine)).not.toMatch(/Zelda|Main St/);
   });
 });

@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
 import vercelJson from "../../../../../vercel.json";
+import { strayKeys } from "@/test/fanout-event-keys";
 import { signMessage } from "../../sign";
 import { handleJob, jobMaxConcurrency } from "../job";
 
@@ -73,6 +74,19 @@ describe("handleJob", () => {
     expect(run.mock.calls[0][1].getTime()).toBeGreaterThanOrEqual(before);
     await handleJob(msg, { deliveryCount: 1 }, { ...ENV, vercelEnv: "preview" }, run);
     expect(run.mock.calls[1][1]).toEqual(new Date("2027-03-20T12:00:00.000Z"));
+  });
+
+  it("logs only ids, counts, flags and enums (AC-17, E6)", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const meta = { deliveryCount: 2 };
+    await handleJob(null, meta, ENV, vi.fn());
+    await handleJob({ kind: "round", roundId: U }, meta, ENV, vi.fn());
+    await expect(
+      handleJob(sign({ kind: "buyer", userId: U, roundIds: [U] }), meta, ENV, vi.fn().mockRejectedValue(new Error("Zelda"))),
+    ).rejects.toThrow();
+    const mine = events(log).filter((e) => e.event === "round_job");
+    expect(mine).toHaveLength(3);
+    expect(strayKeys(mine)).toEqual([]);
   });
 
   it("logs an alert and rethrows when run throws", async () => {

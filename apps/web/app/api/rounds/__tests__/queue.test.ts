@@ -1,6 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import type { QueuedJob } from "@/modules/concierge";
+import { strayKeys } from "@/test/fanout-event-keys";
 import { sendJobsWith as withSecret } from "../queue";
 import { verifyMessage } from "../sign";
 
@@ -70,6 +71,7 @@ describe("sendJobsWith", () => {
     const line = String(log.mock.calls[0][0]);
     expect(JSON.parse(line)).toMatchObject({ event: "round_fanout_send_threw", count: 1, name: "TypeError" });
     expect(line).not.toContain("secret detail");
+    expect(strayKeys([JSON.parse(line)])).toEqual([]);
     log.mockRestore();
   });
 });
