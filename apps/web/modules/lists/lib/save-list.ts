@@ -9,7 +9,7 @@ import { readList, rowToGift, UUID_PATTERN, type Gift, type ListItemRow } from "
 // (ALL-127, T74).
 
 export const MAX_ITEMS = 500;
-const MAX_NAME_LENGTH = 300;
+export const MAX_NAME_LENGTH = 300;
 const MAX_URL_LENGTH = 2048;
 // Postgres prints a timestamptz in well under this.
 export const MAX_VERSION_LENGTH = 64;
@@ -24,7 +24,7 @@ export type ListRow = NonNullable<ReturnType<typeof toRow>>;
 
 // Only http(s) links may be stored: anything else (javascript:, data:) would
 // be rendered straight into an href or src for the owner later.
-function cleanUrl(value: unknown): string | null {
+export function cleanUrl(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   if (!trimmed || trimmed.length > MAX_URL_LENGTH) return null;

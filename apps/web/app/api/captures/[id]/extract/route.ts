@@ -3,7 +3,7 @@ import { z } from "zod";
 import { AI_MODELS } from "@/lib/ai/models";
 import { logEvent } from "@/lib/log";
 import { CaptureNotFound, createSupabaseCaptureStore, processCapture } from "@/modules/concierge";
-import { allowedOrigin, bearer, json, preflight } from "../../http";
+import { allowedOrigin, bearer, json, preflight } from "@/lib/extension-http";
 
 // Try again from the extension popup (ALL-25): reads a pending or failed
 // capture. Same bearer-token and CORS rules as POST /api/captures.
