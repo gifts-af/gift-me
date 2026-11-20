@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { logEvent } from "@/lib/log";
+import { errorFields, logEvent } from "@/lib/log";
 import { verifyMessage } from "../sign";
 import type { JobMessage, JobResult } from "@/modules/concierge";
 
@@ -20,9 +20,11 @@ type Env = { vercelEnv?: string; cronSecret?: string };
  * Runs one message. An invalid one is logged and acknowledged (a retry can't fix it), and so is one
  * whose signature (made by the tick with CRON_SECRET) doesn't verify: the queue SDK checks nothing,
  * so this is the route's own guard. A refused message is never run and never throws. The message's
- * `now` is a test clock, used only outside production (AC-13). If `run` throws, the wiring failed
- * before the engine started (runRoundJob itself never throws): log an alert and rethrow, so the
- * queue retries, up to the trigger's maxDeliveries.
+ * `now` is a test clock, used only outside production (AC-13). If `run` throws, the job failed
+ * before it claimed any round (the wiring, or a setting runRoundJob reads first, the fan-out
+ * switch among them), so no lease is held: log an alert and rethrow, so the queue redelivers, up
+ * to the trigger's maxDeliveries. A failure after a claim comes back as "failed" and is
+ * acknowledged; the next tick picks the round up.
  */
 export async function handleJob(
   raw: unknown,
@@ -46,7 +48,7 @@ export async function handleJob(
     return await run(message, at);
   } catch (err) {
     const who: Record<string, string> = message.kind === "round" ? { round_id: message.roundId } : { user_id: message.userId };
-    logEvent("round_job", { kind: message.kind, result: "failed", ...who, delivery_count: meta.deliveryCount, alert: true });
+    logEvent("round_job", { ...errorFields(err), kind: message.kind, result: "failed", ...who, delivery_count: meta.deliveryCount, alert: true });
     throw err;
   }
 }

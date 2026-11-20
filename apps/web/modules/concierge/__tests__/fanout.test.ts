@@ -294,26 +294,55 @@ describe("runRoundJob", () => {
   });
   afterEach(() => vi.restoreAllMocks());
 
-  it("is off when the fan-out switch is 0 or unreadable, and claims nothing (review focus 5)", async () => {
+  it("is off when the fan-out switch is 0, and claims nothing (review focus 5)", async () => {
     addRound("h1");
     addRound("r1", { status: "awaiting_approval", attentionReason: null, headsUpOn: "2027-02-06" });
     const claim = vi.spyOn(store, "claim");
     store.settings.set("round_fanout_enabled", 0);
     expect(await runRoundJob({ kind: "round", roundId: "r1" }, deps())).toBe("off");
     expect(await runRoundJob({ kind: "buyer", userId: "U1", roundIds: ["h1"] }, deps())).toBe("off");
-    store.settings.delete("round_fanout_enabled");
-    expect(await runRoundJob({ kind: "buyer", userId: "U1", roundIds: ["h1"] }, deps())).toBe("off");
     expect(claim).not.toHaveBeenCalled();
     expect(placeRound).not.toHaveBeenCalled();
   });
 
-  it("reads the schedule settings before claiming, so a failed read leaves no lease held", async () => {
+  it("throws when the fan-out switch can't be read, so the queue redelivers, and claims nothing", async () => {
+    addRound("h1");
+    const claim = vi.spyOn(store, "claim");
+    store.settings.delete("round_fanout_enabled");
+    await expect(runRoundJob({ kind: "buyer", userId: "U1", roundIds: ["h1"] }, deps())).rejects.toThrow();
+    await expect(runRoundJob({ kind: "round", roundId: "h1" }, deps())).rejects.toThrow();
+    expect(claim).not.toHaveBeenCalled();
+    expect(placeRound).not.toHaveBeenCalled();
+  });
+
+  it("throws when a setting read fails before any claim, so the queue redelivers and no lease is held", async () => {
+    addRound("h1");
     addRound("r1", { status: "awaiting_approval", attentionReason: null, headsUpOn: "2027-02-06" });
     const claim = vi.spyOn(store, "claim");
-    vi.spyOn(store, "scheduleSettings").mockRejectedValue(new Error("db down"));
-    expect(await runRoundJob({ kind: "round", roundId: "r1" }, deps())).toBe("failed");
+    const schedule = vi.spyOn(store, "scheduleSettings").mockRejectedValue(new Error("db down"));
+    await expect(runRoundJob({ kind: "round", roundId: "r1" }, deps())).rejects.toThrow("db down");
+    await expect(runRoundJob({ kind: "buyer", userId: "U1", roundIds: ["h1"] }, deps())).rejects.toThrow("db down");
+    schedule.mockRestore();
+    // The engine switch and the placing deadline, read before the buyer's claims too.
+    store.settings.delete("zinc_place_budget_ms");
+    await expect(runRoundJob({ kind: "buyer", userId: "U1", roundIds: ["h1"] }, deps())).rejects.toThrow();
+    store.settings.set("zinc_place_budget_ms", 45_000);
+    store.settings.delete("round_engine_enabled");
+    await expect(runRoundJob({ kind: "round", roundId: "r1" }, deps())).rejects.toThrow();
+    await expect(runRoundJob({ kind: "buyer", userId: "U1", roundIds: ["h1"] }, deps())).rejects.toThrow();
     expect(claim).not.toHaveBeenCalled();
     expect(store.round("r1").lockedUntil).toBeNull();
+    expect(store.round("h1").lockedUntil).toBeNull();
+    expect(placeRound).not.toHaveBeenCalled();
+    // No round_job event of its own: handleJob logs the alert as it rethrows.
+    expect(jobEvents()).toEqual([]);
+  });
+
+  it("is failed, not thrown, when something fails after a round was claimed (the next tick picks it up)", async () => {
+    addRound("r1", { status: "scheduled", attentionReason: null, headsUpOn: null });
+    vi.spyOn(store, "roundContext").mockRejectedValue(new Error("database down"));
+    await expect(runRoundJob({ kind: "round", roundId: "r1" }, deps())).resolves.toBe("failed");
+    expect(jobEvents()).toEqual([expect.objectContaining({ kind: "round", result: "failed", round_id: "r1" })]);
   });
 
   it("with the engine off, a round message is off and a buyer message still places its held round", async () => {

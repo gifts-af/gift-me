@@ -225,25 +225,26 @@ export type JobResult = "off" | "busy" | "advanced" | "failed";
 /**
  * Runs one queue message (ALL-125): one round, or one buyer's held gifts. Every round is claimed
  * first (claim_round), so a step never runs twice at once and placing never runs on a round
- * someone else holds. Never throws.
+ * someone else holds. Throws only when it fails before claiming any round (a setting it reads
+ * first, the fan-out switch among them, couldn't be read): no lease is held, so handleJob
+ * rethrows and the queue redelivers, which a deadline-day held gift can't wait a day for. A
+ * failure once a round is claimed is logged and returns "failed": the lease stands, and the next
+ * tick (and round_stuck) picks the round up.
  */
 export async function runRoundJob(message: JobMessage, deps: EngineDeps): Promise<JobResult> {
   const jobStartMs = (deps.clock ?? Date.now)();
   const id: Record<string, string> = message.kind === "round" ? { round_id: message.roundId } : { user_id: message.userId };
+  const progress: JobProgress = { claimed: false };
   let result: JobResult;
   let rounds = 0;
   try {
-    let fanout = false;
-    try {
-      fanout = (await deps.store.setting("round_fanout_enabled")) === 1;
-    } catch {
-      // Unreadable means off.
-    }
-    if (!fanout) result = "off";
-    else if (message.kind === "round") ({ result, rounds } = await roundJob(message.roundId, deps, jobStartMs));
-    else ({ result, rounds } = await buyerJob(message.roundIds, deps));
+    if ((await deps.store.setting("round_fanout_enabled")) !== 1) result = "off";
+    else if (message.kind === "round") ({ result, rounds } = await roundJob(message.roundId, deps, jobStartMs, progress));
+    else ({ result, rounds } = await buyerJob(message.roundIds, deps, progress));
   } catch (err) {
-    logEvent("round_job", { kind: message.kind, result: "failed", ...id, rounds, ...errorFields(err) });
+    // Before any claim, handleJob logs it (with the alert) as it rethrows.
+    if (!progress.claimed) throw err;
+    logEvent("round_job", { ...errorFields(err), kind: message.kind, result: "failed", ...id, rounds });
     return "failed";
   }
   logEvent("round_job", { kind: message.kind, result, ...id, rounds });
@@ -251,15 +252,18 @@ export async function runRoundJob(message: JobMessage, deps: EngineDeps): Promis
 }
 
 type JobOutcome = { result: JobResult; rounds: number };
+/** Set once the job holds a round's lease: from then on a failure is acknowledged, not redelivered. */
+type JobProgress = { claimed: boolean };
 
 /** A round message: the round's step, and its idea run when that's the step (one run, no per-tick cap). */
-async function roundJob(roundId: string, deps: EngineDeps, jobStartMs: number): Promise<JobOutcome> {
+async function roundJob(roundId: string, deps: EngineDeps, jobStartMs: number, progress: JobProgress): Promise<JobOutcome> {
   const { store } = deps;
   if (!(await engineOn(store))) return { result: "off", rounds: 0 };
   // Before the claim, so a failed read never leaves a lease held for round_lock_minutes.
   const s = await store.scheduleSettings();
   const round = await store.claim(roundId, deps.now);
   if (!round) return { result: "busy", rounds: 0 };
+  progress.claimed = true;
   if (round.status === "needs_attention") {
     // It became a money round after the tick read it: the next tick's buyer message takes it.
     await releaseQuietly(round, deps);
@@ -286,9 +290,9 @@ async function roundJob(roundId: string, deps: EngineDeps, jobStartMs: number): 
  * A buyer message: each of the buyer's held rounds in order, with one placing budget for the
  * message. Runs whatever round_engine_enabled says, like the money path on the tick.
  */
-async function buyerJob(roundIds: string[], deps: EngineDeps): Promise<JobOutcome> {
+async function buyerJob(roundIds: string[], deps: EngineDeps, progress: JobProgress): Promise<JobOutcome> {
   const { store } = deps;
-  // Unreadable, the job fails (as the tick does); the next tick picks the rounds up again.
+  // Unreadable, the job throws before any claim, and the queue redelivers it.
   const on = await engineOn(store);
   const s = await store.scheduleSettings();
   const placeBy = await placeDeadline(deps);
@@ -305,6 +309,7 @@ async function buyerJob(roundIds: string[], deps: EngineDeps): Promise<JobOutcom
     }
     // Approved, skipped or otherwise moved on since the tick, or someone else holds it.
     if (!round) continue;
+    progress.claimed = true;
     if (round.status !== "needs_attention" && !on) {
       // It left the money path, and the engine is off: nothing of its runs now.
       await releaseQuietly(round, deps);

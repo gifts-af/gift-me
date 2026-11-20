@@ -97,6 +97,27 @@ describe("handleJob", () => {
       expect.objectContaining({ event: "round_job", result: "failed", delivery_count: 2, alert: true }),
     );
   });
+
+  it("rethrows a failure before any claim (a setting read) with the error's fields, never its message", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    // runRoundJob throws only before it claims a round, e.g. when round_fanout_enabled can't be read.
+    // An error's own kind (a ZincError's) never overwrites the message's kind.
+    const err = Object.assign(new Error("Zelda at 1 Main St"), { code: "57P01", kind: "unavailable" });
+    const run = vi.fn().mockRejectedValue(err);
+    await expect(handleJob(sign({ kind: "buyer", userId: U, roundIds: [U] }), { deliveryCount: 1 }, ENV, run)).rejects.toBe(err);
+    const mine = events(log).filter((e) => e.event === "round_job");
+    expect(mine).toEqual([
+      expect.objectContaining({ kind: "buyer", result: "failed", user_id: U, delivery_count: 1, alert: true, code: "57P01" }),
+    ]);
+    expect(JSON.stringify(mine)).not.toMatch(/Zelda|Main St/);
+  });
+
+  it("acknowledges a failure after a claim (run resolves failed): no alert, no rethrow", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const run = vi.fn().mockResolvedValue("failed");
+    expect(await handleJob(sign({ kind: "round", roundId: U }), { deliveryCount: 1 }, ENV, run)).toBe("failed");
+    expect(events(log).filter((e) => e.alert)).toEqual([]);
+  });
 });
 
 describe("vercel.json", () => {
