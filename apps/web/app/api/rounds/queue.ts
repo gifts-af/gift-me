@@ -13,12 +13,15 @@ type SendBatch = typeof sendBatch;
 type Msg = BatchSendMessage<JobMessage & { sig: string }>;
 
 /**
- * Each message is signed with `secret` (CRON_SECRET), which the job route checks. Sends the jobs in batches of up to 100, each with its idempotency key. "sent" and "deferred"
- * count as sent; a retryable failure is sent once more; a non-retryable one, or a batch that
- * throws, counts as failed (the tick logs it and the next day's tick picks the round up again).
+ * Each message is signed with `secret` (CRON_SECRET), which the job route checks. Sends the jobs
+ * in batches of up to 100, each with its idempotency key. "sent" and "deferred" count as sent. A
+ * retryable failure, or a batch whose call throws (the SDK says a request-level error can follow
+ * the queue's acceptance, and the keys make a resend safe), is sent once more; failing again, or
+ * a non-retryable failure, counts as failed (the tick logs it and the next day's tick picks the
+ * round up again).
  */
 export function sendJobsWith(send: SendBatch, secret: string): SendJobs {
-  // Returns how many were accepted and the ones to retry; a thrown call fails them all.
+  // Returns how many were accepted and the ones to retry; a thrown call retries them all.
   async function attempt(msgs: Msg[]): Promise<{ sent: number; failed: number; retry: Msg[] }> {
     try {
       const results = await send(TOPIC, msgs);
@@ -35,7 +38,7 @@ export function sendJobsWith(send: SendBatch, secret: string): SendJobs {
       return { sent, failed, retry };
     } catch (err) {
       logEvent("round_fanout_send_threw", { count: msgs.length, ...errorFields(err) });
-      return { sent: 0, failed: msgs.length, retry: [] };
+      return { sent: 0, failed: 0, retry: msgs };
     }
   }
   return async (jobs: QueuedJob[]) => {

@@ -54,9 +54,22 @@ describe("sendJobsWith", () => {
     expect(sendBatch).toHaveBeenCalledTimes(1);
   });
 
-  it("counts a thrown batch's messages failed", async () => {
-    const sendBatch = vi.fn().mockRejectedValueOnce(new Error("down")).mockResolvedValueOnce([ok]);
+  it("re-sends a thrown batch once with the same keys and counts it sent", async () => {
+    // A request-level error can follow the queue's acceptance; the idempotency keys make the resend safe.
+    const sendBatch = vi.fn().mockRejectedValueOnce(new Error("down")).mockResolvedValueOnce([ok, ok]);
+    expect(await sendJobsWith(sendBatch as never)(jobs(2))).toEqual({ sent: 2, failed: 0 });
+    expect(sendBatch).toHaveBeenCalledTimes(2);
+    expect(sendBatch.mock.calls[1][1]).toEqual(sendBatch.mock.calls[0][1]);
+  });
+
+  it("counts a batch that throws twice failed, and sends the next batch", async () => {
+    const sendBatch = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("down"))
+      .mockRejectedValueOnce(new Error("down"))
+      .mockResolvedValueOnce([ok]);
     expect(await sendJobsWith(sendBatch as never)(jobs(101))).toEqual({ sent: 1, failed: 100 });
+    expect(sendBatch).toHaveBeenCalledTimes(3);
   });
 
   it("counts messages the queue returned no result for as failed", async () => {
