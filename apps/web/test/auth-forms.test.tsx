@@ -71,6 +71,16 @@ describe("auth forms keep what was typed before the page loaded", () => {
   });
 });
 
+// The name shows on the owner's shared list as well as on claims (ALL-123).
+describe("sign up's name hint", () => {
+  it("says where the name is shown", () => {
+    render(<SignUpForm />);
+    expect(screen.getByLabelText(/^Name/)).toHaveAccessibleDescription(
+      "Shown on your shared list and when you claim a gift. Leave it blank to show your email to people you claim with.",
+    );
+  });
+});
+
 describe("before the page loads, the forms can't be sent", () => {
   it.each([
     ["sign in", () => <LoginForm />],
