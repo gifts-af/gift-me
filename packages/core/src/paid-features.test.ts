@@ -16,7 +16,7 @@ describe("the money wording (no Alpha label, ALL-114 in ALL-116)", () => {
   });
 
   it("says why reading is off", () => {
-    expect(CAPTURE_READ_OFF).toBe("Reading captures costs real money, so for now it's only on for test accounts.");
+    expect(CAPTURE_READ_OFF).toBe("Reading pages with AI costs money, so it's only on for test accounts for now.");
   });
 });
 

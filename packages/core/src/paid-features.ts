@@ -10,7 +10,7 @@ export function captureReadNotice(estimateCents: number): string {
   return `We read each capture with AI, which costs real money: about ${centsLabel(estimateCents)} each.`;
 }
 
-export const CAPTURE_READ_OFF = "Reading captures costs real money, so for now it's only on for test accounts.";
+export const CAPTURE_READ_OFF = "Reading pages with AI costs money, so it's only on for test accounts for now.";
 
 /** Whole dollars without cents ("$101"), else with them ("$40.50"). For the Zinc guide. */
 export function dollarsLabel(cents: number): string {

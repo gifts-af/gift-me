@@ -396,7 +396,7 @@ describe("WhatWeKnow", () => {
     expect(screen.getByText("1 capture hasn't been read.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Read it now" })).not.toBeInTheDocument();
     expect(
-      screen.getByText("Reading captures costs real money, so for now it's only on for test accounts."),
+      screen.getByText("Reading pages with AI costs money, so it's only on for test accounts for now."),
     ).toBeInTheDocument();
   });
 
