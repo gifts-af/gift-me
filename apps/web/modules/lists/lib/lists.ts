@@ -147,6 +147,11 @@ export type SharedGift = Gift & { claim: GiftClaim | null };
 
 export type SharedList = {
   title: string;
+  // The owner's display name; null when they have none or the card is off
+  // (app_settings.list_link_card_enabled, ALL-123).
+  ownerName: string | null;
+  // The viewer's own person already linked to this list, if any.
+  linkedPerson: { id: string; name: string } | null;
   // True when the viewer owns the list; the share page asks before showing it.
   isOwner: boolean;
   // `name` is what a claim by this viewer would show; null for guests.
@@ -176,11 +181,15 @@ export async function getSharedList(token: string): Promise<SharedList | null> {
   const shared = data as {
     title: string;
     is_owner: boolean;
+    owner_name?: string | null;
+    linked_person?: { id: string; name: string } | null;
     viewer?: { signed_in?: boolean; email?: string | null; name?: string | null };
     items: (ListItemRow & { claim?: GiftClaim | null })[];
   };
   return {
     title: shared.title,
+    ownerName: shared.owner_name ?? null,
+    linkedPerson: shared.linked_person ?? null,
     isOwner: shared.is_owner === true,
     viewer: {
       signedIn: shared.viewer?.signed_in === true,
@@ -192,4 +201,39 @@ export async function getSharedList(token: string): Promise<SharedList | null> {
       claim: row.claim ? { name: row.claim.name, mine: row.claim.mine === true } : null,
     })),
   };
+}
+
+/**
+ * The share token of the list the signed-in user's person is linked to, or
+ * null when unlinked (or not theirs). The generated type says string; the
+ * function returns null when there is no link.
+ */
+export async function getPersonShareToken(personId: string): Promise<string | null> {
+  if (!UUID_PATTERN.test(personId)) return null;
+  const supabase = await createClient();
+  const { data, error } = await supabase.schema("lists").rpc("person_share_token", { p_person_id: personId });
+  if (error) {
+    logEvent("person_share_token_failed", { person_id: personId, code: typeof error.code === "string" ? error.code : null });
+    return null;
+  }
+  return (data as string | null) ?? null;
+}
+
+/**
+ * What a link preview may say about a list: the owner's name and a gift
+ * count. Null for an unknown or malformed token. Callable by anyone.
+ */
+export async function getSharePreview(
+  token: string,
+): Promise<{ ownerName: string | null; itemCount: number } | null> {
+  if (!UUID_PATTERN.test(token)) return null;
+  const supabase = await createClient();
+  const { data, error } = await supabase.schema("lists").rpc("share_preview", { p_token: token });
+  if (error) {
+    logEvent("share_preview_failed", { code: typeof error.code === "string" ? error.code : null });
+    return null;
+  }
+  if (!data) return null;
+  const preview = data as { owner_name: string | null; item_count: number };
+  return { ownerName: preview.owner_name ?? null, itemCount: preview.item_count };
 }

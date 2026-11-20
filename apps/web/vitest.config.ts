@@ -19,6 +19,7 @@ const LOCAL_DB_TESTS = [
   "modules/concierge/__tests__/zinc-events.test.ts",
   "modules/lists/__tests__/add-item-db.test.ts",
   "modules/lists/__tests__/amazon-lookup-db.test.ts",
+  "modules/lists/__tests__/person-link.test.ts",
   "modules/lists/__tests__/save-list.test.ts",
 ];
 const EXCLUDE = ["node_modules", ".next", "scripts", "e2e", "e2e-live"];
