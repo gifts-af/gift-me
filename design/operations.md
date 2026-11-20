@@ -301,9 +301,13 @@ A signed-in buyer who opens someone's share link sees whose list it is and a car
 
 | Setting (`concierge.app_settings`) | Default | What it does |
 |---|---|---|
-| `list_link_card_enabled` | 1 | Off switch. 0 hides the card and the person-page prompt, shows no owner name anywhere (the heading reads "Their list" and link previews are the generic card), and brings back the old paste screen at a person's Their list. |
+| `list_link_card_enabled` | 1 | Off switch. On only when the value is exactly 1; any other value is off. |
+
+**What off looks like:** no add/link card on a shared list, no "Does … have a GiftsAF list?" prompt on a person's page, and no owner name anywhere: the shared list's heading reads "Their list" (even for a buyer whose own person is linked to it; the owner still sees their own title), and link previews show the generic card. A person's **Their list** row opens the old screen instead of the share page, for linked and unlinked people alike: paste a link when there isn't one, **Unlink** when there is.
 
 **Turn it off:** `update concierge.app_settings set value = '0' where key = 'list_link_card_enabled';` (Supabase SQL editor as allensforever711, no deploy). Links already made stay.
+
+**Turn it back on:** `update concierge.app_settings set value = '1' where key = 'list_link_card_enabled';` Pages pick it up on the next load.
 
 **Seeing it work on production (E9):** events, ids only: `lists.linked_from_share` (a person linked from the card or the prompt), `lists.unlinked_from_share` (Remove on the card) and `people.added_from_share` (a person added and linked in one save). Failures log `person_link_failed`, `person_unlink_failed`, `person_share_token_failed`, `person.add_failed` and `share_preview_failed` with the Postgres code.
 
