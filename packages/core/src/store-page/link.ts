@@ -4,7 +4,8 @@
 // fixture, match-key-cases.json.
 //
 // Match key format:
-//   Amazon (any Amazon host, ASIN found in /dp/, /gp/product/ or /gp/aw/d/):
+//   Amazon (any Amazon host, ASIN found in /dp/, /gp/product/, /gp/aw/d/,
+//   /product/ or /exec/obidos/asin/, optionally followed by /product/):
 //     amazon:<UPPER-CASE ASIN>
 //   Everything else:
 //     <host><path>[?<k>=<v>&<k>=<v>...]
@@ -25,7 +26,9 @@ const KEPT_PARAMS = new Set([
   "variant", "sku", "skuid", "size", "color", "id", "pid", "productid", "itemid",
 ]);
 const MARKETPLACE_SLDS = new Set(["co", "com", "net", "org"]);
-const ASIN_IN_PATH = /\/(?:dp|gp\/product|gp\/aw\/d)\/([A-Z0-9]{10})(?:\/|$)/i;
+const ASIN_RE = /^[A-Z0-9]{10}$/;
+const ASIN_IN_PATH =
+  /\/(?:dp|gp\/product|gp\/aw\/d|product|exec\/obidos\/asin)\/(?:product\/)?([A-Z0-9]{10})(?:\/|$)/i;
 
 function parse(url: string): URL | null {
   try {
@@ -36,8 +39,8 @@ function parse(url: string): URL | null {
 }
 
 // Checked label by label: amazon.evil.com must not count as Amazon.
-function isAmazonHost(host: string): boolean {
-  const labels = host.split(".");
+export function isAmazonHost(host: string): boolean {
+  const labels = host.toLowerCase().split(".");
   if (labels.length < 2) return false;
   if (labels[labels.length - 2] === "amazon") return true;
   return (
@@ -45,6 +48,14 @@ function isAmazonHost(host: string): boolean {
     labels[labels.length - 3] === "amazon" &&
     MARKETPLACE_SLDS.has(labels[labels.length - 2])
   );
+}
+
+// The ASIN in a product path, upper-cased (the image CDN is case-sensitive), or null.
+export function extractAsin(pathname: string): string | null {
+  const match = pathname.match(ASIN_IN_PATH);
+  if (!match) return null;
+  const asin = match[1].toUpperCase();
+  return ASIN_RE.test(asin) ? asin : null;
 }
 
 function plainHost(url: URL): string {
@@ -74,8 +85,8 @@ export function matchKey(url: string): string {
   if (!parsed) return url;
   const host = plainHost(parsed);
   if (isAmazonHost(host)) {
-    const asin = parsed.pathname.match(ASIN_IN_PATH)?.[1];
-    if (asin) return `amazon:${asin.toUpperCase()}`;
+    const asin = extractAsin(parsed.pathname);
+    if (asin) return `amazon:${asin}`;
   }
   const path = parsed.pathname.replace(/\/$/, "");
   const pairs = parsed.search

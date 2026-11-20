@@ -16,5 +16,8 @@
   { "url": "https://www.amazon.com/Some-Name/dp/B08N5WRWNW/ref=sr_1_1?th=1&utm_source=x", "key": "amazon:B08N5WRWNW", "host": "amazon" },
   { "url": "https://smile.amazon.co.uk/dp/b08n5wrwnw?th=1", "key": "amazon:B08N5WRWNW", "host": "amazon" },
   { "url": "https://www.amazon.com/gp/aw/d/B08N5WRWNW", "key": "amazon:B08N5WRWNW", "host": "amazon" },
+  { "url": "https://www.amazon.com/product/B08N5WRWNW", "key": "amazon:B08N5WRWNW", "host": "amazon" },
+  { "url": "https://www.amazon.com/exec/obidos/asin/B08N5WRWNW/ref=x", "key": "amazon:B08N5WRWNW", "host": "amazon" },
+  { "url": "https://www.amazon.com/exec/obidos/ASIN/product/b08n5wrwnw", "key": "amazon:B08N5WRWNW", "host": "amazon" },
   { "url": "https://amazon.evil.com/dp/B08N5WRWNW", "key": "amazon.evil.com/dp/B08N5WRWNW", "host": "amazon.evil.com" }
 ]
