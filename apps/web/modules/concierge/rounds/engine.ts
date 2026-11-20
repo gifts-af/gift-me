@@ -303,6 +303,8 @@ async function buyerJob(roundIds: string[], deps: EngineDeps, progress: JobProgr
     try {
       round = await store.claim(roundId, deps.now);
     } catch (err) {
+      // Nothing claimed yet: no lease is held, so let the queue redeliver (and alert).
+      if (!progress.claimed) throw err;
       logEvent("round_failed", { round_id: roundId, ...errorFields(err) });
       failed++;
       continue;

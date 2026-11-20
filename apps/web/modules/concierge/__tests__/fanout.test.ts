@@ -349,6 +349,17 @@ describe("runRoundJob", () => {
     expect(jobEvents()).toEqual([]);
   });
 
+  it("throws when a buyer's first claim itself fails, so the queue redelivers a deadline-day hold", async () => {
+    addRound("h1");
+    addRound("h2");
+    vi.spyOn(store, "claim").mockRejectedValue(new Error("connection reset"));
+    await expect(runRoundJob({ kind: "buyer", userId: "U1", roundIds: ["h1", "h2"] }, deps())).rejects.toThrow(
+      "connection reset",
+    );
+    expect(placeRound).not.toHaveBeenCalled();
+    expect(jobEvents()).toEqual([]);
+  });
+
   it("is failed, not thrown, when something fails after a round was claimed (the next tick picks it up)", async () => {
     addRound("r1", { status: "scheduled", attentionReason: null, headsUpOn: null });
     vi.spyOn(store, "roundContext").mockRejectedValue(new Error("database down"));
