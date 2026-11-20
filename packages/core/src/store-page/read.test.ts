@@ -177,6 +177,13 @@ describe("readProductFromHtml product signals and ids (ALL-78)", () => {
     expect(readProductFromHtml(html, PAGE).canonicalUrl).toBeNull();
   });
 
+  it("skips an off-host canonical link and uses a same-host og:url", () => {
+    const html =
+      `<link rel="canonical" href="https://evil.example.org/p/mug">` +
+      `<meta property="og:url" content="https://shop.example.com/og">`;
+    expect(readProductFromHtml(html, PAGE).canonicalUrl).toBe("https://shop.example.com/og");
+  });
+
   it("falls back to og:url, then JSON-LD url, for the canonical link", () => {
     const og = `<meta property="og:url" content="https://shop.example.com/og">`;
     expect(readProductFromHtml(og, PAGE).canonicalUrl).toBe("https://shop.example.com/og");

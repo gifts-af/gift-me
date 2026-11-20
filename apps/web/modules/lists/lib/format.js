@@ -1,4 +1,4 @@
-import { MAX_PRICE_CENTS } from '@gifts-af/core/store-page'
+import { MAX_PRICE_CENTS } from '@gifts-af/core/store-page/limits'
 
 // The limit lives in core, with the store-page reader that also enforces it.
 export { MAX_PRICE_CENTS }
