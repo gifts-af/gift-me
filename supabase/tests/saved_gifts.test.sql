@@ -3,7 +3,7 @@
 -- the cap and live people, so a script using the API can't skip them.
 begin;
 \ir _helpers.psql
-select plan(22);
+select plan(26);
 
 select tests.create_user('buyer@example.com', 'Buyer') as buyer \gset
 select tests.create_user('other@example.com', 'Other') as other \gset
@@ -34,6 +34,26 @@ select throws_ok(
   $q$update concierge.saved_gifts set name = 'Changed'$q$,
   '42501', null, 'nobody can change a saved gift, not even its owner'
 );
+
+-- ─── one copy of a product per person (ALL-128) ──────────────────────────────
+insert into public.people (name, relationship) values ('Sis', 'sister') returning id as sis \gset
+select lives_ok(
+  format($q$insert into concierge.saved_gifts (person_id, name, retailer_product_id) values (%L, 'Vise', 'B0TESTVISE')$q$, :'sis'),
+  'an idea saves with its product id'
+);
+select throws_ok(
+  format($q$insert into concierge.saved_gifts (person_id, name, retailer_product_id) values (%L, 'Vise again', 'B0TESTVISE')$q$, :'sis'),
+  '23505', null, 'the same product can''t be saved twice for one person'
+);
+select lives_ok(
+  format($q$insert into concierge.saved_gifts (person_id, name, retailer_product_id) values (%L, 'Vise', 'B0TESTVISE')$q$, :'person'),
+  'the same product saves for another person'
+);
+select lives_ok(
+  format($q$insert into concierge.saved_gifts (person_id, name) values (%L, 'Scarf'), (%L, 'Scarf')$q$, :'sis', :'sis'),
+  'gifts typed in by hand, with no product id, are never counted as copies'
+);
+delete from concierge.saved_gifts where person_id = :'sis' or retailer_product_id = 'B0TESTVISE';
 
 -- ─── limits on what's stored ─────────────────────────────────────────────────
 select throws_ok(

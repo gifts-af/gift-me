@@ -1064,6 +1064,7 @@ export type Database = {
           person_id: string;
           price_cents: number | null;
           product_url: string | null;
+          retailer_product_id: string | null;
           user_id: string;
         };
         ComputedFields: never;
@@ -1075,6 +1076,7 @@ export type Database = {
           person_id: string;
           price_cents?: number | null;
           product_url?: string | null;
+          retailer_product_id?: string | null;
           user_id?: string;
         };
         Update: {
@@ -1085,6 +1087,7 @@ export type Database = {
           person_id?: string;
           price_cents?: number | null;
           product_url?: string | null;
+          retailer_product_id?: string | null;
           user_id?: string;
         };
         Relationships: [];
