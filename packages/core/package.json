@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./store-page": "./src/store-page/index.ts",
-    "./store-page/limits": "./src/store-page/limits.ts"
+    "./store-page/limits": "./src/store-page/limits.ts",
+    "./store-page/link": "./src/store-page/link.ts"
   },
   "sideEffects": false,
   "types": "./src/index.ts",

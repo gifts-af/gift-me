@@ -1,3 +1,4 @@
+import { cleanLink } from '@gifts-af/core/store-page/link'
 import { AMAZON_FIXTURES } from './fixtures.js'
 
 // Turns a pasted product link into gift details. Client-only, best effort.
@@ -104,18 +105,6 @@ function normalizeUrl(raw) {
   return { url }
 }
 
-// Tracking tags add nothing to the gift and say where the person came from.
-const TRACKING_PARAM_RE = /^(utm_.*|gclid|fbclid|msclkid|mc_eid|mc_cid)$/i
-
-function cleanStoreUrl(url) {
-  const clean = new URL(url.href)
-  clean.hash = ''
-  for (const key of [...clean.searchParams.keys()]) {
-    if (TRACKING_PARAM_RE.test(key)) clean.searchParams.delete(key)
-  }
-  return clean.href
-}
-
 /**
  * Any store but Amazon (ALL-10). Our server and the browser can't read these
  * pages (decision 49), so only what's in the link itself is used: the name,
@@ -126,7 +115,7 @@ function storeLinkResult(url) {
     name: deslugifyName(url.pathname, null),
     priceCents: null,
     imageUrl: null,
-    productUrl: cleanStoreUrl(url),
+    productUrl: cleanLink(url.href),
     asin: null,
     source: 'store-url',
     store: storeName(url.href),

@@ -3,3 +3,4 @@
 export { readProductFromHtml, toCents, type PageProduct } from "./read";
 export { readAmazonProduct } from "./amazon";
 export { MAX_PRICE_CENTS } from "./limits";
+export { cleanLink, matchKey, storeHost } from "./link";
