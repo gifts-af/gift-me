@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ZincError, type ZincHttp } from "../zinc/client";
-import { productDetails, productOffers, searchProducts } from "../zinc/products";
+import { amazonPasteDetails, productDetails, productOffers, searchProducts } from "../zinc/products";
 
 const KEY = "zn_test_SECRETKEY123";
 type Reply = { status: number; body?: unknown; raw?: string } | Error;
@@ -235,12 +235,13 @@ describe("productDetails (ALL-141)", () => {
     expect(await productDetails(h, KEY, "B0G5Z36T3N")).toBeNull();
   });
 
-  it("keeps the product when the name, price or photo is missing or unusable", async () => {
+  it("keeps the product when the name, price or photo is missing or unusable (photos are https only)", async () => {
     const { h } = fake([
       details({ title: "   ", price: null, main_image: null }),
       details({ title: null, price: -5, main_image: "javascript:alert(1)" }),
       details({ title: undefined, price: 12.5, main_image: "data:image/png;base64,AAAA" }),
       details({ price: "1195", main_image: "http://example.com/a.jpg" }),
+      details({ main_image: "HTTPS://m.media-amazon.com/images/I/b.jpg" }),
     ]);
     const none = { productId: "B0G5Z36T3N", name: null, priceCents: null, imageUrl: null };
     expect(await productDetails(h, KEY, "B0G5Z36T3N")).toEqual(none);
@@ -250,8 +251,9 @@ describe("productDetails (ALL-141)", () => {
       productId: "B0G5Z36T3N",
       name: "SOULWIT Headband Protector",
       priceCents: null,
-      imageUrl: "http://example.com/a.jpg",
+      imageUrl: null,
     });
+    expect((await productDetails(h, KEY, "B0G5Z36T3N"))?.imageUrl).toBe("HTTPS://m.media-amazon.com/images/I/b.jpg");
   });
 
   it("a reply that isn't an object throws rejected", async () => {
@@ -262,5 +264,48 @@ describe("productDetails (ALL-141)", () => {
   it("a 503 throws unavailable", async () => {
     const { h } = fake([{ status: 503 }]);
     await expect(productDetails(h, KEY, "B0G5Z36T3N")).rejects.toBeInstanceOf(ZincError);
+  });
+});
+
+describe("amazonPasteDetails (ALL-141)", () => {
+  const reply = (over: Record<string, unknown> = {}) => ({
+    status: 200,
+    body: { status: "completed", product_id: "B0G5Z36T3N", title: "Headband", main_image: null, price: 1195, ...over },
+  });
+  const ok = () => vi.fn(async () => true);
+
+  it("takes the quota first, then asks Zinc", async () => {
+    const { h, calls } = fake([reply()]);
+    const takeQuota = vi.fn(async () => {
+      expect(calls).toHaveLength(0);
+      return true;
+    });
+    expect(await amazonPasteDetails(h, KEY, "B0G5Z36T3N", takeQuota)).toEqual({
+      kind: "found",
+      product: { productId: "B0G5Z36T3N", name: "Headband", priceCents: 1195, imageUrl: null },
+    });
+    expect(takeQuota).toHaveBeenCalledTimes(1);
+    expect(calls).toHaveLength(1);
+  });
+
+  it("never calls Zinc over the limit", async () => {
+    const { h, calls } = fake([]);
+    expect(await amazonPasteDetails(h, KEY, "B0G5Z36T3N", vi.fn(async () => false))).toEqual({ kind: "over_limit" });
+    expect(calls).toHaveLength(0);
+  });
+
+  it("never calls Zinc when the quota fails", async () => {
+    const { h, calls } = fake([]);
+    const takeQuota = vi.fn(async () => {
+      throw new Error("db down");
+    });
+    await expect(amazonPasteDetails(h, KEY, "B0G5Z36T3N", takeQuota)).rejects.toThrow("db down");
+    expect(calls).toHaveLength(0);
+  });
+
+  it("is not_found when Zinc answers for another product, or has none", async () => {
+    const { h } = fake([reply({ product_id: "B0OTHER000" }), reply({ status: "failed" })]);
+    expect(await amazonPasteDetails(h, KEY, "B0G5Z36T3N", ok())).toEqual({ kind: "not_found" });
+    expect(await amazonPasteDetails(h, KEY, "B0G5Z36T3N", ok())).toEqual({ kind: "not_found" });
   });
 });

@@ -331,6 +331,8 @@ When a signed-in person pastes an Amazon link on My list, the server asks Zinc f
 
 Many `over_limit` from one `user_id` means someone is pasting a lot; lots of `unavailable` means Zinc is down or the key is wrong.
 
+**Shares the idea engine's Zinc key and rate limit.** Paste lookups use the same app key but aren't paced by `zinc_requests_per_second` (that pacing lives inside an idea run). A burst of pastes can push the key over Zinc's limit, so Zinc answers 429: those pastes log `unavailable` with `status: 429`, and an idea run at the same moment can hit 429s too. If that shows up, lower `amazon_paste_lookups_per_user_per_day` or switch paste lookups off.
+
 ## Inbound notes (ALL-31)
 
 Users email a note to `notes@in.giftsaf.com` and it is filed on the right person (T70). Spec: [design/plans/ALL-31-email-capture.md](plans/ALL-31-email-capture.md).

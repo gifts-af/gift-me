@@ -80,10 +80,12 @@ const detailsReply = z.object({
   main_image: z.unknown().optional(),
   price: z.unknown().optional(),
 });
-const webUrl = z.string().regex(/^https?:\/\//i);
+// https only: the photo is shown on our pages.
+const webUrl = z.string().regex(/^https:\/\//i);
 
 export type ZincProductDetails = { productId: string; name: string | null; priceCents: number | null; imageUrl: string | null };
 
+/** Zinc's call itself, internal: the only way in from outside is amazonPasteDetails, which takes the quota first. */
 export async function productDetails(
   h: ZincHttp,
   key: string,
@@ -105,4 +107,28 @@ export async function productDetails(
     priceCents: price.success ? price.data : null,
     imageUrl: image.success ? image.data : null,
   };
+}
+
+export type AmazonPasteDetails =
+  | { kind: "found"; product: ZincProductDetails }
+  | { kind: "not_found" }
+  | { kind: "over_limit" };
+
+/**
+ * An Amazon link pasted on My list, looked up on the app's Zinc key (ALL-141). Each call is
+ * paid, so the caller's daily allowance is a required argument and is taken before Zinc is
+ * called: over the limit, or if taking it fails, Zinc is never asked. An answer for another
+ * product than this ASIN counts as not found. Zinc failures throw ZincError.
+ */
+export async function amazonPasteDetails(
+  h: ZincHttp,
+  key: string,
+  asin: string,
+  takeQuota: () => Promise<boolean>,
+  signal?: AbortSignal,
+): Promise<AmazonPasteDetails> {
+  if (!(await takeQuota())) return { kind: "over_limit" };
+  const product = await productDetails(h, key, asin, signal);
+  if (!product || product.productId !== asin) return { kind: "not_found" };
+  return { kind: "found", product };
 }

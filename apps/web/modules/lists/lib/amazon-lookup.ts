@@ -25,8 +25,17 @@ type Field = string | number | boolean | null;
 export type AmazonLookupDeps = {
   /** Takes one lookup from the person's daily allowance; false when it's used up. */
   takeQuota: () => Promise<boolean>;
-  /** Zinc's product details call, or null when Zinc isn't set up here. */
-  details: ((asin: string, signal?: AbortSignal) => Promise<AmazonProduct | null>) | null;
+  /**
+   * The concierge's amazonPasteDetails, bound to the app's Zinc key: it takes the quota
+   * before calling Zinc. Null when Zinc isn't set up here.
+   */
+  details:
+    | ((
+        asin: string,
+        takeQuota: () => Promise<boolean>,
+        signal?: AbortSignal,
+      ) => Promise<{ kind: "found"; product: AmazonProduct } | { kind: "not_found" } | { kind: "over_limit" }>)
+    | null;
   log: (event: string, fields: Record<string, Field>) => void;
   now: () => number;
 };
@@ -46,16 +55,20 @@ export async function lookUpAmazonProduct(
     if (typeof input.asin !== "string" || !ASIN.test(input.asin)) return { ok: false, reason: "bad_asin" };
     if (!settings.enabled) return { ok: false, reason: "off" };
     if (!deps.details) return { ok: false, reason: "not_configured" };
+    // A bad timeout setting would hang or fail every call: refuse before anything is spent.
+    if (!Number.isInteger(settings.timeoutMs) || settings.timeoutMs <= 0) return { ok: false, reason: "unavailable" };
+
+    // Zinc is called (and billed) only once the allowance is granted.
+    const takeQuota = async () => {
+      const granted = await deps.takeQuota();
+      if (granted) cents = settings.lookupCents;
+      return granted;
+    };
     try {
-      if (!(await deps.takeQuota())) return { ok: false, reason: "over_limit" };
-    } catch (e) {
-      extra = errorFields(e);
-      return { ok: false, reason: "unavailable" };
-    }
-    cents = settings.lookupCents;
-    try {
-      const product = await deps.details(input.asin, AbortSignal.timeout(settings.timeoutMs));
-      return product ? { ok: true, product } : { ok: false, reason: "not_found" };
+      const r = await deps.details(input.asin, takeQuota, AbortSignal.timeout(settings.timeoutMs));
+      if (r.kind === "over_limit") return { ok: false, reason: "over_limit" };
+      if (r.kind === "not_found") return { ok: false, reason: "not_found" };
+      return { ok: true, product: r.product };
     } catch (e) {
       extra = errorFields(e);
       return { ok: false, reason: "unavailable" };

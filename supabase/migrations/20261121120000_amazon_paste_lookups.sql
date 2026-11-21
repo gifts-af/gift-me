@@ -19,7 +19,10 @@ create table lists.amazon_lookups (
   created_at timestamptz not null default now()
 );
 
+-- The first counts a person's lookups; the second finds everyone's old rows
+-- to delete.
 create index amazon_lookups_user_created_idx on lists.amazon_lookups (user_id, created_at);
+create index amazon_lookups_created_idx on lists.amazon_lookups (created_at);
 
 -- Only take_amazon_lookup reads or writes it: new tables in `lists` are
 -- granted to signed-in users by default, so take that back.
@@ -29,8 +32,8 @@ revoke all on lists.amazon_lookups from public, anon, authenticated;
 -- Takes one Amazon lookup from the signed-in caller's allowance: true when
 -- there was one left (and records it), false when the last 24 hours already
 -- used amazon_paste_lookups_per_user_per_day. The limit is read here, never
--- passed in, so a caller can't raise it. Rows older than a day are deleted as
--- it goes. The per-user lock makes two lookups at once count one after the
+-- passed in, so a caller can't raise it. Every person's rows older than a day
+-- are deleted as it goes, so none linger (T42). The per-user lock makes two lookups at once count one after the
 -- other.
 -- Errors: 42501 not signed in; 22023 the limit setting is missing (no lookup
 -- then, rather than no limit).
@@ -56,7 +59,7 @@ begin
   perform pg_advisory_xact_lock(hashtextextended('lists.take_amazon_lookup:' || v_user::text, 0));
 
   delete from lists.amazon_lookups
-  where user_id = v_user and created_at < now() - interval '1 day';
+  where created_at < now() - interval '1 day';
 
   select count(*) into v_used
   from lists.amazon_lookups

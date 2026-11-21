@@ -11,17 +11,29 @@ const PRODUCT = {
 };
 const ON = { enabled: true, timeoutMs: 10000, lookupCents: 1 };
 
+// Plays amazonPasteDetails: takes the quota first, and only then "calls Zinc".
+function zinc(answer: () => Promise<{ kind: "found"; product: typeof PRODUCT } | { kind: "not_found" }>) {
+  const called = vi.fn();
+  const details = vi.fn(async (_asin: string, takeQuota: () => Promise<boolean>) => {
+    if (!(await takeQuota())) return { kind: "over_limit" as const };
+    called();
+    return answer();
+  });
+  return { details, called };
+}
+
 function deps(over: Partial<AmazonLookupDeps> = {}) {
   let t = 1000;
   const log = vi.fn();
-  const d: AmazonLookupDeps = {
+  const z = zinc(async () => ({ kind: "found", product: PRODUCT }));
+  const d = {
     takeQuota: vi.fn(async () => true),
-    details: vi.fn(async () => PRODUCT),
+    details: z.details,
     log,
     now: () => (t += 25),
     ...over,
   };
-  return d as AmazonLookupDeps & { log: typeof log };
+  return { ...d, zincCalled: z.called } as AmazonLookupDeps & { log: typeof log; takeQuota: ReturnType<typeof vi.fn>; zincCalled: ReturnType<typeof vi.fn> };
 }
 
 function onlyEvent(d: { log: ReturnType<typeof vi.fn> }) {
@@ -32,11 +44,11 @@ function onlyEvent(d: { log: ReturnType<typeof vi.fn> }) {
 }
 
 describe("lookUpAmazonProduct (ALL-141)", () => {
-  it("takes one lookup from the day's quota, asks Zinc and gives back the product", async () => {
+  it("hands Zinc's lookup the quota and gives back the product", async () => {
     const d = deps();
     expect(await lookUpAmazonProduct({ asin: ASIN, userId: USER }, ON, d)).toEqual({ ok: true, product: PRODUCT });
     expect(d.takeQuota).toHaveBeenCalledTimes(1);
-    expect(d.details).toHaveBeenCalledWith(ASIN, expect.any(AbortSignal));
+    expect(d.details).toHaveBeenCalledWith(ASIN, expect.any(Function), expect.any(AbortSignal));
     expect(onlyEvent(d)).toEqual({ user_id: USER, outcome: "ok", cents: 1, ms: 25 });
   });
 
@@ -76,37 +88,50 @@ describe("lookUpAmazonProduct (ALL-141)", () => {
     }
   });
 
+  it("is unavailable, taking no quota, when the timeout setting isn't a positive whole number", async () => {
+    for (const timeoutMs of [0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const d = deps();
+      expect(await lookUpAmazonProduct({ asin: ASIN, userId: USER }, { ...ON, timeoutMs }, d)).toEqual({
+        ok: false,
+        reason: "unavailable",
+      });
+      expect(d.takeQuota).not.toHaveBeenCalled();
+      expect(d.details).not.toHaveBeenCalled();
+      expect(onlyEvent(d)).toMatchObject({ outcome: "unavailable", cents: 0 });
+    }
+  });
+
   it("stops at the day's limit without asking Zinc", async () => {
     const d = deps({ takeQuota: vi.fn(async () => false) });
     expect(await lookUpAmazonProduct({ asin: ASIN, userId: USER }, ON, d)).toEqual({ ok: false, reason: "over_limit" });
-    expect(d.details).not.toHaveBeenCalled();
+    expect(d.zincCalled).not.toHaveBeenCalled();
     expect(onlyEvent(d)).toMatchObject({ outcome: "over_limit", cents: 0 });
   });
 
-  it("is unavailable when the quota can't be read, without asking Zinc", async () => {
+  it("is unavailable, at no cost, when the quota can't be read", async () => {
     const d = deps({
       takeQuota: vi.fn(async () => {
-        throw new Error("db down");
+        throw Object.assign(new Error("take_amazon_lookup failed"), { code: "PGRST000" });
       }),
     });
     expect(await lookUpAmazonProduct({ asin: ASIN, userId: USER }, ON, d)).toEqual({ ok: false, reason: "unavailable" });
-    expect(d.details).not.toHaveBeenCalled();
-    expect(onlyEvent(d)).toMatchObject({ outcome: "unavailable", cents: 0 });
+    expect(d.zincCalled).not.toHaveBeenCalled();
+    expect(onlyEvent(d)).toMatchObject({ outcome: "unavailable", cents: 0, code: "PGRST000" });
   });
 
-  it("is not_found when Zinc has no finished product, and counts the lookup's cost", async () => {
-    const d = deps({ details: vi.fn(async () => null) });
+  it("is not_found when Zinc has no matching product, and counts the lookup's cost", async () => {
+    const z = zinc(async () => ({ kind: "not_found" }));
+    const d = deps({ details: z.details });
     expect(await lookUpAmazonProduct({ asin: ASIN, userId: USER }, ON, d)).toEqual({ ok: false, reason: "not_found" });
     expect(onlyEvent(d)).toMatchObject({ outcome: "not_found", cents: 1 });
   });
 
   it("is unavailable when Zinc fails, and counts the lookup's cost", async () => {
     const err = Object.assign(new Error("Zinc GET /products/B0G5Z36T3N failed (503)"), { name: "ZincError", kind: "unavailable", status: 503 });
-    const d = deps({
-      details: vi.fn(async () => {
-        throw err;
-      }),
+    const z = zinc(async () => {
+      throw err;
     });
+    const d = deps({ details: z.details });
     expect(await lookUpAmazonProduct({ asin: ASIN, userId: USER }, ON, d)).toEqual({ ok: false, reason: "unavailable" });
     const fields = onlyEvent(d);
     expect(fields).toMatchObject({ outcome: "unavailable", cents: 1, kind: "unavailable", status: 503 });
@@ -115,14 +140,15 @@ describe("lookUpAmazonProduct (ALL-141)", () => {
 
   it("gives up after the timeout setting", async () => {
     const d = deps({
-      details: vi.fn(
-        (_asin: string, signal?: AbortSignal) =>
-          new Promise<never>((_, reject) => signal?.addEventListener("abort", () => reject(new Error("aborted")))),
-      ),
+      details: vi.fn(async (_asin: string, takeQuota: () => Promise<boolean>, signal?: AbortSignal) => {
+        await takeQuota();
+        return new Promise<never>((_, reject) => signal?.addEventListener("abort", () => reject(new Error("aborted"))));
+      }),
     });
     expect(await lookUpAmazonProduct({ asin: ASIN, userId: USER }, { ...ON, timeoutMs: 20 }, d)).toEqual({
       ok: false,
       reason: "unavailable",
     });
+    expect(onlyEvent(d)).toMatchObject({ cents: 1 });
   });
 });

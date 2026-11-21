@@ -2,7 +2,7 @@
 -- allowance lists.take_amazon_lookup() hands out per signed-in person.
 begin;
 \ir _helpers.psql
-select plan(23);
+select plan(25);
 
 select tests.create_user('a@example.com') as a \gset
 select tests.create_user('b@example.com') as b \gset
@@ -39,10 +39,12 @@ select is((select relrowsecurity from pg_class where oid = 'lists.amazon_lookups
 
 update concierge.app_settings set value = '3' where key = 'amazon_paste_lookups_per_user_per_day';
 
--- A used two lookups yesterday-and-a-bit ago: they don't count, and go.
+-- A used two lookups yesterday-and-a-bit ago: they don't count, and go. B's
+-- old lookup goes too (T42: nobody's rows linger past a day).
 insert into lists.amazon_lookups (user_id, created_at) values
   (:'a', now() - interval '25 hours'),
-  (:'a', now() - interval '3 days');
+  (:'a', now() - interval '3 days'),
+  (:'b', now() - interval '2 days');
 
 select tests.act_as(:'a');
 select is(lists.take_amazon_lookup(), true, 'first lookup');
@@ -56,8 +58,10 @@ select is((select count(*)::int from lists.amazon_lookups where user_id = :'a'),
 select is(
   (select count(*)::int from lists.amazon_lookups where user_id = :'a' and created_at < now() - interval '1 day'),
   0,
-  'rows older than a day were deleted'
+  'A''s rows older than a day were deleted'
 );
+select is((select count(*)::int from lists.amazon_lookups where user_id = :'b'), 0, 'B''s old row was deleted by A''s lookup');
+select has_index('lists', 'amazon_lookups', 'amazon_lookups_created_idx', array['created_at'], 'old rows are found by created_at');
 
 -- B has their own allowance.
 select tests.act_as(:'b');

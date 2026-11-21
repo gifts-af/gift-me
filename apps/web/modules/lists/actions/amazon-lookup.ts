@@ -3,7 +3,7 @@
 import { appSettingInt } from "@/lib/app-settings";
 import { logEvent } from "@/lib/log";
 import { createClient } from "@/lib/supabase/server";
-import { productDetails } from "@/modules/concierge";
+import { amazonPasteDetails } from "@/modules/concierge";
 import { lookUpAmazonProduct, type AmazonLookupResult } from "@/modules/lists/lib/amazon-lookup";
 
 /**
@@ -42,7 +42,7 @@ export async function lookUpAmazon(asin: unknown): Promise<AmazonLookupResult> {
         if (error) throw Object.assign(new Error("take_amazon_lookup failed"), { code: error.code });
         return data === true;
       },
-      details: http && key ? (id, signal) => productDetails(http, key, id, signal) : null,
+      details: http && key ? (id, takeQuota, signal) => amazonPasteDetails(http, key, id, takeQuota, signal) : null,
       log: logEvent,
       now: Date.now,
     },

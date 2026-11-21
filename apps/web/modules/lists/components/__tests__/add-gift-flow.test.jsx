@@ -234,6 +234,39 @@ describe("adding an Amazon gift while signed in (ALL-141)", () => {
     expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({ source: "amazon-url" }));
   });
 
+  it("never lets a slow Amazon lookup overwrite a newer paste", async () => {
+    let answerFirst;
+    const lookUpAmazon = vi.fn((asin) =>
+      asin === "B0EXAMPLE1"
+        ? new Promise((resolve) => {
+            answerFirst = resolve;
+          })
+        : Promise.resolve({
+            ok: true,
+            product: { name: "SOULWIT Headband Protector", priceCents: 1195, imageUrl: REAL_PHOTO, productId: "B0G5Z36T3N" },
+          }),
+    );
+    render(<AddGiftPanel onAdd={vi.fn()} readStorePage={vi.fn()} lookUpAmazon={lookUpAmazon} />);
+    const field = screen.getByLabelText("Paste a link");
+    await userEvent.click(field);
+    await userEvent.paste("https://www.amazon.com/Wool-Hiking-Socks/dp/B0EXAMPLE1");
+    await userEvent.click(screen.getByRole("button", { name: "Add" }));
+    // The Add button waits while looking; Enter in the link field starts a new lookup.
+    await userEvent.clear(field);
+    await userEvent.paste(AMAZON);
+    await userEvent.keyboard("{Enter}");
+    expect(await screen.findByText(/\$11\.95 · found on Amazon/)).toBeInTheDocument();
+
+    answerFirst({
+      ok: true,
+      product: { name: "Wool Hiking Socks, 3 pairs", priceCents: 2400, imageUrl: REAL_PHOTO, productId: "B0EXAMPLE1" },
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByText(/\$11\.95 · found on Amazon/)).toBeInTheDocument();
+    expect(screen.queryByText(/Wool Hiking Socks/)).not.toBeInTheDocument();
+    expect(screen.getByText("SOULWIT Headband Protector")).toBeInTheDocument();
+  });
+
   it("drops a stand-in fixture price once Zinc answers without one", async () => {
     const lookUpAmazon = vi.fn(async () => ({
       ok: true,
