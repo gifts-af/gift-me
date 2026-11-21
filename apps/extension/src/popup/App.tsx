@@ -41,8 +41,9 @@ export function App() {
     await signOut();
     setView({ kind: "signedOut" });
   }
-  const signOutButton = (
-    <button className="btn-link text-sm text-primary" type="button" onClick={handleSignOut}>
+  // Off while an add or save is in flight, so its answer can't land after signing out.
+  const signOutButton = (disabled = false) => (
+    <button className="btn-link text-sm text-primary" type="button" disabled={disabled} onClick={handleSignOut}>
       Sign out
     </button>
   );
@@ -58,7 +59,7 @@ export function App() {
         />
       ) : (
         <>
-          <Bar title="GiftsAF" right={view.kind === "error" ? signOutButton : undefined} />
+          <Bar title="GiftsAF" right={view.kind === "error" ? signOutButton() : undefined} />
           {view.kind === "loading" && <p className="m-0 p-4 text-sm text-muted-foreground">Loading…</p>}
           {view.kind === "signedOut" && <SignIn />}
           {view.kind === "error" && (
@@ -107,7 +108,7 @@ function Capture({
   onSignedOut,
 }: {
   loaded: Loaded;
-  signOutButton: ReactNode;
+  signOutButton: (disabled: boolean) => ReactNode;
   onPeopleChange: (people: Person[]) => void;
   onSignedOut: () => void;
 }) {
@@ -135,6 +136,10 @@ function Capture({
   const [saved, setSaved] = useState<{ captureId: string; person: Person; extraction: Extraction | null } | null>(null);
   const [retryError, setRetryError] = useState<string | null>(null);
   const moneyNotice = paidFeatures ? captureReadNotice(readEstimateCents) : null;
+  // While an add or save is in flight, nothing that leaves the screen works, so
+  // its answer always lands on the screen that asked (store review).
+  const inFlight = busy || addBusy;
+  const signOutNode = signOutButton(inFlight);
 
   function select(person: Person) {
     setSelected(person);
@@ -265,7 +270,7 @@ function Capture({
   if (saved) {
     return (
       <>
-        <Bar title="Capture for…" right={signOutButton} />
+        <Bar title="Capture for…" right={signOutNode} />
         <Learned
           personId={saved.person.id}
           name={saved.person.name}
@@ -284,7 +289,7 @@ function Capture({
   if (added) {
     return (
       <>
-        <Bar title="GiftsAF" right={signOutButton} />
+        <Bar title="GiftsAF" right={signOutNode} />
         <AddResult
           result={added.result}
           gift={added.gift}
@@ -300,7 +305,7 @@ function Capture({
   if (product && !peopleOpen) {
     return (
       <>
-        <Bar title="GiftsAF" right={signOutButton} />
+        <Bar title="GiftsAF" right={signOutNode} />
         <div className="flex flex-col gap-3.5 p-4">
           <ProductCard
             page={product}
@@ -318,7 +323,7 @@ function Capture({
               {addError}
             </p>
           )}
-          <RecentPeople people={recentPeople} onPick={openPeople} onSomeoneElse={() => openPeople(null)} />
+          <RecentPeople people={recentPeople} disabled={inFlight} onPick={openPeople} onSomeoneElse={() => openPeople(null)} />
         </div>
       </>
     );
@@ -336,7 +341,7 @@ function Capture({
         <Bar
           title="Save for someone"
           left={
-            <button className="btn-link text-sm text-primary" type="button" onClick={() => {
+            <button className="btn-link text-sm text-primary" type="button" disabled={inFlight} onClick={() => {
                 setError(null);
                 setPeopleOpen(false);
               }}
@@ -346,7 +351,7 @@ function Capture({
           }
         />
       ) : (
-        <Bar title="GiftsAF" right={signOutButton} />
+        <Bar title="GiftsAF" right={signOutNode} />
       )}
       <PeopleScreen
         top={top}

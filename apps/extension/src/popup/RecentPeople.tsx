@@ -5,10 +5,13 @@ import type { Person } from "./PeopleScreen";
 // mis-tap never saves.
 export function RecentPeople({
   people,
+  disabled,
   onPick,
   onSomeoneElse,
 }: {
   people: Person[];
+  /** While an add is in flight. */
+  disabled: boolean;
   onPick: (person: Person) => void;
   onSomeoneElse: () => void;
 }) {
@@ -17,11 +20,11 @@ export function RecentPeople({
       <div className="or-divider">or save it for someone</div>
       <div className="flex flex-wrap gap-2">
         {people.map((person) => (
-          <button key={person.id} type="button" className="chip" onClick={() => onPick(person)}>
+          <button key={person.id} type="button" className="chip" disabled={disabled} onClick={() => onPick(person)}>
             {person.name}
           </button>
         ))}
-        <button type="button" className="chip chip-more" onClick={onSomeoneElse}>
+        <button type="button" className="chip chip-more" disabled={disabled} onClick={onSomeoneElse}>
           Someone else…
         </button>
       </div>

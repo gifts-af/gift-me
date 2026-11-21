@@ -227,6 +227,18 @@ describe("Popup", () => {
     expect(screen.getByRole("button", { name: "Save to Mom" })).toBeDisabled();
   });
 
+  it("while Save is in flight, Sign out is off", async () => {
+    let resolve!: (r: Response) => void;
+    fetchMock.mockReturnValueOnce(new Promise<Response>((r) => (resolve = r)));
+    render(<App />);
+    await userEvent.click(await screen.findByRole("button", { name: "Mom" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save to Mom" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeDisabled();
+    resolve(json({ id: "c1" }, 201));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Saved to Mom"));
+  });
+
   it("a page that can be scripted but not read shows no card and can still be saved (S1)", async () => {
     fake.scripting.executeScript = async (injection) => {
       fake.scripting.calls.push(injection);
@@ -625,6 +637,44 @@ describe("Product page (ALL-78)", () => {
     expect(await screen.findByRole("status")).toHaveTextContent("Saved to Dad");
     expect(sentForm().get("person_id")).toBe("p-dad");
     expect(sentForm().get("note")).toBe("His size");
+  });
+
+  function deferred() {
+    let resolve!: (r: Response) => void;
+    const promise = new Promise<Response>((r) => (resolve = r));
+    return { promise, resolve };
+  }
+
+  it("while Add is in flight, the chips, Someone else… and Sign out are off, so a late result can't replace the people screen", async () => {
+    const answer = deferred();
+    fetchMock.mockReturnValueOnce(answer.promise);
+    render(<App />);
+    await userEvent.click(await addButton());
+    expect(await screen.findByRole("button", { name: "Adding…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Dad" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Someone else…" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Someone else…" }));
+    expect(screen.queryByText("Save for someone")).not.toBeInTheDocument();
+
+    answer.resolve(json({ outcome: "added", itemId: "i1" }, 201));
+    expect(await screen.findByText("Added to your list")).toBeInTheDocument();
+    expect(signOut).not.toHaveBeenCalled();
+  });
+
+  it("while Save is in flight, ‹ Back is off, so the card can't come back under a late result", async () => {
+    const answer = deferred();
+    fetchMock.mockReturnValueOnce(answer.promise);
+    render(<App />);
+    await userEvent.click(await screen.findByRole("button", { name: "Mom" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save to Mom" }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(screen.getByRole("button", { name: "‹ Back" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "‹ Back" }));
+    expect(screen.queryByRole("button", { name: "Add to my list" })).not.toBeInTheDocument();
+
+    answer.resolve(json({ id: "c1" }, 201));
+    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("Saved to Mom"));
   });
 
   it("only people from recent_people are tagged recent, not the alphabetical fill-ins", async () => {
