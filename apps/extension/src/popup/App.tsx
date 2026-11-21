@@ -3,7 +3,7 @@ import { captureReadNotice } from "@gifts-af/core";
 import { signOut } from "../lib/auth";
 import { config } from "../lib/config";
 import { getSupabase } from "../lib/supabase";
-import { collectPage, ScreenshotTooLargeError } from "../lib/page";
+import { collectPage, ScreenshotTooLargeError, type ShownProduct } from "../lib/page";
 import { cropPhoto } from "../lib/photo";
 import { addToMyList, retryExtraction, uploadCapture, type AddOutcome, type CaptureInput, type Extraction } from "../lib/upload";
 import { AddResult } from "./AddResult";
@@ -113,7 +113,7 @@ function Capture({
 }) {
   const { people, recentPeople, recentCount, textMax, screenshotMaxBytes, paidFeatures, readEstimateCents, tabId, capturable, page } =
     loaded;
-  const product = page?.product.isProduct ? page : null;
+  const product = page?.product?.isProduct ? (page as ShownProduct) : null;
 
   // The full people list over the card, opened by "Someone else…" (AC-13).
   const [peopleOpen, setPeopleOpen] = useState(false);
@@ -370,7 +370,7 @@ function Capture({
 }
 
 // "What you're saving" at the top of the people screen: the chosen photo, the name and the store.
-function ProductReminder({ page, photoIndex, name }: { page: NonNullable<Loaded["page"]>; photoIndex: number; name: string }) {
+function ProductReminder({ page, photoIndex, name }: { page: ShownProduct; photoIndex: number; name: string }) {
   const shotUrl = useObjectUrl(page.screenshot);
   const box = photoCandidates(page)[photoIndex];
   return (

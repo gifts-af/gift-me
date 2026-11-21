@@ -94,7 +94,8 @@ function dataUrlToBlob(dataUrl: string): Blob {
 
 /** What the popup learns from the page when it opens. */
 export type ProductPage = {
-  product: PageProduct;
+  /** null when the page could be scripted but not read (a bad fragment result or a reader error). */
+  product: PageProduct | null;
   pageUrl: string;
   /** Lossless capture of the visible tab; the chosen photo is cropped from it. null when the capture failed. */
   screenshot: Blob | null;
@@ -220,7 +221,15 @@ function fragmentsToHtml(f: Fragments): string {
   return `<html><head>${head.join("")}</head><body>${body.join("")}</body></html>`;
 }
 
-export type ReadDeps = { /** Pixel width of an image; defaults to createImageBitmap. */ imageWidth: (image: Blob) => Promise<number> };
+/** A page whose product was read, so it can show the product card. */
+export type ShownProduct = ProductPage & { product: PageProduct };
+
+export type ReadDeps = {
+  /** Pixel width of an image; defaults to createImageBitmap. */
+  imageWidth: (image: Blob) => Promise<number>;
+  /** The shared reader; injected only to test a reader failure. */
+  read?: typeof readProductFromHtml;
+};
 
 async function decodeWidth(image: Blob): Promise<number> {
   const bitmap = await createImageBitmap(image);
@@ -233,16 +242,27 @@ async function decodeWidth(image: Blob): Promise<number> {
 
 /**
  * Reads the product from the open tab: one script for the fragments, one
- * screenshot. Throws when the tab can't be scripted (chrome://, Web Store) or
- * the script fails. A failed screenshot still returns the product, with
- * screenshot and scale null and no candidates.
+ * screenshot. Throws only when the tab can't be scripted (chrome://, Web
+ * Store), so the caller knows it can't be captured either. A script result
+ * that can't be read, or a reader error, gives product: null (no card; the
+ * page can still be saved for someone). A failed screenshot still returns the
+ * product, with screenshot and scale null and no candidates.
  */
 export async function readProductPage(tabId: number, deps: ReadDeps = { imageWidth: decodeWidth }): Promise<ProductPage> {
   const [injection] = await chrome.scripting.executeScript({ target: { tabId }, func: readFragments });
-  const fragments = injection?.result as Fragments | undefined;
-  if (!fragments) throw new Error("The page script returned nothing");
-  const product = readProductFromHtml(fragmentsToHtml(fragments), fragments.url);
-  const base = { product, pageUrl: fragments.url, viewportWidth: fragments.viewportWidth };
+  const result = injection?.result as Partial<Fragments> | null | undefined;
+  const pageUrl = typeof result?.url === "string" ? result.url : "";
+  const viewportWidth = typeof result?.viewportWidth === "number" ? result.viewportWidth : 0;
+  const unread: ProductPage = { product: null, pageUrl, viewportWidth, screenshot: null, scale: null, candidates: [] };
+  if (!result) return unread;
+  const fragments = result as Fragments;
+  let product: PageProduct;
+  try {
+    product = (deps.read ?? readProductFromHtml)(fragmentsToHtml(fragments), fragments.url);
+  } catch {
+    return unread;
+  }
+  const base = { product, pageUrl, viewportWidth };
   try {
     // PNG: no quality setting to choose; the crop is re-encoded at list_photo_jpeg_quality.
     const screenshot = dataUrlToBlob(await chrome.tabs.captureVisibleTab({ format: "png" }));

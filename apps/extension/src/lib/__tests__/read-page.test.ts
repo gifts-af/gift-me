@@ -97,7 +97,7 @@ describe("readProductPage: what is read and sent along", () => {
       throw new Error("not allowed");
     };
     const page = await readProductPage(7, deps);
-    expect(page.product.name).toBe("Stoneware mug");
+    expect(page.product?.name).toBe("Stoneware mug");
     expect(page.screenshot).toBeNull();
     expect(page.scale).toBeNull();
     expect(page.candidates).toEqual([]);
@@ -110,13 +110,39 @@ describe("readProductPage: what is read and sent along", () => {
         throw new Error("bad image");
       },
     });
-    expect(page.product.name).toBe("Stoneware mug");
+    expect(page.product?.name).toBe("Stoneware mug");
     expect(page.screenshot).toBeNull();
   });
 
-  it("throws when the page script returns nothing", async () => {
-    fake.scripting.executeScript = async () => [{ result: undefined }];
+  it("throws when the tab can't be scripted (chrome://, the Web Store)", async () => {
+    fake.scripting.blocked = true;
     await expect(readProductPage(7, deps)).rejects.toThrow();
+  });
+
+  it("a page script that returns nothing gives a page with product: null and no screenshot (S1)", async () => {
+    fake.scripting.executeScript = async () => [{ result: undefined }];
+    const page = await readProductPage(7, deps);
+    expect(page).toMatchObject({ product: null, screenshot: null, scale: null, candidates: [] });
+    expect(fake.tabs.captures).toHaveLength(0);
+  });
+
+  it("a malformed fragment result gives a page with product: null (S1)", async () => {
+    fake.scripting.executeScript = async () => [{ result: { url: "https://shop.test/x", jsonLd: "not a list" } }];
+    const page = await readProductPage(7, deps);
+    expect(page.product).toBeNull();
+    expect(page.pageUrl).toBe("https://shop.test/x");
+  });
+
+  it("a reader that throws gives a page with product: null (S1)", async () => {
+    load(JSON_LD, "https://shop.test/mug");
+    const page = await readProductPage(7, {
+      ...deps,
+      read: () => {
+        throw new Error("reader bug");
+      },
+    });
+    expect(page.product).toBeNull();
+    expect(page.pageUrl).toBe("https://shop.test/mug");
   });
 
   it("does not read the page text into the fragments", async () => {

@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
-import type { ProductPage } from "../../lib/page";
+import type { ShownProduct as ProductPage } from "../../lib/page";
 import { initialName, initialPrice, ProductCard, photoCandidates } from "../ProductCard";
 
 const shot = new Blob([new Uint8Array([1])], { type: "image/png" });

@@ -22,9 +22,9 @@ export type Loaded = {
   /** How many of recentPeople, from the start, came from recent_people; the rest are fill-ins. */
   recentCount: number;
   tabId: number | null;
-  /** The page could be scripted and read (false on chrome:// pages and the like). */
+  /** The page could be scripted (false on chrome:// pages and the like), so it can be saved for someone. */
   capturable: boolean;
-  /** What the page showed when the popup opened; null when it can't be read. */
+  /** What the page showed when the popup opened; null when it can't be scripted. Its product is null when it couldn't be read. */
   page: ProductPage | null;
 };
 
@@ -57,8 +57,9 @@ export async function loadPopup(): Promise<LoadResult> {
     const { data } = await supabase.auth.getSession();
     if (!data.session) return { kind: "signedOut" };
 
-    // The tab is read while the settings load; a tab that can't be scripted
-    // (chrome://, Web Store) or a failed read gives page: null.
+    // The tab is read while the settings load. Only a tab that can't be
+    // scripted (chrome://, Web Store) gives page: null; a failed read gives a
+    // page with product: null, still capturable.
     const tab = readActiveTab();
     const [people, cap, shotCap, paid, estimate, photoWidth, photoQuality, recent] = await Promise.all([
       supabase.from("people").select("id, name").order("name"),
@@ -105,6 +106,7 @@ export async function loadPopup(): Promise<LoadResult> {
       recentPeople,
       recentCount,
       tabId,
+      // readProductPage throws (page: null) only when the script can't be injected.
       capturable: page !== null,
       page,
     };

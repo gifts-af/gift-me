@@ -223,6 +223,21 @@ describe("Popup", () => {
     expect(screen.getByRole("button", { name: "Save to Mom" })).toBeDisabled();
   });
 
+  it("a page that can be scripted but not read shows no card and can still be saved (S1)", async () => {
+    fake.scripting.executeScript = async (injection) => {
+      fake.scripting.calls.push(injection);
+      // On open the reader's script gives nothing back; on Save the page is collected.
+      return fake.scripting.calls.length === 1 ? [{ result: undefined }] : [{ result: { url: "https://shop.test/x", title: "X", text: "t" } }];
+    };
+    render(<App />);
+    expect(
+      await screen.findByText("No product on this page, so there's nothing to add to your list. You can still save it for someone."),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Mom" }));
+    await userEvent.click(screen.getByRole("button", { name: "Save to Mom" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Saved to Mom");
+  });
+
   it("a missing text cap shows a generic error rather than guessing a default", async () => {
     db.textMax = null;
     render(<App />);

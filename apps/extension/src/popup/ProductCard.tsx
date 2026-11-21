@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from "react";
 import { toCents } from "@gifts-af/core/store-page";
-import type { ProductPage } from "../lib/page";
+import type { ShownProduct } from "../lib/page";
 import { orderCandidates, type PhotoBox } from "../lib/photo";
 
 // The longest name the add route takes (apps/web/modules/lists/lib/save-list.ts MAX_NAME_LENGTH).
@@ -15,8 +15,8 @@ export const formatPrice = (cents: number) => usd.format(cents / 100);
 /** The typed price in cents, or null when it isn't a price we can save. */
 export const parsePrice = (text: string): number | null => toCents(text.trim());
 
-export const initialName = (page: ProductPage) => (page.product.name ?? "").slice(0, NAME_MAX);
-export const initialPrice = (page: ProductPage) =>
+export const initialName = (page: ShownProduct) => (page.product.name ?? "").slice(0, NAME_MAX);
+export const initialPrice = (page: ShownProduct) =>
   page.product.priceCents === null ? "" : formatPrice(page.product.priceCents);
 
 /** "rei.com" from the page address. */
@@ -29,7 +29,7 @@ export function storeLabel(url: string): string {
 }
 
 /** The photos ‹ › steps through, product image first; none without a usable screenshot. */
-export function photoCandidates(page: ProductPage): PhotoBox[] {
+export function photoCandidates(page: ShownProduct): PhotoBox[] {
   if (!page.screenshot || !page.scale) return [];
   return orderCandidates(page.candidates, page.product.imageUrl);
 }
@@ -96,7 +96,7 @@ export function ProductCard({
   busy,
   onAdd,
 }: {
-  page: ProductPage;
+  page: ShownProduct;
   photoIndex: number;
   onPhotoIndex: (index: number) => void;
   name: string;
