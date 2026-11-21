@@ -589,6 +589,64 @@ describe("Product page (ALL-78)", () => {
     expect(screen.getByRole("button", { name: "Add to my list" })).toBeEnabled();
   });
 
+  it("a photo that can't be cropped offers Add without photo, which adds with no photo", async () => {
+    vi.stubGlobal(
+      "OffscreenCanvas",
+      class {
+        getContext() {
+          return { drawImage: () => {} };
+        }
+        async convertToBlob(): Promise<Blob> {
+          throw new Error("encode failed");
+        }
+      },
+    );
+    fetchMock.mockResolvedValueOnce(json({ outcome: "added", itemId: "i1" }, 201));
+    render(<App />);
+    await userEvent.click(await addButton());
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't use that photo.");
+    expect(fetchMock).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole("button", { name: "Add without photo" }));
+    expect(await screen.findByText("Added to your list")).toBeInTheDocument();
+    expect(sentForm().has("photo")).toBe(false);
+    expect(sentForm().get("name")).toBe("YETI Rambler 20 oz Tumbler");
+  });
+
+  it("a photo the server refuses offers Add without photo, which resends with no photo", async () => {
+    fetchMock
+      .mockResolvedValueOnce(json({ error: "That photo couldn't be used.", code: "photo" }, 400))
+      .mockResolvedValueOnce(json({ outcome: "added", itemId: "i1" }, 201));
+    render(<App />);
+    await userEvent.click(await addButton());
+    expect(await screen.findByRole("alert")).toHaveTextContent("That photo couldn't be used.");
+    expect(sentForm(0).get("photo")).toBeInstanceOf(Blob);
+    await userEvent.click(screen.getByRole("button", { name: "Add without photo" }));
+    expect(await screen.findByText("Added to your list")).toBeInTheDocument();
+    expect(sentForm(1).has("photo")).toBe(false);
+  });
+
+  it("after Add without photo, Add anyway on a likely duplicate also goes without the photo", async () => {
+    fetchMock
+      .mockResolvedValueOnce(json({ error: "That photo couldn't be used.", code: "photo" }, 400))
+      .mockResolvedValueOnce(json({ outcome: "likely", existing: { name: "Rambler", priceCents: 3000, imageUrl: null } }, 200))
+      .mockResolvedValueOnce(json({ outcome: "added", itemId: "i1" }, 201));
+    render(<App />);
+    await userEvent.click(await addButton());
+    await userEvent.click(await screen.findByRole("button", { name: "Add without photo" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Add anyway" }));
+    expect(await screen.findByText("Added to your list")).toBeInTheDocument();
+    expect(sentForm(2).has("photo")).toBe(false);
+    expect(sentForm(2).get("confirmLikely")).toBe("1");
+  });
+
+  it("other add errors don't offer Add without photo", async () => {
+    fetchMock.mockResolvedValueOnce(json({ error: "Couldn't add that gift. Try again." }, 500));
+    render(<App />);
+    await userEvent.click(await addButton());
+    expect(await screen.findByRole("alert")).toHaveTextContent("Couldn't add that gift.");
+    expect(screen.queryByRole("button", { name: "Add without photo" })).not.toBeInTheDocument();
+  });
+
   it("no price: the box is empty and focused, and Add is off", async () => {
     productPage({ price: null });
     render(<App />);

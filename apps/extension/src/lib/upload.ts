@@ -104,7 +104,10 @@ export type AddOutcome =
   | { outcome: "duplicate" }
   | { outcome: "likely"; existing: LikelyGift }
   | { outcome: "full" };
-export type AddResponse = ({ ok: true } & AddOutcome) | { ok: false; status: number; error: string };
+export type AddResponse =
+  | ({ ok: true } & AddOutcome)
+  /** photoRefused: the server couldn't use the photo, so adding without it may work. */
+  | { ok: false; status: number; error: string; photoRefused?: true };
 
 const ADD_ERROR = "Couldn't add that gift. Try again.";
 // 503 is the off switch (AC-20); 404 is a web app rolled back to before the route.
@@ -133,7 +136,12 @@ export async function addToMyList(accessToken: string, input: AddInput): Promise
   if (!response) return { ok: false, status: 0, error: NETWORK_ERROR };
   if (response.status === 404 || response.status === 503) return { ok: false, status: response.status, error: ADD_PAUSED };
 
-  const body = (await response.json().catch(() => null)) as { outcome?: unknown; existing?: unknown; error?: unknown } | null;
+  const body = (await response.json().catch(() => null)) as {
+    outcome?: unknown;
+    existing?: unknown;
+    error?: unknown;
+    code?: unknown;
+  } | null;
   if (response.status === 201 && body?.outcome === "added") return { ok: true, outcome: "added" };
   if (response.status === 200) {
     if (body?.outcome === "duplicate" || body?.outcome === "full") return { ok: true, outcome: body.outcome };
@@ -141,5 +149,6 @@ export async function addToMyList(accessToken: string, input: AddInput): Promise
     if (existing) return { ok: true, outcome: "likely", existing };
   }
   const error = typeof body?.error === "string" ? body.error : ADD_ERROR;
+  if (response.status === 400 && body?.code === "photo") return { ok: false, status: 400, error, photoRefused: true };
   return { ok: false, status: response.status, error };
 }

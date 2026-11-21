@@ -72,7 +72,8 @@ export type ExtensionAddResponse =
   | { outcome: "duplicate" }
   | { outcome: "likely"; existing: { name: string; priceCents: number; imageUrl: string | null } }
   | { outcome: "full" }
-  | { error: string };
+  /** code "photo": the photo was refused, so the extension can offer to add without it. */
+  | { error: string; code?: "photo" };
 
 export type ExtensionAddResult = { status: number; body: ExtensionAddResponse };
 
@@ -203,7 +204,7 @@ export async function addFromExtension(store: ExtensionAddStore, input: Extensio
     let jpeg: Uint8Array | null = null;
     if (input.photo) {
       jpeg = await readJpeg(input.photo, input.photoMaxBytes);
-      if (!jpeg) return { status: 400, body: { error: BAD_PHOTO } };
+      if (!jpeg) return { status: 400, body: { error: BAD_PHOTO, code: "photo" } };
     }
 
     let photoUrl: string | null = null;

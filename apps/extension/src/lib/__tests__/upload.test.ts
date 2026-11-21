@@ -179,6 +179,11 @@ describe("addToMyList (ALL-78)", () => {
     expect(await addToMyList("tok", add)).toEqual({ ok: false, status, error: "Adding from the extension is paused." });
   });
 
+  it("marks a refused photo, so the popup can offer to add without it", async () => {
+    stubFetch(json({ error: "That photo couldn't be used.", code: "photo" }, 400));
+    expect(await addToMyList("tok", add)).toEqual({ ok: false, status: 400, error: "That photo couldn't be used.", photoRefused: true });
+  });
+
   it("passes on the server's error, and maps a network failure to status 0", async () => {
     stubFetch(json({ error: "Sign in again." }, 401));
     expect(await addToMyList("tok", add)).toEqual({ ok: false, status: 401, error: "Sign in again." });

@@ -198,7 +198,11 @@ describe("addFromExtension", () => {
     ["over list_photo_max_bytes", new Blob([new Uint8Array([0xff, 0xd8, 0xff, ...new Array(98).fill(0)])], { type: "image/jpeg" })],
   ])("refuses a photo that is %s before anything is queued", async (_label, photo) => {
     const { store, calls } = fakeStore();
-    expect(await addFromExtension(store, input({ photo }))).toEqual({ status: 400, body: { error: "That photo couldn't be used." } });
+    // code "photo" lets the extension offer "Add without photo".
+    expect(await addFromExtension(store, input({ photo }))).toEqual({
+      status: 400,
+      body: { error: "That photo couldn't be used.", code: "photo" },
+    });
     expect(calls).toEqual([]);
   });
 

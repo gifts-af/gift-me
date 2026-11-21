@@ -124,6 +124,11 @@ function Capture({
   const [price, setPrice] = useState(() => (product ? initialPrice(product) : ""));
   const [addBusy, setAddBusy] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+  // The photo couldn't be cropped or was refused: offer "Add without photo",
+  // repeating that add's confirmLikely. Once chosen, later adds (Add anyway)
+  // skip the photo too, until another photo is picked.
+  const [photoFailed, setPhotoFailed] = useState<{ confirmLikely: boolean } | null>(null);
+  const [skipPhoto, setSkipPhoto] = useState(false);
   const [added, setAdded] = useState<{ result: AddOutcome; gift: { name: string; priceCents: number } } | null>(null);
 
   const [selected, setSelected] = useState<Person | null>(null);
@@ -202,20 +207,23 @@ function Capture({
     setPeopleOpen(true);
   }
 
-  async function add(confirmLikely: boolean) {
+  async function add(confirmLikely: boolean, withoutPhoto = skipPhoto) {
     const priceCents = parsePrice(price);
     const trimmed = name.trim();
     if (!product || priceCents === null || !trimmed) return;
     setAddBusy(true);
     setAddError(null);
+    setPhotoFailed(null);
     try {
-      const box = photoCandidates(product)[photoIndex];
+      const box = withoutPhoto ? undefined : photoCandidates(product)[photoIndex];
       let photo: Blob | null = null;
       if (box && product.screenshot && product.scale) {
         try {
           photo = await cropPhoto(product.screenshot, box, product.scale, loaded.photoWidthPx, loaded.photoJpegQuality);
         } catch {
-          setAddError("Couldn't use that photo. Try again.");
+          setAdded(null);
+          setAddError("Couldn't use that photo.");
+          setPhotoFailed({ confirmLikely });
           return;
         }
       }
@@ -235,6 +243,7 @@ function Capture({
       else {
         setAdded(null);
         setAddError(result.error);
+        setPhotoFailed(result.photoRefused ? { confirmLikely } : null);
       }
     } finally {
       setAddBusy(false);
@@ -310,7 +319,10 @@ function Capture({
           <ProductCard
             page={product}
             photoIndex={photoIndex}
-            onPhotoIndex={setPhotoIndex}
+            onPhotoIndex={(index) => {
+              setPhotoIndex(index);
+              setSkipPhoto(false);
+            }}
             name={name}
             onName={setName}
             price={price}
@@ -322,6 +334,19 @@ function Capture({
             <p role="alert" className="m-0 text-sm text-destructive">
               {addError}
             </p>
+          )}
+          {photoFailed && (
+            <button
+              className="btn-outline"
+              type="button"
+              disabled={addBusy}
+              onClick={() => {
+                setSkipPhoto(true);
+                void add(photoFailed.confirmLikely, true);
+              }}
+            >
+              Add without photo
+            </button>
           )}
           <RecentPeople people={recentPeople} disabled={inFlight} onPick={openPeople} onSomeoneElse={() => openPeople(null)} />
         </div>
