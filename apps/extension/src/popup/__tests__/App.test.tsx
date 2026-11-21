@@ -65,8 +65,9 @@ const client = {
 };
 vi.mock("../../lib/supabase", () => ({ getSupabase: () => client }));
 
+const realFetch = globalThis.fetch;
 let fake: FakeChrome;
-let fetchMock: ReturnType<typeof vi.fn>;
+let fetchMock: ReturnType<typeof vi.fn<(url: string, init?: RequestInit) => Promise<Response>>>;
 const json = (body: unknown, status: number) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 
@@ -87,7 +88,10 @@ beforeEach(() => {
   db.adds = [];
   db.recent = [];
   fetchMock = vi.fn(async () => json({ id: "c1" }, 201));
-  vi.stubGlobal("fetch", fetchMock);
+  // The screenshot's data: URL is decoded with the real fetch; only server calls are faked.
+  vi.stubGlobal("fetch", (url: string, init?: RequestInit) =>
+    String(url).startsWith("data:") ? realFetch(url) : fetchMock(url, init),
+  );
   document.title = "Stoneware mug set";
 });
 

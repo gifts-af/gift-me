@@ -78,18 +78,14 @@ export async function collectPage(
   });
   const page = injection.result as { url: string; title: string; text: string };
   const dataUrl = await chrome.tabs.captureVisibleTab({ format: "jpeg", quality: opts.jpegQuality });
-  const screenshot = await fitScreenshot(dataUrlToBlob(dataUrl), opts.screenshotMaxBytes, opts.jpegQuality, deps);
+  const screenshot = await fitScreenshot(await dataUrlToBlob(dataUrl), opts.screenshotMaxBytes, opts.jpegQuality, deps);
   if (!screenshot) throw new ScreenshotTooLargeError();
   return { ...page, screenshot };
 }
 
-function dataUrlToBlob(dataUrl: string): Blob {
-  const [header, base64] = dataUrl.split(",", 2);
-  const type = /^data:([^;]+)/.exec(header)?.[1] ?? "image/jpeg";
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return new Blob([bytes], { type });
+// captureVisibleTab gives a data: URL; fetch decodes it natively (no request leaves the device).
+async function dataUrlToBlob(dataUrl: string): Promise<Blob> {
+  return await (await fetch(dataUrl)).blob();
 }
 
 /** What the popup learns from the page when it opens. */
@@ -265,7 +261,7 @@ export async function readProductPage(tabId: number, deps: ReadDeps = { imageWid
   const base = { product, pageUrl, viewportWidth };
   try {
     // PNG: no quality setting to choose; the crop is re-encoded at list_photo_jpeg_quality.
-    const screenshot = dataUrlToBlob(await chrome.tabs.captureVisibleTab({ format: "png" }));
+    const screenshot = await dataUrlToBlob(await chrome.tabs.captureVisibleTab({ format: "png" }));
     const scale = (await deps.imageWidth(screenshot)) / fragments.viewportWidth;
     if (!Number.isFinite(scale) || scale <= 0) throw new Error("Unusable screenshot size");
     return { ...base, screenshot, scale, candidates: fragments.boxes };
