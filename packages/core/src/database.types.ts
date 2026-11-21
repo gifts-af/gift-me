@@ -1816,6 +1816,25 @@ export type Database = {
   };
   lists: {
     Tables: {
+      amazon_lookups: {
+        Row: {
+          created_at: string;
+          id: number;
+          user_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          id?: never;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: never;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       gift_claims: {
         Row: {
           claimed_at: string;
@@ -2055,6 +2074,10 @@ export type Database = {
         Returns: Json;
       };
       store_host: { Args: { p_url: string }; Returns: string };
+      take_amazon_lookup: {
+        Args: Record<PropertyKey, never>;
+        Returns: boolean;
+      };
       take_photo_deletions: {
         Args: { p_limit: number; p_older_than: string };
         Returns: string[];

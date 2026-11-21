@@ -130,3 +130,9 @@ export { createSupabaseIdeaStore } from "./ideas/store";
 export type { AdminDb, IdeaInputs, IdeaRefusal, IdeaSettings, IdeaStore, SavedIdea } from "./ideas/store";
 export { ideaRunOffer, onDemandIdeas, type IdeaRunOffer } from "./ideas/read";
 export type { ShownIdea } from "./ideas/read";
+// One Amazon product's name, price and photo from the app's Zinc key, for an Amazon link
+// pasted on My list (ALL-141). Paid, so it takes the caller's daily allowance before calling
+// Zinc; the raw Zinc call stays inside. The lists module's paste lookup is its only caller.
+export { amazonPasteDetails } from "./zinc/products";
+export type { AmazonPasteDetails, ZincProductDetails } from "./zinc/products";
+export type { ZincHttp } from "./zinc/client";

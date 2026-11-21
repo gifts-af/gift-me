@@ -50,7 +50,9 @@ select set_eq(
     'idea_ai_timeout_ms', 'idea_zinc_timeout_ms', 'idea_tax_estimate_pct', 'idea_run_estimate_cents', 'idea_run_max_cents',
     'idea_round_runs_max', 'idea_rounds_per_tick', 'idea_run_lease_ms', 'tick_deadline_ms', 'zinc_lookup_cents',
     'zinc_requests_per_second', 'list_photo_width_px', 'list_photo_jpeg_quality', 'list_photo_max_bytes',
-    'extension_add_enabled', 'list_photo_cleanup_batch', 'list_photo_cleanup_min_age_minutes'
+    'extension_add_enabled', 'list_photo_cleanup_batch', 'list_photo_cleanup_min_age_minutes',
+    'amazon_paste_lookup_enabled', 'amazon_paste_lookups_per_user_per_day', 'amazon_paste_lookup_timeout_ms',
+    'amazon_paste_lookups_per_day_total'
   ],
   'every fee, limit, default and schedule setting is seeded'
 );

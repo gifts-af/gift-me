@@ -70,3 +70,65 @@ export async function productOffers(h: ZincHttp, key: string, productId: string,
   }
   return out;
 }
+
+// One Amazon product's name, buy-box price and main photo, for a pasted link (ALL-141).
+// Every field is nullable in Zinc's reply; anything we can't use becomes null.
+const detailsReply = z.object({
+  status: z.string().nullish(),
+  product_id: z.string().nullish(),
+  title: z.unknown().optional(),
+  main_image: z.unknown().optional(),
+  price: z.unknown().optional(),
+});
+// https only: the photo is shown on our pages.
+const webUrl = z.string().regex(/^https:\/\//i);
+
+export type ZincProductDetails = { productId: string; name: string | null; priceCents: number | null; imageUrl: string | null };
+
+/** Zinc's call itself, internal: the only way in from outside is amazonPasteDetails, which takes the quota first. */
+export async function productDetails(
+  h: ZincHttp,
+  key: string,
+  asin: string,
+  signal?: AbortSignal,
+): Promise<ZincProductDetails | null> {
+  const r = await call(h, "GET", `/products/${encodeURIComponent(asin)}`, detailsReply, {
+    key,
+    query: { retailer: "amazon" },
+    signal,
+  });
+  if (r.status !== "completed" || !r.product_id) return null;
+  const name = typeof r.title === "string" ? r.title.trim() : "";
+  const price = cents.safeParse(r.price);
+  const image = webUrl.safeParse(r.main_image);
+  return {
+    productId: r.product_id,
+    name: name === "" ? null : name,
+    priceCents: price.success ? price.data : null,
+    imageUrl: image.success ? image.data : null,
+  };
+}
+
+export type AmazonPasteDetails =
+  | { kind: "found"; product: ZincProductDetails }
+  | { kind: "not_found" }
+  | { kind: "over_limit" };
+
+/**
+ * An Amazon link pasted on My list, looked up on the app's Zinc key (ALL-141). Each call is
+ * paid, so the caller's daily allowance is a required argument and is taken before Zinc is
+ * called: over the limit, or if taking it fails, Zinc is never asked. An answer for another
+ * product than this ASIN counts as not found. Zinc failures throw ZincError.
+ */
+export async function amazonPasteDetails(
+  h: ZincHttp,
+  key: string,
+  asin: string,
+  takeQuota: () => Promise<boolean>,
+  signal?: AbortSignal,
+): Promise<AmazonPasteDetails> {
+  if (!(await takeQuota())) return { kind: "over_limit" };
+  const product = await productDetails(h, key, asin, signal);
+  if (!product || product.productId !== asin) return { kind: "not_found" };
+  return { kind: "found", product };
+}

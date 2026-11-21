@@ -145,11 +145,168 @@ describe("adding a gift from another store while signed in (ALL-10)", () => {
     expect(screen.getByLabelText("Gift name")).toHaveValue("Great Value Long Grain Enriched Rice 32 Oz");
   });
 
-  it("never asks the server about Amazon links", async () => {
+});
+
+// Amazon answers our server's page reads with a bot check, and its ASIN photo
+// shortcut answers newer products with a blank 1x1 picture, so a signed-in
+// person's pasted Amazon link is looked up through Zinc for the real photo,
+// name and price (ALL-141).
+describe("adding an Amazon gift while signed in (ALL-141)", () => {
+  const AMAZON = "https://www.amazon.com/dp/B0G5Z36T3N?th=1";
+  const CANONICAL = "https://www.amazon.com/dp/B0G5Z36T3N";
+  const GUESSED_PHOTO = "https://images-na.ssl-images-amazon.com/images/P/B0G5Z36T3N.01._SCLZZZZZZZ_.jpg";
+  const REAL_PHOTO = "https://m.media-amazon.com/images/I/51jwXyqEB3L._AC_SX300_SY300_QL70_ML2_.jpg";
+
+  async function lookUpWith(lookUpAmazon, url, readStorePage = vi.fn()) {
+    const onAdd = vi.fn();
+    render(<AddGiftPanel onAdd={onAdd} readStorePage={readStorePage} lookUpAmazon={lookUpAmazon} />);
+    await userEvent.click(screen.getByLabelText("Paste a link"));
+    await userEvent.paste(url);
+    await userEvent.click(screen.getByRole("button", { name: "Add" }));
+    return onAdd;
+  }
+
+  it("looks the ASIN up and fills the real name, price and photo, without reading the page", async () => {
+    const lookUpAmazon = vi.fn(async () => ({
+      ok: true,
+      product: { name: "SOULWIT Headband Protector", priceCents: 1195, imageUrl: REAL_PHOTO, productId: "B0G5Z36T3N" },
+    }));
     const readStorePage = vi.fn();
-    await lookUpWith(readStorePage, "https://www.amazon.com/Wool-Hiking-Socks/dp/B0EXAMPLE1");
-    await waitFor(() => expect(screen.getByLabelText("Price")).toHaveFocus());
+    const onAdd = await lookUpWith(lookUpAmazon, AMAZON, readStorePage);
+    expect(await screen.findByText(/\$11\.95 · found on Amazon/)).toBeInTheDocument();
+    expect(lookUpAmazon).toHaveBeenCalledWith("B0G5Z36T3N");
     expect(readStorePage).not.toHaveBeenCalled();
+    expect(screen.getByText("Found it. Check the details, then add it.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Add to list" }));
+    expect(onAdd).toHaveBeenCalledWith({
+      name: "SOULWIT Headband Protector",
+      priceCents: 1195,
+      imageUrl: REAL_PHOTO,
+      productUrl: CANONICAL,
+      asin: "B0G5Z36T3N",
+      source: "amazon-zinc",
+    });
+  });
+
+  it("keeps the guessed photo when Zinc has none, and asks for a missing price", async () => {
+    const lookUpAmazon = vi.fn(async () => ({
+      ok: true,
+      product: { name: "Wool Hiking Socks, 3 pairs", priceCents: null, imageUrl: null, productId: "B0EXAMPLE1" },
+    }));
+    await lookUpWith(lookUpAmazon, "https://www.amazon.com/Wool-Hiking-Socks/dp/B0EXAMPLE1");
+    await waitFor(() => expect(screen.getByLabelText("Price")).toHaveFocus());
+    expect(screen.getByLabelText("Gift name")).toHaveValue("Wool Hiking Socks, 3 pairs");
+    expect(screen.getByLabelText(/Image URL/)).toHaveValue(
+      "https://images-na.ssl-images-amazon.com/images/P/B0EXAMPLE1.01._SCLZZZZZZZ_.jpg",
+    );
+    expect(screen.getByText(/Got the name from Amazon\. Amazon doesn’t show us the price/)).toBeInTheDocument();
+  });
+
+  it("keeps the name from the link when Zinc has no name", async () => {
+    const lookUpAmazon = vi.fn(async () => ({
+      ok: true,
+      product: { name: null, priceCents: 2400, imageUrl: REAL_PHOTO, productId: "B0EXAMPLE1" },
+    }));
+    await lookUpWith(lookUpAmazon, "https://www.amazon.com/Wool-Hiking-Socks/dp/B0EXAMPLE1");
+    expect(await screen.findByText(/\$24\.00 · found on Amazon/)).toBeInTheDocument();
+    expect(screen.getByText("Wool Hiking Socks")).toBeInTheDocument();
+  });
+
+  it("says only what Zinc gave when it gave just the name", async () => {
+    const lookUpAmazon = vi.fn(async () => ({
+      ok: true,
+      product: { name: "Wool Hiking Socks, 3 pairs", priceCents: null, imageUrl: null, productId: "B0EXAMPLE1" },
+    }));
+    await lookUpWith(lookUpAmazon, "https://www.amazon.com/Wool-Hiking-Socks/dp/B0EXAMPLE1");
+    expect(await screen.findByText(/^Got the name from Amazon\./)).toBeInTheDocument();
+  });
+
+  it("ignores an answer for a different product", async () => {
+    const lookUpAmazon = vi.fn(async () => ({
+      ok: true,
+      product: { name: "Something else", priceCents: 999, imageUrl: REAL_PHOTO, productId: "B0OTHER000" },
+    }));
+    const onAdd = await lookUpWith(lookUpAmazon, "https://www.amazon.com/Wool-Hiking-Socks/dp/B0EXAMPLE1");
+    await waitFor(() => expect(screen.getByLabelText("Price")).toHaveFocus());
+    expect(screen.getByLabelText("Gift name")).toHaveValue("Wool Hiking Socks");
+    await userEvent.type(screen.getByLabelText("Price"), "20");
+    await userEvent.click(screen.getByRole("button", { name: "Add to list" }));
+    expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({ source: "amazon-url" }));
+  });
+
+  it("never lets a slow Amazon lookup overwrite a newer paste", async () => {
+    let answerFirst;
+    const lookUpAmazon = vi.fn((asin) =>
+      asin === "B0EXAMPLE1"
+        ? new Promise((resolve) => {
+            answerFirst = resolve;
+          })
+        : Promise.resolve({
+            ok: true,
+            product: { name: "SOULWIT Headband Protector", priceCents: 1195, imageUrl: REAL_PHOTO, productId: "B0G5Z36T3N" },
+          }),
+    );
+    render(<AddGiftPanel onAdd={vi.fn()} readStorePage={vi.fn()} lookUpAmazon={lookUpAmazon} />);
+    const field = screen.getByLabelText("Paste a link");
+    await userEvent.click(field);
+    await userEvent.paste("https://www.amazon.com/Wool-Hiking-Socks/dp/B0EXAMPLE1");
+    await userEvent.click(screen.getByRole("button", { name: "Add" }));
+    // The Add button waits while looking; Enter in the link field starts a new lookup.
+    await userEvent.clear(field);
+    await userEvent.paste(AMAZON);
+    await userEvent.keyboard("{Enter}");
+    expect(await screen.findByText(/\$11\.95 · found on Amazon/)).toBeInTheDocument();
+
+    answerFirst({
+      ok: true,
+      product: { name: "Wool Hiking Socks, 3 pairs", priceCents: 2400, imageUrl: REAL_PHOTO, productId: "B0EXAMPLE1" },
+    });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(screen.getByText(/\$11\.95 · found on Amazon/)).toBeInTheDocument();
+    expect(screen.queryByText(/Wool Hiking Socks/)).not.toBeInTheDocument();
+    expect(screen.getByText("SOULWIT Headband Protector")).toBeInTheDocument();
+  });
+
+  it("drops a stand-in fixture price once Zinc answers without one", async () => {
+    const lookUpAmazon = vi.fn(async () => ({
+      ok: true,
+      product: { name: "Echo Dot (3rd Gen)", priceCents: null, imageUrl: REAL_PHOTO, productId: "B07FZ8S74R" },
+    }));
+    await lookUpWith(lookUpAmazon, "https://www.amazon.com/dp/B07FZ8S74R");
+    await waitFor(() => expect(screen.getByLabelText("Price")).toHaveFocus());
+    expect(screen.getByLabelText("Price")).toHaveValue("");
+  });
+
+  for (const reason of ["off", "not_configured", "over_limit", "not_found", "unavailable"]) {
+    it(`behaves as before when the lookup is ${reason}`, async () => {
+      const lookUpAmazon = vi.fn(async () => ({ ok: false, reason }));
+      const readStorePage = vi.fn();
+      const onAdd = await lookUpWith(lookUpAmazon, "https://www.amazon.com/Wool-Hiking-Socks/dp/B0EXAMPLE1", readStorePage);
+      await waitFor(() => expect(screen.getByLabelText("Price")).toHaveFocus());
+      expect(readStorePage).not.toHaveBeenCalled();
+      expect(screen.getByLabelText("Gift name")).toHaveValue("Wool Hiking Socks");
+      expect(screen.getByText(/Amazon doesn’t share prices/)).toBeInTheDocument();
+      await userEvent.type(screen.getByLabelText("Price"), "20");
+      await userEvent.click(screen.getByRole("button", { name: "Add to list" }));
+      expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({ source: "amazon-url", asin: "B0EXAMPLE1" }));
+    });
+  }
+
+  it("behaves as before when the server call itself fails", async () => {
+    const lookUpAmazon = vi.fn(async () => {
+      throw new Error("offline");
+    });
+    await lookUpWith(lookUpAmazon, AMAZON);
+    await waitFor(() => expect(screen.getByLabelText("Gift name")).toHaveFocus());
+    expect(screen.getByLabelText(/Image URL/)).toHaveValue(GUESSED_PHOTO);
+  });
+
+  it("doesn't ask the server for guests", async () => {
+    await lookUp("https://www.amazon.com/Wool-Hiking-Socks/dp/B0EXAMPLE1");
+    await waitFor(() => expect(screen.getByLabelText("Price")).toHaveFocus());
+    expect(screen.getByLabelText(/Image URL/)).toHaveValue(
+      "https://images-na.ssl-images-amazon.com/images/P/B0EXAMPLE1.01._SCLZZZZZZZ_.jpg",
+    );
   });
 });
 

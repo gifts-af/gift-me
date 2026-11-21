@@ -4,7 +4,7 @@
 
 **Goal:** on a product page, one click in the extension adds the product (name, price, photo, link) to your own list, and every save in the popup ends on a clear success screen that says what happens next.
 
-**Links:** [ALL-78](https://linear.app/allens-forever/issue/ALL-78) (folds in ALL-138; ALL-137's store-update checks run on this release). Approved mock-ups (owner, 2026-11-20): https://claude.ai/artifact/YU7tRxcSdDyP8GRCs1SjkP. Related: ALL-10 (store-page reader, planning decision 49/50, T52), ALL-141 (the website keeps its own photo copy too), ALL-22/ALL-25 (extension, capture), ALL-94 (paid features), PRD C-2.
+**Links:** [ALL-78](https://linear.app/allens-forever/issue/ALL-78) (folds in ALL-138; ALL-137's store-update checks run on this release). Approved mock-ups (owner, 2026-11-20): https://claude.ai/artifact/YU7tRxcSdDyP8GRCs1SjkP. Related: ALL-10 (store-page reader, planning decision 49/50, T52), ALL-141 (pasted Amazon links on the website get their name, price and photo from a Zinc lookup; copying photos was considered and not chosen, planning decision 57), ALL-22/ALL-25 (extension, capture), ALL-94 (paid features), PRD C-2.
 
 ## Spec: what it does
 
@@ -53,7 +53,7 @@
 
 - Adding to someone else's list as a buyer-only suggestion: ALL-77.
 - Choosing between several lists: ALL-7 (everyone has one list for now).
-- The website's own photo copy for pasted links: ALL-141 (shares this ticket's storage).
+- Pasted links on the website: they keep the photo link they found, with no copy in our storage (planning decision 57). For Amazon, ALL-141 looks the product up through Zinc instead.
 - Prices in other currencies: only USD, as ALL-10.
 - Picking a photo by clicking on the page: Chrome closes the popup when the page is clicked, so ‹ › in the popup does this instead (owner, 2026-11-20).
 
