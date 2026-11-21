@@ -9,6 +9,7 @@ export {
   getPersonShareToken,
   getSharedList,
   getSharePreview,
+  UUID_PATTERN,
 } from "./lib/lists";
 // Link or unlink a person's list (ALL-123). Plain functions: the share page's
 // server actions call them and log the events.
