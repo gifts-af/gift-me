@@ -26,4 +26,12 @@ describe("appSettingInt", () => {
     rpc.mockResolvedValue({ data: null, error: { message: "boom" } });
     await expect(appSettingInt("install_tip_snooze_days")).rejects.toThrow("boom");
   });
+
+  it("reads through a client it is given, such as one signed in by bearer token", async () => {
+    const own = vi.fn().mockResolvedValue({ data: 1, error: null });
+    const db = { schema: () => ({ rpc: own }) } as unknown as Parameters<typeof appSettingInt>[1];
+    await expect(appSettingInt("extension_add_enabled", db)).resolves.toBe(1);
+    expect(own).toHaveBeenCalledWith("setting_int", { p_key: "extension_add_enabled" });
+    expect(rpc).not.toHaveBeenCalled();
+  });
 });

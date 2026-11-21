@@ -27,8 +27,14 @@ export default function LookupStatus({ lookup, pending }) {
   }
 
   const needsName = lookup.missing.includes('name')
+  // Only what the page itself gave: an Amazon read keeps the link's name and
+  // guessed photo where the page has none (ALL-141).
+  const found = lookup.product.pageFound ?? {
+    name: Boolean(lookup.product.name),
+    image: Boolean(lookup.product.imageUrl),
+  }
   const got = lookup.product.pageRead
-    ? [lookup.product.name && 'the name', lookup.product.imageUrl && 'the photo'].filter(Boolean)
+    ? [found.name && 'the name', found.image && 'the photo'].filter(Boolean)
     : []
   if (got.length > 0 && !lookup.missing.includes('name')) {
     return (

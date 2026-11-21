@@ -1,7 +1,7 @@
 import { useId, useState, type FormEvent } from "react";
 import { RELATIONSHIPS, relationshipLabel, startingOccasions, type Relationship } from "@gifts-af/core";
 import { getSupabase } from "../lib/supabase";
-import type { Person } from "./PersonPicker";
+import type { Person } from "./PeopleScreen";
 
 // Quick add (AC-9): just a name and a relationship; details wait for the web app.
 export function AddPerson({ onAdded, onCancel }: { onAdded: (person: Person) => void; onCancel?: () => void }) {

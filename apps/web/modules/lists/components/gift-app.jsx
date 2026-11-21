@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { onBeforeLeaving } from '@/lib/leaving-page'
 import { saveList } from '@/modules/lists/actions/lists'
+import { lookUpAmazon } from '@/modules/lists/actions/amazon-lookup'
 import { readStorePage } from '@/modules/lists/actions/store-page'
 import { createListSaver } from '@/modules/lists/lib/list-saver.js'
 import AddGiftPanel from './add-gift-panel.jsx'
@@ -389,8 +390,12 @@ export default function GiftApp({ initial, footer = null }) {
           </Banner>
         )}
 
-        {/* Only signed-in people can have our server read a store page (ALL-10). */}
-        <AddGiftPanel onAdd={addGift} readStorePage={isGuest ? undefined : readStorePage} />
+        {/* Only signed-in people can have our server read a store page (ALL-10) or look up an Amazon product (ALL-141). */}
+        <AddGiftPanel
+          onAdd={addGift}
+          readStorePage={isGuest ? undefined : readStorePage}
+          lookUpAmazon={isGuest ? undefined : lookUpAmazon}
+        />
 
         <section aria-labelledby="list-heading" className="pt-2">
           <GiftList gifts={gifts} onRemove={removeGift} />

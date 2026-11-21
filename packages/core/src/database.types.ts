@@ -1603,6 +1603,12 @@ export type Database = {
           isSetofReturn: true;
         };
       };
+      recent_people: {
+        Args: { p_limit: number };
+        Returns: {
+          person_id: string;
+        }[];
+      };
       reconcile_round: {
         Args: { p_context?: string; p_round_id: string };
         Returns: Database["concierge"]["Enums"]["round_status"];
@@ -1820,6 +1826,25 @@ export type Database = {
   };
   lists: {
     Tables: {
+      amazon_lookups: {
+        Row: {
+          created_at: string;
+          id: number;
+          user_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          id?: never;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          id?: never;
+          user_id?: string;
+        };
+        Relationships: [];
+      };
       gift_claims: {
         Row: {
           claimed_at: string;
@@ -1857,39 +1882,51 @@ export type Database = {
         Row: {
           added_at: string;
           asin: string | null;
+          has_photo: boolean;
           id: string;
           image_url: string | null;
           list_id: string;
+          match_key: string | null;
           name: string;
           position: number;
           price_cents: number;
+          product_id: string | null;
           product_url: string | null;
           source: string;
+          store_host: string | null;
         };
         ComputedFields: never;
         Insert: {
           added_at?: string;
           asin?: string | null;
+          has_photo?: boolean;
           id?: string;
           image_url?: string | null;
           list_id: string;
+          match_key?: never;
           name: string;
           position: number;
           price_cents: number;
+          product_id?: string | null;
           product_url?: string | null;
           source?: string;
+          store_host?: never;
         };
         Update: {
           added_at?: string;
           asin?: string | null;
+          has_photo?: boolean;
           id?: string;
           image_url?: string | null;
           list_id?: string;
+          match_key?: never;
           name?: string;
           position?: number;
           price_cents?: number;
+          product_id?: string | null;
           product_url?: string | null;
           source?: string;
+          store_host?: never;
         };
         Relationships: [
           {
@@ -1962,6 +1999,22 @@ export type Database = {
           },
         ];
       };
+      photo_deletions: {
+        Row: {
+          path: string;
+          queued_at: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          path: string;
+          queued_at?: string;
+        };
+        Update: {
+          path?: string;
+          queued_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -1974,6 +2027,24 @@ export type Database = {
           owner_id: string;
         }[];
       };
+      add_item: {
+        Args: {
+          p_confirm_likely: boolean;
+          p_item_id: string;
+          p_max_items: number;
+          p_name: string;
+          p_photo_url: string;
+          p_price_cents: number;
+          p_product_id: string;
+          p_product_url: string;
+        };
+        Returns: {
+          existing: Json;
+          item_id: string;
+          list_id: string;
+          outcome: string;
+        }[];
+      };
       claim_for_order: {
         Args: { p_item_id: string; p_user_id: string };
         Returns: boolean;
@@ -1982,12 +2053,19 @@ export type Database = {
         Args: { p_item_id: string; p_name: string; p_token: string };
         Returns: Json;
       };
+      forget_photo_deletions: {
+        Args: { p_paths: string[] };
+        Returns: undefined;
+      };
       get_shared_list: { Args: { p_token: string }; Returns: Json };
+      is_amazon_host: { Args: { p_host: string }; Returns: boolean };
       link_person: {
         Args: { p_person_id: string; p_token: string };
         Returns: undefined;
       };
+      match_key: { Args: { p_asin: string; p_url: string }; Returns: string };
       person_list: { Args: { p_person_id: string }; Returns: Json };
+      queue_photo: { Args: { p_item_id: string }; Returns: undefined };
       release_for_order: {
         Args: { p_item_id: string; p_user_id: string };
         Returns: boolean;
@@ -2005,11 +2083,21 @@ export type Database = {
         };
         Returns: Json;
       };
+      store_host: { Args: { p_url: string }; Returns: string };
+      take_amazon_lookup: {
+        Args: Record<PropertyKey, never>;
+        Returns: boolean;
+      };
+      take_photo_deletions: {
+        Args: { p_limit: number; p_older_than: string };
+        Returns: string[];
+      };
       unclaim_gift: {
         Args: { p_item_id: string; p_token: string };
         Returns: boolean;
       };
       unlink_person: { Args: { p_person_id: string }; Returns: boolean };
+      url_parts: { Args: { p_url: string }; Returns: string[] };
       viewer_display_name: {
         Args: Record<PropertyKey, never>;
         Returns: string;

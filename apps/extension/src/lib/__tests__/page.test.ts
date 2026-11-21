@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { installFakeChrome, type FakeChrome } from "../../test/fake-chrome";
-import { canCapture, collectPage, fitScreenshot, ScreenshotTooLargeError } from "../page";
+import { collectPage, fitScreenshot, ScreenshotTooLargeError } from "../page";
 
 let fake: FakeChrome;
 beforeEach(() => {
@@ -14,18 +14,6 @@ beforeEach(() => {
     get(this: HTMLElement) {
       return this.textContent;
     },
-  });
-});
-
-describe("canCapture", () => {
-  it("is true when a script can run in the tab", async () => {
-    expect(await canCapture(7)).toBe(true);
-    expect(fake.scripting.calls[0].target).toEqual({ tabId: 7 });
-  });
-
-  it("is false when the browser refuses (chrome://, Web Store)", async () => {
-    fake.scripting.blocked = true;
-    expect(await canCapture(7)).toBe(false);
   });
 });
 

@@ -91,6 +91,24 @@ Let people's AI assistants (Claude, ChatGPT, Muse and the like) use GiftsAF for 
 - **To work out:** which assistants support remote MCP servers and how they sign users in, pricing (premium or per action, ALL-76), and limits on AI cost.
 - **Source:** owner, 2026-11-03.
 
+### 12. Wish for a kind of gift, not a specific product
+A person's own list can hold general wishes next to specific products: a brand ("Darn Tough socks"), or a thing they need ("a trunk organizer"). When they share the list, buyers see both kinds, and for a general wish they pick the actual product.
+- **Why:** people often know the kind of thing they want, or the brand, but not the exact item. A general wish points buyers in the right direction and leaves them the choice.
+- **Scope (owner, 2026-11-21):** after launch, and for the person's own shared list only. It isn't something gift rounds buy against.
+- **Related:** lists are product-shaped today (name, price, link, photo), so a general wish needs only a description and perhaps a price range, with no link. Claims (39) still apply: the owner never sees what was bought. Later, the idea engine (ALL-27) could suggest products for a buyer from a general wish.
+- **To work out:** how a general wish looks on the shared list next to products, and whether more than one buyer can claim it (socks can be given twice; a trunk organizer can't).
+- **Source:** owner, 2026-11-21.
+
+### 13. Snap a photo of something to add it
+See something you like in a shop or at a friend's? Take a photo, then tap Share › GiftsAF. Choose **My list**, to add it as a wish, or one of **your people**, to save it as an idea for them.
+- **When (owner, 2026-11-21):** after launch.
+- **Why:** many gift ideas start out in the real world, not on a web page. Taking a photo and sharing it is the fastest way to catch one before it's forgotten.
+- **How it could work:** AI reads the photo to name the product and its brand. A Zinc search then finds a product someone could buy. The result is checked, then added to the list or the person as a suggestion. When the exact product can't be found, it becomes a general wish (idea 12).
+- **The Share menu:** the installed web app can appear in Android's Share menu (the Web Share Target in `app/manifest.ts`). iPhone doesn't let web apps appear there, so iPhone needs a native app with a share extension, or an in-app "Add from photo" button that opens the camera.
+- **Related:** photos saved for a person go through capture reading (25, 47). Something only seen in a photo is recorded as "already has", so a photo meant as a gift idea has to say so. Emailed notes with images already exist. Reading a photo with AI costs money, so it follows 53 (test and admin users only) unless that's decided otherwise.
+- **To work out:** iPhone (a native app, or a camera button only), what happens when the product can't be identified, and the cost per photo.
+- **Source:** owner, 2026-11-21.
+
 ## A common thread
 
 Ideas 1, 2, 4 and 5 all use the same building block: **a scannable code tied to a gift that someone claims securely.** If any of these move forward, that's the piece to design once and reuse.

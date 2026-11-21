@@ -14,6 +14,7 @@ export async function handleTick(
   request: Request,
   env: Env,
   run: (now: Date) => Promise<TickSummary>,
+  cleanup?: () => Promise<unknown>,
 ): Promise<Response> {
   if (!env.cronSecret || request.headers.get("authorization") !== `Bearer ${env.cronSecret}`) {
     return Response.json({ ok: false }, { status: 401 });
@@ -24,10 +25,18 @@ export async function handleTick(
     const parsed = raw ? new Date(raw) : null;
     if (parsed && !Number.isNaN(parsed.getTime())) now = parsed;
   }
+  let summary: TickSummary;
   try {
-    return Response.json({ ok: true, ...(await run(now)) });
+    summary = await run(now);
   } catch {
     logEvent("round_tick_failed", {});
     return Response.json({ ok: false }, { status: 500 });
   }
+  // Housekeeping after the rounds: its own failure never changes the tick's result.
+  try {
+    await cleanup?.();
+  } catch {
+    logEvent("tick_cleanup_failed", {});
+  }
+  return Response.json({ ok: true, ...summary });
 }

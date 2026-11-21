@@ -1,5 +1,8 @@
 import { buyingWiring } from "@/app/settings/zinc-deps";
+import { appSettingInt } from "@/lib/app-settings";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { runTick } from "@/modules/concierge";
+import { removeDeletedPhotos } from "@/modules/lists";
 import { queueSendJobs } from "../queue";
 import { handleTick, isTestClock } from "./tick";
 
@@ -14,10 +17,19 @@ export const maxDuration = 300;
 export async function GET(request: Request) {
   const vercelEnv = process.env.VERCEL_ENV;
   const cronSecret = process.env.CRON_SECRET;
-  return handleTick(request, { cronSecret, vercelEnv }, async (now) => {
-    // handleTick refuses the call when the secret is unset; it also signs the queue messages.
-    if (!cronSecret) throw new Error("CRON_SECRET is unset");
-    const sendJobs = queueSendJobs(cronSecret);
-    return runTick((await buyingWiring(now, process.env, {}, { sendJobs, testClock: isTestClock(vercelEnv) })).engine);
-  });
+  return handleTick(
+    request,
+    { cronSecret, vercelEnv },
+    async (now) => {
+      // handleTick refuses the call when the secret is unset; it also signs the queue messages.
+      if (!cronSecret) throw new Error("CRON_SECRET is unset");
+      const sendJobs = queueSendJobs(cronSecret);
+      return runTick((await buyingWiring(now, process.env, {}, { sendJobs, testClock: isTestClock(vercelEnv) })).engine);
+    },
+    // Photos of removed gifts (ALL-78), after the rounds so a storage problem can't touch them.
+    () => {
+      const admin = createAdminClient();
+      return removeDeletedPhotos(admin, (key) => appSettingInt(key, admin));
+    },
+  );
 }

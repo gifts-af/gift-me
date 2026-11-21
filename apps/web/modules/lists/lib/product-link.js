@@ -1,3 +1,4 @@
+import { cleanLink, extractAsin, isAmazonHost } from '@gifts-af/core/store-page/link'
 import { AMAZON_FIXTURES } from './fixtures.js'
 
 // Turns a pasted product link into gift details. Client-only, best effort.
@@ -21,30 +22,7 @@ import { AMAZON_FIXTURES } from './fixtures.js'
 // on nothing else.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ASIN_RE = /^[A-Z0-9]{10}$/
-const ASIN_IN_PATH_RE =
-  /\/(?:dp|gp\/product|gp\/aw\/d|product|exec\/obidos\/asin)\/(?:product\/)?([A-Z0-9]{10})(?:\/|$)/i
-
 const SHORT_LINK_HOST_RE = /^(a\.co|amzn\.to|amzn\.eu|amzn\.asia)$/i
-
-// Second-level labels used by Amazon's multi-part marketplaces, as in amazon.co.uk.
-const MARKETPLACE_SLDS = new Set(['co', 'com', 'net', 'org'])
-
-// A regex can't do this safely: /amazon\.[a-z.]{2,}$/ happily accepts
-// amazon.evil.com, because "evil.com" is shaped exactly like "co.uk". The
-// registrable domain has to be checked label by label instead.
-function isAmazonHost(hostname) {
-  const labels = hostname.toLowerCase().split('.')
-  if (labels.length < 2) return false
-  // amazon.com, www.amazon.com, smile.amazon.com
-  if (labels[labels.length - 2] === 'amazon') return true
-  // amazon.co.uk, www.amazon.com.au
-  return (
-    labels.length >= 3 &&
-    labels[labels.length - 3] === 'amazon' &&
-    MARKETPLACE_SLDS.has(labels[labels.length - 2])
-  )
-}
 
 /**
  * The store a saved link points to, for "View on …": "Amazon" for any Amazon
@@ -104,18 +82,6 @@ function normalizeUrl(raw) {
   return { url }
 }
 
-// Tracking tags add nothing to the gift and say where the person came from.
-const TRACKING_PARAM_RE = /^(utm_.*|gclid|fbclid|msclkid|mc_eid|mc_cid)$/i
-
-function cleanStoreUrl(url) {
-  const clean = new URL(url.href)
-  clean.hash = ''
-  for (const key of [...clean.searchParams.keys()]) {
-    if (TRACKING_PARAM_RE.test(key)) clean.searchParams.delete(key)
-  }
-  return clean.href
-}
-
 /**
  * Any store but Amazon (ALL-10). Our server and the browser can't read these
  * pages (decision 49), so only what's in the link itself is used: the name,
@@ -126,7 +92,7 @@ function storeLinkResult(url) {
     name: deslugifyName(url.pathname, null),
     priceCents: null,
     imageUrl: null,
-    productUrl: cleanStoreUrl(url),
+    productUrl: cleanLink(url.href),
     asin: null,
     source: 'store-url',
     store: storeName(url.href),
@@ -139,14 +105,7 @@ function storeLinkResult(url) {
   }
 }
 
-export function extractAsin(pathname) {
-  const match = pathname.match(ASIN_IN_PATH_RE)
-  if (!match) return null
-  // The `i` flag admits a lowercase ASIN, but the image CDN path is
-  // case-sensitive -- .../P/b08n5wrwnw.01...jpg returns a placeholder.
-  const asin = match[1].toUpperCase()
-  return ASIN_RE.test(asin) ? asin : null
-}
+export { extractAsin }
 
 export function buildImageUrl(asin) {
   return `https://images-na.ssl-images-amazon.com/images/P/${asin}.01._SCLZZZZZZZ_.jpg`

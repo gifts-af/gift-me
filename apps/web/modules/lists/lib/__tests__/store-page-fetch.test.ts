@@ -163,7 +163,7 @@ describe("lookupStorePage (ALL-10)", () => {
       settings,
       { ...deps({ fetch: vi.fn(async () => htmlResponse(page)) }), log, now: () => 0 },
     );
-    expect(result).toEqual({ ok: true, product: { name: "Blue Mug", priceCents: 1200, imageUrl: null } });
+    expect(result).toEqual({ ok: true, product: { isProduct: true, name: "Blue Mug", priceCents: 1200, imageUrl: null, productId: null, canonicalUrl: null } });
     expect(log).toHaveBeenCalledWith("store_page_read", {
       user_id: "u-1",
       store: "shop.example.com",

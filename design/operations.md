@@ -43,7 +43,7 @@ Don't change hosted systems during install: no `pnpm db:push:*`, no Supabase CLI
 | `design/` | This file, [technical design](technical-design.md) (approved 2026-10-17), [decisions log](decisions.md). Spike write-ups go in `design/spikes/`, look and feel in `design/ui.md` (mock-ups in `design/mockups/`), and ticket specs and build plans in `design/plans/` (start from [the template](plans/TEMPLATE.md)), such as [Zinc wallet connection and buying, ALL-32](plans/ALL-32-zinc-connection.md). | Complete |
 | `.claude/` | Shared Claude Code settings (turns on the Superpowers plugin; runs the local setup check at session start) | Done |
 | `apps/web/` | The one web app (Next.js). Products live in `modules/lists` and `modules/concierge`; see its [README](../apps/web/README.md) | Lists live; concierge from Wave 2 |
-| `apps/extension/` | Chrome capture extension: save what's on screen to a person. How to build and load it is in its [README](../apps/extension/README.md) | On the Chrome Web Store, unlisted (ALL-65) |
+| `apps/extension/` | Chrome capture extension: add gifts to your list or save what's on screen to a person. How to build and load it is in its [README](../apps/extension/README.md) | On the Chrome Web Store, unlisted (ALL-65) |
 | `packages/core/` | Pure shared logic (dates, deadlines, budgets) and database types | W1-5 |
 | `supabase/` | Database migrations and local Supabase settings (`config.toml`) | Lists tables today |
 | `scripts/` | Repo tooling, such as `dev-check.mjs` (the local setup check) | Done |
@@ -329,6 +329,45 @@ My list saves each change as it's made, through `lists.save_list_checked`, which
 **Rolling back:** Vercel's instant rollback brings back the old Save button, which still saves through the untouched `lists.save_list`. Nothing in the database needs undoing.
 
 **Cleanup still to do:** once this has been live without a rollback, a later migration drops `lists.save_list` (E7, expand then contract). Before it does, these must stop calling it: the tests in `supabase/tests/lists.test.sql` that call it or pin it as untouched, and `secondUserShareLink` in `apps/web/e2e/people.spec.ts`, which makes a list for a shared test user on every run (with `save_list_checked` it would need to reuse that user's list, so it was left for the cleanup). No app code calls it any more.
+
+## Extension: Add to my list (ALL-78, T77)
+
+The extension adds the product on the open tab to My list through `POST /api/lists/items`, which calls `lists.add_item`. Spec and plan: [design/plans/ALL-78-add-to-my-list.md](plans/ALL-78-add-to-my-list.md).
+
+**Release order (E9):** before the migration runs, check that prod's longest gift link is under about 2,000 characters: `select max(char_length(product_url)) from lists.list_items`. The migration adds `match_key` as an indexed generated column, and a key too long for the index fails the migration. Ask the owner before running anything on prod. Then merge the web code and the migration (`20261121100000_extension_add.sql`) and wait for the `migrate` job to finish green on dev and prod. Check the route answers on production. Only then submit the extension package to the store. The new build calls a route that must already exist.
+
+**Off switch (E7):** set `extension_add_enabled` to `0` in `concierge.app_settings`. The route answers 503 and the popup says "Adding from the extension is paused". No deploy needed. Set it back to `1` to turn it on.
+
+**Photos:** they live in the public `list-photos` bucket as `<gift id>.jpg`, written only by the route. When a gift, its list or its account is removed, the photo goes into `lists.photo_deletions`, and the daily tick (`/api/rounds/tick`) deletes it once it has waited `list_photo_cleanup_min_age_minutes` (60), up to `list_photo_cleanup_batch` (500) a day; the rest wait for the next day. If photos linger, check the tick ran and look for `list.photo_cleanup_skipped` (a cleanup setting couldn't be read, so that day was skipped) or `list.photos_left` (the Storage API refused the delete; tomorrow retries). Other tunables are the `app_settings` rows `list_photo_width_px`, `list_photo_jpeg_quality` and `list_photo_max_bytes`. Keep `list_photo_max_bytes` below the bucket's 1 MB limit, or uploads fail.
+
+**Seeing it work on production:** event `list.extension_add`, with `outcome` (`added`, `duplicate`, `likely`, `full` or `failed`) and ids only.
+
+## Amazon paste lookups (ALL-141)
+
+When a signed-in person pastes an Amazon link on My list, the server asks Zinc for that product's real name, price and photo (`GET /products/{asin}`), because Amazon answers our own page reads with a bot check. It runs on the **app's Zinc key** (`ZINC_API_BASE`, `ZINC_API_KEY`, as for the idea engine), so every lookup costs `zinc_lookup_cents`. It's open to everyone signed in, not just paid accounts (owner decision 2026-11-21), but only for pasting a link: nothing else calls it. Guests, and every other store, are unchanged (other stores still read the page, ALL-10).
+
+**Turning it off (E7):** set `amazon_paste_lookup_enabled` to `0` in `concierge.app_settings` (Supabase SQL editor as allensforever711, no deploy). Pasted Amazon links then give only what the link itself has: the name from its path and a guessed photo, and the person types the price. Set it back to `1` to turn it on.
+
+**Settings** (rows in `concierge.app_settings`; change them in the SQL editor, no deploy):
+
+| Key | Default | What it does |
+|---|---|---|
+| `amazon_paste_lookup_enabled` | 1 | 1 on, 0 off (above) |
+| `amazon_paste_lookups_per_user_per_day` | 30 | Most lookups one person can make in any 24 hours. `lists.take_amazon_lookup()` counts them in `lists.amazon_lookups` and reads the limit itself. Past it, the paste works as when switched off |
+| `amazon_paste_lookups_per_day_total` | 2000 | Most lookups across everyone in any 24 hours, a ceiling on the day's spend (2000 × `zinc_lookup_cents`). Past it, every paste works as when switched off and logs `over_limit` (owner decision 2026-11-21) |
+| `amazon_paste_lookup_timeout_ms` | 10000 | How long a lookup waits for Zinc before the paste goes on without it |
+
+**Seeing it work on production (E9):** event `list.amazon_lookup`, one per paste, ids only (no ASIN, no product name):
+
+| Field | Means |
+|---|---|
+| `outcome` | `ok`; `off` (switched off); `not_configured` (no Zinc key on this environment); `over_limit` (the person's daily limit, or the ceiling across everyone); `not_found` (Zinc had no finished product); `unavailable` (Zinc or the quota failed, with `name`, `kind`, `code`, `status` when known); `bad_asin` |
+| `cents` | What the lookup cost: `zinc_lookup_cents` when Zinc was called, else 0. Add these up for the spend |
+| `user_id`, `ms` | Who, and how long it took |
+
+Many `over_limit` from one `user_id` means someone is pasting a lot; `over_limit` from many people at once means the ceiling across everyone was reached; lots of `unavailable` means Zinc is down or the key is wrong.
+
+**Shares the idea engine's Zinc key and rate limit.** Paste lookups use the same app key but aren't paced by `zinc_requests_per_second` (that pacing lives inside an idea run). A burst of pastes can push the key over Zinc's limit, so Zinc answers 429: those pastes log `unavailable` with `status: 429`, and an idea run at the same moment can hit 429s too. If that shows up, lower `amazon_paste_lookups_per_user_per_day` or switch paste lookups off.
 
 ## Inbound notes (ALL-31)
 

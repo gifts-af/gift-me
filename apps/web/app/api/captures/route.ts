@@ -8,7 +8,7 @@ import {
   saveCapture,
   type Extraction,
 } from "@/modules/concierge";
-import { allowedOrigin, bearer, json, preflight } from "./http";
+import { allowedOrigin, bearer, json, preflight } from "@/lib/extension-http";
 
 // The Chrome extension (ALL-22) posts captures here from chrome-extension://{id}
 // with the user's bearer token. The proxy lets this path through signed out;

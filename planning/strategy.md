@@ -17,12 +17,21 @@ The written source for where the platform is headed and how it reaches people. T
 
 ## 2. Roadmap
 
-No dates (D26). Order within each product:
+No dates (D26). The roadmap page shows broad themes, not tickets (owner, 2026-11-21):
+
+| Now | Next | Later |
+|---|---|---|
+| **Hands-off gifting works end to end:** remembers the date, suggests, buys on one tap, tracks delivery; Jim and friends use it for real | **Ready for public launch:** a business set up, pricing and billing, text messages, privacy review, recipients agree to be gifted | **Gifting on autopilot:** buying without a reply, gift card fallback, season budgets, household sharing, wrapping, native apps |
+| **Capture anything, anywhere:** save ideas from any shop, a pasted link or an email, onto a person or your own list | **Lists and the concierge, together:** lists for each occasion, and a loved one's list feeding the concierge's ideas | **Easier to ask, easier to say thanks:** general wishes and photo sharing (ideas 12, 13), Secret Santa and White Elephant, thank-you reminders |
+| **Lists people want to share:** one link, family claims gifts, still a surprise; invite only | **A first taste of scan-to-gift:** scan, pay, claim safely; a test on one campus | **Gifts that spread GiftsAF:** buy-me-a-drink clothing, QR cards, plushies, GiftsAF inside AI assistants |
+| | | **Premium that pays its way:** concierge suggestions for your own list, live price and stock, affiliate links |
+
+What each theme holds, product by product (the detail behind the page):
 
 | Product | Now | Next | Later |
 |---|---|---|---|
 | **Gift Concierge** | MVP for personal use: 6 waves (ALL-15 to ALL-41 plus follow-ups). Waves 1 and 2 done; Wave 3 at 3 of 4 merged (gift ideas next); Wave 4 at 3 of 4 (Zinc wallet, buying and email capture done; approval screen next) | Public launch: business entity, pricing (ALL-76) and billing, text messages, privacy review and recipient opt-in, recipient-entered addresses, more import sources, a second browser (Linear: "Gift Concierge Public Launch") | "Did you know?" tips pointing to features not yet tried (ALL-126), auto-buy without a reply, gift card fallback, household sharing, gift notes and wrapping, native apps, season budgets, Secret Santa groups (ALL-82), White Elephant gift help (ALL-83), a GiftsAF MCP server so AI assistants can use it for their users (ALL-85) |
-| **Gift lists** | Soft launch: done so far are the GiftsAF name and logo, mobile layout, home page and list tour, request access, gifts from any store with name, price and photo read from the page (ALL-10). Rolling out to friends and family, invite only | Multiple list types (ALL-7), connect to the concierge: gifts you save for someone stay yours and are never shared (decision 54, ALL-93); linking their own list stays as it is today | Thank-you card reminders, premium automation of receiving: the concierge suggests gifts for your own list (idea 7), automatic price and stock for any store link via Zinc (ALL-88) |
+| **Gift lists** | Soft launch: done so far are the GiftsAF name and logo, mobile layout, home page and list tour, request access, gifts from any store with name, price and photo read from the page (ALL-10). Rolling out to friends and family, invite only | Multiple list types (ALL-7), a loved one's list feeding the concierge's ideas (ALL-77). Done: gifts you save for someone stay yours and are never shared (decision 54, ALL-93) | Thank-you card reminders, premium automation of receiving: the concierge suggests gifts for your own list (idea 7), automatic price and stock for any store link via Zinc (ALL-88) |
 | **Scan-to-gift** | Ideas captured | Brainstorm and design the shared building block (scan, pay, claim securely); payments and payouts research | Buy-me-a-drink clothing, QR greeting cards, pay-it-forward plushie and cookie |
 
 ## 3. Go-to-market: the funnel
