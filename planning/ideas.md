@@ -92,10 +92,11 @@ Let people's AI assistants (Claude, ChatGPT, Muse and the like) use GiftsAF for 
 - **Source:** owner, 2026-11-03.
 
 ### 12. Wish for a kind of gift, not a specific product
-A list item can be a description instead of a product link, such as "dark, tough socks" or "a good chef's knife, under $60". The buyer, or their gift round, picks the actual product.
-- **Why:** many people know what they'd like but not which one, and choosing the exact item takes the surprise away. A description gives buyers direction while leaving them the choice.
-- **Related:** the idea engine (ALL-27) already turns a description into products by brainstorming, searching Zinc and ranking. A wish like this could feed it as the strongest signal for that person. Lists are product-shaped today (name, price, link, photo), so a wish needs a price range in place of a price, and no link. Claims (39) still apply: the owner never sees which product was bought.
-- **To work out:** how a wish shows on a shared list, whether two buyers can both "take" the same wish, and whether a round may buy against a wish without the buyer picking (52's live price check).
+A person's own list can hold general wishes next to specific products: a brand ("Darn Tough socks"), or a thing they need ("a trunk organizer"). When they share the list, buyers see both kinds, and for a general wish they pick the actual product.
+- **Why:** people often know the kind of thing they want, or the brand, but not the exact item. A general wish points buyers in the right direction and leaves them the choice.
+- **Scope (owner, 2026-11-21):** after launch, and for the person's own shared list only. It isn't something gift rounds buy against.
+- **Related:** lists are product-shaped today (name, price, link, photo), so a general wish needs only a description and perhaps a price range, with no link. Claims (39) still apply: the owner never sees what was bought. Later, the idea engine (ALL-27) could suggest products for a buyer from a general wish.
+- **To work out:** how a general wish looks on the shared list next to products, and whether more than one buyer can claim it (socks can be given twice; a trunk organizer can't).
 - **Source:** owner, 2026-11-21.
 
 ## A common thread
