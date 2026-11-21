@@ -91,6 +91,13 @@ Let people's AI assistants (Claude, ChatGPT, Muse and the like) use GiftsAF for 
 - **To work out:** which assistants support remote MCP servers and how they sign users in, pricing (premium or per action, ALL-76), and limits on AI cost.
 - **Source:** owner, 2026-11-03.
 
+### 12. Wish for a kind of gift, not a specific product
+A list item can be a description instead of a product link, such as "dark, tough socks" or "a good chef's knife, under $60". The buyer, or their gift round, picks the actual product.
+- **Why:** many people know what they'd like but not which one, and choosing the exact item takes the surprise away. A description gives buyers direction while leaving them the choice.
+- **Related:** the idea engine (ALL-27) already turns a description into products by brainstorming, searching Zinc and ranking. A wish like this could feed it as the strongest signal for that person. Lists are product-shaped today (name, price, link, photo), so a wish needs a price range in place of a price, and no link. Claims (39) still apply: the owner never sees which product was bought.
+- **To work out:** how a wish shows on a shared list, whether two buyers can both "take" the same wish, and whether a round may buy against a wish without the buyer picking (52's live price check).
+- **Source:** owner, 2026-11-21.
+
 ## A common thread
 
 Ideas 1, 2, 4 and 5 all use the same building block: **a scannable code tied to a gift that someone claims securely.** If any of these move forward, that's the piece to design once and reuse.
