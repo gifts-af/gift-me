@@ -319,17 +319,18 @@ When a signed-in person pastes an Amazon link on My list, the server asks Zinc f
 |---|---|---|
 | `amazon_paste_lookup_enabled` | 1 | 1 on, 0 off (above) |
 | `amazon_paste_lookups_per_user_per_day` | 30 | Most lookups one person can make in any 24 hours. `lists.take_amazon_lookup()` counts them in `lists.amazon_lookups` and reads the limit itself. Past it, the paste works as when switched off |
+| `amazon_paste_lookups_per_day_total` | 2000 | Most lookups across everyone in any 24 hours, a ceiling on the day's spend (2000 × `zinc_lookup_cents`). Past it, every paste works as when switched off and logs `over_limit` (owner decision 2026-11-21) |
 | `amazon_paste_lookup_timeout_ms` | 10000 | How long a lookup waits for Zinc before the paste goes on without it |
 
 **Seeing it work on production (E9):** event `list.amazon_lookup`, one per paste, ids only (no ASIN, no product name):
 
 | Field | Means |
 |---|---|
-| `outcome` | `ok`; `off` (switched off); `not_configured` (no Zinc key on this environment); `over_limit` (the person's daily limit); `not_found` (Zinc had no finished product); `unavailable` (Zinc or the quota failed, with `name`, `kind`, `code`, `status` when known); `bad_asin` |
+| `outcome` | `ok`; `off` (switched off); `not_configured` (no Zinc key on this environment); `over_limit` (the person's daily limit, or the ceiling across everyone); `not_found` (Zinc had no finished product); `unavailable` (Zinc or the quota failed, with `name`, `kind`, `code`, `status` when known); `bad_asin` |
 | `cents` | What the lookup cost: `zinc_lookup_cents` when Zinc was called, else 0. Add these up for the spend |
 | `user_id`, `ms` | Who, and how long it took |
 
-Many `over_limit` from one `user_id` means someone is pasting a lot; lots of `unavailable` means Zinc is down or the key is wrong.
+Many `over_limit` from one `user_id` means someone is pasting a lot; `over_limit` from many people at once means the ceiling across everyone was reached; lots of `unavailable` means Zinc is down or the key is wrong.
 
 **Shares the idea engine's Zinc key and rate limit.** Paste lookups use the same app key but aren't paced by `zinc_requests_per_second` (that pacing lives inside an idea run). A burst of pastes can push the key over Zinc's limit, so Zinc answers 429: those pastes log `unavailable` with `status: 429`, and an idea run at the same moment can hit 429s too. If that shows up, lower `amazon_paste_lookups_per_user_per_day` or switch paste lookups off.
 
