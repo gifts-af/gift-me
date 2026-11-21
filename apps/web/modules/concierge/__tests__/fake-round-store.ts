@@ -1,4 +1,4 @@
-import type { CalendarDate, OccasionKind, RoundStatus, ScheduleSettings, StepKey } from "@gifts-af/core";
+import { compareDates, type AttentionReason, type CalendarDate, type OccasionKind, type RoundStatus, type ScheduleSettings, type StepKey } from "@gifts-af/core";
 import type {
   Candidate,
   ClaimedRound,
@@ -17,6 +17,8 @@ export type FakeRound = Omit<NewRoundRow, "nextActionAt"> & {
   attempts: number;
   /** Every status the round has had, oldest first. */
   history: RoundStatus[];
+  /** A needs_attention round's reason (ALL-125 tests); null when left out. */
+  attentionReason?: AttentionReason | null;
 };
 
 export type FakePerson = { name: string; hasAddress: boolean; openQuestions?: number };
@@ -107,7 +109,7 @@ export class FakeRoundStore implements RoundStore {
       late: r.late,
       attempts: r.attempts,
       lockedUntil: new Date(r.lockedUntil.getTime()),
-      attentionReason: null,
+      attentionReason: r.attentionReason ?? null,
       holdCount: 0,
       seenBalanceCents: null,
       emailedBalanceCents: null,
@@ -120,6 +122,15 @@ export class FakeRoundStore implements RoundStore {
       .filter((r) => this.claimable(r, now))
       .sort((a, b) => a.nextActionAt!.getTime() - b.nextActionAt!.getTime())
       .map((r) => this.take(r, now, minutes));
+  }
+
+  /** Like due_rounds: due at `now`, unleased, not finished; held (needs_attention) first, then by deadline. Claims nothing. */
+  async dueRounds(now: Date) {
+    const held = (r: FakeRound) => (r.status === "needs_attention" ? 0 : 1);
+    return this.rounds
+      .filter((r) => this.claimable(r, now))
+      .sort((a, b) => held(a) - held(b) || compareDates(a.shipByDeadline, b.shipByDeadline) || a.nextActionAt!.getTime() - b.nextActionAt!.getTime())
+      .map((r) => ({ id: r.id, userId: r.userId, status: r.status, attentionReason: null, shipByDeadline: r.shipByDeadline }));
   }
 
   /** Like claim_due_money_rounds: only due needs_attention rounds (none reach it in this fake). */
@@ -175,7 +186,8 @@ export class FakeRoundStore implements RoundStore {
     return [];
   }
 
-  async sharedAddressOwnerToTell(): Promise<string | null> {
+  async sharedAddressOwnerToTell(roundId: string): Promise<string | null> {
+    void roundId;
     return null;
   }
 

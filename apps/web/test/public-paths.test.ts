@@ -12,6 +12,8 @@ describe("isPublicPath", () => {
     "/auth/callback",
     "/api/keepalive",
     "/api/rounds/tick",
+    // Only Vercel's queue calls the job route (ALL-125).
+    "/api/rounds/job",
     // Resend posts inbound mail here, signed with Svix (ALL-31).
     "/api/inbound/resend",
     // The Chrome extension posts captures here with a bearer token (ALL-22).

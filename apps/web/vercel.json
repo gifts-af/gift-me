@@ -1,6 +1,13 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "ignoreCommand": "node ../../scripts/vercel-ignore-build.mjs",
+  "functions": {
+    "app/api/rounds/job/route.ts": {
+      "experimentalTriggers": [
+        { "type": "queue/v2beta", "topic": "round-jobs", "maxDeliveries": 3, "maxConcurrency": 5 }
+      ]
+    }
+  },
   "crons": [
     { "path": "/api/keepalive", "schedule": "0 12 * * *" },
     { "path": "/api/rounds/tick", "schedule": "0 12 * * *" }

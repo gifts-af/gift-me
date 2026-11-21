@@ -226,7 +226,7 @@ None left. Answered by Jim on 2026-11-18 after the spec's adversarial review; se
 
 - [ ] `apps/web/components/sign-up-form.tsx:75` hint becomes "Shown on your shared list and when you claim a gift. Leave it blank to show your email to people you claim with." Update its test.
 - [ ] Playwright `apps/web/e2e/add-from-list-link.spec.ts`: as user A, open user B's share link, Add B (relationship chosen), land on B's page with "Their list: Linked", open Their list and see the same screen with Remove, Remove → confirm → the add card returns. One `@layout` test of the card at phone width with `e2e/phone-layout.ts`.
-- [ ] Docs: `design/technical-design.md` §"Picks from a person's own list" (new functions, redirect, the guarded link); `design/decisions.md` new T76 (functions, add_person signature, T58 revision); `design/ui.md` if the card is a new pattern; add `list_link_card_enabled` to `design/operations.md`'s settings and off switches.
+- [ ] Docs: `design/technical-design.md` §"Picks from a person's own list" (new functions, redirect, the guarded link); `design/decisions.md` new T78 (functions, add_person signature, T58 revision); `design/ui.md` if the card is a new pattern; add `list_link_card_enabled` to `design/operations.md`'s settings and off switches.
 - [ ] `pnpm lint && pnpm typecheck && pnpm test && pnpm test:db && pnpm db:test && pnpm build`, then `pnpm gallery` and republish the screens and emails page.
 - [ ] PR `feat: open a list link to add or link its owner (ALL-123)`, body says `Closes ALL-123` only if nothing is left, plus E9's answers: seen working through the `lists.linked_from_share` and `people.added_from_share` events; turned off with `list_link_card_enabled = 0`.
 

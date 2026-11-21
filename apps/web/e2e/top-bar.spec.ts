@@ -94,7 +94,7 @@ test.describe("which bar each page gets", () => {
     }
   });
 
-  // T76 (ALL-123) revises T58: signed in, a shared list gets Get and Give; signed out, the plain bar.
+  // T78 (ALL-123) revises T58: signed in, a shared list gets Get and Give; signed out, the plain bar.
   test("a shared list has Get and Give signed in, and the plain bar signed out", async ({ page }) => {
     const owner = await createFreshUser();
     await signIn(page, owner);

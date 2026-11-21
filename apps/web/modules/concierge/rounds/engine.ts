@@ -18,6 +18,7 @@ import type { IdeaOutcome } from "../ideas/run";
 import { notify, type NotifyDeps, type NotifyResult } from "../notify/notify";
 import { endedAddressReason } from "../notify/templates";
 import type { FailedGift, Funding } from "../notify/templates";
+import { planJobs, type JobMessage, type SendJobs } from "./fanout";
 import type { ClaimedRound, RoundContext, RoundFinish, RoundOrder, RoundStore } from "./store";
 
 // The round engine (ALL-28, design §5.1). The daily tick creates rounds that
@@ -75,6 +76,10 @@ export type EngineDeps = {
   clock?: () => number;
   /** The daily clear-out of unfiled emailed notes (ALL-31), bound by the caller (E3). */
   clearUnfiledNotes?: () => Promise<{ cleared: number; imagesRemoved: number }>;
+  /** Queues due rounds for their own function calls (ALL-125); the tick runs them itself without it. */
+  sendJobs?: SendJobs;
+  /** A test clock: queued messages carry the tick's `now`. */
+  testClock?: boolean;
 };
 
 export type TickSummary = { enabled: boolean; created: number; advanced: number; failed: number };
@@ -127,6 +132,30 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
     } catch (err) {
       logEvent("inbound.notes_clear_failed", { ...errorFields(err) });
     }
+  }
+
+  // Fan-out (ALL-125): with the switch on, due rounds go to the queue and jobs run them. An
+  // unreadable switch means off.
+  let fanout = false;
+  // Without sendJobs the switch isn't read, so callers that don't fan out run exactly as before.
+  if (deps.sendJobs) {
+    try {
+      fanout = (await store.setting("round_fanout_enabled")) === 1;
+    } catch {
+      logEvent("round_fanout_setting_unreadable", {});
+    }
+  }
+  // `deps.sendJobs` again only so TypeScript knows it's set.
+  if (fanout && deps.sendJobs) {
+    const { created, failed: createFailed } = on ? await createDueRounds(deps, await store.scheduleSettings()) : { created: 0, failed: 0 };
+    await tellOwnersOfRejections(deps);
+    const due = await store.dueRounds(now);
+    const result = await deps.sendJobs(planJobs(due, on, now, deps.testClock ?? false));
+    logEvent("round_fanout", { enabled: on, due: due.length, sent: result.sent, failed: result.failed });
+    if (result.failed > 0) logEvent("round_fanout_send_failed", { count: result.failed, alert: true });
+    const summary = { enabled: on, created, advanced: 0, failed: createFailed + result.failed };
+    logEvent("round_tick", summary);
+    return summary;
   }
 
   const s = await store.scheduleSettings();
@@ -184,6 +213,130 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
   const summary = { enabled: true, created, advanced, failed };
   logEvent("round_tick", summary);
   return summary;
+}
+
+/**
+ * What one queue job came to (ALL-125). "off": the fan-out switch (or, for a round message, the
+ * engine) is off. "busy": nothing was run, because another run holds the round, it's no longer
+ * due, or it belongs to the other kind of message now.
+ */
+export type JobResult = "off" | "busy" | "advanced" | "failed";
+
+/**
+ * Runs one queue message (ALL-125): one round, or one buyer's held gifts. Every round is claimed
+ * first (claim_round), so a step never runs twice at once and placing never runs on a round
+ * someone else holds. Throws only when it fails before claiming any round (a setting it reads
+ * first, the fan-out switch among them, couldn't be read): no lease is held, so handleJob
+ * rethrows and the queue redelivers, which a deadline-day held gift can't wait a day for. A
+ * failure once a round is claimed is logged and returns "failed": the lease stands, and the next
+ * tick (and round_stuck) picks the round up.
+ */
+export async function runRoundJob(message: JobMessage, deps: EngineDeps): Promise<JobResult> {
+  const jobStartMs = (deps.clock ?? Date.now)();
+  const id: Record<string, string> = message.kind === "round" ? { round_id: message.roundId } : { user_id: message.userId };
+  const progress: JobProgress = { claimed: false };
+  let result: JobResult;
+  let rounds = 0;
+  try {
+    if ((await deps.store.setting("round_fanout_enabled")) !== 1) result = "off";
+    else if (message.kind === "round") ({ result, rounds } = await roundJob(message.roundId, deps, jobStartMs, progress));
+    else ({ result, rounds } = await buyerJob(message.roundIds, deps, progress));
+  } catch (err) {
+    // Before any claim, handleJob logs it (with the alert) as it rethrows.
+    if (!progress.claimed) throw err;
+    logEvent("round_job", { ...errorFields(err), kind: message.kind, result: "failed", ...id, rounds });
+    return "failed";
+  }
+  logEvent("round_job", { kind: message.kind, result, ...id, rounds });
+  return result;
+}
+
+type JobOutcome = { result: JobResult; rounds: number };
+/** Set once the job holds a round's lease: from then on a failure is acknowledged, not redelivered. */
+type JobProgress = { claimed: boolean };
+
+/** A round message: the round's step, and its idea run when that's the step (one run, no per-tick cap). */
+async function roundJob(roundId: string, deps: EngineDeps, jobStartMs: number, progress: JobProgress): Promise<JobOutcome> {
+  const { store } = deps;
+  if (!(await engineOn(store))) return { result: "off", rounds: 0 };
+  // Before the claim, so a failed read never leaves a lease held for round_lock_minutes.
+  const s = await store.scheduleSettings();
+  const round = await store.claim(roundId, deps.now);
+  if (!round) return { result: "busy", rounds: 0 };
+  progress.claimed = true;
+  if (round.status === "needs_attention") {
+    // It became a money round after the tick read it: the next tick's buyer message takes it.
+    await releaseQuietly(round, deps);
+    return { result: "busy", rounds: 0 };
+  }
+  const step = await advanceClaimed(round, deps, s, false, 0);
+  if (step === "advanced") return { result: "advanced", rounds: 1 };
+  if (step === "failed") return { result: "failed", rounds: 0 };
+  let deadlineMs: number;
+  try {
+    deadlineMs = await store.setting("tick_deadline_ms");
+  } catch (err) {
+    // As on the tick: no run without a deadline; the round stays due.
+    logEvent("round_tick_deadline_unreadable", { ...errorFields(err) });
+    await releaseQuietly(step.generate, deps);
+    return { result: "failed", rounds: 0 };
+  }
+  const ideas = await ideaPass([step.generate], deps, s, jobStartMs + deadlineMs, 1);
+  if (ideas.advanced > 0) return { result: "advanced", rounds: 1 };
+  return { result: ideas.failed > 0 ? "failed" : "busy", rounds: 0 };
+}
+
+/**
+ * A buyer message: each of the buyer's held rounds in order, with one placing budget for the
+ * message. Runs whatever round_engine_enabled says, like the money path on the tick.
+ */
+async function buyerJob(roundIds: string[], deps: EngineDeps, progress: JobProgress): Promise<JobOutcome> {
+  const { store } = deps;
+  // Unreadable, the job throws before any claim, and the queue redelivers it.
+  const on = await engineOn(store);
+  const s = await store.scheduleSettings();
+  const placeBy = await placeDeadline(deps);
+  let advanced = 0;
+  let failed = 0;
+  const claimedIds: string[] = [];
+  for (const roundId of roundIds) {
+    let round: ClaimedRound | null;
+    try {
+      round = await store.claim(roundId, deps.now);
+    } catch (err) {
+      // Nothing claimed yet: no lease is held, so let the queue redeliver (and alert).
+      if (!progress.claimed) throw err;
+      logEvent("round_failed", { round_id: roundId, ...errorFields(err) });
+      failed++;
+      continue;
+    }
+    // Approved, skipped or otherwise moved on since the tick, or someone else holds it.
+    if (!round) continue;
+    progress.claimed = true;
+    if (round.status !== "needs_attention" && !on) {
+      // It left the money path, and the engine is off: nothing of its runs now.
+      await releaseQuietly(round, deps);
+      continue;
+    }
+    const step = await advanceClaimed(round, deps, s, false, placeBy);
+    if (step === "advanced") advanced++;
+    else if (step === "failed") failed++;
+    // An idea run belongs to a round message: the next tick sends one.
+    else await releaseQuietly(step.generate, deps);
+    claimedIds.push(roundId);
+  }
+  // A store that refused a shared address while placing: its owner hears now, as on the inline
+  // tick, not at tomorrow's tick (a deadline-day close doesn't tell them itself).
+  if (claimedIds.length > 0) {
+    try {
+      const rejected = new Set(await store.roundsWithRejectedAddresses());
+      for (const id of claimedIds) if (rejected.has(id)) await tellOwnerOfRejection(id, deps);
+    } catch (err) {
+      logEvent("order.shared_address_notice_failed", { ...errorFields(err), alert: true });
+    }
+  }
+  const result: JobResult = failed > 0 ? "failed" : advanced > 0 ? "advanced" : "busy";
+  return { result, rounds: advanced };
 }
 
 /**
@@ -981,6 +1134,8 @@ async function ideaPass(
   deps: EngineDeps,
   s: ScheduleSettings,
   tickDeadline: number,
+  /** A job's own cap (ALL-125), in place of reading idea_rounds_per_tick. */
+  maxRuns?: number,
 ): Promise<{ advanced: number; failed: number }> {
   if (turns.length === 0) return { advanced: 0, failed: 0 };
   const { store } = deps;
@@ -989,7 +1144,7 @@ async function ideaPass(
   let perTick: number;
   try {
     const [rounds, aiMs, zincMs] = await Promise.all([
-      store.setting("idea_rounds_per_tick"),
+      maxRuns ?? store.setting("idea_rounds_per_tick"),
       store.setting("idea_ai_timeout_ms"),
       store.setting("idea_zinc_timeout_ms"),
     ]);
@@ -1055,6 +1210,10 @@ async function afterIdeaRun(round: ClaimedRound, outcome: IdeaOutcome, deps: Eng
         case "done":
           return sendHeadsUp(round, deps, s);
         case "busy":
+          return release();
+        case "daily_limit":
+          // Today's runs are used up. Nothing failed, so the round stays due for the next tick.
+          logEvent("ideas.daily_limit_reached", { round_id: round.id, user_id: round.userId, alert: true });
           return release();
         case "not_paid":
         case "not_found":
