@@ -115,6 +115,21 @@ describe("ProductCard", () => {
     expect(add).toBeEnabled();
   });
 
+  it.each(["35.", "$0", "abc", "1.2.3"])("a typed price like %s says why Add is off", async (typed) => {
+    render(<Harness page={makePage()} />);
+    const price = screen.getByLabelText("Price");
+    await userEvent.clear(price);
+    expect(screen.queryByText("Type a price like 35.00")).not.toBeInTheDocument();
+    await userEvent.type(price, typed);
+    expect(screen.getByRole("button", { name: "Add to my list" })).toBeDisabled();
+    expect(screen.getByText("Type a price like 35.00")).toBeInTheDocument();
+    expect(price).toHaveAccessibleDescription("Type a price like 35.00");
+    await userEvent.clear(price);
+    await userEvent.type(price, "35.00");
+    expect(screen.queryByText("Type a price like 35.00")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Add to my list" })).toBeEnabled();
+  });
+
   it("an empty name turns Add off", async () => {
     render(<Harness page={makePage()} />);
     await userEvent.clear(screen.getByLabelText("Name"));

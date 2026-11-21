@@ -111,7 +111,10 @@ export function ProductCard({
   const photos = photoCandidates(page);
   const box = photos[photoIndex] ?? null;
   const noPrice = page.product.priceCents === null;
+  // Something typed that isn't a price we can save ("35.", "$0"): say why Add is off.
+  const badPrice = price.trim() !== "" && parsePrice(price) === null;
   const canAdd = name.trim() !== "" && parsePrice(price) !== null && !busy;
+  const priceHints = [noPrice ? `${id}-hint` : null, badPrice ? `${id}-bad` : null].filter(Boolean).join(" ");
   const step = (by: number) => onPhotoIndex((photoIndex + by + photos.length) % photos.length);
 
   return (
@@ -166,10 +169,16 @@ export function ProductCard({
               placeholder="$"
               // Lists need a price, so the cursor waits in an empty box (AC-5).
               autoFocus={noPrice}
-              aria-describedby={noPrice ? `${id}-hint` : undefined}
+              aria-describedby={priceHints || undefined}
+              aria-invalid={badPrice || undefined}
               value={price}
               onChange={(e) => onPrice(e.target.value)}
             />
+            {badPrice && (
+              <span id={`${id}-bad`} className="text-xs font-normal text-destructive">
+                Type a price like 35.00
+              </span>
+            )}
           </div>
           <span className="text-xs text-muted-foreground [overflow-wrap:anywhere]">{storeLabel(page.pageUrl)}</span>
         </div>
