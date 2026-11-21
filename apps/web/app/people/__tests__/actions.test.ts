@@ -98,6 +98,22 @@ describe("addPersonAction (AC-15)", () => {
     expect(await addPersonAction(null, person())).toEqual({ ok: true, id: "p1" });
   });
 
+  it("passes the list link's token on, and none without one (ALL-123)", async () => {
+    addPerson.mockResolvedValue({ ok: true, id: "p1" });
+    const f = person();
+    f.set("list", "3f2b8c1e-9d4a-4e6b-8a1f-0c5d7e9b2a46");
+    await addPersonAction(null, f);
+    expect(addPerson).toHaveBeenLastCalledWith(expect.objectContaining({ name: "Dad" }), "3f2b8c1e-9d4a-4e6b-8a1f-0c5d7e9b2a46");
+    await addPersonAction(null, person());
+    expect(addPerson).toHaveBeenLastCalledWith(expect.objectContaining({ name: "Dad" }), undefined);
+  });
+
+  it("returns the already-added person's id unchanged", async () => {
+    const existing = { ok: false, error: "Sam is already in your people.", existingId: "p0" };
+    addPerson.mockResolvedValue(existing);
+    expect(await addPersonAction(null, person())).toEqual(existing);
+  });
+
   it("sends no tip when adding failed", async () => {
     addPerson.mockResolvedValue({ ok: false, error: "nope" });
     await addPersonAction(null, person());

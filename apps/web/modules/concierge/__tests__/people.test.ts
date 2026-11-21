@@ -91,6 +91,71 @@ describe("addPerson", () => {
   });
 });
 
+// Adding the owner of a shared list, from its link (ALL-123 AC-7–9, 21).
+describe("addPerson from a list link", () => {
+  const NO_LONGER_WORKS = "This list link no longer works. Ask them for a new one.";
+  const OWNER = "list-owner";
+
+  function linkSetup() {
+    const store = new FakePeopleStore();
+    store.lists.set(TOKEN, OWNER);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const events = () => log.mock.calls.map((c) => JSON.parse(String(c[0])) as Record<string, unknown>);
+    return { store, events };
+  }
+
+  it("adds and links the person in one go, and logs ids only", async () => {
+    const { store, events } = linkSetup();
+    const result = await addPerson(store, input({ name: "Sam", relationship: "friend" }), TOKEN);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(JSON.parse(store.writes[0].replace("createPerson ", ""))).toMatchObject({ name: "Sam", shareToken: TOKEN });
+    expect(store.links.get(result.id)).toBe(TOKEN);
+    expect(store.rows.get(result.id)!.linkedUserId).toBe(OWNER);
+    const added = events().find((e) => e.event === "people.added_from_share");
+    expect(added).toMatchObject({ person_id: result.id, user_id: ME });
+    expect(JSON.stringify(added)).not.toContain("Sam");
+  });
+
+  it("sends no token and logs nothing extra without a link", async () => {
+    const { store, events } = linkSetup();
+    const result = await addPerson(store, input());
+    expect(result.ok).toBe(true);
+    expect(JSON.parse(store.writes[0].replace("createPerson ", "")).shareToken ?? null).toBeNull();
+    expect(events().some((e) => e.event === "people.added_from_share")).toBe(false);
+  });
+
+  it("points at the person already linked to this list and adds nobody", async () => {
+    const { store, events } = linkSetup();
+    const first = await addPerson(store, input({ name: "Sam", relationship: "friend" }), TOKEN);
+    if (!first.ok) throw new Error("first add failed");
+    const again = await addPerson(store, input({ name: "Samuel", relationship: "friend" }), TOKEN);
+    expect(again).toEqual({ ok: false, error: "Sam is already in your people.", existingId: first.id });
+    expect((await store.people()).map((p) => p.name)).toEqual(["Sam"]);
+    expect(events().filter((e) => e.event === "people.added_from_share")).toHaveLength(1);
+  });
+
+  it("says the link no longer works when the list is gone or reset", async () => {
+    const { store } = linkSetup();
+    store.lists.clear();
+    expect(await addPerson(store, input(), TOKEN)).toEqual({ ok: false, error: NO_LONGER_WORKS });
+    expect(await store.people()).toEqual([]);
+  });
+
+  it("refuses a malformed token without asking the database", async () => {
+    const { store } = linkSetup();
+    expect(await addPerson(store, input(), "not-a-token")).toEqual({ ok: false, error: NO_LONGER_WORKS });
+    expect(store.writes).toEqual([]);
+  });
+
+  it("refuses the caller's own list", async () => {
+    const { store } = linkSetup();
+    store.lists.set(TOKEN, ME);
+    expect(await addPerson(store, input(), TOKEN)).toEqual({ ok: false, error: "That's your own list." });
+    expect(await store.people()).toEqual([]);
+  });
+});
+
 describe("listPeople", () => {
   it("sorts by next occasion date, then name, with people who have none last", async () => {
     const store = new FakePeopleStore();

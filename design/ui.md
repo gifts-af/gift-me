@@ -130,7 +130,7 @@ The gift list and the concierge each **work on their own**, and are linked light
 - **Each product stands alone.** Someone who only uses lists never has to set up the concierge: "People" shows a quiet one-line "Add someone you buy for" empty state, not a setup wizard. Someone who only uses the concierge sees one small "You" card inviting them to start a wish list.
 - **Links between them are low-key** and appear only where they help, never as prompts or pop-ups. For example, a person's profile can later show their own shared list when they've linked their account (T19's `people.linked_user_id`). These come with the screens that need them, not in the MVP mock-ups.
 - **People cards** show an avatar (their photo, or their initials on a tinted circle), their name, the next occasion, and where ideas come from: "Their own list" when you've linked their shared list, otherwise "We suggest ideas". Without a birthday the card offers "Add birthday" (ALL-21, T41).
-- **Products keep their own paths** (`/lists`, `/concierge`, design §2.2). Share links (`/share/…`) work signed out and don't show Get and Give.
+- **Products keep their own paths** (`/lists`, `/concierge`, design §2.2). Share links (`/share/…`) work signed out; signed-in viewers get Get and Give, signed-out visitors don't (T76).
 - A list-only user who signs in later lands on Give, one press from their list on the "You" card or the Get tab.
 
 ## UI kit

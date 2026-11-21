@@ -94,7 +94,8 @@ test.describe("which bar each page gets", () => {
     }
   });
 
-  test("a shared list has no tabs or account menu, signed out or in", async ({ page }) => {
+  // T76 (ALL-123) revises T58: signed in, a shared list gets Get and Give; signed out, the plain bar.
+  test("a shared list has Get and Give signed in, and the plain bar signed out", async ({ page }) => {
     const owner = await createFreshUser();
     await signIn(page, owner);
     await page.goto("/lists");
@@ -106,17 +107,18 @@ test.describe("which bar each page gets", () => {
     const url = await page.getByLabel("Share link").inputValue();
     const path = new URL(url).pathname;
 
-    const expectPlainBar = async () => {
-      await expect(page.getByRole("heading", { name: "Wool socks" })).toBeVisible();
-      await expect(page.getByRole("button", { name: /Switch to/ })).toBeVisible();
-      await expect(page.getByRole("link", { name: "Get", exact: true })).toHaveCount(0);
-      await expect(page.getByRole("button", { name: "Account" })).toHaveCount(0);
-    };
     await page.goto(path);
-    await expectPlainBar();
+    await expect(page.getByRole("heading", { name: "Wool socks" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Get", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Account" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Switch to/ })).toHaveCount(0);
+
     await page.context().clearCookies();
     await page.goto(path);
-    await expectPlainBar();
+    await expect(page.getByRole("heading", { name: "Wool socks" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Switch to/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Get", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Account" })).toHaveCount(0);
   });
 });
 

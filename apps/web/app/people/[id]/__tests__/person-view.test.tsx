@@ -2,12 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
 const getPerson = vi.hoisted(() => vi.fn());
+const cardEnabled = vi.hoisted(() => ({ value: 1 }));
 const getProfile = vi.hoisted(() =>
   vi.fn(async (...args: unknown[]) => (void args, { groups: [], off: [], unread: 0, openCount: 0, readiness: null as unknown })),
 );
 const countSavedGifts = vi.hoisted(() => vi.fn(async (...args: unknown[]) => (void args, 0)));
 const onDemandIdeas = vi.hoisted(() => vi.fn(async (...args: unknown[]) => (void args, [] as unknown[])));
 vi.mock("@/modules/concierge", () => ({ getPerson, getProfile, countSavedGifts, onDemandIdeas }));
+vi.mock("@/lib/app-settings", () => ({ appSettingInt: async () => cardEnabled.value }));
 vi.mock("@/lib/today", () => ({ todayForRequest: async () => "2026-11-01" }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ auth: { getClaims: async () => ({ data: { claims: { sub: "u1" } } }) } }),
@@ -17,6 +19,7 @@ vi.mock("../../actions", () => {
   return {
     deletePersonAction: action, setOccasionEnabledAction: action, editFactAction: action, setFactActiveAction: action,
     deleteFactAction: action, readCapturesAction: action, confirmFactAction: action,
+    linkUnlinkedListAction: action, linkListAction: action, unlinkListAction: action,
   };
 });
 const notFound = vi.hoisted(() =>
@@ -46,7 +49,10 @@ async function show(photoFailed = false) {
 }
 
 describe("PersonView", () => {
-  beforeEach(() => getPerson.mockReset());
+  beforeEach(() => {
+    getPerson.mockReset();
+    cardEnabled.value = 1;
+  });
 
   it("is a 404 for a person who is not found", async () => {
     getPerson.mockResolvedValue(null);
@@ -61,16 +67,47 @@ describe("PersonView", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Dad" })).toBeInTheDocument();
     expect(screen.getByText("No list of their own, so we suggest ideas")).toBeInTheDocument();
     const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
-    expect(headings).toEqual(["What we know", "Occasions", "Gifts"]);
+    expect(headings).toEqual(["Does Dad have a GiftsAF list?", "What we know", "Occasions", "Gifts"]);
     expect(getProfile.mock.calls[0].slice(1)).toEqual(["p1", false]);
     expect(screen.getByRole("switch", { name: "Birthday" })).toBeChecked();
     expect(screen.getByRole("button", { name: "Delete Dad" })).toBeInTheDocument();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
-    // The Edit form and the inline sections are gone.
-    expect(screen.queryByRole("textbox")).toBeNull();
+    // The Edit form and the inline sections are gone; the only field is the list prompt's.
+    expect(screen.getAllByRole("textbox").map((t) => t.getAttribute("name"))).toEqual(["link"]);
     expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Add an address" })).toBeNull();
     expect(screen.queryByRole("button", { name: /photo/i })).toBeNull();
+  });
+
+  // ALL-123: an unlinked person's page asks for the list link at the top, in place of the row.
+  describe("the list prompt", () => {
+    it("shows first, with the copy, the paste box and the notice, and no Their list row", async () => {
+      getPerson.mockResolvedValue(dad);
+      await show();
+      const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
+      expect(headings[0]).toBe("Does Dad have a GiftsAF list?");
+      expect(screen.getByText("Paste the link they sent you, and their gift ideas will come from their own list.")).toBeInTheDocument();
+      expect(screen.getByRole("textbox", { name: "Their list link" })).toBeInTheDocument();
+      expect(screen.getByText("If a gift for them is waiting on an address, it will ship to this list's owner.")).toBeInTheDocument();
+      expect(screen.queryByRole("link", { name: /^Their list/ })).toBeNull();
+    });
+
+    it("is gone for a linked person, who gets the Their list: Linked row", async () => {
+      getPerson.mockResolvedValue({ ...dad, keepsList: true });
+      await show();
+      expect(screen.queryByText("Does Dad have a GiftsAF list?")).toBeNull();
+      const row = screen.getByRole("link", { name: /^Their list/ });
+      expect(row).toHaveAttribute("href", "/people/p1/list");
+      expect(row).toHaveTextContent("Linked");
+    });
+
+    it("is off with the setting at 0: today's Not linked row instead", async () => {
+      cardEnabled.value = 0;
+      getPerson.mockResolvedValue(dad);
+      await show();
+      expect(screen.queryByText("Does Dad have a GiftsAF list?")).toBeNull();
+      expect(screen.getByRole("link", { name: /^Their list/ })).toHaveTextContent("Not linked");
+    });
   });
 
   it("has an About row with the relationship and birthday, opening About", async () => {
@@ -88,6 +125,7 @@ describe("PersonView", () => {
   });
 
   it("has the gift rows, each opening its own screen", async () => {
+    cardEnabled.value = 0;
     getPerson.mockResolvedValue(dad);
     await show();
     const row = (name: RegExp) => screen.getByRole("link", { name });
