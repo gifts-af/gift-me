@@ -53,10 +53,35 @@ function withStorePage(result, page) {
     source: 'store-page',
     pageRead: true,
   }
+  return withMissing(product)
+}
+
+// Amazon (ALL-141): the link already gives a name from its path, a fixture
+// price and a photo guessed from the ASIN, which Amazon answers with a blank
+// 1x1 for newer products. The page's values win; anything it lacks keeps the
+// link's.
+function withAmazonPage(result, page) {
+  const product = {
+    ...result.product,
+    name: page.name ?? result.product.name,
+    priceCents: page.priceCents ?? result.product.priceCents,
+    imageUrl: page.imageUrl ?? result.product.imageUrl,
+    source: 'amazon-page',
+    store: storeName(result.product.productUrl),
+    pageRead: true,
+  }
+  return withMissing(product)
+}
+
+function withMissing(product) {
   const missing = []
   if (!product.name) missing.push('name')
   if (product.priceCents === null) missing.push('priceCents')
   return { status: missing.length === 0 ? 'complete' : 'partial', product, missing, error: null }
+}
+
+function isAmazonSource(source) {
+  return source === 'amazon-url' || source === 'amazon-fixture'
 }
 
 /**
@@ -64,9 +89,9 @@ function withStorePage(result, page) {
  * confirm; a partial one opens the details, prefilled, at the missing field.
  * "Add by hand" opens the same details empty.
  *
- * `readStorePage(url)`, when given (signed in only), reads a non-Amazon
- * store's page on the server for its name, price and photo. Without it, or
- * when the store blocks us, only what's in the link is used.
+ * `readStorePage(url)`, when given (signed in only), reads the store's page
+ * (Amazon too, ALL-141) on the server for its name, price and photo. Without
+ * it, or when the store blocks us, only what's in the link is used.
  */
 export default function AddGiftPanel({ onAdd, readStorePage }) {
   const [url, setUrl] = useState('')
@@ -124,10 +149,13 @@ export default function AddGiftPanel({ onAdd, readStorePage }) {
       }
     }
 
-    if (result.status !== 'error' && result.product.source === 'store-url' && readStorePage) {
+    const source = result.status === 'error' ? null : result.product.source
+    if (readStorePage && (source === 'store-url' || isAmazonSource(source))) {
       try {
         const page = await readStorePage(result.product.productUrl)
-        if (page?.ok) result = withStorePage(result, page.product)
+        if (page?.ok) {
+          result = isAmazonSource(source) ? withAmazonPage(result, page.product) : withStorePage(result, page.product)
+        }
       } catch {
         // Keep the link-only result: the person can still add it by hand.
       }
