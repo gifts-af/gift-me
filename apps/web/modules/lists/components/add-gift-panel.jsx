@@ -56,19 +56,26 @@ function withStorePage(result, page) {
   return withMissing(product)
 }
 
-// Amazon (ALL-141): the link already gives a name from its path, a fixture
-// price and a photo guessed from the ASIN, which Amazon answers with a blank
-// 1x1 for newer products. The page's values win; anything it lacks keeps the
-// link's.
+// Amazon (ALL-141): the link already gives a name from its path and a photo
+// guessed from the ASIN, which Amazon answers with a blank 1x1 for newer
+// products. The page's name and photo win, and the link's stay where the page
+// has none. The price is the page's only: a fixture's stand-in price never
+// outlives a real read.
+//
+// Only Amazon's own product reader sets the ASIN as productId. Without it the
+// page wasn't this product's (a bot check, an error page), and the general
+// reader could have picked up a title like "Amazon.com", so it's ignored.
 function withAmazonPage(result, page) {
+  if (typeof page.productId !== 'string' || page.productId.toUpperCase() !== result.product.asin) return result
   const product = {
     ...result.product,
     name: page.name ?? result.product.name,
-    priceCents: page.priceCents ?? result.product.priceCents,
+    priceCents: page.priceCents,
     imageUrl: page.imageUrl ?? result.product.imageUrl,
     source: 'amazon-page',
     store: storeName(result.product.productUrl),
     pageRead: true,
+    pageFound: { name: page.name !== null, image: page.imageUrl !== null },
   }
   return withMissing(product)
 }

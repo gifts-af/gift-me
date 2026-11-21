@@ -168,7 +168,7 @@ describe("adding an Amazon gift while signed in (ALL-141)", () => {
   it("reads the clean product link and fills the real name, price and photo", async () => {
     const readStorePage = vi.fn(async () => ({
       ok: true,
-      product: { name: "SOULWIT Headband Protector", priceCents: 1195, imageUrl: REAL_PHOTO },
+      product: { name: "SOULWIT Headband Protector", priceCents: 1195, imageUrl: REAL_PHOTO, productId: "B0G5Z36T3N" },
     }));
     const onAdd = await lookUpWith(readStorePage, AMAZON);
     expect(await screen.findByText(/\$11\.95 · found on Amazon/)).toBeInTheDocument();
@@ -188,7 +188,7 @@ describe("adding an Amazon gift while signed in (ALL-141)", () => {
   it("keeps the guessed photo when the page has none, and asks for a missing price", async () => {
     const readStorePage = vi.fn(async () => ({
       ok: true,
-      product: { name: "Wool Hiking Socks, 3 pairs", priceCents: null, imageUrl: null },
+      product: { name: "Wool Hiking Socks, 3 pairs", priceCents: null, imageUrl: null, productId: "B0EXAMPLE1" },
     }));
     await lookUpWith(readStorePage, "https://www.amazon.com/Wool-Hiking-Socks/dp/B0EXAMPLE1");
     await waitFor(() => expect(screen.getByLabelText("Price")).toHaveFocus());
@@ -196,17 +196,49 @@ describe("adding an Amazon gift while signed in (ALL-141)", () => {
     expect(screen.getByLabelText(/Image URL/)).toHaveValue(
       "https://images-na.ssl-images-amazon.com/images/P/B0EXAMPLE1.01._SCLZZZZZZZ_.jpg",
     );
-    expect(screen.getByText(/Got the name and the photo from Amazon\. Amazon doesn’t show us the price/)).toBeInTheDocument();
+    expect(screen.getByText(/Got the name from Amazon\. Amazon doesn’t show us the price/)).toBeInTheDocument();
   });
 
   it("keeps the name from the link when the page has no name", async () => {
     const readStorePage = vi.fn(async () => ({
       ok: true,
-      product: { name: null, priceCents: 2400, imageUrl: REAL_PHOTO },
+      product: { name: null, priceCents: 2400, imageUrl: REAL_PHOTO, productId: "B0EXAMPLE1" },
     }));
     await lookUpWith(readStorePage, "https://www.amazon.com/Wool-Hiking-Socks/dp/B0EXAMPLE1");
     expect(await screen.findByText(/\$24\.00 · found on Amazon/)).toBeInTheDocument();
     expect(screen.getByText("Wool Hiking Socks")).toBeInTheDocument();
+  });
+
+  it("says only what the page gave when it gave just the name", async () => {
+    const readStorePage = vi.fn(async () => ({
+      ok: true,
+      product: { name: "Wool Hiking Socks, 3 pairs", priceCents: null, imageUrl: null, productId: "B0EXAMPLE1" },
+    }));
+    await lookUpWith(readStorePage, "https://www.amazon.com/Wool-Hiking-Socks/dp/B0EXAMPLE1");
+    expect(await screen.findByText(/^Got the name from Amazon\./)).toBeInTheDocument();
+  });
+
+  it("ignores a page that isn't this product's, like a bot check", async () => {
+    const readStorePage = vi.fn(async () => ({
+      ok: true,
+      product: { name: "Amazon.com", priceCents: null, imageUrl: null, productId: null },
+    }));
+    const onAdd = await lookUpWith(readStorePage, "https://www.amazon.com/Wool-Hiking-Socks/dp/B0EXAMPLE1");
+    await waitFor(() => expect(screen.getByLabelText("Price")).toHaveFocus());
+    expect(screen.getByLabelText("Gift name")).toHaveValue("Wool Hiking Socks");
+    await userEvent.type(screen.getByLabelText("Price"), "20");
+    await userEvent.click(screen.getByRole("button", { name: "Add to list" }));
+    expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({ source: "amazon-url" }));
+  });
+
+  it("drops a stand-in fixture price once the real page is read without one", async () => {
+    const readStorePage = vi.fn(async () => ({
+      ok: true,
+      product: { name: "Echo Dot (3rd Gen)", priceCents: null, imageUrl: REAL_PHOTO, productId: "B07FZ8S74R" },
+    }));
+    await lookUpWith(readStorePage, "https://www.amazon.com/dp/B07FZ8S74R");
+    await waitFor(() => expect(screen.getByLabelText("Price")).toHaveFocus());
+    expect(screen.getByLabelText("Price")).toHaveValue("");
   });
 
   it("behaves as before when Amazon won't show us the page", async () => {
