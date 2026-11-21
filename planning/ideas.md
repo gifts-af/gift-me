@@ -101,6 +101,7 @@ A person's own list can hold general wishes next to specific products: a brand (
 
 ### 13. Snap a photo of something to add it
 See something you like in a shop or at a friend's? Take a photo, then tap Share › GiftsAF. Choose **My list**, to add it as a wish, or one of **your people**, to save it as an idea for them.
+- **When (owner, 2026-11-21):** after launch.
 - **Why:** many gift ideas start out in the real world, not on a web page. Taking a photo and sharing it is the fastest way to catch one before it's forgotten.
 - **How it could work:** AI reads the photo to name the product and its brand. A Zinc search then finds a product someone could buy. The result is checked, then added to the list or the person as a suggestion. When the exact product can't be found, it becomes a general wish (idea 12).
 - **The Share menu:** the installed web app can appear in Android's Share menu (the Web Share Target in `app/manifest.ts`). iPhone doesn't let web apps appear there, so iPhone needs a native app with a share extension, or an in-app "Add from photo" button that opens the camera.
