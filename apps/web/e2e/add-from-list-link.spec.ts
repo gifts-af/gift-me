@@ -13,9 +13,9 @@ import { session, signIn, type Credentials } from "./sign-in";
 const supabase = localSupabase();
 
 /** A fresh owner with a display name and a one-gift list; returns them and the share path. */
-async function ownerWithList(): Promise<{ owner: Credentials; name: string; sharePath: string }> {
+async function ownerWithList(longName = false): Promise<{ owner: Credentials; name: string; sharePath: string }> {
   // A name no other run uses, so the heading check can't match a leftover.
-  const name = `Sam ${randomUUID().slice(0, 8)}`;
+  const name = `${longName ? "Maximiliana Featherstonehaugh" : "Sam"} ${randomUUID().slice(0, 8)}`;
   const owner = await createFreshUser(name);
   const { access_token, user } = await session(owner);
   const headers = {
@@ -110,9 +110,10 @@ test("a signed-out visitor sees Sign in, which returns to the list, and Request 
   await expect(card(page).getByRole("link", { name: "Request access" })).toHaveAttribute("href", "/request-access");
 });
 
-// AC-18: the card fits a phone and desktop, light and dark (T62).
+// AC-18: the card fits a phone and desktop, light and dark (T62). A long name,
+// so the "Add … to your people" button has to wrap (it ran off a phone in CI).
 test("the card on a shared list fits the screen", { tag: "@layout" }, async ({ page }) => {
-  const { name, sharePath } = await ownerWithList();
+  const { name, sharePath } = await ownerWithList(true);
   await signIn(page, await createFreshUser());
   for (const colorScheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme });

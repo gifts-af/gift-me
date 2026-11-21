@@ -63,7 +63,7 @@ function SignedOut({ token, addLabel }: { token: string; addLabel: string }) {
   const loginHref = `/auth/login?next=${encodeURIComponent(`/share/${token}`)}`;
   return (
     <>
-      <Button asChild className="self-start">
+      <Button asChild className="max-w-full self-start whitespace-normal py-2 [overflow-wrap:anywhere]">
         <Link href={loginHref}>{addLabel}</Link>
       </Button>
       <p className="flex flex-wrap gap-x-4 text-[13px]">
@@ -106,7 +106,7 @@ function Add({
 
   return (
     <>
-      <Button asChild className="self-start">
+      <Button asChild className="max-w-full self-start whitespace-normal py-2 [overflow-wrap:anywhere]">
         <Link href={`/people/new?list=${token}`}>{addLabel}</Link>
       </Button>
       {/* Hidden, not empty, when nobody is left to link (Review 4). */}
