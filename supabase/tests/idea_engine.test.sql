@@ -4,6 +4,9 @@ begin;
 \ir _helpers.psql
 select plan(31);
 
+-- This file starts many round runs on one day; the daily limit has its own test (round_fanout).
+update concierge.app_settings set value = '1000' where key = 'idea_round_runs_per_day';
+
 select tests.create_user('a@example.com') as a \gset
 select tests.create_user('b@example.com') as b \gset
 select tests.create_user('c@example.com') as c \gset

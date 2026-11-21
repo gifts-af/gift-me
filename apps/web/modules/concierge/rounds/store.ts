@@ -60,6 +60,15 @@ export type ClaimedRound = {
   emailedBalanceCents: number | null;
 };
 
+/** A round that's due now, read without claiming it (ALL-125): what the tick hands out. */
+export type DueRound = {
+  id: string;
+  userId: string;
+  status: RoundStatus;
+  attentionReason: AttentionReason | null;
+  shipByDeadline: CalendarDate;
+};
+
 /** One of the round's orders, for the hold and failure emails (ALL-32). */
 export type RoundOrder = {
   id: string;
@@ -143,6 +152,8 @@ export interface RoundStore {
   /** On conflict (person, occasion, year) does nothing; true if a row was inserted. */
   insertRound(r: NewRoundRow): Promise<boolean>;
   claimDue(now: Date): Promise<ClaimedRound[]>;
+  /** due_rounds: the rounds claimDue would take, in its order, without claiming (no lease, no attempt). */
+  dueRounds(now: Date): Promise<DueRound[]>;
   /** claim_due_money_rounds: only the due rounds that need attention (a hold or a failure). */
   claimDueMoney(now: Date): Promise<ClaimedRound[]>;
   /** null when the round isn't due, is finished, or another run holds it. */
@@ -342,6 +353,18 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
       const { data, error } = await concierge.rpc("claim_due_rounds", { p_now: now.toISOString() });
       if (error) fail("Claiming due rounds failed", error);
       return data.map(toClaimed).filter((r): r is ClaimedRound => r !== null);
+    },
+
+    async dueRounds(now) {
+      const { data, error } = await concierge.rpc("due_rounds", { p_now: now.toISOString() });
+      if (error) fail("Reading due rounds failed", error);
+      return data.map((r) => ({
+        id: r.id,
+        userId: r.user_id,
+        status: r.status,
+        attentionReason: r.attention_reason as AttentionReason | null,
+        shipByDeadline: r.ship_by_deadline,
+      }));
     },
 
     async claimDueMoney(now) {

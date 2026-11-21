@@ -53,6 +53,8 @@ export type IdeaDeps = {
   clock: () => number;
   /** Waits for the Zinc rate limit; a timer in production. */
   sleep: (ms: number) => Promise<void>;
+  /** How many runs share Zinc's request rate at once (ALL-125); this run gets 1/share of it. Default 1. */
+  zincShare?: number;
 };
 
 /** A true constant: the rate limit is per second. */
@@ -199,7 +201,7 @@ async function attempt(req: IdeaRequest, deps: IdeaDeps, t: Tally): Promise<Idea
   });
 
   // ─── resolve, all candidates at once (B2), capped by cost and rate ──
-  const limit = limiter(s.zincRequestsPerSecond, deps.clock, deps.sleep);
+  const limit = limiter(s.zincRequestsPerSecond / (deps.zincShare ?? 1), deps.clock, deps.sleep);
   let capped = false;
   // Set when a lookup fails with an error that ends the run: no new paid call starts after it.
   let stopping = false;
@@ -374,21 +376,21 @@ function occasionPlan(
   };
 }
 
-/** Lets no more than `perSecond` calls start in any one-second window. Callers wait their turn in order. */
+/**
+ * Spaces calls at least 1000 / perSecond ms apart, so a fractional rate holds too
+ * (a share of Zinc's rate, ALL-125). Callers wait their turn in order.
+ */
 function limiter(perSecond: number, clock: () => number, sleep: (ms: number) => Promise<void>): () => Promise<void> {
-  const starts: number[] = [];
+  const gap = SECOND_MS / perSecond;
+  let last: number | null = null;
   let queue: Promise<void> = Promise.resolve();
   return () => {
     const turn = queue.then(async () => {
-      for (;;) {
-        const now = clock();
-        while (starts.length > 0 && starts[0] <= now - SECOND_MS) starts.shift();
-        if (starts.length < perSecond) {
-          starts.push(now);
-          return;
-        }
-        await sleep(starts[0] + SECOND_MS - now);
+      if (last !== null) {
+        const wait = last + gap - clock();
+        if (wait > 0) await sleep(Math.ceil(wait));
       }
+      last = clock();
     });
     // One caller's failure mustn't decide the others' turns; the run's own stop flag does that.
     queue = turn.catch(() => {});

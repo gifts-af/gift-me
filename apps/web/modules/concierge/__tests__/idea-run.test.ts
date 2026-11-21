@@ -496,6 +496,35 @@ describe("runIdeas: cost and speed", () => {
     for (let i = 2; i < at.length; i++) expect(at[i] - at[i - 2]).toBeGreaterThanOrEqual(1000);
   });
 
+  it("with a share of 5 at 10 a second, lookups start 500 ms apart (ALL-125)", async () => {
+    world([2000, 2000, 2000], { zinc, gateway });
+    store.s = settings({ zincRequestsPerSecond: 10 });
+    const start = t;
+    await runIdeas(req(), { ...deps(), zincShare: 5 });
+    const at = zinc.calls.slice(0, 5).map((c) => c.at - start);
+    expect(at).toEqual([0, 500, 1000, 1500, 2000]);
+  });
+
+  it("with a share of 5 at 3 a second (0.6), lookups start at least 1667 ms apart (ALL-125)", async () => {
+    world([2000, 2000, 2000], { zinc, gateway });
+    store.s = settings({ zincRequestsPerSecond: 3 });
+    const start = t;
+    await runIdeas(req(), { ...deps(), zincShare: 5 });
+    const at = zinc.calls.slice(0, 3).map((c) => c.at - start);
+    expect(at[0]).toBe(0);
+    expect(at[1]).toBeGreaterThanOrEqual(1667);
+    expect(at[2]).toBeGreaterThanOrEqual(3333);
+  });
+
+  it("with no share, lookups keep today's spacing at 10 a second (ALL-125)", async () => {
+    world([2000, 2000, 2000], { zinc, gateway });
+    store.s = settings({ zincRequestsPerSecond: 10 });
+    const start = t;
+    await runIdeas(req(), deps());
+    const at = zinc.calls.slice(0, 3).map((c) => c.at - start);
+    expect(at).toEqual([0, 100, 200]);
+  });
+
   it("resolves candidates in parallel", async () => {
     world([2000, 2000, 2000], { zinc, gateway });
     let searches = 0;

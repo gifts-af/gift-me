@@ -1411,6 +1411,16 @@ export type Database = {
         }[];
       };
       delete_occasion: { Args: { p_occasion_id: string }; Returns: undefined };
+      due_rounds: {
+        Args: { p_now: string };
+        Returns: {
+          attention_reason: string;
+          id: string;
+          ship_by_deadline: string;
+          status: Database["concierge"]["Enums"]["round_status"];
+          user_id: string;
+        }[];
+      };
       enable_owner_rls: { Args: { p_table: unknown }; Returns: undefined };
       excluded_products: { Args: { p_person_id: string }; Returns: string[] };
       fail_order: {

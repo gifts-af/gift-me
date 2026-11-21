@@ -7,6 +7,9 @@ import type { TickSummary } from "@/modules/concierge";
 
 type Env = { cronSecret?: string; vercelEnv?: string };
 
+/** Jobs carry the tick's `now` only off production, where ?now= can set it (AC-13). */
+export const isTestClock = (vercelEnv?: string): boolean => vercelEnv !== "production";
+
 export async function handleTick(
   request: Request,
   env: Env,
@@ -17,7 +20,7 @@ export async function handleTick(
     return Response.json({ ok: false }, { status: 401 });
   }
   let now = new Date();
-  if (env.vercelEnv !== "production") {
+  if (isTestClock(env.vercelEnv)) {
     const raw = new URL(request.url).searchParams.get("now");
     const parsed = raw ? new Date(raw) : null;
     if (parsed && !Number.isNaN(parsed.getTime())) now = parsed;
