@@ -145,9 +145,9 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
       logEvent("round_fanout_setting_unreadable", {});
     }
   }
+  // `deps.sendJobs` again only so TypeScript knows it's set.
   if (fanout && deps.sendJobs) {
-    const s = await store.scheduleSettings();
-    const { created, failed: createFailed } = on ? await createDueRounds(deps, s) : { created: 0, failed: 0 };
+    const { created, failed: createFailed } = on ? await createDueRounds(deps, await store.scheduleSettings()) : { created: 0, failed: 0 };
     await tellOwnersOfRejections(deps);
     const due = await store.dueRounds(now);
     const result = await deps.sendJobs(planJobs(due, on, now, deps.testClock ?? false));
@@ -298,6 +298,7 @@ async function buyerJob(roundIds: string[], deps: EngineDeps, progress: JobProgr
   const placeBy = await placeDeadline(deps);
   let advanced = 0;
   let failed = 0;
+  const claimedIds: string[] = [];
   for (const roundId of roundIds) {
     let round: ClaimedRound | null;
     try {
@@ -322,6 +323,17 @@ async function buyerJob(roundIds: string[], deps: EngineDeps, progress: JobProgr
     else if (step === "failed") failed++;
     // An idea run belongs to a round message: the next tick sends one.
     else await releaseQuietly(step.generate, deps);
+    claimedIds.push(roundId);
+  }
+  // A store that refused a shared address while placing: its owner hears now, as on the inline
+  // tick, not at tomorrow's tick (a deadline-day close doesn't tell them itself).
+  if (claimedIds.length > 0) {
+    try {
+      const rejected = new Set(await store.roundsWithRejectedAddresses());
+      for (const id of claimedIds) if (rejected.has(id)) await tellOwnerOfRejection(id, deps);
+    } catch (err) {
+      logEvent("order.shared_address_notice_failed", { ...errorFields(err), alert: true });
+    }
   }
   const result: JobResult = failed > 0 ? "failed" : advanced > 0 ? "advanced" : "busy";
   return { result, rounds: advanced };

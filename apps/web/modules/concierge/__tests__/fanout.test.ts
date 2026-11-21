@@ -349,6 +349,15 @@ describe("runRoundJob", () => {
     expect(jobEvents()).toEqual([]);
   });
 
+  it("asks a list owner to check their address in the same job when placing was rejected, for its own rounds only", async () => {
+    addRound("h1");
+    addRound("h2");
+    vi.spyOn(store, "roundsWithRejectedAddresses").mockResolvedValue(["h1", "someone-elses"]);
+    const asked = vi.spyOn(store, "sharedAddressOwnerToTell");
+    await runRoundJob({ kind: "buyer", userId: "U1", roundIds: ["h1", "h2"] }, deps());
+    expect(asked.mock.calls.map((c) => c[0])).toEqual(["h1"]);
+  });
+
   it("throws when a buyer's first claim itself fails, so the queue redelivers a deadline-day hold", async () => {
     addRound("h1");
     addRound("h2");

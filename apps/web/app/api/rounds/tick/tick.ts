@@ -20,7 +20,7 @@ export async function handleTick(
     return Response.json({ ok: false }, { status: 401 });
   }
   let now = new Date();
-  if (env.vercelEnv !== "production") {
+  if (isTestClock(env.vercelEnv)) {
     const raw = new URL(request.url).searchParams.get("now");
     const parsed = raw ? new Date(raw) : null;
     if (parsed && !Number.isNaN(parsed.getTime())) now = parsed;

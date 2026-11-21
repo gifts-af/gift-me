@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { errorFields, logEvent } from "@/lib/log";
 import { verifyMessage } from "../sign";
+import { isTestClock } from "../tick/tick";
 import type { JobMessage, JobResult } from "@/modules/concierge";
 
 // One queue message (ALL-125): one round, or one buyer's held gifts. The message crosses into
@@ -43,7 +44,7 @@ export async function handleJob(
   }
   const message: JobMessage & { sig?: string } = { ...parsed.data };
   delete message.sig; // the engine gets the message without it
-  const at = message.now && env.vercelEnv !== "production" ? new Date(message.now) : new Date();
+  const at = message.now && isTestClock(env.vercelEnv) ? new Date(message.now) : new Date();
   try {
     return await run(message, at);
   } catch (err) {

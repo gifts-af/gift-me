@@ -186,7 +186,8 @@ export class FakeRoundStore implements RoundStore {
     return [];
   }
 
-  async sharedAddressOwnerToTell(): Promise<string | null> {
+  async sharedAddressOwnerToTell(roundId: string): Promise<string | null> {
+    void roundId;
     return null;
   }
 
