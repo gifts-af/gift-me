@@ -99,6 +99,15 @@ A person's own list can hold general wishes next to specific products: a brand (
 - **To work out:** how a general wish looks on the shared list next to products, and whether more than one buyer can claim it (socks can be given twice; a trunk organizer can't).
 - **Source:** owner, 2026-11-21.
 
+### 13. Snap a photo of something to add it
+See something you like in a shop or at a friend's? Take a photo, then tap Share › GiftsAF. Choose **My list**, to add it as a wish, or one of **your people**, to save it as an idea for them.
+- **Why:** many gift ideas start out in the real world, not on a web page. Taking a photo and sharing it is the fastest way to catch one before it's forgotten.
+- **How it could work:** AI reads the photo to name the product and its brand. A Zinc search then finds a product someone could buy. The result is checked, then added to the list or the person as a suggestion. When the exact product can't be found, it becomes a general wish (idea 12).
+- **The Share menu:** the installed web app can appear in Android's Share menu (the Web Share Target in `app/manifest.ts`). iPhone doesn't let web apps appear there, so iPhone needs a native app with a share extension, or an in-app "Add from photo" button that opens the camera.
+- **Related:** photos saved for a person go through capture reading (25, 47). Something only seen in a photo is recorded as "already has", so a photo meant as a gift idea has to say so. Emailed notes with images already exist. Reading a photo with AI costs money, so it follows 53 (test and admin users only) unless that's decided otherwise.
+- **To work out:** iPhone (a native app, or a camera button only), what happens when the product can't be identified, and the cost per photo.
+- **Source:** owner, 2026-11-21.
+
 ## A common thread
 
 Ideas 1, 2, 4 and 5 all use the same building block: **a scannable code tied to a gift that someone claims securely.** If any of these move forward, that's the piece to design once and reuse.
