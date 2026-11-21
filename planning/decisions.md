@@ -110,3 +110,9 @@ From the review of ALL-44 (PR #14).
 | # | Decision | Source |
 |---|---|---|
 | 56 | **Adding from the extension: gift photos are public by address, and opening the extension counts as the click** (ALL-78; narrows 43; reads PRD C-2; detail in T77). (1) A gift photo added from the extension is stored at a public address that only that gift uses. The address keeps working after sharing is turned off or the share link is reset, until the gift is removed and the next daily cleanup runs (so within a day of removing it). A product photo isn't sensitive and its address can't be guessed; everything else about the list still follows 43. (2) Clicking the extension's icon is the click C-2 asks for: the popup reads the open tab then, on the user's computer, and nothing leaves it until they press Add or Save. | Owner, 2026-11-20 |
+
+## 2026-11-21
+
+| # | Decision | Source |
+|---|---|---|
+| 57 | **Pasting an Amazon link looks the product up on Zinc, for everyone** (ALL-141; an exception to 53, for this one case only). When a signed-in person pastes an Amazon link on their list, the server asks Zinc for the product's real name, photo and price (1¢ a lookup, `zinc_lookup_cents`). **Why:** Amazon's photo shortcut returns a blank picture for newer products, and Amazon shows our server a bot check when it tries to read the page, so Zinc is the only way to get the real details. **Limits:** only the paste-a-link path may call it. It's capped per person per day (`amazon_paste_lookups_per_user_per_day`, 30), it has an off switch (`amazon_paste_lookup_enabled`), and each lookup logs `list.amazon_lookup` with its cost. Anything else that costs money still follows 53. Website gifts keep linking the store's photo; copying it into our own storage was considered and not chosen. | Owner, 2026-11-21 |
