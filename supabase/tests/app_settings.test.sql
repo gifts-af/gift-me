@@ -49,7 +49,8 @@ select set_eq(
     'idea_engine_enabled', 'idea_candidates', 'idea_max_searches', 'idea_ai_max_tokens', 'idea_keep_min', 'idea_keep_max',
     'idea_ai_timeout_ms', 'idea_zinc_timeout_ms', 'idea_tax_estimate_pct', 'idea_run_estimate_cents', 'idea_run_max_cents',
     'idea_round_runs_max', 'idea_rounds_per_tick', 'idea_run_lease_ms', 'tick_deadline_ms', 'zinc_lookup_cents',
-    'zinc_requests_per_second'
+    'zinc_requests_per_second', 'list_photo_width_px', 'list_photo_jpeg_quality', 'list_photo_max_bytes',
+    'extension_add_enabled', 'list_photo_cleanup_batch', 'list_photo_cleanup_min_age_minutes'
   ],
   'every fee, limit, default and schedule setting is seeded'
 );

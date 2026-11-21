@@ -58,4 +58,20 @@ describe("handleTick", () => {
     expect(await res.json()).toEqual({ ok: false });
     spy.mockRestore();
   });
+
+  it("runs the cleanup after the tick, and a throwing cleanup doesn't change the result", async () => {
+    const order: string[] = [];
+    const run = vi.fn(async () => {
+      order.push("run");
+      return SUMMARY;
+    });
+    const cleanup = vi.fn(async () => {
+      order.push("cleanup");
+      throw new Error("storage down");
+    });
+    const res = await handleTick(req(`Bearer ${SECRET}`), { cronSecret: SECRET }, run, cleanup);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, ...SUMMARY });
+    expect(order).toEqual(["run", "cleanup"]);
+  });
 });

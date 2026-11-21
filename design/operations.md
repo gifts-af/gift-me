@@ -43,7 +43,7 @@ Don't change hosted systems during install: no `pnpm db:push:*`, no Supabase CLI
 | `design/` | This file, [technical design](technical-design.md) (approved 2026-10-17), [decisions log](decisions.md). Spike write-ups go in `design/spikes/`, look and feel in `design/ui.md` (mock-ups in `design/mockups/`), and ticket specs and build plans in `design/plans/` (start from [the template](plans/TEMPLATE.md)), such as [Zinc wallet connection and buying, ALL-32](plans/ALL-32-zinc-connection.md). | Complete |
 | `.claude/` | Shared Claude Code settings (turns on the Superpowers plugin; runs the local setup check at session start) | Done |
 | `apps/web/` | The one web app (Next.js). Products live in `modules/lists` and `modules/concierge`; see its [README](../apps/web/README.md) | Lists live; concierge from Wave 2 |
-| `apps/extension/` | Chrome capture extension: save what's on screen to a person. How to build and load it is in its [README](../apps/extension/README.md) | On the Chrome Web Store, unlisted (ALL-65) |
+| `apps/extension/` | Chrome capture extension: add gifts to your list or save what's on screen to a person. How to build and load it is in its [README](../apps/extension/README.md) | On the Chrome Web Store, unlisted (ALL-65) |
 | `packages/core/` | Pure shared logic (dates, deadlines, budgets) and database types | W1-5 |
 | `supabase/` | Database migrations and local Supabase settings (`config.toml`) | Lists tables today |
 | `scripts/` | Repo tooling, such as `dev-check.mjs` (the local setup check) | Done |
@@ -294,6 +294,18 @@ My list saves each change as it's made, through `lists.save_list_checked`, which
 **Rolling back:** Vercel's instant rollback brings back the old Save button, which still saves through the untouched `lists.save_list`. Nothing in the database needs undoing.
 
 **Cleanup still to do:** once this has been live without a rollback, a later migration drops `lists.save_list` (E7, expand then contract). Before it does, these must stop calling it: the tests in `supabase/tests/lists.test.sql` that call it or pin it as untouched, and `secondUserShareLink` in `apps/web/e2e/people.spec.ts`, which makes a list for a shared test user on every run (with `save_list_checked` it would need to reuse that user's list, so it was left for the cleanup). No app code calls it any more.
+
+## Extension: Add to my list (ALL-78, T77)
+
+The extension adds the product on the open tab to My list through `POST /api/lists/items`, which calls `lists.add_item`. Spec and plan: [design/plans/ALL-78-add-to-my-list.md](plans/ALL-78-add-to-my-list.md).
+
+**Release order (E9):** before the migration runs, check that prod's longest gift link is under about 2,000 characters: `select max(char_length(product_url)) from lists.list_items`. The migration adds `match_key` as an indexed generated column, and a key too long for the index fails the migration. Ask the owner before running anything on prod. Then merge the web code and the migration (`20261121100000_extension_add.sql`) and wait for the `migrate` job to finish green on dev and prod. Check the route answers on production. Only then submit the extension package to the store. The new build calls a route that must already exist.
+
+**Off switch (E7):** set `extension_add_enabled` to `0` in `concierge.app_settings`. The route answers 503 and the popup says "Adding from the extension is paused". No deploy needed. Set it back to `1` to turn it on.
+
+**Photos:** they live in the public `list-photos` bucket as `<gift id>.jpg`, written only by the route. When a gift, its list or its account is removed, the photo goes into `lists.photo_deletions`, and the daily tick (`/api/rounds/tick`) deletes it once it has waited `list_photo_cleanup_min_age_minutes` (60), up to `list_photo_cleanup_batch` (500) a day; the rest wait for the next day. If photos linger, check the tick ran and look for `list.photo_cleanup_skipped` (a cleanup setting couldn't be read, so that day was skipped) or `list.photos_left` (the Storage API refused the delete; tomorrow retries). Other tunables are the `app_settings` rows `list_photo_width_px`, `list_photo_jpeg_quality` and `list_photo_max_bytes`. Keep `list_photo_max_bytes` below the bucket's 1 MB limit, or uploads fail.
+
+**Seeing it work on production:** event `list.extension_add`, with `outcome` (`added`, `duplicate`, `likely`, `full` or `failed`) and ids only.
 
 ## Inbound notes (ALL-31)
 

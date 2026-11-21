@@ -21,6 +21,8 @@ describe("isPublicPath", () => {
     // A closing My list tab posts here with keepalive; signed out gets a 401
     // from the route, never a redirect to follow (ALL-127).
     "/api/lists/save-on-close",
+    // The extension adds a gift to My list with a bearer token (ALL-78).
+    "/api/lists/items",
     // The browser fetches these to offer "Add to Home Screen", signed in or not.
     "/manifest.webmanifest",
     "/icon",
@@ -42,7 +44,7 @@ describe("isPublicPath", () => {
     "/a/abc",
   ])("lets signed-out visitors reach %s", (path) => expect(isPublicPath(path)).toBe(true));
 
-  it.each(["/", "/settings", "/api/other", "/lists/123", "/api/captures/x/other", "/api/captures/a/b/extract"])(
+  it.each(["/", "/settings", "/api/other", "/lists/123", "/api/captures/x/other", "/api/captures/a/b/extract", "/api/lists/items/x"])(
     "sends signed-out visitors on %s to sign in",
     (path) => expect(isPublicPath(path)).toBe(false),
   );

@@ -241,6 +241,7 @@ A clickable, phone-first prototype, published as a private shareable artifact pa
 | Shared list and claim | A friend opening a share link and claiming a gift; a claim that lost the race. The list's owner never sees claims | Existing (GiftsAF), decision 39 |
 | Sign-in | Google sign-in (email and password stays for existing list users) | ALL-20 |
 | Extension popup | "Capture for…" with a person picker | C-1 |
+| Extension popup: Add to my list | Product card on top (name, price, photo with ‹ ›, recent people as buttons), "or save it for someone" below; the added, already-there, likely-duplicate and full states; one success banner after any save. [Approved mock-ups](https://claude.ai/artifact/YU7tRxcSdDyP8GRCs1SjkP) (owner, 2026-11-20, ALL-78) | C-1, T77 |
 | Heads-up email | Two kinds. **Reminder:** the options as small read-only rows and "Choose a gift"; nothing is bought until you choose. **Auto-buy on** (opt-in, A-7): says which gift will be bought and on what date, marks it, and offers "Review or change" and how to skip. Buttons are signed one-time links (design §6.4) to the phone page | N-1, A-7, decision 40 |
 | Computer width | Give and the gift list only | — |
 

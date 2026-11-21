@@ -170,7 +170,7 @@ test("without paid features, the page doesn't offer reading and says why (ALL-94
   await page.goto(`/people/${personId}`);
 
   await expect(page.getByText("1 capture hasn't been read.")).toBeVisible();
-  await expect(page.getByText("Reading captures costs real money, so for now it's only on for test accounts.")).toBeVisible();
+  await expect(page.getByText("Reading pages with AI costs money, so it's only on for test accounts for now.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Read it now" })).toHaveCount(0);
   await expect(page.getByRole("note")).toHaveCount(0);
 });

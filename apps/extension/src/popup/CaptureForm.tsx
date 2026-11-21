@@ -1,6 +1,5 @@
-import { useId } from "react";
-
-// The optional note, the Save button and any save error with Try again.
+// The optional note, the Save button and any save error with Try again,
+// pinned under the people list.
 export function CaptureForm({
   note,
   onNoteChange,
@@ -21,26 +20,25 @@ export function CaptureForm({
   error: string | null;
   onSave: () => void;
 }) {
-  const id = useId();
   return (
     <>
-      <label className="field" htmlFor={id}>
-        <span>
-          Note <span className="text-[13px] font-normal text-muted-foreground">Optional</span>
-        </span>
-        <textarea
-          className="input resize-none"
-          id={id}
-          rows={2}
-          maxLength={2000}
-          placeholder="She loved this in the store"
-          value={note}
-          onChange={(e) => onNoteChange(e.target.value)}
-        />
-      </label>
+      <input
+        className="input"
+        aria-label="Note (optional)"
+        placeholder="Note (optional)"
+        maxLength={2000}
+        autoComplete="off"
+        value={note}
+        onChange={(e) => onNoteChange(e.target.value)}
+      />
       {moneyNotice && (
         <p role="note" className="m-0 rounded-md bg-warning-soft px-2.5 py-1.5 text-[13px] text-warning">
           {moneyNotice}
+        </p>
+      )}
+      {busy && (
+        <p className="m-0 text-sm text-muted-foreground" role="status">
+          Reading the page…
         </p>
       )}
       {error && (

@@ -9,6 +9,12 @@ describe("buildManifest", () => {
     expect(buildManifest(env).permissions).toEqual(["activeTab", "scripting", "storage"]);
   });
 
+  it("says what the extension does, at version 0.2.0", () => {
+    const manifest = buildManifest(env);
+    expect(manifest.description).toBe("Save gifts and gift ideas from any page to GiftsAF");
+    expect(manifest.version).toBe("0.2.0");
+  });
+
   it("no host_permissions or content_scripts", () => {
     const manifest = buildManifest(env);
     expect(manifest).not.toHaveProperty("host_permissions");

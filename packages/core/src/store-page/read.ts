@@ -1,6 +1,7 @@
-// Reads a product's name, price and photo out of a store page's HTML (ALL-10,
-// planning decision 50). Pure: no network, no settings. The fetching and its
-// safety checks are in ./store-page-fetch.ts.
+// Reads a product's name, price, photo and ID out of a store page's HTML
+// (ALL-10, planning decision 50; shared with the extension in ALL-78). Pure:
+// no network, no settings. The website's fetching and its safety checks are in
+// apps/web/modules/lists/lib/store-page-fetch.ts.
 //
 // Sources, first one with a value wins for each field:
 //   1. JSON-LD `Product` (most brand and Shopify sites, Banana Republic)
@@ -8,22 +9,33 @@
 //   3. Open Graph (`og:title`, `og:image`, `product:price:amount`)
 //   4. Walmart's own page data, for the price only (Walmart has no standard
 //      price tag in the HTML it serves)
+// Amazon pages are read by ./amazon.ts first, since they carry none of these.
 // A page's <title> is never used: a captcha page has one too.
+//
+// `isProduct` is true only with a product signal (JSON-LD Product or
+// ProductGroup, microdata Product, og:type product, a product:price:* tag).
+// Open Graph tags alone (Instagram, blogs) are not a product.
 
 import { parse, type HTMLElement } from "node-html-parser";
-import { MAX_PRICE_CENTS } from "./format.js";
+import { readAmazonProduct } from "./amazon";
+import { cleanText, toCents } from "./values";
 
 export type PageProduct = {
+  isProduct: boolean;
   name: string | null;
   priceCents: number | null;
   imageUrl: string | null;
+  productId: string | null;
+  canonicalUrl: string | null;
 };
+
+// What each source (JSON-LD, microdata, Open Graph) can tell us.
+type Fields = Pick<PageProduct, "name" | "priceCents" | "imageUrl">;
+
+export { toCents };
 
 type Json = unknown;
 type JsonObject = Record<string, Json>;
-
-// Only US prices for now. A price with no currency is taken as USD.
-const ACCEPTED_CURRENCY = "USD";
 
 function isObject(value: Json): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -34,27 +46,11 @@ function asList(value: Json): Json[] {
   return Array.isArray(value) ? value : [value];
 }
 
-function cleanText(value: Json): string | null {
-  if (typeof value !== "string") return null;
-  const text = value.replace(/\s+/g, " ").trim();
-  return text || null;
-}
+// Product ID fields, most specific first (the first one present wins).
+const ID_FIELDS = ["sku", "gtin8", "gtin12", "gtin13", "gtin14", "mpn", "productID"];
 
-/** "$1,024.50", "19.97" or 12 → cents; anything else → null. */
-export function toCents(value: Json, currency: Json = null): number | null {
-  if (currency !== null && currency !== undefined && currency !== "") {
-    if (typeof currency !== "string" || currency.trim().toUpperCase() !== ACCEPTED_CURRENCY) return null;
-  }
-  let amount: number;
-  if (typeof value === "number") amount = value;
-  else if (typeof value === "string") {
-    const digits = value.replace(/[$,\s]/g, "").replace(/^USD/i, "");
-    if (!/^\d+(\.\d+)?$/.test(digits)) return null;
-    amount = Number(digits);
-  } else return null;
-  if (!Number.isFinite(amount) || amount <= 0) return null;
-  const cents = Math.round(amount * 100);
-  return cents > MAX_PRICE_CENTS ? null : cents;
+function idText(value: Json): string | null {
+  return typeof value === "number" ? String(value) : cleanText(value);
 }
 
 /** An absolute http(s) link, resolved against the page; anything else → null. */
@@ -96,9 +92,13 @@ function priceFromOffers(offers: Json): number | null {
   for (const offer of asList(offers)) {
     if (!isObject(offer)) continue;
     const currency = offer.priceCurrency ?? null;
+    // A range (lowPrice differs from highPrice) has no single price to take.
+    const low = toCents(offer.lowPrice ?? null, currency);
+    const high = toCents(offer.highPrice ?? null, currency);
+    const flatLow = low !== null && (offer.highPrice == null || low === high) ? low : null;
     const cents =
       toCents(offer.price ?? null, currency) ??
-      toCents(offer.lowPrice ?? null, currency) ??
+      flatLow ??
       (isObject(offer.priceSpecification)
         ? toCents(offer.priceSpecification.price ?? null, offer.priceSpecification.priceCurrency ?? currency)
         : null);
@@ -107,8 +107,11 @@ function priceFromOffers(offers: Json): number | null {
   return null;
 }
 
-function fromJsonLd(root: HTMLElement, pageUrl: string): PageProduct {
-  const product = jsonLdNodes(root).find((node) => hasType(node, "Product") || hasType(node, "ProductGroup"));
+function jsonLdProduct(root: HTMLElement): JsonObject | undefined {
+  return jsonLdNodes(root).find((node) => hasType(node, "Product") || hasType(node, "ProductGroup"));
+}
+
+function fromJsonLd(product: JsonObject | undefined, pageUrl: string): Fields {
   if (!product) return { name: null, priceCents: null, imageUrl: null };
   let priceCents = priceFromOffers(product.offers);
   if (priceCents === null) {
@@ -128,7 +131,7 @@ function itemprop(root: HTMLElement, prop: string): HTMLElement | null {
   return root.querySelector(`[itemprop="${prop}"]`);
 }
 
-function fromMicrodata(root: HTMLElement, pageUrl: string): PageProduct {
+function fromMicrodata(root: HTMLElement, pageUrl: string): Fields {
   const name = itemprop(root, "name");
   const price = itemprop(root, "price");
   const currency = itemprop(root, "priceCurrency");
@@ -160,7 +163,7 @@ function withoutSiteName(title: string, siteName: string | null, pageUrl: string
   return namesSite ? match[1] : title;
 }
 
-function fromOpenGraph(root: HTMLElement, pageUrl: string): PageProduct {
+function fromOpenGraph(root: HTMLElement, pageUrl: string): Fields {
   const title = meta(root, "og:title");
   return {
     name: title ? withoutSiteName(title, meta(root, "og:site_name"), pageUrl) : null,
@@ -186,13 +189,75 @@ function walmartPrice(root: HTMLElement, pageUrl: string): number | null {
   }
 }
 
+function microdataIsProduct(root: HTMLElement): boolean {
+  return root.querySelectorAll("[itemtype]").some((el) => /\/Product$/i.test(el.getAttribute("itemtype")?.trim() ?? ""));
+}
+
+function metaHasProductPrice(root: HTMLElement): boolean {
+  return root
+    .querySelectorAll("meta")
+    .some((tag) => /^product:price:/i.test(tag.getAttribute("property") ?? tag.getAttribute("name") ?? ""));
+}
+
+// "product" and Open Graph's "product.item" / "product.group" kinds.
+function ogTypeIsProduct(root: HTMLElement): boolean {
+  return /^product(\.|$)/i.test(meta(root, "og:type") ?? "");
+}
+
+function jsonLdId(product: JsonObject | undefined): string | null {
+  if (!product) return null;
+  for (const field of ID_FIELDS) {
+    const id = idText(product[field]);
+    if (id) return id;
+  }
+  return null;
+}
+
+function microdataId(root: HTMLElement): string | null {
+  for (const field of ID_FIELDS) {
+    const el = itemprop(root, field);
+    const id = el ? cleanText(el.getAttribute("content") ?? el.text) : null;
+    if (id) return id;
+  }
+  return null;
+}
+
+const withoutWww = (host: string) => host.toLowerCase().replace(/^www\./, "");
+
+/** The page's own address, from canonical, og:url or JSON-LD url: the first on the page's own site. */
+function canonicalUrl(root: HTMLElement, product: JsonObject | undefined, pageUrl: string): string | null {
+  const candidates = [
+    root.querySelector('link[rel="canonical"]')?.getAttribute("href"),
+    meta(root, "og:url"),
+    typeof product?.url === "string" ? product.url : null,
+  ];
+  const pageHost = withoutWww(new URL(pageUrl).hostname);
+  for (const raw of candidates) {
+    if (!raw?.trim()) continue;
+    try {
+      const url = new URL(raw.trim(), pageUrl);
+      if ((url.protocol === "https:" || url.protocol === "http:") && withoutWww(url.hostname) === pageHost) return url.href;
+    } catch {
+      // not a link
+    }
+  }
+  return null;
+}
+
 export function readProductFromHtml(html: string, pageUrl: string): PageProduct {
+  const amazon = readAmazonProduct(html, pageUrl);
+  if (amazon) return amazon;
+
   const root = parse(html, { blockTextElements: { script: true, style: false } });
-  const sources = [fromJsonLd(root, pageUrl), fromMicrodata(root, pageUrl), fromOpenGraph(root, pageUrl)];
-  const pick = <K extends keyof PageProduct>(key: K) => sources.map((s) => s[key]).find((v) => v !== null) ?? null;
+  const product = jsonLdProduct(root);
+  const sources = [fromJsonLd(product, pageUrl), fromMicrodata(root, pageUrl), fromOpenGraph(root, pageUrl)];
+  const pick = <K extends keyof Fields>(key: K) => sources.map((s) => s[key]).find((v) => v !== null) ?? null;
   return {
+    isProduct: Boolean(product) || microdataIsProduct(root) || ogTypeIsProduct(root) || metaHasProductPrice(root),
     name: pick("name"),
     priceCents: pick("priceCents") ?? walmartPrice(root, pageUrl),
     imageUrl: pick("imageUrl"),
+    productId: jsonLdId(product) ?? microdataId(root),
+    canonicalUrl: canonicalUrl(root, product, pageUrl),
   };
 }

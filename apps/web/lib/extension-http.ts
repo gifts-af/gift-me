@@ -1,11 +1,12 @@
-// CORS and JSON helpers for the routes the Chrome extension calls (ALL-22,
-// ALL-25). Only the extension's own origin gets an Allow-Origin header.
+// CORS and JSON helpers for the routes the Chrome extension calls (captures,
+// ALL-22 and ALL-25; adding to My list, ALL-78). Only the extension's own
+// origin gets an Allow-Origin header.
 
 /** Read at request time so a missing value fails the request, not the build. */
 export function allowedOrigin(): string | null {
   const id = process.env.NEXT_PUBLIC_EXTENSION_ID;
   if (!id) {
-    console.error("NEXT_PUBLIC_EXTENSION_ID is not set; the capture routes are disabled.");
+    console.error("NEXT_PUBLIC_EXTENSION_ID is not set; the extension routes are disabled.");
     return null;
   }
   return `chrome-extension://${id}`;

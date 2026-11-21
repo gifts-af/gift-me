@@ -28,6 +28,8 @@ export function isPublicPath(pathname: string) {
     // A closing My list tab posts here with keepalive; the route checks the
     // session itself and answers 401, so nothing follows a redirect (ALL-127).
     pathname === "/api/lists/save-on-close" ||
+    // The extension adds a gift to My list with a bearer token; the route checks it (ALL-78).
+    pathname === "/api/lists/items" ||
     pathname.startsWith("/login") ||
     pathname.startsWith("/share/") ||
     pathname.startsWith("/auth") ||

@@ -1,5 +1,8 @@
 import { buyingWiring } from "@/app/settings/zinc-deps";
+import { appSettingInt } from "@/lib/app-settings";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { runTick } from "@/modules/concierge";
+import { removeDeletedPhotos } from "@/modules/lists";
 import { handleTick } from "./tick";
 
 // Placing gifts at Zinc can run for a while: one zinc_place_budget_ms (45 s by default) for the
@@ -12,7 +15,14 @@ export const maxDuration = 300;
 // are placed and their emails sent. With Zinc off here it still runs, placing nothing.
 export async function GET(request: Request) {
   const vercelEnv = process.env.VERCEL_ENV;
-  return handleTick(request, { cronSecret: process.env.CRON_SECRET, vercelEnv }, async (now) =>
-    runTick((await buyingWiring(now)).engine),
+  return handleTick(
+    request,
+    { cronSecret: process.env.CRON_SECRET, vercelEnv },
+    async (now) => runTick((await buyingWiring(now)).engine),
+    // Photos of removed gifts (ALL-78), after the rounds so a storage problem can't touch them.
+    () => {
+      const admin = createAdminClient();
+      return removeDeletedPhotos(admin, (key) => appSettingInt(key, admin));
+    },
   );
 }
