@@ -70,3 +70,39 @@ export async function productOffers(h: ZincHttp, key: string, productId: string,
   }
   return out;
 }
+
+// One Amazon product's name, buy-box price and main photo, for a pasted link (ALL-141).
+// Every field is nullable in Zinc's reply; anything we can't use becomes null.
+const detailsReply = z.object({
+  status: z.string().nullish(),
+  product_id: z.string().nullish(),
+  title: z.unknown().optional(),
+  main_image: z.unknown().optional(),
+  price: z.unknown().optional(),
+});
+const webUrl = z.string().regex(/^https?:\/\//i);
+
+export type ZincProductDetails = { productId: string; name: string | null; priceCents: number | null; imageUrl: string | null };
+
+export async function productDetails(
+  h: ZincHttp,
+  key: string,
+  asin: string,
+  signal?: AbortSignal,
+): Promise<ZincProductDetails | null> {
+  const r = await call(h, "GET", `/products/${encodeURIComponent(asin)}`, detailsReply, {
+    key,
+    query: { retailer: "amazon" },
+    signal,
+  });
+  if (r.status !== "completed" || !r.product_id) return null;
+  const name = typeof r.title === "string" ? r.title.trim() : "";
+  const price = cents.safeParse(r.price);
+  const image = webUrl.safeParse(r.main_image);
+  return {
+    productId: r.product_id,
+    name: name === "" ? null : name,
+    priceCents: price.success ? price.data : null,
+    imageUrl: image.success ? image.data : null,
+  };
+}

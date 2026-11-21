@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ZincError, type ZincHttp } from "../zinc/client";
-import { productOffers, searchProducts } from "../zinc/products";
+import { productDetails, productOffers, searchProducts } from "../zinc/products";
 
 const KEY = "zn_test_SECRETKEY123";
 type Reply = { status: number; body?: unknown; raw?: string } | Error;
@@ -192,5 +192,75 @@ describe("productOffers", () => {
   it("a 429 throws unavailable with status 429", async () => {
     const { h } = fake([{ status: 429, body: { error: { code: "rate_limited" } } }]);
     await expect(productOffers(h, KEY, "B0TEST", signal())).rejects.toMatchObject({ kind: "unavailable", status: 429 });
+  });
+});
+
+describe("productDetails (ALL-141)", () => {
+  const details = (over: Record<string, unknown> = {}) => ({
+    status: 200,
+    body: {
+      status: "completed",
+      product_id: "B0G5Z36T3N",
+      title: "  SOULWIT Headband Protector  ",
+      main_image: "https://m.media-amazon.com/images/I/51jwXyqEB3L.jpg",
+      price: 1195,
+      retailer: "amazon",
+      feature_bullets: ["ignored"],
+      ...over,
+    },
+  });
+
+  it("asks for one Amazon product and maps its name, price and photo", async () => {
+    const { h, calls } = fake([details()]);
+    expect(await productDetails(h, KEY, "B0G5Z36T3N")).toEqual({
+      productId: "B0G5Z36T3N",
+      name: "SOULWIT Headband Protector",
+      priceCents: 1195,
+      imageUrl: "https://m.media-amazon.com/images/I/51jwXyqEB3L.jpg",
+    });
+    expect(calls).toEqual([
+      { method: "GET", url: "https://zinc.test/products/B0G5Z36T3N?retailer=amazon", auth: `Bearer ${KEY}`, body: undefined },
+    ]);
+  });
+
+  it("is null unless the lookup is completed", async () => {
+    for (const status of ["processing", "failed", null]) {
+      const { h } = fake([details({ status })]);
+      expect(await productDetails(h, KEY, "B0G5Z36T3N")).toBeNull();
+    }
+  });
+
+  it("is null without a product id", async () => {
+    const { h } = fake([details({ product_id: null })]);
+    expect(await productDetails(h, KEY, "B0G5Z36T3N")).toBeNull();
+  });
+
+  it("keeps the product when the name, price or photo is missing or unusable", async () => {
+    const { h } = fake([
+      details({ title: "   ", price: null, main_image: null }),
+      details({ title: null, price: -5, main_image: "javascript:alert(1)" }),
+      details({ title: undefined, price: 12.5, main_image: "data:image/png;base64,AAAA" }),
+      details({ price: "1195", main_image: "http://example.com/a.jpg" }),
+    ]);
+    const none = { productId: "B0G5Z36T3N", name: null, priceCents: null, imageUrl: null };
+    expect(await productDetails(h, KEY, "B0G5Z36T3N")).toEqual(none);
+    expect(await productDetails(h, KEY, "B0G5Z36T3N")).toEqual(none);
+    expect(await productDetails(h, KEY, "B0G5Z36T3N")).toEqual(none);
+    expect(await productDetails(h, KEY, "B0G5Z36T3N")).toEqual({
+      productId: "B0G5Z36T3N",
+      name: "SOULWIT Headband Protector",
+      priceCents: null,
+      imageUrl: "http://example.com/a.jpg",
+    });
+  });
+
+  it("a reply that isn't an object throws rejected", async () => {
+    const { h } = fake([{ status: 200, body: "nope" }]);
+    await expect(productDetails(h, KEY, "B0G5Z36T3N")).rejects.toMatchObject({ kind: "rejected" });
+  });
+
+  it("a 503 throws unavailable", async () => {
+    const { h } = fake([{ status: 503 }]);
+    await expect(productDetails(h, KEY, "B0G5Z36T3N")).rejects.toBeInstanceOf(ZincError);
   });
 });

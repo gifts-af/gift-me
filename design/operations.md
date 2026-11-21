@@ -307,6 +307,30 @@ The extension adds the product on the open tab to My list through `POST /api/lis
 
 **Seeing it work on production:** event `list.extension_add`, with `outcome` (`added`, `duplicate`, `likely`, `full` or `failed`) and ids only.
 
+## Amazon paste lookups (ALL-141)
+
+When a signed-in person pastes an Amazon link on My list, the server asks Zinc for that product's real name, price and photo (`GET /products/{asin}`), because Amazon answers our own page reads with a bot check. It runs on the **app's Zinc key** (`ZINC_API_BASE`, `ZINC_API_KEY`, as for the idea engine), so every lookup costs `zinc_lookup_cents`. It's open to everyone signed in, not just paid accounts (owner decision 2026-11-21), but only for pasting a link: nothing else calls it. Guests, and every other store, are unchanged (other stores still read the page, ALL-10).
+
+**Turning it off (E7):** set `amazon_paste_lookup_enabled` to `0` in `concierge.app_settings` (Supabase SQL editor as allensforever711, no deploy). Pasted Amazon links then give only what the link itself has: the name from its path and a guessed photo, and the person types the price. Set it back to `1` to turn it on.
+
+**Settings** (rows in `concierge.app_settings`; change them in the SQL editor, no deploy):
+
+| Key | Default | What it does |
+|---|---|---|
+| `amazon_paste_lookup_enabled` | 1 | 1 on, 0 off (above) |
+| `amazon_paste_lookups_per_user_per_day` | 30 | Most lookups one person can make in any 24 hours. `lists.take_amazon_lookup()` counts them in `lists.amazon_lookups` and reads the limit itself. Past it, the paste works as when switched off |
+| `amazon_paste_lookup_timeout_ms` | 10000 | How long a lookup waits for Zinc before the paste goes on without it |
+
+**Seeing it work on production (E9):** event `list.amazon_lookup`, one per paste, ids only (no ASIN, no product name):
+
+| Field | Means |
+|---|---|
+| `outcome` | `ok`; `off` (switched off); `not_configured` (no Zinc key on this environment); `over_limit` (the person's daily limit); `not_found` (Zinc had no finished product); `unavailable` (Zinc or the quota failed, with `name`, `kind`, `code`, `status` when known); `bad_asin` |
+| `cents` | What the lookup cost: `zinc_lookup_cents` when Zinc was called, else 0. Add these up for the spend |
+| `user_id`, `ms` | Who, and how long it took |
+
+Many `over_limit` from one `user_id` means someone is pasting a lot; lots of `unavailable` means Zinc is down or the key is wrong.
+
 ## Inbound notes (ALL-31)
 
 Users email a note to `notes@in.giftsaf.com` and it is filed on the right person (T70). Spec: [design/plans/ALL-31-email-capture.md](plans/ALL-31-email-capture.md).

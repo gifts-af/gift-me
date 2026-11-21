@@ -130,3 +130,8 @@ export { createSupabaseIdeaStore } from "./ideas/store";
 export type { AdminDb, IdeaInputs, IdeaRefusal, IdeaSettings, IdeaStore, SavedIdea } from "./ideas/store";
 export { ideaRunOffer, onDemandIdeas, type IdeaRunOffer } from "./ideas/read";
 export type { ShownIdea } from "./ideas/read";
+// One Amazon product's name, price and photo from the app's Zinc key, for an Amazon link
+// pasted on My list (ALL-141). The lists module's paste lookup is its only caller.
+export { productDetails } from "./zinc/products";
+export type { ZincProductDetails } from "./zinc/products";
+export type { ZincHttp } from "./zinc/client";

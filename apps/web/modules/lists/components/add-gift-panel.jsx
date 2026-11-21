@@ -58,21 +58,20 @@ function withStorePage(result, page) {
 
 // Amazon (ALL-141): the link already gives a name from its path and a photo
 // guessed from the ASIN, which Amazon answers with a blank 1x1 for newer
-// products. The page's name and photo win, and the link's stay where the page
-// has none. The price is the page's only: a fixture's stand-in price never
-// outlives a real read.
+// products. Zinc's name and photo win, and the link's stay where Zinc has
+// none. The price is Zinc's only: a fixture's stand-in price never outlives a
+// real lookup.
 //
-// Only Amazon's own product reader sets the ASIN as productId. Without it the
-// page wasn't this product's (a bot check, an error page), and the general
-// reader could have picked up a title like "Amazon.com", so it's ignored.
-function withAmazonPage(result, page) {
+// An answer for a different product (Zinc's productId isn't this ASIN) is
+// ignored.
+function withAmazonProduct(result, page) {
   if (typeof page.productId !== 'string' || page.productId.toUpperCase() !== result.product.asin) return result
   const product = {
     ...result.product,
     name: page.name ?? result.product.name,
     priceCents: page.priceCents,
     imageUrl: page.imageUrl ?? result.product.imageUrl,
-    source: 'amazon-page',
+    source: 'amazon-zinc',
     store: storeName(result.product.productUrl),
     pageRead: true,
     pageFound: { name: page.name !== null, image: page.imageUrl !== null },
@@ -96,11 +95,13 @@ function isAmazonSource(source) {
  * confirm; a partial one opens the details, prefilled, at the missing field.
  * "Add by hand" opens the same details empty.
  *
- * `readStorePage(url)`, when given (signed in only), reads the store's page
- * (Amazon too, ALL-141) on the server for its name, price and photo. Without
- * it, or when the store blocks us, only what's in the link is used.
+ * When signed in, the server fills the name, price and photo:
+ * `readStorePage(url)` reads another store's page, and `lookUpAmazon(asin)`
+ * looks an Amazon product up through Zinc (ALL-141; Amazon blocks our page
+ * reads). Without them, or when either comes back empty, only what's in the
+ * link is used.
  */
-export default function AddGiftPanel({ onAdd, readStorePage }) {
+export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }) {
   const [url, setUrl] = useState('')
   // Every field is seeded with '' and never undefined, so React never has to
   // switch an input from uncontrolled to controlled when autofill lands.
@@ -157,15 +158,16 @@ export default function AddGiftPanel({ onAdd, readStorePage }) {
     }
 
     const source = result.status === 'error' ? null : result.product.source
-    if (readStorePage && (source === 'store-url' || isAmazonSource(source))) {
-      try {
+    try {
+      if (lookUpAmazon && isAmazonSource(source)) {
+        const found = await lookUpAmazon(result.product.asin)
+        if (found?.ok) result = withAmazonProduct(result, found.product)
+      } else if (readStorePage && source === 'store-url') {
         const page = await readStorePage(result.product.productUrl)
-        if (page?.ok) {
-          result = isAmazonSource(source) ? withAmazonPage(result, page.product) : withStorePage(result, page.product)
-        }
-      } catch {
-        // Keep the link-only result: the person can still add it by hand.
+        if (page?.ok) result = withStorePage(result, page.product)
       }
+    } catch {
+      // Keep the link-only result: the person can still add it by hand.
     }
 
     if (myRequest !== requestId.current) return // superseded
