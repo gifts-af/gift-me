@@ -42,6 +42,29 @@ export async function saveTimezone(zone: string): Promise<SaveResult> {
   return { ok: true };
 }
 
+// Saves the name a shared list shows (ALL-136). Only ever what the person
+// typed: never filled in from Google or their email (T42). Empty clears it.
+const MAX_DISPLAY_NAME = 80; // public.profiles.display_name's check
+export async function saveDisplayName(name: string): Promise<SaveResult> {
+  const value = String(name ?? "").trim();
+  if (value.length > MAX_DISPLAY_NAME) return { ok: false, error: `Keep your name to ${MAX_DISPLAY_NAME} characters.` };
+
+  const supabase = await createClient();
+  const { data: auth } = await supabase.auth.getClaims();
+  const userId = auth?.claims?.sub;
+  if (!userId) return { ok: false, error: "Your session ended. Sign in again." };
+
+  const { error } = await supabase.from("profiles").update({ display_name: value || null }).eq("id", userId);
+  if (error) {
+    logEvent("settings.display_name_save_failed", { user_id: userId, ...errorFields(error) });
+    return { ok: false, error: "Your name couldn't be saved. Try again." };
+  }
+  revalidatePath("/settings");
+  revalidatePath("/settings/name");
+  revalidatePath("/lists");
+  return { ok: true };
+}
+
 // Saves the over-budget allowance on its own, as its page needs (ALL-115).
 export async function saveOverBudget(value: string): Promise<SaveResult> {
   const result = await saveConciergeSettings({ overBudgetPct: String(value) });

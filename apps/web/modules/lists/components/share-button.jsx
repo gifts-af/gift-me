@@ -4,8 +4,13 @@ import { BlockedButton, buttonClass } from './ui.jsx'
 
 const COPIED_MS = 2000
 
-export default function ShareButton({ blockedReason, onShare }) {
+export default function ShareButton({ blockedReason, onShare, copiedSignal = 0 }) {
   const [copied, setCopied] = useState(false)
+
+  // The name prompt copies the link itself (ALL-136): show "Copied!" for that too.
+  useEffect(() => {
+    if (copiedSignal > 0) setCopied(true)
+  }, [copiedSignal])
 
   useEffect(() => {
     if (!copied) return
