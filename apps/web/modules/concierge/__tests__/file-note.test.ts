@@ -238,7 +238,7 @@ describe("file_note (ALL-31 AC-4)", () => {
 
   it("refuses without the note deps rather than filing unread", async () => {
     await buttons("wants a new fly rod");
-    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.spyOn(console, "log").mockImplementation(() => {});
     expect(await confirmActionLink("tok-person-dad", USER, { store, now: NOW })).toEqual({ state: "invalid" });
     expect(store.filed).toEqual([]);
   });

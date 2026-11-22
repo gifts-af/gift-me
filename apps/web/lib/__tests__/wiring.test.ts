@@ -18,7 +18,7 @@ const base = { ZINC_ENV: "live", ZINC_API_BASE: "http://127.0.0.1:9", ZINC_WALLE
 
 describe.skipIf(!supabase)("Zinc and engine wiring (real local database and engine)", () => {
   let pg: Client;
-  let wiring: typeof import("../zinc-deps");
+  let wiring: typeof import("@/lib/wiring");
   const users: string[] = [];
   const envBefore = { ...process.env };
   const SHARED = ["round_engine_enabled", "idea_engine_enabled"];
@@ -38,7 +38,7 @@ describe.skipIf(!supabase)("Zinc and engine wiring (real local database and engi
       EMAIL_OUTBOX: "log",
       ...base,
     });
-    wiring = await import("../zinc-deps");
+    wiring = await import("@/lib/wiring");
   });
   afterAll(async () => {
     process.env = envBefore;

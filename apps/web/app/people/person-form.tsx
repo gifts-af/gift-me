@@ -12,6 +12,7 @@ import { PersonAvatar } from "@/components/person-avatar";
 import { useHydrated } from "@/lib/use-hydrated";
 import type { AddResult, SaveResult } from "@/modules/concierge";
 import { prepareJpeg, resizeToJpeg, savePersonPhoto, type PhotoStorage } from "./photo-picker";
+import { errorFields, logEvent } from "@/lib/log";
 
 export const MONTH_NAMES = [
   "January",
@@ -224,11 +225,11 @@ export function PersonForm(props: Props) {
         });
         if (!saved.ok) {
           photoFailed = true;
-          console.error("Photo not saved for new person", saved.error);
+          logEvent("people.new_photo_failed", {});
         }
       } catch (e) {
         photoFailed = true;
-        console.error("Photo not saved for new person", e);
+        logEvent("people.new_photo_failed", errorFields(e));
       }
     }
     // The person exists either way. A failed photo goes to their page, where

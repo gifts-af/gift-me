@@ -21,7 +21,7 @@ import {
   type ZincDeps,
 } from "@/modules/concierge";
 import { baseUrlFrom } from "./base-url";
-import { placeHeld, zincWiring } from "./zinc-deps";
+import { placeHeld, zincWiring } from "@/lib/wiring";
 
 // Saves the time zone on its own, as the picker on Settings needs (ALL-115).
 export async function saveTimezone(zone: string): Promise<SaveResult> {
@@ -89,13 +89,13 @@ export async function sendTestEmail(): Promise<{ ok: true } | { ok: false; error
     if (!baseUrl) return failed;
     const result = await sendTestNotification(userId, {
       store: createSupabaseNotifyStore(),
-      channels: defaultChannels(),
+      channels: defaultChannels(process.env),
       baseUrl,
       now: new Date(),
     });
     return result.ok ? { ok: true } : failed;
   } catch (error) {
-    console.error("sending the test email failed", error);
+    logEvent("settings.test_email_failed", { user_id: userId, ...errorFields(error) });
     return failed;
   }
 }

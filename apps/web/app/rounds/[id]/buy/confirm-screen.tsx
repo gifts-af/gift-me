@@ -5,7 +5,7 @@ import Link from "next/link";
 import { classifyTotal, overBudgetLimitCents } from "@gifts-af/core";
 import { storeName } from "@gifts-af/core/store-page/link";
 import { IdeaPhoto } from "@/components/idea-photo";
-import { shortDate } from "@/components/occasion-format";
+import { shortDate } from "@/lib/occasion-format";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";

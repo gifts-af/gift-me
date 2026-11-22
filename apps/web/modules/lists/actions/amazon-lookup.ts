@@ -2,6 +2,7 @@
 
 import { appSettingInt } from "@/lib/app-settings";
 import { logEvent } from "@/lib/log";
+import { zincAppKey } from "@/lib/wiring";
 import { createClient } from "@/lib/supabase/server";
 import { amazonPasteDetails } from "@/modules/concierge";
 import { lookUpAmazonProduct, type AmazonLookupResult } from "@/modules/lists/lib/amazon-lookup";
@@ -28,10 +29,7 @@ export async function lookUpAmazon(asin: unknown): Promise<AmazonLookupResult> {
     appSettingInt("zinc_lookup_cents", supabase),
   ]);
 
-  // The app's own Zinc key (T17), never a person's wallet key.
-  const base = process.env.ZINC_API_BASE;
-  const key = process.env.ZINC_API_KEY;
-  const http = base && key ? { base, timeoutMs, fetch } : null;
+  const zinc = zincAppKey();
 
   return lookUpAmazonProduct(
     { asin, userId },
@@ -42,7 +40,9 @@ export async function lookUpAmazon(asin: unknown): Promise<AmazonLookupResult> {
         if (error) throw Object.assign(new Error("take_amazon_lookup failed"), { code: error.code });
         return data === true;
       },
-      details: http && key ? (id, takeQuota, signal) => amazonPasteDetails(http, key, id, takeQuota, signal) : null,
+      details: zinc
+        ? (id, takeQuota, signal) => amazonPasteDetails({ base: zinc.base, timeoutMs, fetch }, zinc.key, id, takeQuota, signal)
+        : null,
       log: logEvent,
       now: Date.now,
     },

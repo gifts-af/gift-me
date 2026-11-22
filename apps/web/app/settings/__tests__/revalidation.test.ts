@@ -24,7 +24,7 @@ vi.mock("@/lib/account-address", () => ({
   setSharing: m.setSharing,
 }));
 vi.mock("@/modules/concierge", () => ({ startConnect: m.startConnect, pollConnect: m.pollConnect, disconnectZinc: m.disconnectZinc }));
-vi.mock("../zinc-deps", () => ({ placeHeld: vi.fn(), zincWiring: m.zincWiring }));
+vi.mock("@/lib/wiring", () => ({ placeHeld: vi.fn(), zincWiring: m.zincWiring }));
 
 import { removeMyAddressAction, saveMyAddressAction, setSharingAction } from "../address-actions";
 import { disconnectZincAccount, pollZincConnect, startZincConnect } from "../actions";

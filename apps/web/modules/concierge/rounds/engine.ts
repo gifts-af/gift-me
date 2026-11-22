@@ -14,7 +14,7 @@ import {
   type ScheduleSettings,
   type StepKey,
 } from "@gifts-af/core";
-import { OCCASION_NAMES, shortDate } from "@/components/occasion-format";
+import { OCCASION_NAMES, shortDate } from "@/lib/occasion-format";
 import { errorFields, logEvent } from "@/lib/log";
 import type { IdeaOutcome } from "../ideas/run";
 import { notify, type NotifyDeps, type NotifyResult } from "../notify/notify";

@@ -2,11 +2,13 @@
 // ALL-22 and ALL-25; adding to My list, ALL-78). Only the extension's own
 // origin gets an Allow-Origin header.
 
+import { logEvent } from "@/lib/log";
+
 /** Read at request time so a missing value fails the request, not the build. */
 export function allowedOrigin(): string | null {
   const id = process.env.NEXT_PUBLIC_EXTENSION_ID;
   if (!id) {
-    console.error("NEXT_PUBLIC_EXTENSION_ID is not set; the extension routes are disabled.");
+    logEvent("extension.origin_unset", {});
     return null;
   }
   return `chrome-extension://${id}`;

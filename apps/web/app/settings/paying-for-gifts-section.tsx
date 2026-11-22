@@ -5,7 +5,7 @@ import { errorFields, logEvent } from "@/lib/log";
 import { getPaymentStatus, hasPaidFeatures, hasZincConnection } from "@/modules/concierge";
 import { cancelZincConnect, disconnectZincAccount, pollZincConnect, saveBuyerPhone, startZincConnect } from "./actions";
 import { PayingForGifts, type PayingInitial } from "./paying-for-gifts";
-import { zincWiring } from "./zinc-deps";
+import { zincWiring } from "@/lib/wiring";
 
 const actions = {
   start: startZincConnect,

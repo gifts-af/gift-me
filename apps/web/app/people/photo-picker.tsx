@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/client";
 import type { SaveResult } from "@/modules/concierge";
+import { errorFields, logEvent } from "@/lib/log";
 
 const BUCKET = "person-photos";
 
@@ -28,7 +29,7 @@ async function tryRemove(store: PhotoStorage, path: string) {
   try {
     await store.remove(path);
   } catch (error) {
-    console.error("Could not remove photo object", path, error);
+    logEvent("people.photo_remove_failed", errorFields(error));
   }
 }
 

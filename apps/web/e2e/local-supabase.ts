@@ -2,18 +2,10 @@ import { execSync } from "node:child_process";
 import path from "node:path";
 
 // Browser tests run against the local Supabase in Docker, never `dev` or
-// `prod`. CI sets these from `supabase status`; locally they're read from the
-// running stack.
+// `prod`. Its address and keys are read from the running stack, locally and in CI.
 export type LocalSupabase = { url: string; publishableKey: string; serviceRoleKey: string };
 
 export function localSupabase(): LocalSupabase {
-  const fromEnv = {
-    url: process.env.E2E_SUPABASE_URL,
-    publishableKey: process.env.E2E_SUPABASE_PUBLISHABLE_KEY,
-    serviceRoleKey: process.env.E2E_SUPABASE_SERVICE_ROLE_KEY,
-  };
-  if (fromEnv.url && fromEnv.publishableKey && fromEnv.serviceRoleKey) return fromEnv as LocalSupabase;
-
   const out = execSync("pnpm -s supabase status -o env", {
     cwd: path.resolve(__dirname, "../../.."),
     encoding: "utf8",

@@ -110,7 +110,7 @@ describe("PhotoPicker", () => {
   it("still reports success when removing the old object throws", async () => {
     const t = setup();
     t.storage.remove.mockRejectedValue(new Error("gone"));
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
     await choose(photo);
     await vi.waitFor(() => expect(t.onSaved).toHaveBeenCalled());
     expect(screen.queryByRole("alert")).toBeNull();

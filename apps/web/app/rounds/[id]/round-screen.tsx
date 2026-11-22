@@ -4,7 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { FACT_VALUE_MAX, overBudgetLimitCents, picksBar, type RejectionCode } from "@gifts-af/core";
 import { IdeaPhoto } from "@/components/idea-photo";
-import { OCCASION_NAMES, shortDate } from "@/components/occasion-format";
+import { OCCASION_NAMES, shortDate } from "@/lib/occasion-format";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";

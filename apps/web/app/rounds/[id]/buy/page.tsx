@@ -9,7 +9,7 @@ import { APP_NAME } from "@/lib/brand";
 import { errorFields, logEvent } from "@/lib/log";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { capsFor, getZincWallet, type RoundPageIdea, type RoundPageView } from "@/modules/concierge";
-import { settingInt, zincWiring } from "@/app/settings/zinc-deps";
+import { settingInt, zincWiring } from "@/lib/wiring";
 import { buyAction } from "../../actions";
 import { OtherAccount } from "../../access";
 import { loadRound, shipToChoices } from "../../load";

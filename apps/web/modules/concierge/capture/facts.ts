@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { SaveResult } from "../settings";
 import { processCapture } from "./extract";
 import { createCookieCaptureStore } from "./supabase-store";
+import { errorFields, logEvent } from "@/lib/log";
 
 /** Reads the person's pending and failed captures, one at a time. */
 export async function readUnreadCaptures(extract: Extract, personId: string): Promise<SaveResult> {
@@ -17,7 +18,7 @@ export async function readUnreadCaptures(extract: Extract, personId: string): Pr
     .in("status", ["pending", "failed"])
     .order("created_at");
   if (error) {
-    console.error("listing unread captures failed", error);
+    logEvent("capture.list_unread_failed", { person_id: personId, ...errorFields(error) });
     return { ok: false, error: "Couldn't read them. Try again." };
   }
   let failed = 0;

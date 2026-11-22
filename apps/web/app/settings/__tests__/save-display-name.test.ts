@@ -13,7 +13,7 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 vi.mock("@/modules/concierge", () => ({}));
-vi.mock("../zinc-deps", () => ({ placeHeld: vi.fn(), zincWiring: vi.fn() }));
+vi.mock("@/lib/wiring", () => ({ placeHeld: vi.fn(), zincWiring: vi.fn() }));
 
 import { saveDisplayName } from "../actions";
 

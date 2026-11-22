@@ -30,7 +30,7 @@ export async function scheduleNotesTip(person: { id: string; name: string }): Pr
         const db = createAdminClient();
         await sendNotesTipOnce(userId, person, {
           store: createSupabaseInboundStore(db),
-          notify: { store: createSupabaseNotifyStore(db), channels: defaultChannels(), baseUrl: siteUrl(), now: new Date() },
+          notify: { store: createSupabaseNotifyStore(db), channels: defaultChannels(process.env), baseUrl: siteUrl(), now: new Date() },
           notesAddress,
         });
       } catch (e) {

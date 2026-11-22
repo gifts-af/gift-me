@@ -26,6 +26,12 @@ describe("errorFields", () => {
     expect(errorFields("boom")).toEqual({ name: "unknown" });
   });
 
+  it("keeps the code of a plain error object, such as a Supabase error, never its message or details", () => {
+    const e = { message: "duplicate key mary@example.com", code: "23505", details: "Key (email)=(mary@example.com)" };
+    expect(errorFields(e)).toEqual({ name: "unknown", code: "23505" });
+    expect(JSON.stringify(errorFields(e))).not.toContain("mary");
+  });
+
   it("leaves out a kind or code that isn't a short plain token", () => {
     const e = Object.assign(new Error("x"), { code: "a@b.com mary's address", kind: { nested: true } });
     expect(errorFields(e)).toEqual({ name: "Error" });

@@ -1,7 +1,7 @@
 import { ListChecks, Sparkles } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { relationshipLabel } from "@gifts-af/core";
-import { OCCASION_NAMES, monthDay, shortDate } from "@/components/occasion-format";
+import { OCCASION_NAMES, monthDay, shortDate } from "@/lib/occasion-format";
 import { PersonAvatar } from "@/components/person-avatar";
 import { PageTitle } from "@/components/app-shell/page-frame";
 import { appSettingInt } from "@/lib/app-settings";

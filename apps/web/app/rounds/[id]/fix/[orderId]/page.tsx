@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { APP_NAME } from "@/lib/brand";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isId } from "@/modules/concierge";
-import { settingInt } from "@/app/settings/zinc-deps";
+import { settingInt } from "@/lib/wiring";
 import { checkPriceAction, replaceAction } from "../../../actions";
 import { OtherAccount } from "../../../access";
 import { loadRound, shipToChoices } from "../../../load";

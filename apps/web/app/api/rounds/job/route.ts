@@ -1,5 +1,5 @@
 import vercelJson from "../../../../vercel.json";
-import { buyingWiring } from "@/app/settings/zinc-deps";
+import { buyingWiring } from "@/lib/wiring";
 import { runRoundJob } from "@/modules/concierge";
 import { handleCallback } from "../queue";
 import { handleJob, jobMaxConcurrency } from "./job";

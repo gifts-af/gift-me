@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { parseOverBudgetPct } from "./settings-rules";
+import { errorFields, logEvent } from "@/lib/log";
 
 export type ConciergeSettings = { overBudgetPct: number };
 export type SaveResult = { ok: true } | { ok: false; error: string };
@@ -48,7 +49,7 @@ export async function saveConciergeSettings(input: { overBudgetPct: string }): P
     .update({ over_budget_pct: overBudgetPct })
     .eq("user_id", userId);
   if (error) {
-    console.error("saving concierge settings failed", error);
+    logEvent("settings.save_failed", { user_id: userId, ...errorFields(error) });
     return { ok: false, error: "Your settings couldn't be saved. Try again." };
   }
   return { ok: true };

@@ -3,6 +3,7 @@ import type { Address, AddressDraft, OccasionKind } from "@gifts-af/core";
 import { appSettingInt } from "@/lib/app-settings";
 import type { ImportAddress } from "./rules";
 import { createClient } from "@/lib/supabase/server";
+import { errorFields, logEvent } from "@/lib/log";
 
 // Everything the people logic needs from the database (ALL-21). The interface
 // keeps service.ts testable with an in-memory store; the Supabase version
@@ -351,7 +352,7 @@ export function createSupabasePeopleStore(): PeopleStore {
     async uploadPhoto(path, bytes, contentType) {
       const supabase = await createClient();
       const { error } = await supabase.storage.from("person-photos").upload(path, bytes, { contentType });
-      if (error) console.error("uploading a contact photo failed", error.message);
+      if (error) logEvent("people.contact_photo_upload_failed", errorFields(error));
       return !error;
     },
 

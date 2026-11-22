@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { classifyTotal, overBudgetLimitCents } from "@gifts-af/core";
 import { IdeaPhoto } from "@/components/idea-photo";
-import { shortDate } from "@/components/occasion-format";
+import { shortDate } from "@/lib/occasion-format";
 import { Button } from "@/components/ui/button";
 import type { RoundPageIdea, RoundPageOrder } from "@/modules/concierge";
 import { money } from "@/app/people/[id]/money";

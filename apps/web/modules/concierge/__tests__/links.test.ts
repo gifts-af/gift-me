@@ -186,12 +186,14 @@ describe("confirmActionLink", () => {
   it("returns invalid and logs (without the token) when the action fails; the link stays used", async () => {
     const store = await storeWithLink();
     vi.spyOn(ACTIONS.test, "run").mockResolvedValue({ ok: false, error: "boom" });
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
     expect(await confirmActionLink(TOKEN, OWNER, { store, now: NOW })).toEqual({
       state: "invalid",
     });
     expect(log).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(log.mock.calls)).toContain("boom");
+    expect(JSON.parse(String(log.mock.calls[0][0]))).toMatchObject({ event: "action_link.failed", action: "test", user_id: OWNER });
+    // Ids only (E6): neither the token nor the action's error text.
+    expect(JSON.stringify(log.mock.calls)).not.toContain("boom");
     expect(JSON.stringify(log.mock.calls)).not.toContain(TOKEN);
     expect(store.links[0].usedAt).toEqual(NOW);
   });
@@ -212,12 +214,14 @@ describe("confirmActionLink", () => {
   it("treats an action that throws like a failure: logged without the token, link stays used", async () => {
     const store = await storeWithLink();
     vi.spyOn(ACTIONS.test, "run").mockRejectedValue(new Error("kaboom"));
-    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
     expect(await confirmActionLink(TOKEN, OWNER, { store, now: NOW })).toEqual({
       state: "invalid",
     });
     expect(log).toHaveBeenCalledTimes(1);
-    expect(JSON.stringify(log.mock.calls)).toContain("kaboom");
+    expect(JSON.parse(String(log.mock.calls[0][0]))).toMatchObject({ event: "action_link.failed", action: "test", user_id: OWNER });
+    // Ids only (E6): neither the token nor the action's error text.
+    expect(JSON.stringify(log.mock.calls)).not.toContain("kaboom");
     expect(JSON.stringify(log.mock.calls)).not.toContain(TOKEN);
     expect(store.links[0].usedAt).toEqual(NOW);
   });

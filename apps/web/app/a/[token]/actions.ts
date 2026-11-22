@@ -31,7 +31,7 @@ export async function confirmLink(token: string): Promise<ConfirmResult> {
     captureStore: (userId: string) => captureStoreFor(db, userId),
     extract: createExtractor(AI_MODELS.extraction),
     inbound: createSupabaseInboundStore(db),
-    notify: { store, channels: defaultChannels(), baseUrl: siteUrl(), now },
+    notify: { store, channels: defaultChannels(process.env), baseUrl: siteUrl(), now },
   });
   const result = await confirmActionLink(token, viewerId, { store, now, notes });
   if (result.state === "done" && result.straight && result.next) redirect(result.next);

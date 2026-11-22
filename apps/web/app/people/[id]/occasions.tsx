@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { OCCASION_NAMES, shortDate } from "@/components/occasion-format";
+import { OCCASION_NAMES, shortDate } from "@/lib/occasion-format";
 import { Switch } from "@/components/ui/switch";
 import type { PersonDetail, SaveResult } from "@/modules/concierge";
 

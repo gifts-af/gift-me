@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { NativeSelect } from "@/components/ui/native-select";
 import type { ImportResult } from "@/modules/concierge";
+import { errorFields, logEvent } from "@/lib/log";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
@@ -55,7 +56,7 @@ export function ImportChecklist({
     try {
       setStage({ kind: "list", contacts: await load() });
     } catch (e) {
-      console.error("loading Google contacts failed", e);
+      logEvent("people.contacts_load_failed", errorFields(e));
       setStage({ kind: "failed" });
     }
   }

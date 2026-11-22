@@ -6,7 +6,7 @@ import { getMyAddress } from "@/lib/account-address";
 import { createClient } from "@/lib/supabase/server";
 import { todayForRequest } from "@/lib/today";
 import { getPerson, roundAccess, roundView, type RoundPageView } from "@/modules/concierge";
-import { roundDbDeps } from "@/app/settings/zinc-deps";
+import { roundDbDeps } from "@/lib/wiring";
 import type { Place, RecipientAddress } from "./ship-to";
 
 // What the confirm and fix pages read on load (ALL-29). Only reads (AC-4a). Whose round it is

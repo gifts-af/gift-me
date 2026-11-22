@@ -6,8 +6,8 @@ import { localSupabase } from "./e2e/local-supabase";
 // Browser tests (ALL-20). They need the local Supabase running
 // (`pnpm supabase start`). They run against a production build, as CI's do: under
 // `pnpm dev`, Next's overlay blocks clicks and slow compiling lets clicks land
-// before the page responds (ALL-99). Local runs build first; CI builds in an
-// earlier step. The run only uses the server it started itself: if anything else
+// before the page responds (ALL-99). Every run, local or CI, builds first with the
+// settings below, so both test the same build. The run only uses the server it started itself: if anything else
 // holds the port, ours fails to start and so does the run (ALL-99, ALL-108). To
 // test a running server on purpose, set E2E_BASE_URL.
 const supabase = localSupabase();
@@ -15,8 +15,8 @@ const supabase = localSupabase();
 const port = Number(process.env.E2E_PORT ?? 3100);
 const CI = Boolean(process.env.CI);
 // Cloudflare's published Turnstile test keys (ALL-68): the widget always
-// passes and its dummy token always verifies. CI's build gets the site key
-// from the workflow, since NEXT_PUBLIC_ values are fixed at build time.
+// passes and its dummy token always verifies. The build below bakes in the site key,
+// since NEXT_PUBLIC_ values are fixed at build time.
 const TURNSTILE_TEST_SITE_KEY = "1x00000000000000000000AA";
 const TURNSTILE_TEST_SECRET_KEY = "1x0000000000000000000000000000000AA";
 
@@ -47,14 +47,15 @@ export default defineConfig({
   webServer: process.env.E2E_BASE_URL
     ? undefined
     : {
-        command: CI ? `pnpm start --port ${port}` : `pnpm build && pnpm start --port ${port}`,
+        command: `pnpm build && pnpm start --port ${port}`,
         // Wait for this run's own server to say it's listening, not for the port
         // to answer: another checkout can take the port during the ~30 s build, and
         // a URL check would then pass on its server (ALL-108). If ours can't start
         // (EADDRINUSE), it exits and the run fails.
         wait: { stdout: /Ready in/ },
         reuseExistingServer: false,
-        timeout: 120_000,
+        // The build is part of this wait: about 30 s locally, longer on CI's runners.
+        timeout: 300_000,
         env: {
           NEXT_PUBLIC_SUPABASE_URL: supabase.url,
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: supabase.publishableKey,

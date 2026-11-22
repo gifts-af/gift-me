@@ -9,7 +9,7 @@ import { TopBar } from "@/components/app-shell/top-bar";
 import { APP_NAME } from "@/lib/brand";
 import { createClient } from "@/lib/supabase/server";
 import { roundAccess, roundView } from "@/modules/concierge";
-import { roundDbDeps } from "@/app/settings/zinc-deps";
+import { roundDbDeps } from "@/lib/wiring";
 import { outlookAction, rejectAction, setBudgetAction } from "../actions";
 import { OtherAccount } from "../access";
 import { RoundScreen } from "./round-screen";
