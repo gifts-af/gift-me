@@ -101,7 +101,7 @@ How the concierge's intelligence works (matches design §3.1):
 
 ## 6. Money model (D34, D58)
 - **Free:** managing and sharing gift lists.
-- **A transparent fee per gift (D58, owner 2026-11-22):** each gift bought through GiftsAF shows a flat "GiftsAF fee" as its own line at checkout. The fee's name links to a breakdown of what it pays for. At launch it covers our costs only and says so ("launch pricing"); a margin is added as adoption grows. This replaces the premium subscription idea for the concierge. The amount is still to set (ALL-76).
+- **A transparent fee per gift (D58, owner 2026-11-22):** each gift bought through GiftsAF shows a flat "GiftsAF fee" as its own line at checkout. The fee's name links to a breakdown with an amount for each part, our average cost per gift, read from cost tracking (ALL-144). At launch it covers our costs only and says so ("launch pricing"); a margin is added as adoption grows. This replaces the premium subscription idea for the concierge. The amount is still to set (ALL-76).
 - **Per run (option):** concierge runs people schedule for their own list could carry a small fee that covers our AI cost, instead of or alongside limits (idea 7).
 - **Affiliate links (option):** commission on purchases made through GiftsAF, never used to rank or pick gifts (PRD G-5; idea 10, ALL-84).
 
