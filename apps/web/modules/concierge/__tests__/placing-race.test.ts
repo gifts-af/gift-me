@@ -1,4 +1,3 @@
-// @vitest-environment node
 // Two real connections to local Supabase race the money-path functions
 // against each other (ALL-32 Task 2, AC-18, AC-24, AC-25, review focus 4).
 // Every function locks the round row first, so one waits for the other and

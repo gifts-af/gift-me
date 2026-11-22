@@ -1,4 +1,3 @@
-// @vitest-environment node
 // The Supabase NotifyStore's "Who is this about?" parts (ALL-31 Task 8, AC-4) and the file_note
 // action through it, against the real local database (E5): the link columns, and
 // file_inbound_message letting only the first button win. Skipped when the stack isn't running.

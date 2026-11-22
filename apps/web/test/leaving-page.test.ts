@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
 import { finishBeforeLeaving, LEAVE_WAIT_MS, onBeforeLeaving } from "@/lib/leaving-page";
 

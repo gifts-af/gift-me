@@ -1,4 +1,3 @@
-// @vitest-environment node
 // POST /api/lists/items (ALL-78): CORS for the extension only, sign-in, the off
 // switch (AC-20), the shape version (AC-21) and each outcome's status. The add's
 // own logic is modules/lists/lib/__tests__/extension-add.test.ts.

@@ -1,4 +1,3 @@
-// @vitest-environment node
 // The Amazon paste lookup's daily allowance against the real local database (E5, money,
 // ALL-141): the server action takes lists.take_amazon_lookup through the signed-in
 // person's own client, the first `limit` lookups reach Zinc, the next is over_limit and

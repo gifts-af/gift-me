@@ -1,4 +1,3 @@
-// @vitest-environment node
 // The Supabase InboundStore (ALL-31 Task 5) on the service-role client: RLS doesn't apply, so
 // each query must keep to the one user itself. Real local database (E5); skipped when it isn't
 // running. Needs migration 20261116100000_inbound_notes.

@@ -1,4 +1,3 @@
-// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { installPlatform, isRunningInstalled, isSnoozed } from "@/lib/install-tip";
 

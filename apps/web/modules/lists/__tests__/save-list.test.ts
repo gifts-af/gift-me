@@ -1,4 +1,3 @@
-// @vitest-environment node
 // Saving My list against the real local database (E5, ALL-127): each save
 // carries the list's version, a stale one is refused with the latest list, and
 // the close route's remove drops only the ids it names. Skipped when the local

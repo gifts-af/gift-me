@@ -12,6 +12,7 @@
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
+    "test:changed": "pnpm -r test:changed",
     "db:test": "supabase test db",
     "db:start:tests": "supabase start -x studio,imgproxy,mailpit,edge-runtime,logflare,vector,supavisor,realtime,storage-api,postgres-meta",
     "test:db": "pnpm --filter @gifts-af/web test:db",

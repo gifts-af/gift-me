@@ -72,6 +72,7 @@ pnpm supabase db reset # rebuild the local database from the migrations, e.g. af
 pnpm supabase stop     # stop the containers; your local data is kept
 pnpm db:start:tests    # start only the services the tests need (no Studio or Mailpit); what CI runs
 pnpm db:test           # run the database tests in supabase/tests/ (privacy rules, keys, cascades)
+pnpm test:changed      # quick local loop: only the unit tests your changes since origin/main affect (a change to a Vitest config reruns everything). CI always runs the full `pnpm test`
 pnpm test:db           # run the Vitest files that use the real local database and its API (order races, buying, Zinc connect and events; `pnpm test` leaves them out). Needs `pnpm supabase start`; skips when it isn't running, but fails in CI, whose db job starts it
 pnpm check:bundle      # after pnpm build: fail if a Zinc key prefix or a Vault function name is in the browser code (CI runs it)
 pnpm db:types          # regenerate packages/core/src/database.types.ts after changing the schema
@@ -106,6 +107,8 @@ Write new migrations with `pnpm supabase migration new <name>` and test them loc
 - **Signing in.** Call `signIn(page)` from `e2e/sign-in.ts` (or `signIn(page, user)` for `SECOND_USER` or an account from `createFreshUser()`), then open the page you're testing. It signs in through Supabase's API, without the login form, so it's fast. Only tests of the login form itself fill in the form: `pnpm lint` fails any other test that finds the password field (by label, placeholder or role), and those tests disable the rule on that line with a comment saying why (ALL-107).
 
 **What CI skips (ALL-117):** a push to `main` that only changes `planning/`, `design/` or Markdown files runs no CI, including `migrate`. The PR title check is its own workflow (`.github/workflows/pr-title.yml`), so fixing a title re-runs only that. Changing a PR's base branch no longer re-runs `check`; push again to re-test against the new base.
+
+**Unit tests in the web app** run in plain Node, except component tests (`.tsx`, `.jsx`), which get a fake browser (jsdom) and `test/setup.ts`. A `.ts` test that needs `window` or `localStorage` starts with `// @vitest-environment jsdom` (ALL-147).
 
 **Running the web app:** follow [apps/web/README.md](../apps/web/README.md) to link Vercel and pull the environment variables, then `pnpm dev`. Before a PR, `pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm check:bundle` (CI runs the same).
 

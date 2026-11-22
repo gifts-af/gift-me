@@ -1,4 +1,3 @@
-// @vitest-environment node
 // The close route (ALL-127): a tab going away with a remove held for Undo posts
 // the ids here with fetch keepalive. It checks who and where the request is
 // from, takes only { listId, version, removeIds }, and saves through the

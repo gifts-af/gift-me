@@ -39,15 +39,27 @@ export default defineConfig({
     },
   },
   test: {
-    environment: "jsdom",
+    // Logic tests run in plain Node; only component tests (.tsx, .jsx) pay for the fake
+    // browser and its setup file. A .ts test that needs a browser says `@vitest-environment jsdom`.
+    environment: "node",
     globals: true,
-    setupFiles: ["./test/setup.ts"],
+    pool: "threads",
     projects: [
       {
         extends: true,
         test: {
           name: "unit",
-          include: ["**/*.{test,spec}.{js,jsx,ts,tsx}"],
+          include: ["**/*.{test,spec}.{js,ts}"],
+          exclude: [...EXCLUDE, ...LOCAL_DB_TESTS],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "unit-dom",
+          environment: "jsdom",
+          setupFiles: ["./test/setup.ts"],
+          include: ["**/*.{test,spec}.{jsx,tsx}"],
           exclude: [...EXCLUDE, ...LOCAL_DB_TESTS],
         },
       },

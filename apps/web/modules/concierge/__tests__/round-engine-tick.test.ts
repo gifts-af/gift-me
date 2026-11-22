@@ -1,4 +1,3 @@
-// @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import { advanceRound, runTick, type EngineZinc } from "../rounds/engine";
 import { USER, PERSON, OCCASION, NAME, EMAIL, BASE, at, harness, events, captureLog } from "./round-engine-fakes";

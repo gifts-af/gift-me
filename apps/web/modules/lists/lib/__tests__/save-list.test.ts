@@ -1,4 +1,3 @@
-// @vitest-environment node
 // saveChecked's own shape, on a fake client: what comes back after a save and
 // what's logged on a failure (E6: ids and the error code only). The real
 // database behaviour is modules/lists/__tests__/save-list.test.ts and

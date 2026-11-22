@@ -1,4 +1,3 @@
-// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import recordedText from "../fixtures/recorded/extract.json";
 import { isSensitive } from "../sensitive";

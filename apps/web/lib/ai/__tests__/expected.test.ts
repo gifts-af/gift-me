@@ -1,4 +1,3 @@
-// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import expected from "../fixtures/expected.json";
 import recordedScreens from "../fixtures/recorded/screens.json";

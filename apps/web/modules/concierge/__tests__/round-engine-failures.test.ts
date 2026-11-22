@@ -1,4 +1,3 @@
-// @vitest-environment node
 import { addDays } from "@gifts-af/core";
 import { describe, expect, it, vi } from "vitest";
 import { runTick, type EngineZinc } from "../rounds/engine";

@@ -1,4 +1,3 @@
-// @vitest-environment node
 // Connect, phone, disconnect (ALL-32 Task 4, AC-1 to AC-9, AC-12). Our own
 // database is real (local Supabase, E5); only Zinc is faked. Skipped when the
 // local database isn't running (the unit-test CI job has none).

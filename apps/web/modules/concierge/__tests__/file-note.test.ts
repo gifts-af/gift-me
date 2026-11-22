@@ -1,4 +1,3 @@
-// @vitest-environment node
 // The "Who is this about?" buttons (ALL-31 Task 8, AC-4): file_note through the action-link
 // flow, on the in-memory stores. The real file_inbound_message and the link columns are
 // covered against the database in notify-store.test.ts.

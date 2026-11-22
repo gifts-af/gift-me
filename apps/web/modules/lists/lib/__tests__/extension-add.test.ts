@@ -1,4 +1,3 @@
-// @vitest-environment node
 // Adding a gift from the extension (ALL-78), on a fake store: the form's shape,
 // each add_item outcome, the photo's queue → upload → add order and its clean-up
 // (AC-9c), and the one event per add with ids only (AC-22, E6). The database side

@@ -1,4 +1,3 @@
-// @vitest-environment node
 // The webhook route's checks before it trusts a body (ALL-32): id shape and size cap.
 import { describe, expect, it, vi } from "vitest";
 import { readWebhookBody } from "../zinc/guard";

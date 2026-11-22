@@ -1,4 +1,3 @@
-// @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import { EMAIL_FROM } from "@/lib/brand";
 import { fetchMessageId, sendEmail } from "@/lib/resend";

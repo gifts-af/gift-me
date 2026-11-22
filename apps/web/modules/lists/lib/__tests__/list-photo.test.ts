@@ -1,4 +1,3 @@
-// @vitest-environment node
 // AC-6 (ALL-78): a gift added from the extension with a photo shows that photo
 // on My list and the shared list. add_item stores the photo's public URL as the
 // gift's image_url (supabase/tests/extension_add.test.sql); these check that

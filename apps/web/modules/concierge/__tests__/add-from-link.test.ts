@@ -1,4 +1,3 @@
-// @vitest-environment node
 // Adding a list's owner from its share link, against the real local database
 // (E5, ALL-123 AC-21): the add and the link are one transaction, so a
 // double-tapped Save makes one person, never two (two people would mean two

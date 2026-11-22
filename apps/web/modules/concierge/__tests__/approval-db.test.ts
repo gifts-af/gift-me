@@ -1,4 +1,3 @@
-// @vitest-environment node
 // Rejecting a round's ideas, the open round's budget, and the round screen's reads (ALL-29
 // Task 9: AC-3, AC-9, AC-12, AC-13a, AC-18, AC-25, AC-29, AC-30, AC-30a) on the real local
 // database (E5): the service-role client for the writes and roundAccess, and a signed-in

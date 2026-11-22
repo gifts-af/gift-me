@@ -1,4 +1,3 @@
-// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { roundReturnPath, safeNext } from "@/lib/safe-next";
 

@@ -1,4 +1,3 @@
-// @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import { localStack } from "../../../test/local-db";
 import { tellOrdered, tellOwnerOfRejection, tellOwnersOfRejections } from "../rounds/money-path";
