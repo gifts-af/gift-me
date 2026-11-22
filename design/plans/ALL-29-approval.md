@@ -1,8 +1,8 @@
 # ALL-29 Approval: Spec and Plan
 
-**Goal:** a buyer can buy a suggested gift from the heads-up email in two taps, pick several or none of a round's ideas in the app, and fix a gift that hit a problem, and rounds are switched on in production for test and admin users.
+**Goal:** a buyer can buy a suggested gift from the heads-up email in two taps, pick several or none of a round's ideas in the app (gifts from the person's own list first), and fix a gift that hit a problem, and rounds are switched on in production for test and admin users.
 
-**Status:** Spec approved by the owner, 2026-11-22, after its adversarial review (T55) and the owner's six answers.
+**Status:** Spec approved by the owner, 2026-11-22, after its adversarial review (T55) and the owner's six answers. Revised the same day after the plan's adversarial review and four more owner decisions (list gifts built here, "Which one?", None of these with no runs left, Zinc-supported stores).
 
 **Links:** [ALL-29](https://linear.app/allens-forever/issue/ALL-29). Design §4.2, §6.5. PRD A-1, A-3, A-4, B-4, G-2, G-3. Planning decisions 2, 23, 36, 37, 38, 45, 53. Technical decisions T18, T29, T31, T51, T56, T68, T71, T76. Mock-ups: [ALL-29 approval](https://claude.ai/artifact/UB35r46GYrCddcLj2Frxhh) (this ticket, owner approved 2026-11-22) and the signed-off ALL-41 screens [Mom: pick from her list](https://claude.ai/artifact/BvdSVB6RPatUPRbBDyPRzW#approval), [Dad: suggested ideas](https://claude.ai/artifact/BvdSVB6RPatUPRbBDyPRzW#ideas), [Where it goes](https://claude.ai/artifact/BvdSVB6RPatUPRbBDyPRzW#ship-to) and [Price went up](https://claude.ai/artifact/BvdSVB6RPatUPRbBDyPRzW#needs-attention).
 
@@ -17,14 +17,15 @@
 ### Who it's for and what they can do
 
 1. **Buy from the email in two taps:** as a buyer, each idea in the heads-up email has its own "Buy this" link. Tap 1 opens a confirm page with everything that will happen (photo, total with the fee, arrival date, where it ships, the money notice). Tap 2 buys it. So a gift I like costs me two taps.
-2. **Pick one or more:** as a buyer, the round screen lists the round's ideas, with photo, title, store, full cost, arrive-by date and the reason each fits. I tick one or more and continue to the same confirm page. Ideas from the person's own list say so, and gifts someone else claimed are greyed out (decisions 36, 37).
+2. **Pick one or more:** as a buyer, the round screen lists the round's ideas, with photo, title, store, full cost, arrive-by date and the reason each fits. I tick one or more and continue to the same confirm page. Ideas from the person's own list come first and say so, and gifts someone else claimed are greyed out (decisions 36, 37).
 3. **Over budget only on purpose:** as a buyer, picking the over-budget idea, or picks that add up past the budget, asks me first ("Yes, pick it" / "Keep within budget"). Without that, nothing over budget can be bought, and nothing past the over-budget allowance can be bought at all (B-4, §4.2).
 4. **Set a budget where it's first useful:** as a buyer with no budget for this person and occasion, the round screen offers an optional "Your budget" field. What I type is saved as that person's budget for that occasion and marks ideas over it (decision 45, ALL-21).
 5. **Choose where it ships and add a note:** as a buyer, the confirm page ships to the recipient by default. I can switch to my own address or another address (D38), and add an optional gift note.
-6. **None of these:** as a buyer, I can reject a round's ideas with a reason (chips plus optional text). The reason is saved to what the app knows about the person, the round looks again, and I get new ideas by email, never the same products again (G-3).
+6. **None of these:** as a buyer, I can reject a round's ideas with a reason (chips plus optional text). The reason is saved to what the app knows about the person, the round looks again, and I get new ideas by email, never the same products again (G-3). If the round has no new searches left, the sheet says so before I confirm, and the ideas stay buyable.
 7. **Fix a gift that hit a problem:** as a buyer, when a gift's price went up, I can buy it at the new price if that still fits the budget rules, or buy the next-best idea in one tap. When it's out of stock, failed, or its address couldn't be used, I can buy the next-best idea or open all ideas (§6.5 steps 4–5).
 8. **Photos on ideas:** as a buyer, every idea card shows the product photo when the store has one.
 9. **Rounds on in production:** as the owner, rounds run on production for test and admin users, and one real round goes from start to heads-up to a real order.
+10. **Gifts from their own list first:** as a buyer whose person is linked to their own gift list, the round offers that list's unclaimed gifts first, each priced and dated live, from any store Zinc can buy from. AI ideas are added only when fewer than 3 list gifts qualify. A list gift Zinc can't buy still shows, with "Buy it yourself" (decisions 36, 37, T31 (5)).
 
 ### Acceptance criteria
 
@@ -42,16 +43,16 @@
 | AC-9 | No budget for this person and occasion (round `budget_cents` is null) | The buyer types one in "Your budget" on the round screen | It's saved as that person's budget for that occasion (`save_budgets`), and the open round's `budget_cents` is set from it under the round lease, with each idea's `over_budget` recomputed. This revises T73's "a round copies its budget when it starts" for this one case. `approveAndBuy` re-reads the round after taking the lease, so the cap is never computed from an older budget. Left empty, nothing is saved and it's not asked again this round |
 | AC-10 | The confirm page | The buyer changes "Ships to" to themselves or another address | The order ships there (`orders.ship_to` is `buyer` or `other`), and another address can be saved to the person (D38, T31). Without a usable address, they're sent to add one and then come back |
 | AC-11 | The confirm page | The buyer adds a gift note | It's sent with the order, and it can't be longer than `zinc_gift_message_max_chars`. The note never appears in events or logs (E6) |
-| AC-12 | A round in `awaiting_approval` with no live orders | The buyer chooses "None of these", picks a reason chip and optionally types more | Under the round lease: a `rejections` row is saved for each idea, each idea becomes `rejected`, and the round goes back to `generating`. "Already has one" saves an `owns` fact; "Not their style" and "Too generic" save an `avoid` fact; the free text is saved as its own fact. Each fact has `source = 'rejection'`, stays under the 500-character limit, and bumps `updated_at` even when the same value already exists, so it counts as new for the idea engine's extra run (ALL-27 AC-9). "Too pricey" saves no fact: the next run searches under the cheapest rejected idea's total. The next run never shows those products again. "None of these" isn't offered on a round in any other state |
+| AC-12 | A round in `awaiting_approval` with no live orders | The buyer chooses "None of these", picks a reason chip and optionally types more | Under the round lease, when the round has a new search left (AC-13a otherwise): a `rejections` row is saved for each idea, each idea becomes `rejected`, and the round goes back to `generating`. "Already has one" asks "Which one?"; the buyer taps the idea they already have and its title is saved as an `owns` fact. "Not their style" and "Too generic" save one `avoid` fact naming the titles. The free text is saved as its own `avoid` fact. Each fact has `source = 'rejection'`, stays within the 500-character limit, keeps its `active` flag, and bumps `updated_at` even when the same value already exists, so it counts as new for the idea engine's extra run (ALL-27 AC-9). "Too pricey" saves no fact: the next run searches under the cheapest rejected idea's total. The next run never shows those products or list gifts again. "None of these" isn't offered on a round in any other state |
 | AC-12a | A round whose ideas were all rejected | The next tick runs it | The run starts and saves new ideas: the idea engine counts only ideas that aren't `rejected` when deciding a round already has ideas (`start_idea_run`, `save_ideas`) |
 | AC-12b | A rejected idea, or one that isn't `proposed` any more | Someone opens an old "Buy this" link or a stale tab and presses Buy | Nothing is bought: `approve_round` and `replace_failed_order` refuse ideas that aren't `proposed` (except, for `replace_failed_order`, the failed order's own idea, which is `selected`, when it's re-bought at a new price (AC-14) or to a new address (AC-15a)), and the page says those ideas were replaced |
-| AC-13 | A rejected round gets new ideas | The run saves ideas | A new heads-up email goes out with the new ideas. Every send step after a rejection is keyed per idea set (`heads_up:2`, `reminder_1:2`, …), so the new ideas get their own heads-up and reminders. If the run finds nothing, the existing "couldn't get gift ideas" email goes out instead |
-| AC-13a | A "None of these" when the round has used all its idea runs | The buyer rejects | The reason is saved, the round stays open until its deadline, and the page and one email say there are no more new ideas this time: pick from the remaining ideas on the person's page or buy it yourself |
-| AC-14 | An order failed with `price_up` | The buyer opens the gift's fix page | The page looks up today's price (one product lookup, inside the paid-features check) and shows the old and new totals. "Buy at about $new" replaces the failed order through `replace_failed_order`, with the cap worked out like `approveAndBuy`'s: other orders' committed spend counted, then the budget check (AC-6's deliberate choice if over, refused past the allowance). Once only |
+| AC-13 | A rejected round gets new ideas | The run saves ideas | A new heads-up email goes out with the new ideas. The rejection renames the round's sent approval emails (`heads_up` to `heads_up@1`, `reminder_1` to `reminder_1@1`, …, `@2` the second time), so the new ideas get their own heads-up and reminders under the usual keys. If the runs find nothing, the existing "couldn't get gift ideas" email goes out instead, under its usual rules, and nothing else |
+| AC-13a | A round with no new search left, counting the extra run the chosen reason's fact would allow (`round_idea_state`'s rule) | The buyer opens "None of these" and picks a reason | Before confirming, the sheet says "No more new ideas this time". Confirming saves the reason (a `rejections` row with no idea, and its facts) and nothing else: the current ideas stay `proposed` and buyable until the deadline, the round stays `awaiting_approval`, and no new-ideas email goes out. If the answer changed between the sheet and the confirm, nothing is saved and the sheet shows again |
+| AC-14 | An order failed with `price_up` | The buyer opens the gift's fix page | The page looks up today's price (one product lookup for the idea's own offer, inside the paid-features check) and shows the old and new totals. "Buy at about $new" looks the price up once more under the round lease ($0.01) and refuses if it rose above what the page showed. Then it replaces the failed order through `replace_failed_order`, which saves the new total on the idea (so the order's cap follows it), with the cap worked out like `approveAndBuy`'s: other orders' committed spend counted, then the budget check (AC-6's deliberate choice and "Buy anyway" if over, refused past the allowance). Once per gift: if the price rises again, the fix page offers "See all ideas" instead |
 | AC-15 | An order failed with `price_up`, `out_of_stock`, `failed` or `too_late` | The buyer opens the gift's fix page | They see what happened in plain words and the next-best idea (highest-ranked `proposed` idea in the round that can still arrive in time), with "Buy this instead". `replace_failed_order` takes the lease, checks the round is open and before its ship-by date, checks the failed order is unresolved and current, re-checks list claims and that the idea is `proposed`, counts the other picks' committed spend, then resolves the failure and inserts the new order in one transaction. The new order keeps the failed one's ship-to and gift note. With no next-best idea left, they see "See all ideas" |
-| AC-15a | An order failed with `address_withdrawn` or `address_rejected` | The buyer opens the gift's fix page | The gift is offered again, not a different one: ship it to the buyer, to another address, or to the person's own address once one is added, read fresh at that moment. It's never sent to the withdrawn or rejected shared address |
+| AC-15a | An order failed with `address_withdrawn` or `address_rejected` | The buyer opens the gift's fix page | The gift is offered again, not a different one: ship it to the buyer, to another address, or to the person's own address once one is added, read fresh at that moment (only while no list owner shares an address for them, T61). The new order ships to that fixed address (`ship_to` `buyer` or `other`, its snapshot saved), never re-read from the recipient, so it's never sent to the withdrawn or rejected shared address |
 | AC-16 | A round in `needs_attention` | Its emails are built | The "needs your attention" email and the `failed_several` summary link each gift to its own re-approval page (ALL-116 `FailedGift.action`), not the person's page. Failures are read from the orders, not `attention_reason` (ALL-116) |
-| AC-17 | Ideas are saved by a run | The run resolves each kept idea | The idea gets the product's photo URL (https only) when Zinc has one. Cards and the confirm page show it with `referrerpolicy="no-referrer"`; without one (including gifts from the person's own list) they show the gift icon. Photos come only from Zinc, never a URL the AI wrote |
+| AC-17 | Ideas are saved by a run | The run resolves each kept idea | The idea gets the product's photo URL (https only) when Zinc has one, list gifts included. Cards and the confirm page show it with `referrerpolicy="no-referrer"`; without one they show the gift icon. Photos come only from Zinc, never a URL the AI wrote or a list item's own picture. A photo lookup never pushes a run over its cost cap or drops an idea |
 | AC-18 | A link or page for a round that's no longer open (ordered, skipped, past its deadline) | The buyer opens it | They see what happened ("Already ordered: LEGO Botanical Orchid", "This occasion has passed") and nothing can be bought. Buying twice from two tabs places one order (the `approve_round` lease and guards) |
 | AC-19 | Two people or two tabs act on one round at once | Both press Buy | One order set is placed; the other sees what was bought (`claimed`/`busy`) |
 | AC-20 | Rounds are switched on in production (moved from ALL-27, decision 53), after ALL-134 ships (the owner approved the AI spend, 2026-11-22) | The owner sets `round_engine_enabled` (app-wide; rounds reach only test and admin users through the paid-features flag) | One real round goes from start to heads-up email to approval with real ideas. Evidence on this ticket |
@@ -61,6 +62,11 @@
 | AC-24 | Auto top-up (moved from ALL-32). Charges the owner's real card, so the owner confirms right before it runs (owner, 2026-11-22) | Turned on only for this test, with Zinc's $15 minimum and a daily limit of about $30, and a gift costing more than the balance | Zinc charges the card and the order goes ahead. Auto top-up goes off again afterwards |
 | AC-25 | A rejection reason saved from AC-12 | The person's page is opened, and the next ideas are made | The reason shows under what we know about them, and the next ideas avoid it (ticket AC) |
 | AC-26 | A phone and a computer, light and dark | Each new screen is shown | It fits with no sideways scroll, and every tap target is at least 44px (`@layout` tests) |
+| AC-27 | A round for a person linked to a list (`lists.person_list`) with unclaimed gifts | The round's idea run starts | Each unclaimed list gift is priced and dated live through Zinc by its store: Amazon and Walmart through the offers lookup, Best Buy, Shopify and Etsy through `GET /products/{id}`, any other store link through `GET /retailers/check?url=` (`spikes/checkout.md` answer 7). Each call costs `zinc_lookup_cents` inside the run's cost cap. A gift qualifies when Zinc can buy from its store, it can arrive in time, and it's within the over-budget allowance; it's saved as a `gift_ideas` row with `source = 'list'` and `list_item_id`, ranked first, in list order |
+| AC-28 | That run | Fewer than 3 list gifts qualify | The AI brainstorm runs and adds ideas up to `idea_keep_max`. With 3 or more, there's no brainstorm and no AI cost. A person with no facts but qualifying list gifts still gets a round (no `no_ideas` email) |
+| AC-29 | A list gift from a store Zinc can't buy from, or one that didn't qualify | The round screen is shown | It's listed under "From their list" with "Buy it yourself", linking to its product page. It's never bought |
+| AC-30 | A list gift someone else claimed | The round screen or confirm page is shown | It's greyed out and can't be picked; `approve_round` refuses it (`claimed`). A list gift the buyer approves is claimed for them through `lists.claim_for_order`, and released if the order fails or is cancelled (ALL-30, T31 (6)) |
+| AC-31 | A list gift that was rejected or given | Any later run for that person | It's never offered again |
 
 ### Out of scope
 
@@ -69,10 +75,11 @@
 - A daily limit on idea runs per buyer: ALL-132. Sample ideas on dev: ALL-133 (this ticket seeds `gift_ideas` rows in tests instead).
 - Opening paid features beyond test and admin users: ALL-135.
 - Editing a gift note or ship-to after an order is placed.
+- List gifts on the on-demand Gift ideas screen (ALL-27's screen stays as it is); this ticket adds them to rounds only.
 
 ### Open questions
 
-None left for the owner. The choices below marked **[Claude's call]** are open to the reviewer and the owner.
+One for the owner: how to price a list gift whose store Zinc can only check, not look up (last row of the table below, with Claude's pick). The other choices marked **[Claude's call]** are open to the reviewer and the owner.
 
 ## What was decided, and why
 
@@ -86,157 +93,162 @@ None left for the owner. The choices below marked **[Claude's call]** are open t
 | Ship-to on the confirm page | A "Ships to" row with the recipient as the default. Changing it opens the ALL-41 "Where it goes" choices **[Claude's call]** | A separate ship-to step would make the email path 3 taps |
 | When does "None of these" search again? | On the next tick, not right away | A new search costs money and takes minutes; the tick already runs ideas inside its limits (ALL-27 AC-25, T76) |
 | Reason chips | "Already has one", "Not their style", "Too pricey", "Too generic", plus optional text. ALL-41 said "He has one"; the app doesn't know pronouns, so the chips don't use them. Codes: `has_it`, `not_style`, `too_pricey`, `too_generic` **[Claude's call]** | ALL-41's signed-off chips; the ticket's "too practical" is covered by the free text |
-| What facts a rejection saves | "Already has one" saves `owns`; "Not their style" and "Too generic" save `avoid`; the free text is its own fact. "Too pricey" saves no lasting fact and only lowers the next search's price (AC-12) **Owner, 2026-11-22** | The engine already excludes rejected products (ALL-27 AC-7), so the fact carries only the reason. A price complaint is about this occasion, not the person (T42 (3), "ask, don't infer") |
+| What facts a rejection saves | "Already has one" asks "Which one?" and saves that idea's title as `owns`; "Not their style" and "Too generic" save one `avoid` fact naming the titles, within 500 characters; the free text is its own `avoid` fact. "Too pricey" saves no lasting fact and only lowers the next search's price (AC-12) **Owner, 2026-11-22** | The engine already excludes rejected products (ALL-27 AC-7), so the fact carries only the reason. A price complaint is about this occasion, not the person (T42 (3), "ask, don't infer") |
 | Which idea is "next-best" | The highest-ranked `proposed` idea in the round that still arrives in time. Not offered for address failures, which re-offer the same gift with a different address (AC-15a) | §6.5 step 5; no new search needed. For an address failure the gift was fine (T61, ALL-112) |
 | How a failed order is replaced | A new database function, `replace_failed_order`, does it in one transaction under the round lease (AC-15). `approve_round` stays for first approvals. Both refuse ideas that aren't `proposed` (AC-12b). New T# | `approve_round` refuses rounds outside `awaiting_approval` and counts an unresolved failure as a live order, so it can't do this. `reapprove_order` takes any price it's given and checks no budget, so it's replaced by the new function |
-| Where "Buy at $new" gets the price | One product lookup ($0.01) when the fix page opens, inside the paid-features check. **[Verify]** first whether Zinc's `max_price_exceeded` failure carries the price, and use that if so. **Owner, 2026-11-22** | Nothing records the new price today (`zinc/events.ts` keeps only the failure type) |
+| Where "Buy at $new" gets the price | One product lookup ($0.01) for the idea's own offer when the fix page opens, inside the paid-features check, and one more under the lease when Buy is pressed, refused if the price rose above what the page showed. Nothing is stored between the two. **[Verify]** first whether Zinc's `max_price_exceeded` failure carries the price, and use that for the page if so. **Owner, 2026-11-22** | Nothing records the new price today (`zinc/events.ts` keeps only the failure type). A stored quote could be stale or from another tab (plan review S1) |
+| How often a price rise can be fixed | Once per gift. A second rise sends the buyer to "See all ideas" **Owner, 2026-11-22** | Stops a loop of rising prices; the other ideas are one tap away |
 | Old email links after "None of these" | Stay valid as plain URLs; the server refuses ideas that were rejected (AC-12b) and the page says they were replaced | Simpler than expiring them; the status check protects the money path |
-| What "None of these" does when runs are used up | Saves the reason, keeps the round open until its deadline, and says plainly there are no more new ideas this time (AC-13a). **Owner, 2026-11-22** | ALL-27 caps a round at `idea_round_runs_max` (2) plus one after a new fact, about $1.20 |
+| What "None of these" does when runs are used up | The sheet says "No more new ideas this time" before confirming. Confirming saves the reason, keeps the current ideas `proposed` and buyable until the deadline, and sends no new-ideas email (AC-13a). Replaces the earlier answer, where the ideas were rejected and the round waited empty. **Owner, 2026-11-22** | ALL-27 caps a round at `idea_round_runs_max` (2) plus one after a new fact, about $1.20. Rejecting with nothing to replace them would strand the buyer (plan review S6) |
+| How the new ideas get their own emails | The rejection renames the round's sent approval steps (`heads_up` to `heads_up@1`, and so on), so the engine sends a fresh heads-up and reminders under its usual keys **Owner, 2026-11-22** | Simpler than a per-set key on every step (plan review S5; 1, E2) |
+| Gifts from the person's own list | Built in this ticket: the linked list's unclaimed gifts first, as `source = 'list'` ideas priced and dated live through Zinc; AI ideas only when fewer than 3 qualify; unbuyable ones shown with "Buy it yourself"; claimed ones greyed; rejected or given ones never return (AC-27 to AC-31) **Owner, 2026-11-22** | Decisions 36, 37: a person's own list is the ideal case. T31 (5) laid out the columns; nothing wrote them yet |
+| Which stores can be bought from | Any store Zinc supports, not only Amazon: Amazon and Walmart priced through offers, Best Buy, Shopify and Etsy through product details, others checked with `GET /retailers/check?url=` (`spikes/checkout.md` answer 7). Orders already go to Zinc by product URL. AI ideas still come from Zinc's Amazon search **Owner, 2026-11-22** | Zinc buys from far more stores than Amazon |
+| A list gift whose store gives no live price or delivery time (only the store check) | **[Claude's call]**, for the owner: offer it at the list's own price plus the tax estimate, with `planning_delivery_days` as its arrival time, labelled "Price from their list". The order's cap (estimate plus `order_price_margin_pct`) stops it if the real price is higher. Without a list price, "Buy it yourself" | Keeps such gifts buyable without risking more than the cap; a wrong guess fails as "price went up", never as an overspend |
 
 ## Principles check
 
-- **Simplest version?** Plain app pages instead of new signed-link kinds; the confirm page serves one or many ideas; re-approval is one page for every failure kind. Cut: a separate ship-to step, an immediate new search after "None of these".
+- **Simplest version?** Plain app pages instead of new signed-link kinds; the confirm page serves one or many ideas; re-approval is one page for every failure kind. Renamed sends instead of per-set keys; no stored price quote. Cut: a separate ship-to step, an immediate new search after "None of these", list gifts on the on-demand screen.
 - **Hard-coded values?** None new. The fee, over-budget allowance, gift-note length, price margin and run cap are existing settings.
-- **Product boundaries?** All in `modules/concierge`. Budgets and facts are concierge tables. Claimed list gifts come through `lists.person_list` (T19).
+- **Product boundaries?** All in `modules/concierge`. Budgets and facts are concierge tables. List gifts and their claims are read only through `lists.person_list`, and claimed and released through `lists.claim_for_order` and `lists.release_for_order`, the lists functions ALL-30 added (T19, T31).
 - **New personal data?** `gift_ideas.image_url` (a product photo, not personal). A gift note is already an `orders` column. Events carry ids only (E6).
-- **Docs and decisions** that need updating: `design/technical-design.md` §6.5 (plain links, next-best, photos, `replace_failed_order`), `design/decisions.md` (a new T# for plain app links revising T38, `replace_failed_order`, photos, and AC-9's revision of T73), `design/ui.md` (the approval screens and the email's per-idea links), the round engine page (re-generation after a rejection), the screens and emails page.
+- **Docs and decisions** that need updating: `design/technical-design.md` §6.3 (list gifts first, store routes) and §6.5 (plain links, next-best, photos, `replace_failed_order`), `design/decisions.md` (a new T# for plain app links revising T38, `replace_failed_order`, photos, and AC-9's revision of T73), `design/ui.md` (the approval screens and the email's per-idea links), the round engine page (re-generation after a rejection), the screens and emails page.
 
 ## Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development or superpowers:executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+**Revised 2026-11-22** after the plan's adversarial review (B1–B3, S1–S7, nits) and the owner's decisions on list gifts, "Which one?", None of these with no runs left, and Zinc-supported stores. Where each finding is fixed: the consistency check below.
+
 **Architecture:**
-- **The database guards money.** One new migration adds a photo column, an idea-set counter and a re-quote column, makes the idea engine ignore rejected ideas, makes `approve_round` refuse ideas that aren't `proposed`, and adds three service-role functions that run under the round lease: `replace_failed_order`, `reject_round_ideas` and `set_round_budget`.
-- **Thin TypeScript wrappers** in `modules/concierge` call them: `approveAndBuy` (changed), `replaceFailedOrder`, `rejectRoundIdeas`, `setRoundBudget`, and the page reads. Pure rules (rejection facts, next-best idea, the picks bar) live in `packages/core`.
-- **The engine** keys its approval emails per idea set, gives the next run a price ceiling after "Too pricey", sends one "no more ideas" email, and saves photos while resolving.
+- **The database guards money.** One new migration adds a photo column, makes the idea engine ignore rejected ideas and save list gifts, makes `approve_round` refuse ideas that aren't `proposed`, and adds service-role functions that run under the round lease: `replace_failed_order`, `reject_round_ideas` (with `runs_after_rejection` to know beforehand) and `set_round_budget`.
+- **List gifts first.** The idea run reads the linked list through `lists.person_list`, prices and dates each unclaimed gift through Zinc by its store, and brainstorms with AI only when fewer than `idea_keep_min` (3) qualify.
+- **Thin TypeScript wrappers** in `modules/concierge` call the functions; pure rules live in `packages/core`.
 - **Three plain app pages** (`/rounds/[id]`, `/rounds/[id]/buy`, `/rounds/[id]/fix/[orderId]`) only read; every change goes through a server action in `app/rounds/actions.ts`.
 
-**Tech stack:** Next.js 16 (server components, server actions, `searchParams` as a promise), Supabase (Postgres, RLS, pgTAP), Vitest (`unit` and `local-db` projects), Playwright, the fake Zinc and fake Gateway.
+**What changes for a linked person today.** `round_candidates` doesn't look at lists, and needs no change: it picks occasions and budgets. `generateIdeas` (`runIdeas`) ignores lists entirely and stops with `no_facts` for a person with no facts, and the round plan sends `no_ideas` when `hasFacts` is false. So a list-only person gets no round ideas today. Task 6 adds the list pass and lets a person with list gifts but no facts run; Task 7 makes the round plan treat list gifts like facts. Claiming already exists: `approve_round` claims a list gift through `lists.claim_for_order` when it's approved, and `reconcile_round` releases it through `lists.release_for_order` when the order fails or is cancelled (ALL-30). `replace_failed_order` does the same; no new lists function is needed.
 
-**Branch:** `aarontallen/all-29-approval`, cut from `main` at the start of Task 1. One PR (`Part of ALL-29`, since Task 14 follows the merge). The migration ships with the code: it only adds things and tightens guards that today's code never trips, so a Vercel rollback runs the old code on the new schema safely (E7).
+**Tech stack:** Next.js 16 (server components, server actions, `params` and `searchParams` as promises), Supabase (Postgres, RLS, pgTAP), Vitest (`unit` and `local-db` projects), Playwright, the fake Zinc and fake Gateway.
+
+**Branch:** `aarontallen/all-29-approval`, cut from `main` at the start of Task 1. One PR (`Part of ALL-29`, since Task 15 follows the merge). The migration ships with the code: it adds things and tightens guards today's code never trips, so a Vercel rollback runs the old code on the new schema safely (E7).
 
 ### Global constraints
 
-- **Settings, not constants (T23):** `zinc_order_fee_cents`, `order_price_margin_pct`, `zinc_gift_message_max_chars`, `accounts.over_budget_pct`, `idea_round_runs_max`, `zinc_lookup_cents` and `round_lock_minutes` are read, never copied into code. No new settings. The 500-character fact limit is the `profile_facts` check; the form mirrors it from one exported constant next to the parser, with a test that it equals the database's limit.
-- **Loading never acts (AC-4a):** the three pages only read. Buying, rejecting, saving a budget and replacing happen only in server actions, each of which checks the signed-in user owns the round, validates its input with zod, and returns only what the screen renders (Next's `server-actions.md` > Security). The fix page's one price lookup is a read: it writes only `orders.requote_total_cents`, never an order.
-- **Explicit dependencies (E3):** module logic takes its clients and settings as arguments. Only the server actions and pages build them, through `buyingWiring` and the on-demand idea wiring in `app/settings/zinc-deps.ts`.
-- **Events (E6):** through `logEvent`, ids only: `round_id`, `user_id`, `order_id`, `idea_id`, counts, cents, reason codes. Never a gift note, free-text reason, title, address or photo URL. New events: `round.ideas_rejected`, `round.budget_set`, `order.replaced`, `order.requoted`.
-- **Photos (AC-17):** only from Zinc, `https://` only (checked in the adapter and by a column check), shown with `referrerpolicy="no-referrer"`; the gift icon otherwise.
-- **Phones (AC-26):** every new screen fits at phone width with no sideways scroll, and every tap target is at least 44px (`MIN_TAP_PX` in `e2e/phone-layout.ts`). Layout checks are short `@layout` tests; journeys stay untagged (T62). Sign in with `signIn(page)`.
-- **Reads on column-granted tables:** signed-in reads of `gift_rounds`, `orders` and `accounts` name their columns (no `select('*')`). The new columns (`idea_set`, `requote_total_cents`) stay server-only.
-- **Migration:** one file, `supabase/migrations/20261122100000_approval.sql`, re-dated past `main`'s newest just before merge. Expand-only (E7): `reapprove_order` stays until a later contract migration, unused. Don't push it to dev before merge. Run `pnpm db:types` after it changes.
-- **Fakes (E5):** the database is always real for money, rounds and privacy (pgTAP, `pnpm test:db`, Playwright on local Supabase). Zinc, the AI Gateway and email are faked.
-- **Before the PR:** `pnpm lint && pnpm typecheck && pnpm test && pnpm test:db && pnpm db:test && pnpm build`, then `pnpm --filter @gifts-af/web e2e`.
+- **Settings, not constants (T23):** `zinc_order_fee_cents`, `order_price_margin_pct`, `zinc_gift_message_max_chars`, `accounts.over_budget_pct`, `idea_round_runs_max`, `idea_keep_min` (the "fewer than 3"), `idea_keep_max`, `idea_run_max_cents`, `zinc_lookup_cents`, `planning_delivery_days` and `round_lock_minutes` are read, never copied into code. No new settings. The 500-character fact limit is the `profile_facts` check; the code mirrors it as `FACT_VALUE_MAX`, tested on both sides (Tasks 3 and 4).
+- **Loading never acts (AC-4a):** the pages only read (the fix page's price lookup writes nothing). Buying, rejecting, saving a budget and replacing happen only in server actions, each of which takes the user from the session, validates its input with zod, checks ownership again on the server, and returns only what the screen renders (Next's `server-actions.md` > Security).
+- **Privacy (principle 6, T26):** pages read a round with the signed-in user's client, so RLS applies, naming columns on `gift_rounds` and `orders`. The service role answers only "yours, someone else's, or missing" (AC-3).
+- **Product boundary (T19):** the concierge reads list gifts only through `lists.person_list`, takes `storeName` from `@/modules/lists`, and claims through `lists.claim_for_order`.
+- **Explicit dependencies (E3):** module logic takes its clients and settings as arguments. Only server actions and pages build them, through `buyingWiring` and the idea-lookup wiring in `app/settings/zinc-deps.ts`.
+- **Events (E6):** through `logEvent`, ids only: `round_id`, `user_id`, `order_id`, `idea_id`, counts, cents, reason codes, store route names. Never a gift note, free-text reason, title, address, URL or photo URL. New events: `round.ideas_rejected`, `round.rejection_noted`, `round.budget_set`, `order.replaced`, `order.requote`, `ideas.list_gift`.
+- **Photos (AC-17):** only from Zinc, `https://` only (adapter and column check), shown with `referrerpolicy="no-referrer"`; the gift icon otherwise. "Buy it yourself" links open with `rel="noopener noreferrer"`.
+- **Phones (AC-26):** every new screen fits at phone width with no sideways scroll and every tap target is at least 44px (`MIN_TAP_PX`, `e2e/phone-layout.ts`). Layout checks are short `@layout` tests; journeys stay untagged (T62). Sign in with `signIn(page)`.
+- **Migration:** one file, `supabase/migrations/20261122100000_approval.sql`, re-dated past `main`'s newest just before merge. Expand-only (E7): `reapprove_order` stays, unused, until a later contract migration. Don't push it to dev before merge. Run `pnpm db:types` after it changes.
+- **Fakes (E5):** the database is always real for money, rounds, lists and privacy (pgTAP, `pnpm test:db`, Playwright on local Supabase). Zinc, the AI Gateway and email are faked. The unit-test fake Zinc refuses an order whose `max_price` is below its product's price, as Zinc does.
+- **Before the PR:** `pnpm lint && pnpm typecheck && pnpm test && pnpm test:db && pnpm db:test && pnpm build`, then `pnpm --filter @gifts-af/web e2e` (check the exit code).
 
 ### File map
 
 | File | Change |
 |---|---|
-| `supabase/migrations/20261122100000_approval.sql` | New: columns, idea counting, `approve_round` guard, three functions |
+| `supabase/migrations/20261122100000_approval.sql` | New: `image_url`, idea counting, `save_ideas` list fields, `approve_round` guard, four functions |
 | `supabase/tests/approval.test.sql` | New pgTAP |
 | `packages/core/src/approval.ts` (+ `index.ts`, test) | New: `rejectionFacts`, `nextBestIdea`, `picksBar` |
-| `packages/core/src/round-plan.ts`, `ideas.ts` | Per-set keys, `no_more_ideas`; `JudgeContext.maxTotalCents`, `ZincHit.imageUrl` |
+| `packages/core/src/{ideas,round-plan}.ts` | `JudgeContext.maxTotalCents`; `hasFacts` becomes `hasInputs`; the skip rule's prefix check |
 | `packages/core/src/database.types.ts` | Regenerated |
-| `apps/web/modules/concierge/purchase/{approve,replace,store}.ts` | `approveAndBuy` changes; new `replaceFailedOrder`, `requote` |
-| `apps/web/modules/concierge/rounds/{approval,engine,store}.ts` | New `rejectRoundIdeas`, `setRoundBudget`, `roundForBuyer`; engine per-set keys |
-| `apps/web/modules/concierge/ideas/{run,store}.ts`, `zinc/products.ts` | Price ceiling; photos |
-| `apps/web/modules/concierge/notify/{templates,samples}.ts`, `lib/email-layout.ts` | Per-row links; buy links; fix links; `no_more_ideas` |
-| `apps/web/app/rounds/…` | New pages, screens, actions |
-| `apps/web/components/idea-photo.tsx` | New: the photo or the gift icon |
+| `apps/web/modules/concierge/zinc/products.ts` | Retailer on offers and details; `checkRetailer`; `listGiftQuote` |
+| `apps/web/modules/concierge/ideas/{run,store}.ts` | The list pass, photos, the price ceiling |
+| `apps/web/modules/concierge/purchase/{approve,replace,store}.ts` | `approveAndBuy` changes, `capsFor`; new `replaceFailedOrder`, `quoteFailedOrder` |
+| `apps/web/modules/concierge/rounds/{approval,engine,store}.ts` | New `rejectRoundIdeas`, `rejectionOutlook`, `setRoundBudget`, `roundAccess`, `roundView`; engine reads list gifts and the new idea fields |
+| `apps/web/modules/concierge/notify/{templates,samples}.ts`, `lib/email-layout.ts` | Per-row links; buy links; fix links |
+| `apps/web/app/rounds/…`, `components/idea-photo.tsx` | New pages, screens, actions, photo |
 | `apps/web/app/people/[id]/ideas/ideas-screen.tsx` | Photos on idea cards |
-| `apps/web/e2e/{approval.spec,fake-zinc,gallery.shots}.ts` | Journeys, layout, photos, gallery |
+| `apps/web/modules/concierge/__tests__/fake-zinc.ts`, `apps/web/e2e/{approval.spec,fake-zinc,gallery.shots}.ts` | Fakes (other stores, max-price refusal), journeys, layout, gallery |
 
 ---
 
-### Task 1: Ideas that count, and `approve_round` refuses replaced ideas (AC-12a, AC-12b, AC-17)
+### Task 1: Ideas that count, list ideas, and `approve_round` refuses replaced ideas (AC-12a, AC-12b, AC-17, AC-27)
 
 **Files:** create the migration and `supabase/tests/approval.test.sql`.
 
 **Produces:**
 - `gift_ideas.image_url text` with `check (image_url is null or image_url ~ '^https://')`. Readable by signed-in owners (the table has no column grants).
-- `gift_rounds.idea_set integer not null default 1 check (idea_set >= 1)`: which set of ideas the round is on. Server-only (not in the column grant).
 - `start_idea_run`: re-created from `20261121140000_round_fanout.sql`; `done` only when the round has an idea whose `status <> 'rejected'`.
-- `save_ideas`: re-created from `20261117100000_idea_engine.sql`; the same rule, and it inserts `image_url`.
-- `approve_round`: re-created from `20261113100000_order_address_source.sql`, adding after the "isn't this round's" check: any idea with `status <> 'proposed'` raises `approve_round: replaced` (P0001).
+- `save_ideas`: re-created from `20261117100000_idea_engine.sql`; the same rule. It inserts `image_url`, and `source` and `list_item_id` from each element (`source` defaults to `generated`; `list` requires a `list_item_id`).
+- `approve_round`: re-created from `20261113100000_order_address_source.sql`; after the "isn't this round's" check, any idea with `status <> 'proposed'` raises `approve_round: replaced` (P0001).
 
 - [ ] **Step 1: Write the failing pgTAP tests:**
-  - `start_idea_run starts a round whose ideas were all rejected` (returns a run id, refusal null)
-  - `start_idea_run still says done when one idea is proposed`
+  - `start_idea_run starts a round whose ideas were all rejected` (run id returned, refusal null)
   - `save_ideas saves into a round whose ideas were all rejected` (returns 3)
-  - `save_ideas keeps image_url`
+  - `save_ideas keeps image_url, source and list_item_id`
+  - `save_ideas refuses a list idea with no list_item_id`
   - `image_url refuses http://` (`throws_ok`, 23514)
-  - `approve_round refuses a rejected idea` (`throws_ok` … `approve_round: replaced`)
+  - `approve_round refuses a rejected idea` (`approve_round: replaced`)
   - `approve_round refuses a selected idea`
-  - `authenticated can read image_url but not idea_set`
-- [ ] **Step 2: Watch them fail.** `pnpm db:test`. Expected: `approval.test.sql` fails (columns missing).
+  - Regression guard (passes before and after): `start_idea_run still says done when one idea is proposed`
+- [ ] **Step 2: Watch them fail.** `pnpm db:test`. Expected: the new tests fail; the guard passes.
 - [ ] **Step 3: Write this part of the migration.**
-- [ ] **Step 4: Watch them pass.** `pnpm supabase db reset && pnpm db:test`. Expected: all files pass, including `idea_engine.test.sql` and `approve_round_guards.test.sql` unchanged.
-- [ ] **Step 5: Commit** `feat(db): rejected ideas don't count, and approval refuses replaced ideas (ALL-29)`.
+- [ ] **Step 4: Watch them pass.** `pnpm supabase db reset && pnpm db:test`. Expected: all files pass, `idea_engine.test.sql` and `approve_round_guards.test.sql` unchanged.
+- [ ] **Step 5: Commit** `feat(db): rejected ideas don't count, list ideas save, approval refuses replaced ideas (ALL-29)`.
 
-### Task 2: `replace_failed_order` (AC-14, AC-15, AC-15a, AC-12b)
+### Task 2: `replace_failed_order` (AC-14, AC-15, AC-15a, AC-12b, AC-30)
 
 **Files:** the migration and `approval.test.sql`.
 
-**Produces:**
-- `orders.requote_total_cents integer check (requote_total_cents >= 0)`: today's estimated total for a `price_up` order, written by the fix page's lookup. Server-only.
-- `concierge.replace_failed_order(p_round_id uuid, p_user_id uuid, p_lock timestamptz, p_failed_order_id uuid, p_order jsonb) returns setof concierge.orders`. `p_order` has the shape of one `approve_round` element (`idea_id`, `max_price_cents`, `fee_cents`, `gift_message`, `ship_to`, `address_source`, `address`). Security definer, `search_path = ''`, service_role only. In order, each refusal a P0001 starting `replace_failed_order:`:
-  1. Round locked `for update`, the user's, `locked_until = p_lock` (`lease not held`).
-  2. `closed_at is null`, status `needs_attention`, and the UTC day before `ship_by_deadline` (`not open`).
-  3. The failed order is this round's and user's, `status = 'failed'`, `not resolved` (`not current`).
-  4. The idea is this round's and either `proposed`, or the failed order's own idea when `failure_type in ('price_up', 'address_withdrawn', 'address_rejected')` (`replaced`).
-  5. For `address_withdrawn` and `address_rejected`, `address_source` must not be `shared` (`shared address`).
-  6. The list claim check and `lists.claim_for_order`, as in `approve_round` (`claimed`).
-  7. Then: `resolved = true` on the failed order, insert the new `held`/`retry` order and its `order_addresses` row, set the idea `selected`, `reconcile_round`, return the new order.
+**Produces:** `concierge.replace_failed_order(p_round_id uuid, p_user_id uuid, p_lock timestamptz, p_failed_order_id uuid, p_order jsonb) returns setof concierge.orders`. `p_order` has an `approve_round` element's shape (`idea_id`, `max_price_cents`, `fee_cents`, `gift_message`, `ship_to`, `address_source`, `address`) plus `new_total_cents` for a price-up re-buy. Security definer, `search_path = ''`, service_role only. In order, each refusal a P0001 starting `replace_failed_order:`:
+1. Round locked `for update`, the user's, `locked_until = p_lock` (`lease not held`).
+2. `closed_at is null`, status `needs_attention`, and the UTC day before `ship_by_deadline` (`not open`).
+3. The failed order is this round's and user's, `status = 'failed'`, `not resolved` (`not current`).
+4. The idea is this round's and either `proposed`, or the failed order's own idea when its `failure_type` is `price_up`, `address_withdrawn` or `address_rejected` (`replaced`).
+5. A same-idea `price_up` re-buy is refused when that idea already has a resolved `price_up` order (`once`, S2), and needs `new_total_cents`.
+6. For `address_withdrawn` and `address_rejected`, `ship_to` must be `buyer` or `other` with `address_source = 'own'` (`fixed address`, B2): the order keeps a saved snapshot and `placeRound` never re-reads the recipient for it.
+7. The list claim check and `lists.claim_for_order`, as in `approve_round` (`claimed`).
+8. Then: `resolved = true` on the failed order; for a price-up re-buy, the idea's `est_total_cents = new_total_cents` and `over_budget` recomputed against the round's budget (B1, so `placeRound`'s cap re-check follows the new price); insert the `held`/`retry` order and its `order_addresses` row; the idea `selected`; `reconcile_round`; return the new order.
 
 - [ ] **Step 1: Write the failing pgTAP tests:**
   - `replace_failed_order replaces an out_of_stock order with a proposed idea` (old `resolved`, new `held`, idea `selected`)
   - `the new order keeps the gift note and ship_to it was given`
-  - `a price_up order can be re-bought as the same idea`
+  - `a price_up re-buy saves the new total on the idea` (`est_total_cents` = 5400, `over_budget` true against 5000)
+  - `a second price_up re-buy of the same idea is refused` (`once`)
   - `an out_of_stock order can't be re-bought as the same idea` (`replaced`)
   - `a rejected idea is refused` (`replaced`)
-  - `an address_rejected order is never sent to a shared address` (`shared address`)
+  - `an address_rejected order can't ship to the recipient` (`fixed address`)
   - `an address_rejected order can go to the buyer` (`ship_to = 'buyer'`, `address_source = 'own'`)
   - `a second replace of the same failed order is refused` (`not current`)
-  - `a closed round is refused`; `on the ship-by day it's refused`
-  - `without the lease it's refused`
-  - `another user's round is refused`
-  - `a list gift a friend claimed is refused` (`claimed`)
+  - `a closed round is refused`; `on the ship-by day it's refused`; `without the lease it's refused`; `another user's round is refused`
+  - `a list gift a friend claimed is refused` (`claimed`); `a list gift re-bought is claimed for the buyer`
   - `anon and authenticated can't execute it`
-- [ ] **Step 2: Watch them fail.** `pnpm db:test`. Expected: the new tests fail (function missing).
+- [ ] **Step 2: Watch them fail.** `pnpm db:test`.
 - [ ] **Step 3: Write it.**
 - [ ] **Step 4: Watch them pass.** `pnpm supabase db reset && pnpm db:test`. Expected: all pass.
 - [ ] **Step 5: Commit** `feat(db): replace a failed order under the round lease (ALL-29)`.
 
-### Task 3: Reject a round's ideas, and set an open round's budget (AC-9, AC-12, AC-13a)
+### Task 3: Reject a round's ideas, and set an open round's budget (AC-9, AC-12, AC-13, AC-13a)
 
 **Files:** the migration, `approval.test.sql`; then regenerate `packages/core/src/database.types.ts`.
 
 **Produces:**
-- `concierge.reject_round_ideas(p_round_id uuid, p_user_id uuid, p_lock timestamptz, p_reason_code text, p_reason_text text, p_facts jsonb) returns table (idea_set integer, runs_left boolean)`. Service_role only.
-  - Refuses (P0001 `reject_round_ideas: …`): lease not held; status not `awaiting_approval` or closed; any live order (not `cancelled`, not a resolved failure); `p_reason_code` not in (`has_it`, `not_style`, `too_pricey`, `too_generic`); a fact whose category isn't `owns` or `avoid`.
-  - Inserts one `rejections` row per `proposed` idea (`reason_code`, `reason_text`), sets those ideas `rejected`.
-  - Upserts each `p_facts` element (`{category, value}`) as `source = 'rejection'`, `on conflict (person_id, category, value_key) do update set updated_at = now(), active = true`.
-  - Sets the round `status = 'generating'`, `idea_set = idea_set + 1`, `next_action_at = now()`.
-  - Returns the new `idea_set` and `round_idea_state(p_round_id).runs_left`, read after the facts are saved.
-- `concierge.set_round_budget(p_round_id uuid, p_user_id uuid, p_lock timestamptz, p_budget_cents integer) returns void`. Service_role only. Refuses: lease not held; status not `awaiting_approval`; `budget_cents` already set (`already set`); a negative amount. Sets `budget_cents`, then `over_budget = est_total_cents > p_budget_cents` on the round's `proposed` ideas.
+- `concierge.runs_after_rejection(p_round_id uuid, p_saves_fact boolean) returns boolean`, stable, service_role only: `round_idea_state`'s runs rule, counting a fact the rejection would save as newer than the last run. A missing setting answers false.
+- `concierge.reject_round_ideas(p_round_id uuid, p_user_id uuid, p_lock timestamptz, p_reason_code text, p_reason_text text, p_facts jsonb, p_expect_more boolean) returns void`, service_role only.
+  - Refuses (P0001 `reject_round_ideas: …`): lease not held; status not `awaiting_approval` or closed; any live order (not `cancelled`, not a resolved failure); `p_reason_code` not in (`has_it`, `not_style`, `too_pricey`, `too_generic`); a fact category other than `owns` or `avoid`; `runs_after_rejection(p_round_id, jsonb_array_length(p_facts) > 0)` differing from `p_expect_more` (`changed`).
+  - Saves each `p_facts` element (`{category, value}`) with `source = 'rejection'`, `on conflict (person_id, category, value_key) do update set updated_at = now()`, leaving `active` as it is (nit).
+  - **New search left** (`p_expect_more`): one `rejections` row per `proposed` idea (`reason_code`, `reason_text`); those ideas `rejected`; the round's sent approval steps renamed to `<step>@<n>`, `n` the next free number (`heads_up`, `reminder_1`, `reminder_2`, `final_notice`, `no_ideas`, `no_ideas_again`) (S5); the round `generating`, `next_action_at = now()`.
+  - **None left:** one `rejections` row with `idea_id` null; ideas and round unchanged (decision b).
+- `concierge.set_round_budget(p_round_id uuid, p_user_id uuid, p_lock timestamptz, p_budget_cents integer) returns void`, service_role only. Refuses: lease not held; status not `awaiting_approval`; `budget_cents` already set (`already set`); a negative amount. Sets `budget_cents`, then `over_budget = est_total_cents > p_budget_cents` on the round's `proposed` ideas.
 
 - [ ] **Step 1: Write the failing pgTAP tests:**
-  - `reject_round_ideas saves a rejection per idea and marks them rejected`
-  - `the round goes back to generating, due now, on idea set 2`
-  - `a fact that already exists has its updated_at bumped` (`updated_at > before`, one row)
-  - `the bumped fact allows one more run` (`runs_left` true after `idea_round_runs_max` runs)
-  - `too_pricey with no facts and no runs left returns runs_left false`
+  - `with a search left, reject saves a rejection per idea, marks them rejected and sends the round back to generating, due now`
+  - `the sent heads_up and reminder_1 become heads_up@1 and reminder_1@1; a second rejection makes @2`
+  - `with no search left, reject saves one reason and leaves the ideas proposed and the round awaiting_approval`
+  - `runs_after_rejection: after idea_round_runs_max runs, true with a fact, false without`; `after max + 1 runs, false either way`
+  - `a stale p_expect_more is refused and saves nothing` (`changed`)
+  - `a fact that already exists has its updated_at bumped and stays inactive if it was off`
   - `a 501-character fact is refused` (23514)
-  - `a round with a live order can't be rejected`
-  - `a needs_attention round can't be rejected`
-  - `an unknown reason code is refused`
+  - `a round with a live order can't be rejected`; `a needs_attention round can't be rejected`; `an unknown reason code is refused`
   - `set_round_budget sets the budget and marks ideas over it` (5000: a 6000 idea `over_budget`, a 4000 idea not)
   - `set_round_budget refuses a round that already has a budget`
-  - `without the lease both are refused`
-  - `anon and authenticated can't execute either`
-- [ ] **Step 2: Watch them fail.** `pnpm db:test`. Expected: the new tests fail.
+  - `without the lease each is refused`; `anon and authenticated can't execute them`
+- [ ] **Step 2: Watch them fail.** `pnpm db:test`.
 - [ ] **Step 3: Write them.**
-- [ ] **Step 4: Watch them pass, then regenerate types.** `pnpm supabase db reset && pnpm db:test && pnpm db:types`. Expected: all pass; `database.types.ts` gains the columns and functions.
+- [ ] **Step 4: Watch them pass, then regenerate types.** `pnpm supabase db reset && pnpm db:test && pnpm db:types`. Expected: all pass; `database.types.ts` gains the column and functions.
 - [ ] **Step 5: Commit** `feat(db): reject a round's ideas and set an open round's budget (ALL-29)`.
 
 ### Task 4: Pure rules for the screens [P] (AC-5, AC-6, AC-7, AC-12, AC-15)
@@ -246,175 +258,215 @@ Can run alongside Tasks 1–3.
 **Files:** create `packages/core/src/approval.ts` and `approval.test.ts`; export from `index.ts`.
 
 **Produces:**
-- `type RejectionCode = "has_it" | "not_style" | "too_pricey" | "too_generic"`.
-- `rejectionFacts(code: RejectionCode, text: string | null, titles: string[]): { category: "owns" | "avoid"; value: string }[]`: `has_it` → `owns`, `not_style` and `too_generic` → `avoid`, `too_pricey` → none; the free text, trimmed, as its own `avoid` fact. Values come from the titles as written in the owner decision below (**[Claude's call]** pending it); each value is cut to `FACT_VALUE_MAX` (500).
+- `type RejectionCode = "has_it" | "not_style" | "too_pricey" | "too_generic"`; `FACT_VALUE_MAX = 500`.
+- `rejectionFacts(code: RejectionCode, text: string | null, titles: string[], ownedTitle: string | null): { category: "owns" | "avoid"; value: string }[]`: `has_it` saves `ownedTitle` as `owns` (none without one); `not_style` saves `avoid` "Not their style: <titles, comma-separated>", `too_generic` "Too generic: <titles>", cut to fit 500 characters at a title boundary; `too_pricey` none; the free text, trimmed, as its own `avoid` fact, cut to 500.
 - `nextBestIdea(ideas: { id; rank; status; handlingDaysMax; deliveryDaysMax }[], ctx: { today; occasionDate; s: ScheduleSettings }): string | null`: the lowest `rank` that is `proposed` and passes `canArriveInTime`.
-- `picksBar(totals: number[], budgetCents: number | null, overBudgetPct: number): { count; totalCents; fit: BudgetFit }`, built on `classifyTotal`.
+- `picksBar(totals: number[], budgetCents: number | null, overBudgetPct: number): { count; totalCents; fit: BudgetFit }`, on `classifyTotal`.
 
 - [ ] **Step 1: Write the failing tests:**
-  - `has_it saves owns, not_style and too_generic save avoid, too_pricey saves nothing`
-  - `the free text is its own fact, trimmed; blank text adds nothing`
-  - `a value is never longer than 500 characters`
-  - `next-best skips rejected, selected and too-slow ideas and takes the lowest rank`
-  - `no next-best when nothing proposed can arrive in time` (null)
+  - `has_it saves the tapped title as owns; without one it saves nothing`
+  - `not_style and too_generic save one avoid fact naming the titles; too_pricey saves nothing`
+  - `a long title list is cut at a title, within 500 characters`
+  - `the free text is its own avoid fact, trimmed; blank adds nothing`
+  - `FACT_VALUE_MAX is 500` (the database side is Task 3's `a 501-character fact is refused`)
+  - `next-best skips rejected, selected and too-slow ideas and takes the lowest rank`; `null when nothing can arrive in time`
   - `picksBar: 2 picks of $30 against $50 at 20% are over; against $70 within; 3 of $30 dropped`
 - [ ] **Step 2: Watch them fail.** `pnpm --filter @gifts-af/core test`. Expected: module not found.
 - [ ] **Step 3: Write `approval.ts`.**
-- [ ] **Step 4: Watch them pass.** Same command. Expected: all pass.
+- [ ] **Step 4: Watch them pass.** Same command.
 - [ ] **Step 5: Commit** `feat: rules for picks, rejections and next-best ideas (ALL-29)`.
 
-### Task 5: Buying and replacing in TypeScript (AC-2, AC-6–AC-11, AC-12b, AC-14, AC-15, AC-15a, AC-18, AC-19)
+### Task 5: Zinc lookups for any supported store [P] (AC-27, AC-29, AC-17)
+
+Can run alongside Tasks 1–4.
+
+**Files:** `modules/concierge/zinc/products.ts`, `__tests__/zinc-products.test.ts`, `__tests__/fake-zinc.ts`.
+
+**Produces:**
+- `productOffers` and `productDetails` take `retailer: ZincRetailer` (today hard-coded `amazon`). `productDetails` is exported for the idea run and returns `deliveryDaysMax` and `shippingCents` when the reply has them (**[Verify]** against Zinc's product-details reply for Best Buy and Etsy).
+- `checkRetailer(h, key, url, signal): Promise<boolean>`: `GET /retailers/check?url=`.
+- `listGiftRoute(url: string, asin: string | null): { kind: "offers"; retailer: "amazon" | "walmart"; productId: string } | { kind: "details"; retailer: "bestbuy" | "etsy"; productId: string } | { kind: "check" }`: Amazon by its ASIN, Walmart, Best Buy and Etsy by their product id in the link, everything else (Shopify stores included, which have no common host) by the store check. **[Verify]** Zinc's retailer codes and each store's product-id form.
+- `listGiftQuote(h, key, item: { url; asin; listPriceCents }, signal): Promise<{ kind: "offer"; offer: ZincOffer; productId; imageUrl } | { kind: "listed"; priceCents } | { kind: "unsupported" }>`: offers route → `pickOffer`; details route → an offer built from the reply; check route → `listed` at the list price when the check passes and there's a list price (the owner question), else `unsupported`. One or two calls, each charged by the caller.
+- The unit fake Zinc answers the new routes, and refuses an order whose `max_price` is below its product's price with `max_price_exceeded` (B1).
+
+- [ ] **Step 1: Write the failing tests:**
+  - `an Amazon list gift is priced through offers with its ASIN`
+  - `a Walmart link uses offers with the walmart retailer`
+  - `a Best Buy link uses product details`
+  - `another store passes the check and is listed at its list price`
+  - `a store the check refuses is unsupported`; `no list price is unsupported`
+  - `an http photo is dropped`
+  - `the fake refuses an order capped below the price`
+- [ ] **Step 2: Watch them fail.** `pnpm test`.
+- [ ] **Step 3: Write the adapter changes.**
+- [ ] **Step 4: Watch them pass.** `pnpm test`. Expected: all pass, the existing Amazon lookups unchanged.
+- [ ] **Step 5: Commit** `feat: Zinc lookups for list gifts from any supported store (ALL-29)`.
+
+### Task 6: List gifts first, photos and the price ceiling in the idea run (AC-12, AC-17, AC-27, AC-28, AC-31)
+
+**Files:** `packages/core/src/ideas.ts` and test; `modules/concierge/ideas/{run,store}.ts`; `__tests__/{idea-run,idea-store}.test.ts`.
+
+**Consumes:** Task 1 (`save_ideas` list fields), Task 5 (`listGiftQuote`, `productDetails`).
+
+**Produces:**
+- `IdeaInputs.listGifts: { itemId; name; url; asin; listPriceCents }[]`: for a round only, from `lists.person_list` (service role), unclaimed, in list order, leaving out items whose `list_item_id` is on a rejected idea or a live order for this person (AC-31).
+- `IdeaInputs.round.maxTotalCents: number | null`: the lowest `est_total_cents` among the round's ideas rejected with `too_pricey`. `JudgeContext.maxTotalCents`: a total at or above it drops as `over_limit`; the brainstorm's budget is `min(budget, maxTotalCents)`.
+- `runIdeas`:
+  1. `no_facts` only when there are no facts and no list gifts.
+  2. After `start`, the list pass: each list gift through `listGiftQuote` and `judgeCandidate` (a `listed` gift is judged with `planning_delivery_days` as its delivery time), each call charged `zinc_lookup_cents` through the run's `lookup`, so the cost cap holds. Qualifying gifts become `SavedIdea`s with `source: "list"`, `listItemId`, title from the list, `retailer` from `storeName`, reason "On their list", ranked first in list order. Logs `ideas.list_gift` with the route and outcome only.
+  3. With at least `idea_keep_min` list gifts, save them and stop: no brainstorm. Otherwise, if there are facts, brainstorm and keep up to `idea_keep_max` minus the list gifts kept; with no facts, save the list gifts alone.
+- Photos: a hit's `imageUrl` if the search reply has one (**[Verify]** the field first; if present, no extra call); otherwise one `productDetails` call per kept idea without one, made only while the run has room under `idea_run_max_cents`. A failed or skipped photo call leaves the photo null and never drops an idea (nit).
+- `SavedIdea` gains `imageUrl`, `source` and `listItemId`; `save()` sends them.
+
+- [ ] **Step 1: Write the failing tests:**
+  - core: `judgeCandidate drops a total at or above maxTotalCents`
+  - run: `three qualifying list gifts are saved first and no brainstorm runs` (fake Gateway call count 0)
+  - `two qualifying list gifts are kept and the brainstorm fills up to idea_keep_max`
+  - `a person with no facts and one list gift gets that one idea`
+  - `a list gift that can't arrive in time, or is past the allowance, isn't saved`
+  - `list lookups count toward idea_run_max_cents`
+  - `a photo call never runs past the cost cap, and a failed one keeps the idea`
+  - store (local-db): `listGifts leaves out claimed items and items rejected before`
+  - `the run after Too pricey uses the cheapest rejected total as its ceiling`
+- [ ] **Step 2: Watch them fail.** `pnpm test && pnpm test:db`.
+- [ ] **Step 3: Write the changes.**
+- [ ] **Step 4: Watch them pass.** Same commands. Expected: all pass, including the existing `idea-run` tests.
+- [ ] **Step 5: Commit** `feat: gifts from their own list first, photos, and a lower price after Too pricey (ALL-29)`.
+
+### Task 7: The engine after a rejection, and list-only people (AC-13, AC-28)
+
+**Files:** `packages/core/src/round-plan.ts` and test; `modules/concierge/rounds/{engine,store}.ts`; `__tests__/round-engine.test.ts`.
+
+**Produces:**
+- `RoundView.hasFacts` becomes `hasInputs`: active facts, or unclaimed list gifts (`RoundContext.hasListGifts`, from `lists.person_list` with the service role, read only before ideas are found, as `hasFacts` is today).
+- The skip rule's "was the buyer told anything?" checks `heads_up`, `address_request` and `no_ideas` with or without an `@n` suffix (`toldBefore(sent)`), since a rejection renames them.
+- No other engine change for re-generation: after Task 3's rename the usual keys are free, so a rejected round runs ideas on the next tick and sends a fresh heads-up and reminders.
+
+- [ ] **Step 1: Write the failing tests:**
+  - round-plan: `a list-only person (no facts, list gifts) generates instead of sending no_ideas`
+  - `with heads_up@1 sent and no heads_up, a round with new ideas sends heads_up`
+  - `the deadline skip emails a buyer whose only heads-up is heads_up@1`
+  - engine (fake store): `a rejected round runs ideas on the next tick and sends a second heads-up with the new ideas`
+  - `a rejected round whose runs find nothing sends no_ideas once, and later ticks send nothing more` (B3)
+- [ ] **Step 2: Watch them fail.** `pnpm test`.
+- [ ] **Step 3: Write the changes.**
+- [ ] **Step 4: Watch them pass.** `pnpm test && pnpm test:db`. Expected: all pass, including `fanout-db.test.ts`.
+- [ ] **Step 5: Commit** `feat: new ideas and their own emails after None of these; rounds for list-only people (ALL-29)`.
+
+### Task 8: Buying and replacing in TypeScript (AC-2, AC-6–AC-11, AC-12b, AC-14, AC-15, AC-15a, AC-18, AC-19)
 
 **Files:** `modules/concierge/purchase/approve.ts`, `store.ts`, new `replace.ts`; `__tests__/purchase.test.ts` (local-db), new `__tests__/replace.test.ts` (local-db); export through `modules/concierge/index.ts`.
 
-**Consumes:** Tasks 1–2 functions; `sequentialCaps` and `placeRound` from `place.ts`; `committedSpendCents`, `classifyTotal` from core.
+**Consumes:** Tasks 1–2, Task 5 (`listGiftQuote` for re-quotes), `sequentialCaps` and `placeRound` from `place.ts`, `committedSpendCents` and `classifyTotal` from core.
 
 **Produces:**
-- `ApproveInput` gains `shipTo?: ShipTo`, with `type ShipTo = { kind: "recipient" } | { kind: "buyer" } | { kind: "other"; address: AddressDraft; saveToPerson: boolean }`. `buyer` reads `public.account_addresses` with the service-role client (`address_source = 'own'`); `other` checks `isShippableAddress`.
-- `ApproveError` gains `"replaced"` (from `approve_round: replaced`).
-- `approveAndBuy` reads the round again **after** `claimRoundNow` and computes caps from that read (AC-9).
-- `capsFor(round: RoundRow, totals: number[], account: Account, confirmed: boolean, settings, committedCents: number): { caps: number[]; neverMoreThanCents: number } | ApproveError`, shared by `approveAndBuy`, `replaceFailedOrder` and the confirm page's preview.
-- `requote(input: { userId; roundId; orderId }, deps: PurchaseDeps & { lookup: { http: ZincHttp; key: string } }): Promise<{ oldCents; newCents } | "not_allowed" | "unavailable">`: inside `hasPaidFeatures`, one `productOffers` call, `pickOffer`, `estimatedTotalCents`; writes `requote_total_cents`; logs `order.requoted`. Only for an unresolved `price_up` order.
-- `replaceFailedOrder(input: { userId; roundId; failedOrderId; ideaId; shipTo?: ShipTo; overBudgetConfirmed?: boolean }, deps: PurchaseDeps): Promise<ApproveResult>`: lease, re-read, committed spend of the other live orders, budget check (AC-6 rules), caps, `replace_failed_order`, `placeRound`, the same "tell the customer" step as `approveAndBuy`. A `price_up` re-buy uses `requote_total_cents` as its total and refuses without one (`not_found`). Keeps the failed order's `gift_message` and `ship_to` unless `shipTo` is given (address failures).
+- `ApproveInput` gains `shipTo?: ShipTo`, `type ShipTo = { kind: "recipient" } | { kind: "buyer" } | { kind: "other"; address: AddressDraft; saveToPerson: boolean }`. `buyer` reads `public.account_addresses` (service role; `address_source = 'own'`); `other` checks `isShippableAddress`.
+- `ApproveError` gains `"replaced"`: returned when a picked idea isn't `proposed` (`IdeaRow` gains `status`), checked after the lease and before `approve_round`, so a stale link on a `generating` round says "replaced", not "not open" (nit); also mapped from `approve_round: replaced`.
+- `approveAndBuy` keeps its ownership read before the lease (so it never leases another user's round), then reads the round again after `claimRoundNow` and works only from that read (AC-9).
+- `capsFor(round: RoundRow, totals: number[], account: Account, confirmed: boolean, settings, committedCents: number): { caps: number[]; neverMoreThanCents: number } | ApproveError`, shared by `approveAndBuy`, `replaceFailedOrder` and the confirm page.
+- `quoteFailedOrder(input: { userId; roundId; orderId }, deps: QuoteDeps): Promise<{ oldCents; newCents } | "not_allowed" | "unavailable" | "once">`, read-only, for the fix page: inside `hasPaidFeatures`, one quote for the idea's own offer (`offer_id`; gone counts as `unavailable`) through `listGiftQuote`'s route; `once` when the idea already had a price rise fixed. `QuoteDeps` = `ZincDeps` plus `lookup: { http; key }` (the app's lookup key, as the idea run uses it, **[Verify]**). Logs `order.requote`.
+- `replaceFailedOrder(input: { userId; roundId; failedOrderId; ideaId; shownTotalCents?: number; shipTo?: ShipTo; overBudgetConfirmed?: boolean }, deps: PurchaseDeps & QuoteDeps): Promise<ApproveResult>`: ownership read, `hasPaidFeatures` (refuses `not_allowed`, nit), lease, re-read; for a price-up re-buy, one more quote under the lease, refused (`price_changed`) when above `shownTotalCents` (S1); the other live orders' committed spend; the budget check (`needs_confirmation`, `over_budget`); caps; `replace_failed_order` with `new_total_cents`; `placeRound`; the same "tell the customer" step as `approveAndBuy`. Address failures pass `shipTo` (`buyer`, `other`, or the person's own address as `other`, only when `recipientAddress` isn't shared, T61).
 
 - [ ] **Step 1: Write the failing local-db tests:**
-  - `a budget saved while approveAndBuy waits for the lease caps the order at the new budget`
+  - `a budget set while approveAndBuy takes the lease caps the order at the new budget` (S7: the test adds a temporary trigger on that round that sets `budget_cents = 5000` when `locked_until` changes, so the read before the lease sees no budget and the read after sees 5000; it fails on today's code)
   - `ships to the buyer's own address when asked` (`ship_to = 'buyer'`, the snapshot is the account address)
   - `another address is saved to the person when asked`
-  - `a rejected idea returns replaced and places nothing`
+  - `a stale link after None of these returns replaced and places nothing`
   - `a gift note over zinc_gift_message_max_chars is refused`
-  - `requote writes today's total and makes one Zinc call` (fake Zinc call count 1)
-  - `requote without paid features makes no Zinc call`
-  - `replace at the new price places one order capped from the re-quote, and a second replace is refused`
-  - `replace counts the round's other placed order against the budget` (a $30 placed order and $25 next-best against $50 → `needs_confirmation`)
+  - `a price_up re-buy places at the new price` (B1: the fake refuses any cap below the price; the re-buy is placed)
+  - `the re-buy is refused when the price rose again since the page loaded` (`price_changed`; two quotes, no order)
+  - `a second price rise on the same gift is offered no re-buy` (`once`)
+  - `replace counts the round's other placed order against the budget` ($30 placed and a $25 next-best against $50 → `needs_confirmation`)
   - `replace past the over-budget allowance is refused` (`over_budget`)
-  - `an address_rejected order replaced to the buyer places; to the shared address it's refused`
+  - `without paid features replace is refused and calls no Zinc`
+  - `an address_rejected gift re-bought to the buyer ships to the buyer, with the shared address still present` (B2, through `placeRound`: the Zinc order's address is the buyer's)
   - `two replaces at once: one order, the other busy`
-- [ ] **Step 2: Watch them fail.** `pnpm test:db`. Expected: the new tests fail.
+  - `a list gift approved is claimed for the buyer, and released when its order fails`
+- [ ] **Step 2: Watch them fail.** `pnpm test:db`.
 - [ ] **Step 3: Write the changes.**
 - [ ] **Step 4: Watch them pass.** `pnpm test:db`. Expected: all pass, including the existing `purchase.test.ts`.
 - [ ] **Step 5: Commit** `feat: buy with a ship-to choice and replace a failed gift (ALL-29)`.
 
-### Task 6: Rejecting, the open round's budget, and page reads [P with Task 5] (AC-3, AC-9, AC-12, AC-13a, AC-18, AC-25)
+### Task 9: Rejecting, the open round's budget, and page reads [P with Task 8] (AC-3, AC-9, AC-12, AC-13a, AC-18, AC-25, AC-29, AC-30)
 
 **Files:** new `modules/concierge/rounds/approval.ts`, `__tests__/approval-db.test.ts` (local-db); export through `index.ts`.
 
 **Produces:**
-- `rejectRoundIdeas(input: { userId; roundId; code: RejectionCode; text: string | null }, deps: ZincDeps): Promise<{ ok: true; runsLeft: boolean } | { ok: false; error: "not_found" | "busy" | "not_open" | "too_long" }>`: lease via `claimRoundNow`/`withLease`, `rejectionFacts` from the proposed ideas' titles, `reject_round_ideas`; logs `round.ideas_rejected` with the code and count only. Doesn't call `advanceRound`: the next tick runs ideas.
+- `rejectionOutlook(roundId, deps): Promise<{ withFact: boolean; withoutFact: boolean }>`: `runs_after_rejection` both ways, so the sheet knows per chip whether to say "No more new ideas this time".
+- `rejectRoundIdeas(input: { userId; roundId; code: RejectionCode; text: string | null; ownedIdeaId: string | null; expectMore: boolean }, deps: ZincDeps): Promise<{ ok: true; more: boolean } | { ok: false; error: "not_found" | "busy" | "not_open" | "changed" | "too_long" }>`: lease, `rejectionFacts` from the proposed ideas' titles (the owned idea's title for `has_it`), `reject_round_ideas`. Logs `round.ideas_rejected` or `round.rejection_noted` with the code and count only. Doesn't call `advanceRound`: the next tick runs ideas.
 - `setRoundBudget(input: { userId; roundId; budgetCents: number }, userDb, deps: ZincDeps): Promise<"saved" | "busy" | "already_set" | "not_open">`: `save_budgets` as the user (the round's occasion kind), then `set_round_budget` under the lease; logs `round.budget_set`.
-- `roundForBuyer(roundId: string, viewerId: string, deps): Promise<{ kind: "mine"; view: RoundPageView } | { kind: "other" } | { kind: "missing" }>`: one service-role read that tells the owner from anyone else and returns nothing about another account's round. `RoundPageView` carries the round (status, budget, deadline, occasion), its ideas (with `imageUrl`, `source`, claimed), live and failed orders, the next-best idea, and `closedText` for AC-18.
+- `roundAccess(roundId, viewerId, deps): Promise<"mine" | "other" | "missing">`: the only service-role read, returning nothing else (S4).
+- `roundView(roundId, userDb): Promise<RoundPageView>`: read with the user's client (RLS), naming columns on `gift_rounds` and `orders`: the round, its ideas (`imageUrl`, `source`, `listItemId`), live and failed orders, `closedText` (AC-18), the next-best idea, and from `lists.person_list` (the user may read their own people's) the claimed flags and the list gifts not among the ideas, for "Buy it yourself".
 
 - [ ] **Step 1: Write the failing local-db tests:**
-  - `None of these saves the reason and the facts and sends the round back to generating`
-  - `a busy round returns busy and changes nothing`
-  - `rejecting after an order was placed returns not_open`
+  - `None of these with a search left saves the reason and the facts and sends the round back to generating`
+  - `None of these with no search left keeps the ideas buyable` (the round still `awaiting_approval`, ideas `proposed`)
+  - `a stale outlook returns changed and saves nothing`
+  - `a busy round returns busy and changes nothing`; `after an order was placed it returns not_open`
   - `the saved reason shows in activeFacts for the person` (AC-25)
   - `a budget typed on the round is saved for the person and the occasion, and sets the round's budget`
-  - `roundForBuyer tells another account only "other"` (no ids, titles or names in the result)
+  - `roundAccess tells another account only "other"`; `roundView as another user returns nothing` (RLS)
+  - `roundView greys a claimed list gift and lists an unbuyable one for Buy it yourself`
   - `an ordered round's view says what was ordered`; `a past round says the occasion has passed`
 - [ ] **Step 2: Watch them fail.** `pnpm test:db`.
 - [ ] **Step 3: Write `approval.ts`.**
-- [ ] **Step 4: Watch them pass.** `pnpm test:db`. Expected: all pass.
+- [ ] **Step 4: Watch them pass.** `pnpm test:db`.
 - [ ] **Step 5: Commit** `feat: reject a round's ideas and set its budget from the round screen (ALL-29)`.
 
-### Task 7: The engine after a rejection (AC-13, AC-13a)
+### Task 10: Emails link to the new pages [P with Tasks 7–9] (AC-1, AC-16)
 
-**Files:** `packages/core/src/round-plan.ts` and its test; `modules/concierge/rounds/{engine,store}.ts`, `notify/templates.ts`, `__tests__/round-engine.test.ts`.
-
-**Produces:**
-- `StepKey` adds `` `${SetStep}:${number}` `` with `SetStep = "heads_up" | "reminder_1" | "reminder_2" | "final_notice" | "no_ideas" | "no_ideas_again" | "no_more_ideas"`.
-- `setKey(step: SetStep, ideaSet: number): StepKey`: set 1 keeps the bare key, so rounds already running are unchanged; set 2 and later get `:n`.
-- `RoundView.ideaSet: number` and `ranSinceRejection: boolean` (an idea run started after the round's latest `rejections.created_at`). `nextAction` keys the approval schedule and `noIdeasAction` through `setKey`. When `ideaSet > 1`, `!ideaRunsLeft` and `!ranSinceRejection`, it sends `setKey("no_more_ideas", n)` once.
-- `ClaimedRound.ideaSet` from `gift_rounds.idea_set`; `RoundContext.ranSinceRejection`; `ranSinceNoIdeas` reads the set's own `no_ideas` key.
-- The engine's `sendHeadsUp`, `emailStep` and the skip rule ("was the buyer told anything?") use the set's keys.
-- New template `no_more_ideas: { personName }` with links `{ open: person page }`: "There are no more new ideas this time. Pick from the ideas on {name}'s page, or buy something yourself."
-
-- [ ] **Step 1: Write the failing tests:**
-  - round-plan: `after a rejection, set 2 sends heads_up:2 though heads_up was sent`
-  - `reminder_1 from set 1 doesn't stop reminder_1:2`
-  - `set 1 keys are unchanged` (existing tests pass as they are)
-  - `set 2 with no runs left and no run since the rejection sends no_more_ideas:2, once`
-  - `set 2 whose run found nothing sends no_ideas:2`
-  - engine (fake store): `a rejected round runs ideas on the next tick and sends a second heads-up with the new ideas`
-- [ ] **Step 2: Watch them fail.** `pnpm test`.
-- [ ] **Step 3: Write the changes.**
-- [ ] **Step 4: Watch them pass.** `pnpm test && pnpm test:db`. Expected: all pass, including `fanout-db.test.ts`.
-- [ ] **Step 5: Commit** `feat: new ideas, and their own emails, after None of these (ALL-29)`.
-
-### Task 8: Too-pricey ceiling and photos in the idea run [P with Task 7] (AC-12, AC-17)
-
-**Files:** `packages/core/src/ideas.ts` and test; `modules/concierge/zinc/products.ts`, `ideas/{run,store}.ts`; `__tests__/{zinc-products,idea-run,idea-store}.test.ts`; `e2e/fake-zinc.ts`.
-
-**Produces:**
-- `ZincHit.imageUrl: string | null`, read from the search hit's image field when it's `https://` (**[Verify]** the field name against the first recorded search reply; `null` until then).
-- `productPhoto(h, key, productId, signal): Promise<string | null>`, exported from `products.ts`, wrapping `productDetails`' `imageUrl`. The run calls it once per kept idea that has no photo, after ranking, counting `zinc_lookup_cents` against `idea_run_max_cents` like every other lookup; a failure leaves the photo null.
-- `SavedIdea.imageUrl`; `save()` sends `image_url`.
-- `IdeaInputs.round.maxTotalCents: number | null`: the lowest `est_total_cents` among the round's ideas rejected with `too_pricey` in its latest rejection. `JudgeContext.maxTotalCents`: a total at or above it drops as `over_limit`; the brainstorm's budget is `min(budget, maxTotalCents)`.
-
-- [ ] **Step 1: Write the failing tests:**
-  - `judgeCandidate drops a total at or above maxTotalCents`
-  - `searchProducts keeps an https image and drops an http one`
-  - `a kept idea without a search photo gets one from product details, counted at zinc_lookup_cents`
-  - `a failed photo lookup keeps the idea, with no photo`
-  - `the run after Too pricey uses the cheapest rejected total as its ceiling` (idea-store, local-db)
-- [ ] **Step 2: Watch them fail.** `pnpm test && pnpm test:db`.
-- [ ] **Step 3: Write the changes; the fake Zinc's product details answer with a `main_image`.**
-- [ ] **Step 4: Watch them pass.** Same commands. Expected: all pass.
-- [ ] **Step 5: Commit** `feat: product photos on ideas, and a lower price after Too pricey (ALL-29)`.
-
-### Task 9: Emails link to the new pages [P with Tasks 7–8] (AC-1, AC-16)
-
-**Files:** `lib/email-layout.ts` and `lib/__tests__/email-layout.test.ts`; `modules/concierge/notify/{templates,samples}.ts`; `rounds/engine.ts`; `__tests__/{templates,samples}.test.ts`.
+**Files:** `lib/email-layout.ts` and its test; `modules/concierge/notify/{templates,samples}.ts`; `rounds/{engine,store}.ts`; `__tests__/{templates,samples}.test.ts`.
 
 **Produces:**
 - `EmailParts.rows[]` gains `link?: { label: string; url: string }`: an anchor under the row's detail, 44px tall like the other plain links; the text version prints `label: url` under the row.
-- `IdeaRow` gains `arriveBy: string` and `reason: string`; `TemplateLinks.heads_up | reminder | final_notice` become `{ choose: string; questions?: string; [buy: `buy${number}`]: string }`, the `who_is_this` pattern. Each row's link is "Buy this". The button reads "Pick several or none of these" and opens `/rounds/<id>`.
-- The engine passes plain links (`LinkSpec` `{ path }`): `buy<i>` → `/rounds/<id>/buy?ideas=<ideaId>`, `choose` → `/rounds/<id>`. Ideas come from `RoundContext.ideas`, which gains `id`, `arriveBy` and `reason`.
-- `sendOpenFailures` and `failed_several`: each `FailedGift` gains `url`, `/rounds/<id>/fix/<orderId>`; the single-failure emails' button opens that page too. The auto-buy heads-up keeps its current links.
+- `IdeaRow` gains `arriveBy` and `reason`. `TemplateLinks.heads_up | reminder | final_notice` become `{ choose: string; questions?: string; [buy: `buy${number}`]: string }`, the `who_is_this` pattern. Each row's link is "Buy this"; the button reads "Pick several or none of these" and opens `/rounds/<id>`.
+- The engine passes plain links (`LinkSpec` `{ path }`): `buy<i>` → `/rounds/<id>/buy?ideas=<ideaId>`, `choose` → `/rounds/<id>`. `RoundContext.ideas` gains `id`, `arriveBy` and `reason`.
+- `sendOpenFailures` and `failed_several`: each `FailedGift` gains `url`, `/rounds/<id>/fix/<orderId>`; the single-failure emails' button opens that page. The auto-buy heads-up keeps its current links.
 
 - [ ] **Step 1: Write the failing tests:**
   - `a row with a link renders it as an anchor and in the text version`
   - `the heads-up has a Buy this link per idea and one button to the round screen` (3 ideas → 3 `/buy?ideas=` URLs, 1 `/rounds/<id>` button)
   - `reminder and final notice carry the same links`
-  - `failed_several links each gift to its own fix page`
-  - `a single price_up email opens that order's fix page`
-  - `the samples render every kind` (adds `no_more_ideas`)
+  - `failed_several links each gift to its own fix page`; `a single price_up email opens that order's fix page`
+  - `the samples render every kind`
 - [ ] **Step 2: Watch them fail.** `pnpm test`.
 - [ ] **Step 3: Write the changes.**
-- [ ] **Step 4: Watch them pass.** `pnpm test`. Expected: all pass.
+- [ ] **Step 4: Watch them pass.** `pnpm test`.
 - [ ] **Step 5: Commit** `feat: Buy this links in the approval emails, and failure links to each gift (ALL-29)`.
 
-### Task 10: The round screen (AC-3, AC-5, AC-6, AC-7, AC-9, AC-12, AC-13a, AC-17, AC-18)
+### Task 11: The round screen (AC-3, AC-5, AC-6, AC-7, AC-9, AC-12, AC-13a, AC-17, AC-18, AC-29, AC-30)
 
-**Files:** create `apps/web/app/rounds/[id]/page.tsx`, `round-screen.tsx`, `app/rounds/actions.ts`, `app/rounds/access.tsx` (signed-out and wrong-account states), `components/idea-photo.tsx`; tests in `app/rounds/__tests__/round-screen.test.tsx`; photos in `app/people/[id]/ideas/ideas-screen.tsx`.
+**Files:** create `apps/web/app/rounds/[id]/page.tsx`, `round-screen.tsx`, `app/rounds/actions.ts`, `app/rounds/access.tsx`, `components/idea-photo.tsx`; tests in `app/rounds/__tests__/round-screen.test.tsx`; photos in `app/people/[id]/ideas/ideas-screen.tsx`.
 
 **Produces:**
-- Page: `params: Promise<{ id: string }>`; `roundForBuyer` decides the state. Signed out is handled by `proxy.ts` (`signInRedirect` keeps the path and query). "other" shows "This gift belongs to another account" and nothing else.
-- `RoundScreen`: idea cards (photo, title, store, total, arrive-by, reason; "From their list" for `source = 'list'`; claimed list gifts greyed and not tickable); the picks bar (`picksBar`); the over-budget sheet ("Yes, pick it" / "Keep within budget"); "Your budget" when the round has none; "None of these" with the four chips (`Already has one`, `Not their style`, `Too pricey`, `Too generic`) and optional text, only on `awaiting_approval` with no live orders. "Buy n gifts" links to `/rounds/<id>/buy?ideas=a,b` plus `&over=1` after the sheet.
+- Page: `params: Promise<{ id: string }>`; `roundAccess` decides the state, then `roundView` reads the round. Signed out is handled by `proxy.ts` (`signInRedirect` keeps the path and query). "other" shows "This gift belongs to another account" and nothing else.
+- `RoundScreen`: list gifts first ("On their list"), then AI ideas: photo, title, store, total, arrive-by, reason; claimed list gifts greyed and not tickable; "From their list" rows with "Buy it yourself" for gifts that weren't offered; the picks bar (`picksBar`); the over-budget sheet ("Yes, pick it" / "Keep within budget"); "Your budget" when the round has none; "None of these" (only on `awaiting_approval` with no live orders) with the four chips, "Which one?" after "Already has one", optional text, and "No more new ideas this time" when `rejectionOutlook` says so for the chosen chip. "Buy n gifts" links to `/rounds/<id>/buy?ideas=a,b` plus `&over=1` after the sheet.
 - `IdeaPhoto({ url, title })`: `<img referrerPolicy="no-referrer" loading="lazy">` or the gift icon.
-- Server actions: `rejectAction(roundId, form)` and `setBudgetAction(roundId, form)`, each re-reading the user from the session and validating with zod.
+- Server actions `rejectAction(roundId, form)` and `setBudgetAction(roundId, form)`.
 
 - [ ] **Step 1: Write the failing component tests:**
   - `ticking two ideas shows "2 picked · $60 of $50"`
   - `ticking past the budget opens the sheet; Keep within budget unticks it`
   - `past the allowance the bar says it's over the most you allowed and Buy is disabled`
-  - `a claimed list gift is greyed and can't be ticked`
+  - `list gifts come first; a claimed one is greyed and can't be ticked`
+  - `a gift that wasn't offered shows Buy it yourself linking to its page`
+  - `Already has one asks Which one? before it can be sent`
+  - `with no search left the sheet says No more new ideas this time before confirming`
   - `None of these isn't shown on an ordered round`
-  - `with no runs left the page says there are no more new ideas this time`
   - `the photo has referrerpolicy no-referrer; with no url the gift icon shows`
 - [ ] **Step 2: Watch them fail.** `pnpm test`.
 - [ ] **Step 3: Build the page, screen, actions and photo.**
-- [ ] **Step 4: Watch them pass.** `pnpm test && pnpm typecheck`. Expected: all pass.
-- [ ] **Step 5: Commit** `feat: the round screen: pick several, set a budget, or none of these (ALL-29)`.
+- [ ] **Step 4: Watch them pass.** `pnpm test && pnpm typecheck`.
+- [ ] **Step 5: Commit** `feat: the round screen: list gifts first, pick several, set a budget, or none of these (ALL-29)`.
 
-### Task 11: The confirm page and the fix page (AC-2, AC-4, AC-8, AC-10, AC-11, AC-12b, AC-14, AC-15, AC-15a, AC-18, AC-19)
+### Task 12: The confirm page and the fix page (AC-2, AC-4, AC-6, AC-8, AC-10, AC-11, AC-12b, AC-14, AC-15, AC-15a, AC-18, AC-19)
 
-**Files:** create `app/rounds/[id]/buy/page.tsx`, `confirm-screen.tsx`, `app/rounds/[id]/fix/[orderId]/page.tsx`, `fix-screen.tsx`; add `buyAction` and `replaceAction` to `app/rounds/actions.ts`; tests in `app/rounds/__tests__/`.
+**Files:** create `app/rounds/[id]/buy/page.tsx`, `confirm-screen.tsx`, `app/rounds/[id]/fix/[orderId]/page.tsx`, `fix-screen.tsx`, a shared `over-budget-sheet.tsx`; add `buyAction` and `replaceAction` to `app/rounds/actions.ts`; tests in `app/rounds/__tests__/`.
 
 **Produces:**
-- Confirm page: `searchParams: Promise<{ ideas?: string; over?: string }>`, ids parsed as UUIDs (max: the round's idea count). It shows, per AC-4, each idea's photo, title, store and arrive-by; the price with shipping and tax; Zinc's fee per order; the estimated total; "never more than $X" (`capsFor().neverMoreThanCents`); "Ships to" (the recipient by default; city and state only for a shared address; the ALL-41 "Where it goes" choices); a gift note limited to `zinc_gift_message_max_chars`; the Zinc balance (`getZincWallet`) and `zincFeeNotice`. One button: "Buy now · about $total", or "Buy anyway · $total" with how far over the budget it is (AC-8). Ideas that aren't `proposed` show "These ideas were replaced" and no button (AC-12b).
-- `buyAction(roundId, form)`: builds deps with `buyingWiring`, calls `approveAndBuy` with `overBudgetConfirmed` only when the page was in its over-budget state, and shows the result ("Ordered", "Waiting on your Zinc balance", "Price went up", "Someone else got it", "Busy, try again"). `no_address` links to the address form with `?next=` back (**[Verify]** both address forms honour `next`).
-- Fix page: for `price_up` it calls `requote` once on load and shows old and new totals with "Buy at about $new"; for the other failures it shows what happened in plain words and the next-best idea with "Buy this instead", or "See all ideas"; for address failures, "Ship it to me", "Another address" or the person's own address once added (AC-15a). A resolved or replaced order shows what happened instead.
+- Confirm page: `searchParams: Promise<{ ideas?: string; over?: string }>`, ids parsed as UUIDs (at most the round's idea count). Per AC-4: each idea's photo, title, store and arrive-by; the price with shipping and tax; Zinc's fee per order; the estimated total; "never more than $X" (`capsFor().neverMoreThanCents`); "Ships to" (recipient by default, city and state only for a shared address, the ALL-41 "Where it goes" choices); a gift note limited to `zinc_gift_message_max_chars`; the Zinc balance (`getZincWallet`) and `zincFeeNotice`. One button: "Buy now · about $total", or "Buy anyway · $total" with how far over (AC-8). Ideas that aren't `proposed` show "These ideas were replaced" and no button (AC-12b).
+- `buyAction(roundId, form)`: `buyingWiring`, then `approveAndBuy` with `overBudgetConfirmed` only from the over-budget state; shows "Ordered", "Waiting on your Zinc balance", "Price went up", "Someone else got it", "These ideas were replaced", "Busy, try again". `no_address` links to the address form with `?next=` back (**[Verify]** both address forms honour `next`).
+- Fix page: `price_up` calls `quoteFailedOrder` on load and shows old and new totals with "Buy at about $new" (the form carries `shownTotalCents`); `once`, `unavailable` or a store with no live price shows the next-best idea or "See all ideas". Other failures: what happened in plain words, the next-best idea with "Buy this instead", or "See all ideas". Address failures: "Ship it to me", "Another address", or the person's own address when one is saved and no address is shared (AC-15a). Over the budget, the same over-budget sheet and "Buy anyway" as the round screen (S3). A resolved or replaced order shows what happened instead.
 - `replaceAction(roundId, orderId, form)` calls `replaceFailedOrder`.
 
 - [ ] **Step 1: Write the failing component tests:**
@@ -422,48 +474,53 @@ Can run alongside Tasks 1–3.
   - `an over-budget link reads Buy anyway and says how far over`
   - `the gift note stops at the setting's length`
   - `a replaced idea shows "These ideas were replaced" and no button`
-  - `the price_up fix page shows old and new totals`
-  - `an address failure never offers the shared address`
+  - `the price_up fix page shows old and new totals and carries the shown total`
+  - `a fix that goes over the budget asks first and then reads Buy anyway` (S3)
+  - `a second price rise shows See all ideas`
+  - `an address failure offers me, another address, and their own address only when none is shared`
   - `with no next-best idea the fix page shows See all ideas`
 - [ ] **Step 2: Watch them fail.** `pnpm test`.
 - [ ] **Step 3: Build the pages and actions.**
-- [ ] **Step 4: Watch them pass.** `pnpm test && pnpm typecheck && pnpm build`. Expected: all pass, and the build lists `/rounds/[id]`, `/rounds/[id]/buy` and `/rounds/[id]/fix/[orderId]` as dynamic.
+- [ ] **Step 4: Watch them pass.** `pnpm test && pnpm typecheck && pnpm build`. Expected: all pass; the build lists the three `/rounds` routes as dynamic.
 - [ ] **Step 5: Commit** `feat: the confirm page and the fix page (ALL-29)`.
 
-### Task 12: Browser journeys, layout and gallery (AC-1–AC-4a, AC-6, AC-12, AC-13, AC-14, AC-15, AC-18, AC-19, AC-26)
+### Task 13: Browser journeys, layout and gallery (AC-1–AC-4a, AC-6, AC-12, AC-13, AC-13a, AC-14, AC-15, AC-18, AC-19, AC-26–AC-30)
 
-**Files:** create `e2e/approval.spec.ts`; add rows to `e2e/gallery.shots.ts`. Rounds and ideas are seeded with the service role (the app can't create them); everything else goes through the app.
+**Files:** create `e2e/approval.spec.ts`; extend `e2e/fake-zinc.ts` (other stores, store check, product details with `main_image`); add rows to `e2e/gallery.shots.ts`. Rounds and ideas are seeded with the service role (the app can't create them); lists, links and budgets go through the app (`e2e/seed.ts`).
 
 - [ ] **Step 1: Write the journeys (iPhone only):**
-  - `Buy this from the heads-up buys in two taps` (open the buy URL, press "Buy now": one order, fake Zinc places it, "Ordered" shows)
+  - `Buy this from the heads-up buys in two taps` (one order, the fake places it, "Ordered" shows)
   - `opening a buy link signed out signs in and comes back to the same page`
   - `another account sees only "This gift belongs to another account"`
-  - `loading the round, buy and fix pages changes nothing` (`request.get` on each URL: orders, rejections, budgets and round rows unchanged)
+  - `loading the round, buy and fix pages changes nothing` (`request.get` on each; orders, rejections, budgets, facts and rounds unchanged)
   - `two tabs press Buy: one order, the other sees what was bought`
   - `an over-budget pick needs Yes, pick it, and the confirm page says Buy anyway`
-  - `None of these saves the reason, the next tick brings new ideas and a second heads-up, and the old Buy this link says replaced` (fake Gateway, tick through `/api/rounds/tick` with the test clock)
+  - `None of these saves the reason, the next tick brings new ideas and a second heads-up, and the old Buy this link says replaced` (fake Gateway; tick through `/api/rounds/tick` with the test clock)
+  - `None of these with no search left keeps the ideas buyable and sends no email`
+  - `a linked list's gifts come first, priced by the fake Zinc, with no AI call when three qualify`; `a claimed one is greyed`; `an unsupported store's gift shows Buy it yourself`
   - `a price_up gift is bought at the new price from its fix page`
   - `an out_of_stock gift is replaced by the next-best idea`
   - `an ordered round's link says Already ordered and has no Buy button`
-- [ ] **Step 2: Write the `@layout` checks:** round screen, confirm page, fix page, the over-budget sheet and the None of these sheet: `phoneLayoutProblems(page)` is empty (no sideways scroll, every target at least 44px), light and dark.
-- [ ] **Step 3: Run them.** `pnpm --filter @gifts-af/web e2e -- e2e/approval.spec.ts`. Expected: they fail before the pages exist (run once on Task 9's commit), pass now. Check the exit code, not just the summary.
-- [ ] **Step 4: Gallery rows** for the round screen, the confirm page, the fix page and the `no_more_ideas` email; `pnpm gallery` renders them.
-- [ ] **Step 5: Commit** `test: approval journeys and layout checks (ALL-29)`.
+- [ ] **Step 2: Write the `@layout` checks:** round screen (with list gifts and "Buy it yourself"), confirm page, fix page, the over-budget sheet and the None of these sheet with "Which one?": `phoneLayoutProblems(page)` is empty, light and dark.
+- [ ] **Step 3: Run them.** `pnpm --filter @gifts-af/web e2e -- e2e/approval.spec.ts`. Expected: they fail on Task 10's commit, pass now. Check the exit code.
+- [ ] **Step 4: Gallery rows** for the round screen, the confirm page and the fix page; `pnpm gallery` renders them.
+- [ ] **Step 5: Commit** `test: approval and list-gift journeys and layout checks (ALL-29)`.
 
-### Task 13: Docs, pages and the PR
+### Task 14: Docs, pages and the PR
 
 - [ ] **Step 1: Decisions** in `design/decisions.md`, next free numbers (T78 onward at the time of writing):
   - Plain app links for the approval pages, revising T38 for them; loading never acts (AC-4a).
-  - `replace_failed_order` replaces `reapprove_order` (dropped in a later contract migration); the same-idea rule; never back to a withdrawn or rejected shared address.
+  - `replace_failed_order` replaces `reapprove_order` (dropped in a later contract migration): the same-idea rule, once per gift, fixed address for address failures, the buy-time re-quote.
+  - List gifts first in rounds, any Zinc-supported store, AI only below `idea_keep_min`; the store routes; the pricing rule for check-only stores, as the owner answers.
   - Photos from Zinc only, `https://`, no referrer.
   - Revising T73: a budget typed on an open round with none sets that round's budget under the lease.
-  - Per-idea-set step keys and `no_more_ideas`.
-- [ ] **Step 2: Design and UI docs.** `design/technical-design.md` §6.5 (pages, next-best, `replace_failed_order`, photos, re-quote) and §5 (re-generation after a rejection); `design/ui.md` (the approval screens and the email's per-idea links); `design/operations.md` (the new events, and that `reapprove_order` is unused). No new commands.
-- [ ] **Step 3: Pages.** Republish the round engine page (re-generation after a rejection, per-set keys) and the screens and emails page (`pnpm gallery`), each to its own URL.
+  - Renamed sends after a rejection; None of these with no search left keeps the ideas.
+- [ ] **Step 2: Design and UI docs.** `design/technical-design.md` §6.3 (list gifts first, store routes, photos) and §6.5 (pages, next-best, `replace_failed_order`, re-quote) and §5 (re-generation after a rejection); `design/ui.md` (the approval screens, list gifts and "Buy it yourself", the email's per-idea links); `design/spikes/checkout.md` (the [Verify] answers for store routes); `design/operations.md` (the new events, and that `reapprove_order` is unused). No new commands.
+- [ ] **Step 3: Pages.** Republish the round engine page (re-generation after a rejection, list-only rounds) and the screens and emails page (`pnpm gallery`), each to its own URL.
 - [ ] **Step 4: Verify.** Re-date the migration past `main`'s newest, then `pnpm lint && pnpm typecheck && pnpm test && pnpm test:db && pnpm db:test && pnpm build` and `pnpm --filter @gifts-af/web e2e`. All green.
-- [ ] **Step 5: PR** titled `feat: approve and buy from the email, pick several, none of these, fix a failed gift (ALL-29)`, body `Part of ALL-29`, answering E9: **seeing it work:** `order.approved`, `order.replaced`, `round.ideas_rejected` events; **turning it off:** `zinc_ordering_enabled = 0` stops all buying, `round_engine_enabled = 0` stops new rounds and emails, or a Vercel rollback. Run the adversarial review (T55) and read PR feedback (T59).
+- [ ] **Step 5: PR** titled `feat: approve and buy from the email, list gifts first, none of these, fix a failed gift (ALL-29)`, body `Part of ALL-29`, answering E9: **seeing it work:** `order.approved`, `order.replaced`, `round.ideas_rejected`, `ideas.list_gift` events; **turning it off:** `zinc_ordering_enabled = 0` stops all buying, `round_engine_enabled = 0` stops new rounds and emails, `idea_engine_enabled = 0` stops idea runs (list lookups included), or a Vercel rollback. Run the adversarial review (T55) and read PR feedback (T59).
 
-### Task 14: Switching on in production (AC-20–AC-24; needs the owner)
+### Task 15: Switching on in production (AC-20–AC-24; needs the owner)
 
 Not code. Each step needs the owner; none runs without them. Evidence goes on ALL-29 as each passes.
 
@@ -479,45 +536,46 @@ Not code. Each step needs the owner; none runs without them. Evidence goes on AL
 
 - [x] Every acceptance criterion maps to a task and a test:
 
-| Criterion | Task |
+| Criterion | Tasks |
 |---|---|
-| AC-1 | 9, 12 |
-| AC-2, AC-3, AC-4, AC-4a | 5, 6, 10, 11, 12 |
-| AC-5, AC-6, AC-7, AC-8 | 4, 5, 10, 11, 12 |
-| AC-9 | 3, 5, 6, 10 |
-| AC-10, AC-11 | 5, 11 |
-| AC-12, AC-25 | 3, 4, 6, 8, 10, 12 |
+| AC-1 | 10, 13 |
+| AC-2, AC-3, AC-4, AC-4a | 8, 9, 11, 12, 13 |
+| AC-5, AC-6, AC-7, AC-8 | 4, 8, 11, 12, 13 |
+| AC-9 | 3, 8, 9, 11 |
+| AC-10, AC-11 | 8, 12 |
+| AC-12, AC-25 | 3, 4, 6, 9, 11, 13 |
 | AC-12a | 1 |
-| AC-12b | 1, 2, 5, 11, 12 |
-| AC-13, AC-13a | 3, 7, 10, 12 |
-| AC-14, AC-15, AC-15a | 2, 4, 5, 11, 12 |
-| AC-16 | 9 |
-| AC-17 | 1, 8, 10 |
-| AC-18, AC-19 | 1, 5, 6, 11, 12 |
-| AC-20 to AC-24 | 14 |
-| AC-26 | 12 |
+| AC-12b | 1, 2, 8, 12, 13 |
+| AC-13 | 3, 7, 13 |
+| AC-13a | 3, 9, 11, 13 |
+| AC-14, AC-15, AC-15a | 2, 4, 5, 8, 12, 13 |
+| AC-16 | 10 |
+| AC-17 | 1, 5, 6, 11 |
+| AC-18, AC-19 | 1, 8, 9, 12, 13 |
+| AC-20 to AC-24 | 15 |
+| AC-26 | 13 |
+| AC-27, AC-28 | 1, 5, 6, 7, 13 |
+| AC-29, AC-30 | 2, 5, 8, 9, 11, 13 |
+| AC-31 | 6 |
 
-- [x] Every task traces back to a story or criterion. The re-quote column (Task 2) exists so the "Buy at about $new" action uses the price the page showed without a second paid lookup (AC-14).
-- [ ] No open questions are left. Two need the owner (below).
-- [ ] Adversarial review of the spec done; of this plan, still to do.
-
-**For the owner, before Task 4:**
-1. **What does "Already has one" save when the round had three ideas?** My pick: the sheet asks "Which one?" (one tap on an idea) and saves that title as `owns`; "Not their style" and "Too generic" save one `avoid` fact, "Not their style: <the titles>"; the free text is saved as an `avoid` fact.
-2. **Gifts from a person's own list:** nothing puts them into a round today (no code writes `gift_ideas.source = 'list'`). My pick: this ticket shows and greys them out when they're there, and a new ticket makes rounds offer them.
+- [x] Every task traces back to a story or criterion (nothing extra).
+- [x] Plan review findings and where each is fixed: B1 Tasks 2, 5, 8; B2 Tasks 2, 8; B3 Task 7; S1 Tasks 8, 12; S2 Tasks 2, 8, 12; S3 Task 12; S4 Tasks 9, 11; S5 Tasks 3, 7; S6 Tasks 3, 9, 11; S7 Task 8; nits: status-first mapping Task 8, `active` kept Task 3, `productDetails` called directly and photos never over the cap Task 6, paid check on replace Task 8, regression-guard label Task 1.
+- [ ] No open questions are left. One remains for the owner: pricing a list gift whose store Zinc can only check (decisions table, last row).
+- [ ] Adversarial review of the spec done, and of the plan; re-review of this revision still to do.
 
 ## Done: evidence on the ticket (T44)
 
 - [ ] Test evidence posted on the Linear ticket: tests added (and that they failed first), suite and CI results.
-- [ ] Screenshots of what people see (the round screen, the confirm page, the fix page, the sheets and the new emails; phone and desktop, light and dark) and the mock-ups, uploaded into the ticket comment.
-- [ ] Live checks after deploy (Task 14), or listed as **Still open**.
+- [ ] Screenshots of what people see (the round screen with list gifts, the confirm page, the fix page, the sheets and the new emails; phone and desktop, light and dark) and the mock-ups, uploaded into the ticket comment.
+- [ ] Live checks after deploy (Task 15), or listed as **Still open**.
 - [ ] Every acceptance-criteria box in the ticket description ticked, each with a pointer to its evidence.
 
 ## Review focus
 
 The riskiest things no acceptance criterion pins down directly, each with the test that covers it:
 
-1. **A stale "Buy this" link buys a rejected idea.** The email outlives the ideas it lists. `approve_round` refuses anything not `proposed` (Task 1: `approve_round refuses a rejected idea`), and the journey presses an old link after None of these (Task 12).
-2. **A budget typed on the round screen races an approval in another tab.** `approveAndBuy` used to read the round before the lease, so its cap could ignore the new budget. It now re-reads under the lease (Task 5: `a budget saved while approveAndBuy waits for the lease caps the order at the new budget`).
-3. **A failed address gift goes back to the same unusable shared address.** `replace_failed_order` refuses `address_source = 'shared'` for those failures (Task 2: `an address_rejected order is never sent to a shared address`).
-4. **Double replacement from two tabs on the fix page buys twice.** The lease makes one busy, and the failed order must still be unresolved (Task 2: `a second replace of the same failed order is refused`; Task 5: `two replaces at once: one order, the other busy`).
-5. **A link scanner or prefetch acts by loading a page.** The pages only read, and the fix page's lookup writes only the re-quote (Task 12: `loading the round, buy and fix pages changes nothing`).
+1. **A price-up re-buy places at the old price and fails again.** `placeRound` re-checks caps from the idea's estimate, so `replace_failed_order` saves the new total on the idea. Task 2: `a price_up re-buy saves the new total on the idea`; Task 8: `a price_up re-buy places at the new price`, with a fake that refuses any cap below the price.
+2. **A failed shared-address gift goes back to the same address.** `placeRound` re-reads the recipient for `ship_to = 'recipient'`, so address re-buys must use a fixed snapshot. Task 2: `an address_rejected order can't ship to the recipient`; Task 8: `… ships to the buyer, with the shared address still present`.
+3. **A budget typed on the round screen races an approval in another tab.** Task 8: `a budget set while approveAndBuy takes the lease caps the order at the new budget`, made deterministic with a trigger on the lease.
+4. **A stale "Buy this" link buys a rejected idea.** Task 1: `approve_round refuses a rejected idea`; Task 8: `a stale link after None of these returns replaced`; Task 13's rejection journey.
+5. **A list gift from a store with no live price is bought for more than its list price.** Its cap is the list price plus the tax estimate and `order_price_margin_pct`, so Zinc refuses a higher real price and the gift fails as "price went up". Task 5: `another store passes the check and is listed at its list price`; Task 8 with the fake refusing a cap below the price.
