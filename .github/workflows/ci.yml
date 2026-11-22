@@ -55,6 +55,7 @@ jobs:
       - run: pnpm db:test
       - run: pnpm test:db
       - run: pnpm db:types:check
+      - run: pnpm db:map:check
 
   # Migrations (ALL-79, T50): after a merge to main, apply new migrations to
   # dev, then to prod only if dev succeeded. Vercel deploys the code at the same

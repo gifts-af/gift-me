@@ -127,7 +127,10 @@ The screens and emails page, https://claude.ai/artifact/9mrDvFAgoqxvxmzirJFCz6, 
 
 ## The database map page
 
-The database map, https://claude.ai/artifact/9uCRGGJL5Tu4X53VCYV3Rk, draws every table, how the tables connect, and every column, read from the local database. It is shared with the owner and Jim only, so link it from repo docs but not from the public roadmap or progress pages. When a change adds, drops or renames a table or a foreign key, redraw it in the same piece of work: read it with the Artifact tool (`action: "read"`), update it from the local database (`pnpm supabase start` with every migration applied), and republish to the same URL. Never publish a copy. The migrations stay the source; if the two disagree, the migrations win.
+The database map, https://claude.ai/artifact/9uCRGGJL5Tu4X53VCYV3Rk, draws every table, how the tables connect, and every column, with each table's rules and definition. It is shared with the owner and Jim only, so link it from repo docs but not from the public roadmap or progress pages. Keeping it current is enforced in two steps:
+
+- **In the PR (CI).** The page is generated from the local database into `design/database-map.html` by `pnpm db:map`, and committed. CI's `pnpm db:map:check` fails when that file doesn't match the schema, so a migration that changes tables, columns, keys, rules or privacy policies must regenerate it. A migration that only changes data leaves it alone. A new table lands in the map's bottom strip until it's given a lane and a one-line note in `apps/web/scripts/db-map/layout.json` (`pnpm db:map` says so).
+- **After the merge (Claude Code).** A hook in `.claude/settings.json` notices a merged PR that changed the map and asks for it to be published once CI's `migrate` job on main passes: publish `design/database-map.html` from the main checkout to the same URL with the Artifact tool. Never publish a copy. Until then a `.db-map-pending` note stays, and the session is stopped once before it finishes. A merge made outside Claude Code skips the hook, so whoever merges that way publishes it by hand.
 
 ## Writing for the human in the loop
 

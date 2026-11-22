@@ -1,0 +1,358 @@
+<title>GiftsAF Database Map</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: one reading column; a wide four-lane diagram (scrolls on phones) whose tables open a definition panel (right drawer on wide screens, bottom sheet on phones); then a table index. GiftsAF tokens (giftsaf.com): white or near-black, heavy system type, teal actions, yellow only on the logo tag. */
+:root {
+  --bg: #ffffff;
+  --card: #ffffff;
+  --fg: #18181b;
+  --muted: #f4f4f5;
+  --muted-fg: #71717a;
+  --line: #e4e4e7;
+  --teal: #0f766e;
+  --teal-soft: #f0fdfa;
+  --warm: #b45309;
+  --warm-soft: #fffbeb;
+  --shadow: 0 1px 2px rgba(24, 24, 27, .06), 0 8px 24px rgba(24, 24, 27, .08);
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, "Cascadia Code", "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #09090b; --card: #18181b; --fg: #fafafa; --muted: #27272a; --muted-fg: #a1a1aa; --line: #3f3f46;
+    --teal: #2dd4bf; --teal-soft: #042f2e; --warm: #fbbf24; --warm-soft: #2a2006;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 12px 32px rgba(0, 0, 0, .5); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #09090b; --card: #18181b; --fg: #fafafa; --muted: #27272a; --muted-fg: #a1a1aa; --line: #3f3f46;
+  --teal: #2dd4bf; --teal-soft: #042f2e; --warm: #fbbf24; --warm-soft: #2a2006;
+  --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 12px 32px rgba(0, 0, 0, .5); color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font: 15px/1.55 var(--font); }
+.wrap { max-width: 1120px; margin: 0 auto; padding-block: 28px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex; flex-direction: column; gap: 40px; }
+header { display: flex; flex-direction: column; gap: 12px; }
+.logo { display: inline-flex; align-items: center; gap: .1em; font-weight: 900; letter-spacing: -0.02em; font-size: 22px; color: var(--fg); text-decoration: none; }
+.logo svg { height: 1.2em; width: 1.94em; overflow: visible; }
+.badge { font-size: 11px; font-weight: 800; letter-spacing: .06em; background: var(--muted); border-radius: 999px; padding: 4px 10px; margin-left: 8px; }
+h1 { font-size: clamp(30px, 6vw, 46px); line-height: 1.05; margin: 0; font-weight: 900; letter-spacing: -0.025em; text-wrap: balance; }
+h2 { font-size: 22px; margin: 0; font-weight: 800; letter-spacing: -0.01em; text-wrap: balance; }
+.lede { margin: 0; color: var(--muted-fg); max-width: 64ch; font-size: 17px; }
+.eyebrow { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--teal); }
+section.block { display: flex; flex-direction: column; gap: 14px; }
+section.block > p { margin: 0; max-width: 66ch; color: var(--muted-fg); }
+code { font-family: var(--mono); font-size: .88em; background: var(--muted); padding: 1px 5px; border-radius: 5px; }
+.stats { display: flex; flex-wrap: wrap; gap: 10px 28px; font-size: 14px; color: var(--muted-fg); align-items: baseline; }
+.stats b { color: var(--fg); font-size: 24px; font-weight: 900; font-variant-numeric: tabular-nums; margin-right: 6px; }
+
+.toolbar { display: flex; flex-wrap: wrap; gap: 10px 22px; align-items: center; justify-content: space-between; }
+.legend { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 13px; color: var(--muted-fg); align-items: center; }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+.dot.user { background: var(--fg); }
+.dot.person { background: var(--teal); }
+.sw { width: 26px; border-top: 2px solid var(--muted-fg); display: inline-block; }
+.sw.b { border-color: var(--warm); border-top-width: 3px; }
+.hint { font-size: 13px; font-weight: 600; color: var(--teal); background: var(--teal-soft); border-radius: 999px; padding: 5px 12px; }
+
+figure { margin: 0; display: flex; flex-direction: column; gap: 10px; }
+.scroll { overflow-x: auto; border: 1px solid var(--line); border-radius: 18px; background: var(--card); box-shadow: var(--shadow); }
+.scroll svg { display: block; width: 100%; min-width: 960px; height: auto; }
+figcaption { font-size: 13px; color: var(--muted-fg); max-width: 76ch; }
+.lane { font-size: 15px; font-weight: 800; fill: var(--fg); }
+.lane-sub { font-family: var(--mono); font-size: 11px; fill: var(--muted-fg); }
+.rule { stroke: var(--line); stroke-width: 1; stroke-dasharray: 3 4; }
+.tbl { cursor: pointer; outline: none; }
+.tbl rect { fill: var(--card); stroke: var(--line); stroke-width: 1.5; transition: stroke .15s, fill .15s; }
+.tbl.hub rect { stroke: var(--teal); stroke-width: 2; fill: var(--teal-soft); }
+.tbl:hover rect, .tbl:focus-visible rect { stroke: var(--teal); stroke-width: 2.5; }
+.tbl.sel rect { stroke: var(--teal); stroke-width: 3; fill: var(--teal-soft); }
+.tname { font-family: var(--mono); font-size: 13px; font-weight: 700; fill: var(--fg); }
+.tnote { font-size: 11.5px; fill: var(--muted-fg); }
+.tcount { font-family: var(--mono); font-size: 10.5px; fill: var(--muted-fg); }
+.b-user { fill: var(--fg); }
+.b-person { fill: var(--teal); }
+.edge { fill: none; stroke: var(--muted-fg); stroke-width: 1.5; transition: opacity .15s; }
+.edge.bridge { stroke: var(--warm); stroke-width: 3; }
+.ah { fill: var(--muted-fg); }
+.ah-b { fill: var(--warm); }
+.elabel { font-size: 11px; fill: var(--muted-fg); paint-order: stroke; stroke: var(--card); stroke-width: 4px; stroke-linejoin: round; }
+.elabel.b { fill: var(--warm); font-weight: 800; font-size: 12px; }
+/* focus mode: a table is selected, everything not connected to it fades */
+svg.focus .tbl, svg.focus .edge, svg.focus .elabel { opacity: .22; }
+svg.focus .tbl.near, svg.focus .tbl.sel, svg.focus .edge.near, svg.focus .elabel.near { opacity: 1; }
+svg.focus .edge.near { stroke: var(--teal); stroke-width: 2.25; }
+svg.focus .edge.bridge.near { stroke: var(--warm); stroke-width: 3; }
+@media (prefers-reduced-motion: reduce) { .tbl rect, .edge, .panel { transition: none !important; } }
+
+.rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.rule-card { background: var(--muted); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.rule-card h3 { margin: 0; font-size: 15px; font-weight: 800; }
+.rule-card p { margin: 0; font-size: 14px; color: var(--muted-fg); }
+
+/* index */
+.index { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; }
+.ix { border: 1px solid var(--line); border-radius: 14px; background: var(--card); padding: 12px; min-width: 0; }
+.ix h3 { margin: 0 4px 8px; font-size: 15px; font-weight: 800; display: flex; gap: 8px; align-items: baseline; }
+.ix h3 code { font-size: 11px; font-weight: 500; }
+.ixn { margin-left: auto; font-size: 12px; color: var(--muted-fg); font-variant-numeric: tabular-nums; }
+.ix ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.ixb { width: 100%; display: grid; grid-template-columns: auto 1fr auto; gap: 2px 10px; align-items: baseline; text-align: left; border: 0; background: none; color: inherit; font: inherit; padding: 6px 8px; border-radius: 8px; cursor: pointer; }
+.ixb code { background: none; padding: 0; font-weight: 700; font-size: 12.5px; }
+.ixb span { color: var(--muted-fg); font-size: 12.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ixb em { font-style: normal; font-size: 11px; color: var(--muted-fg); font-family: var(--mono); }
+.ixb:hover, .ixb:focus-visible { background: var(--teal-soft); outline: none; }
+.ixb:focus-visible { box-shadow: 0 0 0 2px var(--teal); }
+
+/* definition panel */
+.panel { position: fixed; z-index: 20; background: var(--card); color: var(--fg); box-shadow: var(--shadow); border: 1px solid var(--line);
+  display: flex; flex-direction: column; overflow: hidden;
+  top: calc(12px + env(safe-area-inset-top, 0px)); bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  right: calc(12px + env(safe-area-inset-right, 0px)); width: min(460px, calc(100vw - 24px)); border-radius: 18px; }
+.p-head { padding: 16px 18px 12px; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.p-top { display: flex; align-items: flex-start; gap: 10px; }
+.p-top h2 { font-family: var(--mono); font-size: 18px; word-break: break-all; flex: 1; }
+.p-schema { font-family: var(--mono); font-size: 11px; color: var(--muted-fg); display: block; margin-bottom: 2px; }
+.x { border: 1px solid var(--line); background: var(--card); color: var(--fg); border-radius: 10px; width: 34px; height: 34px; font-size: 18px; line-height: 1; cursor: pointer; flex: none; }
+.x:hover, .x:focus-visible { border-color: var(--teal); color: var(--teal); outline: none; }
+.p-note { margin: 0; color: var(--muted-fg); font-size: 14px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { font-size: 12px; font-weight: 600; border-radius: 999px; padding: 3px 9px; background: var(--muted); color: var(--fg); display: inline-flex; gap: 6px; align-items: center; }
+.chip.t { background: var(--teal-soft); color: var(--teal); }
+.p-body { overflow-y: auto; padding: 14px 18px 22px; display: flex; flex-direction: column; gap: 18px; }
+.p-sec h4 { margin: 0 0 6px; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .07em; color: var(--muted-fg); }
+.links { display: flex; flex-wrap: wrap; gap: 6px; }
+.lk { border: 1px solid var(--line); background: var(--card); color: var(--fg); border-radius: 9px; padding: 5px 9px; font: 12.5px var(--mono); cursor: pointer; text-align: left; }
+.lk small { display: block; font-family: var(--font); color: var(--muted-fg); font-size: 11.5px; }
+.lk:hover, .lk:focus-visible { border-color: var(--teal); outline: none; }
+.lk.auth { cursor: default; }
+.lk.auth:hover { border-color: var(--line); }
+.none { font-size: 13px; color: var(--muted-fg); margin: 0; }
+.tw { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted-fg); font-weight: 700; padding: 6px 8px; background: var(--muted); }
+td { padding: 5px 8px; border-top: 1px solid var(--line); vertical-align: top; }
+td.c { font-family: var(--mono); white-space: nowrap; font-weight: 600; }
+td.c .k { font-size: 10px; font-weight: 800; color: var(--teal); margin-left: 6px; }
+td.ty { font-family: var(--mono); color: var(--muted-fg); white-space: nowrap; }
+td.ty .req { font-family: var(--font); font-size: 10.5px; border: 1px solid var(--line); border-radius: 999px; padding: 0 5px; margin-left: 4px; }
+td.d { font-family: var(--mono); font-size: 11.5px; color: var(--muted-fg); }
+td.d .fk { color: var(--teal); display: block; }
+.rl { margin: 0; padding-left: 18px; font-size: 13px; display: grid; gap: 4px; }
+.rl code { font-size: 11.5px; }
+pre.sql { margin: 0; background: var(--muted); border-radius: 10px; padding: 12px; overflow-x: auto; font: 11.5px/1.5 var(--mono); white-space: pre; }
+.copy { border: 1px solid var(--line); background: var(--card); color: var(--fg); border-radius: 8px; padding: 3px 10px; font: 600 12px var(--font); cursor: pointer; float: right; margin-top: -2px; }
+.copy:hover, .copy:focus-visible { border-color: var(--teal); color: var(--teal); outline: none; }
+@media (max-width: 720px) {
+  .panel { top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: 82vh; border-radius: 18px 18px 0 0; border-bottom: 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px); padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
+}
+footer { font-size: 13px; color: var(--muted-fg); border-top: 1px solid var(--line); padding-top: 16px; }
+footer a { color: var(--teal); }
+</style>
+
+<div class="wrap">
+  <header>
+    <a class="logo" href="https://giftsaf.com" aria-label="GiftsAF">
+      <span aria-hidden="true">Gifts</span>
+      <svg aria-hidden="true" viewBox="-4 -6 84 52"><g transform="rotate(-8 38 20)"><path fill="#facc15" fill-rule="evenodd" d="M18 0 H72 Q76 0 76 4 V36 Q76 40 72 40 H18 L0 20 Z M13 24.1 C9.4 21.4 8.5 19.6 8.5 18.52 C8.5 17.08 9.58 16 10.84 16 C11.74 16 12.55 16.54 13 17.26 C13.45 16.54 14.26 16 15.16 16 C16.42 16 17.5 17.08 17.5 18.52 C17.5 19.6 16.6 21.4 13 24.1 Z"/><path fill="#18181b" fill-rule="evenodd" transform="translate(24.6 7.6) scale(0.95)" d="M0 26 L9 0 H16 L25 26 H18 L16.5 21 H8.5 L7 26 Z M10.2 15.5 H14.8 L12.5 8 Z M28 0 H45 V5.5 H35 V10.5 H43 V16 H35 V26 H28 Z"/></g></svg>
+      <span class="badge">DATABASE</span>
+    </a>
+    <h1>Where GiftsAF keeps its data</h1>
+    <p class="lede">One Supabase database, one schema per product. The gift lists and the concierge each keep their own tables and meet in one place: the people you give to. Select any table to see what's in it.</p>
+    <!--STATS-->
+  </header>
+
+  <section class="block" aria-labelledby="map">
+    <div class="eyebrow">The map</div>
+    <h2 id="map">How the tables connect</h2>
+    <div class="toolbar">
+      <div class="legend">
+        <span><i class="dot user"></i>deleted with its account</span>
+        <span><i class="dot person"></i>tied to one of your people</span>
+        <span><i class="sw"></i>points to</span>
+        <span><i class="sw b"></i>the only link between products</span>
+      </div>
+      <span class="hint">Select a table to see its columns</span>
+    </div>
+    <figure>
+      <div class="scroll"><!--SVG--></div>
+      <figcaption>Arrows point from a row to the row it belongs to. Tables with a dark dot also point to their account in <code>auth.users</code> and are deleted with it; those arrows are left out so the chains show. In the concierge, an occasion starts a gift round, the round gets ideas, an idea is bought as an order, and the order ships to an address.</figcaption>
+    </figure>
+  </section>
+
+  <section class="block" aria-labelledby="rules">
+    <div class="eyebrow">What the schema enforces</div>
+    <h2 id="rules">Four rules the database keeps for us</h2>
+    <div class="rules">
+      <div class="rule-card"><h3>Every row has an owner</h3><p>User data carries <code>user_id</code>, and a privacy rule lets only that account read it (T26). Deleting an account deletes its rows.</p></div>
+      <div class="rule-card"><h3>No pointing at someone else's person</h3><p>Concierge tables link to a person by <code>(person_id, user_id)</code> together, so a row can only name one of its own owner's people.</p></div>
+      <div class="rule-card"><h3>Products meet at people only</h3><p>Lists and the concierge share no foreign keys except <code>person_links</code> (T19). A gift idea names a list gift by id and reads it through the lists module's functions.</p></div>
+      <div class="rule-card"><h3>An order keeps its own address</h3><p>An order belongs to the idea it bought and the round it came from, and its shipping address is copied onto it, so a later edit never changes where a placed order went.</p></div>
+    </div>
+  </section>
+
+  <section class="block" aria-labelledby="ix">
+    <div class="eyebrow">Every table</div>
+    <h2 id="ix">Find a table</h2>
+    <p>Grouped by schema, with its column count. Select one to open its columns, rules and definition.</p>
+    <div class="index"><!--INDEX--></div>
+  </section>
+
+  <footer>Read from the local database built from <code>supabase/migrations</code>, which stay the source. See <a href="https://github.com/gifts-af/gift-me/blob/main/design/technical-design.md">technical-design §3</a> and the <a href="https://claude.ai/artifact/Edr5DRi5s53iRPfAsuSnd8">round engine</a> page. GiftsAF alpha · made by Jim and Aaron.</footer>
+</div>
+
+<aside class="panel" id="panel" role="dialog" aria-modal="false" aria-labelledby="p-name" hidden>
+  <div class="p-head">
+    <div class="p-top">
+      <div style="flex:1;min-width:0"><span class="p-schema" id="p-schema"></span><h2 id="p-name" tabindex="-1"></h2></div>
+      <button class="x" type="button" id="p-close" aria-label="Close">×</button>
+    </div>
+    <p class="p-note" id="p-note"></p>
+    <div class="chips" id="p-chips"></div>
+  </div>
+  <div class="p-body" id="p-body"></div>
+</aside>
+
+<script>
+(function () {
+  const DATA = /*DATA*/null;
+  const svg = document.getElementById('map-svg');
+  const panel = document.getElementById('panel');
+  const body = document.getElementById('p-body');
+  let current = null, opener = null;
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+  const hashOf = (t) => 't-' + t.replace(/[^a-z0-9]+/gi, '-');
+  const fromHash = () => { const h = location.hash.slice(1); return Object.keys(DATA).find((t) => hashOf(t) === h) || null; };
+
+  function linkBtn(t, sub) {
+    const known = !!DATA[t];
+    const b = el('button', 'lk' + (known ? '' : ' auth'));
+    b.type = 'button';
+    b.append(document.createTextNode(t));
+    if (sub) b.append(el('small', null, sub));
+    if (known) b.addEventListener('click', () => open(t));
+    else b.disabled = true;
+    return b;
+  }
+
+  function section(title) { const s = el('div', 'p-sec'); s.append(el('h4', null, title)); return s; }
+
+  function render(t) {
+    const d = DATA[t];
+    const [schema, name] = t.split('.');
+    document.getElementById('p-schema').textContent = schema + ' · ' + d.lane;
+    document.getElementById('p-name').textContent = name;
+    document.getElementById('p-note').textContent = d.note;
+    const chips = document.getElementById('p-chips');
+    chips.replaceChildren();
+    chips.append(el('span', 'chip', d.cols.length + ' columns'));
+    if (d.owned) chips.append(el('span', 'chip', 'deleted with its account'));
+    if (d.personal) chips.append(el('span', 'chip t', 'tied to one of your people'));
+    chips.append(el('span', 'chip' + (d.rls ? ' t' : ''), d.rls ? 'privacy rules on · ' + d.policies + (d.policies === 1 ? ' policy' : ' policies') : 'no row privacy rules'));
+
+    body.replaceChildren();
+    const out = section('Belongs to');
+    if (d.out.length) {
+      const l = el('div', 'links');
+      d.out.forEach((f) => l.append(linkBtn(f.t, f.cols.join(', ') + ' · ' + f.del)));
+      out.append(l);
+    } else out.append(el('p', 'none', 'Nothing: it stands on its own.'));
+    body.append(out);
+
+    const inn = section('Pointed to by');
+    if (d.in.length) {
+      const l = el('div', 'links');
+      d.in.forEach((f) => l.append(linkBtn(f.t, f.cols.join(', '))));
+      inn.append(l);
+    } else inn.append(el('p', 'none', 'No other table points here.'));
+    body.append(inn);
+
+    const cs = section('Columns');
+    const tw = el('div', 'tw');
+    const table = el('table');
+    const head = el('thead'); const hr = el('tr');
+    ['Column', 'Type', 'Default and links'].forEach((h) => hr.append(el('th', null, h)));
+    head.append(hr); table.append(head);
+    const tb = el('tbody');
+    d.cols.forEach((c) => {
+      const tr = el('tr');
+      const tc = el('td', 'c', c.c);
+      if (c.pk) tc.append(el('span', 'k', 'PK'));
+      const ty = el('td', 'ty', c.ty);
+      if (c.req) ty.append(el('span', 'req', 'required'));
+      const dd = el('td', 'd');
+      if (c.def) dd.append(document.createTextNode(c.def));
+      c.fk.forEach((f) => dd.append(el('span', 'fk', '→ ' + f)));
+      if (c.cmt) dd.append(el('span', null, c.cmt));
+      tr.append(tc, ty, dd); tb.append(tr);
+    });
+    table.append(tb); tw.append(table); cs.append(tw); body.append(cs);
+
+    if (d.checks.length || d.unique.length) {
+      const rs = section('Rules on its rows');
+      const ul = el('ul', 'rl');
+      d.unique.forEach((u) => { const li = el('li'); li.append(document.createTextNode('one row per ')); li.append(el('code', null, u.join(', '))); ul.append(li); });
+      d.checks.forEach((c) => { const li = el('li'); li.append(el('code', null, c)); ul.append(li); });
+      rs.append(ul); body.append(rs);
+    }
+
+    const ss = section('Definition');
+    const copy = el('button', 'copy', 'Copy');
+    copy.type = 'button';
+    const pre = el('pre', 'sql', d.sql);
+    copy.addEventListener('click', () => {
+      const done = () => { copy.textContent = 'Copied'; setTimeout(() => (copy.textContent = 'Copy'), 1600); };
+      const fallback = () => { const r = document.createRange(); r.selectNodeContents(pre); const s = getSelection(); s.removeAllRanges(); s.addRange(r); copy.textContent = 'Selected'; };
+      try { navigator.clipboard.writeText(d.sql).then(done, fallback); } catch (e) { fallback(); }
+    });
+    ss.querySelector('h4').append(copy);
+    ss.append(pre); body.append(ss);
+    body.scrollTop = 0;
+  }
+
+  function highlight(t) {
+    svg.classList.toggle('focus', !!t);
+    svg.querySelectorAll('.tbl').forEach((g) => g.classList.remove('sel', 'near'));
+    svg.querySelectorAll('.edge, .elabel').forEach((e) => e.classList.remove('near'));
+    if (!t) return;
+    const near = new Set([t]);
+    DATA[t].out.forEach((f) => near.add(f.t));
+    DATA[t].in.forEach((f) => near.add(f.t));
+    svg.querySelectorAll('.tbl').forEach((g) => {
+      if (g.dataset.t === t) g.classList.add('sel');
+      else if (near.has(g.dataset.t)) g.classList.add('near');
+    });
+    svg.querySelectorAll('.edge, .elabel').forEach((e) => { if (e.dataset.a === t || e.dataset.b === t) e.classList.add('near'); });
+  }
+
+  function open(t, from) {
+    if (!DATA[t]) return;
+    if (from) opener = from;
+    current = t;
+    render(t);
+    highlight(t);
+    panel.hidden = false;
+    document.getElementById('p-name').focus({ preventScroll: true });
+    try { history.replaceState(null, '', '#' + hashOf(t)); } catch (e) { location.hash = hashOf(t); }
+  }
+  function close() {
+    panel.hidden = true; current = null; highlight(null);
+    try { history.replaceState(null, '', location.pathname + location.search); } catch (e) {}
+    if (opener && document.contains(opener)) opener.focus({ preventScroll: true });
+  }
+
+  svg.querySelectorAll('.tbl').forEach((g) => {
+    g.addEventListener('click', () => open(g.dataset.t, g));
+    g.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(g.dataset.t, g); } });
+  });
+  document.querySelectorAll('[data-open]').forEach((b) => b.addEventListener('click', () => open(b.dataset.open, b)));
+  document.getElementById('p-close').addEventListener('click', close);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !panel.hidden) close(); });
+  window.addEventListener('hashchange', () => { const t = fromHash(); if (t && t !== current) open(t); });
+  const start = fromHash(); if (start) open(start);
+})();
+</script>

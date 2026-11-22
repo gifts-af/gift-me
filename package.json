@@ -24,6 +24,8 @@
     "db:push:prod": "node scripts/db-push.mjs pegtrucfuaaufqvsavpb",
     "db:types": "supabase gen types typescript --local --schema public --schema concierge --schema lists > packages/core/src/database.types.ts && prettier --write --log-level warn packages/core/src/database.types.ts",
     "db:types:check": "node scripts/db-types-check.mjs",
+    "db:map": "pnpm --filter @gifts-af/web db:map",
+    "db:map:check": "pnpm --filter @gifts-af/web db:map:check",
     "ai:eval": "pnpm --filter @gifts-af/web ai:eval",
     "gallery": "pnpm --filter @gifts-af/web gallery",
     "live-check": "pnpm --filter @gifts-af/web live-check",
