@@ -33,16 +33,17 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
     now: new Date(),
   });
 
-  // New ideas after "None of these" need the idea engine on; it ships off (runs_after_rejection).
-  let engineWas: string;
+  // New ideas after "None of these" need the idea and round engines on; both ship off (runs_after_rejection).
+  const ENGINES = ["idea_engine_enabled", "round_engine_enabled"];
+  let enginesWere: { key: string; value: string }[];
   beforeAll(async () => {
     pg = new Client({ connectionString: LOCAL_DB });
     await pg.connect();
-    engineWas = (await pg.query("select value from concierge.app_settings where key = 'idea_engine_enabled'")).rows[0].value;
-    await pg.query("update concierge.app_settings set value = '1' where key = 'idea_engine_enabled'");
+    enginesWere = (await pg.query("select key, value from concierge.app_settings where key = any($1)", [ENGINES])).rows;
+    await pg.query("update concierge.app_settings set value = '1' where key = any($1)", [ENGINES]);
   });
   afterAll(async () => {
-    await pg.query("update concierge.app_settings set value = $1 where key = 'idea_engine_enabled'", [engineWas]);
+    for (const { key, value } of enginesWere) await pg.query("update concierge.app_settings set value = $1 where key = $2", [value, key]);
     for (const id of users) await admin!.auth.admin.deleteUser(id);
     await pg.end();
   });

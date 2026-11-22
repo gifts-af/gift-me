@@ -42,8 +42,16 @@ export type QuoteDeps = DbDeps & { lookup: { http: ZincHttp; key: string } };
 /**
  * `not_current`: the failure was fixed or replaced already (a stale tab). `not_open`: the round
  * no longer needs attention, is closed, or has reached its ship-by day, so nothing can be bought.
+ * `zinc_off`: zinc_ordering_enabled isn't 1, so a re-buy would only be held (E7's off switch).
  */
-export type QuoteResult = { oldCents: number; newCents: number } | "not_allowed" | "not_current" | "not_open" | "unavailable" | "once";
+export type QuoteResult =
+  | { oldCents: number; newCents: number }
+  | "not_allowed"
+  | "not_current"
+  | "not_open"
+  | "unavailable"
+  | "once"
+  | "zinc_off";
 
 /** replaceFailedOrder's own refusals, on top of approveAndBuy's. */
 export type ReplaceError =
@@ -178,6 +186,8 @@ export async function quoteFailedOrder(input: { userId: string; roundId: string;
   if (!isCurrentFailure(failed, userId, roundId)) return "not_current";
   if (failed.failure_type !== "price_up") return "not_allowed";
   if (!(await hasPaidFeatures(deps.db, userId))) return "not_allowed";
+  // Stop all ordering stops this paid lookup too: a re-buy would only be held as paused.
+  if ((await setting(deps, "zinc_ordering_enabled")) !== 1) return "zinc_off";
   if (await priceRiseFixed(deps, failed.idea_id, failed.id)) return "once";
   const idea = (await readIdeas(deps, [failed.idea_id])).get(failed.idea_id);
   if (!idea) return "unavailable";

@@ -132,10 +132,10 @@ describe("FixScreen: a price rise", () => {
     expect(await screen.findByText("This gift can't be changed now. Reload to see what happened.")).toBeInTheDocument();
   });
 
-  it("with buying switched off, the price check says so", async () => {
+  it("with buying switched off (zinc_ordering_enabled 0, or Zinc not set up here), the price check says so", async () => {
     setup({}, { check: { ok: false, error: "zinc_off" } });
     await userEvent.click(screen.getByRole("button", { name: "Check today's price" }));
-    expect(await screen.findByText("Buying is switched off here right now, so we didn't check the price.")).toBeInTheDocument();
+    expect(await screen.findByText("Buying is switched off right now, so we didn't check the price.")).toBeInTheDocument();
   });
 
   it("a stale tab whose failure was already fixed says so in neutral words", async () => {
