@@ -318,11 +318,11 @@ describe.skipIf(!dbUp)("createSupabaseIdeaStore", () => {
     );
   }
 
-  it("listGiftCandidates leaves out claimed items, items rejected before, and items on a live order", async () => {
+  it("listGiftCandidates leaves out claimed items, items on a live order, and items the round already offered", async () => {
     const buyer = await newUser("Jim");
     const person = await newPerson(buyer.id, "Dad");
     // Not linked yet: nothing.
-    expect(await listGiftCandidates(admin!, person)).toEqual([]);
+    expect(await listGiftCandidates(admin!, person, null)).toEqual([]);
 
     const { ownerId, item } = await linkedList(buyer.id, person);
     const open = await item("Open vase", 2500, "https://shop.example/vase");
@@ -340,12 +340,15 @@ describe.skipIf(!dbUp)("createSupabaseIdeaStore", () => {
     const r3 = await newRound(buyer.id, person, 2032);
     await order(buyer.id, r3, await listIdea(buyer.id, person, r3, refunded, { title: "Mug", status: "selected" }), "refunded");
 
-    const want = [
-      { itemId: open, name: "Open vase", url: "https://shop.example/vase", asin: null, listPriceCents: 2500 },
-      // A refunded order doesn't count as given; a price of 0 means the list has none.
-      { itemId: refunded, name: "Mug", url: "https://www.amazon.com/dp/B0MUG", asin: "B0MUG", listPriceCents: null },
-    ];
-    expect(await listGiftCandidates(admin!, person)).toEqual(want);
+    const vase = { itemId: open, name: "Open vase", url: "https://shop.example/vase", asin: null, listPriceCents: 2500 };
+    // A refunded order doesn't count as given; a price of 0 means the list has none.
+    const mug = { itemId: refunded, name: "Mug", url: "https://www.amazon.com/dp/B0MUG", asin: "B0MUG", listPriceCents: null };
+    const scarf = { itemId: rejected, name: "Scarf", url: "https://shop.example/scarf", asin: null, listPriceCents: 3000 };
+    // The round that rejected the scarf doesn't offer it again.
+    expect(await listGiftCandidates(admin!, person, r1)).toEqual([vase, mug]);
+    // Owner, 2026-11-22: a list gift rejected in one round is offered again in another.
+    const want = [vase, scarf, mug];
+    expect(await listGiftCandidates(admin!, person, r2)).toEqual(want);
 
     // A round's inputs carry the same list; on demand, none.
     const r4 = await newRound(buyer.id, person, 2033);

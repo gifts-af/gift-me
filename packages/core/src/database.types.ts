@@ -1427,7 +1427,7 @@ export type Database = {
       };
       enable_owner_rls: { Args: { p_table: unknown }; Returns: undefined };
       excluded_offers: {
-        Args: { p_person_id: string };
+        Args: { p_person_id: string; p_round_id: string };
         Returns: {
           list_item_id: string;
           product_id: string;
@@ -1637,6 +1637,7 @@ export type Database = {
         Args: {
           p_expect_more: boolean;
           p_facts: Json;
+          p_list_gifts: boolean;
           p_lock: string;
           p_reason_code: string;
           p_reason_text: string;
@@ -1735,7 +1736,12 @@ export type Database = {
         Returns: string[];
       };
       runs_after_rejection: {
-        Args: { p_facts: Json; p_now: string; p_round_id: string };
+        Args: {
+          p_facts: Json;
+          p_list_gifts: boolean;
+          p_now: string;
+          p_round_id: string;
+        };
         Returns: boolean;
       };
       save_budgets: {

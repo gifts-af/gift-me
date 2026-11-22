@@ -307,7 +307,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
       concierge.from("round_sends").select("created_at").eq("round_id", roundId).eq("step", "no_ideas").maybeSingle(),
       concierge.from("idea_runs").select("started_at").eq("round_id", roundId).order("started_at", { ascending: false }).limit(1),
       setting("idea_engine_enabled"),
-      listGiftCandidates(db, personId),
+      listGiftCandidates(db, personId, roundId),
     ]);
     if (state.error) fail("Reading the round's idea state failed", state.error);
     if (told.error) fail("Reading the round's no_ideas email failed", told.error);

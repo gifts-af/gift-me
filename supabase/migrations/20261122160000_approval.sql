@@ -90,12 +90,17 @@ revoke all on function concierge.order_is_given(text, boolean) from public, anon
 grant execute on function concierge.order_is_given(text, boolean) to service_role;
 
 -- ─── excluded_offers (AC-31) ─────────────────────────────────────────────────
--- What not to offer this person again: ideas rejected, or given
--- (order_is_given). A product is matched on retailer and product id; a list
--- gift on its list_item_id. Ideas saved before 20261117100000_idea_engine.sql
--- have no person_id, so the person is found through the round too (S9), as
+-- What not to offer this person in a run for p_round_id (null on demand):
+--   given, in any round (order_is_given): never again;
+--   an AI product rejected, in any round: never again (ALL-27 AC-7);
+--   a list gift already offered in p_round_id: not again in that round. A
+--   list gift rejected in another round is offered again (owner, 2026-11-22),
+--   and one round never offers a list gift twice (gift_ideas_round_list_item_key).
+-- A product is matched on retailer and product id; a list gift on its
+-- list_item_id. Ideas saved before 20261117100000_idea_engine.sql have no
+-- person_id, so the person is found through the round too (S9), as
 -- excluded_products does.
-create function concierge.excluded_offers(p_person_id uuid)
+create function concierge.excluded_offers(p_person_id uuid, p_round_id uuid)
 returns table (retailer text, product_id text, list_item_id uuid)
 language sql
 stable
@@ -108,15 +113,16 @@ as $$
    where coalesce(i.person_id, r.person_id) = p_person_id
      and (i.retailer_product_id is not null or i.list_item_id is not null)
      and (
-       i.status = 'rejected'
-       or exists (select 1 from concierge.rejections j where j.idea_id = i.id)
-       or exists (select 1 from concierge.orders o
-                   where o.idea_id = i.id and concierge.order_is_given(o.status, o.resolved))
+       exists (select 1 from concierge.orders o
+                where o.idea_id = i.id and concierge.order_is_given(o.status, o.resolved))
+       or (i.list_item_id is null
+           and (i.status = 'rejected' or exists (select 1 from concierge.rejections j where j.idea_id = i.id)))
+       or (i.list_item_id is not null and i.round_id = p_round_id)
      );
 $$;
 
-revoke all on function concierge.excluded_offers(uuid) from public, anon, authenticated;
-grant execute on function concierge.excluded_offers(uuid) to service_role;
+revoke all on function concierge.excluded_offers(uuid, uuid) from public, anon, authenticated;
+grant execute on function concierge.excluded_offers(uuid, uuid) to service_role;
 
 -- ─── start_idea_run: rejected ideas don't count (AC-12a) ─────────────────────
 -- From 20261121140000_round_fanout.sql.
@@ -537,7 +543,14 @@ grant execute on function concierge.replace_failed_order(uuid, uuid, timestamptz
 -- ship-by day, so new ideas couldn't be bought in time (S1). A missing
 -- setting answers false (round_idea_state). With no facts it's exactly the
 -- rule reject_round_ideas checks after saving its facts.
-create function concierge.runs_after_rejection(p_round_id uuid, p_facts jsonb, p_now timestamptz)
+--   New (none of these can strand the buyer): a run must also be able to
+-- happen and find something. The idea engine is on (idea_engine_enabled = 1),
+-- the buyer has paid features, and the person has an active fact (counting
+-- the ones this choice saves) or p_list_gifts: the caller found offerable list
+-- gifts beyond the ones this round already offered (listGiftCandidates for
+-- this round, which the lists product answers, T19). Otherwise false, so the
+-- ideas stay buyable ("No more new ideas this time").
+create function concierge.runs_after_rejection(p_round_id uuid, p_facts jsonb, p_now timestamptz, p_list_gifts boolean)
 returns boolean
 language sql
 stable
@@ -546,33 +559,41 @@ set search_path = ''
 as $$
   select coalesce((
     select (p_now at time zone 'utc')::date + 1 < r.ship_by_deadline
+       and concierge.setting_int('idea_engine_enabled') = 1
+       and s.paid
+       and (s.has_facts or nf.any_new or coalesce(p_list_gifts, false))
        and (s.runs_left
             or (n.runs = concierge.setting_int('idea_round_runs_max')
                 and n.last_started < p_now
-                and exists (
-                  select 1
-                    from jsonb_array_elements(coalesce(p_facts, '[]'::jsonb)) e
-                   where not exists (
-                     select 1 from concierge.profile_facts f
-                      where f.person_id = r.person_id
-                        and f.category = e ->> 'category'
-                        -- profile_facts.value_key's expression.
-                        and f.value_key = lower(regexp_replace(btrim(e ->> 'value'), '\s+', ' ', 'g'))
-                        and not f.active))))
+                and nf.any_new))
       from concierge.gift_rounds r
       cross join lateral concierge.round_idea_state(r.id) s
       cross join lateral (
         select count(*) as runs, max(u.started_at) as last_started
           from concierge.idea_runs u where u.round_id = r.id
       ) n
+      -- A fact in p_facts that would end up active.
+      cross join lateral (
+        select exists (
+          select 1
+            from jsonb_array_elements(coalesce(p_facts, '[]'::jsonb)) e
+           where not exists (
+             select 1 from concierge.profile_facts f
+              where f.person_id = r.person_id
+                and f.category = e ->> 'category'
+                -- profile_facts.value_key's expression.
+                and f.value_key = lower(regexp_replace(btrim(e ->> 'value'), '\s+', ' ', 'g'))
+                and not f.active)) as any_new
+      ) nf
      where r.id = p_round_id), false);
 $$;
 
-revoke all on function concierge.runs_after_rejection(uuid, jsonb, timestamptz) from public, anon, authenticated;
-grant execute on function concierge.runs_after_rejection(uuid, jsonb, timestamptz) to service_role;
+revoke all on function concierge.runs_after_rejection(uuid, jsonb, timestamptz, boolean) from public, anon, authenticated;
+grant execute on function concierge.runs_after_rejection(uuid, jsonb, timestamptz, boolean) to service_role;
 
 -- ─── reject_round_ideas: "None of these" (AC-12, AC-13, AC-13a) ──────────────
 -- Under the round lease, for a round awaiting approval with no live order.
+-- p_list_gifts is runs_after_rejection's, from the caller.
 -- The facts ({category, value}, owns or avoid) are saved first with source
 -- 'rejection'; one that already exists keeps its active flag and has its
 -- updated_at bumped, so it counts as new for the extra run. Then the runs
@@ -585,7 +606,8 @@ grant execute on function concierge.runs_after_rejection(uuid, jsonb, timestampt
 --   None left: one rejections row with no idea; the ideas stay buyable and
 --   the round stays awaiting approval (decision b).
 create function concierge.reject_round_ideas(p_round_id uuid, p_user_id uuid, p_lock timestamptz, p_reason_code text,
-                                             p_reason_text text, p_facts jsonb, p_expect_more boolean)
+                                             p_reason_text text, p_facts jsonb, p_expect_more boolean,
+                                             p_list_gifts boolean)
 returns void
 language plpgsql
 security definer
@@ -624,7 +646,7 @@ begin
     from jsonb_array_elements(v_facts) e
   on conflict (person_id, category, value_key) do update set updated_at = now();
 
-  if concierge.runs_after_rejection(p_round_id, '[]'::jsonb, now()) is distinct from p_expect_more then
+  if concierge.runs_after_rejection(p_round_id, '[]'::jsonb, now(), p_list_gifts) is distinct from p_expect_more then
     raise exception 'reject_round_ideas: changed' using errcode = 'P0001';
   end if;
 
@@ -658,8 +680,8 @@ begin
 end;
 $$;
 
-revoke all on function concierge.reject_round_ideas(uuid, uuid, timestamptz, text, text, jsonb, boolean) from public, anon, authenticated;
-grant execute on function concierge.reject_round_ideas(uuid, uuid, timestamptz, text, text, jsonb, boolean) to service_role;
+revoke all on function concierge.reject_round_ideas(uuid, uuid, timestamptz, text, text, jsonb, boolean, boolean) from public, anon, authenticated;
+grant execute on function concierge.reject_round_ideas(uuid, uuid, timestamptz, text, text, jsonb, boolean, boolean) to service_role;
 
 -- ─── set_round_budget: an open round's budget (AC-9) ─────────────────────────
 -- Under the round lease, for a round awaiting approval that has no budget yet

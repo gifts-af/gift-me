@@ -33,11 +33,16 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
     now: new Date(),
   });
 
+  // New ideas after "None of these" need the idea engine on; it ships off (runs_after_rejection).
+  let engineWas: string;
   beforeAll(async () => {
     pg = new Client({ connectionString: LOCAL_DB });
     await pg.connect();
+    engineWas = (await pg.query("select value from concierge.app_settings where key = 'idea_engine_enabled'")).rows[0].value;
+    await pg.query("update concierge.app_settings set value = '1' where key = 'idea_engine_enabled'");
   });
   afterAll(async () => {
+    await pg.query("update concierge.app_settings set value = $1 where key = 'idea_engine_enabled'", [engineWas]);
     for (const id of users) await admin!.auth.admin.deleteUser(id);
     await pg.end();
   });
@@ -169,6 +174,38 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
     expect(await rejections(r.roundId)).toEqual([{ idea_id: null, reason_code: "has_it", reason_text: null }]);
     expect(await facts(r.personId)).toEqual([{ category: "owns", value: "Reel", source: "rejection" }]);
     expect(await roundRow(r.roundId)).toMatchObject({ status: "awaiting_approval", locked_until: null });
+  });
+
+  it("None of these can strand a list-only person: Too pricey brings new ideas only while another list gift is left", async () => {
+    const u = await newUser();
+    const owner = await newUser();
+    const { listId, itemIds } = await newList(owner, [
+      { name: "Vase", url: "https://shop.example/vase" },
+      { name: "Lamp", url: "https://shop.example/lamp" },
+    ]);
+    // No facts: only the list can bring ideas, and the round already offers the vase.
+    const r = await newRound(u, { listId, ideas: [{ title: "Vase", listItem: itemIds[0] }] });
+    const input = { roundId: r.roundId, code: "too_pricey" as const, text: null, ownedIdeaId: null };
+    expect(await rejectionOutlook(input, deps())).toBe(true);
+
+    // Someone claims the lamp: nothing is left to find.
+    await pg.query("insert into lists.gift_claims (item_id, claimer_id, claimer_name) values ($1, $2, 'Bea')", [itemIds[1], owner.id]);
+    expect(await rejectionOutlook(input, deps())).toBe(false);
+    expect(await reject(u, r, { code: "too_pricey", expectMore: true })).toEqual({ ok: false, error: "changed" });
+    expect(await reject(u, r, { code: "too_pricey", expectMore: false })).toEqual({ ok: true, more: false });
+    expect(await ideaStatuses(r.roundId)).toEqual(["proposed"]);
+    expect(await roundRow(r.roundId)).toMatchObject({ status: "awaiting_approval", locked_until: null });
+  });
+
+  it("with the idea engine off, None of these brings no new ideas", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    await pg.query("update concierge.app_settings set value = '0' where key = 'idea_engine_enabled'");
+    try {
+      expect(await rejectionOutlook({ roundId: r.roundId, code: "not_style", text: "No plastic", ownedIdeaId: null }, deps())).toBe(false);
+    } finally {
+      await pg.query("update concierge.app_settings set value = '1' where key = 'idea_engine_enabled'");
+    }
   });
 
   it("a stale outlook returns changed and saves nothing", async () => {
@@ -348,6 +385,15 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
     expect(view?.closedText).toBe("Already ordered: LEGO Botanical Orchid");
     expect(view?.liveOrders).toEqual([expect.objectContaining({ ideaId: r.ideaIds[0], status: "placed", title: "LEGO Botanical Orchid" })]);
     expect(view?.failedOrders).toEqual([]);
+  });
+
+  it("on the ship-by day the round is closed: the occasion has passed and nothing is buyable", async () => {
+    const u = await newUser();
+    // approve_round refuses from the ship-by day on (today >= ship_by_deadline).
+    const r = await newRound(u, { deadlineIn: 0 });
+    const view = await roundView(r.roundId, await signedIn(u), new Date());
+    expect(view?.closedText).toBe("This occasion has passed");
+    expect(view?.nextBestIdeaId).toBeNull();
   });
 
   it("a past round says the occasion has passed", async () => {

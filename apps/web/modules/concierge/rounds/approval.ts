@@ -17,6 +17,7 @@ import { z } from "zod";
 import { logEvent } from "@/lib/log";
 import { storeName } from "@gifts-af/core/store-page/link";
 import { isId } from "../profile/rules";
+import { listGiftCandidates } from "../ideas/store";
 import { claimRoundNow, concierge, fail, withLease } from "../purchase/store";
 import type { ZincDeps } from "../zinc/types";
 import { createSupabaseRoundStore } from "./store";
@@ -47,6 +48,14 @@ function factsFor(ideas: OfferedIdea[], code: RejectionCode, text: string | null
 }
 
 /**
+ * Whether the person's list has a gift a new run in this round could offer: listGiftCandidates
+ * leaves out the ones this round already offered, which "None of these" would reject.
+ */
+async function listGiftsLeft(deps: ZincDeps, roundId: string, personId: string): Promise<boolean> {
+  return (await listGiftCandidates(deps.db, personId, roundId)).length > 0;
+}
+
+/**
  * Whether this choice still brings new ideas (runs_after_rejection), so the sheet says
  * "No more new ideas this time" for exactly that choice (AC-13a). Null when the owned idea isn't
  * one of the round's offered ideas. The caller has checked the round is the buyer's.
@@ -57,10 +66,14 @@ export async function rejectionOutlook(
 ): Promise<boolean | null> {
   const facts = factsFor(await offeredIdeas(deps, input.roundId), input.code, input.text, input.ownedIdeaId);
   if (facts === null) return null;
+  const round = await concierge(deps).from("gift_rounds").select("person_id").eq("id", input.roundId).maybeSingle();
+  if (round.error) fail("Loading the round failed", round.error);
+  if (!round.data) return null;
   const { data, error } = await concierge(deps).rpc("runs_after_rejection", {
     p_round_id: input.roundId,
     p_facts: facts,
     p_now: deps.now.toISOString(),
+    p_list_gifts: await listGiftsLeft(deps, input.roundId, round.data.person_id),
   });
   if (error) fail("Reading the rejection outlook failed", error);
   return data === true;
@@ -126,6 +139,7 @@ export async function rejectRoundIdeas(input: RejectInput, deps: ZincDeps): Prom
       p_reason_text: text as string,
       p_facts: facts,
       p_expect_more: input.expectMore,
+      p_list_gifts: await listGiftsLeft(deps, roundId, round.person_id),
     });
     if (error) {
       const why = refusal(error, "reject_round_ideas");
@@ -403,7 +417,8 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
   const failedOrders = orders.filter((o) => o.status === "failed");
 
   const today = now.toISOString().slice(0, 10);
-  const pastDeadline = today > r.ship_by_deadline;
+  // From the ship-by day on, as approve_round refuses it.
+  const pastDeadline = today >= r.ship_by_deadline;
   let closedText: string | null = null;
   if (ORDERED_STATUSES.has(r.status) && liveOrders.length > 0) closedText = `Already ordered: ${liveOrders.map((o) => o.title).join(", ")}`;
   else if (r.closed_at !== null || r.status === "skipped" || ORDERED_STATUSES.has(r.status) || pastDeadline)

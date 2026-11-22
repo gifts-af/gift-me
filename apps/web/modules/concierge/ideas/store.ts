@@ -52,7 +52,7 @@ export type IdeaInputs = {
   /** Each word of the person's and the buyer's names, longest first. Never logged. */
   names: string[];
   facts: ActiveFact[];
-  /** Amazon product ids already given or rejected for this person (excluded_offers). */
+  /** Amazon product ids given, rejected as AI ideas, or already offered from the list in this round (excluded_offers). */
   excluded: string[];
   /** Titles of those ideas, so the AI doesn't suggest them again. Never a list gift's title (T42). */
   avoidTitles: string[];
@@ -179,8 +179,12 @@ const personListItem = z.object({
   claimed: z.boolean(),
 });
 
-async function excludedOffers(db: AdminDb, personId: string): Promise<ExcludedOffer[]> {
-  const { data, error } = await db.schema("concierge").rpc("excluded_offers", { p_person_id: personId });
+/** excluded_offers for a run in roundId (null on demand). */
+async function excludedOffers(db: AdminDb, personId: string, roundId: string | null): Promise<ExcludedOffer[]> {
+  const { data, error } = await db
+    .schema("concierge")
+    // PostgREST takes null for a uuid argument; the generated type says string.
+    .rpc("excluded_offers", { p_person_id: personId, p_round_id: roundId as string });
   if (error) fail("Loading excluded offers failed", error);
   return z.array(excludedOffer).parse(data);
 }
@@ -204,7 +208,8 @@ async function offerableListGifts(db: AdminDb, personId: string, excluded: Exclu
   const out: ListGift[] = [];
   for (const raw of list.items) {
     const p = personListItem.safeParse(raw);
-    // A gift without a link can't be priced or bought; a claimed, rejected or given one isn't offered (AC-31).
+    // A gift without a link can't be priced or bought; a claimed or given one, or one this round
+    // already offered, isn't offered (AC-31).
     if (!p.success || p.data.claimed || p.data.product_url === null || gone.has(p.data.id)) continue;
     const i = p.data;
     out.push({
@@ -220,12 +225,13 @@ async function offerableListGifts(db: AdminDb, personId: string, excluded: Exclu
 }
 
 /**
- * The one read of offerable list gifts (S6), for the idea run and roundContext: the person's
- * linked list through lists.person_list (service role, T19), unclaimed, in list order, without the
- * ones excluded_offers names (rejected or given, AC-31).
+ * The one read of offerable list gifts (S6), for a run in roundId, roundContext and the rejection
+ * outlook: the person's linked list through lists.person_list (service role, T19), unclaimed, in
+ * list order, without the ones excluded_offers names: given, or already offered in this round. A
+ * list gift rejected in another round is offered again (AC-31, owner 2026-11-22).
  */
-export async function listGiftCandidates(db: AdminDb, personId: string): Promise<ListGift[]> {
-  return offerableListGifts(db, personId, await excludedOffers(db, personId));
+export async function listGiftCandidates(db: AdminDb, personId: string, roundId: string | null): Promise<ListGift[]> {
+  return offerableListGifts(db, personId, await excludedOffers(db, personId, roundId));
 }
 
 /** The lowest total among the round's AI ideas rejected as "Too pricey"; list gifts never set it. */
@@ -323,7 +329,7 @@ export function createSupabaseIdeaStore(db: AdminDb): IdeaStore {
       const [buyer, facts, excludedRows, account, occasions, budgets, byDefault] = await Promise.all([
         db.from("profiles").select("display_name").eq("id", userId).maybeSingle(),
         activeFacts(db, personId),
-        excludedOffers(db, personId),
+        excludedOffers(db, personId, roundId),
         concierge.from("accounts").select("over_budget_pct").eq("user_id", userId).maybeSingle(),
         concierge
           .from("occasions")
