@@ -124,11 +124,13 @@ test("the Add form, Home, a person's page, About and the moved screens fit the s
     ["Person page", `/people/${personId}`, async () => {
       await expect(page.getByRole("link", { name: /^Budget/ })).toContainText("$75 · Christmas $125 · Mother's Day $50.50");
       await expect(page.getByRole("link", { name: /^About Mom/ })).toContainText("Mother · Birthday Mar 14");
+      // The list prompt at the top (ALL-123), in place of the Their list row.
+      await expect(page.getByRole("heading", { name: "Does Mom have a GiftsAF list?" })).toBeVisible();
+      await expect(page.getByRole("textbox", { name: "Their list link" })).toBeVisible();
     }],
     ["About", `/people/${personId}/about`, () => expect(page.getByRole("button", { name: "Remove birthday" })).toBeVisible()],
     ["Budget screen", `/people/${personId}/budget`, () => expect(page.getByRole("textbox", { name: "Any occasion" })).toBeVisible()],
     ["Saved gifts", `/people/${personId}/saved-gifts`, () => expect(page.getByRole("region", { name: "Saved gifts" }).getByRole("listitem")).toHaveCount(1)],
-    ["Their list", `/people/${personId}/list`, () => expect(page.getByRole("textbox", { name: "Their list link" })).toBeVisible()],
     ["Shipping address", `/people/${personId}/address`, () => expect(page.getByRole("button", { name: "Add an address" })).toBeVisible()],
   ];
   for (const scheme of ["light", "dark"] as const) {
@@ -297,17 +299,13 @@ test("add Mom, set her occasions and budget, link her list, delete her", async (
   await expect(budgetRow).toContainText("$75");
   await expect(budgetRow).not.toContainText("Mother's Day");
 
-  // 4. SECOND_USER's list, linked by its share link on Their list: "Their own list".
+  // 4. SECOND_USER's list, linked by its share link in the prompt at the top (ALL-123): "Their own list".
   const sharePath = await secondUserShareLink();
-  const listRow = page.getByRole("link", { name: /^Their list/ });
-  await expect(listRow).toContainText("Not linked");
-  await listRow.click();
-  await expect(page).toHaveURL(/\/list$/);
+  await expect(page.getByRole("link", { name: /^Their list/ })).toHaveCount(0);
   await page.getByRole("textbox", { name: "Their list link" }).fill(new URL(sharePath, page.url()).toString());
   await page.getByRole("button", { name: "Link", exact: true }).click();
-  await expect(page.getByText("Linked.")).toBeVisible();
-  await page.getByRole("link", { name: mom }).first().click();
   await expect(page.getByRole("link", { name: /^Their list/ })).toContainText("Linked");
+  await expect(page.getByRole("heading", { name: `Does ${mom} have a GiftsAF list?` })).toHaveCount(0);
   await page.goto("/");
   await expect(page.locator("div", { has: momLink }).last()).toContainText("Their own list");
 

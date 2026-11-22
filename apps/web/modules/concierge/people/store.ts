@@ -55,6 +55,13 @@ export type NewPerson = {
   /** From a Google Contacts import (ALL-24). */
   googleContactId?: string | null;
   address?: ImportAddress | null;
+  /**
+   * A shared list's token (ALL-123): the person is linked to that list in the
+   * same transaction. Throws P0001 "list_has_person" with the already-linked
+   * person's id as `details`, P0002 for a list that's gone or reset, 22023
+   * for the caller's own list; the person is never added then.
+   */
+  shareToken?: string | null;
 };
 
 export interface PeopleStore {
@@ -124,9 +131,9 @@ function toPersonRow(r: PersonDbRow): PersonRow {
   };
 }
 
-function check(error: { message: string; code?: string } | null, what: string): void {
+function check(error: { message: string; code?: string; details?: string } | null, what: string): void {
   if (!error) return;
-  throw Object.assign(new Error(`${what}: ${error.message}`), { code: error.code });
+  throw Object.assign(new Error(`${what}: ${error.message}`), { code: error.code, details: error.details });
 }
 
 export function createSupabasePeopleStore(): PeopleStore {
@@ -228,6 +235,7 @@ export function createSupabasePeopleStore(): PeopleStore {
         p_state: p.address?.state ?? undefined,
         p_zip: p.address?.zip ?? undefined,
         p_country: p.address?.country ?? undefined,
+        p_share_token: p.shareToken ?? undefined,
       });
       check(error, "Adding a person failed");
       if (!data) throw new Error("Adding a person returned no id.");

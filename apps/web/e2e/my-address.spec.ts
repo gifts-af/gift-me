@@ -327,13 +327,13 @@ test("a linked buyer sees only the city, and nothing once sharing stops (AC-13, 
   const context = await browser.newContext({ viewport: page.viewportSize() });
   const buyerPage = await context.newPage();
   await signIn(buyerPage, buyer);
-  // Their list and Shipping address are screens of their own (ALL-127).
-  await buyerPage.goto(`/people/${personId}/list`);
+  // An unlinked person's page asks for the list at the top (ALL-123); Shipping address is a screen of its own (ALL-127).
+  await buyerPage.goto(`/people/${personId}`);
   const linkField = buyerPage.getByLabel("Their list link");
   await linkField.fill(`${new URL(page.url()).origin}/share/${share_token}`);
   await expect.poll(() => linkField.evaluate((el) => Object.keys(el).some((k) => k.startsWith("__reactProps")))).toBe(true);
   await linkField.press("Enter");
-  await expect(buyerPage.getByText("Linked.", { exact: false })).toBeVisible();
+  await expect(buyerPage.getByRole("link", { name: /^Their list/ })).toContainText("Linked");
 
   const line = "Gifts ship to Sam's own address in Columbus, OH. They keep it up to date.";
   await buyerPage.goto(`/people/${personId}/address`);

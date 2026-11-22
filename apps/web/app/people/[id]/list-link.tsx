@@ -8,20 +8,29 @@ import type { SaveResult } from "@/modules/concierge";
 
 type Action = (previous: null, formData: FormData) => Promise<SaveResult>;
 
-/** Paste a link to their GiftsAF list, or unlink it. */
+/**
+ * Paste a link to their GiftsAF list, or unlink it. The `prompt` variant is the
+ * ask at the top of an unlinked person's page (ALL-123); the `page` variant is
+ * the old Their list screen, shown only with the card switched off.
+ */
 export function ListLink({
+  variant,
+  name,
   personId,
   keepsList,
   linkAction,
   unlinkAction,
 }: {
+  variant: "prompt" | "page";
+  name: string;
   personId: string;
   keepsList: boolean;
-  /** `linkListAction` */
+  /** `linkUnlinkedListAction` for the prompt (never replaces a link), `linkListAction` for the page */
   linkAction: Action;
-  /** `unlinkListAction` */
-  unlinkAction: Action;
+  /** `unlinkListAction`; the prompt only shows while nothing is linked, so it has none */
+  unlinkAction?: Action;
 }) {
+  const prompt = variant === "prompt";
   const [link, setLink] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -47,9 +56,9 @@ export function ListLink({
   return (
     <section className="flex flex-col gap-2" aria-labelledby="link-heading">
       <h2 id="link-heading" className="text-lg font-semibold">
-        Link to their list
+        {prompt ? `Does ${name} have a GiftsAF list?` : "Link to their list"}
       </h2>
-      {keepsList ? (
+      {keepsList && unlinkAction ? (
         <>
           <p className="text-[13px] text-muted-foreground">Linked. Their ideas come from their own list.</p>
           <Button type="button" variant="outline" className="self-start" disabled={busy} onClick={() => void run(unlinkAction)}>
@@ -68,7 +77,11 @@ export function ListLink({
             void run(linkAction, ["link", value]);
           }}
         >
-          <p className="text-[13px] text-muted-foreground">You don&apos;t need their list to buy for them.</p>
+          <p className="text-[13px] text-muted-foreground">
+            {prompt
+              ? "Paste the link they sent you, and their gift ideas will come from their own list."
+              : "You don't need their list to buy for them."}
+          </p>
           <Label htmlFor="list-link">Their list link</Label>
           <div className="flex items-center gap-2">
             <Input

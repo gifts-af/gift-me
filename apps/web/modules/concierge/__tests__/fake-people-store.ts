@@ -13,8 +13,8 @@ import type {
 export const ME = "me";
 export const OTHER = "someone-else";
 
-function dbError(message: string, code: string): Error {
-  return Object.assign(new Error(message), { code });
+function dbError(message: string, code: string, details?: string): Error {
+  return Object.assign(new Error(message), { code, details });
 }
 
 /**
@@ -33,6 +33,8 @@ export class FakePeopleStore implements PeopleStore {
   /** The caller's relationship defaults (budget_defaults), cents by relationship. */
   defaults = new Map<string, number>();
   lists = new Map<string, string>(); // share token -> owner
+  /** Active list links: person -> share token (ALL-123). */
+  links = new Map<string, string>();
   signed: string[][] = [];
   writes: string[] = [];
   /** Google contact id and address of imported people (ALL-24). */
@@ -110,6 +112,15 @@ export class FakePeopleStore implements PeopleStore {
     if (p.googleContactId && [...this.googleIds].some(([id, g]) => g === p.googleContactId && this.mine(id))) {
       throw dbError("duplicate key value", "23505");
     }
+    // Like add_person with a share token (ALL-123): the add and the link are
+    // one transaction, so any refusal leaves no person behind.
+    const owner = p.shareToken ? this.lists.get(p.shareToken) : undefined;
+    if (p.shareToken) {
+      if (!owner) throw dbError("List not found", "P0002");
+      if (owner === this.caller) throw dbError("You cannot link a person to your own list", "22023");
+      const linked = [...this.links].find(([id, t]) => t === p.shareToken && this.mine(id));
+      if (linked) throw dbError("list_has_person", "P0001", linked[0]);
+    }
     const id = this.seed(this.caller ?? "", { name: p.name, relationship: p.relationship, birthYear: p.birthYear });
     for (const kind of p.kinds) {
       const d = kind === "birthday" ? p.birthday : kind === "anniversary" ? p.anniversary : null;
@@ -119,6 +130,10 @@ export class FakePeopleStore implements PeopleStore {
     }
     if (p.googleContactId) this.googleIds.set(id, p.googleContactId);
     if (p.address) this.addresses.set(id, p.address);
+    if (p.shareToken && owner) {
+      this.links.set(id, p.shareToken);
+      this.rows.get(id)!.linkedUserId = owner;
+    }
     return id;
   }
 
