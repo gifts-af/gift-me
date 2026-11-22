@@ -2,7 +2,7 @@ import { productLink } from "@gifts-af/core/store-page/link";
 import { z } from "zod";
 import { logEvent } from "@/lib/log";
 import { MAX_PRICE_CENTS } from "./format.js";
-import { cleanUrl, MAX_ITEMS, MAX_NAME_LENGTH } from "./save-list";
+import { cleanUrl, MAX_NAME_LENGTH } from "./save-list";
 
 // "Add to my list" from the Chrome extension (ALL-78): the form the extension
 // posts to POST /api/lists/items, and the add itself. The route makes the
@@ -33,6 +33,8 @@ export type ExtensionAddInput = {
   photo: Blob | null;
   /** list_photo_max_bytes, read by the route. */
   photoMaxBytes: number;
+  /** list_max_items, read by the route (ALL-142). */
+  maxItems: number;
 };
 
 export type AddItemArgs = {
@@ -102,7 +104,7 @@ const formSchema = z.object({
 });
 
 type ParseResult =
-  | { ok: true; input: Omit<ExtensionAddInput, "itemId" | "photoMaxBytes"> }
+  | { ok: true; input: Omit<ExtensionAddInput, "itemId" | "photoMaxBytes" | "maxItems"> }
   | { ok: false; status: 400; error: string };
 
 /** Validates the extension's multipart form (E4). The version is checked first, so an old build is told to update. */
@@ -226,7 +228,7 @@ export async function addFromExtension(store: ExtensionAddStore, input: Extensio
       productId: input.productId,
       photoUrl,
       confirmLikely: input.confirmLikely,
-      maxItems: MAX_ITEMS,
+      maxItems: input.maxItems,
     });
 
     const result = toResult(row, itemId);

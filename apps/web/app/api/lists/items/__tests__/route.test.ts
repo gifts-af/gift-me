@@ -75,7 +75,7 @@ function fakeStore(outcome = "added") {
 beforeEach(() => {
   vi.stubEnv("NEXT_PUBLIC_EXTENSION_ID", ID);
   createStore.mockReset();
-  settings = { extension_add_enabled: 1, list_photo_max_bytes: 200000 };
+  settings = { extension_add_enabled: 1, list_photo_max_bytes: 200000, list_max_items: 500 };
   vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
@@ -181,6 +181,23 @@ describe("POST", () => {
     expect(store.addItem).not.toHaveBeenCalled();
     const log = vi.mocked(console.log).mock.calls.map((c) => JSON.parse(String(c[0])));
     expect(log).toEqual([{ event: "list.extension_add", at: expect.any(String), outcome: "failed", error: "Error" }]);
+  });
+
+  it("adds with the item limit from list_max_items", async () => {
+    settings.list_max_items = 12;
+    const store = fakeStore();
+    createStore.mockResolvedValue(store);
+    await POST(signedIn());
+    expect(store.addItem).toHaveBeenCalledWith(expect.objectContaining({ maxItems: 12 }));
+  });
+
+  it("500 when list_max_items can't be read", async () => {
+    settings.list_max_items = new Error("no setting");
+    const store = fakeStore();
+    createStore.mockResolvedValue(store);
+    const res = await POST(signedIn());
+    expect(res.status).toBe(500);
+    expect(store.addItem).not.toHaveBeenCalled();
   });
 
   it("refuses an oversize photo with the limit from list_photo_max_bytes", async () => {
