@@ -48,14 +48,15 @@ function factsFor(ideas: OfferedIdea[], code: RejectionCode, text: string | null
 
 /**
  * Whether this choice still brings new ideas (runs_after_rejection), so the sheet says
- * "No more new ideas this time" for exactly that choice (AC-13a). The caller has checked the
- * round is the buyer's.
+ * "No more new ideas this time" for exactly that choice (AC-13a). Null when the owned idea isn't
+ * one of the round's offered ideas. The caller has checked the round is the buyer's.
  */
 export async function rejectionOutlook(
   input: { roundId: string; code: RejectionCode; text: string | null; ownedIdeaId: string | null },
   deps: ZincDeps,
-): Promise<boolean> {
-  const facts = factsFor(await offeredIdeas(deps, input.roundId), input.code, input.text, input.ownedIdeaId) ?? [];
+): Promise<boolean | null> {
+  const facts = factsFor(await offeredIdeas(deps, input.roundId), input.code, input.text, input.ownedIdeaId);
+  if (facts === null) return null;
   const { data, error } = await concierge(deps).rpc("runs_after_rejection", {
     p_round_id: input.roundId,
     p_facts: facts,

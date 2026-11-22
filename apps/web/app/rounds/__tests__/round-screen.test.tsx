@@ -172,6 +172,95 @@ describe("RoundScreen: picking", () => {
   });
 });
 
+describe("RoundScreen: picks after the round changes", () => {
+  function props() {
+    return {
+      rejectAction: vi.fn(async (...a: [string, FormData]): Promise<RejectResult> => (void a, { ok: true, more: true })),
+      setBudgetAction: vi.fn(async (...a: [string, FormData]): Promise<BudgetResult> => (void a, { ok: true })),
+      outlookAction: vi.fn(async (...a: [string, { code: string; ownedIdeaId: string | null; text: string | null }]) => (void a, true)),
+    };
+  }
+
+  it("a ticked idea that's since been rejected drops out: no picks and Buy disabled", async () => {
+    const a = idea({ title: "Orchid" });
+    const p = props();
+    const { rerender } = render(<RoundScreen view={view({ ideas: [a] })} {...p} />);
+    await pick("Orchid");
+    rerender(<RoundScreen view={view({ ideas: [{ ...a, status: "rejected" }] }, { status: "generating" })} {...p} />);
+    expect(screen.queryByText(/picked/)).toBeNull();
+    expect(screen.queryByRole("link", { name: /Buy/ })).toBeNull();
+  });
+
+  it("a ticked idea that can't be picked any more leaves the bar and the Buy link", async () => {
+    const a = idea({ title: "Orchid" });
+    const b = idea({ title: "Cocotte", source: "list", listItemId: "li1" });
+    const p = props();
+    const { rerender } = render(<RoundScreen view={view({ ideas: [a, b] })} {...p} />);
+    await pick("Orchid");
+    await pick("Cocotte");
+    await userEvent.click(await screen.findByRole("button", { name: "Yes, pick it" }));
+    rerender(<RoundScreen view={view({ ideas: [a, { ...b, claimed: true }] })} {...p} />);
+    expect(screen.getByText("1 picked · $30 of $50")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Buy 1 gift" })).toHaveAttribute("href", `/rounds/r1/buy?ideas=${a.id}`);
+  });
+
+  it("None of these clears the picks", async () => {
+    const a = idea({ title: "Orchid" });
+    const p = props();
+    render(<RoundScreen view={view({ ideas: [a, idea({ title: "Cocotte" })] })} {...p} />);
+    await pick("Orchid");
+    await userEvent.click(screen.getByRole("button", { name: "None of these" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Too generic" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Find new ideas" })).toBeEnabled());
+    await userEvent.click(screen.getByRole("button", { name: "Find new ideas" }));
+    expect(await screen.findByText("Looking again. New ideas will come by email.")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Orchid" })).not.toBeChecked();
+    expect(screen.getByText("Pick one or more")).toBeInTheDocument();
+  });
+
+  it("a budget saved under ticked picks offers the over-budget sheet instead of a silent dead button", async () => {
+    const a = idea({ title: "Orchid", totalCents: 5500 });
+    const p = props();
+    const { rerender } = render(<RoundScreen view={view({ ideas: [a] }, { budgetCents: null })} {...p} />);
+    await pick("Orchid");
+    rerender(<RoundScreen view={view({ ideas: [a] }, { budgetCents: 5000 })} {...p} />);
+    expect(screen.getByRole("button", { name: "Buy 1 gift" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Over budget: review" }));
+    expect(await screen.findByText("$55 is $5 over the $50 budget.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Yes, pick it" }));
+    expect(screen.getByRole("link", { name: "Buy 1 gift" })).toHaveAttribute("href", `/rounds/r1/buy?ideas=${a.id}&over=1`);
+  });
+
+  it("Keep within budget from the review unticks the last pick", async () => {
+    const a = idea({ title: "Orchid", totalCents: 5500 });
+    const p = props();
+    const { rerender } = render(<RoundScreen view={view({ ideas: [a] }, { budgetCents: null })} {...p} />);
+    await pick("Orchid");
+    rerender(<RoundScreen view={view({ ideas: [a] }, { budgetCents: 5000 })} {...p} />);
+    await userEvent.click(screen.getByRole("button", { name: "Over budget: review" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Keep within budget" }));
+    expect(screen.getByRole("checkbox", { name: "Orchid" })).not.toBeChecked();
+  });
+
+  it("going past the allowance forgets an earlier Yes, pick it", async () => {
+    const p = props();
+    render(
+      <RoundScreen
+        view={view({ ideas: [idea({ title: "A", totalCents: 3000 }), idea({ title: "B", totalCents: 2500 }), idea({ title: "C", totalCents: 2000 })] })}
+        {...p}
+      />,
+    );
+    await pick("A");
+    await pick("B");
+    await userEvent.click(await screen.findByRole("button", { name: "Yes, pick it" }));
+    await pick("C"); // $75: past the $60 allowance
+    expect(screen.getByRole("button", { name: "Buy 3 gifts" })).toBeDisabled();
+    await pick("C"); // back to $55: over, and asks again rather than trusting the old Yes
+    expect(screen.queryByRole("link", { name: /Buy/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Over budget: review" })).toBeInTheDocument();
+  });
+});
+
 describe("RoundScreen: budget", () => {
   it("offers Your budget when the round has none and sends the amount", async () => {
     const { setBudgetAction } = setup(view({ ideas: [idea()] }, { budgetCents: null }));

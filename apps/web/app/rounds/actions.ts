@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import type { Database } from "@gifts-af/core";
+import { FACT_VALUE_MAX, type Database } from "@gifts-af/core";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 import { roundDbDeps } from "@/app/settings/zinc-deps";
@@ -32,8 +32,8 @@ async function signedIn(): Promise<{ userId: string; userDb: SupabaseClient<Data
 const RejectForm = z.object({
   code: Code,
   owned: z.uuid().nullable(),
-  // Bounded here; the module refuses anything past FACT_VALUE_MAX after trimming (too_long).
-  text: z.string().max(5000),
+  // The profile_facts limit, after trimming; the module checks it again (too_long).
+  text: z.string().trim().max(FACT_VALUE_MAX),
   expectMore: z.enum(["0", "1"]),
 });
 
@@ -57,7 +57,7 @@ export async function rejectAction(roundId: string, form: FormData): Promise<Rej
 
   const { code, owned, text, expectMore } = parsed.data;
   const result = await rejectRoundIdeas(
-    { userId: user.userId, roundId: id.data, code, text: text.trim() || null, ownedIdeaId: owned, expectMore: expectMore === "1" },
+    { userId: user.userId, roundId: id.data, code, text: text || null, ownedIdeaId: owned, expectMore: expectMore === "1" },
     roundDbDeps(new Date()),
   );
   if (result.ok) revalidatePath(`/rounds/${id.data}`);
@@ -74,7 +74,7 @@ export async function outlookAction(
 ): Promise<boolean | null> {
   const id = RoundId.safeParse(roundId);
   const parsed = z
-    .object({ code: Code, ownedIdeaId: z.uuid().nullable(), text: z.string().max(5000).nullable() })
+    .object({ code: Code, ownedIdeaId: z.uuid().nullable(), text: z.string().trim().max(FACT_VALUE_MAX).nullable() })
     .safeParse(input);
   if (!id.success || !parsed.success) return null;
   const user = await signedIn();
@@ -82,7 +82,7 @@ export async function outlookAction(
   const deps = roundDbDeps(new Date());
   if ((await roundAccess(id.data, user.userId, deps)) !== "mine") return null;
   const { code, ownedIdeaId, text } = parsed.data;
-  return rejectionOutlook({ roundId: id.data, code, text: text?.trim() || null, ownedIdeaId }, deps);
+  return rejectionOutlook({ roundId: id.data, code, text: text || null, ownedIdeaId }, deps);
 }
 
 const BUDGET_MESSAGES = {
@@ -95,7 +95,9 @@ const BUDGET_MESSAGES = {
 export async function setBudgetAction(roundId: string, form: FormData): Promise<BudgetResult> {
   const id = RoundId.safeParse(roundId);
   if (!id.success) return { ok: false, error: "That didn't go through. Reload and try again." };
-  const parsed = parseBudget(field(form, "budget") ?? "");
+  const raw = z.string().max(20).safeParse(field(form, "budget") ?? "");
+  if (!raw.success) return { ok: false, error: "Enter an amount like 75 or 75.50." };
+  const parsed = parseBudget(raw.data);
   if (!parsed.ok) return { ok: false, error: parsed.error };
   // Left empty, nothing is saved (AC-9).
   if (parsed.cents === null) return { ok: false, error: "Enter an amount like 75 or 75.50." };

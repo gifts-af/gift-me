@@ -152,6 +152,12 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
     expect(await roundRow(r.roundId)).toMatchObject({ status: "generating", due: true, locked_until: null });
   });
 
+  it("the outlook for an owned idea that isn't one of the round's is null", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    expect(await rejectionOutlook({ roundId: r.roundId, code: "has_it", text: null, ownedIdeaId: randomUUID() }, deps())).toBeNull();
+  });
+
   it("None of these with no search left keeps the ideas buyable", async () => {
     const u = await newUser();
     // The next tick isn't before the ship-by day: new ideas couldn't be bought in time.

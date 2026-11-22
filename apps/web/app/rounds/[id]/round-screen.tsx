@@ -380,11 +380,17 @@ export function RoundScreen({
   const [done, setDone] = useState<string | null>(null);
 
   const byId = new Map(order.map((i) => [i.id, i]));
+  // Picks still on the screen and still pickable: a refresh after None of these, a claim or a
+  // cut link can take a ticked idea away.
+  const live = picked.filter((id) => {
+    const i = byId.get(id);
+    return i !== undefined && pickable(i);
+  });
   const barFor = (ids: string[]) => picksBar(ids.map((id) => byId.get(id)!.totalCents), budget, pct);
   const inOrder = (ids: Set<string>) => order.filter((i) => ids.has(i.id)).map((i) => i.id);
 
   function toggle(id: string) {
-    const now = new Set(picked);
+    const now = new Set(live);
     if (now.has(id)) {
       now.delete(id);
       const next = inOrder(now);
@@ -395,7 +401,10 @@ export function RoundScreen({
     now.add(id);
     const next = inOrder(now);
     setPicked(next);
-    if (barFor(next).fit === "over") {
+    const fit = barFor(next).fit;
+    // Past the allowance an earlier "Yes, pick it" no longer counts: coming back asks again.
+    if (fit === "dropped") setOverOk(false);
+    if (fit === "over") {
       setPendingOver({ id, before: overOk });
       setOverOk(false);
     }
@@ -408,15 +417,21 @@ export function RoundScreen({
     setPendingOver(null);
   }
 
+  /** Picks that went over without a tick (a budget saved under them): ask about the last one. */
+  function review() {
+    const last = live[live.length - 1];
+    if (last) setPendingOver({ id: last, before: false });
+  }
+
   function pickAnyway() {
     setOverOk(true);
     setPendingOver(null);
   }
 
-  const bar = barFor(picked);
+  const bar = barFor(live);
   const buyable = bar.count > 0 && bar.fit !== "dropped" && (bar.fit !== "over" || overOk) && pendingOver === null;
   const buyLabel = bar.count === 0 ? "Buy gifts" : bar.count === 1 ? "Buy 1 gift" : `Buy ${bar.count} gifts`;
-  const buyHref = `/rounds/${round.id}/buy?ideas=${picked.join(",")}${bar.fit === "over" ? "&over=1" : ""}`;
+  const buyHref = `/rounds/${round.id}/buy?ideas=${live.join(",")}${bar.fit === "over" ? "&over=1" : ""}`;
   const offered = order.filter((i) => i.status === "proposed" || i.status === "selected");
 
   const card = (i: RoundPageIdea) => (
@@ -426,7 +441,7 @@ export function RoundScreen({
       budgetCents={budget}
       note={blockedBecause(i, ordered)}
       pickable={canBuy ? pickable(i) : null}
-      checked={picked.includes(i.id)}
+      checked={live.includes(i.id)}
       onToggle={() => toggle(i.id)}
     />
   );
@@ -515,7 +530,11 @@ export function RoundScreen({
           ideas={offered}
           rejectAction={rejectAction}
           outlookAction={outlookAction}
-          onDone={(more) => setDone(more ? "Looking again. New ideas will come by email." : "Saved. These ideas are still here to buy.")}
+          onDone={(more) => {
+            setPicked([]);
+            setOverOk(false);
+            setDone(more ? "Looking again. New ideas will come by email." : "Saved. These ideas are still here to buy.");
+          }}
         />
       )}
 
@@ -531,6 +550,11 @@ export function RoundScreen({
               <span className="text-[13px] text-destructive">{`Over the most you allowed (${money(overBudgetLimitCents(budget, pct))})`}</span>
             )}
           </p>
+          {bar.fit === "over" && !overOk && pendingOver === null && (
+            <Button type="button" variant="outline" size="sm" onClick={review}>
+              Over budget: review
+            </Button>
+          )}
           {buyable ? (
             <Button asChild className="w-full">
               <Link href={buyHref}>{buyLabel}</Link>
