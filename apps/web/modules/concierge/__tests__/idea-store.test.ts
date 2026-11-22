@@ -1,4 +1,3 @@
-// @vitest-environment node
 // The Supabase IdeaStore and onDemandIdeas (ALL-27 Task 6) on the real local database (E5):
 // the service-role client for the store, and a signed-in user's client for what the screen
 // reads, so RLS is the real thing. Skipped when the local stack isn't running.

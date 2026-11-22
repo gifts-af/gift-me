@@ -1,4 +1,3 @@
-// @vitest-environment node
 // The Zinc and engine wiring (ALL-32 Task 7) against the real local Supabase and the real
 // engine (E5: nothing of ours is mocked). Zinc's address points nowhere: these paths only tell
 // the buyer and never call Zinc. Skipped when the local stack isn't running; fails in CI then.

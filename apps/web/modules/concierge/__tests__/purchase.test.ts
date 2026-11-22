@@ -1,4 +1,3 @@
-// @vitest-environment node
 // Approve, place, sweep (ALL-32 Task 6, ALL-30: AC-15 to AC-21, AC-26, AC-28). Our own
 // database is real (local Supabase, E5); only Zinc is faked. Skipped when the local
 // database isn't running. The kill switch is a shared setting: tests that flip it put it back.

@@ -1,4 +1,3 @@
-// @vitest-environment node
 import { describe, expect, it, vi } from "vitest";
 import { localStack } from "../../../test/local-db";
 import type { IdeaOutcome } from "../ideas/run";

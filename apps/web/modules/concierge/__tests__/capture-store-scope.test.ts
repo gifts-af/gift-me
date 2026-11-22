@@ -1,4 +1,3 @@
-// @vitest-environment node
 // The capture store run with the service-role client (inbound email, ALL-31 Task 4):
 // RLS doesn't apply, so every query must still keep to the one user. Real local
 // database (E5); skipped when it isn't running.

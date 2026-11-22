@@ -1,4 +1,3 @@
-// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { metadata } from "@/app/layout";
 import { siteUrl } from "@/lib/site-url";

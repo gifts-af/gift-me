@@ -1,4 +1,3 @@
-// @vitest-environment node
 // Zinc webhooks (ALL-32 Task 5, AC-13, AC-14, AC-26). Our own database is real
 // (local Supabase, E5); only Zinc is faked. Skipped when the local database isn't running.
 import { createHmac, randomUUID } from "node:crypto";

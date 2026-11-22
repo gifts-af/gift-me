@@ -1,4 +1,3 @@
-// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { APICallError } from "ai";
 import { MockLanguageModelV4 } from "ai/test";

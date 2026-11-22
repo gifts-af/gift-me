@@ -1,4 +1,3 @@
-// @vitest-environment node
 // Fan-out jobs (ALL-125) against the real local database (E5): the round lease, placing and the
 // idea runs' daily limit are the database's own behaviour. Only Zinc, email and the AI are faked
 // (no paid calls). Every job builds its own Supabase client, so the database sees separate,

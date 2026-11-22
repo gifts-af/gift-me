@@ -1,4 +1,3 @@
-// @vitest-environment node
 // Linking a person to a shared list, against the real local database (E5,
 // ALL-123): each link status maps to its result, unlink keeps the person and
 // their occasions, and a bad token is the "no longer works" copy, not a throw.

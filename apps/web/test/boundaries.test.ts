@@ -1,4 +1,3 @@
-// @vitest-environment node
 // Proves the product boundary rule (T19) keeps working: outside code may
 // import a product only through its index.ts.
 import path from "node:path";

@@ -1,4 +1,3 @@
-// @vitest-environment node
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@gifts-af/core";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";

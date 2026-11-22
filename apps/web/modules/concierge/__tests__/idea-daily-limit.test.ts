@@ -1,4 +1,3 @@
-// @vitest-environment node
 // Ten real connections race start_idea_run for round runs when only one place
 // is left in the day (ALL-125, AC-9). The daily limit is counted under its own
 // advisory lock, so exactly one start wins. Skipped when the local database

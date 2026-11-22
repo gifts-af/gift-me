@@ -1,4 +1,3 @@
-// @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // ALL-123 task 7: the link preview names the owner and the wish count, and

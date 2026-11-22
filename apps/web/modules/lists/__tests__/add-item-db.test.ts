@@ -1,4 +1,3 @@
-// @vitest-environment node
 // lists.add_item against the real local database (E5, ALL-78): the match key in
 // SQL gives the written answer (the rule is in core's link.ts header) for every
 // case in match-key-cases.json, and adds racing each other or a My list save on many

@@ -1,4 +1,3 @@
-// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { EMAIL_LOGO_URL, renderEmail } from "@/lib/email-layout";
 

@@ -1,4 +1,3 @@
-// @vitest-environment node
 import { afterEach, describe, expect, it, vi } from "vitest";
 import vercelJson from "../../../../../vercel.json";
 import { strayKeys } from "@/test/fanout-event-keys";

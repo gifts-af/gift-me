@@ -1,4 +1,3 @@
-// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import { NextResponse } from "next/server";
 import { homeRewrite, isPublicPath, signInRedirect, withCookies } from "@/lib/supabase/proxy";

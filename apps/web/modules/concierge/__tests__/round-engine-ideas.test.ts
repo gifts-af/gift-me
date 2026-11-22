@@ -1,4 +1,3 @@
-// @vitest-environment node
 import type { StepKey } from "@gifts-af/core";
 import { describe, expect, it, vi } from "vitest";
 import type { IdeaOutcome } from "../ideas/run";

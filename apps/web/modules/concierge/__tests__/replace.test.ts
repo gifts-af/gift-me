@@ -1,4 +1,3 @@
-// @vitest-environment node
 // Replacing a failed gift and checking today's price (ALL-29 AC-14, AC-15, AC-15a, AC-12b,
 // AC-19). Our own database is real (local Supabase, E5); only Zinc is faked, and the fake
 // refuses an order whose max_price is below its product's price, as Zinc does.

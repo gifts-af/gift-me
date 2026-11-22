@@ -1,4 +1,3 @@
-// @vitest-environment node
 import type { ScheduleSettings } from "@gifts-af/core";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { planJobs, type QueuedJob, type SendJobs } from "../rounds/fanout";

@@ -1,4 +1,3 @@
-// @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sendNotesTipOnce, type TipDeps } from "../inbound/tip";
 import type { Channel } from "../notify/channels";

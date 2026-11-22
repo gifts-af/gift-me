@@ -1,4 +1,3 @@
-// @vitest-environment node
 // The colour tokens in app/globals.css must match design/ui.md > Colours, and
 // every text-on-fill pair must pass WCAG AA (4.5:1) in both themes.
 import { readFileSync } from "node:fs";

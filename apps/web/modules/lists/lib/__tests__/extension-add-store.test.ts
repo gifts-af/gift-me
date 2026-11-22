@@ -1,4 +1,3 @@
-// @vitest-environment node
 // Which client does what in the extension add (ALL-78): the photo queue and
 // storage go through the service role (users can't write list-photos), and
 // add_item runs as the user so RLS applies. Fake clients; the SQL itself is
