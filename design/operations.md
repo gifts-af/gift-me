@@ -77,6 +77,8 @@ pnpm test:db           # run the Vitest files that use the real local database a
 pnpm check:bundle      # after pnpm build: fail if a Zinc key prefix or a Vault function name is in the browser code (CI runs it)
 pnpm db:types          # regenerate packages/core/src/database.types.ts after changing the schema
 pnpm db:types:check    # fail if that file doesn't match the local database (CI runs it)
+pnpm db:map            # redraw the database map into design/database-map.html after a schema change, and commit it (CLAUDE.md > The database map page)
+pnpm db:map:check      # fail if the committed map doesn't match the local database (CI runs it)
 pnpm e2e               # the browser tests: build the app against the local database, then test it (see Browser tests below)
 pnpm e2e:browsers      # install Playwright's Chromium and WebKit; e2e:browsers:deps installs only their Linux system packages (CI, when the browsers are cached)
 pnpm db:push:dev       # apply new migrations to dev (CI does this on every merge to main; by hand only to recover)

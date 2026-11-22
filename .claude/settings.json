@@ -14,6 +14,40 @@
           }
         ]
       }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(gh pr merge*)",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/db-map-hooks.mjs\" merged",
+            "timeout": 30
+          }
+        ]
+      },
+      {
+        "matcher": "Artifact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/db-map-hooks.mjs\" published",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/scripts/db-map-hooks.mjs\" stop",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }
