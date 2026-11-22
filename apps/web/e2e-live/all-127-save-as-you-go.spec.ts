@@ -44,8 +44,19 @@ test("About saves the name, relationship and birthday as you go", async ({ page 
     await page.goto(personUrl);
     await expect(page.getByRole("heading", { level: 1, name: renamed })).toBeVisible();
     await expect(page.getByRole("link", { name: new RegExp(`^About ${renamed}`) })).toContainText("Aunt · Birthday Nov 30");
-    for (const row of [/^Budget/, /^Saved gifts/, /^Their list/, /^Shipping address/]) {
+    for (const row of [/^Budget/, /^Saved gifts/, /^Shipping address/]) {
       await expect(page.getByRole("link", { name: row })).toBeVisible();
+    }
+    // With list_link_card_enabled on (ALL-123), an unlinked person gets the list prompt at the top
+    // instead of the Their list row; with it off, the row is there.
+    const listCard = page.getByRole("heading", { level: 2, name: `Does ${renamed} have a GiftsAF list?` });
+    const listRow = page.getByRole("link", { name: /^Their list/ });
+    await expect(listCard.or(listRow)).toBeVisible();
+    if (await listCard.isVisible()) {
+      await expect(page.getByLabel("Their list link")).toBeVisible();
+      await expect(listRow).toHaveCount(0);
+    } else {
+      await expect(listRow).toBeVisible();
     }
   } finally {
     await page.goto(personUrl);
