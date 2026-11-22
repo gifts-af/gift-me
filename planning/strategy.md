@@ -94,7 +94,7 @@ How the concierge's intelligence works (matches design §3.1):
 
 | Phase | What happens |
 |---|---|
-| **0. Friends and family (now)** | Gift lists soft launch; Gift Concierge MVP for the owner, Jim and 1–2 friends; pick one platform name. Paid features (AI and Zinc) are for test and admin users only (decision 53); friends wait until premium is scoped (ALL-76), owner 2026-11-06 |
+| **0. Friends and family (now)** | Gift lists soft launch; Gift Concierge MVP for the owner, Jim and 1–2 friends; pick one platform name. Paid features (AI and Zinc) are for test and admin users only (decision 53); friends wait until premium is scoped (ALL-76), owner 2026-11-06. Once it is, friends use it before billing exists, and we cover our own costs until the fee is charged at public launch (D58, owner 2026-11-22) |
 | **1. Seed a campus** | Free buy-me-a-drink shirts to friends' and family's college networks on one campus. Learn whether people scan, pay and come back. Bridge every scanner to a list. |
 | **2. Events and seasons** | Bachelor and bachelorette gear for wedding season, with wedding lists. QR cards for Valentine's Day, Mother's Day, graduations and Christmas. Plushie chains with seasonal characters. Cookie promotions with local bakeries. |
 | **3. Convert and charge** | Concierge public launch with premium automation. Offer it to list guests and frequent givers first. Help loyal customers build profiles, including the social media tour, then automate their recurring gifts. Per-gift fees. |
