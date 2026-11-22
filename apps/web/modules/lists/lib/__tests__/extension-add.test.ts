@@ -5,7 +5,6 @@
 // of add_item is supabase/tests/extension_add.test.sql and add-item-db.test.ts.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { addFromExtension, parseExtensionAddForm, type AddItemRow, type ExtensionAddInput, type ExtensionAddStore } from "../extension-add";
-import { MAX_ITEMS } from "../save-list";
 
 const ITEM = "33333333-3333-4333-8333-333333333333";
 const LIST = "11111111-1111-4111-8111-111111111111";
@@ -35,6 +34,7 @@ function input(over: Partial<ExtensionAddInput> = {}): ExtensionAddInput {
     confirmLikely: false,
     photo: null,
     photoMaxBytes: 100,
+    maxItems: 7,
     ...over,
   };
 }
@@ -151,7 +151,7 @@ describe("addFromExtension", () => {
       productId: null,
       photoUrl: null,
       confirmLikely: false,
-      maxItems: MAX_ITEMS,
+      maxItems: 7,
     });
   });
 

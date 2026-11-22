@@ -2,13 +2,13 @@
 
 import type { Gift } from "@/modules/lists/lib/lists";
 import {
-  MAX_ITEMS,
   MAX_VERSION_LENGTH,
   saveChecked,
   toRow,
   type ListRow,
   type SaveListResult,
 } from "@/modules/lists/lib/save-list";
+import { appSettingInt } from "@/lib/app-settings";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -31,8 +31,10 @@ export async function saveList(input: {
 
   const items = Array.isArray(input?.items) ? input.items : null;
   if (!items) return { ok: false, error: "That list couldn't be read." };
-  if (items.length > MAX_ITEMS) {
-    return { ok: false, error: `A list can hold up to ${MAX_ITEMS} gifts.` };
+  // The same setting the database enforces (ALL-142), so the person gets a plain message first.
+  const maxItems = await appSettingInt("list_max_items", supabase);
+  if (items.length > maxItems) {
+    return { ok: false, error: `A list can hold up to ${maxItems} gifts.` };
   }
 
   const rows = items.map(toRow);
