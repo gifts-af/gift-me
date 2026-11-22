@@ -94,7 +94,8 @@ export function sequentialCaps(
   });
 }
 
-function asCommitted(o: OrderRow): CommittedOrder {
+/** An order as the budget math counts it (committedSpendCents). */
+export function asCommitted(o: OrderRow): CommittedOrder {
   const status = (o.status === "unconfirmed" ? "placing" : o.status) as CommittedOrder["status"];
   return { id: o.id, status, maxPriceCents: o.max_price_cents, finalTotalCents: o.total_cents, feeCents: o.fee_cents };
 }

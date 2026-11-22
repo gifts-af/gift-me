@@ -115,6 +115,10 @@ export { hasPaidFeatures } from "./paid-features";
 // webhook route, Settings and the people actions bind these in app/settings/zinc-deps.ts.
 export { approveAndBuy } from "./purchase/approve";
 export type { ApproveError, ApproveInput, ApproveResult } from "./purchase/approve";
+export { capsFor } from "./purchase/approve";
+export type { ShipTo } from "./purchase/approve";
+export { quoteFailedOrder, replaceFailedOrder } from "./purchase/replace";
+export type { QuoteDeps, QuoteResult, ReplaceError, ReplaceInput, ReplaceResult } from "./purchase/replace";
 export { placeAddressHeld as placeAddressHeldFor, placeHeldForUser, placeRound, sweepStalePlacing } from "./purchase/place";
 export type { PlaceOutcome } from "./purchase/place";
 export type { PurchaseDeps } from "./purchase/store";
