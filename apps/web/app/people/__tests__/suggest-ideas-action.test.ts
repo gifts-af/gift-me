@@ -14,7 +14,7 @@ vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath }));
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("@/lib/today", () => ({ todayForRequest: async () => "2026-11-01" }));
-vi.mock("@/app/settings/zinc-deps", () => ({ placeAddressHeld: async () => {}, onDemandIdeaDeps }));
+vi.mock("@/lib/wiring", () => ({ placeAddressHeld: async () => {}, onDemandIdeaDeps }));
 vi.mock("@/lib/app-settings", () => ({
   appSettingInt: async (key: string) =>
     ({ idea_ai_timeout_ms: 60000, idea_zinc_timeout_ms: 15000, idea_list_lookups_max: 10, zinc_requests_per_second: 10 })[key],

@@ -15,7 +15,7 @@ import { saveTimezone } from "./actions";
 import { addressRowText, paymentRowText } from "./rows";
 import { SettingsRow } from "@/components/settings-row";
 import { TimeZoneRow } from "./time-zone-row";
-import { zincWiring } from "./zinc-deps";
+import { zincWiring } from "@/lib/wiring";
 
 function Group({ title, children }: { title: string; children: React.ReactNode }) {
   return (

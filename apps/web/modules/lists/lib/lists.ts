@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { logEvent } from "@/lib/log";
+import { errorFields, logEvent } from "@/lib/log";
 import { createClient } from "@/lib/supabase/server";
 
 export { DEFAULT_LIST_TITLE } from "./list-title";
@@ -129,7 +129,7 @@ export async function getMyListSummary(): Promise<{ count: number } | null> {
     .limit(1)
     .maybeSingle();
   if (error) {
-    console.error("loading the list summary failed", error);
+    logEvent("lists.summary_failed", errorFields(error));
     return null;
   }
   if (!list) return { count: 0 };
@@ -178,7 +178,7 @@ export async function getSharedList(token: string): Promise<SharedList | null> {
   const supabase = await createClient();
   const { data, error } = await supabase.schema("lists").rpc("get_shared_list", { p_token: token });
   if (error) {
-    console.error("get_shared_list failed", error);
+    logEvent("lists.shared_list_failed", errorFields(error));
     throw new Error("Couldn't load that list.");
   }
   if (!data) return null;

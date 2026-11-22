@@ -213,9 +213,9 @@ describe("POST", () => {
 
   it("500 when the extension id is not configured", async () => {
     vi.stubEnv("NEXT_PUBLIC_EXTENSION_ID", "");
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const error = vi.spyOn(console, "log").mockImplementation(() => {});
     const res = await POST(signedIn());
     expect(res.status).toBe(500);
-    expect(error).toHaveBeenCalledWith(expect.stringContaining("extension routes"));
+    expect(error).toHaveBeenCalledWith(expect.stringContaining("extension.origin_unset"));
   });
 });

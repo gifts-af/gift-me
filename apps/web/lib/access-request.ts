@@ -2,6 +2,7 @@ import { APP_NAME, inboxFor } from "@/lib/brand";
 import { renderEmail } from "@/lib/email-layout";
 import { NOT_HUMAN, TURNSTILE_FIELD } from "@/lib/turnstile";
 import { sendEmail, type OutgoingEmail } from "@/lib/resend";
+import { logEvent } from "@/lib/log";
 
 // Access requests (ALL-47) and the concierge waitlist (ALL-71): a short form
 // emails the owner through Resend, then sends the person a branded
@@ -98,6 +99,7 @@ export async function requestAccess(
   // The owner has the request, so the visitor is thanked even if their own
   // copy doesn't go out.
   const confirmed = await sendEmail(buildRequestConfirmation(checked.value), deps);
-  if (!confirmed.ok) console.error("access request confirmation not sent", confirmed.error);
+  // Only the fact: the error can echo the visitor's address.
+  if (!confirmed.ok) logEvent("access_request.confirmation_failed", {});
   return { status: "sent" };
 }

@@ -53,7 +53,7 @@ export async function POST(request: Request) {
       captureStore: (userId) => captureStoreFor(db, userId),
       extract: createExtractor(AI_MODELS.extraction),
       resend: { apiKey: process.env.RESEND_API_KEY, fetch },
-      notify: { store: createSupabaseNotifyStore(db), channels: defaultChannels(), baseUrl: siteUrl(), now: new Date() },
+      notify: { store: createSupabaseNotifyStore(db), channels: defaultChannels(process.env), baseUrl: siteUrl(), now: new Date() },
     };
     // One row per email: Resend retries and duplicates insert nothing, so nothing runs twice.
     const { data, error } = await db

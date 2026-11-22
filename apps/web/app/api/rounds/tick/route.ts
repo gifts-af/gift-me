@@ -1,4 +1,4 @@
-import { buyingWiring } from "@/app/settings/zinc-deps";
+import { buyingWiring } from "@/lib/wiring";
 import { appSettingInt } from "@/lib/app-settings";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { runTick } from "@/modules/concierge";

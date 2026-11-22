@@ -9,7 +9,7 @@ vi.mock("../notes-tip", () => ({ scheduleNotesTip: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath }));
 vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("@/lib/today", () => ({ todayForRequest: async () => "2026-11-01" }));
-vi.mock("@/app/settings/zinc-deps", () => ({ placeHeld: async () => {} }));
+vi.mock("@/lib/wiring", () => ({ placeHeld: async () => {} }));
 vi.mock("@/lib/app-settings", () => ({ appSettingInt: async () => 20 }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ client: true }) }));
 vi.mock("@/modules/concierge", async () => {

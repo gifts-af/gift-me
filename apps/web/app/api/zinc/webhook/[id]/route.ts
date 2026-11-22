@@ -1,7 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { errorFields, logEvent } from "@/lib/log";
 import { handleZincWebhook, readWebhookBody } from "@/modules/concierge";
-import { placeHeld, webhookTellers, zincWiring } from "@/app/settings/zinc-deps";
+import { placeHeld, webhookTellers, zincWiring } from "@/lib/wiring";
 
 // An auto top-up places the user's held gifts here, which can run for a while: one zinc_place_budget_ms (45 s by default) for the
 // run, plus a request already in flight with its retries. 300 s is the most Vercel's Fluid

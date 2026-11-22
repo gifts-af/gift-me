@@ -1,4 +1,5 @@
 import type { CaptureStore, NewCaptureRow } from "./store";
+import { errorFields, logEvent } from "@/lib/log";
 
 export type CaptureInput = {
   personId: string;
@@ -18,9 +19,9 @@ const SAVE_FAILED = "Couldn't save the capture.";
 /** Matches the check constraint on concierge.captures.note. */
 export const CAPTURE_NOTE_MAX_CHARS = 2000;
 
-// Log only the step and the error object: never the token, form body, text or screenshot.
+// Log only the step and the error's code: never the token, form body, text or screenshot.
 function logFailure(step: string, err: unknown): void {
-  console.error(`capture: ${step} failed`, err);
+  logEvent("capture.failed", { step, ...errorFields(err) });
 }
 
 /** An emailed note (ALL-31): no page, and at most one image of any of these types. */
@@ -56,8 +57,8 @@ export async function saveNoteCapture(store: CaptureStore, input: NoteCaptureInp
   if (input.image) {
     const ext = IMAGE_EXTENSIONS[input.image.type];
     if (!ext) {
-      // The type is a MIME string, never personal data.
-      logFailure("image type", input.image.type);
+      // The type is the sender's own text, so it stays out of the log; the step says why.
+      logFailure("image type", null);
       return { ok: false, status: 500, error: SAVE_FAILED };
     }
     image = { blob: new Blob([input.image.bytes as BlobPart], { type: input.image.type }), type: input.image.type, ext };

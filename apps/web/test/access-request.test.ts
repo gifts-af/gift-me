@@ -152,11 +152,11 @@ describe("requestAccess", () => {
   });
 
   it("still thanks the visitor if only their confirmation fails", async () => {
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const error = vi.spyOn(console, "log").mockImplementation(() => {});
     const send = vi.fn().mockResolvedValueOnce(ok()).mockResolvedValueOnce(new Response("nope", { status: 500 }));
     const result = await requestAccess(form({ name: "Jordan", email: "jo@example.com" }), { isHuman: human, apiKey: "re_test", fetch: send });
     expect(result).toEqual({ status: "sent" });
-    expect(error).toHaveBeenCalled();
+    expect(String(error.mock.calls[0][0])).toContain("access_request.confirmation_failed");
     error.mockRestore();
   });
 

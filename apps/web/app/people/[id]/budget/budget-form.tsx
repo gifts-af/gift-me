@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useGoBack } from "@/components/app-shell/back-history";
-import { OCCASION_NAMES } from "@/components/occasion-format";
+import { OCCASION_NAMES } from "@/lib/occasion-format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

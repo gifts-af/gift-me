@@ -6,7 +6,7 @@ import { FACT_VALUE_MAX, type Database } from "@gifts-af/core";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { buyingWiring, lookupWiring, roundDbDeps } from "@/app/settings/zinc-deps";
+import { buyingWiring, lookupWiring, roundDbDeps } from "@/lib/wiring";
 import {
   approveAndBuy,
   MAX_BUDGET_CENTS,

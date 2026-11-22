@@ -6,7 +6,12 @@ import type { CaptureInput, NoteCaptureInput } from "../capture/capture";
 import { FakeCaptureStore } from "./fake-capture-store";
 
 let store: FakeCaptureStore;
-let consoleError: MockInstance<typeof console.error>;
+let consoleLog: MockInstance<typeof console.log>;
+
+/** The structured events logged so far (E6). */
+function events(): Record<string, unknown>[] {
+  return consoleLog.mock.calls.map((c) => JSON.parse(String(c[0])));
+}
 
 function input(over: Partial<CaptureInput> = {}): CaptureInput {
   return {
@@ -24,11 +29,11 @@ beforeEach(() => {
   store = new FakeCaptureStore();
   store.people.add("p1");
   // Store failures are logged; keep that out of the test output.
-  consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+  consoleLog = vi.spyOn(console, "log").mockImplementation(() => {});
 });
 
 afterEach(() => {
-  consoleError.mockRestore();
+  consoleLog.mockRestore();
 });
 
 describe("saveCapture", () => {
@@ -82,11 +87,8 @@ describe("saveCapture", () => {
   it("logs a failing upload once, with the step name and the error only", async () => {
     store.failUpload = true;
     await saveCapture(store, input({ note: "secret note", text: "secret text" }));
-    expect(consoleError).toHaveBeenCalledTimes(1);
-    const [message, err] = consoleError.mock.calls[0];
-    expect(message).toBe("capture: upload failed");
-    expect(err).toBeInstanceOf(Error);
-    expect(consoleError.mock.calls[0]).toHaveLength(2);
+    expect(events()).toEqual([expect.objectContaining({ event: "capture.failed", step: "upload", name: "Error" })]);
+    expect(JSON.stringify(events())).not.toContain("secret");
   });
 
   it.each([
@@ -98,8 +100,7 @@ describe("saveCapture", () => {
     store[flag] = true;
     const r = await saveCapture(store, input());
     expect(r).toMatchObject({ ok: false, status: 500 });
-    expect(consoleError).toHaveBeenCalledTimes(1);
-    expect(consoleError).toHaveBeenCalledWith(`capture: ${step} failed`, expect.any(Error));
+    expect(events()).toEqual([expect.objectContaining({ event: "capture.failed", step })]);
   });
 
   it("logs both the upload and a failing rollback delete", async () => {
@@ -107,15 +108,12 @@ describe("saveCapture", () => {
     store.failDelete = true;
     const r = await saveCapture(store, input());
     expect(r).toMatchObject({ ok: false, status: 500 });
-    expect(consoleError.mock.calls.map((c) => c[0])).toEqual([
-      "capture: upload failed",
-      "capture: rollback delete failed",
-    ]);
+    expect(events().map((e) => e.step)).toEqual(["upload", "rollback delete"]);
   });
 
   it("logs nothing when the save succeeds", async () => {
     await saveCapture(store, input());
-    expect(consoleError).not.toHaveBeenCalled();
+    expect(consoleLog).not.toHaveBeenCalled();
   });
 });
 
@@ -180,7 +178,8 @@ describe("saveNoteCapture", () => {
     const r = await saveNoteCapture(store, note({ image: { bytes: new Uint8Array([1]), type: "image/tiff" } }));
     expect(r).toMatchObject({ ok: false, status: 500 });
     expect(store.rows).toHaveLength(0);
-    expect(consoleError).toHaveBeenCalledWith("capture: image type failed", "image/tiff");
+    expect(events()).toEqual([expect.objectContaining({ event: "capture.failed", step: "image type" })]);
+    expect(JSON.stringify(events())).not.toContain("image/tiff");
   });
 
   it("deletes the row when the upload fails", async () => {

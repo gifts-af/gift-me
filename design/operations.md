@@ -61,7 +61,7 @@ Where new docs go, how to write them, and when to push straight to `main` versus
 | pnpm | Package manager for this repo | `npm install -g pnpm` |
 | Dependencies | Includes the **Supabase CLI**, pinned in `package.json`, so there's nothing to install globally | `pnpm install` from the repo root |
 | Docker | The Supabase CLI runs a full local Supabase (database, auth, storage) in Docker containers | **Windows:** `wsl --install --no-distribution` as admin, restart Windows, then `winget install -e --id Docker.DockerDesktop`, open Docker Desktop and accept its terms. **Mac:** in Terminal, `brew install --cask docker-desktop` (it asks for your Mac password), then open Docker Desktop and accept its terms. |
-| Playwright's Chromium and WebKit | Run the browser tests (`apps/web/e2e/`) as an Android phone (Chromium) and an iPhone (WebKit, Safari's engine) | `pnpm --filter @gifts-af/web exec playwright install chromium webkit` |
+| Playwright's Chromium and WebKit | Run the browser tests (`apps/web/e2e/`) as an Android phone (Chromium) and an iPhone (WebKit, Safari's engine) | `pnpm e2e:browsers` (on Linux this also installs the system packages the browsers need) |
 
 **Local database.** With Docker Desktop running:
 
@@ -70,10 +70,14 @@ pnpm supabase start    # first run downloads images (a few minutes); applies sup
 pnpm supabase status   # local URLs and keys; Studio (the database UI) is at http://127.0.0.1:54323
 pnpm supabase db reset # rebuild the local database from the migrations, e.g. after pulling new ones
 pnpm supabase stop     # stop the containers; your local data is kept
+pnpm db:start:tests    # start only the services the tests need (no Studio or Mailpit); what CI runs
 pnpm db:test           # run the database tests in supabase/tests/ (privacy rules, keys, cascades)
 pnpm test:db           # run the Vitest files that use the real local database and its API (order races, buying, Zinc connect and events; `pnpm test` leaves them out). Needs `pnpm supabase start`; skips when it isn't running, but fails in CI, whose db job starts it
 pnpm check:bundle      # after pnpm build: fail if a Zinc key prefix or a Vault function name is in the browser code (CI runs it)
 pnpm db:types          # regenerate packages/core/src/database.types.ts after changing the schema
+pnpm db:types:check    # fail if that file doesn't match the local database (CI runs it)
+pnpm e2e               # the browser tests: build the app against the local database, then test it (see Browser tests below)
+pnpm e2e:browsers      # install Playwright's Chromium and WebKit; e2e:browsers:deps installs only their Linux system packages (CI, when the browsers are cached)
 pnpm db:push:dev       # apply new migrations to dev (CI does this on every merge to main; by hand only to recover)
 pnpm db:push:prod      # apply new migrations to prod (same; add --dry-run to see what would run)
 pnpm live-check        # signed-in checks on giftsaf.com with the shared test account (needs `pnpm supabase login`; see Production test account)
@@ -83,11 +87,11 @@ pnpm ai:eval           # check capture extraction against the fixtures with the 
 pnpm ai:eval --ideas   # idea engine on the 5 fixture people, real AI and Zinc; checks AC-2/5/6, prints AI and Zinc cents per run; --ai-cents-max N (default 25). **SPENDS MONEY (about 20-25¢ AI per person plus Zinc lookups): run only with Jim's go-ahead, never in CI.** Needs AI_GATEWAY_BASE, AI_GATEWAY_API_KEY, ZINC_API_BASE, ZINC_API_KEY; refuses before any call without them
 ```
 
-Write new migrations with `pnpm supabase migration new <name>` and test them locally before they go to `dev` or `prod`. Local settings live in `supabase/config.toml`. Every new user-owned table needs `user_id`, its privacy rule and a test in `supabase/tests/` (see `design/decisions.md` T26). CI runs `pnpm db:test` and fails if the generated types are stale.
+Write new migrations with `pnpm supabase migration new <name>` and test them locally before they go to `dev` or `prod`. Local settings live in `supabase/config.toml`. Every new user-owned table needs `user_id`, its privacy rule and a test in `supabase/tests/` (see `design/decisions.md` T26). CI runs `pnpm db:test`, and `pnpm db:types:check` fails it if the generated types are stale.
 
 **Before the first migration push to a hosted project (`dev` or `prod`):** `config.toml` only exposes the `concierge` and `lists` schemas locally. On each hosted project, add both under Project Settings > Data API > Exposed schemas (admin, as allensforever711), or the app's queries fail with `PGRST106`. Do it **right after** pushing the migration that creates the schema, never before. Exposing a schema that doesn't exist yet takes the whole Data API down (every request gets a 503; tested locally on 2026-10-25). That project also needs Postgres 15 or later; the migrations use `on delete set null (column)`.
 
-**Browser tests (Playwright):** with the local database running, `pnpm --filter @gifts-af/web e2e`. They sign in as a throwaway local account (created for you, email and password, since local Supabase has no Google) at phone width (375 px). They build the app first (about 30 seconds, and type errors stop the run) and test that production build, as CI's `e2e` job does. They need port 3100 free: the run waits for its own server to start, so if anything else holds the port, even one taken during the build, the run fails rather than testing someone else's code (ALL-108). Set `E2E_PORT` to use another port, so several worktrees can run them at once. To test a server that's already running, set `E2E_BASE_URL`. CI keeps the downloaded browsers in a cache until `pnpm-lock.yaml` changes, so most runs install only the system packages the browsers need; both install steps time out after 15 minutes (the system packages come from Ubuntu's mirror, which can take 7 minutes or more), so a stuck download fails well short of the hour-long hangs we used to see and can be re-run (ALL-100).
+**Browser tests (Playwright):** with the local database running, `pnpm e2e`. They sign in as a throwaway local account (created for you, email and password, since local Supabase has no Google) at phone width (375 px). They build the app first (about 30 seconds, and type errors stop the run) and test that production build. CI's `e2e` job runs the same command, so its build is the same as yours. They need port 3100 free: the run waits for its own server to start, so if anything else holds the port, even one taken during the build, the run fails rather than testing someone else's code (ALL-108). Set `E2E_PORT` to use another port, so several worktrees can run them at once. To test a server that's already running, set `E2E_BASE_URL`. CI keeps the downloaded browsers in a cache until `pnpm-lock.yaml` changes, so most runs install only the system packages the browsers need; both install steps time out after 15 minutes (the system packages come from Ubuntu's mirror, which can take 7 minutes or more), so a stuck download fails well short of the hour-long hangs we used to see and can be re-run (ALL-100).
 
 **Reviewing screens and emails by eye:**
 

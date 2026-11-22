@@ -533,7 +533,7 @@ async function copyPhoto(
     if (!(await store.uploadPhoto(path, bytes, type))) return false;
     return await store.setPhotoPath(personId, path);
   } catch (e) {
-    console.error("copying a contact photo failed", e);
+    logEvent("people.contact_photo_failed", { person_id: personId, ...errorFields(e) });
     return false;
   }
 }
@@ -563,7 +563,7 @@ export async function importPeople(store: PeopleStore, rows: ImportRow[], deps: 
       store.photoSettings(),
     ]);
   } catch (e) {
-    console.error("starting an import failed", e);
+    logEvent("people.import_start_failed", errorFields(e));
     return { ok: false, error: TRY_AGAIN };
   }
 
@@ -593,7 +593,7 @@ export async function importPeople(store: PeopleStore, rows: ImportRow[], deps: 
       // The unique index: another import added them a moment ago.
       if (errorCode(e) === "23505") result.skipped++;
       else {
-        console.error("importing a person failed", e);
+        logEvent("people.import_row_failed", errorFields(e));
         result.failed++;
       }
     }

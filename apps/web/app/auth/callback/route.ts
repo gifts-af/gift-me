@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import type { AuthErrorCode } from "@/lib/auth-errors";
 import { safeNext } from "@/lib/safe-next";
 import { NextResponse, type NextRequest } from "next/server";
+import { errorFields, logEvent } from "@/lib/log";
 
 // Google sends the user back here (through Supabase) with a one-time code,
 // which becomes the session cookie. PKCE: the verifier was stored in a cookie
@@ -13,7 +14,10 @@ export async function GET(request: NextRequest) {
   // Google's own refusal, e.g. the user pressed Cancel.
   const providerError = searchParams.get("error_description") ?? searchParams.get("error");
   if (providerError) {
-    console.error("Google sign-in refused:", providerError);
+    // OAuth's `error` is a fixed code (access_denied, server_error); the description is
+    // free text, so only the code is logged.
+    const code = searchParams.get("error");
+    logEvent("auth.google_refused", { code: code && /^[a-z_]{1,64}$/.test(code) ? code : null });
     return fail("cancelled");
   }
 
@@ -23,7 +27,7 @@ export async function GET(request: NextRequest) {
   const supabase = await createClient();
   const { error } = await supabase.auth.exchangeCodeForSession(code);
   if (error) {
-    console.error("sign-in code exchange failed:", error.message);
+    logEvent("auth.code_exchange_failed", errorFields(error));
     return fail("failed");
   }
 

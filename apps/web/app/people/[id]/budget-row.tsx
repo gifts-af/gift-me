@@ -1,4 +1,4 @@
-import { OCCASION_NAMES } from "@/components/occasion-format";
+import { OCCASION_NAMES } from "@/lib/occasion-format";
 import { SettingsRow } from "@/components/settings-row";
 import type { PersonDetail } from "@/modules/concierge";
 import { money } from "./money";

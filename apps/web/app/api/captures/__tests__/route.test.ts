@@ -127,9 +127,9 @@ describe("POST", () => {
 
   it("500 when the extension id is not configured", async () => {
     vi.stubEnv("NEXT_PUBLIC_EXTENSION_ID", "");
-    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
     const res = await POST(post({ origin: ORIGIN, authorization: "Bearer t" }));
     expect(res.status).toBe(500);
-    expect(spy).toHaveBeenCalled();
+    expect(spy).toHaveBeenCalledWith(expect.stringContaining("extension.origin_unset"));
   });
 });

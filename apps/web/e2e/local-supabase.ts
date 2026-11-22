@@ -2,8 +2,9 @@ import { execSync } from "node:child_process";
 import path from "node:path";
 
 // Browser tests run against the local Supabase in Docker, never `dev` or
-// `prod`. CI sets these from `supabase status`; locally they're read from the
-// running stack.
+// `prod`. Its address and keys are read from the running stack, locally and in CI.
+// `supabase status` takes a second or two, so playwright.config.ts reads it once and
+// passes it to the workers in these env vars; sign-ins and seeds then reuse it.
 export type LocalSupabase = { url: string; publishableKey: string; serviceRoleKey: string };
 
 export function localSupabase(): LocalSupabase {

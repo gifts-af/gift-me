@@ -2,6 +2,7 @@
 
 import { UUID_PATTERN, type GiftClaim } from "@/modules/lists/lib/lists";
 import { createClient } from "@/lib/supabase/server";
+import { errorFields, logEvent } from "@/lib/log";
 
 const MAX_NAME_LENGTH = 80;
 
@@ -54,7 +55,7 @@ export async function claimGift(input: {
     if (error.code === "P0002") {
       return { ok: false, error: "That gift is no longer on this list. Refresh the page." };
     }
-    console.error("claim_gift failed", error);
+    logEvent("lists.claim_failed", { item_id: input.itemId, ...errorFields(error) });
     return { ok: false, error: "This gift couldn't be claimed. Try again." };
   }
 
@@ -63,7 +64,7 @@ export async function claimGift(input: {
     return { ok: false, error: "Someone just claimed this gift.", alreadyClaimed: true };
   }
   if (typeof result?.name !== "string") {
-    console.error("claim_gift returned an unexpected result", data);
+    logEvent("lists.claim_unexpected_result", { item_id: input.itemId });
     return { ok: false, error: "This gift couldn't be claimed. Try again." };
   }
 
@@ -88,7 +89,7 @@ export async function unclaimGift(input: {
     p_item_id: input.itemId,
   });
   if (error) {
-    console.error("unclaim_gift failed", error);
+    logEvent("lists.unclaim_failed", { item_id: input.itemId, ...errorFields(error) });
     return { ok: false, error: "This gift couldn't be unclaimed. Try again." };
   }
   if (removed !== true) {

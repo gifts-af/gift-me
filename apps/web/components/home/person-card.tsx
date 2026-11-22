@@ -1,6 +1,6 @@
 import { ChevronRight, ListChecks, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { OCCASION_NAMES, shortDate } from "@/components/occasion-format";
+import { OCCASION_NAMES, shortDate } from "@/lib/occasion-format";
 import { PersonAvatar } from "@/components/person-avatar";
 import type { PersonCard as Card } from "@/modules/concierge";
 

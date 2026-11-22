@@ -15,7 +15,7 @@ vi.mock("next/navigation", () => ({ redirect }));
 vi.mock("@/lib/today", () => ({ todayForRequest: async () => "2026-11-01" }));
 // The Zinc wiring is server-only glue; these tests never place an order.
 const buyingWiring = vi.hoisted(() => vi.fn());
-vi.mock("@/app/settings/zinc-deps", () => ({ placeHeld: async () => {}, placeAddressHeld: async () => {}, buyingWiring }));
+vi.mock("@/lib/wiring", () => ({ placeHeld: async () => {}, placeAddressHeld: async () => {}, buyingWiring }));
 vi.mock("@/lib/app-settings", () => ({ appSettingInt: async () => 20 }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({}) }));
 const renamePerson = vi.hoisted(() => vi.fn());

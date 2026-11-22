@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Check } from "lucide-react";
 import { IDEA_RUN_OFF, ideaRunNotice } from "@gifts-af/core";
 import { IdeaPhoto } from "@/components/idea-photo";
-import { shortDate } from "@/components/occasion-format";
+import { shortDate } from "@/lib/occasion-format";
 import { Button } from "@/components/ui/button";
 import type { IdeaRunOffer, ShownIdea } from "@/modules/concierge";
 import { money } from "../money";

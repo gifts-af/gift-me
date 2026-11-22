@@ -29,7 +29,7 @@ function outboxChannel(): Channel {
   };
 }
 
-export function defaultChannels(env: Record<string, string | undefined> = process.env): Channel[] {
+export function defaultChannels(env: Record<string, string | undefined>): Channel[] {
   if (env.EMAIL_OUTBOX === "log" && env.VERCEL_ENV !== "production") return [outboxChannel()];
   return [emailChannel({ apiKey: env.RESEND_API_KEY, fetch })];
 }

@@ -12,7 +12,7 @@ const { createClient, approveAndBuy, quoteFailedOrder, buyingWiring, lookupWirin
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
-vi.mock("@/app/settings/zinc-deps", () => ({ buyingWiring, lookupWiring, roundDbDeps: vi.fn() }));
+vi.mock("@/lib/wiring", () => ({ buyingWiring, lookupWiring, roundDbDeps: vi.fn() }));
 vi.mock("@/modules/concierge", () => ({ approveAndBuy, quoteFailedOrder, MAX_BUDGET_CENTS: 1 }));
 
 import { buyAction, checkPriceAction } from "../actions";

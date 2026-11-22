@@ -10,7 +10,7 @@ import { errorFields, logEvent } from "@/lib/log";
 import { createClient } from "@/lib/supabase/server";
 import { todayForRequest } from "@/lib/today";
 import { scheduleNotesTip } from "./notes-tip";
-import { onDemandIdeaDeps, placeAddressHeld } from "@/app/settings/zinc-deps";
+import { onDemandIdeaDeps, placeAddressHeld } from "@/lib/wiring";
 import { IDEA_MESSAGES, NO_FACTS } from "./[id]/ideas/messages";
 import {
   addPerson,

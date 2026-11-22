@@ -1,6 +1,7 @@
 import { ACTIONS, type Action, type ActionResult, type NoteDeps } from "./actions";
 import type { LinkRow, NotifyStore } from "./store";
 import { hashActionToken } from "./tokens";
+import { logEvent } from "@/lib/log";
 
 // Reading and confirming one-time action links (ALL-23, AC-3 to AC-10).
 // Reading never changes anything (an email scanner's GET must not use the link
@@ -77,8 +78,8 @@ export async function confirmActionLink(
   const result = await runSafely(action, claimed, deps);
   if (!result.ok) {
     // [Claude's call] The link stays used: real actions must be safe to treat as
-    // done or report their own failure. Never log the raw token.
-    console.error(`Action link "${claimed.action}" failed for user ${userId}: ${result.error}`);
+    // done or report their own failure. Never log the raw token or the error text.
+    logEvent("action_link.failed", { action: claimed.action, user_id: userId });
     return { state: "invalid" };
   }
   // The link is already used, so a failed lookup only costs the shortcut. The result's own

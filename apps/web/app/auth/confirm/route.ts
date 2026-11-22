@@ -3,6 +3,7 @@ import { safeNext } from "@/lib/safe-next";
 import { type EmailOtpType } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 import { type NextRequest } from "next/server";
+import { errorFields, logEvent } from "@/lib/log";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -21,7 +22,7 @@ export async function GET(request: NextRequest) {
       // redirect user to specified redirect URL or root of app
       redirect(next);
     } else {
-      console.error("email link verification failed:", error.message);
+      logEvent("auth.email_link_failed", errorFields(error));
       redirect("/auth/error?error=failed");
     }
   }
