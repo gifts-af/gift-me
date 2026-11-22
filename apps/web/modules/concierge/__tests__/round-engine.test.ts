@@ -2376,7 +2376,7 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
       await settleFailed(u, r.orderIds[0], type);
       await advance(r.roundId, 1);
       expect(inbox(u)).toEqual(["Sorry, there's a problem with Mary's gift@1"]);
-      expect(lastText(u)).toContain(`Open Mary's page: ${BASE}/rounds/${r.roundId}/fix/${r.orderIds[0]}`);
+      expect(lastText(u)).toContain(`Review the gift: ${BASE}/rounds/${r.roundId}/fix/${r.orderIds[0]}`);
     },
   );
 

@@ -381,7 +381,7 @@ export const TEMPLATES: {
     ...renderEmail({
       heading: `Sorry, there's a problem with ${d.personName}'s gift`,
       paragraphs: [`We're sorry. We couldn't finish the gift for ${d.personName}'s ${d.occasion} on ${d.dateText}: ${d.reason}`],
-      button: { label: `Open ${d.personName}'s page`, url: links.open },
+      button: { label: "Review the gift", url: links.open },
       footer: d.orderByText
         ? `What happens next: nothing else is bought until you choose. Choose another gift by ${d.orderByText} so it arrives in time.`
         : `What happens next: ${NEXT_TIME(d.personName)}`,
@@ -738,7 +738,7 @@ export const SAMPLE_DATA: {
   },
   needs_attention: {
     data: { ...OCC, reason: "the store couldn't place the order for the Le Creuset mug set, and you haven't been charged.", orderByText: "Thursday, March 5" },
-    links: { open: "https://example.com/a/attention-token" },
+    links: { open: "https://example.com/rounds/r1/fix/o1" },
   },
   reaction_prompt: {
     data: { personName: "Mom", occasion: "birthday", giftTitle: "The stoneware mug set" },

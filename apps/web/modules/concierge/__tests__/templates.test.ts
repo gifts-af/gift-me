@@ -359,6 +359,14 @@ describe("the other gift emails match the approved wording (ALL-116)", () => {
     expect(mail.text).toContain("See faster gifts:");
   });
 
+  it("needs_attention: the one button opens the gift's fix page and says so", () => {
+    const s = SAMPLE_DATA.needs_attention;
+    const mail = TEMPLATES.needs_attention(s.data, { open: "https://example.com/rounds/r1/fix/o1" });
+    expect(mail.text).toContain("Review the gift: https://example.com/rounds/r1/fix/o1");
+    expect(mail.html).toMatch(/background:#0f766e[^>]*>Review the gift</);
+    expect(mail.text).not.toContain("Open Mom's page");
+  });
+
   it("needs_attention: says when to choose again, or what happens next once there's nothing to choose", () => {
     const s = SAMPLE_DATA.needs_attention;
     expect(TEMPLATES.needs_attention(s.data, s.links).text).toContain("Choose another gift by Thursday, March 5 so it arrives in time.");
