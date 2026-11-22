@@ -1566,6 +1566,10 @@ export type Database = {
           isSetofReturn: true;
         };
       };
+      order_is_given: {
+        Args: { p_resolved: boolean; p_status: string };
+        Returns: boolean;
+      };
       reapprove_order: {
         Args: {
           p_lock: string;

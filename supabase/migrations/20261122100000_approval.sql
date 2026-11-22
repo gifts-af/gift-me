@@ -63,12 +63,29 @@ revoke all on function lists.claim_holder(uuid, uuid) from public, anon, authent
 grant execute on function lists.item_shared(uuid, uuid) to service_role;
 grant execute on function lists.claim_holder(uuid, uuid) to service_role;
 
+-- ─── order_is_given: the one "given" rule (AC-30, AC-31) ────────────────────
+-- An order counts as given unless it's cancelled, refunded, or failed and
+-- resolved. A failure not yet resolved may still be replaced, so it counts.
+-- excluded_offers and approve_round's already_bought both use it, so the
+-- engine never offers a gift that approval would refuse as already bought.
+create function concierge.order_is_given(p_status text, p_resolved boolean)
+returns boolean
+language sql
+immutable
+set search_path = ''
+as $$
+  select p_status not in ('failed', 'cancelled', 'refunded') or (p_status = 'failed' and not p_resolved);
+$$;
+
+revoke all on function concierge.order_is_given(text, boolean) from public, anon, authenticated;
+grant execute on function concierge.order_is_given(text, boolean) to service_role;
+
 -- ─── excluded_offers (AC-31) ─────────────────────────────────────────────────
--- What not to offer this person again: ideas rejected, or given (on an order
--- that isn't failed, cancelled or refunded). A product is matched on retailer
--- and product id; a list gift on its list_item_id. Ideas saved before
--- 20261117100000_idea_engine.sql have no person_id, so the person is found
--- through the round too (S9), as excluded_products does.
+-- What not to offer this person again: ideas rejected, or given
+-- (order_is_given). A product is matched on retailer and product id; a list
+-- gift on its list_item_id. Ideas saved before 20261117100000_idea_engine.sql
+-- have no person_id, so the person is found through the round too (S9), as
+-- excluded_products does.
 create function concierge.excluded_offers(p_person_id uuid)
 returns table (retailer text, product_id text, list_item_id uuid)
 language sql
@@ -85,7 +102,7 @@ as $$
        i.status = 'rejected'
        or exists (select 1 from concierge.rejections j where j.idea_id = i.id)
        or exists (select 1 from concierge.orders o
-                   where o.idea_id = i.id and o.status not in ('failed', 'cancelled', 'refunded'))
+                   where o.idea_id = i.id and concierge.order_is_given(o.status, o.resolved))
      );
 $$;
 
@@ -296,16 +313,14 @@ begin
     raise exception 'approve_round: not_shared' using errcode = 'P0001';
   end if;
   -- New (AC-30, S2): a list gift already on one of this buyer's live orders, in
-  -- any round, isn't bought again. Live is excluded_offers' "given" (not failed,
-  -- cancelled or refunded), plus a failure not yet resolved, which may still be
-  -- replaced, as the live-order check above treats it within a round.
+  -- any round, isn't bought again: the same rule as excluded_offers (order_is_given).
   if exists (select 1
                from jsonb_array_elements(p_orders) e
                join concierge.gift_ideas i on i.id = (e ->> 'idea_id')::uuid
                join concierge.gift_ideas i2 on i2.user_id = p_user_id and i2.list_item_id = i.list_item_id
                join concierge.orders o on o.idea_id = i2.id
               where i.list_item_id is not null
-                and (o.status not in ('failed', 'cancelled', 'refunded') or (o.status = 'failed' and not o.resolved)))
+                and concierge.order_is_given(o.status, o.resolved))
      -- Nor twice in one approval: neither order exists yet, and the second claim
      -- reads as the buyer's own.
      or (select count(i.list_item_id) <> count(distinct i.list_item_id)

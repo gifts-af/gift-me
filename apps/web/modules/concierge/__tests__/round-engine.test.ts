@@ -1213,6 +1213,14 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     const ideaIds: string[] = [];
     for (const [i, total] of (o.totals ?? [4200]).entries()) {
       const item = o.listItems?.[i] ?? null;
+      // A list idea's person is linked to the item's list, as approve_round requires (AC-30a).
+      if (item)
+        await pg.query(
+          `insert into lists.person_links (person_id, buyer_id, list_id, share_token)
+           select $1, $2, l.id, l.share_token from lists.list_items li join lists.lists l on l.id = li.list_id where li.id = $3
+           on conflict (person_id) do nothing`,
+          [person.rows[0].id, u.userId, item],
+        );
       const idea = await pg.query(
         `insert into concierge.gift_ideas (user_id, round_id, title, product_url, price_cents, est_total_cents, handling_days_max, delivery_days_min, delivery_days_max, rank, source, list_item_id)
          values ($1, $2, $3, 'https://shop.test/pending', $4, $4, 2, 3, 5, $5, $6, $7) returning id`,

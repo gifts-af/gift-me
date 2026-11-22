@@ -5,7 +5,7 @@
 -- shared, and list gifts the buyer already has on a live order.
 begin;
 \ir _helpers.psql
-select plan(22);
+select plan(24);
 
 -- This file starts several round runs on one day; the daily limit has its own test (round_fanout).
 update concierge.app_settings set value = '1000' where key = 'idea_round_runs_per_day';
@@ -27,6 +27,7 @@ insert into lists.list_items (list_id, position, name, price_cents) values (:'li
 insert into lists.list_items (list_id, position, name, price_cents) values (:'list_id', 6, 'Pen', 1000) returning id as i_cancel \gset
 insert into lists.list_items (list_id, position, name, price_cents) values (:'list_id', 7, 'Cup', 1000) returning id as i_failed \gset
 insert into lists.list_items (list_id, position, name, price_cents) values (:'list_id', 8, 'Bag', 1000) returning id as i_dup \gset
+insert into lists.list_items (list_id, position, name, price_cents) values (:'list_id', 9, 'Kit', 1000) returning id as i_unres \gset
 insert into lists.lists (owner_id, title) values (:'stranger', 'Other') returning id as other_list \gset
 insert into lists.list_items (list_id, position, name, price_cents) values (:'other_list', 0, 'Kite', 1000) returning id as i_other \gset
 
@@ -37,6 +38,7 @@ insert into public.people (name, relationship) values ('Run', 'friend') returnin
 insert into public.people (name, relationship) values ('Done', 'friend') returning id as p_done \gset
 insert into public.people (name, relationship) values ('Save', 'friend') returning id as p_save \gset
 insert into public.people (name, relationship) values ('Excl', 'friend') returning id as p_excl \gset
+insert into public.people (name, relationship) values ('Unres', 'friend') returning id as p_unres \gset
 select tests.reset_role();
 
 -- A round awaiting approval under a lease, an idea in it, and approve_round's orders.
@@ -265,6 +267,8 @@ values (:'a', :'r_ex', 'Cup', 1000, 1100, 4, 'amazon', 'B0OPEN');
 insert into concierge.orders (user_id, round_id, idea_id, funding_mode, max_price_cents, fee_cents, status, ship_to, ship_city, ship_state)
 values (:'a', :'r_ex', :'given_idea', 'zinc_wallet', 3300, 100, 'delivered', 'recipient', 'Dayton', 'OH'),
        (:'a', :'r_ex', :'failed_idea', 'zinc_wallet', 1100, 100, 'failed', 'recipient', 'Dayton', 'OH');
+-- The failed order is resolved, so it isn't given (an unresolved one is; see below).
+update concierge.orders set resolved = true where idea_id = :'failed_idea';
 select tests.act_as_server();
 select set_eq(
   format($q$select retailer, product_id, list_item_id from concierge.excluded_offers(%L)$q$, :'p_excl'),
@@ -275,6 +279,29 @@ select ok(
   not has_function_privilege('anon', 'concierge.excluded_offers(uuid)', 'execute')
   and not has_function_privilege('authenticated', 'concierge.excluded_offers(uuid)', 'execute'),
   'excluded_offers is server only');
+
+-- An unresolved failure may still be replaced, so it counts as given, exactly
+-- as approve_round's already_bought counts it; resolved, it no longer does.
+select tests.ap_round(:'a', :'p_unres') as r_unres \gset
+insert into concierge.gift_ideas (user_id, round_id, title, price_cents, est_total_cents, rank, source, list_item_id, status)
+values (:'a', :'r_unres', 'Kit', 1000, 1100, 1, 'list', :'i_unres', 'selected') returning id as unres_list_idea \gset
+insert into concierge.gift_ideas (user_id, round_id, title, price_cents, est_total_cents, rank, retailer, retailer_product_id, status)
+values (:'a', :'r_unres', 'Lamp', 3000, 3300, 2, 'amazon', 'B0UNRES', 'selected') returning id as unres_idea \gset
+insert into concierge.orders (user_id, round_id, idea_id, funding_mode, max_price_cents, fee_cents, status, resolved, ship_to, ship_city, ship_state)
+values (:'a', :'r_unres', :'unres_list_idea', 'zinc_wallet', 1100, 100, 'failed', false, 'recipient', 'Dayton', 'OH'),
+       (:'a', :'r_unres', :'unres_idea', 'zinc_wallet', 3300, 100, 'failed', false, 'recipient', 'Dayton', 'OH');
+select tests.act_as_server();
+select set_eq(
+  format($q$select retailer, product_id, list_item_id from concierge.excluded_offers(%L)$q$, :'p_unres'),
+  format($q$values (null::text, null::text, %L::uuid), ('amazon', 'B0UNRES', null)$q$, :'i_unres'),
+  'excluded_offers lists a list item and a product whose only order failed and isn''t resolved');
+select tests.reset_role();
+update concierge.orders set resolved = true where round_id = :'r_unres';
+select tests.act_as_server();
+select is_empty(
+  format($q$select * from concierge.excluded_offers(%L)$q$, :'p_unres'),
+  '... and stops listing them once that failure is resolved');
+select tests.reset_role();
 
 -- ─── After the link is cut (AC-30a, B2) ──────────────────────────────────────
 -- Last, since resetting the share token cuts every link to Mom's list.
