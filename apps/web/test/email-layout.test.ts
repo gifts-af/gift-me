@@ -65,3 +65,35 @@ describe("renderEmail", () => {
     expect(text).toContain("Changed your mind? Cancel this gift: https://giftsaf.com/a/c");
   });
 });
+
+describe("renderEmail rows with a link (ALL-29)", () => {
+  const parts = {
+    heading: "Hi",
+    paragraphs: ["x"],
+    rows: [
+      { title: "Mug · $42", detail: "Arrives by Dec 12 · Amazon", reason: "Loves tea.", link: { label: "Buy this ›", url: "https://giftsaf.com/rounds/r1/buy?ideas=i1" } },
+      { title: "Plain · $10" },
+    ],
+  };
+
+  it("a row with a link renders it as an anchor and in the text version", () => {
+    const { html, text } = renderEmail(parts);
+    expect(html).toContain('<a href="https://giftsaf.com/rounds/r1/buy?ideas=i1"');
+    expect(html).toContain("Buy this ›");
+    expect(html.match(/<a[\s>]/g)).toHaveLength(1);
+    // 44px tall like the other plain links: 20px line plus 12px above and below.
+    expect(html).toMatch(/<a href="https:\/\/giftsaf\.com\/rounds\/r1\/buy\?ideas=i1"[^>]*line-height:20px;padding:12px 0/);
+    // The reason is in italics, under the detail and above the link.
+    expect(html).toMatch(/font-style:italic[^>]*>Loves tea\./);
+    expect(html.indexOf("Loves tea.")).toBeLessThan(html.indexOf("Buy this"));
+    expect(text).toContain("- Mug · $42 (Arrives by Dec 12 · Amazon)");
+    expect(text).toContain("Loves tea.");
+    expect(text).toContain("Buy this ›: https://giftsaf.com/rounds/r1/buy?ideas=i1");
+    expect(text).toContain("- Plain · $10\n");
+  });
+
+  it("escapes a row's reason", () => {
+    const { html } = renderEmail({ heading: "Hi", paragraphs: ["x"], rows: [{ title: "T", reason: "<b>&" }] });
+    expect(html).toContain("&lt;b&gt;&amp;");
+  });
+});

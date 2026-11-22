@@ -33,10 +33,16 @@ export function escapeHtml(s: string): string {
 /** A plain link, with optional words in front of it on the same line ("Changed your mind? Cancel this gift"). */
 export type EmailLink = { label: string; url: string; before?: string };
 
+/**
+ * One row of a list. `reason` is a line in italics under the detail; `link` is an anchor under
+ * that (ALL-29: "Buy this"), teal and 44px tall like the other plain links, never a button.
+ */
+export type EmailRow = { title: string; detail?: string; reason?: string; link?: { label: string; url: string } };
+
 export type EmailParts = {
   heading: string;
   paragraphs: string[];
-  rows?: { title: string; detail?: string }[];
+  rows?: EmailRow[];
   /** An amber box above the button, its lead in bold (ALL-32: "Your Zinc balance is low."). */
   warning?: { lead: string; text: string };
   button?: { label: string; url: string };
@@ -59,10 +65,16 @@ export function renderEmail(parts: EmailParts): { html: string; text: string } {
   const rows = (parts.rows ?? [])
     .map(
       (r) =>
-        `<div style="padding:12px 0;border-top:1px solid ${RULE}">` +
+        `<div style="padding:${r.link ? "12px 0 0" : "12px 0"};border-top:1px solid ${RULE}">` +
         `<div style="font-size:16px;font-weight:600;color:${INK}">${escapeHtml(r.title)}</div>` +
         (r.detail
           ? `<div style="font-size:14px;color:${MUTED}">${escapeHtml(r.detail)}</div>`
+          : "") +
+        (r.reason
+          ? `<div style="font-size:14px;color:${MUTED};font-style:italic">${escapeHtml(r.reason)}</div>`
+          : "") +
+        (r.link
+          ? `<a href="${escapeHtml(r.link.url)}" style="display:inline-block;color:${TEAL};font-weight:600;font-size:15px;line-height:20px;padding:12px 0">${escapeHtml(r.link.label)}</a>`
           : "") +
         `</div>`,
     )
@@ -106,7 +118,11 @@ export function renderEmail(parts: EmailParts): { html: string; text: string } {
 
   const lines = [parts.heading, "", ...parts.paragraphs.flatMap((s) => [s, ""])];
   if (parts.rows?.length) {
-    for (const r of parts.rows) lines.push(r.detail ? `- ${r.title} (${r.detail})` : `- ${r.title}`);
+    for (const r of parts.rows) {
+      lines.push(r.detail ? `- ${r.title} (${r.detail})` : `- ${r.title}`);
+      if (r.reason) lines.push(`  ${r.reason}`);
+      if (r.link) lines.push(`  ${r.link.label}: ${r.link.url}`);
+    }
     lines.push("");
   }
   if (parts.warning) lines.push(`${parts.warning.lead} ${parts.warning.text}`, "");

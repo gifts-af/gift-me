@@ -104,7 +104,18 @@ export type RoundContext = {
   /** Guided questions open for the person (ALL-26); the emails link them when above 0. */
   openQuestions: number;
   /** Proposed ideas, best first; `overBudget`: above the budget but within the allowance. */
-  ideas: { title: string; totalCents: number; overBudget: boolean }[];
+  ideas: {
+    id: string;
+    title: string;
+    totalCents: number;
+    overBudget: boolean;
+    /** The slowest-case arrival date (YYYY-MM-DD); null when unknown. */
+    arriveBy: string | null;
+    /** Why it was picked; a list gift says "On their list". Null when none. */
+    reason: string | null;
+    /** The retailer's name; null when unknown. */
+    store: string | null;
+  }[];
   /**
    * The idea checks (ALL-27, round_idea_state): the person has an active fact, and the round may
    * start another run. Only read before ideas are found (scheduled, needs_address, generating);
@@ -464,7 +475,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
         concierge.from("occasions").select("kind").eq("id", round.occasion_id).single(),
         concierge
           .from("gift_ideas")
-          .select("title, est_total_cents, over_budget")
+          .select("id, title, est_total_cents, over_budget, arrive_by, reason, retailer")
           .eq("round_id", roundId)
           .eq("status", "proposed")
           .order("rank"),
@@ -526,7 +537,15 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
         hasAddress: isShippableAddress(draftOf(a)),
         hasSharedAddress: shared !== null && isShippableAddress(draftOf(shared)),
         openQuestions: open.length,
-        ideas: ideas.data.map((i) => ({ title: i.title, totalCents: i.est_total_cents, overBudget: i.over_budget })),
+        ideas: ideas.data.map((i) => ({
+          id: i.id,
+          title: i.title,
+          totalCents: i.est_total_cents,
+          overBudget: i.over_budget,
+          arriveBy: i.arrive_by,
+          reason: i.reason,
+          store: i.retailer,
+        })),
         ...ideaState,
         orders: orders.data.map((o) => ({
           id: o.id,

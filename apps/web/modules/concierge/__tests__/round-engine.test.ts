@@ -97,8 +97,8 @@ function harness(opts: { hasAddress?: boolean; candidateFrom?: CalendarDate; zin
   const generateIdeas = vi.fn<GenerateIdeas>(async (round) => {
     if (!store.ideas.has(round.id)) {
       store.ideas.set(round.id, [
-        { title: "Stoneware mug set", totalCents: 4200 },
-        { title: "Herb planter", totalCents: 3850 },
+        { id: "idea-1", title: "Stoneware mug set", totalCents: 4200, arriveBy: "2027-03-05", reason: "Loves tea." },
+        { id: "idea-2", title: "Herb planter", totalCents: 3850, arriveBy: "2027-03-06", reason: "Likes plants." },
       ]);
     }
     return { status: "saved", count: 2 };
@@ -261,12 +261,29 @@ describe("runTick", () => {
     const final = h.emails.find((e) => e.subject.startsWith("Last chance"))!;
     expect(final.text).toContain("by Wed, Mar 10");
 
+    // The approval emails link to the round screen with plain links; only the skipped email's button is a one-time link.
     const links = h.notifyStore.links;
-    expect(links).toHaveLength(5);
-    for (const l of links) {
-      expect(l).toMatchObject({ userId: USER, roundId: "round-1", action: "open_person" });
-      expect(l.expiresAt).toEqual(new Date("2027-03-11T23:59:00Z"));
+    expect(links).toHaveLength(1);
+    expect(links[0]).toMatchObject({ userId: USER, roundId: "round-1", action: "open_person" });
+    expect(links[0].expiresAt).toEqual(new Date("2027-03-11T23:59:00Z"));
+  });
+
+  it("the approval emails link each idea to its buy page and the button to the round screen (ALL-29 AC-1)", async () => {
+    const h = harness();
+    await h.runDays("2027-02-11", "2027-03-11");
+    const ids = h.store.ideas.get("round-1")!.map((i) => i.id);
+    expect(ids).toHaveLength(2);
+    const round = `${BASE}/rounds/round-1`;
+    const approval = h.emails.filter((e) => /gifts from their list|Reminder|Last chance/.test(e.subject));
+    expect(approval).toHaveLength(4);
+    for (const e of approval) {
+      expect(e.html).toContain(`href="${round}"`);
+      expect(e.text).toContain(`Pick several or none of these: ${round}`);
+      ids.forEach((id) => expect(e.html).toContain(`href="${round}/buy?ideas=${id}"`));
+      expect(e.html.match(/Buy this/g)).toHaveLength(2);
     }
+    expect(approval[0].text).toContain("Arrives by");
+    expect(approval[0].text).toContain("Loves tea.");
   });
 
   it("links open questions in the heads-up and reminders only (ALL-26 AC-10)", async () => {
@@ -560,7 +577,7 @@ describe("failures", () => {
     h.store.occasionKinds.set("occasion-2", "birthday");
     h.generateIdeas.mockImplementation(async (round) => {
       if (round.id === "round-1") throw new Error("ideas failed");
-      h.store.ideas.set(round.id, [{ title: "Book", totalCents: 2000 }]);
+      h.store.ideas.set(round.id, [{ id: "idea-1", title: "Book", totalCents: 2000, arriveBy: null, reason: null }]);
       return { status: "saved", count: 1 };
     });
     // Two people with a birthday the same day.
@@ -713,7 +730,7 @@ describe("the idea pass (ALL-27)", () => {
     return h;
   }
   const saved = (h: ReturnType<typeof harness>) => async (round: { id: string }): Promise<IdeaOutcome> => {
-    h.store.ideas.set(round.id, [{ title: "Book", totalCents: 2000 }]);
+    h.store.ideas.set(round.id, [{ id: "idea-1", title: "Book", totalCents: 2000, arriveBy: null, reason: null }]);
     return { status: "saved", count: 1 };
   };
 
@@ -738,7 +755,7 @@ describe("the idea pass (ALL-27)", () => {
     });
     h.generateIdeas.mockImplementation(async (round) => {
       order.push("ideas");
-      h.store.ideas.set(round.id, [{ title: "Book", totalCents: 2000 }]);
+      h.store.ideas.set(round.id, [{ id: "idea-1", title: "Book", totalCents: 2000, arriveBy: null, reason: null }]);
       return { status: "saved", count: 1 };
     });
 
@@ -754,7 +771,7 @@ describe("the idea pass (ALL-27)", () => {
     await h.tick("2027-02-11");
     expect(h.store.rounds[0].status).toBe("generating");
     // A run saved them, and its heads-up never went (a crash, say).
-    h.store.ideas.set("round-1", [{ title: "Book", totalCents: 2000 }]);
+    h.store.ideas.set("round-1", [{ id: "idea-1", title: "Book", totalCents: 2000, arriveBy: null, reason: null }]);
 
     await h.tick("2027-02-12");
 
@@ -2329,6 +2346,9 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     expect(text).toContain("- Stoneware mug set (The price went up more than you allowed for. Approve the new price, or choose another gift.)");
     expect(text).toContain("- Linen apron (The store ran out. Choose another gift.)");
     expect(text).toContain("Review the new price for the Stoneware mug set:");
+    // Each gift links to its own fix page (ALL-29 AC-16).
+    expect(text).toContain(`Review the new price for the Stoneware mug set: ${BASE}/rounds/${r.roundId}/fix/${r.orderIds[0]}`);
+    expect(text).toContain(`Choose another gift instead of the Linen apron: ${BASE}/rounds/${r.roundId}/fix/${r.orderIds[1]}`);
     expect(await sends(r.roundId)).toEqual(expect.arrayContaining(r.orderIds.map((id) => `fail:${id}`)));
     // The price failure can still be re-approved.
     const priceUp = await pg.query("select status, failure_type, resolved from concierge.orders where id = $1", [r.orderIds[0]]);
@@ -2337,6 +2357,15 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     await pg.query("update concierge.gift_rounds set next_action_at = now() where id = $1", [r.roundId]);
     await advance(r.roundId, 2);
     expect(inbox(u).slice(before)).toHaveLength(1);
+  });
+
+  it("a single failure's button opens that order's fix page (ALL-29 AC-16)", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await placingRound(u, [4200]);
+    await settleFailed(u, r.orderIds[0], "price_up");
+    await advance(r.roundId, 1);
+    expect(inbox(u)).toHaveLength(1);
+    expect(lastText(u)).toContain(`Review the gift: ${BASE}/rounds/${r.roundId}/fix/${r.orderIds[0]}`);
   });
 
   it("a later failure is told on its own, and the gift named is the one that failed (AC-2, AC-3)", async () => {

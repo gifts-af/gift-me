@@ -26,7 +26,7 @@ export function sampleEmails(link: string): SampleEmail[] {
       add("heads_up-auto_buy", kind, autoBuy, { ...links, skip: link });
       const funding = { dueText: "$160", haveText: "$40", atLeast: false, windowText: "the next 3 weeks", walletUrl: link };
       add("heads_up-funding", kind, { ...base, funding }, links);
-      const overBudget = [...base.ideas.slice(0, 2), { title: "Espresso machine", price: "$95", overBudget: true }];
+      const overBudget = [...base.ideas.slice(0, 2), { title: "Espresso machine", price: "$95", overBudget: true, arriveBy: "Mar 6", store: "Amazon", reason: "Mentioned wanting good coffee." }];
       add("heads_up-over_budget", kind, { ...base, ideas: overBudget }, links);
       continue;
     }
@@ -53,7 +53,13 @@ export function sampleEmails(link: string): SampleEmail[] {
   return list;
 }
 
-/** The Zinc wallet address some emails carry as data points at `link` too. */
+/** The Zinc wallet address and each failed gift's fix page, which some emails carry as data, point at `link` too. */
 function withWallet(data: unknown, link: string): unknown {
-  return data && typeof data === "object" && "walletUrl" in data ? { ...data, walletUrl: link } : data;
+  if (!data || typeof data !== "object") return data;
+  let out = data;
+  if ("walletUrl" in out) out = { ...out, walletUrl: link };
+  if ("failed" in out && Array.isArray(out.failed)) {
+    out = { ...out, failed: out.failed.map((f: object) => ("url" in f ? { ...f, url: link } : f)) };
+  }
+  return out;
 }
