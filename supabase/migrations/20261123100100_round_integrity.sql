@@ -22,6 +22,10 @@ alter table concierge.gift_rounds
 -- set, that person must be the round's. MATCH SIMPLE skips the check when
 -- person_id is null, and the existing (round_id, user_id) key still covers
 -- the owner then, so it stays.
+-- Ideas and idea runs keep their (round_id, user_id) key too, so there are two
+-- keys between them and gift_rounds: a PostgREST embed across them needs a
+-- !<constraint> hint. occasions_id_user_id_key is no longer used by a key but
+-- stays, as it's cheap and other tables may point at occasions that way later.
 alter table concierge.gift_rounds
   add constraint gift_rounds_id_person_id_user_id_key unique (id, person_id, user_id);
 

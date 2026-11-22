@@ -44,6 +44,9 @@ as $$
   ]);
 $$;
 
+-- Adding a key is a new migration that redefines this function. Removing one
+-- also needs a data fix first: the function is immutable, so Postgres won't
+-- re-check rows already stored until each check is dropped and re-added.
 comment on function public.is_relationship(text) is
   'True for a relationship key the app knows (RELATIONSHIPS in packages/core/src/people.ts).';
 

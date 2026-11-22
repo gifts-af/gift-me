@@ -1,14 +1,9 @@
--- Schema hygiene: a missing updated_at trigger, a unique Zinc order id, and
--- indexes behind every foreign key and every user_id.
-
--- lists.lists has updated_at but only the save functions kept it current; any
--- other update (a share-token change, a rename by the server) left it stale.
--- updated_at is also the list's version for stale-save checks, and the save
--- functions set it to clock_timestamp() so two saves in one transaction get
--- different versions. An update that sets updated_at itself keeps its value.
-create trigger set_updated_at before update on lists.lists
-  for each row when (new.updated_at is not distinct from old.updated_at)
-  execute function public.set_updated_at();
+-- Schema hygiene: a unique Zinc order id, and indexes behind every foreign key
+-- and every user_id.
+--
+-- lists.lists has no set_updated_at trigger on purpose: updated_at is the
+-- list's version for stale-save checks, and every writer stamps it with
+-- clock_timestamp() itself.
 
 -- A provider's order id names one order in that account. The Zinc webhook finds
 -- our row by user_id and the provider's order id, so two rows holding the same

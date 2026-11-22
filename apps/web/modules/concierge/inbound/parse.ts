@@ -131,7 +131,7 @@ export function looksLikeCancel(text: string): boolean {
   return CANCEL_PHRASES.some((p) => new RegExp(`(?<![a-z])${escapeRegExp(p)}(?![a-z])`).test(t));
 }
 
-const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+export const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
 
 export function firstImage(
   atts: { id: string; content_type: string; size: number }[],

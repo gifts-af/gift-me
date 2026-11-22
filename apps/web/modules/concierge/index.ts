@@ -92,7 +92,7 @@ export { planJobs } from "./rounds/fanout";
 export type { JobMessage, QueuedJob, SendJobs } from "./rounds/fanout";
 export { createSupabaseRoundStore } from "./rounds/store";
 export type { Candidate, ClaimedRound, NewRoundRow, RoundContext, RoundFinish, RoundOrder, RoundStore } from "./rounds/store";
-export { clearUnfiledNotes } from "./inbound/cleanup";
+export { clearUnfiledNotes, pruneExpiredActionLinks } from "./inbound/cleanup";
 export type { InboundCleanup } from "./inbound/cleanup";
 
 // Paying for gifts from the user's own Zinc wallet (ALL-32): connect, phone, disconnect, Settings status.

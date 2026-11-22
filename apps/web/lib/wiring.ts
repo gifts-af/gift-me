@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   advanceRound,
   clearUnfiledNotes,
+  pruneExpiredActionLinks,
   createSupabaseIdeaStore,
   createSupabaseNotifyStore,
   createSupabaseRoundStore,
@@ -150,6 +151,7 @@ export async function buyingWiring(
     ...(opts.testClock !== undefined ? { testClock: opts.testClock } : {}),
     zinc: null,
     clearUnfiledNotes: () => clearUnfiledNotes(db),
+    pruneActionLinks: () => pruneExpiredActionLinks(db),
   };
   const wiring = await zincWiring(db, env);
   if (!wiring) {

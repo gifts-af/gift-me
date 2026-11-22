@@ -146,7 +146,11 @@ export async function rejectRoundIdeas(input: RejectInput, deps: DbDeps): Promis
       if (why === "changed") return { ok: false, error: "changed" };
       if (why === "not open" || why === "live order") return { ok: false, error: "not_open" };
       if (why === "lease not held") return { ok: false, error: "busy" };
-      if (error.code === "23514") return { ok: false, error: "too_long" };
+      // Only the fact-length rule means the reason was too long; any other
+      // check failing here is a bug and must surface as one.
+      if (error.code === "23514" && error.message.includes("profile_facts_value_check")) {
+        return { ok: false, error: "too_long" };
+      }
       fail("Rejecting the round's ideas failed", error);
     }
     logEvent(input.expectMore ? "round.ideas_rejected" : "round.rejection_noted", {

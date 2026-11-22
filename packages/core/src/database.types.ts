@@ -1585,6 +1585,10 @@ export type Database = {
         Args: { p_resolved: boolean; p_status: string };
         Returns: boolean;
       };
+      prune_expired_action_links: {
+        Args: Record<PropertyKey, never>;
+        Returns: number;
+      };
       reapprove_order: {
         Args: {
           p_lock: string;

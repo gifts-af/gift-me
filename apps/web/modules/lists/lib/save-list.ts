@@ -55,7 +55,7 @@ function cleanShortText(value: unknown, max: number): string | null {
 
 // The values list_items_source_check accepts. A client that sends anything else
 // still saves its gifts; they're recorded as typed in by hand.
-const LIST_ITEM_SOURCES: ReadonlySet<string> = new Set([
+export const LIST_ITEM_SOURCES: ReadonlySet<string> = new Set([
   "manual",
   "store-url",
   "amazon-url",

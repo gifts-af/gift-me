@@ -1,9 +1,9 @@
 -- Schema hygiene: every foreign key and every user_id has an index behind it,
--- lists.lists keeps its updated_at current, and a provider's order id names
+-- and a provider's order id names
 -- one order in an account, which the Zinc webhook relies on to find the right row.
 begin;
 \ir _helpers.psql
-select plan(9);
+select plan(7);
 
 -- ─── indexes behind foreign keys ─────────────────────────────────────────────
 -- A key is covered by a btree index that leads with the key's first column, or
@@ -64,21 +64,6 @@ select ok(
                                  where attrelid = 'concierge.gift_rounds'::regclass and attname = 'occasion_id')),
   'gift_rounds has an index that leads with occasion_id, for keys from rounds to their occasion'
 );
-
--- ─── lists.lists keeps updated_at current ────────────────────────────────────
-select tests.create_user('owner@example.com', 'Owner') as owner \gset
-insert into lists.lists (owner_id, title, updated_at)
-values (:'owner', 'Birthday', now() - interval '1 day') returning id as list_id \gset
-
-update lists.lists set title = 'Birthday 2030' where id = :'list_id';
-select is((select updated_at from lists.lists where id = :'list_id'), now(),
-  'changing a list stamps its updated_at');
-
--- The save functions stamp clock_timestamp() so two saves in one transaction
--- get different versions; the trigger must not round that back to now().
-update lists.lists set updated_at = clock_timestamp() where id = :'list_id';
-select ok((select updated_at > now() from lists.lists where id = :'list_id'),
-  'an update that sets updated_at itself keeps that value');
 
 -- ─── one order per provider order id ─────────────────────────────────────────
 select tests.create_user('buyer@example.com', 'Buyer') as buyer \gset

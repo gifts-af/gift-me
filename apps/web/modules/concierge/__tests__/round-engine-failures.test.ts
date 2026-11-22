@@ -303,3 +303,47 @@ describe("runTick: clearing unfiled notes (ALL-31)", () => {
     expect(named("inbound.notes_clear_failed")).toHaveLength(0);
   });
 });
+
+describe("runTick: pruning expired action links", () => {
+  it("runs the prune, with the engine on or off, and logs how many it deleted", async () => {
+    for (const on of [1, 0]) {
+      const h = harness();
+      h.store.settings.set("round_engine_enabled", on);
+      const prune = vi.fn(async () => 3);
+      await runTick({ ...h.deps(at("2027-01-01")), pruneActionLinks: prune });
+      expect(prune).toHaveBeenCalledTimes(1);
+    }
+    expect(named("housekeeping.action_links_pruned")).toEqual([
+      expect.objectContaining({ deleted: 3 }),
+      expect.objectContaining({ deleted: 3 }),
+    ]);
+  });
+
+  it("logs a failed prune and still runs the clear-out and the rest of the tick", async () => {
+    const h = harness();
+    const prune = vi.fn(async () => {
+      throw new Error("db down for someone@example.com");
+    });
+    const clear = vi.fn(async () => ({ cleared: 1, imagesRemoved: 0 }));
+    h.store.candidateRows = [
+      { userId: USER, personId: PERSON, occasionId: OCCASION, rule: { kind: "birthday", month: 3, day: 20 }, budgetCents: 5000 },
+    ];
+    const summary = await runTick({ ...h.deps(at("2027-02-11")), clearUnfiledNotes: clear, pruneActionLinks: prune });
+
+    expect(summary).toMatchObject({ enabled: true, created: 1, failed: 0 });
+    expect(clear).toHaveBeenCalledTimes(1);
+    const failed = named("housekeeping.action_links_prune_failed");
+    expect(failed).toHaveLength(1);
+    expect(JSON.stringify(failed)).not.toContain("someone@example.com");
+    expect(named("inbound.notes_cleared")).toHaveLength(1);
+  });
+
+  it("still prunes when the clear-out fails", async () => {
+    const h = harness();
+    const prune = vi.fn(async () => 0);
+    const clear = vi.fn(async () => Promise.reject(new Error("storage down")));
+    await runTick({ ...h.deps(at("2027-01-01")), clearUnfiledNotes: clear, pruneActionLinks: prune });
+    expect(prune).toHaveBeenCalledTimes(1);
+    expect(named("housekeeping.action_links_pruned")).toEqual([expect.objectContaining({ deleted: 0 })]);
+  });
+});
