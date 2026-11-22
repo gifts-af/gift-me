@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { classifyTotal, overBudgetLimitCents, zincFeeNotice } from "@gifts-af/core";
+import { classifyTotal, overBudgetLimitCents } from "@gifts-af/core";
 import { storeName } from "@gifts-af/core/store-page/link";
 import { IdeaPhoto } from "@/components/idea-photo";
 import { shortDate } from "@/components/occasion-format";
@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { cn } from "@/lib/utils";
 import type { RoundPageIdea } from "@/modules/concierge";
 import { money } from "@/app/people/[id]/money";
-import { Outcome, UNKNOWN, outcomeWords, type BuyResult } from "../../outcome";
+import { MoneyNotice, Outcome, UNKNOWN, outcomeWords, type BuyResult } from "../../outcome";
 import {
   EMPTY_ADDRESS,
   OtherAddressForm,
@@ -216,13 +216,7 @@ export function ConfirmScreen(p: ConfirmScreenProps) {
         </div>
       </div>
 
-      <div role="note" className="flex flex-col gap-1 rounded-lg bg-warning-soft px-2.5 py-2 text-[13px] text-warning">
-        <span>{zincFeeNotice(feeCents)}</span>
-        <span>
-          {p.balanceCents !== null ? `Your Zinc balance: ${money(p.balanceCents)}. ` : "We couldn't read your Zinc balance just now. "}
-          This is a real purchase and can&apos;t be undone once placed.
-        </span>
-      </div>
+      <MoneyNotice feeCents={feeCents} balanceCents={p.balanceCents} />
 
       {thrown && (
         <p role="alert" className="text-[13px] text-destructive">

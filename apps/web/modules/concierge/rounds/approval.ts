@@ -232,6 +232,8 @@ export type RoundPageIdea = {
   claimedByMe: boolean;
   /** A list gift whose list the buyer can no longer see: can't be picked (AC-30a). */
   noLongerShared: boolean;
+  /** Zinc can price it today (it has a product id), so the fix page may offer "Check today's price" (AC-14). */
+  livePrice: boolean;
 };
 
 export type RoundPageOrder = {
@@ -335,7 +337,7 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
     db
       .from("gift_ideas")
       .select(
-        "id, title, reason, retailer, product_url, image_url, source, list_item_id, price_cents, est_total_cents, over_budget, rank, status, arrive_by, handling_days_max, delivery_days_max",
+        "id, title, reason, retailer, retailer_product_id, product_url, image_url, source, list_item_id, price_cents, est_total_cents, over_budget, rank, status, arrive_by, handling_days_max, delivery_days_max",
       )
       .eq("round_id", roundId)
       .order("rank"),
@@ -379,6 +381,7 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
       claimedByMe: item !== undefined && item.claimed_by_me,
       // Off the list the buyer sees now, as lists.item_shared counts it.
       noLongerShared: i.list_item_id !== null && item === undefined,
+      livePrice: i.retailer_product_id !== null,
     };
   });
 

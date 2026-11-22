@@ -83,8 +83,10 @@ async function Loaded({ params }: { params: Params }) {
   const committed = committedSpendCents(
     view.liveOrders.map((o) => ({ id: o.id, status: "placing", maxPriceCents: o.maxPriceCents, finalTotalCents: o.totalCents, feeCents: o.feeCents })),
   );
-  const [lookupCents, choices] = await Promise.all([
-    settingInt(createAdminClient(), "zinc_lookup_cents"),
+  const db = createAdminClient();
+  const [lookupCents, feeCents, choices] = await Promise.all([
+    settingInt(db, "zinc_lookup_cents"),
+    settingInt(db, "zinc_order_fee_cents"),
     shipToChoices(view.round.personId, userId),
   ]);
 
@@ -94,6 +96,7 @@ async function Loaded({ params }: { params: Params }) {
       <PageTitle>{`Gift for ${name}`}</PageTitle>
       <FixScreen
         roundId={id}
+        personId={view.round.personId}
         personName={name}
         shipByDeadline={view.round.shipByDeadline}
         order={order}
@@ -102,6 +105,7 @@ async function Loaded({ params }: { params: Params }) {
         budgetCents={view.round.budgetCents}
         overBudgetPct={view.overBudgetPct ?? 0}
         committedCents={committed}
+        feeCents={feeCents}
         priceCheckNotice={priceCheckNotice(lookupCents)}
         recipient={choices.recipient}
         buyerAddress={choices.buyerAddress}

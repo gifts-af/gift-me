@@ -168,10 +168,13 @@ const NO_LOOKUP: QuoteDeps["lookup"] = {
 /** The confirm page's one button (AC-2, AC-4, AC-6, AC-8, AC-10, AC-11). */
 export async function buyAction(roundId: string, form: FormData): Promise<BuyResult> {
   const id = RoundId.safeParse(roundId);
-  const ideas = z.array(z.uuid()).min(1).safeParse((field(form, "ideas") ?? "").split(","));
-  const note = field(form, "note") ?? "";
+  // Input bounds, checked before anything else; not business limits. The page links at most the
+  // round's ideas, and the module checks each idea is the round's and the note against
+  // zinc_gift_message_max_chars (T23).
+  const ideas = z.array(z.uuid()).min(1).max(50).safeParse((field(form, "ideas") ?? "").split(","));
+  const note = z.string().max(2000).safeParse(field(form, "note") ?? "");
   const shipTo = shipToOf(form);
-  if (!id.success || !ideas.success || shipTo === null) return { ok: false, error: "bad_form" };
+  if (!id.success || !ideas.success || !note.success || shipTo === null) return { ok: false, error: "bad_form" };
   const user = await signedIn();
   if (!user) return { ok: false, error: "session" };
 
@@ -183,7 +186,7 @@ export async function buyAction(roundId: string, form: FormData): Promise<BuyRes
       roundId: id.data,
       ideaIds: [...new Set(ideas.data)],
       // Never logged (E6); the module checks it against zinc_gift_message_max_chars.
-      ...(note.trim() ? { giftMessage: note } : {}),
+      ...(note.data.trim() ? { giftMessage: note.data } : {}),
       overBudgetConfirmed: overOf(form),
       ...(shipTo ? { shipTo } : {}),
     },

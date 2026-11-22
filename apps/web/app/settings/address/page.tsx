@@ -21,6 +21,8 @@ async function LoadedAddress({ searchParams }: { searchParams: Promise<{ next?: 
     userId ? getMyAddress(supabase, userId) : Promise.resolve<MyAddress>({ kind: "unavailable" }),
   ]);
   // The same rule as the Settings list: no address row until you have a list (principle 10).
+  // Except when a gift's "Ship it to me" sent the buyer here (`next`): the feature they're using
+  // right now needs it, so the form shows even with no list.
   const showAddress = next !== undefined || address.kind !== "none" || myList?.list != null || myList?.loadError != null;
   if (!showAddress) redirect("/settings");
   return <MyAddressSection address={address} saveAction={saveMyAddressAction} removeAction={removeMyAddressAction} next={next} />;

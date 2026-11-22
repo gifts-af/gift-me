@@ -38,7 +38,8 @@ import {
 /** ZincDeps plus the app's own lookup key, as the idea run uses it (ZINC_API_KEY, T17). */
 export type QuoteDeps = ZincDeps & { lookup: { http: ZincHttp; key: string } };
 
-export type QuoteResult = { oldCents: number; newCents: number } | "not_allowed" | "unavailable" | "once";
+/** `not_current`: the failure was fixed or replaced already (a stale tab). */
+export type QuoteResult = { oldCents: number; newCents: number } | "not_allowed" | "not_current" | "unavailable" | "once";
 
 /** replaceFailedOrder's own refusals, on top of approveAndBuy's. */
 export type ReplaceError =
@@ -162,7 +163,9 @@ export async function quoteFailedOrder(input: { userId: string; roundId: string;
   const round = await readRound(deps, roundId);
   if (!round || round.user_id !== userId) return "not_allowed";
   const failed = await readOrder(deps, orderId);
-  if (!isCurrentFailure(failed, userId, roundId) || failed.failure_type !== "price_up") return "not_allowed";
+  if (!failed || failed.user_id !== userId || failed.round_id !== roundId) return "not_allowed";
+  if (!isCurrentFailure(failed, userId, roundId)) return "not_current";
+  if (failed.failure_type !== "price_up") return "not_allowed";
   if (!(await hasPaidFeatures(deps.db, userId))) return "not_allowed";
   if (await priceRiseFixed(deps, failed.idea_id, failed.id)) return "once";
   const idea = (await readIdeas(deps, [failed.idea_id])).get(failed.idea_id);

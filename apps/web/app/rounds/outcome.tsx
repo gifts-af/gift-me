@@ -1,7 +1,9 @@
 import Link from "next/link";
+import { zincFeeNotice } from "@gifts-af/core";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { ApproveError, ReplaceError } from "@/modules/concierge";
+import { money } from "@/app/people/[id]/money";
 
 // What the confirm and fix pages say after Buy (ALL-29 AC-2, AC-18, AC-19): every result of
 // approveAndBuy and replaceFailedOrder, in plain words, with what happens next (customers are
@@ -9,6 +11,22 @@ import type { ApproveError, ReplaceError } from "@/modules/concierge";
 
 export type BuyError = ApproveError | ReplaceError | "zinc_off" | "session" | "bad_form";
 export type BuyResult = { ok: true; status: "ordered" | "held" | "failed"; reason: string | null } | { ok: false; error: BuyError };
+
+/**
+ * The money notice (decision 53), always shown next to anything that places an order: the
+ * confirm page's Buy and every buy button on the fix page. The balance only where it was read.
+ */
+export function MoneyNotice({ feeCents, balanceCents }: { feeCents: number; balanceCents?: number | null }) {
+  return (
+    <div role="note" className="flex flex-col gap-1 rounded-lg bg-warning-soft px-2.5 py-2 text-[13px] text-warning">
+      <span>{zincFeeNotice(feeCents)}</span>
+      {balanceCents !== undefined && (
+        <span>{balanceCents !== null ? `Your Zinc balance: ${money(balanceCents)}.` : "We couldn't read your Zinc balance just now."}</span>
+      )}
+      <span>This is a real purchase and can&apos;t be undone once placed.</span>
+    </div>
+  );
+}
 
 /** For a thrown action: a purchase may have gone through, so never just "try again". */
 export const UNKNOWN = "Something went wrong. Check the gift's page before trying again.";

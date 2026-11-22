@@ -10,6 +10,7 @@ import type { RoundPageIdea, RoundPageOrder } from "@/modules/concierge";
 import { money } from "@/app/people/[id]/money";
 import { OverBudgetSheet } from "../../../over-budget-sheet";
 import {
+  MoneyNotice,
   Outcome,
   UNKNOWN,
   outcomeWords,
@@ -19,6 +20,7 @@ import {
   EMPTY_ADDRESS,
   OtherAddressForm,
   myAddressHref,
+  personAddressHref,
   place,
   putShipTo,
   type Place,
@@ -28,7 +30,8 @@ import {
 
 // The fix page for one failed gift (ALL-29 AC-14, AC-15, AC-15a, S3). Opening it costs nothing
 // (AC-4a): today's price is looked up only when "Check today's price" is tapped, and the money
-// notice sits by that button. A replacement over the budget asks first, as the round screen does,
+// notice sits by that button. Every button that buys has the money notice by it too (decision
+// 53), and says it buys. A replacement over the budget asks first, as the round screen does,
 // and only then reads "Buy anyway"; the server checks the budget and the allowance again.
 
 export type FixResult = BuyResult;
@@ -36,11 +39,18 @@ export type CheckResult =
   | { ok: true; oldCents: number; newCents: number }
   | {
       ok: false;
-      error: "not_allowed" | "unavailable" | "once" | "session" | "bad_form";
+      error:
+        | "not_allowed"
+        | "not_current"
+        | "unavailable"
+        | "once"
+        | "session"
+        | "bad_form";
     };
 
 export type FixScreenProps = {
   roundId: string;
+  personId: string;
   personName: string;
   shipByDeadline: string;
   /** The unresolved failed order. */
@@ -53,6 +63,8 @@ export type FixScreenProps = {
   overBudgetPct: number;
   /** What the round's other live orders already hold. */
   committedCents: number;
+  /** zinc_order_fee_cents, for the money notice. */
+  feeCents: number;
   /** priceCheckNotice(zinc_lookup_cents) */
   priceCheckNotice: string;
   recipient: RecipientAddress;
@@ -102,6 +114,7 @@ const CHECK_WORDS: Record<
   once: "The price went up again, so we won't try this one a third time.",
   unavailable: "We can't get today's price for this one.",
   not_allowed: "Checking prices is open to test accounts during the alpha.",
+  not_current: "This gift was already sorted out. Reload to see what happened.",
   session: "Your session ended. Sign in again.",
   bad_form: "That didn't work. Reload and try again.",
 };
@@ -260,7 +273,15 @@ export function FixScreen(p: FixScreenProps) {
         )}
       </section>
 
-      {failure === "price_up" && idea && (
+      <MoneyNotice feeCents={p.feeCents} />
+
+      {failure === "price_up" && idea && !idea.livePrice && (
+        <p role="status" className="text-[15px]">
+          We can&apos;t check today&apos;s price for this one.
+        </p>
+      )}
+
+      {failure === "price_up" && idea?.livePrice && (
         <div className="flex flex-col gap-2">
           {check === null ||
           (!check.ok &&
@@ -318,11 +339,19 @@ export function FixScreen(p: FixScreenProps) {
                 totalCents: idea.totalCents,
                 shipTo: { kind: "buyer" },
               },
-              "Ship it to me",
+              `Ship it to me · buy for about ${money(idea.totalCents)}`,
             )
           ) : (
             <Link href={myAddressHref(p.returnPath)} className={linkCls}>
               Add your address
+            </Link>
+          )}
+          {p.recipient.kind === "none" && (
+            <Link
+              href={personAddressHref(p.personId, p.returnPath)}
+              className={linkCls}
+            >
+              {`Add ${personName}'s address`}
             </Link>
           )}
           {p.recipient.kind === "own" &&
@@ -333,7 +362,7 @@ export function FixScreen(p: FixScreenProps) {
                 totalCents: idea.totalCents,
                 shipTo: { kind: "recipient" },
               },
-              `Ship to ${personName}'s address in ${place(p.recipient)}`,
+              `Ship to ${personName}'s address in ${place(p.recipient)} · buy for about ${money(idea.totalCents)}`,
               "outline",
             )}
           {other ? (
@@ -343,7 +372,7 @@ export function FixScreen(p: FixScreenProps) {
               canSave={p.recipient.kind !== "shared"}
               saveToPerson={saveToPerson}
               onSaveToPerson={setSaveToPerson}
-              submitLabel="Ship it here"
+              submitLabel={`Ship it here · buy for about ${money(idea.totalCents)}`}
               onUse={(address) =>
                 attempt({
                   key: "other",
@@ -431,6 +460,11 @@ export function FixScreen(p: FixScreenProps) {
         open={pendingOver !== null}
         totalCents={p.committedCents + (pendingOver?.totalCents ?? 0)}
         budgetCents={budgetCents}
+        yesLabel={
+          pendingOver?.key === "other"
+            ? `Buy anyway · ${money(pendingOver.totalCents)}`
+            : undefined
+        }
         onYes={() => {
           if (!pendingOver) return;
           setPendingOver(null);

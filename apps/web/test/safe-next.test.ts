@@ -74,7 +74,7 @@ describe("roundReturnPath", () => {
     expect(roundReturnPath("/rounds/r1/buy?ideas=a,b")).toBe("/rounds/r1/buy?ideas=a,b");
   });
 
-  it.each(["/settings", "//evil.com/rounds/x", "https://evil.com/rounds/x", "/\evil.com", "", null, undefined])("refuses %j", (value) => {
+  it.each(["/settings", "//evil.com/rounds/x", "https://evil.com/rounds/x", "/\\evil.com", "/rounds/../settings", "/rounds/%2e%2e/x", "", null, undefined])("refuses %j", (value) => {
     expect(roundReturnPath(value)).toBeUndefined();
   });
 });

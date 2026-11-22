@@ -216,6 +216,16 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
     expect(await orders(r.roundId)).toHaveLength(2);
   });
 
+  it("a quote for a failure already fixed (a stale tab) is not_current and looks nothing up", async () => {
+    const userId = await newUser();
+    const r = await newRound(userId);
+    const [failed] = await boughtAndFailed(userId, r, { 0: "max_price_exceeded" });
+    await pg.query("update concierge.orders set resolved = true where id = $1", [failed]);
+    zinc.calls = [];
+    expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps())).toBe("not_current");
+    expect(zinc.calls).toEqual([]);
+  });
+
   it("a gift with no live price can't be re-quoted", async () => {
     const userId = await newUser();
     const r = await newRound(userId);

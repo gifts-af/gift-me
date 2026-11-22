@@ -15,8 +15,11 @@ export function OverBudgetSheet({
   budgetCents,
   onYes,
   onKeep,
+  yesLabel = "Yes, pick it",
 }: {
   open: boolean;
+  /** "Buy anyway · $X" where saying yes buys at once (the fix page's "Another address"). */
+  yesLabel?: string;
   totalCents: number;
   budgetCents: number | null;
   onYes: () => void;
@@ -32,7 +35,7 @@ export function OverBudgetSheet({
           )}
         </DialogHeader>
         <Button type="button" onClick={onYes}>
-          Yes, pick it
+          {yesLabel}
         </Button>
         <Button type="button" variant="outline" onClick={onKeep}>
           Keep within budget

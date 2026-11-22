@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { zincFeeNotice } from "@gifts-af/core";
 import type { RoundPageIdea, RoundPageOrder } from "@/modules/concierge";
 import { FixScreen, type CheckResult, type FixResult, type FixScreenProps } from "../[id]/fix/[orderId]/fix-screen";
 
@@ -28,6 +29,7 @@ function idea(o: Partial<RoundPageIdea> = {}): RoundPageIdea {
     claimed: false,
     claimedByMe: false,
     noLongerShared: false,
+    livePrice: true,
     ...o,
   };
 }
@@ -60,6 +62,7 @@ function setup(
   const failed = idea({ title: "LEGO Botanical Orchid" });
   const props: FixScreenProps = {
     roundId: "r1",
+    personId: "p1",
     personName: "Mom",
     shipByDeadline: "2026-12-09",
     order: order({ ideaId: failed.id }),
@@ -68,6 +71,7 @@ function setup(
     budgetCents: 10000,
     overBudgetPct: 10,
     committedCents: 0,
+    feeCents: 100,
     priceCheckNotice: NOTICE,
     recipient: { kind: "none" },
     buyerAddress: { city: "Columbus", state: "OH" },
@@ -122,12 +126,36 @@ describe("FixScreen: a price rise", () => {
     expect(replaceAction).not.toHaveBeenCalled();
   });
 
+  it("a stale tab whose failure was already fixed says so in neutral words", async () => {
+    setup({}, { check: { ok: false, error: "not_current" } });
+    await userEvent.click(screen.getByRole("button", { name: "Check today's price" }));
+    expect(await screen.findByText("This gift was already sorted out. Reload to see what happened.")).toBeInTheDocument();
+    expect(screen.queryByText(/test accounts/)).toBeNull();
+  });
+
+  it("a gift with no live price offers no price check, only the next-best idea", () => {
+    const { checkPriceAction } = setup({ idea: idea({ title: "From her list", livePrice: false }) });
+    expect(screen.queryByRole("button", { name: "Check today's price" })).toBeNull();
+    expect(screen.queryByText(NOTICE)).toBeNull();
+    expect(screen.getByText("We can't check today's price for this one.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Buy this instead" })).toBeInTheDocument();
+    expect(checkPriceAction).not.toHaveBeenCalled();
+  });
+
   it("a second price rise shows See all ideas", async () => {
     setup({ nextBest: null }, { check: { ok: false, error: "once" } });
     await userEvent.click(screen.getByRole("button", { name: "Check today's price" }));
     expect(await screen.findByText("The price went up again, so we won't try this one a third time.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Buy at/ })).toBeNull();
     expect(screen.getByRole("link", { name: "See all ideas" })).toHaveAttribute("href", "/rounds/r1");
+  });
+});
+
+describe("FixScreen: the money notice", () => {
+  it.each(["price_up", "out_of_stock", "address_rejected"])("is always shown by the buy buttons (%s)", (failureType) => {
+    setup({ order: order({ failureType }), recipient: { kind: "own", city: "Dayton", state: "OH" } });
+    expect(screen.getByText(zincFeeNotice(100))).toBeInTheDocument();
+    expect(screen.getByText("This is a real purchase and can't be undone once placed.")).toBeInTheDocument();
   });
 });
 
@@ -153,9 +181,9 @@ describe("FixScreen: other failures", () => {
       recipient: { kind: "own", city: "Dayton", state: "OH" },
     });
     expect(screen.queryByRole("button", { name: "Buy this instead" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Ship it to me" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ship it to me · buy for about $54.20" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Another address" })).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Ship to Mom's address in Dayton, OH" }));
+    await userEvent.click(screen.getByRole("button", { name: "Ship to Mom's address in Dayton, OH · buy for about $54.20" }));
     const form = replaceAction.mock.calls[0][2];
     expect(form.get("ideaId")).toBe(failed.id);
     expect(form.get("shipTo")).toBe("recipient");
@@ -163,8 +191,35 @@ describe("FixScreen: other failures", () => {
 
   it("with a shared address, an address failure doesn't offer it again", () => {
     setup({ order: order({ failureType: "address_withdrawn" }), recipient: { kind: "shared", city: "Dayton", state: "OH" } });
-    expect(screen.getByRole("button", { name: "Ship it to me" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Ship it to me · buy for about $54.20" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Mom's address/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Add Mom's address" })).toBeNull();
+  });
+
+  it("with no address saved for them, it links to add theirs and back here", () => {
+    setup({ order: order({ failureType: "address_rejected" }), recipient: { kind: "none" } });
+    expect(screen.getByRole("link", { name: "Add Mom's address" })).toHaveAttribute(
+      "href",
+      `/people/p1/address?open=1&next=${encodeURIComponent("/rounds/r1/fix/o1")}`,
+    );
+  });
+
+  it("another address over the budget asks with Buy anyway and then sends it", async () => {
+    const { replaceAction } = setup({ order: order({ failureType: "address_rejected" }), budgetCents: 5000, overBudgetPct: 20 });
+    await userEvent.click(screen.getByRole("button", { name: "Another address" }));
+    await userEvent.type(screen.getByLabelText("First name"), "Ann");
+    await userEvent.type(screen.getByLabelText("Last name"), "Lee");
+    await userEvent.type(screen.getByLabelText("Street address"), "1 Main St");
+    await userEvent.type(screen.getByLabelText("City"), "Tampa");
+    await userEvent.selectOptions(screen.getByLabelText("State"), "FL");
+    await userEvent.type(screen.getByLabelText("ZIP code"), "33602");
+    await userEvent.click(screen.getByRole("button", { name: "Ship it here · buy for about $54.20" }));
+    expect(replaceAction).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Yes, pick it" })).toBeNull();
+    await userEvent.click(await screen.findByRole("button", { name: "Buy anyway · $54.20" }));
+    const form = replaceAction.mock.calls[0][2];
+    expect(form.get("over")).toBe("1");
+    expect(form.get("shipTo")).toBe("other");
   });
 
   it("Ship it to me with no address of mine links to Settings and back", async () => {
