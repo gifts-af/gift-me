@@ -57,8 +57,7 @@ export async function saveNoteCapture(store: CaptureStore, input: NoteCaptureInp
   if (input.image) {
     const ext = IMAGE_EXTENSIONS[input.image.type];
     if (!ext) {
-      // The type is a MIME string, never personal data.
-      // The type is the sender's own text, so it stays out of the log.
+      // The type is the sender's own text, so it stays out of the log; the step says why.
       logFailure("image type", null);
       return { ok: false, status: 500, error: SAVE_FAILED };
     }
