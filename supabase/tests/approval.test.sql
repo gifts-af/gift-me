@@ -6,7 +6,7 @@
 -- replaces a failed order under the round lease (Task 2).
 begin;
 \ir _helpers.psql
-select plan(44);
+select plan(50);
 
 -- This file starts several round runs on one day; the daily limit has its own test (round_fanout).
 update concierge.app_settings set value = '1000' where key = 'idea_round_runs_per_day';
@@ -32,6 +32,9 @@ insert into lists.list_items (list_id, position, name, price_cents) values (:'li
 insert into lists.list_items (list_id, position, name, price_cents) values (:'list_id', 10, 'Rug', 1000) returning id as i_rf_claimed \gset
 insert into lists.list_items (list_id, position, name, price_cents) values (:'list_id', 11, 'Fan', 1000) returning id as i_rf_cut \gset
 insert into lists.list_items (list_id, position, name, price_cents) values (:'list_id', 12, 'Owl', 1000) returning id as i_rf_rebuy \gset
+insert into lists.list_items (list_id, position, name, price_cents) values (:'list_id', 13, 'Jar', 1000) returning id as i_rf_old \gset
+insert into lists.list_items (list_id, position, name, price_cents) values (:'list_id', 14, 'Bowl', 1000) returning id as i_rf_keep \gset
+insert into lists.list_items (list_id, position, name, price_cents) values (:'list_id', 15, 'Tray', 1000) returning id as i_rf_both \gset
 insert into lists.lists (owner_id, title) values (:'stranger', 'Other') returning id as other_list \gset
 insert into lists.list_items (list_id, position, name, price_cents) values (:'other_list', 0, 'Kite', 1000) returning id as i_other \gset
 
@@ -371,6 +374,8 @@ select * from tests.rf_round(:'a', :'p_fix', 'price_up') \gset rf2_
 select tests.act_as_server();
 select throws_ok(tests.rf_sql(:'rf2_round_id', :'a', :'rf2_lock', :'rf2_failed_order', tests.rf_order(:'rf2_failed_idea')),
   'P0001', 'replace_failed_order: no new total', 'a price_up re-buy needs the new total');
+select throws_ok(tests.rf_sql(:'rf2_round_id', :'a', :'rf2_lock', :'rf2_failed_order', tests.rf_order(:'rf2_failed_idea', 'recipient', null, 0)),
+  'P0001', 'replace_failed_order: no new total', '... and refuses a new total of zero');
 select id as rf2_new from concierge.replace_failed_order(:'rf2_round_id', :'a', :'rf2_lock', :'rf2_failed_order',
   tests.rf_order(:'rf2_failed_idea', 'recipient', null, 5400)) \gset
 select tests.reset_role();
@@ -398,6 +403,9 @@ select tests.act_as_server();
 select throws_ok(tests.rf_sql(:'rf4_round_id', :'a', :'rf4_lock', :'rf4_failed_order',
     tests.rf_order(:'rf4_failed_idea', 'recipient', 'shared')),
   'P0001', 'replace_failed_order: fixed address', 'an address_rejected order can''t ship to the recipient');
+select throws_ok(tests.rf_sql(:'rf4_round_id', :'a', :'rf4_lock', :'rf4_failed_order', tests.rf_order(:'rf4_next_idea')),
+  'P0001', 'replace_failed_order: fixed address',
+  'after an address failure, a different proposed idea shipping to the recipient is refused');
 select id as rf4_new from concierge.replace_failed_order(:'rf4_round_id', :'a', :'rf4_lock', :'rf4_failed_order',
   tests.rf_order(:'rf4_failed_idea', 'buyer', 'own')) \gset
 select tests.reset_role();
@@ -407,6 +415,14 @@ select tests.act_as_server();
 select throws_ok(tests.rf_sql(:'rf4_round_id', :'a', :'rf4_lock', :'rf4_failed_order', tests.rf_order(:'rf4_failed_idea', 'buyer', 'own')),
   'P0001', 'replace_failed_order: not current', 'a second replace of the same failed order is refused');
 select tests.reset_role();
+select * from tests.rf_round(:'a', :'p_fix', 'address_withdrawn') \gset rfw_
+select tests.act_as_server();
+select id as rfw_new from concierge.replace_failed_order(:'rfw_round_id', :'a', :'rfw_lock', :'rfw_failed_order',
+  tests.rf_order(:'rfw_failed_idea', 'other', 'own')) \gset
+select tests.reset_role();
+select is((select array[o.ship_to, o.address_source, o.status::text, (o.idea_id = :'rfw_failed_idea')::text, x.address_line1]
+             from concierge.orders o join concierge.order_addresses x on x.order_id = o.id where o.id = :'rfw_new'),
+  array['other', 'own', 'held', 'true', '12 Oak St'], 'an address_withdrawn order can go to another address');
 
 -- The round: its lease, its owner, open and before the ship-by day (AC-15).
 select * from tests.rf_round(:'a', :'p_fix', 'out_of_stock') \gset rf5_
@@ -446,6 +462,35 @@ select is(lists.claim_holder(:'i_rf_rebuy', :'a'), 'none', 'a list gift whose or
 select count(*) from concierge.replace_failed_order(:'rf9_round_id', :'a', :'rf9_lock', :'rf9_failed_order',
   tests.rf_order(:'rf9_failed_idea', 'recipient', null, 4800));
 select is(lists.claim_holder(:'i_rf_rebuy', :'a'), 'mine', 'a list gift re-bought is claimed for the buyer');
+select tests.reset_role();
+
+-- The failed order's own claim (AC-30): released when another idea replaces it,
+-- kept when the same gift is re-bought or is still on another live order.
+select * from tests.rf_round(:'a', :'p_mom', 'out_of_stock', :'i_rf_old') \gset rf11_
+insert into lists.gift_claims (item_id, claimer_id, claimer_name, for_order) values (:'i_rf_old', :'a', 'Buyer', true);
+select tests.act_as_server();
+select count(*) from concierge.replace_failed_order(:'rf11_round_id', :'a', :'rf11_lock', :'rf11_failed_order',
+  tests.rf_order(:'rf11_next_idea'));
+select is(lists.claim_holder(:'i_rf_old', :'a'), 'none', 'a list gift replaced by another idea is released');
+select tests.reset_role();
+select * from tests.rf_round(:'a', :'p_mom', 'price_up', :'i_rf_keep') \gset rf12_
+insert into lists.gift_claims (item_id, claimer_id, claimer_name, for_order) values (:'i_rf_keep', :'a', 'Buyer', true);
+select tests.act_as_server();
+select count(*) from concierge.replace_failed_order(:'rf12_round_id', :'a', :'rf12_lock', :'rf12_failed_order',
+  tests.rf_order(:'rf12_failed_idea', 'recipient', null, 4800));
+select is(lists.claim_holder(:'i_rf_keep', :'a'), 'mine', 're-buying the same list gift keeps its claim');
+select tests.reset_role();
+-- i_rf_both is also on a placed order in an earlier round.
+select tests.ap_round(:'a', :'p_mom') as r_both \gset
+select tests.ap_idea(:'r_both', :'i_rf_both', 'selected') as r_both_idea \gset
+insert into concierge.orders (user_id, round_id, idea_id, funding_mode, max_price_cents, fee_cents, status, ship_to, ship_city, ship_state)
+values (:'a', :'r_both', :'r_both_idea', 'zinc_wallet', 4500, 100, 'placed', 'recipient', 'Dayton', 'OH');
+select * from tests.rf_round(:'a', :'p_mom', 'out_of_stock', :'i_rf_both') \gset rf13_
+insert into lists.gift_claims (item_id, claimer_id, claimer_name, for_order) values (:'i_rf_both', :'a', 'Buyer', true);
+select tests.act_as_server();
+select count(*) from concierge.replace_failed_order(:'rf13_round_id', :'a', :'rf13_lock', :'rf13_failed_order',
+  tests.rf_order(:'rf13_next_idea'));
+select is(lists.claim_holder(:'i_rf_both', :'a'), 'mine', '... but not while the gift is on another live order');
 select tests.reset_role();
 
 select ok(

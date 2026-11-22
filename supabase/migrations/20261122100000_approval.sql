@@ -395,6 +395,7 @@ declare
   v_idea concierge.gift_ideas;
   v_found boolean;
   v_same boolean;
+  v_old_item uuid;
   v_new_total integer := (p_order ->> 'new_total_cents')::integer;
   v_order concierge.orders;
 begin
@@ -434,7 +435,7 @@ begin
                   and o.status = 'failed' and o.failure_type = 'price_up' and o.resolved) then
       raise exception 'replace_failed_order: once' using errcode = 'P0001';
     end if;
-    if v_new_total is null then
+    if v_new_total is null or v_new_total <= 0 then
       raise exception 'replace_failed_order: no new total' using errcode = 'P0001';
     end if;
   end if;
@@ -489,6 +490,20 @@ begin
           p_order -> 'address' ->> 'state', p_order -> 'address' ->> 'zip', p_order -> 'address' ->> 'country',
           p_order -> 'address' ->> 'phone');
   update concierge.gift_ideas set status = 'selected' where id = v_idea.id;
+  -- Another idea replaced a list gift: its claim goes back to the list unless
+  -- the gift is still on another of this buyer's live orders, as
+  -- reconcile_round guards its release (AC-30).
+  if not v_same then
+    select i.list_item_id into v_old_item from concierge.gift_ideas i where i.id = v_old.idea_id;
+    if v_old_item is not null
+       and not exists (select 1
+                         from concierge.gift_ideas i2
+                         join concierge.orders o on o.idea_id = i2.id
+                        where i2.user_id = p_user_id and i2.list_item_id = v_old_item
+                          and concierge.order_is_given(o.status, o.resolved)) then
+      perform lists.release_for_order(v_old_item, p_user_id);
+    end if;
+  end if;
   -- A friend's claim that landed after the check above wins; the buyer's own is fine.
   if v_idea.list_item_id is not null
      and not lists.claim_for_order(v_idea.list_item_id, p_user_id)
