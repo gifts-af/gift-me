@@ -13,11 +13,11 @@ select tests.create_user('other@example.com', 'Other') as other \gset
 
 -- Mom keeps a list with three gifts; a friend claims the kneeler.
 select tests.act_as(:'mom');
-select lists.save_list(null, 'Birthday', '[
+select (lists.save_list_checked(null, 'Birthday', '[
   {"id": "aaaaaaaa-0000-4000-8000-000000000001", "name": "Mug set", "price_cents": 4200},
   {"id": "aaaaaaaa-0000-4000-8000-000000000002", "name": "Herb planter", "price_cents": 6800},
   {"id": "aaaaaaaa-0000-4000-8000-000000000003", "name": "Kneeler", "price_cents": 3500}
-]'::jsonb) as list_id \gset
+]'::jsonb, null) ->> 'id')::uuid as list_id \gset
 select share_token as token from lists.lists where id = :'list_id' \gset
 insert into public.people (name, relationship) values ('Me', 'self') returning id as mom_self \gset
 
@@ -93,7 +93,9 @@ select is(public.shared_city_for_person(:'person'), null, 'after the list is del
 
 -- A linked person who is then deleted shows nothing.
 select tests.act_as(:'mom');
-select lists.save_list(null, 'New list', '[{"name": "Scarf", "price_cents": 2000}]'::jsonb) as list2 \gset
+-- Mom already has a list, so this second one is written directly.
+insert into lists.lists (owner_id, title) values (:'mom', 'New list') returning id as list2 \gset
+insert into lists.list_items (list_id, position, name, price_cents) values (:'list2', 0, 'Scarf', 2000);
 select share_token as token2 from lists.lists where id = :'list2' \gset
 select tests.act_as(:'buyer');
 insert into public.people (name, relationship) values ('Mom 2', 'parent') returning id as person2 \gset
@@ -113,7 +115,7 @@ select is(lists.person_list(:'person3'), null, 'once Mom deletes her account, th
 -- An admin hard delete of a linked person still works (the link goes too).
 insert into public.people (name, relationship) values ('Linked', 'friend') returning id as person4 \gset
 select tests.act_as(:'other');
-select lists.save_list(null, 'Other list', '[]'::jsonb) as list3 \gset
+select (lists.save_list_checked(null, 'Other list', '[]'::jsonb, null) ->> 'id')::uuid as list3 \gset
 select share_token as token3 from lists.lists where id = :'list3' \gset
 select tests.act_as(:'buyer');
 select lists.link_person(:'token3', :'person4');
