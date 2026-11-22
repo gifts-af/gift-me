@@ -13,6 +13,10 @@
 alter table concierge.gift_ideas
   add column image_url text check (image_url is null or image_url ~ '^https://');
 
+-- A round offers each list gift once, so one approval can't buy it twice (AC-30).
+create unique index gift_ideas_round_list_item_key on concierge.gift_ideas (round_id, list_item_id)
+  where list_item_id is not null;
+
 -- ─── settings (AC-27, AC-28) ─────────────────────────────────────────────────
 insert into concierge.app_settings (key, value, description) values
   ('idea_list_lookups_max', '10', 'The most Zinc lookups of the person''s list gifts in one idea run.'),
@@ -292,14 +296,21 @@ begin
     raise exception 'approve_round: not_shared' using errcode = 'P0001';
   end if;
   -- New (AC-30, S2): a list gift already on one of this buyer's live orders, in
-  -- any round, isn't bought again. Live as in reconcile_round's claim release.
+  -- any round, isn't bought again. Live is excluded_offers' "given" (not failed,
+  -- cancelled or refunded), plus a failure not yet resolved, which may still be
+  -- replaced, as the live-order check above treats it within a round.
   if exists (select 1
                from jsonb_array_elements(p_orders) e
                join concierge.gift_ideas i on i.id = (e ->> 'idea_id')::uuid
                join concierge.gift_ideas i2 on i2.user_id = p_user_id and i2.list_item_id = i.list_item_id
                join concierge.orders o on o.idea_id = i2.id
               where i.list_item_id is not null
-                and o.status <> 'cancelled' and not (o.status = 'failed' and o.resolved)) then
+                and (o.status not in ('failed', 'cancelled', 'refunded') or (o.status = 'failed' and not o.resolved)))
+     -- Nor twice in one approval: neither order exists yet, and the second claim
+     -- reads as the buyer's own.
+     or (select count(i.list_item_id) <> count(distinct i.list_item_id)
+           from jsonb_array_elements(p_orders) e
+           join concierge.gift_ideas i on i.id = (e ->> 'idea_id')::uuid) then
     raise exception 'approve_round: already_bought' using errcode = 'P0001';
   end if;
   -- A list pick someone else already claimed isn't bought too (AC-28).

@@ -5,7 +5,7 @@
 -- shared, and list gifts the buyer already has on a live order.
 begin;
 \ir _helpers.psql
-select plan(16);
+select plan(22);
 
 -- This file starts several round runs on one day; the daily limit has its own test (round_fanout).
 update concierge.app_settings set value = '1000' where key = 'idea_round_runs_per_day';
@@ -23,6 +23,10 @@ insert into lists.list_items (list_id, position, name, price_cents) values (:'li
 insert into lists.list_items (list_id, position, name, price_cents) values (:'list_id', 2, 'Mug', 2000) returning id as i_cut \gset
 insert into lists.list_items (list_id, position, name, price_cents) values (:'list_id', 3, 'Book', 1500) returning id as i_mine \gset
 insert into lists.list_items (list_id, position, name, price_cents) values (:'list_id', 4, 'Scarf', 2500) returning id as i_free \gset
+insert into lists.list_items (list_id, position, name, price_cents) values (:'list_id', 5, 'Hat', 1000) returning id as i_refund \gset
+insert into lists.list_items (list_id, position, name, price_cents) values (:'list_id', 6, 'Pen', 1000) returning id as i_cancel \gset
+insert into lists.list_items (list_id, position, name, price_cents) values (:'list_id', 7, 'Cup', 1000) returning id as i_failed \gset
+insert into lists.list_items (list_id, position, name, price_cents) values (:'list_id', 8, 'Bag', 1000) returning id as i_dup \gset
 insert into lists.lists (owner_id, title) values (:'stranger', 'Other') returning id as other_list \gset
 insert into lists.list_items (list_id, position, name, price_cents) values (:'other_list', 0, 'Kite', 1000) returning id as i_other \gset
 
@@ -172,6 +176,60 @@ select throws_ok(
   'P0001', 'approve_round: already_bought',
   'approve_round refuses a list item already on this buyer''s live order in another round');
 select tests.reset_role();
+
+-- An earlier order in another round, in the given state, then a new round
+-- offering the same list item again.
+create function tests.ap_retry(p_user uuid, p_person uuid, p_item uuid, p_status text, p_resolved boolean)
+returns table (round_id uuid, idea_id uuid, lock timestamptz) language plpgsql as $$
+declare v_round uuid; v_idea uuid;
+begin
+  v_round := tests.ap_round(p_user, p_person);
+  v_idea := tests.ap_idea(v_round, p_item, 'selected');
+  insert into concierge.orders (user_id, round_id, idea_id, funding_mode, max_price_cents, fee_cents, status, resolved,
+                                ship_to, ship_city, ship_state)
+  values (p_user, v_round, v_idea, 'zinc_wallet', 4500, 100, p_status, p_resolved, 'recipient', 'Dayton', 'OH');
+  v_round := tests.ap_round(p_user, p_person);
+  v_idea := tests.ap_idea(v_round, p_item);
+  return query select v_round, v_idea, r.locked_until from concierge.gift_rounds r where r.id = v_round;
+end $$;
+
+-- Given means an order that isn't failed, cancelled or refunded (AC-31), so a
+-- refunded or cancelled one doesn't stop buying the gift again. An unresolved
+-- failure still does, as approve_round treats it within a round: it may yet be replaced.
+select round_id as r_refund, idea_id as r_refund_idea, lock as r_refund_lock
+  from tests.ap_retry(:'a', :'p_mom', :'i_refund', 'refunded', false) \gset
+select round_id as r_cancel, idea_id as r_cancel_idea, lock as r_cancel_lock
+  from tests.ap_retry(:'a', :'p_mom', :'i_cancel', 'cancelled', false) \gset
+select round_id as r_failed, idea_id as r_failed_idea, lock as r_failed_lock
+  from tests.ap_retry(:'a', :'p_mom', :'i_failed', 'failed', false) \gset
+select tests.act_as_server();
+select is((select count(*)::int from concierge.approve_round(:'r_refund', :'a', :'r_refund_lock', tests.ap_orders(:'r_refund_idea'))), 1,
+  'approve_round buys a list item again after its earlier order was refunded');
+select is((select count(*)::int from concierge.approve_round(:'r_cancel', :'a', :'r_cancel_lock', tests.ap_orders(:'r_cancel_idea'))), 1,
+  'approve_round buys a list item again after its earlier order was cancelled');
+select throws_ok(
+  format($q$select * from concierge.approve_round(%L, %L, %L, %L)$q$, :'r_failed', :'a', :'r_failed_lock', tests.ap_orders(:'r_failed_idea')),
+  'P0001', 'approve_round: already_bought', 'approve_round still refuses a list item whose earlier order failed and isn''t resolved');
+select tests.reset_role();
+
+-- ─── One list item once per round and per approval ───────────────────────────
+
+select tests.ap_round(:'a', :'p_mom') as r_dup \gset
+select tests.ap_idea(:'r_dup', :'i_dup') as r_dup_idea \gset
+select throws_ok(format($q$select tests.ap_idea(%L, %L)$q$, :'r_dup', :'i_dup'),
+  '23505', null, 'a round can''t hold the same list item twice');
+
+-- Without the index (as for a round saved before it), one approval still can't buy it twice.
+drop index concierge.gift_ideas_round_list_item_key;
+select tests.ap_idea(:'r_dup', :'i_dup') as r_dup_idea2 \gset
+select locked_until as r_dup_lock from concierge.gift_rounds where id = :'r_dup' \gset
+select tests.act_as_server();
+select throws_ok(
+  format($q$select * from concierge.approve_round(%L, %L, %L, %L)$q$, :'r_dup', :'a', :'r_dup_lock',
+    tests.ap_orders(:'r_dup_idea') || tests.ap_orders(:'r_dup_idea2')),
+  'P0001', 'approve_round: already_bought', 'approve_round refuses one list item twice in one approval');
+select tests.reset_role();
+select is((select count(*)::int from concierge.orders where round_id = :'r_dup'), 0, '... and no order is written');
 
 -- ─── The lists product's interface (T19) ─────────────────────────────────────
 
