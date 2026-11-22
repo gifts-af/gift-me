@@ -11,6 +11,10 @@ import { localSupabase } from "./e2e/local-supabase";
 // holds the port, ours fails to start and so does the run (ALL-99, ALL-108). To
 // test a running server on purpose, set E2E_BASE_URL.
 const supabase = localSupabase();
+// Read once here; the workers inherit these, so they don't each run `supabase status`.
+process.env.E2E_SUPABASE_URL = supabase.url;
+process.env.E2E_SUPABASE_PUBLISHABLE_KEY = supabase.publishableKey;
+process.env.E2E_SUPABASE_SERVICE_ROLE_KEY = supabase.serviceRoleKey;
 // E2E_PORT lets several worktrees run the browser tests at once.
 const port = Number(process.env.E2E_PORT ?? 3100);
 const CI = Boolean(process.env.CI);

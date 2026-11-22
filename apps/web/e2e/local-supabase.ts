@@ -3,9 +3,18 @@ import path from "node:path";
 
 // Browser tests run against the local Supabase in Docker, never `dev` or
 // `prod`. Its address and keys are read from the running stack, locally and in CI.
+// `supabase status` takes a second or two, so playwright.config.ts reads it once and
+// passes it to the workers in these env vars; sign-ins and seeds then reuse it.
 export type LocalSupabase = { url: string; publishableKey: string; serviceRoleKey: string };
 
 export function localSupabase(): LocalSupabase {
+  const fromEnv = {
+    url: process.env.E2E_SUPABASE_URL,
+    publishableKey: process.env.E2E_SUPABASE_PUBLISHABLE_KEY,
+    serviceRoleKey: process.env.E2E_SUPABASE_SERVICE_ROLE_KEY,
+  };
+  if (fromEnv.url && fromEnv.publishableKey && fromEnv.serviceRoleKey) return fromEnv as LocalSupabase;
+
   const out = execSync("pnpm -s supabase status -o env", {
     cwd: path.resolve(__dirname, "../../.."),
     encoding: "utf8",
