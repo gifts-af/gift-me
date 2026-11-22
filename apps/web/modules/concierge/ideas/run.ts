@@ -22,7 +22,7 @@ import { AiError, gatewayPrices, type GatewayHttp } from "@/lib/ai/messages";
 import { AI_MODELS } from "@/lib/ai/models";
 import { isSensitive } from "@/lib/ai/sensitive";
 import { errorFields, logEvent } from "@/lib/log";
-import { storeName } from "@/modules/lists";
+import { storeName } from "@gifts-af/core/store-page/link";
 import { ZincError, type ZincErrorKind, type ZincHttp } from "../zinc/client";
 import {
   listGiftQuote,

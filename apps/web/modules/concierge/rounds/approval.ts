@@ -15,7 +15,7 @@ import {
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { logEvent } from "@/lib/log";
-import { storeName } from "@/modules/lists";
+import { storeName } from "@gifts-af/core/store-page/link";
 import { isId } from "../profile/rules";
 import { claimRoundNow, concierge, fail, withLease } from "../purchase/store";
 import type { ZincDeps } from "../zinc/types";

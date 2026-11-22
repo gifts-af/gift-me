@@ -67,6 +67,22 @@ export function isAmazonHost(host: string): boolean {
   );
 }
 
+/**
+ * The store a saved link points to, for "View on ...": "Amazon" for any Amazon
+ * site, otherwise the bare domain ("walmart.com"). Null if it isn't a link.
+ * Lives here, with no dependencies, so the concierge's emails can name a store
+ * without loading the lists module's React components (ALL-29).
+ */
+export function storeName(productUrl: string): string | null {
+  let hostname: string;
+  try {
+    hostname = new URL(productUrl).hostname;
+  } catch {
+    return null;
+  }
+  return isAmazonHost(hostname) ? "Amazon" : hostname.replace(/^www\./i, "").toLowerCase();
+}
+
 // The ASIN in a product path, upper-cased (the image CDN is case-sensitive), or null.
 export function extractAsin(pathname: string): string | null {
   const match = pathname.match(ASIN_IN_PATH);
