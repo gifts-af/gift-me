@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { cn } from "@/lib/utils";
 import type { RoundPageIdea } from "@/modules/concierge";
 import { money } from "@/app/people/[id]/money";
+import { listPriceNote } from "../round-screen";
 import { MoneyNotice, Outcome, UNKNOWN, outcomeWords, type BuyResult } from "../../outcome";
 import {
   EMPTY_ADDRESS,
@@ -110,7 +111,7 @@ export function ConfirmScreen(p: ConfirmScreenProps) {
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="text-[15px] font-semibold [overflow-wrap:anywhere]">{i.title}</span>
             <span className="text-[13px] text-muted-foreground">
-              {[storeOf(i), i.arriveBy ? `Arrives by ${shortDate(i.arriveBy)}` : null].filter(Boolean).join(" · ")}
+              {[storeOf(i), listPriceNote(i), i.arriveBy ? `Arrives by ${shortDate(i.arriveBy)}` : null].filter(Boolean).join(" · ")}
             </span>
           </span>
           <span className="flex-none text-[15px] font-semibold tabular-nums">{money(i.totalCents)}</span>

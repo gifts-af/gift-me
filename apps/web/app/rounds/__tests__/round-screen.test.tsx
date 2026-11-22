@@ -134,6 +134,21 @@ describe("RoundScreen: picking", () => {
     expect(screen.getByRole("checkbox", { name: "Taken gift" })).not.toBeChecked();
   });
 
+  it("a list gift priced from the list (a store Zinc can only check) says so; a live-priced one doesn't (AC-27)", () => {
+    setup(
+      view({
+        ideas: [
+          idea({ title: "Camp mug", source: "list", listItemId: "li5", livePrice: false }),
+          idea({ title: "Tote", source: "list", listItemId: "li6", livePrice: true }),
+        ],
+      }),
+    );
+    const mug = screen.getByRole("checkbox", { name: "Camp mug" }).closest("label")!;
+    expect(within(mug).getByText(/Price from their list/)).toBeInTheDocument();
+    const tote = screen.getByRole("checkbox", { name: "Tote" }).closest("label")!;
+    expect(within(tote).queryByText(/Price from their list/)).toBeNull();
+  });
+
   it("a list gift already on one of the buyer's orders can't be ticked", () => {
     setup(view({ ideas: [idea({ title: "Mine already", source: "list", listItemId: "li3", claimedByMe: true })] }));
     expect(screen.getByRole("checkbox", { name: "Mine already" })).toBeDisabled();

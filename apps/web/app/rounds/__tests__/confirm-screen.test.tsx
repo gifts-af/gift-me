@@ -76,6 +76,11 @@ describe("ConfirmScreen", () => {
     expect(screen.getByRole("button", { name: "Buy now · about $54.20" })).toBeInTheDocument();
   });
 
+  it("a list gift priced from the list says so (AC-27)", () => {
+    setup({ ideas: [idea({ title: "Camp mug", source: "list", listItemId: "li1", livePrice: false, productUrl: "https://www.rei.com/product/1" })] });
+    expect(screen.getByText(/Price from their list/)).toBeInTheDocument();
+  });
+
   it("an over-budget link reads Buy anyway and says how far over", async () => {
     const { buyAction } = setup({ budgetCents: 5000 });
     expect(screen.getByText("$4.20 over Mom's $50 budget.")).toBeInTheDocument();

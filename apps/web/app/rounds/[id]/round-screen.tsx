@@ -46,6 +46,14 @@ function storeLabel(retailer: string | null): string | null {
   return retailer ? retailer.charAt(0).toUpperCase() + retailer.slice(1) : null;
 }
 
+/**
+ * A list gift from a store Zinc can only check has no live price: it's offered at the list's own
+ * price, and says so (AC-27). Shared with the confirm page.
+ */
+export function listPriceNote(idea: Pick<RoundPageIdea, "source" | "livePrice">): string | null {
+  return idea.source === "list" && !idea.livePrice ? "Price from their list" : null;
+}
+
 /** Why an idea can't be ticked, in words for the card; null when it can. */
 function blockedBecause(idea: RoundPageIdea, ordered: Set<string>): string | null {
   if (ordered.has(idea.id)) return "Ordered";
@@ -72,7 +80,9 @@ function IdeaCard({
   onToggle: () => void;
 }) {
   const store = storeLabel(idea.retailer);
-  const meta = [money(idea.totalCents), store, idea.arriveBy ? `by ${shortDate(idea.arriveBy)}` : null].filter(Boolean).join(" · ");
+  const meta = [money(idea.totalCents), listPriceNote(idea), store, idea.arriveBy ? `by ${shortDate(idea.arriveBy)}` : null]
+    .filter(Boolean)
+    .join(" · ");
   const over = budgetCents !== null && idea.totalCents > budgetCents ? idea.totalCents - budgetCents : 0;
   const body = (
     <>
