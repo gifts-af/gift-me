@@ -928,25 +928,47 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
       )
     ).rows[0];
 
+  /**
+   * Runs `run` while taking the round's lease also sets its budget to `cents`: the read before the
+   * lease sees the old budget, the lease itself the new one (S7). Both creates are inside the try,
+   * so a failed second create still drops the first.
+   */
+  async function budgetSetByLease<T>(roundId: string, cents: number, run: () => Promise<T>): Promise<T> {
+    const tag = `test_budget_${roundId.replace(/-/g, "")}`;
+    try {
+      await pg.query(`create function public.${tag}() returns trigger language plpgsql as $$ begin new.budget_cents := ${cents}; return new; end $$`);
+      await pg.query(
+        `create trigger ${tag} before update of locked_until on concierge.gift_rounds for each row
+         when (new.id = '${roundId}' and new.locked_until is not null) execute function public.${tag}()`,
+      );
+      return await run();
+    } finally {
+      await pg.query(`drop trigger if exists ${tag} on concierge.gift_rounds`);
+      await pg.query(`drop function if exists public.${tag}()`);
+    }
+  }
+
   it("a budget set while approveAndBuy takes the lease caps the order at the new budget", async () => {
     const u = await newUser();
     const r = await newRound(u, { budget: null });
-    // The read before the lease sees no budget; the lease itself sets one (S7).
-    const tag = `test_budget_${r.roundId.replace(/-/g, "")}`;
-    await pg.query(`create function public.${tag}() returns trigger language plpgsql as $$ begin new.budget_cents := 5000; return new; end $$`);
-    await pg.query(
-      `create trigger ${tag} before update of locked_until on concierge.gift_rounds for each row
-       when (new.id = '${r.roundId}' and new.locked_until is not null) execute function public.${tag}()`,
+    expect(await budgetSetByLease(r.roundId, 5000, () => approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps()))).toEqual(
+      ORDERED,
     );
-    try {
-      expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps())).toEqual(ORDERED);
-    } finally {
-      await pg.query(`drop trigger ${tag} on concierge.gift_rounds`);
-      await pg.query(`drop function public.${tag}()`);
-    }
     // Within a 5000 budget the cap is the pick plus the margin less the fee; with no budget it would be 4100.
     expect((await orders(r.roundId))[0].max_price_cents).toBe(4520);
     expect(zinc.posts).toEqual([expect.objectContaining({ maxPrice: 4520 })]);
+  });
+
+  it("a budget that tightens below the pick while approveAndBuy takes the lease asks to confirm and buys nothing", async () => {
+    const u = await newUser();
+    // The pick is 4200: within 10000 before the lease, over a 4000 budget (inside the 15% allowance) after.
+    const r = await newRound(u, { budget: 10000 });
+    expect(await budgetSetByLease(r.roundId, 4000, () => approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps()))).toEqual({
+      ok: false,
+      error: "needs_confirmation",
+    });
+    expect(await orders(r.roundId)).toHaveLength(0);
+    expect(zinc.posts).toEqual([]);
   });
 
   it("ships to the buyer's own address when asked", async () => {
