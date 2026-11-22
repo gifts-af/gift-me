@@ -8,7 +8,7 @@
 -- its budget (Task 3).
 begin;
 \ir _helpers.psql
-select plan(78);
+select plan(80);
 
 -- This file starts several round runs on one day; the daily limit has its own test (round_fanout).
 update concierge.app_settings set value = '1000' where key = 'idea_round_runs_per_day';
@@ -388,6 +388,16 @@ select tests.act_as_server();
 select throws_ok(tests.rf_sql(:'rf2_round_id', :'a', :'rf2_lock', :'rf2_new', tests.rf_order(:'rf2_failed_idea', 'recipient', null, 5600)),
   'P0001', 'replace_failed_order: once', 'a second price_up re-buy of the same idea is refused');
 select tests.reset_role();
+
+-- The same re-buy on a round with no budget: nothing is over it (found by the browser journey, ALL-29 Task 13).
+select * from tests.rf_round(:'a', :'p_fix', 'price_up') \gset rf2b_
+update concierge.gift_rounds set budget_cents = null where id = :'rf2b_round_id';
+select tests.act_as_server();
+select lives_ok(tests.rf_sql(:'rf2b_round_id', :'a', :'rf2b_lock', :'rf2b_failed_order', tests.rf_order(:'rf2b_failed_idea', 'recipient', null, 5400)),
+  'a price_up re-buy on a round with no budget goes through');
+select tests.reset_role();
+select is((select array[est_total_cents::text, over_budget::text] from concierge.gift_ideas where id = :'rf2b_failed_idea'),
+  array['5400', 'false'], '... and the idea is not over a budget it doesn''t have');
 
 -- Ideas that aren't on offer (AC-12b).
 select * from tests.rf_round(:'a', :'p_fix', 'out_of_stock') \gset rf3_

@@ -481,7 +481,8 @@ begin
   if v_same and v_old.failure_type = 'price_up' then
     update concierge.gift_ideas
        set est_total_cents = v_new_total,
-           over_budget = v_new_total > r.budget_cents
+           -- A round with no budget has nothing to be over.
+           over_budget = coalesce(v_new_total > r.budget_cents, false)
      where id = v_idea.id;
   end if;
 
