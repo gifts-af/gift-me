@@ -277,6 +277,7 @@ export type Database = {
           first_party: boolean | null;
           handling_days_max: number | null;
           id: string;
+          image_url: string | null;
           list_item_id: string | null;
           offer_id: string | null;
           over_budget: boolean;
@@ -307,6 +308,7 @@ export type Database = {
           first_party?: boolean | null;
           handling_days_max?: number | null;
           id?: string;
+          image_url?: string | null;
           list_item_id?: string | null;
           offer_id?: string | null;
           over_budget?: boolean;
@@ -336,6 +338,7 @@ export type Database = {
           first_party?: boolean | null;
           handling_days_max?: number | null;
           id?: string;
+          image_url?: string | null;
           list_item_id?: string | null;
           offer_id?: string | null;
           over_budget?: boolean;
@@ -1422,6 +1425,14 @@ export type Database = {
         }[];
       };
       enable_owner_rls: { Args: { p_table: unknown }; Returns: undefined };
+      excluded_offers: {
+        Args: { p_person_id: string };
+        Returns: {
+          list_item_id: string;
+          product_id: string;
+          retailer: string;
+        }[];
+      };
       excluded_products: { Args: { p_person_id: string }; Returns: string[] };
       fail_order: {
         Args: { p_failure_type: string; p_order_id: string };
@@ -1554,6 +1565,10 @@ export type Database = {
           isOneToOne: false;
           isSetofReturn: true;
         };
+      };
+      order_is_given: {
+        Args: { p_resolved: boolean; p_status: string };
+        Returns: boolean;
       };
       reapprove_order: {
         Args: {
@@ -2045,6 +2060,7 @@ export type Database = {
           outcome: string;
         }[];
       };
+      check_item_limit: { Args: { p_list_ids: string[] }; Returns: undefined };
       claim_for_order: {
         Args: { p_item_id: string; p_user_id: string };
         Returns: boolean;
@@ -2053,6 +2069,10 @@ export type Database = {
         Args: { p_item_id: string; p_name: string; p_token: string };
         Returns: Json;
       };
+      claim_holder: {
+        Args: { p_item_id: string; p_user_id: string };
+        Returns: string;
+      };
       forget_photo_deletions: {
         Args: { p_paths: string[] };
         Returns: undefined;
@@ -2060,6 +2080,10 @@ export type Database = {
       get_shared_list: { Args: { p_token: string }; Returns: Json };
       is_allowed_image_url: { Args: { p_url: string }; Returns: boolean };
       is_amazon_host: { Args: { p_host: string }; Returns: boolean };
+      item_shared: {
+        Args: { p_item_id: string; p_person_id: string };
+        Returns: boolean;
+      };
       link_person: {
         Args: { p_person_id: string; p_token: string };
         Returns: undefined;

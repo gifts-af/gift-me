@@ -7,8 +7,8 @@
 --
 --   * A list holds at most list_max_items gifts (T23). add_item still answers
 --     "full" on its own; a save or direct insert past the limit fails. Lowering
---     the setting below a list's size makes every save of that list fail until
---     it's back under, and a value that isn't a number fails every write.
+--     the setting below a list's size stops adds to that list (edits and
+--     removes still work), and a value that isn't a number fails every write.
 --   * A gift's photo address starts with https://, or is http:// on this
 --     machine (localhost or 127.0.0.1: local Supabase storage, which can't
 --     reach anyone else). Existing http:// addresses elsewhere are moved to
@@ -58,16 +58,18 @@ alter table lists.list_items
   add constraint list_items_image_url_allowed check (image_url is null or lists.is_allowed_image_url(image_url));
 
 -- ─── Item limit ─────────────────────────────────────────────────────────────
--- Once per statement, after it, for inserts and for updates (which could move
--- gifts onto another list): a save writes many rows in one statement and
--- deletes some in the same one, so only the finished count means anything.
--- It locks each list it added to first (no key update: it doesn't clash with
--- the foreign-key locks inserts take), so two writers can't both squeeze
--- under the limit; My list's saves and add_item hold that lock already. Runs as its owner to read the setting; a missing
--- setting fails the write rather than guessing a limit (T23).
+-- Checked once per statement, after it: a save writes many rows in one
+-- statement and deletes some in the same one, so only the finished count means
+-- anything. Inserts count, and so do updates that move a gift onto another
+-- list; an edit in place doesn't, so a list left over a lowered limit can still
+-- be edited and trimmed. Each list is locked first (no key update: it doesn't
+-- clash with the foreign-key locks inserts take), so two writers can't both
+-- squeeze under the limit; My list's saves and add_item hold that lock already.
+-- Runs as its owner to read the setting; a missing setting fails the write
+-- rather than guessing a limit (T23).
 
-create function lists.enforce_item_limit()
-returns trigger
+create function lists.check_item_limit(p_list_ids uuid[])
+returns void
 language plpgsql
 security definer
 set search_path = ''
@@ -76,31 +78,60 @@ declare
   v_limit integer;
   v_list_id uuid;
 begin
+  if coalesce(cardinality(p_list_ids), 0) = 0 then
+    return;
+  end if;
   select s.value::integer into v_limit from concierge.app_settings s where s.key = 'list_max_items';
   if v_limit is null then
     raise exception 'Setting list_max_items is missing' using errcode = '22023';
   end if;
-
-  for v_list_id in select distinct n.list_id from new_items n order by n.list_id loop
+  for v_list_id in select distinct x from unnest(p_list_ids) x order by 1 loop
     perform 1 from lists.lists l where l.id = v_list_id for no key update;
     if (select count(*) from lists.list_items i where i.list_id = v_list_id) > v_limit then
       raise exception 'A list can hold up to % gifts', v_limit using errcode = '23514';
     end if;
   end loop;
+end;
+$$;
+
+create function lists.enforce_item_limit()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform lists.check_item_limit(array(select n.list_id from new_items n));
   return null;
 end;
 $$;
 
+create function lists.enforce_item_limit_on_move()
+returns trigger
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  perform lists.check_item_limit(array(
+    select n.list_id from new_items n join old_items o on o.id = n.id
+     where o.list_id is distinct from n.list_id
+  ));
+  return null;
+end;
+$$;
+
+revoke execute on function lists.check_item_limit(uuid[]) from public, anon, authenticated;
 revoke execute on function lists.enforce_item_limit() from public, anon, authenticated;
+revoke execute on function lists.enforce_item_limit_on_move() from public, anon, authenticated;
 
 create trigger enforce_item_limit after insert on lists.list_items
   referencing new table as new_items
   for each statement execute function lists.enforce_item_limit();
 
--- Moving gifts onto another of your lists counts too.
 create trigger enforce_item_limit_on_move after update on lists.list_items
-  referencing new table as new_items
-  for each statement execute function lists.enforce_item_limit();
+  referencing old table as old_items new table as new_items
+  for each statement execute function lists.enforce_item_limit_on_move();
 
 -- ─── Old save ───────────────────────────────────────────────────────────────
 

@@ -2,7 +2,7 @@
 -- function is gone (ALL-130).
 begin;
 \ir _helpers.psql
-select plan(16);
+select plan(17);
 
 select tests.create_user('a@example.com') as a \gset
 
@@ -53,6 +53,18 @@ select throws_ok(
   '23514', null,
   'moving a gift onto a full list fails'
 );
+
+-- Over the limit after it's lowered: editing a gift in place still works.
+select tests.reset_role();
+update concierge.app_settings set value = '2' where key = 'list_max_items';
+select tests.act_as(:'a');
+select lives_ok(
+  format($$update lists.list_items set price_cents = 200 where list_id = %L$$, :'list_id'),
+  'editing gifts on a list over a lowered limit still works'
+);
+select tests.reset_role();
+update concierge.app_settings set value = '3' where key = 'list_max_items';
+select tests.act_as(:'a');
 
 -- Removing and re-adding in one save stays within the limit.
 select lives_ok(
@@ -111,7 +123,8 @@ select throws_ok(
 select tests.reset_role();
 select hasnt_function('lists', 'save_list', array['uuid', 'text', 'jsonb'], 'the old save_list is gone');
 select ok(
-  not has_function_privilege('authenticated', 'lists.enforce_item_limit()', 'execute'),
+  not has_function_privilege('authenticated', 'lists.check_item_limit(uuid[])', 'execute')
+  and not has_function_privilege('authenticated', 'lists.enforce_item_limit()', 'execute'),
   'nobody calls the limit check directly'
 );
 
