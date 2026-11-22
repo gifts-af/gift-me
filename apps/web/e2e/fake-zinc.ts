@@ -154,6 +154,7 @@ export function startFakeZinc(): Promise<Server> {
       }
       if (route === "POST /orders") {
         // On the buyer's own key, whatever it is. Like Zinc, an order capped below the price is refused.
+        // Only products[0] is checked: our orders are one product each today (createOrder).
         const order = json as { products: { url: string }[]; max_price: number; metadata: { order_id: string } };
         const p = PRODUCTS.find((x) => x.url === order.products[0]?.url);
         if (p?.orderError) return send(400, { error: { code: p.orderError } });

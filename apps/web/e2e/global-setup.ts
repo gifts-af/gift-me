@@ -13,11 +13,11 @@ export default async function globalSetup() {
   // engine (ALL-27). Not needed against a deployed site.
   if (process.env.E2E_BASE_URL) return;
   const servers = [await startFakeZinc(), await startFakeGateway()];
-  const before = await settingsForRun();
+  for (const [key, { run }] of Object.entries(RUN_SETTINGS)) await setSetting(key, run);
   return async () => {
     await Promise.all(servers.map((s) => new Promise<void>((done) => s.close(() => done()))));
     await ideasOff();
-    for (const [key, value] of Object.entries(before)) await setSetting(key, value);
+    for (const [key, { shipped }] of Object.entries(RUN_SETTINGS)) await setSetting(key, shipped);
   };
 }
 
@@ -26,24 +26,13 @@ export default async function globalSetup() {
 // - buying on (it ships off), for approval.spec.ts's purchases, which go to the fake Zinc;
 // - room in the tick's idea pass, which is global: every spec's rounds want a turn, and every run
 //   of the day counts (ALL-125). The fakes answer at once, so a high limit stays well inside the tick.
-// Returns what they were, for the teardown.
-const RUN_SETTINGS: Record<string, number> = {
-  zinc_ordering_enabled: 1,
-  idea_rounds_per_tick: 100,
-  idea_round_runs_per_day: 100,
+// The teardown writes back the values the migrations ship (`shipped`), not what it found: a run
+// that crashed before its teardown would otherwise leave the run's values as "what was there".
+const RUN_SETTINGS: Record<string, { run: number; shipped: number }> = {
+  zinc_ordering_enabled: { run: 1, shipped: 0 },
+  idea_rounds_per_tick: { run: 100, shipped: 1 },
+  idea_round_runs_per_day: { run: 100, shipped: 5 },
 };
-
-async function settingsForRun(): Promise<Record<string, string>> {
-  const { url, serviceRoleKey } = localSupabase();
-  const keys = Object.keys(RUN_SETTINGS);
-  const res = await fetch(`${url}/rest/v1/app_settings?select=key,value&key=in.(${keys.join(",")})`, {
-    headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}`, "Accept-Profile": "concierge" },
-  });
-  if (!res.ok) throw new Error(`Couldn't read the run's settings: ${res.status} ${await res.text()}`);
-  const before = Object.fromEntries(((await res.json()) as { key: string; value: string }[]).map((r) => [r.key, r.value]));
-  for (const [key, value] of Object.entries(RUN_SETTINGS)) await setSetting(key, value);
-  return before;
-}
 
 async function setSetting(key: string, value: string | number) {
   const { url, serviceRoleKey } = localSupabase();

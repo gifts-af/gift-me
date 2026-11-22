@@ -29,6 +29,7 @@ async function setSetting(key: string, value: number) {
 }
 
 async function tick(page: Page): Promise<void> {
+  // round-engine.spec.ts switches the engine off around its own tests, in parallel, so it can be off by the time this tick runs: switch it on and try again.
   for (let attempt = 0; attempt < 3; attempt++) {
     await setSetting("round_engine_enabled", 1);
     await setSetting("idea_engine_enabled", 1);
@@ -334,6 +335,9 @@ test("a linked list's gifts come first, priced by the fake Zinc, with no AI call
 
 // ─── fixing a failed gift ───────────────────────────────────────────────────
 
+/** The price_up round's other idea, by a fixed id so a lookup for it on load would be counted. */
+const NEXT_PRODUCT_ID = "B0E2ENEXT1";
+
 /** A snapshot of everything loading a page must not change (AC-4a). */
 async function untouched(b: Buyer, roundId: string, personId: string) {
   return {
@@ -343,10 +347,11 @@ async function untouched(b: Buyer, roundId: string, personId: string) {
     rejections: await rest(`rejections?select=id&user_id=eq.${b.id}`),
     budgets: await rest(`budgets?select=occasion_kind,amount_cents&person_id=eq.${personId}`),
     facts: await rest(`profile_facts?select=id,updated_at&person_id=eq.${personId}`),
-    // Orders on the buyer's key, and paid lookups for the gift. The confirm page does read the
-    // Zinc balance (GET /wallet/me, free) to show it (AC-4); that's a read, not an act.
-    zincOrders: await calls(FAKE_ZINC_URL, `POST /orders Bearer ${b.zincKey}`),
-    zincLookups: await calls(FAKE_ZINC_URL, FAKE_PRODUCTS.priceUp.productId),
+    // Every call on the buyer's key but the balance: the confirm page reads it (GET /wallet/me,
+    // free) to show it (AC-4); that's a read, not an act. And lookups for either idea's product,
+    // on any key.
+    zincOnKey: (await calls(FAKE_ZINC_URL, b.zincKey)) - (await calls(FAKE_ZINC_URL, `GET /wallet/me Bearer ${b.zincKey}`)),
+    zincLookups: [await calls(FAKE_ZINC_URL, FAKE_PRODUCTS.priceUp.productId), await calls(FAKE_ZINC_URL, NEXT_PRODUCT_ID)],
   };
 }
 
@@ -360,7 +365,7 @@ test("a price_up gift is bought at the new price after Check today's price, and 
   const { roundId, ideaIds } = await seedRound(b.id, person, {
     ideas: [
       { title: priceUp.title, totalCents: 2000, productId: priceUp.productId, url: priceUp.url },
-      { title: "Fly line dressing", totalCents: 1200 },
+      { title: "Fly line dressing", totalCents: 1200, productId: NEXT_PRODUCT_ID },
     ],
   });
   await signIn(page, b.creds);
@@ -372,9 +377,17 @@ test("a price_up gift is bought at the new price after Check today's price, and 
 
   // Loading every page, as a person, a link scanner or a prefetch would, changes nothing and calls no Zinc.
   const before = await untouched(b, roundId, person.personId);
-  for (const path of [`/rounds/${roundId}`, `/rounds/${roundId}/buy?ideas=${ideaIds[1]}`, `/rounds/${roundId}/fix/${failed.id}`]) {
+  const pages: [path: string, shows: string][] = [
+    [`/rounds/${roundId}`, "Gift for Nora"],
+    [`/rounds/${roundId}/buy?ideas=${ideaIds[1]}`, "Fly line dressing"],
+    [`/rounds/${roundId}/fix/${failed.id}`, "The price went up"],
+  ];
+  for (const [path, shows] of pages) {
     const res = await page.request.get(path);
     expect(res.status(), path).toBe(200);
+    // The page itself, not the sign-in page a redirect would answer 200 with.
+    expect(new URL(res.url()).pathname, path).toBe(path.split("?")[0]);
+    expect(await res.text(), path).toContain(shows);
   }
   expect(await untouched(b, roundId, person.personId)).toEqual(before);
 

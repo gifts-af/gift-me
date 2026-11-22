@@ -304,6 +304,26 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
     expect((await roundView(r.roundId, await signedIn(u), new Date()))?.nextBestIdeaId).toBe(r.ideaIds[2]);
   });
 
+  it("a Buy it yourself row shows only an https photo (AC-17)", async () => {
+    const u = await newUser();
+    const owner = await newUser();
+    const { listId, itemIds } = await newList(owner, [
+      { name: "Vase", url: "https://www.etsy.com/listing/1" },
+      { name: "Lamp", url: "https://www.etsy.com/listing/2" },
+      { name: "Mug", url: "https://www.etsy.com/listing/3" },
+    ]);
+    await pg.query("update lists.list_items set image_url = $2 where id = $1", [itemIds[0], "https://images.test/vase.jpg"]);
+    await pg.query("update lists.list_items set image_url = $2 where id = $1", [itemIds[1], "http://images.test/lamp.jpg"]);
+    await pg.query("update lists.list_items set image_url = $2 where id = $1", [itemIds[2], "list-photos/owner/mug.jpg"]);
+    const r = await newRound(u, { listId, ideas: [{ title: "Fly rod" }] });
+    const view = await roundView(r.roundId, await signedIn(u), new Date());
+    expect(view?.buyYourself.map((i) => [i.name, i.imageUrl])).toEqual([
+      ["Vase", "https://images.test/vase.jpg"],
+      ["Lamp", null],
+      ["Mug", null],
+    ]);
+  });
+
   it("after the link is cut, roundView marks the round's list ideas no longer shared", async () => {
     const u = await newUser();
     const owner = await newUser();

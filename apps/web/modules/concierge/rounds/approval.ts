@@ -432,7 +432,8 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
       productUrl: i.product_url ?? null,
       storeName: i.product_url ? storeName(i.product_url) : null,
       priceCents: i.price_cents ?? null,
-      imageUrl: i.image_url ?? null,
+      // https only, as idea photos are (AC-17): a list photo saved as a storage path or over http shows the gift icon.
+      imageUrl: i.image_url?.startsWith("https://") ? i.image_url : null,
       claimed: i.claimed && !i.claimed_by_me,
       claimedByMe: i.claimed_by_me,
     }));
