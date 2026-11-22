@@ -29,8 +29,8 @@ async function deleteLeftovers(name: string) {
   if (!res.ok) throw new Error(`Couldn't clear old test people: ${res.status} ${await res.text()}`);
 }
 
-// SECOND_USER saves a list through the lists RPC, as the app does, and we
-// return its share link path.
+// SECOND_USER's share link path. They keep one list across runs: a run makes
+// it with save_list_checked, as the app does, only when they have none yet.
 async function secondUserShareLink(): Promise<string> {
   const { token, id } = await signInApi(SECOND_USER);
   const headers = {
@@ -38,24 +38,33 @@ async function secondUserShareLink(): Promise<string> {
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
   };
-  const saved = await fetch(`${supabase.url}/rest/v1/rpc/save_list`, {
-    method: "POST",
-    headers: { ...headers, "Content-Profile": "lists" },
-    body: JSON.stringify({
-      p_list_id: null,
-      p_title: null,
-      p_items: [{ id: null, name: "Wool socks", price_cents: 1500, image_url: null, product_url: null, asin: null, source: "manual", added_at: null }],
-    }),
-  });
-  if (!saved.ok) throw new Error(`Couldn't create a list: ${saved.status} ${await saved.text()}`);
-  const listId = (await saved.json()) as string;
-  const read = await fetch(
-    `${supabase.url}/rest/v1/lists?select=share_token&id=eq.${listId}&owner_id=eq.${id}`,
-    { headers: { ...headers, "Accept-Profile": "lists" } },
-  );
-  const rows = (await read.json()) as { share_token: string }[];
-  expect(rows).toHaveLength(1);
-  return `/share/${rows[0].share_token}`;
+  const readToken = async (): Promise<string | null> => {
+    const read = await fetch(
+      `${supabase.url}/rest/v1/lists?select=share_token&owner_id=eq.${id}&order=created_at.asc&limit=1`,
+      { headers: { ...headers, "Accept-Profile": "lists" } },
+    );
+    if (!read.ok) throw new Error(`Couldn't read the list: ${read.status} ${await read.text()}`);
+    const rows = (await read.json()) as { share_token: string }[];
+    return rows[0]?.share_token ?? null;
+  };
+  let shareToken = await readToken();
+  if (!shareToken) {
+    const saved = await fetch(`${supabase.url}/rest/v1/rpc/save_list_checked`, {
+      method: "POST",
+      headers: { ...headers, "Content-Profile": "lists" },
+      body: JSON.stringify({
+        p_list_id: null,
+        p_title: null,
+        p_items: [{ id: null, name: "Wool socks", price_cents: 1500, image_url: null, product_url: null, asin: null, source: "manual", added_at: null }],
+        p_expected: null,
+      }),
+    });
+    // 409-style refusal (GL409) means another run made it first: read it again.
+    if (!saved.ok && !(await saved.text()).includes("GL409")) throw new Error(`Couldn't create a list: ${saved.status}`);
+    shareToken = await readToken();
+  }
+  expect(shareToken).toBeTruthy();
+  return `/share/${shareToken}`;
 }
 
 /** The person's birthday occasion, read with the service role (no RLS). */

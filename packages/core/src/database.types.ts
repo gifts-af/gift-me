@@ -2045,6 +2045,7 @@ export type Database = {
           outcome: string;
         }[];
       };
+      check_item_limit: { Args: { p_list_ids: string[] }; Returns: undefined };
       claim_for_order: {
         Args: { p_item_id: string; p_user_id: string };
         Returns: boolean;
@@ -2058,6 +2059,7 @@ export type Database = {
         Returns: undefined;
       };
       get_shared_list: { Args: { p_token: string }; Returns: Json };
+      is_allowed_image_url: { Args: { p_url: string }; Returns: boolean };
       is_amazon_host: { Args: { p_host: string }; Returns: boolean };
       link_person: {
         Args: { p_person_id: string; p_token: string };
@@ -2069,10 +2071,6 @@ export type Database = {
       release_for_order: {
         Args: { p_item_id: string; p_user_id: string };
         Returns: boolean;
-      };
-      save_list: {
-        Args: { p_items: Json; p_list_id: string; p_title: string };
-        Returns: string;
       };
       save_list_checked: {
         Args: {

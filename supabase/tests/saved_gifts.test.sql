@@ -11,7 +11,7 @@ select tests.create_user('dad@example.com', 'Dad') as dad \gset
 
 -- Dad keeps his own list; the buyer links their "Dad" to it.
 select tests.act_as(:'dad');
-select lists.save_list(null, 'Dad''s list', '[{"name": "Reel", "price_cents": 4900}]'::jsonb) as dad_list \gset
+select (lists.save_list_checked(null, 'Dad''s list', '[{"name": "Reel", "price_cents": 4900}]'::jsonb, null) ->> 'id')::uuid as dad_list \gset
 select share_token as token from lists.lists where id = :'dad_list' \gset
 
 select tests.act_as(:'buyer');

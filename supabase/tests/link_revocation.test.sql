@@ -13,9 +13,9 @@ select tests.create_user('friend@example.com', 'Friend') as friend \gset
 
 -- Mom keeps a list and shares her address; a friend claims a gift.
 select tests.act_as(:'mom');
-select lists.save_list(null, 'Birthday', '[
+select (lists.save_list_checked(null, 'Birthday', '[
   {"id": "aaaaaaaa-0000-4000-8000-000000000001", "name": "Mug set", "price_cents": 4200}
-]'::jsonb) as list_id \gset
+]'::jsonb, null) ->> 'id')::uuid as list_id \gset
 select share_token as old_token from lists.lists where id = :'list_id' \gset
 insert into public.account_addresses (recipient_first_name, recipient_last_name, address_line1, city, state, zip, share_for_gifts)
 values ('Mary', 'Allen', '12 Oak St', 'Dayton', 'OH', '45402', true);

@@ -169,7 +169,7 @@ select is((select count(*)::integer from concierge.orders where round_id = :'r8'
 select tests.act_as(:'owner_id');
 insert into public.account_addresses (recipient_first_name, recipient_last_name, address_line1, city, state, zip, share_for_gifts)
 values ('Mary', 'Allen', '12 Oak St', 'Dayton', 'OH', '45402', true);
-select lists.save_list(null, 'Birthday', '[]'::jsonb) as list_id \gset
+select (lists.save_list_checked(null, 'Birthday', '[]'::jsonb, null) ->> 'id')::uuid as list_id \gset
 select share_token as token from lists.lists where id = :'list_id' \gset
 select tests.reset_role();
 select tests.as_round(:'buyer') as r9 \gset
