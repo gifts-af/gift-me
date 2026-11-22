@@ -1,4 +1,4 @@
-import { lookupProductLink } from "@/modules/lists/lib/product-link.js";
+import { lookupProductLink } from "@/modules/lists/lib/product-link";
 import type { LookupStorePageResult } from "@/modules/lists/lib/store-page-fetch";
 
 // Reading a pasted gift link for other parts of the app (ALL-93's saved

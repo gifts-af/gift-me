@@ -1,11 +1,12 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { GiftClaim, SharedGift, SharedList as SharedListData } from "@/modules/lists/lib/lists";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/modules/lists/actions/claims", () => ({ claimGift: vi.fn(), unclaimGift: vi.fn() }));
 const { claimGift } = await import("@/modules/lists/actions/claims");
-const { default: SharedList } = await import("../shared-list.jsx");
+const { default: SharedList } = await import("../shared-list");
 
 beforeAll(() => {
   // jsdom has <dialog> but not its modal methods.
@@ -14,7 +15,7 @@ beforeAll(() => {
   };
 });
 
-const item = (id, name, claim = null) => ({
+const item = (id: string, name: string, claim: GiftClaim | null = null): SharedGift => ({
   id,
   name,
   priceCents: 3200,
@@ -26,7 +27,10 @@ const item = (id, name, claim = null) => ({
   claim,
 });
 
-const guest = { signedIn: false, email: null, name: null };
+const guest: SharedListData["viewer"] = { signedIn: false, email: null, name: null };
+
+// The heading fields, for tests that aren't about the heading.
+const unnamed = { cardEnabled: false, ownerName: null, linkedPerson: null };
 
 describe("SharedList", () => {
   it("lets a friend claim and shows who claimed what", () => {
@@ -51,7 +55,10 @@ describe("SharedList", () => {
 
   it("offers a quiet way to find out about GiftsAF, after the gifts (ALL-46)", () => {
     render(
-      <SharedList token="t" list={{ title: "Sam's list", isOwner: false, viewer: guest, items: [item("a", "Board game")] }} />,
+      <SharedList
+        token="t"
+        list={{ ...unnamed, title: "Sam's list", isOwner: false, viewer: guest, items: [item("a", "Board game")] }}
+      />,
     );
     const about = screen.getByRole("link", { name: "What is GiftsAF?" });
     expect(about).toHaveAttribute("href", "/");
@@ -63,7 +70,7 @@ describe("SharedList", () => {
     render(
       <SharedList
         token="t"
-        list={{ title: "My list", isOwner: true, viewer: guest, items: [item("a", "Board game")] }}
+        list={{ ...unnamed, title: "My list", isOwner: true, viewer: guest, items: [item("a", "Board game")] }}
       />,
     );
     expect(screen.getByText(/This is your list\. Claims are hidden from you/)).toBeInTheDocument();
@@ -79,7 +86,7 @@ describe("SharedList", () => {
     render(
       <SharedList
         token="t"
-        list={{ title: "Sam's list", isOwner: false, viewer: guest, items: [item("a", "Board game")] }}
+        list={{ ...unnamed, title: "Sam's list", isOwner: false, viewer: guest, items: [item("a", "Board game")] }}
       />,
     );
     await userEvent.click(screen.getByRole("button", { name: "Claim Board game" }));
@@ -101,7 +108,10 @@ describe("SharedList", () => {
 
     it("prefers the linked person's name", () => {
       render(
-        <SharedList token="t" list={{ ...base, title: "My list", ownerName: "Sam Lee", linkedPerson: { id: "p", name: "Sammy" } }} />,
+        <SharedList
+          token="t"
+          list={{ ...base, title: "My list", ownerName: "Sam Lee", linkedPerson: { id: "p", name: "Sammy" } }}
+        />,
       );
       expect(heading()).toHaveTextContent("Sammy's list");
     });
@@ -122,12 +132,19 @@ describe("SharedList", () => {
     });
 
     it("still shows the owner their own title with the switch off", () => {
-      render(<SharedList token="t" list={{ ...base, cardEnabled: false, isOwner: true, title: "Birthday", ownerName: "Sam Lee", linkedPerson: null }} />);
+      render(
+        <SharedList
+          token="t"
+          list={{ ...base, cardEnabled: false, isOwner: true, title: "Birthday", ownerName: "Sam Lee", linkedPerson: null }}
+        />,
+      );
       expect(heading()).toHaveTextContent(/^Birthday$/);
     });
 
     it("shows the owner their own title", () => {
-      render(<SharedList token="t" list={{ ...base, isOwner: true, title: "Birthday", ownerName: "Sam Lee", linkedPerson: null }} />);
+      render(
+        <SharedList token="t" list={{ ...base, isOwner: true, title: "Birthday", ownerName: "Sam Lee", linkedPerson: null }} />,
+      );
       expect(heading()).toHaveTextContent("Birthday");
     });
 
@@ -158,7 +175,11 @@ describe("SharedList", () => {
 
     it("puts nav in the top bar", () => {
       render(
-        <SharedList token="t" nav={<span>Nav here</span>} list={{ ...base, title: "My list", ownerName: "Sam", linkedPerson: null }} />,
+        <SharedList
+          token="t"
+          nav={<span>Nav here</span>}
+          list={{ ...base, title: "My list", ownerName: "Sam", linkedPerson: null }}
+        />,
       );
       expect(screen.getByText("Nav here")).toBeInTheDocument();
     });

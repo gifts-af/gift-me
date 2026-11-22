@@ -1,0 +1,30 @@
+import { MAX_PRICE_CENTS } from "@gifts-af/core/store-page/limits";
+
+// The limit lives in core, with the store-page reader that also enforces it.
+export { MAX_PRICE_CENTS };
+
+const CURRENCY = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+
+// Prices are carried as integer cents everywhere, so the list total is exact.
+// Formatting is the only place a price ever becomes a string.
+export function formatCents(cents: number | null | undefined): string {
+  if (typeof cents !== "number" || !Number.isFinite(cents)) return "--";
+  return CURRENCY.format(cents / 100);
+}
+
+export function parsePriceToCents(raw: unknown): number | null {
+  if (typeof raw !== "string") return null;
+  const cleaned = raw.replace(/[$£€,\s]/g, "");
+  if (cleaned === "" || !/^\d*\.?\d*$/.test(cleaned) || cleaned === ".") return null;
+  const value = Number(cleaned);
+  if (!Number.isFinite(value) || value < 0) return null;
+  // Round rather than truncate: 19.99 * 100 === 1998.9999999999998, and
+  // truncating that would silently charge a cent less.
+  const cents = Math.round(value * 100);
+  return cents > MAX_PRICE_CENTS ? null : cents;
+}
+
+export function centsToInputValue(cents: number | null | undefined): string {
+  if (typeof cents !== "number" || !Number.isFinite(cents)) return "";
+  return (cents / 100).toFixed(2);
+}

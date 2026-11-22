@@ -1,23 +1,25 @@
-import Link from 'next/link'
-import { useState } from 'react'
-import Modal from './modal.jsx'
-import { Banner, buttonClass, inputClass, labelClass } from './ui.jsx'
+import Link from "next/link";
+import { useState, type FormEvent } from "react";
+import type { ClaimResult } from "@/modules/lists/actions/claims";
+import type { Gift, SharedList } from "@/modules/lists/lib/lists";
+import Modal from "./modal";
+import { Banner, buttonClass, inputClass, labelClass } from "./ui";
 
-const NAME_KEY = 'giftme:guest-name'
-const MAX_NAME_LENGTH = 80
+const NAME_KEY = "giftme:guest-name";
+const MAX_NAME_LENGTH = 80;
 
 // Storage can throw (private mode, blocked site data); a name is a nicety.
 function readSavedName() {
   try {
-    return window.localStorage.getItem(NAME_KEY) ?? ''
+    return window.localStorage.getItem(NAME_KEY) ?? "";
   } catch {
-    return ''
+    return "";
   }
 }
 
-function saveName(name) {
+function saveName(name: string) {
   try {
-    window.localStorage.setItem(NAME_KEY, name)
+    window.localStorage.setItem(NAME_KEY, name);
   } catch {
     // Not worth bothering anyone about.
   }
@@ -28,40 +30,49 @@ function saveName(name) {
  * success the parent closes us, on failure we show its message. A claim that
  * lost the race says so here and offers only Cancel (mock-up "shared").
  */
-export default function ClaimDialog({ gift, viewer, loginHref, onConfirm, onClose }) {
-  const [name, setName] = useState(() => (viewer.signedIn ? '' : readSavedName()))
-  const [nameError, setNameError] = useState('')
-  const [error, setError] = useState('')
-  const [taken, setTaken] = useState(false)
-  const [pending, setPending] = useState(false)
+export type ClaimDialogProps = {
+  gift: Pick<Gift, "name">;
+  viewer: SharedList["viewer"];
+  loginHref: string;
+  // `name` is undefined for a signed-in viewer: the database names them.
+  onConfirm: (name: string | undefined) => Promise<ClaimResult>;
+  onClose: () => void;
+};
 
-  async function handleSubmit(event) {
-    event.preventDefault()
-    if (pending) return
+export default function ClaimDialog({ gift, viewer, loginHref, onConfirm, onClose }: ClaimDialogProps) {
+  const [name, setName] = useState(() => (viewer.signedIn ? "" : readSavedName()));
+  const [nameError, setNameError] = useState("");
+  const [error, setError] = useState("");
+  const [taken, setTaken] = useState(false);
+  const [pending, setPending] = useState(false);
 
-    const trimmed = name.trim()
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (pending) return;
+
+    const trimmed = name.trim();
     if (!viewer.signedIn && !trimmed) {
-      setNameError('Enter your name so others know who is buying this.')
-      return
+      setNameError("Enter your name so others know who is buying this.");
+      return;
     }
-    setNameError('')
-    setError('')
-    setPending(true)
+    setNameError("");
+    setError("");
+    setPending(true);
 
-    let result
+    let result: ClaimResult;
     try {
-      result = await onConfirm(viewer.signedIn ? undefined : trimmed)
+      result = await onConfirm(viewer.signedIn ? undefined : trimmed);
     } catch {
-      result = { ok: false, error: "This gift couldn't be claimed. Check your connection and try again." }
+      result = { ok: false, error: "This gift couldn't be claimed. Check your connection and try again." };
     }
     // On success the parent unmounts us; only a failure needs local state.
     if (!result.ok) {
-      setPending(false)
-      if (result.alreadyClaimed) setTaken(true)
-      else setError(result.error)
-      return
+      setPending(false);
+      if (result.alreadyClaimed) setTaken(true);
+      else setError(result.error);
+      return;
     }
-    if (!viewer.signedIn) saveName(trimmed)
+    if (!viewer.signedIn) saveName(trimmed);
   }
 
   return (
@@ -81,13 +92,12 @@ export default function ClaimDialog({ gift, viewer, loginHref, onConfirm, onClos
         ) : (
           <>
             <p id="claim-dialog-desc" className="text-[15px] text-muted-foreground">
-              Only claim it if you’ll definitely buy it. Other friends will see it’s claimed; the
-              list’s owner won’t.
+              Only claim it if you’ll definitely buy it. Other friends will see it’s claimed; the list’s owner won’t.
             </p>
 
             {viewer.signedIn ? (
               <p className="text-[13px] text-muted-foreground">
-                Claiming as <strong className="text-foreground">{viewer.name ?? viewer.email ?? 'your account'}</strong>.
+                Claiming as <strong className="text-foreground">{viewer.name ?? viewer.email ?? "your account"}</strong>.
               </p>
             ) : (
               <>
@@ -103,8 +113,8 @@ export default function ClaimDialog({ gift, viewer, loginHref, onConfirm, onClos
                     className={inputClass}
                     value={name}
                     onChange={(event) => setName(event.target.value)}
-                    aria-invalid={nameError ? 'true' : undefined}
-                    aria-describedby={nameError ? 'claim-name-error' : undefined}
+                    aria-invalid={nameError ? "true" : undefined}
+                    aria-describedby={nameError ? "claim-name-error" : undefined}
                     required
                     autoFocus
                   />
@@ -115,10 +125,10 @@ export default function ClaimDialog({ gift, viewer, loginHref, onConfirm, onClos
                   )}
                 </div>
                 <p className="text-[13px] text-muted-foreground">
-                  A guest claim can’t be undone.{' '}
+                  A guest claim can’t be undone.{" "}
                   <Link href={loginHref} className="text-foreground underline underline-offset-[3px]">
                     Sign in
-                  </Link>{' '}
+                  </Link>{" "}
                   to be able to unclaim it if plans change.
                 </p>
               </>
@@ -131,7 +141,7 @@ export default function ClaimDialog({ gift, viewer, loginHref, onConfirm, onClos
             )}
 
             <button type="submit" className={`${buttonClass.primary} w-full`} disabled={pending} aria-busy={pending}>
-              {pending ? 'Claiming…' : 'Claim gift'}
+              {pending ? "Claiming…" : "Claim gift"}
             </button>
           </>
         )}
@@ -140,5 +150,5 @@ export default function ClaimDialog({ gift, viewer, loginHref, onConfirm, onClos
         </button>
       </form>
     </Modal>
-  )
+  );
 }

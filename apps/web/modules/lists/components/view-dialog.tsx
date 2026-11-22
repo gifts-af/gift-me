@@ -1,13 +1,19 @@
-import { storeName } from '@/modules/lists/lib/product-link.js'
-import Modal from './modal.jsx'
-import { buttonClass } from './ui.jsx'
+import type { Gift } from "@/modules/lists/lib/lists";
+import { storeName } from "@/modules/lists/lib/product-link";
+import Modal from "./modal";
+import { buttonClass } from "./ui";
 
 /**
  * Shown before opening an unclaimed gift's product page, as a reminder to
  * come back and claim it. The "go" choice is a real link so the new tab
  * isn't eaten by a popup blocker.
  */
-export default function ViewDialog({ gift, onClose }) {
+export type ViewDialogProps = {
+  gift: Pick<Gift, "name" | "productUrl">;
+  onClose: () => void;
+};
+
+export default function ViewDialog({ gift, onClose }: ViewDialogProps) {
   return (
     <Modal labelledBy="view-dialog-title" describedBy="view-dialog-desc" onClose={onClose}>
       <h2 id="view-dialog-title" className="text-[17px] font-semibold">
@@ -18,17 +24,17 @@ export default function ViewDialog({ gift, onClose }) {
       </p>
       <a
         className={`${buttonClass.primary} w-full whitespace-normal text-center`}
-        href={gift.productUrl}
+        href={gift.productUrl ?? undefined}
         target="_blank"
         rel="noopener noreferrer"
         onClick={onClose}
       >
-        Open on {storeName(gift.productUrl)}, and I’ll claim it if I buy it
+        Open on {storeName(gift.productUrl ?? "")}, and I’ll claim it if I buy it
         <span className="sr-only"> (opens in a new tab)</span>
       </a>
       <button type="button" className={`${buttonClass.link} self-center`} onClick={onClose}>
         Cancel
       </button>
     </Modal>
-  )
+  );
 }

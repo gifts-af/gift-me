@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import ViewDialog from "../view-dialog.jsx";
+import ViewDialog from "../view-dialog";
 
 beforeAll(() => {
   // jsdom has <dialog> but not its modal methods.

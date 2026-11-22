@@ -1,6 +1,6 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
-import AddGiftPanel from "../add-gift-panel.jsx";
+import AddGiftPanel from "../add-gift-panel";
 
 // The details, image URL included, sit behind "Add by hand" (mock-up "list").
 function openDetails() {
@@ -8,7 +8,7 @@ function openDetails() {
   fireEvent.click(screen.getByRole("button", { name: "Add by hand" }));
 }
 
-function fireLoad(img, naturalWidth) {
+function fireLoad(img: HTMLElement, naturalWidth: number) {
   Object.defineProperty(img, "naturalWidth", { configurable: true, value: naturalWidth });
   fireEvent.load(img);
 }

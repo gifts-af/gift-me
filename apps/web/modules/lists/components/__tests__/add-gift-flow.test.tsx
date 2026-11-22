@@ -1,9 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import AddGiftPanel from "../add-gift-panel.jsx";
+import type { PageProduct } from "@gifts-af/core/store-page";
+import type { AmazonLookupResult } from "@/modules/lists/lib/amazon-lookup";
+import type { ReadPage } from "@/modules/lists/lib/gift-link";
+import AddGiftPanel, { type AddGiftPanelProps } from "../add-gift-panel";
 
-async function lookUp(url) {
+type LookUpAmazon = NonNullable<AddGiftPanelProps["lookUpAmazon"]>;
+
+// A store page read that found a product, with only the fields these tests use.
+function pageRead(product: Pick<PageProduct, "name" | "priceCents" | "imageUrl">): Awaited<ReturnType<ReadPage>> {
+  return { ok: true, product: { isProduct: true, productId: null, canonicalUrl: null, ...product } };
+}
+
+async function lookUp(url: string) {
   const onAdd = vi.fn();
   render(<AddGiftPanel onAdd={onAdd} />);
   // Paste, as a person does: typing a long URL a key at a time made this the
@@ -40,9 +50,7 @@ describe("adding a gift", () => {
   });
 
   it("takes a Walmart link, fills the name, and waits for the price (ALL-10)", async () => {
-    const onAdd = await lookUp(
-      "https://www.walmart.com/ip/Great-Value-Long-Grain-Enriched-Rice-32-oz/10315394",
-    );
+    const onAdd = await lookUp("https://www.walmart.com/ip/Great-Value-Long-Grain-Enriched-Rice-32-oz/10315394");
     await waitFor(() => expect(screen.getByLabelText("Price")).toHaveFocus());
     expect(screen.getByLabelText("Gift name")).toHaveValue("Great Value Long Grain Enriched Rice 32 Oz");
     expect(screen.getByText(/can’t read prices from/)).toHaveTextContent("walmart.com");
@@ -88,7 +96,7 @@ describe("adding a gift", () => {
 describe("adding a gift from another store while signed in (ALL-10)", () => {
   const WALMART = "https://www.walmart.com/ip/Great-Value-Long-Grain-Enriched-Rice-32-oz/10315394";
 
-  async function lookUpWith(readStorePage, url) {
+  async function lookUpWith(readStorePage: ReadPage, url: string) {
     const onAdd = vi.fn();
     render(<AddGiftPanel onAdd={onAdd} readStorePage={readStorePage} />);
     await userEvent.click(screen.getByLabelText("Paste a link"));
@@ -98,10 +106,9 @@ describe("adding a gift from another store while signed in (ALL-10)", () => {
   }
 
   it("fills the name, price and photo read from the store page", async () => {
-    const readStorePage = vi.fn(async () => ({
-      ok: true,
-      product: { name: "Great Value Rice, 32 oz", priceCents: 182, imageUrl: "https://i5.walmartimages.com/rice.jpeg" },
-    }));
+    const readStorePage = vi.fn<ReadPage>(async () =>
+      pageRead({ name: "Great Value Rice, 32 oz", priceCents: 182, imageUrl: "https://i5.walmartimages.com/rice.jpeg" }),
+    );
     const onAdd = await lookUpWith(readStorePage, WALMART);
     expect(await screen.findByText(/\$1\.82 · found on walmart\.com/)).toBeInTheDocument();
     expect(readStorePage).toHaveBeenCalledWith(WALMART);
@@ -117,10 +124,9 @@ describe("adding a gift from another store while signed in (ALL-10)", () => {
   });
 
   it("asks only for the price when the page has no price (Target)", async () => {
-    const readStorePage = vi.fn(async () => ({
-      ok: true,
-      product: { name: "Scarecrow T-Shirt", priceCents: null, imageUrl: "https://target.scene7.com/shirt" },
-    }));
+    const readStorePage = vi.fn<ReadPage>(async () =>
+      pageRead({ name: "Scarecrow T-Shirt", priceCents: null, imageUrl: "https://target.scene7.com/shirt" }),
+    );
     await lookUpWith(readStorePage, "https://www.target.com/p/scarecrow-tee/-/A-1000465184");
     await waitFor(() => expect(screen.getByLabelText("Price")).toHaveFocus());
     expect(screen.getByLabelText("Gift name")).toHaveValue("Scarecrow T-Shirt");
@@ -129,7 +135,7 @@ describe("adding a gift from another store while signed in (ALL-10)", () => {
   });
 
   it("falls back to the name in the link when the store blocks us", async () => {
-    const readStorePage = vi.fn(async () => ({ ok: false, reason: "http_status" }));
+    const readStorePage = vi.fn<ReadPage>(async () => ({ ok: false, reason: "http_status" }));
     await lookUpWith(readStorePage, WALMART);
     await waitFor(() => expect(screen.getByLabelText("Price")).toHaveFocus());
     expect(screen.getByLabelText("Gift name")).toHaveValue("Great Value Long Grain Enriched Rice 32 Oz");
@@ -137,14 +143,13 @@ describe("adding a gift from another store while signed in (ALL-10)", () => {
   });
 
   it("falls back the same way when the server call itself fails", async () => {
-    const readStorePage = vi.fn(async () => {
+    const readStorePage = vi.fn<ReadPage>(async () => {
       throw new Error("offline");
     });
     await lookUpWith(readStorePage, WALMART);
     await waitFor(() => expect(screen.getByLabelText("Price")).toHaveFocus());
     expect(screen.getByLabelText("Gift name")).toHaveValue("Great Value Long Grain Enriched Rice 32 Oz");
   });
-
 });
 
 // Amazon answers our server's page reads with a bot check, and its ASIN photo
@@ -157,7 +162,7 @@ describe("adding an Amazon gift while signed in (ALL-141)", () => {
   const GUESSED_PHOTO = "https://images-na.ssl-images-amazon.com/images/P/B0G5Z36T3N.01._SCLZZZZZZZ_.jpg";
   const REAL_PHOTO = "https://m.media-amazon.com/images/I/51jwXyqEB3L._AC_SX300_SY300_QL70_ML2_.jpg";
 
-  async function lookUpWith(lookUpAmazon, url, readStorePage = vi.fn()) {
+  async function lookUpWith(lookUpAmazon: LookUpAmazon, url: string, readStorePage: ReadPage = vi.fn<ReadPage>()) {
     const onAdd = vi.fn();
     render(<AddGiftPanel onAdd={onAdd} readStorePage={readStorePage} lookUpAmazon={lookUpAmazon} />);
     await userEvent.click(screen.getByLabelText("Paste a link"));
@@ -167,11 +172,11 @@ describe("adding an Amazon gift while signed in (ALL-141)", () => {
   }
 
   it("looks the ASIN up and fills the real name, price and photo, without reading the page", async () => {
-    const lookUpAmazon = vi.fn(async () => ({
+    const lookUpAmazon = vi.fn<LookUpAmazon>(async () => ({
       ok: true,
       product: { name: "SOULWIT Headband Protector", priceCents: 1195, imageUrl: REAL_PHOTO, productId: "B0G5Z36T3N" },
     }));
-    const readStorePage = vi.fn();
+    const readStorePage = vi.fn<ReadPage>();
     const onAdd = await lookUpWith(lookUpAmazon, AMAZON, readStorePage);
     expect(await screen.findByText(/\$11\.95 · found on Amazon/)).toBeInTheDocument();
     expect(lookUpAmazon).toHaveBeenCalledWith("B0G5Z36T3N");
@@ -189,7 +194,7 @@ describe("adding an Amazon gift while signed in (ALL-141)", () => {
   });
 
   it("keeps the guessed photo when Zinc has none, and asks for a missing price", async () => {
-    const lookUpAmazon = vi.fn(async () => ({
+    const lookUpAmazon = vi.fn<LookUpAmazon>(async () => ({
       ok: true,
       product: { name: "Wool Hiking Socks, 3 pairs", priceCents: null, imageUrl: null, productId: "B0EXAMPLE1" },
     }));
@@ -203,7 +208,7 @@ describe("adding an Amazon gift while signed in (ALL-141)", () => {
   });
 
   it("keeps the name from the link when Zinc has no name", async () => {
-    const lookUpAmazon = vi.fn(async () => ({
+    const lookUpAmazon = vi.fn<LookUpAmazon>(async () => ({
       ok: true,
       product: { name: null, priceCents: 2400, imageUrl: REAL_PHOTO, productId: "B0EXAMPLE1" },
     }));
@@ -213,7 +218,7 @@ describe("adding an Amazon gift while signed in (ALL-141)", () => {
   });
 
   it("says only what Zinc gave when it gave just the name", async () => {
-    const lookUpAmazon = vi.fn(async () => ({
+    const lookUpAmazon = vi.fn<LookUpAmazon>(async () => ({
       ok: true,
       product: { name: "Wool Hiking Socks, 3 pairs", priceCents: null, imageUrl: null, productId: "B0EXAMPLE1" },
     }));
@@ -222,7 +227,7 @@ describe("adding an Amazon gift while signed in (ALL-141)", () => {
   });
 
   it("ignores an answer for a different product", async () => {
-    const lookUpAmazon = vi.fn(async () => ({
+    const lookUpAmazon = vi.fn<LookUpAmazon>(async () => ({
       ok: true,
       product: { name: "Something else", priceCents: 999, imageUrl: REAL_PHOTO, productId: "B0OTHER000" },
     }));
@@ -235,10 +240,10 @@ describe("adding an Amazon gift while signed in (ALL-141)", () => {
   });
 
   it("never lets a slow Amazon lookup overwrite a newer paste", async () => {
-    let answerFirst;
-    const lookUpAmazon = vi.fn((asin) =>
+    let answerFirst!: (result: AmazonLookupResult) => void;
+    const lookUpAmazon = vi.fn<LookUpAmazon>((asin) =>
       asin === "B0EXAMPLE1"
-        ? new Promise((resolve) => {
+        ? new Promise<AmazonLookupResult>((resolve) => {
             answerFirst = resolve;
           })
         : Promise.resolve({
@@ -246,7 +251,7 @@ describe("adding an Amazon gift while signed in (ALL-141)", () => {
             product: { name: "SOULWIT Headband Protector", priceCents: 1195, imageUrl: REAL_PHOTO, productId: "B0G5Z36T3N" },
           }),
     );
-    render(<AddGiftPanel onAdd={vi.fn()} readStorePage={vi.fn()} lookUpAmazon={lookUpAmazon} />);
+    render(<AddGiftPanel onAdd={vi.fn()} readStorePage={vi.fn<ReadPage>()} lookUpAmazon={lookUpAmazon} />);
     const field = screen.getByLabelText("Paste a link");
     await userEvent.click(field);
     await userEvent.paste("https://www.amazon.com/Wool-Hiking-Socks/dp/B0EXAMPLE1");
@@ -268,7 +273,7 @@ describe("adding an Amazon gift while signed in (ALL-141)", () => {
   });
 
   it("drops a stand-in fixture price once Zinc answers without one", async () => {
-    const lookUpAmazon = vi.fn(async () => ({
+    const lookUpAmazon = vi.fn<LookUpAmazon>(async () => ({
       ok: true,
       product: { name: "Echo Dot (3rd Gen)", priceCents: null, imageUrl: REAL_PHOTO, productId: "B07FZ8S74R" },
     }));
@@ -277,10 +282,10 @@ describe("adding an Amazon gift while signed in (ALL-141)", () => {
     expect(screen.getByLabelText("Price")).toHaveValue("");
   });
 
-  for (const reason of ["off", "not_configured", "over_limit", "not_found", "unavailable"]) {
+  for (const reason of ["off", "not_configured", "over_limit", "not_found", "unavailable"] as const) {
     it(`behaves as before when the lookup is ${reason}`, async () => {
-      const lookUpAmazon = vi.fn(async () => ({ ok: false, reason }));
-      const readStorePage = vi.fn();
+      const lookUpAmazon = vi.fn<LookUpAmazon>(async () => ({ ok: false, reason }));
+      const readStorePage = vi.fn<ReadPage>();
       const onAdd = await lookUpWith(lookUpAmazon, "https://www.amazon.com/Wool-Hiking-Socks/dp/B0EXAMPLE1", readStorePage);
       await waitFor(() => expect(screen.getByLabelText("Price")).toHaveFocus());
       expect(readStorePage).not.toHaveBeenCalled();
@@ -293,7 +298,7 @@ describe("adding an Amazon gift while signed in (ALL-141)", () => {
   }
 
   it("behaves as before when the server call itself fails", async () => {
-    const lookUpAmazon = vi.fn(async () => {
+    const lookUpAmazon = vi.fn<LookUpAmazon>(async () => {
       throw new Error("offline");
     });
     await lookUpWith(lookUpAmazon, AMAZON);
@@ -314,7 +319,7 @@ describe("pasting a new link starts a fresh draft (ALL-91)", () => {
   const BANANA = "https://bananarepublic.gap.com/browse/product.do?pid=795219002";
   const WALMART = "https://www.walmart.com/ip/Apple-AirTag-2nd-Generation-1-Pack/19390102536";
 
-  async function paste(url) {
+  async function paste(url: string) {
     const field = screen.getByLabelText("Paste a link");
     await userEvent.clear(field);
     await userEvent.paste(url);
@@ -322,9 +327,9 @@ describe("pasting a new link starts a fresh draft (ALL-91)", () => {
   }
 
   it("clears the previous link's price and photo", async () => {
-    const readStorePage = vi.fn(async (url) =>
+    const readStorePage = vi.fn<ReadPage>(async (url) =>
       url.includes("bananarepublic")
-        ? { ok: true, product: { name: "Slim Chino", priceCents: 1997, imageUrl: "https://content.gapinc.com/chino.png" } }
+        ? pageRead({ name: "Slim Chino", priceCents: 1997, imageUrl: "https://content.gapinc.com/chino.png" })
         : { ok: false, reason: "nothing_found" },
     );
     render(<AddGiftPanel onAdd={vi.fn()} readStorePage={readStorePage} />);

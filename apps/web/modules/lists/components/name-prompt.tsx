@@ -1,24 +1,36 @@
-import { useId, useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import { useId, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
-const SKIP_KEY = 'giftsaf:skip-name-prompt'
+const SKIP_KEY = "giftsaf:skip-name-prompt";
+
+export type SaveNameResult = { ok: true } | { ok: false; error: string };
+
+export type NamePromptProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  saveName: (name: string) => Promise<SaveNameResult>;
+  // Resolves true once the link is on the clipboard.
+  copyLink: () => Promise<boolean>;
+  onNamed: () => void;
+  onCopied?: () => void;
+};
 
 // Skip is remembered on this device only, and storage can be missing or
 // blocked (private windows): then the prompt simply asks again next time.
 export function skippedNamePrompt() {
   try {
-    return localStorage.getItem(SKIP_KEY) === '1'
+    return localStorage.getItem(SKIP_KEY) === "1";
   } catch {
-    return false
+    return false;
   }
 }
 
 function rememberSkip() {
   try {
-    localStorage.setItem(SKIP_KEY, '1')
+    localStorage.setItem(SKIP_KEY, "1");
   } catch {
     // Nothing to do: it asks again next time.
   }
@@ -30,41 +42,41 @@ function rememberSkip() {
  * ever what they type (T42). Both buttons copy the link, from the click itself
  * so the clipboard still allows it; "Save" also saves the name.
  */
-export default function NamePrompt({ open, onOpenChange, saveName, copyLink, onNamed, onCopied }) {
-  const id = useId()
-  const [name, setName] = useState('')
-  const [error, setError] = useState(null)
-  const [busy, setBusy] = useState(false)
+export default function NamePrompt({ open, onOpenChange, saveName, copyLink, onNamed, onCopied }: NamePromptProps) {
+  const id = useId();
+  const [name, setName] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   async function save() {
-    const value = name.trim()
+    const value = name.trim();
     if (!value) {
-      setError('Type a name, or tap Skip.')
-      return
+      setError("Type a name, or tap Skip.");
+      return;
     }
-    setBusy(true)
-    setError(null)
-    const copied = copyLink()
-    let result
+    setBusy(true);
+    setError(null);
+    const copied = copyLink();
+    let result: SaveNameResult;
     try {
-      result = await saveName(value)
+      result = await saveName(value);
     } catch {
-      result = { ok: false, error: "Your name couldn't be saved. Try again." }
+      result = { ok: false, error: "Your name couldn't be saved. Try again." };
     }
-    if (await copied) onCopied?.()
-    setBusy(false)
+    if (await copied) onCopied?.();
+    setBusy(false);
     if (!result.ok) {
-      setError(result.error)
-      return
+      setError(result.error);
+      return;
     }
-    onNamed()
-    onOpenChange(false)
+    onNamed();
+    onOpenChange(false);
   }
 
   function skip() {
-    rememberSkip()
-    void copyLink().then((ok) => ok && onCopied?.())
-    onOpenChange(false)
+    rememberSkip();
+    void copyLink().then((ok) => ok && onCopied?.());
+    onOpenChange(false);
   }
 
   return (
@@ -78,8 +90,8 @@ export default function NamePrompt({ open, onOpenChange, saveName, copyLink, onN
           className="flex flex-col gap-3"
           noValidate
           onSubmit={(event) => {
-            event.preventDefault()
-            void save()
+            event.preventDefault();
+            void save();
           }}
         >
           <div className="flex flex-col gap-1.5">
@@ -109,5 +121,5 @@ export default function NamePrompt({ open, onOpenChange, saveName, copyLink, onN
         </form>
       </DialogContent>
     </Dialog>
-  )
+  );
 }

@@ -1,25 +1,33 @@
-import { X } from 'lucide-react'
-import { useState } from 'react'
-import { storeName } from '@/modules/lists/lib/product-link.js'
-import { formatCents } from '@/modules/lists/lib/format.js'
+import { X } from "lucide-react";
+import { useState, type ReactNode, type SyntheticEvent } from "react";
+import type { Gift } from "@/modules/lists/lib/lists";
+import { storeName } from "@/modules/lists/lib/product-link";
+import { formatCents } from "@/modules/lists/lib/format";
 
 /**
  * `onView`, when given, intercepts the product link (the shared list asks
  * "are you going to buy?" first). `actions` renders under the details, e.g.
  * a gift's claim status.
  */
-export default function GiftCard({ gift, onRemove, onView, actions }) {
+export type GiftCardProps<G extends Gift = Gift> = {
+  gift: G;
+  onRemove?: (id: string) => void;
+  onView?: (gift: G) => void;
+  actions?: ReactNode;
+};
+
+export default function GiftCard<G extends Gift>({ gift, onRemove, onView, actions }: GiftCardProps<G>) {
   // Never reassign img.src inside onError: if the fallback also fails the
   // handler re-fires on the new src and loops. Track a flag instead.
-  const [imageFailed, setImageFailed] = useState(false)
-  const showImage = gift.imageUrl && !imageFailed
+  const [imageFailed, setImageFailed] = useState(false);
+  const showImage = gift.imageUrl && !imageFailed;
 
   // Amazon's P/{ASIN}.01._SCLZZZZZZZ_.jpg CDN returns a 1x1 GIF for ASINs
   // it doesn't have a product photo for -- HTTP 200, so onError never fires.
   // Treat any tiny image as absent, so the placeholder shows instead of an
   // empty box.
-  function handleLoad(event) {
-    if (event.currentTarget.naturalWidth <= 1) setImageFailed(true)
+  function handleLoad(event: SyntheticEvent<HTMLImageElement>) {
+    if (event.currentTarget.naturalWidth <= 1) setImageFailed(true);
   }
 
   return (
@@ -29,7 +37,7 @@ export default function GiftCard({ gift, onRemove, onView, actions }) {
           // Decorative: the name is visible text directly below, and alt={name}
           // would make a screen reader announce it twice.
           <img
-            src={gift.imageUrl}
+            src={gift.imageUrl ?? undefined}
             alt=""
             className="h-full w-full object-contain"
             onLoad={handleLoad}
@@ -52,8 +60,8 @@ export default function GiftCard({ gift, onRemove, onView, actions }) {
           onClick={
             onView &&
             ((event) => {
-              event.preventDefault()
-              onView(gift)
+              event.preventDefault();
+              onView(gift);
             })
           }
         >
@@ -75,5 +83,5 @@ export default function GiftCard({ gift, onRemove, onView, actions }) {
         </button>
       )}
     </article>
-  )
+  );
 }
