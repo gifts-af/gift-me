@@ -125,6 +125,10 @@ The round engine page, https://claude.ai/artifact/Edr5DRi5s53iRPfAsuSnd8, draws 
 
 The screens and emails page, https://claude.ai/artifact/9mrDvFAgoqxvxmzirJFCz6, shows every main screen (phone light and dark, desktop) and every email, from `pnpm gallery` (`design/operations.md` > Reviewing screens and emails by eye). When a change alters how a screen or email looks, update the page in the same piece of work: run `pnpm gallery` with the local Supabase running, then republish `apps/web/gallery/index.html` to the same URL with the Artifact tool (`url` set to the link, `root` set to `apps/web/gallery`, and every PNG under it in `files`; pass `null` for a picture whose screen was removed). Never publish a copy. The app is the source; the page is a snapshot. Edit access works the same as for the roadmap page.
 
+## The database map page
+
+The database map, https://claude.ai/artifact/9uCRGGJL5Tu4X53VCYV3Rk, draws every table, how the tables connect, and every column, read from the local database. It is shared with the owner and Jim only, so link it from repo docs but not from the public roadmap or progress pages. When a change adds, drops or renames a table or a foreign key, redraw it in the same piece of work: read it with the Artifact tool (`action: "read"`), update it from the local database (`pnpm supabase start` with every migration applied), and republish to the same URL. Never publish a copy. The migrations stay the source; if the two disagree, the migrations win.
+
 ## Writing for the human in the loop
 
 - Lead with the answer or the decision, then the reasons.
