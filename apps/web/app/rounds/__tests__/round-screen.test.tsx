@@ -1,0 +1,369 @@
+import { describe, expect, it, vi } from "vitest";
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import type { RoundPageIdea, RoundPageView } from "@/modules/concierge";
+import { IdeaPhoto } from "@/components/idea-photo";
+import { RoundScreen, type BudgetResult, type RejectResult } from "../[id]/round-screen";
+
+// The round screen (ALL-29 Task 11). The server actions are faked here; the real ones run in the
+// round journeys (Task 13) against local Supabase, and their module logic in approval-db.test.ts.
+
+let n = 0;
+function idea(o: Partial<RoundPageIdea> = {}): RoundPageIdea {
+  n += 1;
+  return {
+    id: `i${n}`,
+    title: `Idea ${n}`,
+    reason: "Loves this kind of thing.",
+    retailer: "amazon",
+    productUrl: `https://www.amazon.com/dp/B0${n}`,
+    imageUrl: null,
+    source: "generated",
+    listItemId: null,
+    priceCents: 2500,
+    totalCents: 3000,
+    overBudget: false,
+    rank: n,
+    status: "proposed",
+    arriveBy: "2026-12-12",
+    claimed: false,
+    claimedByMe: false,
+    noLongerShared: false,
+    ...o,
+  };
+}
+
+function view(o: Partial<RoundPageView> = {}, round: Partial<RoundPageView["round"]> = {}): RoundPageView {
+  return {
+    round: {
+      id: "r1",
+      personId: "p1",
+      personName: "Mom",
+      occasionId: "o1",
+      occasionKind: "birthday",
+      occasionDate: "2026-12-18",
+      shipByDeadline: "2026-12-09",
+      budgetCents: 5000,
+      status: "awaiting_approval",
+      attentionReason: null,
+      ...round,
+    },
+    overBudgetPct: 20,
+    ideas: [],
+    liveOrders: [],
+    failedOrders: [],
+    closedText: null,
+    nextBestIdeaId: null,
+    buyYourself: [],
+    ...o,
+  };
+}
+
+function setup(v: RoundPageView, { outlook = true }: { outlook?: boolean | null } = {}) {
+  const rejectAction = vi.fn(async (...a: [string, FormData]): Promise<RejectResult> => (void a, { ok: true, more: true }));
+  const setBudgetAction = vi.fn(async (...a: [string, FormData]): Promise<BudgetResult> => (void a, { ok: true }));
+  const outlookAction = vi.fn(async (...a: [string, { code: string; ownedIdeaId: string | null; text: string | null }]) => (void a, outlook));
+  render(<RoundScreen view={v} rejectAction={rejectAction} setBudgetAction={setBudgetAction} outlookAction={outlookAction} />);
+  return { rejectAction, setBudgetAction, outlookAction };
+}
+
+const pick = (title: string) => userEvent.click(screen.getByRole("checkbox", { name: title }));
+
+describe("RoundScreen: picking", () => {
+  it('ticking two ideas shows "2 picked · $60 of $50"', async () => {
+    const a = idea({ title: "Orchid" });
+    const b = idea({ title: "Cocotte" });
+    setup(view({ ideas: [a, b] }));
+    await pick("Orchid");
+    expect(screen.getByText("1 picked · $30 of $50")).toBeInTheDocument();
+    await pick("Cocotte");
+    await userEvent.click(await screen.findByRole("button", { name: "Yes, pick it" }));
+    expect(screen.getByText("2 picked · $60 of $50")).toBeInTheDocument();
+    const buy = screen.getByRole("link", { name: "Buy 2 gifts" });
+    expect(buy).toHaveAttribute("href", `/rounds/r1/buy?ideas=${a.id},${b.id}&over=1`);
+  });
+
+  it("within budget the Buy link carries no over flag", async () => {
+    const a = idea({ title: "Orchid" });
+    setup(view({ ideas: [a] }));
+    await pick("Orchid");
+    expect(screen.getByRole("link", { name: "Buy 1 gift" })).toHaveAttribute("href", `/rounds/r1/buy?ideas=${a.id}`);
+  });
+
+  it("ticking past the budget opens the sheet; Keep within budget unticks it", async () => {
+    setup(view({ ideas: [idea({ title: "Orchid" }), idea({ title: "Cocotte" })] }));
+    await pick("Orchid");
+    await pick("Cocotte");
+    expect(await screen.findByText("$60 is $10 over the $50 budget.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Keep within budget" }));
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Keep within budget" })).toBeNull());
+    expect(screen.getByRole("checkbox", { name: "Cocotte" })).not.toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Orchid" })).toBeChecked();
+    expect(screen.getByText("1 picked · $30 of $50")).toBeInTheDocument();
+  });
+
+  it("past the allowance the bar says it's over the most you allowed and Buy is disabled", async () => {
+    setup(view({ ideas: [idea({ title: "Orchid", totalCents: 4000 }), idea({ title: "Cocotte", totalCents: 4000 })] }));
+    await pick("Orchid");
+    await pick("Cocotte");
+    expect(screen.getByText("2 picked · $80 of $50")).toBeInTheDocument();
+    expect(screen.getByText("Over the most you allowed ($60)")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Buy/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Buy 2 gifts" })).toBeDisabled();
+  });
+
+  it("with no budget the bar shows the total alone and asks nothing", async () => {
+    setup(view({ ideas: [idea({ title: "Orchid", totalCents: 9000 })] }, { budgetCents: null }));
+    await pick("Orchid");
+    expect(screen.getByText("1 picked · $90")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Yes, pick it" })).toBeNull();
+  });
+
+  it("list gifts come first; a claimed one is greyed and can't be ticked", async () => {
+    const ai = idea({ title: "AI gift", rank: 0 });
+    const list = idea({ title: "From the list", source: "list", listItemId: "li1", rank: 1 });
+    const claimed = idea({ title: "Taken gift", source: "list", listItemId: "li2", rank: 2, claimed: true });
+    setup(view({ ideas: [ai, list, claimed] }));
+    const boxes = screen.getAllByRole("checkbox").map((b) => b.getAttribute("aria-label"));
+    expect(boxes).toEqual(["From the list", "Taken gift", "AI gift"]);
+    expect(screen.getByRole("heading", { name: "On their list" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Taken gift" })).toBeDisabled();
+    expect(screen.getByText("Someone else is getting this")).toBeInTheDocument();
+    await pick("Taken gift");
+    expect(screen.getByRole("checkbox", { name: "Taken gift" })).not.toBeChecked();
+  });
+
+  it("a list gift already on one of the buyer's orders can't be ticked", () => {
+    setup(view({ ideas: [idea({ title: "Mine already", source: "list", listItemId: "li3", claimedByMe: true })] }));
+    expect(screen.getByRole("checkbox", { name: "Mine already" })).toBeDisabled();
+    expect(screen.getByText("Already on one of your orders")).toBeInTheDocument();
+  });
+
+  it("a no-longer-shared one says so and can't be ticked", () => {
+    setup(view({ ideas: [idea({ title: "Gone gift", source: "list", listItemId: "li4", noLongerShared: true })] }));
+    expect(screen.getByRole("checkbox", { name: "Gone gift" })).toBeDisabled();
+    expect(screen.getByText("No longer shared")).toBeInTheDocument();
+  });
+
+  it("a gift that wasn't offered shows Buy it yourself linking to its page", () => {
+    setup(
+      view({
+        ideas: [idea({ title: "Orchid" })],
+        buyYourself: [
+          {
+            itemId: "li9",
+            name: "Pottery class",
+            productUrl: "https://pottery.example/class",
+            storeName: "pottery.example",
+            priceCents: 8000,
+            imageUrl: null,
+            claimed: false,
+            claimedByMe: false,
+          },
+        ],
+      }),
+    );
+    expect(screen.getByRole("heading", { name: "From their list" })).toBeInTheDocument();
+    const row = screen.getByText("Pottery class").closest("li")!;
+    const link = within(row).getByRole("link", { name: "Buy it yourself" });
+    expect(link).toHaveAttribute("href", "https://pottery.example/class");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  });
+});
+
+describe("RoundScreen: picks after the round changes", () => {
+  function props() {
+    return {
+      rejectAction: vi.fn(async (...a: [string, FormData]): Promise<RejectResult> => (void a, { ok: true, more: true })),
+      setBudgetAction: vi.fn(async (...a: [string, FormData]): Promise<BudgetResult> => (void a, { ok: true })),
+      outlookAction: vi.fn(async (...a: [string, { code: string; ownedIdeaId: string | null; text: string | null }]) => (void a, true)),
+    };
+  }
+
+  it("a ticked idea that's since been rejected drops out: no picks and Buy disabled", async () => {
+    const a = idea({ title: "Orchid" });
+    const p = props();
+    const { rerender } = render(<RoundScreen view={view({ ideas: [a] })} {...p} />);
+    await pick("Orchid");
+    rerender(<RoundScreen view={view({ ideas: [{ ...a, status: "rejected" }] }, { status: "generating" })} {...p} />);
+    expect(screen.queryByText(/picked/)).toBeNull();
+    expect(screen.queryByRole("link", { name: /Buy/ })).toBeNull();
+  });
+
+  it("a ticked idea that can't be picked any more leaves the bar and the Buy link", async () => {
+    const a = idea({ title: "Orchid" });
+    const b = idea({ title: "Cocotte", source: "list", listItemId: "li1" });
+    const p = props();
+    const { rerender } = render(<RoundScreen view={view({ ideas: [a, b] })} {...p} />);
+    await pick("Orchid");
+    await pick("Cocotte");
+    await userEvent.click(await screen.findByRole("button", { name: "Yes, pick it" }));
+    rerender(<RoundScreen view={view({ ideas: [a, { ...b, claimed: true }] })} {...p} />);
+    expect(screen.getByText("1 picked · $30 of $50")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Buy 1 gift" })).toHaveAttribute("href", `/rounds/r1/buy?ideas=${a.id}`);
+  });
+
+  it("None of these clears the picks", async () => {
+    const a = idea({ title: "Orchid" });
+    const p = props();
+    render(<RoundScreen view={view({ ideas: [a, idea({ title: "Cocotte" })] })} {...p} />);
+    await pick("Orchid");
+    await userEvent.click(screen.getByRole("button", { name: "None of these" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Too generic" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Find new ideas" })).toBeEnabled());
+    await userEvent.click(screen.getByRole("button", { name: "Find new ideas" }));
+    expect(await screen.findByText("Looking again. New ideas will come by email.")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Orchid" })).not.toBeChecked();
+    expect(screen.getByText("Pick one or more")).toBeInTheDocument();
+  });
+
+  it("a budget saved under ticked picks offers the over-budget sheet instead of a silent dead button", async () => {
+    const a = idea({ title: "Orchid", totalCents: 5500 });
+    const p = props();
+    const { rerender } = render(<RoundScreen view={view({ ideas: [a] }, { budgetCents: null })} {...p} />);
+    await pick("Orchid");
+    rerender(<RoundScreen view={view({ ideas: [a] }, { budgetCents: 5000 })} {...p} />);
+    expect(screen.getByRole("button", { name: "Buy 1 gift" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Over budget: review" }));
+    expect(await screen.findByText("$55 is $5 over the $50 budget.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Yes, pick it" }));
+    expect(screen.getByRole("link", { name: "Buy 1 gift" })).toHaveAttribute("href", `/rounds/r1/buy?ideas=${a.id}&over=1`);
+  });
+
+  it("Keep within budget from the review unticks the last pick", async () => {
+    const a = idea({ title: "Orchid", totalCents: 5500 });
+    const p = props();
+    const { rerender } = render(<RoundScreen view={view({ ideas: [a] }, { budgetCents: null })} {...p} />);
+    await pick("Orchid");
+    rerender(<RoundScreen view={view({ ideas: [a] }, { budgetCents: 5000 })} {...p} />);
+    await userEvent.click(screen.getByRole("button", { name: "Over budget: review" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Keep within budget" }));
+    expect(screen.getByRole("checkbox", { name: "Orchid" })).not.toBeChecked();
+  });
+
+  it("going past the allowance forgets an earlier Yes, pick it", async () => {
+    const p = props();
+    render(
+      <RoundScreen
+        view={view({ ideas: [idea({ title: "A", totalCents: 3000 }), idea({ title: "B", totalCents: 2500 }), idea({ title: "C", totalCents: 2000 })] })}
+        {...p}
+      />,
+    );
+    await pick("A");
+    await pick("B");
+    await userEvent.click(await screen.findByRole("button", { name: "Yes, pick it" }));
+    await pick("C"); // $75: past the $60 allowance
+    expect(screen.getByRole("button", { name: "Buy 3 gifts" })).toBeDisabled();
+    await pick("C"); // back to $55: over, and asks again rather than trusting the old Yes
+    expect(screen.queryByRole("link", { name: /Buy/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Over budget: review" })).toBeInTheDocument();
+  });
+});
+
+describe("RoundScreen: budget", () => {
+  it("offers Your budget when the round has none and sends the amount", async () => {
+    const { setBudgetAction } = setup(view({ ideas: [idea()] }, { budgetCents: null }));
+    await userEvent.type(screen.getByLabelText("Your budget"), "55");
+    await userEvent.click(screen.getByRole("button", { name: "Save budget" }));
+    await waitFor(() => expect(setBudgetAction).toHaveBeenCalledTimes(1));
+    const [roundId, form] = setBudgetAction.mock.calls[0];
+    expect(roundId).toBe("r1");
+    expect(form.get("budget")).toBe("55");
+  });
+
+  it("doesn't offer Your budget once the round has one", () => {
+    setup(view({ ideas: [idea()] }));
+    expect(screen.queryByLabelText("Your budget")).toBeNull();
+  });
+});
+
+describe("RoundScreen: None of these", () => {
+  it("Already has one asks Which one? before it can be sent", async () => {
+    const a = idea({ title: "Orchid" });
+    const b = idea({ title: "Cocotte" });
+    const { rejectAction, outlookAction } = setup(view({ ideas: [a, b] }));
+    await userEvent.click(screen.getByRole("button", { name: "None of these" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Already has one" }));
+    expect(screen.getByText("Which one?")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Find new ideas" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("radio", { name: "Cocotte" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Find new ideas" })).toBeEnabled());
+    expect(outlookAction).toHaveBeenLastCalledWith("r1", { code: "has_it", ownedIdeaId: b.id, text: null });
+    await userEvent.click(screen.getByRole("button", { name: "Find new ideas" }));
+    await waitFor(() => expect(rejectAction).toHaveBeenCalledTimes(1));
+    const form = rejectAction.mock.calls[0][1];
+    expect(form.get("code")).toBe("has_it");
+    expect(form.get("owned")).toBe(b.id);
+    expect(form.get("expectMore")).toBe("1");
+    expect(await screen.findByText("Looking again. New ideas will come by email.")).toBeInTheDocument();
+  });
+
+  it("with no search left the sheet says No more new ideas this time before confirming", async () => {
+    const { rejectAction } = setup(view({ ideas: [idea()] }), { outlook: false });
+    await userEvent.click(screen.getByRole("button", { name: "None of these" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Too generic" }));
+    expect(await screen.findByText("No more new ideas this time")).toBeInTheDocument();
+    await userEvent.type(screen.getByLabelText("Anything else? (optional)"), "Rather an experience");
+    await userEvent.click(screen.getByRole("button", { name: "Save the reason" }));
+    await waitFor(() => expect(rejectAction).toHaveBeenCalledTimes(1));
+    const form = rejectAction.mock.calls[0][1];
+    expect(form.get("code")).toBe("too_generic");
+    expect(form.get("text")).toBe("Rather an experience");
+    expect(form.get("expectMore")).toBe("0");
+  });
+
+  it("when the outlook changed it says so and asks again", async () => {
+    const { rejectAction, outlookAction } = setup(view({ ideas: [idea()] }));
+    rejectAction.mockResolvedValueOnce({ ok: false, error: "changed" });
+    await userEvent.click(screen.getByRole("button", { name: "None of these" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Not their style" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Find new ideas" })).toBeEnabled());
+    outlookAction.mockResolvedValueOnce(false);
+    await userEvent.click(screen.getByRole("button", { name: "Find new ideas" }));
+    expect(await screen.findByText("No more new ideas this time")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("That changed. Check and send again.");
+  });
+
+  it("None of these isn't shown on an ordered round", () => {
+    setup(
+      view(
+        {
+          ideas: [idea({ title: "Orchid", status: "selected" })],
+          closedText: "Already ordered: Orchid",
+          liveOrders: [
+            {
+              id: "o1",
+              ideaId: "i1",
+              title: "Orchid",
+              status: "ordered",
+              failureType: null,
+              totalCents: 3000,
+              maxPriceCents: 3300,
+              feeCents: 100,
+              estDeliveryDate: null,
+            },
+          ],
+        },
+        { status: "ordered" },
+      ),
+    );
+    expect(screen.getByText("Already ordered: Orchid")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "None of these" })).toBeNull();
+    expect(screen.queryByRole("checkbox")).toBeNull();
+  });
+});
+
+describe("IdeaPhoto", () => {
+  it("the photo has referrerpolicy no-referrer; with no url the gift icon shows", () => {
+    const { rerender } = render(<IdeaPhoto url="https://m.media-amazon.com/images/I/x.jpg" title="Orchid" />);
+    const img = screen.getByRole("img", { name: "Orchid" });
+    expect(img.tagName).toBe("IMG");
+    expect(img).toHaveAttribute("referrerpolicy", "no-referrer");
+    expect(img).toHaveAttribute("loading", "lazy");
+    rerender(<IdeaPhoto url={null} title="Orchid" />);
+    const icon = screen.getByRole("img", { name: "Orchid" });
+    expect(icon.tagName).not.toBe("IMG");
+    expect(icon.querySelector("svg")).not.toBeNull();
+  });
+});
