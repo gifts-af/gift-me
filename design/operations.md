@@ -286,7 +286,7 @@ None of these is an alert. Rejected-then-regenerated rounds show up as `ideas.ru
 
 **Unused until a later contract migration:** the database function `reapprove_order` (replaced by `replace_failed_order`, T81) and the `excluded_products` helper (replaced by `concierge.order_is_given` and `excluded_offers`). Both stay so a Vercel rollback still works.
 
-**Known gap (needs a ticket):** adding gifts to a person's list doesn't wake a round waiting after `no_ideas`; only a new fact does (T82).
+**Known gap (ALL-151):** adding gifts to a person's list doesn't wake a round waiting after `no_ideas`; only a new fact does (T82).
 
 ## Gift idea engine (ALL-27)
 
