@@ -1,7 +1,7 @@
 -- Shared tables in `public`: profiles and people (design §3, T19, T26).
 begin;
 \ir _helpers.psql
-select plan(20);
+select plan(21);
 
 select tests.create_user('a@example.com', 'Aaron') as a \gset
 select tests.create_user('b@example.com') as b \gset
@@ -48,6 +48,12 @@ select is((select count(*)::int from public.profiles), 1, 'A sees only their own
 -- A edits their own name and timezone, but not their email.
 update public.profiles set display_name = 'A', timezone = 'America/Chicago';
 select is((select timezone from public.profiles), 'America/Chicago', 'A can set their timezone');
+-- ALL-136: Settings and the Share prompt write display_name as the user. A
+-- can't name anyone else: the update matches no row of B's.
+update public.profiles set display_name = 'Hijacked' where id = :'b';
+select tests.reset_role();
+select is((select display_name from public.profiles where id = :'b'), null, 'A cannot set another user''s display name');
+select tests.act_as(:'a');
 select throws_ok(
   $q$update public.profiles set email = 'victim@example.com'$q$,
   '42501', null, 'A cannot change the email we send to'
