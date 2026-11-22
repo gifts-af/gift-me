@@ -587,6 +587,42 @@ describe("runIdeas: privacy and safety", () => {
     expect(gateway.bodies[0].content).toContain("them family tackle box for them");
   });
 
+  it("facts and avoid titles reach the AI with emails, phones and addresses removed (ALL-134)", async () => {
+    world([2000, 2000], { zinc, gateway });
+    store.in = inputs({
+      avoidTitles: ["Mug engraved 12 Elm St"],
+      facts: [fact("loves letters, write to 12 Elm St"), fact("texts from 555-123-4567 or bob@example.com"), fact("shoe size 10.5")],
+    });
+    await runIdeas(req(), deps());
+    expect(gateway.bodies).toHaveLength(2);
+    for (const b of gateway.bodies) {
+      expect(b.content).not.toMatch(/Elm St|555-123-4567|example\.com/);
+      expect(b.content).toContain("loves letters, write to [contact removed]");
+      expect(b.content).toContain("shoe size 10.5");
+    }
+    expect(gateway.bodies[0].content).toContain("Mug engraved [contact removed]");
+    // Only what's sent is filtered: the store's facts are untouched.
+    expect(store.in!.facts[0].value).toBe("loves letters, write to 12 Elm St");
+  });
+
+  it("an address on a street named like the person is still stripped: contacts go before names (ALL-134)", async () => {
+    world([2000, 2000], { zinc, gateway });
+    store.in = inputs({ names: ["Harris"], facts: [fact("write to 12 Harris Rd")] });
+    await runIdeas(req(), deps());
+    for (const b of gateway.bodies) {
+      expect(b.content).toContain("write to [contact removed]");
+      expect(b.content).not.toContain("12 them");
+    }
+  });
+
+  it("ideas.run carries no contact text (E6, ALL-134)", async () => {
+    world([2000, 2000], { zinc, gateway });
+    store.in = inputs({ facts: [fact("write to 12 Elm St, bob@example.com, 555-123-4567")] });
+    await runIdeas(req(), deps());
+    const all = lines().join("\n");
+    for (const text of ["Elm", "example.com", "4567", "contact removed"]) expect(all).not.toContain(text);
+  });
+
   it("a search naming the person never reaches Zinc", async () => {
     world([2000, 2000], { zinc, gateway });
     gateway.ideas[1].search = "fishing rod for bob";

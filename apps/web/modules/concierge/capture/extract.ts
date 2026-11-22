@@ -1,4 +1,4 @@
-import { factLine, type FactCategory } from "@gifts-af/core";
+import { factLine, stripContactDetails, type FactCategory } from "@gifts-af/core";
 import type { CandidateFact, Extract } from "@/lib/ai/extract";
 import { isSensitive } from "@/lib/ai/sensitive";
 import { logEvent } from "@/lib/log";
@@ -71,14 +71,19 @@ export async function processCapture(store: CaptureStore, extract: Extract, capt
     const screenshot = capture.screenshotPath
       ? { bytes: await store.downloadScreenshot(capture.screenshotPath), type: capture.screenshotType }
       : null;
+    // Contact details stay out of what the model reads (T42, ALL-134): the buyer's own words (the
+    // note, and an emailed note's subject and body, which has no URL) are stripped; a page's text,
+    // title and URL are the store's and go as written. What's saved is unchanged.
+    const emailed = !capture.url;
     const candidates = await extract({
       relationship: capture.relationship,
       url: capture.url,
-      title: capture.title,
-      text: capture.text,
-      note: capture.note,
+      title: emailed ? stripContactDetails(capture.title) : capture.title,
+      text: emailed ? stripContactDetails(capture.text) : capture.text,
+      note: capture.note === null ? null : stripContactDetails(capture.note),
       screenshot,
-      known: known.map((f) => factLine(f.category, f.value)),
+      // Contact details stay out of what the model reads (T42, ALL-134); the duplicate check below uses the real values.
+      known: known.map((f) => stripContactDetails(factLine(f.category, f.value))),
     }, { timeoutMs: settings.timeoutMs });
     const { keep, blocked } = selectFacts(
       candidates,

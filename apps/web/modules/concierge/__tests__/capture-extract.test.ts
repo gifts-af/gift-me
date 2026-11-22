@@ -116,6 +116,33 @@ describe("processCapture", () => {
     expect(calls[0].known).toEqual(["Already has: UCF pocket t-shirt (dark gray)", "Into: golf"]);
   });
 
+  it("strips contact details from the known facts sent to the model, not from the saved ones (ALL-134)", async () => {
+    capture();
+    store.facts.push({ id: "f1", personId: "p1", captureId: "old", category: "interest", value: "letters, write to 12 Elm St", active: true });
+    reply = async () => [fact("interest", "letters, write to 12 Elm St")];
+    const result = await processCapture(store, extract, "cap-1");
+    expect(calls[0].known).toEqual(["Into: letters, write to [contact removed]"]);
+    // The duplicate check still uses the real value, so the same fact isn't saved twice.
+    expect(result.facts).toEqual([]);
+    expect(store.facts[0].value).toBe("letters, write to 12 Elm St");
+  });
+
+  it("strips contact details from the buyer's note, but not from page text, title or URL (T42, ALL-134)", async () => {
+    capture({ note: "for his workshop at 12 Elm St, call 555-123-4567", text: "Visit us at 12 Elm St", title: "Shop, 555-123-4567" });
+    await processCapture(store, extract, "cap-1");
+    expect(calls[0].note).toBe("for his workshop at [contact removed], call [contact removed]");
+    expect(calls[0].text).toBe("Visit us at 12 Elm St");
+    expect(calls[0].title).toBe("Shop, 555-123-4567");
+    expect(calls[0].url).toBe("https://www.instagram.com/p/x");
+  });
+
+  it("strips contact details from an emailed note's text and title, which have no URL (ALL-134)", async () => {
+    capture({ url: "", title: "Re: 555-123-4567", text: "write to 12 elm st", note: null });
+    await processCapture(store, extract, "cap-1");
+    expect(calls[0].text).toBe("write to [contact removed]");
+    expect(calls[0].title).toBe("Re: [contact removed]");
+  });
+
   it("tells the model nothing is recorded for a new person", async () => {
     capture();
     await processCapture(store, extract, "cap-1");

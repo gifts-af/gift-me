@@ -115,6 +115,13 @@ describe("file_note (ALL-31 AC-4)", () => {
     expect(sent).toEqual([]);
   });
 
+  it("a phone or address in the asked-about note never reaches the AI (T42, ALL-134)", async () => {
+    await buttons("wants a fly rod, ship to 12 Elm St, call (555) 123-4567");
+    await confirmActionLink("tok-person-dad", USER, deps);
+    expect(extract).toHaveBeenCalledTimes(1);
+    expect(extract.mock.calls[0][0].text).toBe("wants a fly rod, ship to [contact removed], call [contact removed]");
+  });
+
   it("another button afterwards says it's already filed and creates nothing", async () => {
     await buttons("wants a new fly rod");
     await confirmActionLink("tok-person-dad", USER, deps);

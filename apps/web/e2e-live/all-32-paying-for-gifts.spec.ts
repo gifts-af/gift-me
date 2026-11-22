@@ -5,8 +5,10 @@ import { expect, test } from "@playwright/test";
 // load-failure line. Buys nothing, connects nothing.
 test("Settings shows the Paying for gifts section", async ({ page }) => {
   await page.goto("/settings/paying");
-  await expect(page.getByRole("heading", { name: "Paying for gifts" })).toBeVisible();
-  const section = page.locator("section", { has: page.getByRole("heading", { name: "Paying for gifts" }) });
+  // The page title is the h1; the section's own h2 says "Paying for gifts" too, or "Connect Zinc" while waiting.
+  await expect(page.getByRole("heading", { level: 1, name: "Paying for gifts" })).toBeVisible();
+  const section = page.locator('section[aria-labelledby="paying-heading"]');
+  await expect(section).toBeVisible();
   await expect(section).not.toContainText("Couldn't load");
   const text = (await section.innerText()).replace(/\s+/g, " ");
   test.info().annotations.push({ type: "state", description: text.slice(0, 200) });
