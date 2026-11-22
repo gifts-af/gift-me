@@ -18,20 +18,20 @@ select tests.create_user('friend@example.com', 'Friend') as friend \gset
 -- Sam keeps a list with three gifts, one claimed by a friend. Pat and a user
 -- with no display name keep lists too.
 select tests.act_as(:'sam');
-select lists.save_list(null, 'My list', '[
+select (lists.save_list_checked(null, 'My list', '[
   {"id": "bbbbbbbb-0000-4000-8000-000000000001", "name": "Mug set", "price_cents": 4200},
   {"id": "bbbbbbbb-0000-4000-8000-000000000002", "name": "Herb planter", "price_cents": 6800},
   {"id": "bbbbbbbb-0000-4000-8000-000000000003", "name": "Kneeler", "price_cents": 3500}
-]'::jsonb) as list_a \gset
+]'::jsonb, null) ->> 'id')::uuid as list_a \gset
 select share_token as token_a from lists.lists where id = :'list_a' \gset
 insert into public.people (name, relationship) values ('Me', 'self') returning id as sam_self \gset
 
 select tests.act_as(:'pat');
-select lists.save_list(null, 'Pat''s list', '[]'::jsonb) as list_b \gset
+select (lists.save_list_checked(null, 'Pat''s list', '[]'::jsonb, null) ->> 'id')::uuid as list_b \gset
 select share_token as token_b from lists.lists where id = :'list_b' \gset
 
 select tests.act_as(:'noname');
-select lists.save_list(null, 'My list', '[]'::jsonb) as list_n \gset
+select (lists.save_list_checked(null, 'My list', '[]'::jsonb, null) ->> 'id')::uuid as list_n \gset
 select share_token as token_n from lists.lists where id = :'list_n' \gset
 
 select tests.act_as(:'friend');
