@@ -2368,6 +2368,18 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     expect(lastText(u)).toContain(`Review the gift: ${BASE}/rounds/${r.roundId}/fix/${r.orderIds[0]}`);
   });
 
+  it.each(["address_withdrawn", "address_rejected", "other_failure"])(
+    "a single %s failure's button opens that order's fix page (ALL-29 AC-16)",
+    async (type) => {
+      const u = await newUser({ autoTopUp: null });
+      const r = await placingRound(u, [4200]);
+      await settleFailed(u, r.orderIds[0], type);
+      await advance(r.roundId, 1);
+      expect(inbox(u)).toEqual(["Sorry, there's a problem with Mary's gift@1"]);
+      expect(lastText(u)).toContain(`Open Mary's page: ${BASE}/rounds/${r.roundId}/fix/${r.orderIds[0]}`);
+    },
+  );
+
   it("a later failure is told on its own, and the gift named is the one that failed (AC-2, AC-3)", async () => {
     const u = await newUser({ autoTopUp: null });
     const r = await placingRound(u);

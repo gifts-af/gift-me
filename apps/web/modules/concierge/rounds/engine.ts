@@ -983,11 +983,11 @@ async function sendOpenFailures(
     case "address_withdrawn":
     case "address_rejected": {
       const reason = endedAddressReason(o.failureType, ctx.personName, [o.title], ownerAsked);
-      return notify({ ...base, kind: "needs_attention", data: { ...occasion, reason, orderByText }, links: open }, deps.notify);
+      return notify({ ...base, kind: "needs_attention", data: { ...occasion, reason, orderByText }, links: fix(o) }, deps.notify);
     }
     default: {
       const reason = `the store couldn't place the order for the ${o.title}, and you haven't been charged.`;
-      return notify({ ...base, kind: "needs_attention", data: { ...occasion, reason, orderByText }, links: open }, deps.notify);
+      return notify({ ...base, kind: "needs_attention", data: { ...occasion, reason, orderByText }, links: fix(o) }, deps.notify);
     }
   }
 }
