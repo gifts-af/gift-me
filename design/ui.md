@@ -218,6 +218,23 @@ My list saves as you go too, with no Save button and no "Unsaved changes" bar. W
 
 **Pages kept in the background:** Next keeps visited screens in the page, hidden. Leaving About saves a change still waiting (a bad one is dropped), and leaving the address screen closes its form, so coming back shows what's saved.
 
+## Approval screens (ALL-29, T78 to T83)
+
+Mock-ups: [ALL-29 approval](https://claude.ai/artifact/UB35r46GYrCddcLj2Frxhh), owner-approved 2026-11-22, on top of ALL-41's signed-off screens. The pages are plain app URLs that only read when loaded (T78); built for the phone first, with 44px tap targets.
+
+| Screen | URL | What it shows |
+|---|---|---|
+| Round screen | `/rounds/<id>` | The round's ideas: photo (or the gift icon), title, store, full cost, arrive-by date, the reason it fits. Tick one or more; a bar shows "n picked" and the total against the budget, and "Buy n gifts" continues. An optional **Your budget** field appears only when the round has none. **None of these** opens a sheet with reason chips ("Already has one", "Not their style", "Too pricey", "Too generic") and an optional text; "Already has one" asks "Which one?". With no search left the sheet first says "No more new ideas this time" and the ideas stay buyable |
+| List gifts | same | **From their list** comes first. A gift someone else claimed is greyed out; one whose list stopped being shared says "No longer shared"; one from a store Zinc can't buy from, or with no saved price at a check-only store, says **Buy it yourself** and links to its product page (`rel="noopener noreferrer"`). A check-only store's gift is labelled "Price from their list" |
+| Over-budget sheet | same | "Yes, pick it" or "Keep within budget". Picks past the over-budget allowance can't continue; the bar says so |
+| Confirm page | `/rounds/<id>/buy?ideas=…` | Each idea's photo, title, store, arrive-by date; estimate with shipping and tax, Zinc's order fee, "never more than $cap"; **Ships to** (the recipient, you, or another address; city and state only for a shared address); an optional gift note; the Zinc balance; the money notice; one **Buy now · about $total** button (**Buy anyway** and how far over, for an over-budget idea). Opening it buys nothing |
+| Fix page | `/rounds/<id>/fix/<orderId>` | What happened in plain words. Price up: **Check today's price** (with the money notice), then old and new totals and **Buy at about $new** (once per gift; then "See all ideas"). Out of stock, failed, too late: the next-best idea with **Buy this instead**. Address problems: the same gift to you, another address, or the person's own address. Always **See all ideas**. The money notice sits by every button that buys |
+| Gone states | any | A round that's ordered, skipped or past its deadline says what happened ("Already ordered: …", "This occasion has passed") and offers nothing to buy. A replaced idea says so |
+
+**Heads-up, reminder and final-notice emails** list each idea as a row (title, total, arrive-by date, reason) with its own **Buy this** link to the confirm page; the one button opens the round screen ("Pick several or none of these"). The text version carries the same links. The needs-attention email's button reads **Review the gift** and opens that gift's fix page; the several-failures summary links each gift to its own fix page.
+
+**Signed out or wrong account:** sign in and come back to the same page; another account sees "This gift belongs to another account" and nothing of the round.
+
 ## Mock-ups
 
 **What's built, as it looks today:** the [screens and emails page](https://claude.ai/artifact/9mrDvFAgoqxvxmzirJFCz6) has every main screen on a phone (light and dark) and on desktop, and every email, taken from the real app by `pnpm gallery`. The mock-ups below are the designs; that page is the result.
@@ -236,13 +253,13 @@ A clickable, phone-first prototype, published as a private shareable artifact pa
 | Pick from their list (Mom) | Gifts from the person's own list, with when each was added and arrive-by date; one already claimed by someone else; pick one or several. **Your budget** is a separate, optional field: only when it's filled in do over-budget labels and the confirm step appear | A-1, B-4, decisions 36, 37 |
 | Suggested ideas (Dad) | Generated ideas with the reason each fits, the same optional budget, and "None of these" with a reason | A-1, B-4, G-3, decision 36 |
 | Where it goes | Ship to the recipient, to you (your saved address), or to another address. For someone with a list, their shared address is one tap (city shown); for someone without one, you add theirs once and can save it | P-5, A-3, decision 38 |
-| Price went up **[Claude's call]** | Re-approve at the new total, or pick the next-best idea (D29) | A-4 |
+| Price went up **[Claude's call]** | Re-approve at the new total, or pick the next-best idea (D29); built as the fix page (see Approval screens, ALL-29) | A-4 |
 | Gift list | The list app in the new look: add by link or by hand, saved as you go with Undo on remove (ALL-127), share | Existing (GiftsAF) |
 | Shared list and claim | A friend opening a share link and claiming a gift; a claim that lost the race. The list's owner never sees claims | Existing (GiftsAF), decision 39 |
 | Sign-in | Google sign-in (email and password stays for existing list users) | ALL-20 |
 | Extension popup | "Capture for…" with a person picker | C-1 |
 | Extension popup: Add to my list | Product card on top (name, price, photo with ‹ ›, recent people as buttons), "or save it for someone" below; the added, already-there, likely-duplicate and full states; one success banner after any save. [Approved mock-ups](https://claude.ai/artifact/YU7tRxcSdDyP8GRCs1SjkP) (owner, 2026-11-20, ALL-78) | C-1, T77 |
-| Heads-up email | Two kinds. **Reminder:** the options as small read-only rows and "Choose a gift"; nothing is bought until you choose. **Auto-buy on** (opt-in, A-7): says which gift will be bought and on what date, marks it, and offers "Review or change" and how to skip. Buttons are signed one-time links (design §6.4) to the phone page | N-1, A-7, decision 40 |
+| Heads-up email | Two kinds. **Reminder:** the options as small read-only rows and "Choose a gift"; nothing is bought until you choose. **Auto-buy on** (opt-in, A-7): says which gift will be bought and on what date, marks it, and offers "Review or change" and how to skip. The "Buy this" and button links are plain app URLs for the signed-in owner (T78, see Approval screens); other buttons are signed one-time links (design §6.4) | N-1, A-7, decision 40 |
 | Computer width | Give and the gift list only | — |
 
 **As built on the person page (ALL-26, D51, ALL-127):** "What we know" is one list of facts by category, each with its source and ✨ on unconfirmed AI suggestions. Tapping a fact opens it in place, and it saves as you go (T71), with no Save button:
