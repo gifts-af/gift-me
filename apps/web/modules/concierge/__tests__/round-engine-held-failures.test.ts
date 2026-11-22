@@ -73,7 +73,7 @@ describe.skipIf(!stack)("held rounds: failures and due rounds (real local databa
     expect(lastText(u)).toContain(`Review the gift: ${BASE}/rounds/${r.roundId}/fix/${r.orderIds[0]}`);
   });
 
-  it.each(["address_withdrawn", "address_rejected", "other_failure"])(
+  it.each(["address_withdrawn", "address_rejected", "failed"])(
     "a single %s failure's button opens that order's fix page (ALL-29 AC-16)",
     async (type) => {
       const u = await newUser({ autoTopUp: null });

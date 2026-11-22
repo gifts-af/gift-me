@@ -53,7 +53,7 @@ select tests.act_as(:'mom');
 select (lists.save_list_checked(null, 'Birthday', '[]'::jsonb, null) ->> 'id')::uuid as list_id \gset
 select share_token as token from lists.lists where id = :'list_id' \gset
 select tests.act_as(:'buyer');
-insert into public.people (name, relationship) values ('Mom', 'parent') returning id as person \gset
+insert into public.people (name, relationship) values ('Mom', 'mother') returning id as person \gset
 select lists.link_person(:'token', :'person');
 
 select tests.act_as(:'buyer');

@@ -45,6 +45,7 @@ select set_eq(
     'zinc_topup_fee_bps', 'zinc_topup_fee_fixed_cents', 'check_address_link_days', 'check_address_retry_days',
     'inbound_email_enabled', 'inbound_match_max_choices', 'inbound_max_per_user_per_day', 'inbound_link_hours',
     'inbound_thread_lookup_max', 'inbound_thread_lookup_days', 'inbound_prune_days',
+    'action_link_prune_days', 'notification_prune_days', 'idea_run_prune_days',
     'saved_gifts_max', 'list_link_card_enabled',
     'idea_engine_enabled', 'idea_candidates', 'idea_max_searches', 'idea_ai_max_tokens', 'idea_keep_min', 'idea_keep_max',
     'idea_ai_timeout_ms', 'idea_zinc_timeout_ms', 'idea_tax_estimate_pct', 'idea_run_estimate_cents', 'idea_run_max_cents',

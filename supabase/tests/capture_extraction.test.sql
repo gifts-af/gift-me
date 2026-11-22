@@ -11,7 +11,7 @@ select is(concierge.setting_int('capture_extraction_enabled'), 1, 'extraction is
 select is(concierge.setting_int('capture_extract_timeout_ms'), 40000, 'a model call gives up after 40 s');
 
 select tests.act_as(:'a');
-insert into public.people (name, relationship) values ('Dad', 'parent');
+insert into public.people (name, relationship) values ('Dad', 'father');
 select id as dad from public.people where name = 'Dad' \gset
 
 select lives_ok(

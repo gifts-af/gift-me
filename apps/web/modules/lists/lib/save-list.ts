@@ -53,6 +53,18 @@ function cleanShortText(value: unknown, max: number): string | null {
   return trimmed ? trimmed.slice(0, max) : null;
 }
 
+// The values list_items_source_check accepts. A client that sends anything else
+// still saves its gifts; they're recorded as typed in by hand.
+const LIST_ITEM_SOURCES: ReadonlySet<string> = new Set([
+  "manual",
+  "store-url",
+  "amazon-url",
+  "amazon-fixture",
+  "store-page",
+  "amazon-zinc",
+  "extension",
+]);
+
 export function toRow(input: Partial<Gift>) {
   const name = typeof input.name === "string" ? input.name.trim() : "";
   if (!name || name.length > MAX_NAME_LENGTH) return null;
@@ -81,7 +93,7 @@ export function toRow(input: Partial<Gift>) {
     image_url: cleanImageUrl(input.imageUrl),
     product_url: cleanUrl(input.productUrl),
     asin: cleanShortText(input.asin, 20),
-    source: cleanShortText(input.source, 40) ?? "manual",
+    source: typeof input.source === "string" && LIST_ITEM_SOURCES.has(input.source) ? input.source : "manual",
     added_at: addedAt,
   };
 }

@@ -7,8 +7,8 @@ select plan(8);
 
 select tests.create_user('a@example.com') as a \gset
 select tests.act_as(:'a');
-insert into public.people (name, relationship) values ('Mom', 'parent') returning id as mom \gset
-insert into public.people (name, relationship) values ('Dad', 'parent') returning id as dad \gset
+insert into public.people (name, relationship) values ('Mom', 'mother') returning id as mom \gset
+insert into public.people (name, relationship) values ('Dad', 'father') returning id as dad \gset
 insert into concierge.occasions (person_id, kind, month, day) values (:'mom', 'birthday', 3, 14) returning id as bday \gset
 insert into concierge.occasions (person_id, kind) values (:'dad', 'fathers_day') returning id as fday \gset
 insert into concierge.occasions (person_id, kind) values (:'dad', 'christmas') returning id as xmas \gset

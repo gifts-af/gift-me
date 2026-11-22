@@ -11,7 +11,7 @@ select tests.create_user('a@example.com') as a \gset
 select tests.create_user('b@example.com') as b \gset
 
 select tests.act_as(:'a');
-insert into public.people (name, relationship) values ('Mom', 'parent') returning id as mom \gset
+insert into public.people (name, relationship) values ('Mom', 'mother') returning id as mom \gset
 insert into concierge.occasions (person_id, kind, month, day) values (:'mom', 'birthday', 3, 14) returning id as bday \gset
 
 -- The server builds a round with one idea from Mom's list, and orders it.

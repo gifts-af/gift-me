@@ -9,7 +9,7 @@ select tests.create_user('b@example.com') as b \gset
 
 -- A has Mom (with a birthday) and Dad (with Father's Day).
 select tests.act_as(:'a');
-insert into public.people (name, relationship) values ('Mom', 'parent'), ('Dad', 'parent');
+insert into public.people (name, relationship) values ('Mom', 'mother'), ('Dad', 'father');
 select id as mom from public.people where name = 'Mom' \gset
 select id as dad from public.people where name = 'Dad' \gset
 insert into concierge.occasions (person_id, kind, month, day) values (:'mom', 'birthday', 3, 14) returning id as bday \gset

@@ -24,7 +24,7 @@ select lists.claim_gift(:'old_token', 'aaaaaaaa-0000-4000-8000-000000000001', nu
 
 -- The buyer links "Mom" through the share link, and sees everything.
 select tests.act_as(:'buyer');
-insert into public.people (name, relationship) values ('Mom', 'parent') returning id as person \gset
+insert into public.people (name, relationship) values ('Mom', 'mother') returning id as person \gset
 select lists.link_person(:'old_token', :'person');
 select is(lists.person_list(:'person') ->> 'title', 'Birthday', 'while shared, the buyer sees the list');
 select is(public.shared_city_for_person(:'person') ->> 'city', 'Dayton', 'and Mom''s city');
@@ -71,7 +71,7 @@ select is(public.shared_address_for_person(:'person'), null, 'or full address');
 -- ─── deleting a person ends the link ────────────────────────────────────────
 select share_token as token3 from lists.lists where id = :'list_id' \gset
 select tests.act_as(:'buyer');
-insert into public.people (name, relationship) values ('Mom 2', 'parent') returning id as person2 \gset
+insert into public.people (name, relationship) values ('Mom 2', 'mother') returning id as person2 \gset
 select lists.link_person(:'token3', :'person2');
 select public.delete_person(:'person2');
 select tests.reset_role();

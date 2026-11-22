@@ -11,12 +11,12 @@ update concierge.app_settings set value = '20' where key = 'default_over_budget_
 
 -- A sets up two people with one of everything for Mom.
 select tests.act_as(:'a');
-insert into public.people (name, relationship) values ('Mom', 'parent'), ('Dad', 'parent');
+insert into public.people (name, relationship) values ('Mom', 'mother'), ('Dad', 'father');
 select id as mom from public.people where name = 'Mom' \gset
 select id as dad from public.people where name = 'Dad' \gset
 
 insert into concierge.accounts (user_id) values (:'a');
-insert into concierge.budget_defaults (relationship, base_amount_cents) values ('parent', 10000);
+insert into concierge.budget_defaults (relationship, base_amount_cents) values ('mother', 10000);
 insert into concierge.occasions (person_id, kind, month, day) values (:'mom', 'birthday', 3, 14);
 insert into concierge.occasions (person_id, kind) values (:'mom', 'mothers_day'), (:'dad', 'fathers_day');
 insert into concierge.budgets (person_id, occasion_kind, amount_cents) values (:'mom', 'birthday', 12000);
