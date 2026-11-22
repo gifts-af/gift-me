@@ -51,6 +51,7 @@ const ctx = (c: Partial<JudgeContext> = {}): JudgeContext => ({
   occasionDate: "2026-12-25",
   orderDate: "2026-12-01",
   excluded: new Set(),
+  maxTotalCents: null,
   ...c,
 });
 
@@ -115,6 +116,12 @@ describe("judgeCandidate", () => {
   it("drops excluded products as given_or_rejected", () => {
     expect(judgeCandidate(cand(), ctx({ excluded: new Set(["p1"]) }), s)).toEqual({ keep: false, reason: "given_or_rejected" });
   });
+  it("judgeCandidate drops a total at or above maxTotalCents", () => {
+    // 2000 + 500 shipping + 160 tax + 100 fee = 2760.
+    expect(judgeCandidate(cand(), ctx({ maxTotalCents: 2760 }), s)).toEqual({ keep: false, reason: "over_limit" });
+    expect(judgeCandidate(cand(), ctx({ maxTotalCents: 2761 }), s)).toMatchObject({ keep: true, totalCents: 2760 });
+    expect(judgeCandidate(cand(), ctx({ maxTotalCents: null }), s)).toMatchObject({ keep: true });
+  });
   it("drops an unavailable offer", () => {
     expect(judgeCandidate(cand({ available: false }), ctx(), s)).toEqual({ keep: false, reason: "unavailable" });
   });
@@ -173,8 +180,13 @@ describe("onDemandOccasion", () => {
 });
 
 describe("idea run cost", () => {
-  it("ideaRunWorstMs is 2*ai + 2*zinc", () => {
-    expect(ideaRunWorstMs(60000, 15000)).toBe(150000);
+  it("ideaRunWorstMs counts the list pass", () => {
+    // Brainstorm and resolve: 2*ai + 2*zinc. List pass: 10 lookups at 10 a second plus two Zinc
+    // timeouts, since a details lookup Zinc rejects is followed by the store check. Photos: one
+    // more Zinc timeout.
+    expect(ideaRunWorstMs(60000, 15000, 10, 10)).toBe(150000 + 1000 + 2 * 15000 + 15000);
+    // A fractional rate rounds the list pass up to a whole millisecond.
+    expect(ideaRunWorstMs(60000, 15000, 10, 3)).toBe(150000 + 3334 + 2 * 15000 + 15000);
   });
   it("canAffordRank", () => {
     expect(canAffordRank(90, 15, 100)).toBe(false);

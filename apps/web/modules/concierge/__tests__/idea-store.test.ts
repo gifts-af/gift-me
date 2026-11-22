@@ -12,7 +12,7 @@ import type { SavedIdea } from "../ideas/store";
 
 vi.mock("server-only", () => ({}));
 const { onDemandIdeas } = await import("../ideas/read");
-const { createSupabaseIdeaStore } = await import("../ideas/store");
+const { createSupabaseIdeaStore, listGiftCandidates } = await import("../ideas/store");
 const { runIdeas } = await import("../ideas/run");
 
 const stack = await localStack({ api: true });
@@ -37,6 +37,9 @@ const idea = (o: Partial<SavedIdea> = {}): SavedIdea => ({
   reason: "He fishes every weekend",
   overBudget: false,
   rank: 1,
+  imageUrl: null,
+  source: "generated",
+  listItemId: null,
   ...o,
 });
 
@@ -257,6 +260,149 @@ describe.skipIf(!dbUp)("createSupabaseIdeaStore", () => {
     const got = await store().inputs({ userId: buyer.id, personId: dad, roundId: null });
     expect(got?.excluded).toEqual(["B0MUG"]);
     expect(got?.avoidTitles).toEqual(["Stoneware mug"]);
+  });
+
+  async function newRound(userId: string, personId: string, year: number): Promise<string> {
+    const occasion = (
+      await pg.query(
+        `insert into concierge.occasions (user_id, person_id, kind) values ($1, $2, 'christmas')
+         on conflict do nothing returning id`,
+        [userId, personId],
+      )
+    ).rows[0]?.id ?? (await pg.query("select id from concierge.occasions where person_id = $1 and kind = 'christmas'", [personId])).rows[0].id;
+    return (
+      await pg.query(
+        `insert into concierge.gift_rounds (user_id, person_id, occasion_id, occasion_year, occasion_date, ship_by_deadline, budget_cents, status)
+         values ($1, $2, $3, $4, '2026-12-25', '2026-12-16', 5000, 'generating') returning id`,
+        [userId, personId, occasion, year],
+      )
+    ).rows[0].id as string;
+  }
+
+  /** A list owned by someone else, linked to the buyer's person. */
+  async function linkedList(buyerId: string, personId: string) {
+    const owner = await newUser("List Owner");
+    const list = (await pg.query("insert into lists.lists (owner_id, title) values ($1, 'Wishes') returning id, share_token", [owner.id])).rows[0];
+    await pg.query("insert into lists.person_links (person_id, buyer_id, list_id, share_token) values ($1, $2, $3, $4)", [
+      personId,
+      buyerId,
+      list.id,
+      list.share_token,
+    ]);
+    let position = 0;
+    const item = async (name: string, priceCents: number, url: string | null, asin: string | null = null) =>
+      (
+        await pg.query(
+          "insert into lists.list_items (list_id, position, name, price_cents, product_url, asin) values ($1, $2, $3, $4, $5, $6) returning id",
+          [list.id, position++, name, priceCents, url, asin],
+        )
+      ).rows[0].id as string;
+    return { ownerId: owner.id, item };
+  }
+
+  async function listIdea(userId: string, personId: string, roundId: string, itemId: string | null, o: { title: string; status: string; total?: number; productId?: string | null }) {
+    return (
+      await pg.query(
+        `insert into concierge.gift_ideas (user_id, person_id, round_id, source, list_item_id, title, retailer_product_id, price_cents, est_total_cents, rank, status)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $8, 1, $9) returning id`,
+        [userId, personId, roundId, itemId ? "list" : "generated", itemId, o.title, o.productId ?? null, o.total ?? 1000, o.status],
+      )
+    ).rows[0].id as string;
+  }
+
+  async function order(userId: string, roundId: string, ideaId: string, status: string) {
+    await pg.query(
+      `insert into concierge.orders (user_id, round_id, idea_id, funding_mode, max_price_cents, fee_cents, status, ship_to, ship_city, ship_state)
+       values ($1, $2, $3, 'zinc_wallet', 4500, 100, $4, 'recipient', 'Dayton', 'OH')`,
+      [userId, roundId, ideaId, status],
+    );
+  }
+
+  it("listGiftCandidates leaves out claimed items, items on a live order, and items the round already offered", async () => {
+    const buyer = await newUser("Jim");
+    const person = await newPerson(buyer.id, "Dad");
+    // Not linked yet: nothing.
+    expect(await listGiftCandidates(admin!, person, null)).toEqual([]);
+
+    const { ownerId, item } = await linkedList(buyer.id, person);
+    const open = await item("Open vase", 2500, "https://shop.example/vase");
+    const claimed = await item("Lamp", 4000, "https://www.amazon.com/dp/B0LAMP", "B0LAMP");
+    const rejected = await item("Scarf", 3000, "https://shop.example/scarf");
+    const ordered = await item("Book", 1500, "https://shop.example/book");
+    const refunded = await item("Mug", 0, "https://www.amazon.com/dp/B0MUG", "B0MUG");
+    await item("No link", 1000, null);
+    await pg.query("insert into lists.gift_claims (item_id, claimer_id, claimer_name) values ($1, $2, 'Bea')", [claimed, ownerId]);
+
+    const r1 = await newRound(buyer.id, person, 2030);
+    await listIdea(buyer.id, person, r1, rejected, { title: "Scarf", status: "rejected" });
+    const r2 = await newRound(buyer.id, person, 2031);
+    await order(buyer.id, r2, await listIdea(buyer.id, person, r2, ordered, { title: "Book", status: "selected" }), "placed");
+    const r3 = await newRound(buyer.id, person, 2032);
+    await order(buyer.id, r3, await listIdea(buyer.id, person, r3, refunded, { title: "Mug", status: "selected" }), "refunded");
+
+    const vase = { itemId: open, name: "Open vase", url: "https://shop.example/vase", asin: null, listPriceCents: 2500 };
+    // A refunded order doesn't count as given; a price of 0 means the list has none.
+    const mug = { itemId: refunded, name: "Mug", url: "https://www.amazon.com/dp/B0MUG", asin: "B0MUG", listPriceCents: null };
+    const scarf = { itemId: rejected, name: "Scarf", url: "https://shop.example/scarf", asin: null, listPriceCents: 3000 };
+    // The round that rejected the scarf doesn't offer it again.
+    expect(await listGiftCandidates(admin!, person, r1)).toEqual([vase, mug]);
+    // Owner, 2026-11-22: a list gift rejected in one round is offered again in another.
+    const want = [vase, scarf, mug];
+    expect(await listGiftCandidates(admin!, person, r2)).toEqual(want);
+
+    // A round's inputs carry the same list; on demand, none.
+    const r4 = await newRound(buyer.id, person, 2033);
+    expect((await store().inputs({ userId: buyer.id, personId: person, roundId: r4 }))?.listGifts).toEqual(want);
+    expect((await store().inputs({ userId: buyer.id, personId: person, roundId: null }))?.listGifts).toEqual([]);
+  });
+
+  it("the run after Too pricey uses the cheapest rejected AI idea's total as its ceiling, ignoring a cheaper list gift", async () => {
+    const buyer = await newUser("Jim");
+    const person = await newPerson(buyer.id, "Dad");
+    const { item } = await linkedList(buyer.id, person);
+    const lamp = await item("Grandma's lamp", 900, "https://www.amazon.com/dp/B0LAMP", "B0LAMP");
+    const round = await newRound(buyer.id, person, 2030);
+
+    const reject = async (ideaId: string, reason: string) =>
+      pg.query("insert into concierge.rejections (user_id, round_id, idea_id, reason_code) values ($1, $2, $3, $4)", [
+        buyer.id,
+        round,
+        ideaId,
+        reason,
+      ]);
+    await reject(await listIdea(buyer.id, person, round, null, { title: "Big kettle", status: "rejected", total: 4000, productId: "B0K1" }), "too_pricey");
+    await reject(await listIdea(buyer.id, person, round, null, { title: "Small kettle", status: "rejected", total: 3000, productId: "B0K2" }), "too_pricey");
+    await reject(await listIdea(buyer.id, person, round, lamp, { title: "Grandma's lamp", status: "rejected", total: 1000, productId: "B0LAMP" }), "too_pricey");
+
+    const got = await store().inputs({ userId: buyer.id, personId: person, roundId: round });
+    expect(got?.round?.maxTotalCents).toBe(3000);
+    // A list gift's title is the list owner's words: never something the AI is told to avoid (T42).
+    expect(got?.avoidTitles.sort()).toEqual(["Big kettle", "Small kettle"]);
+
+    // Another round of the same person has no ceiling.
+    const fresh = await newRound(buyer.id, person, 2031);
+    expect((await store().inputs({ userId: buyer.id, personId: person, roundId: fresh }))?.round?.maxTotalCents).toBeNull();
+  });
+
+  it("save sends photos, sources and list items", async () => {
+    const buyer = await newUser("Jim");
+    const person = await newPerson(buyer.id, "Dad");
+    const { item } = await linkedList(buyer.id, person);
+    const vase = await item("Vase", 2500, "https://shop.example/vase");
+    const round = await newRound(buyer.id, person, 2030);
+    const started = await store().start({ userId: buyer.id, personId: person, roundId: round }, new Date());
+    if (!("runId" in started)) throw new Error(`refused: ${started.refused}`);
+    await store().save(started.runId, [
+      idea({ title: "Vase", retailer: "shop.example", retailerProductId: null, offerId: null, source: "list", listItemId: vase, imageUrl: null }),
+      idea({ rank: 2, imageUrl: "https://img.test/rod.jpg" }),
+    ]);
+    const rows = (
+      await pg.query("select source, list_item_id, image_url, retailer_product_id from concierge.gift_ideas where round_id = $1 order by rank", [round])
+    ).rows;
+    expect(rows).toEqual([
+      { source: "list", list_item_id: vase, image_url: null, retailer_product_id: null },
+      { source: "generated", list_item_id: null, image_url: "https://img.test/rod.jpg", retailer_product_id: "B0ROD" },
+    ]);
   });
 
   // S4: the checks before a run, on the real store. Both vendors are spies that fail the test if

@@ -277,6 +277,7 @@ export type Database = {
           first_party: boolean | null;
           handling_days_max: number | null;
           id: string;
+          image_url: string | null;
           list_item_id: string | null;
           offer_id: string | null;
           over_budget: boolean;
@@ -307,6 +308,7 @@ export type Database = {
           first_party?: boolean | null;
           handling_days_max?: number | null;
           id?: string;
+          image_url?: string | null;
           list_item_id?: string | null;
           offer_id?: string | null;
           over_budget?: boolean;
@@ -336,6 +338,7 @@ export type Database = {
           first_party?: boolean | null;
           handling_days_max?: number | null;
           id?: string;
+          image_url?: string | null;
           list_item_id?: string | null;
           offer_id?: string | null;
           over_budget?: boolean;
@@ -1423,6 +1426,14 @@ export type Database = {
         }[];
       };
       enable_owner_rls: { Args: { p_table: unknown }; Returns: undefined };
+      excluded_offers: {
+        Args: { p_person_id: string; p_round_id: string };
+        Returns: {
+          list_item_id: string;
+          product_id: string;
+          retailer: string;
+        }[];
+      };
       excluded_products: { Args: { p_person_id: string }; Returns: string[] };
       fail_order: {
         Args: { p_failure_type: string; p_order_id: string };
@@ -1556,6 +1567,10 @@ export type Database = {
           isSetofReturn: true;
         };
       };
+      order_is_given: {
+        Args: { p_resolved: boolean; p_status: string };
+        Returns: boolean;
+      };
       reapprove_order: {
         Args: {
           p_lock: string;
@@ -1618,6 +1633,19 @@ export type Database = {
         Args: { p_results: Json; p_round_id: string };
         Returns: Database["concierge"]["Enums"]["round_status"];
       };
+      reject_round_ideas: {
+        Args: {
+          p_expect_more: boolean;
+          p_facts: Json;
+          p_list_gifts: boolean;
+          p_lock: string;
+          p_reason_code: string;
+          p_reason_text: string;
+          p_round_id: string;
+          p_user_id: string;
+        };
+        Returns: undefined;
+      };
       release_failure_notices: {
         Args: { p_order_ids: string[]; p_round_id: string };
         Returns: undefined;
@@ -1629,6 +1657,54 @@ export type Database = {
       remove_zinc_secrets: {
         Args: { p_api_key_secret_id: string; p_webhook_secret_id: string };
         Returns: undefined;
+      };
+      replace_failed_order: {
+        Args: {
+          p_failed_order_id: string;
+          p_lock: string;
+          p_order: Json;
+          p_round_id: string;
+          p_user_id: string;
+        };
+        Returns: {
+          address_source: string | null;
+          created_at: string;
+          est_delivery_date: string | null;
+          failed_after_close: boolean;
+          failed_at: string | null;
+          failure_type: string | null;
+          fee_cents: number;
+          funding_mode: string;
+          gift_message: string | null;
+          hold_reason: string | null;
+          id: string;
+          idea_id: string;
+          idempotency_key: string;
+          is_gift: boolean;
+          max_price_cents: number;
+          merchant_order_id: string | null;
+          packages: NonNullable<Json>;
+          provider: string;
+          provider_order_id: string | null;
+          resolved: boolean;
+          round_id: string;
+          ship_city: string;
+          ship_state: string;
+          ship_to: string;
+          shipping_cents: number | null;
+          status: string;
+          subtotal_cents: number | null;
+          tax_cents: number | null;
+          total_cents: number | null;
+          updated_at: string;
+          user_id: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "orders";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
       };
       round_candidates: {
         Args: { p_today: string };
@@ -1659,6 +1735,15 @@ export type Database = {
         Args: Record<PropertyKey, never>;
         Returns: string[];
       };
+      runs_after_rejection: {
+        Args: {
+          p_facts: Json;
+          p_list_gifts: boolean;
+          p_now: string;
+          p_round_id: string;
+        };
+        Returns: boolean;
+      };
       save_budgets: {
         Args: { p_amounts: Json; p_person_id: string };
         Returns: undefined;
@@ -1673,6 +1758,15 @@ export type Database = {
       };
       set_last_emailed_reason: {
         Args: { p_reason: string; p_round_id: string };
+        Returns: undefined;
+      };
+      set_round_budget: {
+        Args: {
+          p_budget_cents: number;
+          p_lock: string;
+          p_round_id: string;
+          p_user_id: string;
+        };
         Returns: undefined;
       };
       set_seen_balance: {
@@ -2055,6 +2149,10 @@ export type Database = {
         Args: { p_item_id: string; p_name: string; p_token: string };
         Returns: Json;
       };
+      claim_holder: {
+        Args: { p_item_id: string; p_user_id: string };
+        Returns: string;
+      };
       forget_photo_deletions: {
         Args: { p_paths: string[] };
         Returns: undefined;
@@ -2062,6 +2160,10 @@ export type Database = {
       get_shared_list: { Args: { p_token: string }; Returns: Json };
       is_allowed_image_url: { Args: { p_url: string }; Returns: boolean };
       is_amazon_host: { Args: { p_host: string }; Returns: boolean };
+      item_shared: {
+        Args: { p_item_id: string; p_person_id: string };
+        Returns: boolean;
+      };
       link_person: {
         Args: { p_person_id: string; p_token: string };
         Returns: undefined;

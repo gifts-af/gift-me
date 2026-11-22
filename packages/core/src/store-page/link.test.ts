@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanLink, productLink } from "./link";
+import { cleanLink, productLink, storeName } from "./link";
 
 describe("cleanLink", () => {
   it("drops tracking tokens and the hash, keeps variant and id", () => {
@@ -52,5 +52,14 @@ describe("productLink", () => {
 
   it("cleans tracking from the canonical too", () => {
     expect(productLink("https://shop.test/p", "https://shop.test/p?gclid=1")).toBe("https://shop.test/p");
+  });
+});
+
+describe("storeName", () => {
+  it("says Amazon for any Amazon site and the bare domain for other stores", () => {
+    expect(storeName("https://www.amazon.co.uk/dp/B0EXAMPLE1")).toBe("Amazon");
+    expect(storeName("https://www.walmart.com/ip/x/1")).toBe("walmart.com");
+    expect(storeName("https://shop.example.co/p/1")).toBe("shop.example.co");
+    expect(storeName("not a url")).toBeNull();
   });
 });

@@ -4,9 +4,11 @@ import {
   ideaRunWorstMs,
   nextAction,
   roundToCreate,
+  toldBefore,
   type AttentionReason,
   type CalendarDate,
   type OccasionKind,
+  type RenamedStepKey,
   type RoundStatus,
   type RoundView,
   type ScheduleSettings,
@@ -472,7 +474,8 @@ async function runStep(claimed: ClaimedRound, deps: EngineDeps, s: ScheduleSetti
     case "skip": {
       const ids = { round_id: round.id, user_id: round.userId };
       // Tell the buyer about a skip only if we asked or told them something (ruling 13, ALL-27 AC-9).
-      if (!sent.has("heads_up") && !sent.has("address_request") && !sent.has("no_ideas")) {
+      // A rejection renames what was sent (heads_up@1), and that still counts (ALL-29 AC-13).
+      if (!toldBefore(sent)) {
         logEvent("round_skipped_silently", { ...ids, status: round.status });
         return finishStep(round, ctx, sent, { status: "skipped" }, deps, s);
       }
@@ -859,8 +862,13 @@ function lateDetail(o: RoundOrder, personName: string): string {
   }
 }
 
+// Pages of the round screen (ALL-29); the emails link to them with plain links, no token.
+const roundPath = (roundId: string) => `/rounds/${roundId}`;
+const buyPath = (roundId: string, ideaId: string) => `${roundPath(roundId)}/buy?ideas=${ideaId}`;
+const fixPath = (roundId: string, orderId: string) => `${roundPath(roundId)}/fix/${orderId}`;
+
 /** Why a gift failed and what the buyer can do now, for a summary while the round is open. */
-function openRow(o: RoundOrder, personName: string, ownerAsked: boolean): FailedGift {
+function openRow(o: RoundOrder, personName: string, ownerAsked: boolean, url: string): FailedGift {
   const choose = `Choose another gift instead of the ${o.title}`;
   switch (o.failureType) {
     case "price_up":
@@ -868,18 +876,19 @@ function openRow(o: RoundOrder, personName: string, ownerAsked: boolean): Failed
         title: o.title,
         detail: "The price went up more than you allowed for. Approve the new price, or choose another gift.",
         action: `Review the new price for the ${o.title}`,
+        url,
       };
     case "out_of_stock":
-      return { title: o.title, detail: "The store ran out. Choose another gift.", action: choose };
+      return { title: o.title, detail: "The store ran out. Choose another gift.", action: choose, url };
     case "too_late":
-      return { title: o.title, detail: "It wouldn't arrive in time anymore. Choose something that ships faster.", action: choose };
+      return { title: o.title, detail: "It wouldn't arrive in time anymore. Choose something that ships faster.", action: choose, url };
     case "address_withdrawn":
     case "address_rejected": {
       const asked = o.failureType === "address_rejected" && ownerAsked ? ` We'll ask ${personName} to check it, without mentioning a gift.` : "";
-      return { title: o.title, detail: `${lateDetail(o, personName)}${asked} Choose another gift.`, action: choose };
+      return { title: o.title, detail: `${lateDetail(o, personName)}${asked} Choose another gift.`, action: choose, url };
     }
     default:
-      return { title: o.title, detail: "The store couldn't place the order. Choose another gift.", action: choose };
+      return { title: o.title, detail: "The store couldn't place the order. Choose another gift.", action: choose, url };
   }
 }
 
@@ -937,6 +946,8 @@ async function sendOpenFailures(
   const base = { userId: round.userId, roundId: round.id };
   const occasion = { personName: ctx.personName, occasion: occasionWord(ctx.occasionKind), dateText: shortDate(ctx.occasionDate) };
   const open = { open: { action: "open_person" as const, expiresAt: new Date(`${round.shipByDeadline}T23:59:00Z`) } };
+  // A single failure's button opens that gift's own fix page (ALL-29 AC-16); the page itself signs the buyer in.
+  const fix = (o: RoundOrder) => ({ open: { path: fixPath(round.id, o.id) } });
   const orderByText = chooseBy(round.shipByDeadline);
   if (failed.length > 1) {
     // Gifts still in play before this news: not cancelled, and not a failure the buyer already heard about.
@@ -951,7 +962,7 @@ async function sendOpenFailures(
         data: {
           ...occasion,
           tried: Math.max(tried, failed.length),
-          failed: failed.map((o) => openRow(o, ctx.personName, ownerAsked)),
+          failed: failed.map((o) => openRow(o, ctx.personName, ownerAsked, `${deps.notify.baseUrl}${fixPath(round.id, o.id)}`)),
           ...(onItsWay.length > 0 ? { onItsWay } : {}),
           orderByText,
         },
@@ -964,19 +975,19 @@ async function sendOpenFailures(
   const one = { ...occasion, giftTitle: o.title, orderByText };
   switch (o.failureType) {
     case "price_up":
-      return notify({ ...base, kind: "price_up", data: one, links: open }, deps.notify);
+      return notify({ ...base, kind: "price_up", data: one, links: fix(o) }, deps.notify);
     case "out_of_stock":
-      return notify({ ...base, kind: "out_of_stock", data: one, links: open }, deps.notify);
+      return notify({ ...base, kind: "out_of_stock", data: one, links: fix(o) }, deps.notify);
     case "too_late":
-      return notify({ ...base, kind: "too_late", data: one, links: open }, deps.notify);
+      return notify({ ...base, kind: "too_late", data: one, links: fix(o) }, deps.notify);
     case "address_withdrawn":
     case "address_rejected": {
       const reason = endedAddressReason(o.failureType, ctx.personName, [o.title], ownerAsked);
-      return notify({ ...base, kind: "needs_attention", data: { ...occasion, reason, orderByText }, links: open }, deps.notify);
+      return notify({ ...base, kind: "needs_attention", data: { ...occasion, reason, orderByText }, links: fix(o) }, deps.notify);
     }
     default: {
       const reason = `the store couldn't place the order for the ${o.title}, and you haven't been charged.`;
-      return notify({ ...base, kind: "needs_attention", data: { ...occasion, reason, orderByText }, links: open }, deps.notify);
+      return notify({ ...base, kind: "needs_attention", data: { ...occasion, reason, orderByText }, links: fix(o) }, deps.notify);
     }
   }
 }
@@ -1103,7 +1114,7 @@ function view(round: ClaimedRound, ctx: RoundContext, sent: Set<StepKey>, placeT
     emailedBalanceCents: round.emailedBalanceCents,
     placeTried,
     orderingPaused,
-    hasFacts: hasIdeas || ctx.hasFacts,
+    hasInputs: hasIdeas || ctx.hasFacts || ctx.hasListGifts,
     ideaRunsLeft: hasIdeas || ctx.ideaRunsLeft,
     ranSinceNoIdeas: ctx.ranSinceNoIdeas,
     paid: ctx.paid,
@@ -1143,13 +1154,15 @@ async function ideaPass(
   let worstMs: number;
   let perTick: number;
   try {
-    const [rounds, aiMs, zincMs] = await Promise.all([
+    const [rounds, aiMs, zincMs, listLookupsMax, zincPerSecond] = await Promise.all([
       maxRuns ?? store.setting("idea_rounds_per_tick"),
       store.setting("idea_ai_timeout_ms"),
       store.setting("idea_zinc_timeout_ms"),
+      store.setting("idea_list_lookups_max"),
+      store.setting("zinc_requests_per_second"),
     ]);
     perTick = rounds;
-    worstMs = ideaRunWorstMs(aiMs, zincMs);
+    worstMs = ideaRunWorstMs(aiMs, zincMs, listLookupsMax, zincPerSecond);
   } catch (err) {
     logEvent("ideas.pass_failed", { ...errorFields(err) });
     for (const round of turns) await releaseQuietly(round, deps);
@@ -1323,7 +1336,8 @@ function occasionWord(kind: OccasionKind): string {
   return kind === "birthday" || kind === "anniversary" ? OCCASION_NAMES[kind].toLowerCase() : OCCASION_NAMES[kind];
 }
 
-type PlainStep = Exclude<StepKey, `hold:${string}` | `fail:${string}` | `ordered:${string}` | `late_fail:${string}` | "shared_address">;
+// A renamed key (heads_up@1) is only read, never sent.
+type PlainStep = Exclude<StepKey, `hold:${string}` | `fail:${string}` | `ordered:${string}` | `late_fail:${string}` | "shared_address" | RenamedStepKey>;
 /** Which email a step key sends; the numbered keys group by kind. Failures are told by tellFailures. */
 type EmailStep = PlainStep | "hold" | "hold_short" | "hold_deadline" | "fail" | "ordered";
 
@@ -1348,9 +1362,21 @@ async function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundContext, 
     occasion: occasionWord(ctx.occasionKind),
     dateText: shortDate(ctx.occasionDate),
   };
-  const ideas = ctx.ideas.map((i) => ({ title: i.title, price: money(i.totalCents), ...(i.overBudget ? { overBudget: true } : {}) }));
-  // Every button opens the person's page until the approval screen (ALL-29).
-  // Links last until the end of the deadline day.
+  const ideas = ctx.ideas.map((i) => ({
+    title: i.title,
+    price: money(i.totalCents),
+    ...(i.overBudget ? { overBudget: true } : {}),
+    ...(i.arriveBy ? { arriveBy: shortDate(i.arriveBy) } : {}),
+    ...(i.store ? { store: i.store } : {}),
+    ...(i.reason ? { reason: i.reason } : {}),
+  }));
+  // The approval emails link each idea's "Buy this" and the one button to the round screen with
+  // plain links (ALL-29); the other emails open the person's page with one-time links that last
+  // until the end of the deadline day.
+  const approval = {
+    choose: { path: roundPath(round.id) },
+    ...Object.fromEntries(ctx.ideas.map((i, n) => [`buy${n}`, { path: buyPath(round.id, i.id) }])),
+  };
   const link = { action: "open_person" as const, expiresAt: new Date(`${round.shipByDeadline}T23:59:00Z`) };
   // The address emails open the person's address form instead (ALL-81).
   const addressLink = { ...link, action: "add_address" as const };
@@ -1372,14 +1398,14 @@ async function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundContext, 
           ...base,
           kind: "heads_up",
           data: { ...occasion, ...asks, mode: "reminder", ideas, late: round.late, ...(extra.funding ? { funding: extra.funding } : {}) },
-          links: { choose: link, ...questionsLink },
+          links: { ...approval, ...questionsLink },
         },
         notifyDeps,
       );
     case "reminder_1":
     case "reminder_2":
       return notify(
-        { ...base, kind: "reminder", data: { ...occasion, ...asks, ideas }, links: { choose: link, ...questionsLink } },
+        { ...base, kind: "reminder", data: { ...occasion, ...asks, ideas }, links: { ...approval, ...questionsLink } },
         notifyDeps,
       );
     case "final_notice":
@@ -1389,7 +1415,7 @@ async function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundContext, 
           kind: "final_notice",
           // The day before ship-by: that day's tick closes the round (ALL-116 plan review).
           data: { ...occasion, ideas, orderByText: chooseBy(round.shipByDeadline) },
-          links: { choose: link },
+          links: approval,
         },
         notifyDeps,
       );

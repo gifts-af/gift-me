@@ -383,9 +383,14 @@ export async function suggestIdeasAction(personId: string): Promise<SuggestResul
       logEvent("ideas.not_configured", { user_id: userId, person_id: personId });
       return { ok: false, error: IDEA_MESSAGES.failed };
     }
-    const [aiMs, zincMs] = await Promise.all([appSettingInt("idea_ai_timeout_ms"), appSettingInt("idea_zinc_timeout_ms")]);
+    const [aiMs, zincMs, listLookupsMax, zincPerSecond] = await Promise.all([
+      appSettingInt("idea_ai_timeout_ms"),
+      appSettingInt("idea_zinc_timeout_ms"),
+      appSettingInt("idea_list_lookups_max"),
+      appSettingInt("zinc_requests_per_second"),
+    ]);
     const outcome = await runIdeas(
-      { userId, personId, roundId: null, signal: AbortSignal.timeout(ideaRunWorstMs(aiMs, zincMs)) },
+      { userId, personId, roundId: null, signal: AbortSignal.timeout(ideaRunWorstMs(aiMs, zincMs, listLookupsMax, zincPerSecond)) },
       deps,
     );
     revalidatePath(`/people/${personId}/ideas`);

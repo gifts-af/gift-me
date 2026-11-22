@@ -45,7 +45,8 @@ export type NotesReplyKind = (typeof REPLIES_ARE_NOTES)[number];
 export type RenderedEmail = { subject: string; html: string; text: string };
 
 // Everything is already formatted by the caller (dates, prices).
-export type IdeaRow = { title: string; price: string; overBudget?: boolean };
+// `arriveBy` is the date formatted; `store` the retailer's name; `reason` why we picked it.
+export type IdeaRow = { title: string; price: string; overBudget?: boolean; arriveBy?: string; store?: string; reason?: string };
 
 type Occasion = { personName: string; occasion: string; dateText: string };
 
@@ -62,7 +63,8 @@ type OneGift = Occasion & { giftTitle: string };
 /** One failed gift while the round is open; `orderByText`: the last day to choose again in time. */
 type Failure = OneGift & { orderByText: string };
 /** A failed gift in a summary (ALL-116): what happened, and the link text for what to do now. */
-export type FailedGift = { title: string; detail: string; action?: string };
+// `url` is that gift's own fix page (ALL-29).
+export type FailedGift = { title: string; detail: string; action?: string; url: string };
 
 export type TemplateData = {
   test: Record<string, never>;
@@ -136,9 +138,10 @@ export type TemplateData = {
 export type TemplateLinks = {
   test: { tryIt: string };
   // `skip`, when given, is shown as a plain link to copy; the button stays the only anchor.
-  heads_up: { choose: string; skip?: string; questions?: string };
-  reminder: { choose: string; questions?: string };
-  final_notice: { choose: string };
+  // `buy{i}` is the "Buy this" link of ideas[i] (the who_is_this pattern); `choose` opens the round screen (ALL-29).
+  heads_up: { choose: string; skip?: string; questions?: string; [buy: `buy${number}`]: string };
+  reminder: { choose: string; questions?: string; [buy: `buy${number}`]: string };
+  final_notice: { choose: string; [buy: `buy${number}`]: string };
   needs_attention: { open: string };
   reaction_prompt: { open: string };
   needs_address: { addAddress: string };
@@ -154,7 +157,7 @@ export type TemplateLinks = {
   missed_on_us: { open: string };
   ordered: { open: string };
   failed_late: { open: string };
-  // Until ALL-29, every gift's link opens the person's page too.
+  // `open` is the person's page; each failed gift carries its own fix page in `FailedGift.url`.
   failed_several: { open: string };
   check_your_address: { open: string };
   notes_tip: Record<string, never>;
@@ -165,8 +168,26 @@ export type TemplateLinks = {
   no_ideas: { questions: string };
 };
 
-const rowsOf = (ideas: IdeaRow[]) =>
-  ideas.map((i) => ({ title: `${i.title} · ${i.price}`, ...(i.overBudget ? { detail: "Over budget" } : {}) }));
+/** An idea's "Buy this" link. Missing, it would render href="undefined": refuse rather than send that. */
+function buyLink(links: Record<string, string | undefined>, i: number): string {
+  const url = links[`buy${i}`];
+  if (!url) throw new Error(`No link for idea buy${i}`);
+  return url;
+}
+
+/** Idea rows; with `links`, each gets its own "Buy this" link (ALL-29 AC-1). */
+const rowsOf = (ideas: IdeaRow[], links?: Record<string, string | undefined>) =>
+  ideas.map((i, n) => {
+    const detail = [i.overBudget ? "Over budget" : "", i.arriveBy ? `Arrives by ${i.arriveBy}` : "", i.store ?? ""].filter(Boolean).join(" · ");
+    return {
+      title: `${i.title} · ${i.price}`,
+      ...(detail ? { detail } : {}),
+      ...(i.reason ? { reason: i.reason } : {}),
+      ...(links ? { link: { label: "Buy this ›", url: buyLink(links, n) } } : {}),
+    };
+  });
+
+const PICK_BUTTON = "Pick several or none of these";
 
 const PRICES_NOTE = "Prices include shipping and tax.";
 
@@ -317,9 +338,9 @@ export const TEMPLATES: {
           `${d.personName}'s ${d.occasion} is ${d.dateText}. These gifts can still arrive in time.`,
           ...late,
         ],
-        rows: rowsOf(d.ideas),
+        rows: rowsOf(d.ideas, links),
         warning: funding.warning,
-        button: { label: "Choose a gift", url: links.choose },
+        button: { label: PICK_BUTTON, url: links.choose },
         link: plainLinks(questionsLink(d, links.questions)),
         footer: `Nothing is bought until you choose. ${PRICES_NOTE}`,
       }),
@@ -334,8 +355,8 @@ export const TEMPLATES: {
         `${d.personName}'s ${d.occasion} is ${d.dateText} and you haven't chosen a gift yet.`,
         "Pick one and we'll take care of the rest.",
       ],
-      rows: rowsOf(d.ideas),
-      button: { label: "Choose a gift", url: links.choose },
+      rows: rowsOf(d.ideas, links),
+      button: { label: PICK_BUTTON, url: links.choose },
       link: questionsLink(d, links.questions),
       footer: `Nothing is bought until you choose. ${PRICES_NOTE}`,
     }),
@@ -349,8 +370,8 @@ export const TEMPLATES: {
         `${d.personName}'s ${d.occasion} is ${d.dateText}. Choose a gift by ${d.orderByText} so it arrives in time.`,
         "Choose one now so it gets there.",
       ],
-      rows: rowsOf(d.ideas),
-      button: { label: "Choose a gift", url: links.choose },
+      rows: rowsOf(d.ideas, links),
+      button: { label: PICK_BUTTON, url: links.choose },
       footer: `Nothing is bought until you choose. ${PRICES_NOTE}`,
     }),
   }),
@@ -360,7 +381,7 @@ export const TEMPLATES: {
     ...renderEmail({
       heading: `Sorry, there's a problem with ${d.personName}'s gift`,
       paragraphs: [`We're sorry. We couldn't finish the gift for ${d.personName}'s ${d.occasion} on ${d.dateText}: ${d.reason}`],
-      button: { label: `Open ${d.personName}'s page`, url: links.open },
+      button: { label: "Review the gift", url: links.open },
       footer: d.orderByText
         ? `What happens next: nothing else is bought until you choose. Choose another gift by ${d.orderByText} so it arrives in time.`
         : `What happens next: ${NEXT_TIME(d.personName)}`,
@@ -598,7 +619,7 @@ export const TEMPLATES: {
       ],
       rows: d.failed.map((f) => ({ title: f.title, detail: f.detail })),
       button: { label: `Open ${d.personName}'s page`, url: links.open },
-      link: d.failed.filter((f) => f.action).map((f) => ({ label: f.action as string, url: links.open })),
+      link: d.failed.filter((f) => f.action).map((f) => ({ label: f.action as string, url: f.url })),
       footer: `What happens next: there's still time to put this right. Nothing else is bought until you choose. Choose by ${d.orderByText} so it arrives in time. If you don't, we'll close this round then and let you know.`,
     }),
   }),
@@ -684,10 +705,16 @@ export const TEMPLATES: {
 };
 
 const IDEAS: IdeaRow[] = [
-  { title: "Stoneware mug set", price: "$42" },
-  { title: "Cast-iron herb planter", price: "$68" },
-  { title: "Audiobook credits", price: "$45" },
+  { title: "Stoneware mug set", price: "$42", arriveBy: "Mar 5", store: "Amazon", reason: "Loves tea." },
+  { title: "Cast-iron herb planter", price: "$68", arriveBy: "Mar 7", store: "Amazon", reason: "Grows herbs on the balcony." },
+  { title: "Audiobook credits", price: "$45", arriveBy: "Mar 4", store: "Audible", reason: "On their list." },
 ];
+const BUY_LINKS = {
+  choose: "https://example.com/rounds/r1",
+  buy0: "https://example.com/rounds/r1/buy?ideas=i0",
+  buy1: "https://example.com/rounds/r1/buy?ideas=i1",
+  buy2: "https://example.com/rounds/r1/buy?ideas=i2",
+};
 const OCC = { personName: "Mom", occasion: "birthday", dateText: "Saturday, March 14" };
 const GIFT = { ...OCC, giftTitles: ["Le Creuset mug set"] };
 const ONE_GIFT = { ...OCC, giftTitle: "Le Creuset mug set" };
@@ -699,19 +726,19 @@ export const SAMPLE_DATA: {
   test: { data: {}, links: { tryIt: "https://example.com/a/test-token" } },
   heads_up: {
     data: { ...OCC, mode: "reminder", ideas: IDEAS },
-    links: { choose: "https://example.com/a/heads-up-token" },
+    links: BUY_LINKS,
   },
   reminder: {
     data: { ...OCC, ideas: IDEAS },
-    links: { choose: "https://example.com/a/reminder-token" },
+    links: BUY_LINKS,
   },
   final_notice: {
     data: { ...OCC, ideas: IDEAS, orderByText: "Thursday, March 12" },
-    links: { choose: "https://example.com/a/final-token" },
+    links: BUY_LINKS,
   },
   needs_attention: {
     data: { ...OCC, reason: "the store couldn't place the order for the Le Creuset mug set, and you haven't been charged.", orderByText: "Thursday, March 5" },
-    links: { open: "https://example.com/a/attention-token" },
+    links: { open: "https://example.com/rounds/r1/fix/o1" },
   },
   reaction_prompt: {
     data: { personName: "Mom", occasion: "birthday", giftTitle: "The stoneware mug set" },
@@ -761,8 +788,14 @@ export const SAMPLE_DATA: {
           title: "Le Creuset mug set",
           detail: "The price went up more than you allowed for. Approve the new price, or choose another gift.",
           action: "Review the new price for the Le Creuset mug set",
+          url: "https://example.com/rounds/r1/fix/o1",
         },
-        { title: "Linen apron", detail: "The store ran out. Choose another gift.", action: "Choose another gift instead of the Linen apron" },
+        {
+          title: "Linen apron",
+          detail: "The store ran out. Choose another gift.",
+          action: "Choose another gift instead of the Linen apron",
+          url: "https://example.com/rounds/r1/fix/o2",
+        },
       ],
       onItsWay: ["Cast-iron herb planter"],
       orderByText: "Thursday, March 5",

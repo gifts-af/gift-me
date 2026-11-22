@@ -1,4 +1,5 @@
-import { cleanLink, extractAsin, isAmazonHost } from '@gifts-af/core/store-page/link'
+import { cleanLink, extractAsin, isAmazonHost, storeName } from '@gifts-af/core/store-page/link'
+export { storeName }
 import { AMAZON_FIXTURES } from './fixtures.js'
 
 // Turns a pasted product link into gift details. Client-only, best effort.
@@ -23,20 +24,6 @@ import { AMAZON_FIXTURES } from './fixtures.js'
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SHORT_LINK_HOST_RE = /^(a\.co|amzn\.to|amzn\.eu|amzn\.asia)$/i
-
-/**
- * The store a saved link points to, for "View on …": "Amazon" for any Amazon
- * site, otherwise the bare domain ("walmart.com"). Null if it isn't a link.
- */
-export function storeName(productUrl) {
-  let hostname
-  try {
-    hostname = new URL(productUrl).hostname
-  } catch {
-    return null
-  }
-  return isAmazonHost(hostname) ? 'Amazon' : hostname.replace(/^www\./i, '').toLowerCase()
-}
 
 const ERROR_MESSAGES = {
   EMPTY_INPUT: 'Paste a product link first.',

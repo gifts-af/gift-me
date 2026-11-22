@@ -60,8 +60,8 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     ...over,
   });
 
-  /** Our real database, with one named function failing for one round, like a dropped connection would. */
-  function failingRpc(name: string, roundId: string) {
+  /** Our real database, with one named function failing for one round, like a dropped connection would (or with `err`). */
+  function failingRpc(name: string, roundId: string, err: { code: string; message: string } = { code: "XX000", message: "down" }) {
     const real = createClient<Database>(supabase!.url, supabase!.serviceRoleKey, { auth: { persistSession: false } });
     return new Proxy(real, {
       get(target, prop, receiver) {
@@ -73,7 +73,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
               if (p !== "rpc") return Reflect.get(t, p, r);
               return (fn: string, args: Record<string, unknown>) =>
                 fn === name && args?.p_round_id === roundId
-                  ? Promise.resolve({ data: null, error: { code: "XX000", message: "down" } })
+                  ? Promise.resolve({ data: null, error: err })
                   : (t.rpc as (f: string, a: unknown) => unknown).call(t, fn, args);
             },
           });
@@ -130,6 +130,14 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     const ideaIds: string[] = [];
     for (const [i, total] of (o.totals ?? [4200]).entries()) {
       const item = o.listItems?.[i] ?? null;
+      // A list idea's person is linked to the item's list, as approve_round requires (AC-30a).
+      if (item)
+        await pg.query(
+          `insert into lists.person_links (person_id, buyer_id, list_id, share_token)
+           select $1, $2, l.id, l.share_token from lists.list_items li join lists.lists l on l.id = li.list_id where li.id = $3
+           on conflict (person_id) do nothing`,
+          [person.rows[0].id, u.userId, item],
+        );
       const idea = await pg.query(
         `insert into concierge.gift_ideas (user_id, round_id, title, product_url, price_cents, est_total_cents, handling_days_max, delivery_days_min, delivery_days_max, rank, source, list_item_id)
          values ($1, $2, 'Gift', 'https://shop.test/pending', $3, $3, 2, 3, 5, $4, $5, $6) returning id`,
@@ -906,5 +914,228 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     await approvedOnly(u, r);
     expect(await placeRound(r.roundId, new Date(), deps())).toBe("not_ready");
     expect(zinc.calls).toEqual([]);
+  });
+
+  // ─── the approval screen (ALL-29) ─────────────────────────────────────────
+
+  const ORDERED = { ok: true, status: "ordered", reason: null };
+  const destination = async (orderId: string) =>
+    (
+      await pg.query(
+        `select o.ship_to, o.address_source, o.ship_city, x.address_line1, x.city
+           from concierge.orders o left join concierge.order_addresses x on x.order_id = o.id where o.id = $1`,
+        [orderId],
+      )
+    ).rows[0];
+
+  /**
+   * Runs `run` while taking the round's lease also sets its budget to `cents`: the read before the
+   * lease sees the old budget, the lease itself the new one (S7). Both creates are inside the try,
+   * so a failed second create still drops the first.
+   */
+  async function budgetSetByLease<T>(roundId: string, cents: number, run: () => Promise<T>): Promise<T> {
+    const tag = `test_budget_${roundId.replace(/-/g, "")}`;
+    try {
+      await pg.query(`create function public.${tag}() returns trigger language plpgsql as $$ begin new.budget_cents := ${cents}; return new; end $$`);
+      await pg.query(
+        `create trigger ${tag} before update of locked_until on concierge.gift_rounds for each row
+         when (new.id = '${roundId}' and new.locked_until is not null) execute function public.${tag}()`,
+      );
+      return await run();
+    } finally {
+      await pg.query(`drop trigger if exists ${tag} on concierge.gift_rounds`);
+      await pg.query(`drop function if exists public.${tag}()`);
+    }
+  }
+
+  it("a budget set while approveAndBuy takes the lease caps the order at the new budget", async () => {
+    const u = await newUser();
+    const r = await newRound(u, { budget: null });
+    expect(await budgetSetByLease(r.roundId, 5000, () => approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps()))).toEqual(
+      ORDERED,
+    );
+    // Within a 5000 budget the cap is the pick plus the margin less the fee; with no budget it would be 4100.
+    expect((await orders(r.roundId))[0].max_price_cents).toBe(4520);
+    expect(zinc.posts).toEqual([expect.objectContaining({ maxPrice: 4520 })]);
+  });
+
+  it("a second tab after the buy went through says already ordered, not replaced", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    const buy = () => approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps());
+    expect(await buy()).toEqual(ORDERED);
+    expect(await buy()).toEqual({ ok: false, error: "already_ordered" });
+
+    // Held (setup not finished), so the round can still be leased.
+    const v = await newUser({ connected: false });
+    const s = await newRound(v);
+    const buyHeld = () => approveAndBuy({ userId: v.userId, roundId: s.roundId, ideaIds: s.ideaIds }, deps());
+    expect(await buyHeld()).toEqual({ ok: true, status: "held", reason: "setup" });
+    expect(await buyHeld()).toEqual({ ok: false, error: "already_ordered" });
+    expect(await orders(r.roundId)).toHaveLength(1);
+    expect(await orders(s.roundId)).toHaveLength(1);
+  });
+
+  it("approve_round's lease not held is busy, and each refusal's word is logged", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    const refused = (message: string) =>
+      approveAndBuy(
+        { userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds },
+        deps({ db: failingRpc("approve_round", r.roundId, { code: "P0001", message }) }),
+      );
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      expect(await refused("approve_round: lease not held")).toEqual({ ok: false, error: "busy" });
+      expect(await refused("approve_round: past the ship-by deadline")).toEqual({ ok: false, error: "not_open" });
+      const reasons = log.mock.calls
+        .map((c) => JSON.parse(String(c[0])))
+        .filter((e) => e.event === "order.approve_refused" && e.round_id === r.roundId)
+        .map((e) => e.reason);
+      expect(reasons).toEqual(["lease not held", "past the ship-by deadline"]);
+    } finally {
+      log.mockRestore();
+    }
+    expect(await orders(r.roundId)).toHaveLength(0);
+  });
+
+  it("a budget that tightens below the pick while approveAndBuy takes the lease asks to confirm and buys nothing", async () => {
+    const u = await newUser();
+    // The pick is 4200: within 10000 before the lease, over a 4000 budget (inside the 15% allowance) after.
+    const r = await newRound(u, { budget: 10000 });
+    expect(await budgetSetByLease(r.roundId, 4000, () => approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps()))).toEqual({
+      ok: false,
+      error: "needs_confirmation",
+    });
+    expect(await orders(r.roundId)).toHaveLength(0);
+    expect(zinc.posts).toEqual([]);
+  });
+
+  it("ships to the buyer's own address when asked", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    await pg.query(
+      `insert into public.account_addresses (user_id, recipient_first_name, recipient_last_name, address_line1, city, state, zip)
+       values ($1, 'Bo', 'Buyer', '5 Home Rd', 'Columbus', 'OH', '43215')`,
+      [u.userId],
+    );
+    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds, shipTo: { kind: "buyer" } }, deps())).toEqual(ORDERED);
+    const [o] = await orders(r.roundId);
+    expect(await destination(o.id)).toEqual({ ship_to: "buyer", address_source: "own", ship_city: "Columbus", address_line1: "5 Home Rd", city: "Columbus" });
+    expect(zinc.posts).toEqual([expect.objectContaining({ city: "Columbus" })]);
+
+    // No address of their own: nothing is approved.
+    const v = await newUser();
+    const s = await newRound(v);
+    expect(await approveAndBuy({ userId: v.userId, roundId: s.roundId, ideaIds: s.ideaIds, shipTo: { kind: "buyer" } }, deps())).toEqual({
+      ok: false,
+      error: "no_address",
+    });
+    expect(await orders(s.roundId)).toHaveLength(0);
+  });
+
+  it("another address is saved to the person when asked", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    const address = { firstName: "Ann", lastName: "Lee", line1: "7 Lake Ave", line2: null, city: "Toledo", state: "OH", zip: "43604" };
+    expect(
+      await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds, shipTo: { kind: "other", address, saveToPerson: true } }, deps()),
+    ).toEqual(ORDERED);
+    const [o] = await orders(r.roundId);
+    expect(await destination(o.id)).toEqual({ ship_to: "other", address_source: "own", ship_city: "Toledo", address_line1: "7 Lake Ave", city: "Toledo" });
+    expect(zinc.posts).toEqual([expect.objectContaining({ city: "Toledo" })]);
+    const person = await pg.query("select recipient_first_name, address_line1, city, zip from public.people where id = $1", [r.personId]);
+    expect(person.rows[0]).toEqual({ recipient_first_name: "Ann", address_line1: "7 Lake Ave", city: "Toledo", zip: "43604" });
+
+    // Not saved unless asked, and an address that fails the check is refused.
+    const s = await newRound(u);
+    await approveAndBuy({ userId: u.userId, roundId: s.roundId, ideaIds: s.ideaIds, shipTo: { kind: "other", address: { ...address, city: "Lima" }, saveToPerson: false } }, deps());
+    expect((await pg.query("select city from public.people where id = $1", [s.personId])).rows[0].city).toBe("Dayton");
+    const t = await newRound(u);
+    expect(
+      await approveAndBuy({ userId: u.userId, roundId: t.roundId, ideaIds: t.ideaIds, shipTo: { kind: "other", address: { ...address, state: "Ohio" }, saveToPerson: true } }, deps()),
+    ).toEqual({ ok: false, error: "no_address" });
+    expect(await orders(t.roundId)).toHaveLength(0);
+  });
+
+  it("a stale link after None of these returns replaced and places nothing", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    await pg.query("update concierge.gift_ideas set status = 'rejected' where round_id = $1", [r.roundId]);
+    await pg.query("update concierge.gift_rounds set status = 'generating' where id = $1", [r.roundId]);
+    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps())).toEqual({ ok: false, error: "replaced" });
+    // The same once the new ideas are in and the round is open again.
+    await pg.query("update concierge.gift_rounds set status = 'awaiting_approval' where id = $1", [r.roundId]);
+    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps())).toEqual({ ok: false, error: "replaced" });
+    expect(await orders(r.roundId)).toHaveLength(0);
+    expect(zinc.calls).toEqual([]);
+  });
+
+  it("a gift note over zinc_gift_message_max_chars is refused", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    const max = Number((await pg.query("select value from concierge.app_settings where key = 'zinc_gift_message_max_chars'")).rows[0].value);
+    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds, giftMessage: "x".repeat(max + 1) }, deps())).toEqual({
+      ok: false,
+      error: "gift_message_too_long",
+    });
+    expect(await orders(r.roundId)).toHaveLength(0);
+    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds, giftMessage: "x".repeat(max) }, deps())).toEqual(ORDERED);
+  });
+
+  async function listItem(price = 4000): Promise<string> {
+    const owner = await newUser();
+    const list = await pg.query("insert into lists.lists (owner_id, title) values ($1, 'List') returning id", [owner.userId]);
+    const item = await pg.query("insert into lists.list_items (list_id, position, name, price_cents) values ($1, 0, 'Vase', $2) returning id", [
+      list.rows[0].id,
+      price,
+    ]);
+    return item.rows[0].id;
+  }
+
+  it("a list gift whose link was cut returns not_shared and places nothing", async () => {
+    const u = await newUser();
+    const r = await newRound(u, { listItems: [await listItem()] });
+    await pg.query("delete from lists.person_links where person_id = $1", [r.personId]);
+    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps())).toEqual({ ok: false, error: "not_shared" });
+    expect(await orders(r.roundId)).toHaveLength(0);
+    expect((await round(r.roundId)).locked_until).toBeNull();
+    expect(zinc.calls).toEqual([]);
+  });
+
+  it("a list gift already on another of the buyer's orders returns already_bought", async () => {
+    const u = await newUser();
+    const item = await listItem();
+    const first = await newRound(u, { listItems: [item] });
+    expect(await approveAndBuy({ userId: u.userId, roundId: first.roundId, ideaIds: first.ideaIds }, deps())).toEqual(ORDERED);
+    const second = await newRound(u, { listItems: [item] });
+    expect(await approveAndBuy({ userId: u.userId, roundId: second.roundId, ideaIds: second.ideaIds }, deps())).toEqual({
+      ok: false,
+      error: "already_bought",
+    });
+    expect(await orders(second.roundId)).toHaveLength(0);
+  });
+
+  // Regression guard (ALL-30 built it).
+  it("a list gift approved is claimed for the buyer, and released when its order fails", async () => {
+    const u = await newUser();
+    const item = await listItem();
+    const r = await newRound(u, { listItems: [item] });
+    zinc.plan.set(urlOf(r.ideaIds[0]), [{ status: 400, code: "invalid_product" }]);
+    const claims = async () => (await pg.query("select claimer_id, for_order from lists.gift_claims where item_id = $1", [item])).rows;
+    let open!: () => void;
+    zinc.gate = new Promise<void>((res) => (open = res));
+    const posted = new Promise<void>((res) => (zinc.onPost = res));
+    const buying = approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps());
+    await posted;
+    expect(await claims()).toEqual([{ claimer_id: u.userId, for_order: true }]);
+    open();
+    expect(await buying).toMatchObject({ ok: true, status: "failed" });
+    // A failure not yet dealt with may still be replaced, so the claim stays until it is:
+    // here, the round closing at its deadline.
+    expect(await claims()).toEqual([{ claimer_id: u.userId, for_order: true }]);
+    await pg.query("update concierge.gift_rounds set closed_at = now() where id = $1", [r.roundId]);
+    await pg.query("select concierge.reconcile_round($1, 'deadline')", [r.roundId]);
+    expect(await claims()).toEqual([]);
   });
 });

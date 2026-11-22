@@ -10,6 +10,11 @@ export function captureReadNotice(estimateCents: number): string {
   return `We read each capture with AI, which costs real money: about ${centsLabel(estimateCents)} each.`;
 }
 
+/** By the fix page's "Check today's price" (ALL-29 AC-14): one Zinc lookup at zinc_lookup_cents. */
+export function priceCheckNotice(lookupCents: number): string {
+  return `Checking today's price is a live lookup, which costs real money: about ${centsLabel(lookupCents)}.`;
+}
+
 export const CAPTURE_READ_OFF = "Reading pages with AI costs money, so it's only on for test accounts for now.";
 
 /** Whole dollars without cents ("$101"), else with them ("$40.50"). For the Zinc guide. */

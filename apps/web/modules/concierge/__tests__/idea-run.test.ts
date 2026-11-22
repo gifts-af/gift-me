@@ -3,8 +3,12 @@
 import type { ScheduleSettings } from "@gifts-af/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AI_MODELS } from "@/lib/ai/models";
-import { runIdeas, type IdeaDeps, type IdeaRequest } from "../ideas/run";
-import type { IdeaInputs, IdeaRefusal, IdeaSettings, IdeaStore, RunEnd, RunStage, SavedIdea } from "../ideas/store";
+import type { IdeaDeps, IdeaRequest } from "../ideas/run";
+import type { IdeaInputs, IdeaRefusal, IdeaSettings, IdeaStore, ListGift, RunEnd, RunStage, SavedIdea } from "../ideas/store";
+
+// The run names a list gift's store with the lists product's storeName (T19), whose index is server-only.
+vi.mock("server-only", () => ({}));
+const { runIdeas } = await import("../ideas/run");
 
 const SCHEDULE: ScheduleSettings = {
   planningDeliveryDays: 7,
@@ -31,6 +35,8 @@ const settings = (o: Partial<IdeaSettings> = {}): IdeaSettings => ({
   zincLookupCents: 1,
   zincRequestsPerSecond: 10,
   orderFeeCents: 100,
+  listLookupsMax: 10,
+  listMin: 3,
   schedule: SCHEDULE,
   ...o,
 });
@@ -48,6 +54,7 @@ const inputs = (o: Partial<IdeaInputs> = {}): IdeaInputs => ({
   occasions: [{ rule: { kind: "birthday", month: 12, day: 20 }, ownBudgetCents: 3000 }],
   baseBudgetCents: null,
   defaultBudgetCents: null,
+  listGifts: [],
   ...o,
 });
 
@@ -128,31 +135,54 @@ const rawOffer = (o: RawOffer = {}): RawOffer => ({
   ...o,
 });
 
-/** A fake Zinc: search by query, offers by product id; a number is an error status. */
+type ZincKind = "search" | "offers" | "details" | "check";
+type RawHit = { product_id: string; title: string; price: number; image?: string | null };
+
+/**
+ * A fake Zinc: search by query, offers and details by product id, the store check by URL;
+ * a number is an error status.
+ */
 class FakeZinc {
-  search = new Map<string, { product_id: string; title: string; price: number }[] | number>();
+  search = new Map<string, RawHit[] | number>();
   offers = new Map<string, RawOffer[] | number>();
-  calls: { kind: "search" | "offers"; at: number; target: string }[] = [];
-  onCall: ((kind: "search" | "offers") => Promise<void> | void) | null = null;
+  details = new Map<string, Record<string, unknown> | number>();
+  orderable = new Set<string>();
+  calls: { kind: ZincKind; at: number; target: string; retailer: string | null }[] = [];
+  onCall: ((kind: ZincKind) => Promise<void> | void) | null = null;
   constructor(private now: () => number) {}
   fetch = (async (input: string) => {
     const url = new URL(input);
-    const isSearch = url.pathname === "/products/search";
-    const target = isSearch ? url.searchParams.get("query")! : decodeURIComponent(url.pathname.split("/")[2]);
-    this.calls.push({ kind: isSearch ? "search" : "offers", at: this.now(), target });
-    await this.onCall?.(isSearch ? "search" : "offers");
-    const reply = isSearch ? this.search.get(target) : this.offers.get(target);
+    const parts = url.pathname.split("/");
+    const kind: ZincKind =
+      url.pathname === "/products/search"
+        ? "search"
+        : url.pathname === "/retailers/check"
+          ? "check"
+          : parts[3] === "offers"
+            ? "offers"
+            : "details";
+    const target =
+      kind === "search" ? url.searchParams.get("query")! : kind === "check" ? url.searchParams.get("url")! : decodeURIComponent(parts[2]);
+    this.calls.push({ kind, at: this.now(), target, retailer: url.searchParams.get("retailer") });
+    await this.onCall?.(kind);
+    if (kind === "check") return json({ orderable: this.orderable.has(target) });
+    const reply = kind === "search" ? this.search.get(target) : kind === "offers" ? this.offers.get(target) : this.details.get(target);
     if (reply === undefined) return json({ error: { code: "not_found" } }, 404);
     if (typeof reply === "number") return json({ error: { code: "x" } }, reply);
-    return json(isSearch ? { results: reply } : { offers: reply });
+    return json(kind === "search" ? { results: reply } : kind === "offers" ? { offers: reply } : reply);
   }) as typeof fetch;
+  count(kind: ZincKind) {
+    return this.calls.filter((c) => c.kind === kind).length;
+  }
 }
 
 /** n candidates c1..cn: search "thing i", product Pi titled "Acme thing i", priced as given. */
 function world(prices: number[], o: { zinc: FakeZinc; gateway: FakeGateway }) {
   o.gateway.ideas = prices.map((_, i) => ({ title: `Idea ${i + 1}`, search: `thing ${i + 1}`, brand: "Acme", why: "fits" }));
   prices.forEach((price, i) => {
-    o.zinc.search.set(`thing ${i + 1}`, [{ product_id: `P${i + 1}`, title: `Acme thing ${i + 1}`, price }]);
+    o.zinc.search.set(`thing ${i + 1}`, [
+      { product_id: `P${i + 1}`, title: `Acme thing ${i + 1}`, price, image: `https://img.test/P${i + 1}.jpg` },
+    ]);
     o.zinc.offers.set(`P${i + 1}`, [rawOffer({ offer_id: `offer-${i + 1}`, price })]);
   });
 }
@@ -284,6 +314,9 @@ describe("runIdeas: results", () => {
       reason: "Reason for c1",
       overBudget: false,
       rank: 1,
+      imageUrl: "https://img.test/P1.jpg",
+      source: "generated",
+      listItemId: null,
     });
     expect(store.saved[5]).toMatchObject({ overBudget: true, estTotalCents: 3300 });
     expect(store.progressed.map((p) => p.stage)).toEqual(["brainstormed", "resolved", "ranked"]);
@@ -325,7 +358,7 @@ describe("runIdeas: results", () => {
     // Deadline Dec 18, occasion Dec 20: 1 + 4 days from the 18th arrives after the buffer.
     zinc.offers.set("P2", [rawOffer({ handling_days: { max: 0 }, shipping_options: [{ price: 500, delivery_days: { min: 0, max: 0 } }] })]);
     store.in = inputs({
-      round: { occasion: "birthday", occasionDate: "2026-12-20", shipByDeadline: "2026-12-18", budgetCents: 5000 },
+      round: { occasion: "birthday", occasionDate: "2026-12-20", shipByDeadline: "2026-12-18", budgetCents: 5000, maxTotalCents: null },
     });
     const outcome = await runIdeas(req({ roundId: "round-1" }), deps());
     expect(outcome).toEqual({ status: "saved", count: 1 });
@@ -582,5 +615,306 @@ describe("runIdeas: privacy and safety", () => {
     }
     expect(event("ideas.run_started")).toMatchObject({ run_id: "run-1" });
     expect(event("ideas.run")).toMatchObject({ kept: 2, short: true, stage: "ranked", ms: expect.any(Number) });
+  });
+});
+
+// ─── list gifts first, photos, and the price ceiling (ALL-29 Task 6) ─────────
+
+const ROUND = { occasion: "birthday" as const, occasionDate: "2026-12-20", shipByDeadline: "2026-12-10", budgetCents: 5000, maxTotalCents: null };
+
+/** List gift i: an Amazon link (ASIN Li) priced at the list's $20, unless overridden. */
+const gift = (i: number, o: Partial<ListGift> = {}): ListGift => ({
+  itemId: `item-${i}`,
+  name: `List gift ${i}`,
+  url: `https://www.amazon.com/dp/L${i}`,
+  asin: `L${i}`,
+  listPriceCents: 2000,
+  ...o,
+});
+
+/** n Amazon list gifts with live offers, each with a photo on its details page. */
+function listWorld(n: number, z: FakeZinc, price = 2000): ListGift[] {
+  return Array.from({ length: n }, (_, k) => {
+    const i = k + 1;
+    z.offers.set(`L${i}`, [rawOffer({ offer_id: `loff-${i}`, price })]);
+    z.details.set(`L${i}`, { status: "completed", product_id: `L${i}`, main_image: `https://img.test/L${i}.jpg` });
+    return gift(i);
+  });
+}
+
+const roundReq = () => req({ roundId: "round-1" });
+
+describe("runIdeas: list gifts first", () => {
+  it("three qualifying list gifts are saved first and no brainstorm runs", async () => {
+    world([2000, 2000], { zinc, gateway });
+    store.in = inputs({ round: ROUND, listGifts: listWorld(3, zinc) });
+
+    expect(await runIdeas(roundReq(), deps())).toEqual({ status: "saved", count: 3 });
+
+    expect(gateway.messages).toBe(0);
+    expect(zinc.count("search")).toBe(0);
+    expect(store.saved.map((i) => [i.listItemId, i.rank, i.source])).toEqual([
+      ["item-1", 1, "list"],
+      ["item-2", 2, "list"],
+      ["item-3", 3, "list"],
+    ]);
+    expect(store.saved[0]).toEqual({
+      title: "List gift 1",
+      retailer: "Amazon",
+      productUrl: "https://www.amazon.com/dp/L1",
+      retailerProductId: "L1",
+      offerId: "loff-1",
+      sellerName: "Amazon",
+      firstParty: true,
+      priceCents: 2000,
+      estShippingCents: 500,
+      estTaxCents: 160,
+      estTotalCents: 2760,
+      handlingDaysMax: 1,
+      deliveryDaysMin: 2,
+      deliveryDaysMax: 4,
+      arriveBy: "2026-12-15",
+      reason: "On their list",
+      overBudget: false,
+      rank: 1,
+      imageUrl: "https://img.test/L1.jpg",
+      source: "list",
+      listItemId: "item-1",
+    });
+    // Three offers lookups and three photo calls.
+    expect(store.finished).toEqual([{ outcome: "saved", cost: 6 }]);
+    const listEvents = events().filter((e) => e.event === "ideas.list_gift");
+    expect(listEvents).toHaveLength(3);
+    expect(listEvents[0]).toEqual(expect.objectContaining({ run_id: "run-1", route: "amazon", outcome: "kept" }));
+    // Ids, routes and outcomes only: no title, link or photo (E6, T42).
+    const all = lines().join("\n");
+    for (const text of ["List gift", "amazon.com", "img.test"]) expect(all).not.toContain(text);
+  });
+
+  it("two qualifying list gifts are kept and the brainstorm fills up to idea_keep_max", async () => {
+    world([2000, 2000, 2000, 2000, 2000], { zinc, gateway });
+    store.in = inputs({ round: ROUND, listGifts: listWorld(2, zinc) });
+
+    expect(await runIdeas(roundReq(), deps())).toEqual({ status: "saved", count: 5 });
+
+    expect(gateway.messages).toBe(2);
+    expect(store.saved.map((i) => [i.source, i.rank])).toEqual([
+      ["list", 1],
+      ["list", 2],
+      ["generated", 3],
+      ["generated", 4],
+      ["generated", 5],
+    ]);
+    expect(store.saved.slice(2).map((i) => i.retailerProductId)).toEqual(["P1", "P2", "P3"]);
+    expect(store.saved[2]).toMatchObject({ listItemId: null, imageUrl: "https://img.test/P1.jpg" });
+  });
+
+  it("a person with no facts and one list gift gets that one idea", async () => {
+    store.in = inputs({ facts: [], round: ROUND, listGifts: listWorld(1, zinc) });
+    expect(await runIdeas(roundReq(), deps())).toEqual({ status: "saved", count: 1 });
+    expect(gateway.messages).toBe(0);
+    expect(store.saved).toEqual([expect.objectContaining({ source: "list", listItemId: "item-1", rank: 1 })]);
+  });
+
+  it("a 200-item list makes at most idea_list_lookups_max lookups and saves what qualified", async () => {
+    const gifts = listWorld(200, zinc, 9000);
+    // Only gifts 4 and 9 are within the allowance.
+    zinc.offers.set("L4", [rawOffer({ price: 2000 })]);
+    zinc.offers.set("L9", [rawOffer({ price: 2000 })]);
+    store.in = inputs({ facts: [], round: ROUND, listGifts: gifts });
+
+    expect(await runIdeas(roundReq(), deps())).toEqual({ status: "saved", count: 2 });
+
+    expect(zinc.count("offers")).toBe(10);
+    expect(zinc.calls.filter((c) => c.kind === "offers").map((c) => c.target)).toEqual(
+      Array.from({ length: 10 }, (_, k) => `L${k + 1}`),
+    );
+    expect(store.saved.map((i) => i.listItemId)).toEqual(["item-4", "item-9"]);
+  });
+
+  it("stops looking once idea_keep_max list gifts qualify", async () => {
+    store.s = settings({ keepMax: 2, zincRequestsPerSecond: 1 });
+    store.in = inputs({ facts: [], round: ROUND, listGifts: listWorld(6, zinc) });
+    // The rate limit's wait takes real time, so earlier replies are in before the next lookup's turn.
+    const d = deps();
+    d.sleep = async (ms) => {
+      await new Promise((r) => setTimeout(r, 5));
+      t += ms;
+    };
+    expect(await runIdeas(roundReq(), d)).toEqual({ status: "saved", count: 2 });
+    expect(store.saved.map((i) => i.listItemId)).toEqual(["item-1", "item-2"]);
+    expect(zinc.count("offers")).toBeLessThan(6);
+  });
+
+  it("list gifts that qualified are saved when the cost cap stops the brainstorm", async () => {
+    world([2000, 2000, 2000], { zinc, gateway });
+    store.in = inputs({ round: ROUND, listGifts: listWorld(2, zinc) });
+    // 2¢ of list lookups, then 95.5¢ of output and 3¢ of searches: no room for any AI lookup.
+    gateway.brainstormUsage = { input_tokens: 0, output_tokens: 9550, server_tool_use: { web_search_requests: 3 } };
+
+    expect(await runIdeas(roundReq(), deps())).toEqual({ status: "saved", count: 2 });
+
+    expect(store.saved.map((i) => i.listItemId)).toEqual(["item-1", "item-2"]);
+    expect(store.finished).toEqual([{ outcome: "saved", cost: expect.any(Number) }]);
+    expect(zinc.count("search")).toBe(0);
+  });
+
+  it("list gifts that qualified are saved when the deadline cuts the brainstorm off", async () => {
+    store.in = inputs({ round: ROUND, listGifts: listWorld(1, zinc) });
+    const controller = new AbortController();
+    const prices = gateway.fetch;
+    gateway.fetch = (async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/v1/models")) return prices(url, init);
+      controller.abort();
+      throw new DOMException("aborted", "AbortError");
+    }) as typeof fetch;
+    expect(await runIdeas(req({ roundId: "round-1", signal: controller.signal }), deps())).toEqual({ status: "saved", count: 1 });
+    expect(store.finished).toEqual([{ outcome: "saved", cost: expect.any(Number) }]);
+  });
+
+  it("list gift titles never reach the brainstorm prompt", async () => {
+    world([2000], { zinc, gateway });
+    zinc.offers.set("L1", [rawOffer({ price: 2000 })]);
+    store.in = inputs({ round: ROUND, listGifts: [gift(1, { name: "Grandma's secret lamp" })] });
+    await runIdeas(roundReq(), deps());
+    expect(gateway.bodies.length).toBeGreaterThan(0);
+    for (const b of gateway.bodies) expect(`${b.system}\n${b.content}`).not.toMatch(/secret lamp/i);
+  });
+
+  it("a list gift that can't arrive in time, or is past the allowance, isn't saved", async () => {
+    zinc.offers.set("L1", [rawOffer({ handling_days: { max: 9 } })]);
+    zinc.offers.set("L2", [rawOffer({ price: 9000 })]);
+    // A store Zinc can only check: the list's price, arriving in planning_delivery_days (7).
+    const checked = gift(3, { url: "https://shop.example/blue-vase", asin: null, listPriceCents: 1500 });
+    zinc.orderable.add(checked.url);
+    store.in = inputs({ facts: [], round: ROUND, listGifts: [gift(1), gift(2), checked] });
+
+    expect(await runIdeas(roundReq(), deps())).toEqual({ status: "saved", count: 1 });
+    expect(store.saved[0]).toMatchObject({
+      listItemId: "item-3",
+      retailer: "shop.example",
+      productUrl: "https://shop.example/blue-vase",
+      retailerProductId: null,
+      offerId: null,
+      priceCents: 1500,
+      estShippingCents: 0,
+      estTotalCents: 1500 + 120 + 100,
+      handlingDaysMax: 0,
+      deliveryDaysMax: 7,
+      arriveBy: "2026-12-17",
+      imageUrl: null,
+    });
+    expect(events().filter((e) => e.event === "ideas.list_gift").map((e) => e.outcome)).toEqual(["late", "over_limit", "kept"]);
+
+    // The same checked gift, with a deadline 7 days can't make (Dec 18 + 7 is past Dec 20 less the buffer).
+    store.in = inputs({ facts: [], round: { ...ROUND, shipByDeadline: "2026-12-18" }, listGifts: [checked] });
+    store.saved = [];
+    expect(await runIdeas(roundReq(), deps())).toEqual({ status: "none" });
+    expect(store.saved).toEqual([]);
+  });
+
+  it("a gift whose delivery Zinc doesn't know is judged on planning_delivery_days", async () => {
+    // An Etsy listing: details with a price but no delivery days.
+    const etsy = gift(1, { url: "https://www.etsy.com/listing/123/mug", asin: null });
+    zinc.details.set("123", { status: "completed", product_id: "123", price: 2000, main_image: "https://img.test/e.jpg" });
+    store.in = inputs({ facts: [], round: { ...ROUND, shipByDeadline: "2026-12-11" }, listGifts: [etsy] });
+    expect(await runIdeas(roundReq(), deps())).toEqual({ status: "saved", count: 1 });
+    expect(store.saved[0]).toMatchObject({
+      retailer: "etsy.com",
+      retailerProductId: "123",
+      deliveryDaysMax: 7,
+      arriveBy: "2026-12-18",
+      imageUrl: "https://img.test/e.jpg",
+    });
+    // The photo came with the details: no second call.
+    expect(zinc.calls).toHaveLength(1);
+
+    store.in = inputs({ facts: [], round: { ...ROUND, shipByDeadline: "2026-12-14" }, listGifts: [etsy] });
+    expect(await runIdeas(roundReq(), deps())).toEqual({ status: "none" });
+  });
+
+  it("list lookups count toward idea_run_max_cents", async () => {
+    store.s = settings({ runMaxCents: 2 });
+    store.in = inputs({ facts: [], round: ROUND, listGifts: listWorld(5, zinc) });
+    expect(await runIdeas(roundReq(), deps())).toEqual({ status: "saved", count: 2 });
+    expect(zinc.count("offers")).toBe(2);
+    expect(zinc.count("details")).toBe(0);
+    expect(store.finished).toEqual([{ outcome: "saved", cost: 2 }]);
+  });
+
+  it("a details lookup Zinc rejects, then the store check, is charged twice and counts twice toward idea_list_lookups_max", async () => {
+    // Etsy listings with no details reply (404, rejected): each falls back to the store check.
+    const etsy = (i: number) => gift(i, { url: `https://www.etsy.com/listing/${i}/mug`, asin: null, listPriceCents: 1500 });
+    const gifts = [etsy(1), etsy(2)];
+    for (const g of gifts) zinc.orderable.add(g.url);
+    store.s = settings({ listLookupsMax: 3 });
+    store.in = inputs({ facts: [], round: ROUND, listGifts: gifts });
+
+    expect(await runIdeas(roundReq(), deps())).toEqual({ status: "saved", count: 1 });
+
+    // Gift 1: details, then the check (2). Gift 2: details (3); its check would be the 4th.
+    // The two gifts' lookups run side by side, so only the set is fixed.
+    expect(zinc.calls.map((c) => `${c.kind} ${c.target}`).sort()).toEqual(["check https://www.etsy.com/listing/1/mug", "details 1", "details 2"]);
+    expect(store.saved.map((i) => i.listItemId)).toEqual(["item-1"]);
+    expect(store.finished).toEqual([{ outcome: "saved", cost: 3 }]);
+  });
+
+  it("a list gift already given or rejected as a product isn't offered", async () => {
+    store.in = inputs({ facts: [], round: ROUND, listGifts: listWorld(2, zinc), excluded: ["L1"] });
+    expect(await runIdeas(roundReq(), deps())).toEqual({ status: "saved", count: 1 });
+    expect(store.saved.map((i) => i.listItemId)).toEqual(["item-2"]);
+  });
+
+  it("an AI idea for a product already kept from the list is dropped as a duplicate", async () => {
+    world([2000, 2000], { zinc, gateway });
+    zinc.search.set("thing 1", [{ product_id: "L1", title: "Acme thing 1", price: 2000, image: "https://img.test/x.jpg" }]);
+    store.in = inputs({ round: ROUND, listGifts: listWorld(1, zinc) });
+    await runIdeas(roundReq(), deps());
+    expect(store.saved.map((i) => i.retailerProductId)).toEqual(["L1", "P2"]);
+  });
+});
+
+describe("runIdeas: photos and the price ceiling", () => {
+  it("a photo call never runs past the cost cap, and a failed one keeps the idea", async () => {
+    // An AI hit without a photo gets one details call.
+    world([2000, 2000], { zinc, gateway });
+    zinc.search.set("thing 1", [{ product_id: "P1", title: "Acme thing 1", price: 2000, image: null }]);
+    zinc.details.set("P1", { status: "completed", product_id: "P1", main_image: "https://img.test/details-P1.jpg" });
+    expect(await runIdeas(req(), deps())).toEqual({ status: "saved", count: 2 });
+    expect(store.saved.map((i) => i.imageUrl)).toEqual(["https://img.test/details-P1.jpg", "https://img.test/P2.jpg"]);
+    expect(zinc.calls.filter((c) => c.kind === "details")).toEqual([expect.objectContaining({ target: "P1", retailer: "amazon" })]);
+
+    // A failed photo call keeps the idea, with no photo.
+    zinc.calls = [];
+    zinc.details.set("P1", 500);
+    expect(await runIdeas(req(), deps())).toEqual({ status: "saved", count: 2 });
+    expect(store.saved[0]).toMatchObject({ retailerProductId: "P1", imageUrl: null });
+
+    // With no room under the cap, no photo call is made and the ideas are still saved.
+    zinc.calls = [];
+    store.s = settings({ runMaxCents: 3 });
+    store.in = inputs({ facts: [], round: ROUND, listGifts: listWorld(3, zinc) });
+    expect(await runIdeas(roundReq(), deps())).toEqual({ status: "saved", count: 3 });
+    expect(zinc.count("details")).toBe(0);
+    expect(store.saved.map((i) => i.imageUrl)).toEqual([null, null, null]);
+    expect(store.finished.at(-1)).toEqual({ outcome: "saved", cost: 3 });
+  });
+
+  it("an http photo is never kept", async () => {
+    world([2000], { zinc, gateway });
+    zinc.search.set("thing 1", [{ product_id: "P1", title: "Acme thing 1", price: 2000, image: "http://img.test/P1.jpg" }]);
+    zinc.details.set("P1", { status: "completed", product_id: "P1", main_image: "http://img.test/P1.jpg" });
+    await runIdeas(req(), deps());
+    expect(store.saved[0].imageUrl).toBeNull();
+  });
+
+  it("after Too pricey, the brainstorm searches under the ceiling and a total at or above it drops", async () => {
+    world([2000, 1000], { zinc, gateway });
+    // P1 totals 2760, P2 1680. The ceiling is 2760: P1 drops.
+    store.in = inputs({ round: { ...ROUND, maxTotalCents: 2760 } });
+    expect(await runIdeas(roundReq(), deps())).toEqual({ status: "saved", count: 1 });
+    expect(gateway.bodies[0].content).toContain("Budget: $27.60");
+    expect(store.saved.map((i) => i.retailerProductId)).toEqual(["P2"]);
+    expect(event("ideas.candidate_dropped")).toMatchObject({ reason: "over_limit" });
   });
 });

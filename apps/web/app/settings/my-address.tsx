@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useLayoutEffect, useState } from "react";
 import type { Address } from "@gifts-af/core";
 import { AddressForm, type AddressValues } from "@/components/address/address-form";
+import { ReturnTo } from "@/components/address/return-to";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import type { AccountAddressResult, MyAddress } from "@/lib/account-address";
@@ -21,12 +22,16 @@ export function MyAddressSection({
   address,
   saveAction,
   removeAction,
+  next,
 }: {
   address: MyAddress;
   saveAction: (form: FormData) => Promise<AccountAddressResult>;
   removeAction: () => Promise<AccountAddressResult>;
+  /** A same-site path to go back to once saved (ALL-29: a gift's confirm or fix page); opens the form. */
+  next?: string;
 }) {
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(next !== undefined && address.kind !== "unavailable");
+  const [saved, setSaved] = useState(false);
 
   // Next keeps visited routes in the page, hidden, with their state: close the
   // form on leaving, so coming back shows the saved card.
@@ -40,7 +45,18 @@ export function MyAddressSection({
       {address.kind === "unavailable" ? (
         <p className="text-[13px] text-muted-foreground">We couldn&apos;t load your address. Try again.</p>
       ) : editing ? (
-        <AddressForm start={startValues(address)} submitLabel="Save address" save={saveAction} onDone={() => setEditing(false)} />
+        <AddressForm
+          start={startValues(address)}
+          submitLabel="Save address"
+          save={async (form) => {
+            const result = await saveAction(form);
+            if (result.ok) setSaved(true);
+            return result;
+          }}
+          onDone={() => setEditing(false)}
+        />
+      ) : saved && next ? (
+        <ReturnTo to={next} />
       ) : address.kind === "saved" ? (
         <SavedAddress address={address.address} shared={address.shared} onChange={() => setEditing(true)} removeAction={removeAction} />
       ) : (

@@ -1,0 +1,337 @@
+// Replacing a failed gift (ALL-29 AC-14, AC-15, AC-15a): the fix page's "Check today's
+// price" (quoteFailedOrder, read-only, only on a tap) and its "Buy" (replaceFailedOrder).
+// The replacement goes through replace_failed_order under the round lease, with the cap
+// worked out like approveAndBuy's, then it's placed and the buyer told the same way.
+//
+// A re-quote looks the idea up by its saved retailer and product id on the app's own
+// lookup key (T17): Amazon and Walmart through their offers, preferring the idea's own
+// offer; other stores through the product's details. An idea priced from a list (no
+// product id) can't be re-quoted. Events carry ids, cents and reason codes only (E6);
+// a Zinc failure logs only its kind, never its message (a Shopify path holds the handle).
+import { committedSpendCents, estimatedTotalCents, isShippableAddress, pickOffer, type ZincOffer } from "@gifts-af/core";
+import { logEvent } from "@/lib/log";
+import { hasPaidFeatures } from "../paid-features";
+import { ZincError, type ZincHttp } from "../zinc/client";
+import { listGiftRoute, productDetails, productOffers, type ZincStep } from "../zinc/products";
+import type { DbDeps } from "../zinc/types";
+import { capsFor, destinationFor, refusalOf, saveDestination, tellCustomer, type ApproveError, type ApproveResult, type Destination, type ShipTo } from "./approve";
+import { asCommitted, placeRound } from "./place";
+import {
+  claimRoundNow,
+  concierge,
+  liveOrders,
+  priceRiseFixed,
+  readAccount,
+  readIdeas,
+  readOrder,
+  readRound,
+  recipientAddress,
+  savedSnapshots,
+  setting,
+  type AddressSnapshot,
+  type AddressSource,
+  type FailedOrderRow,
+  type IdeaRow,
+  type PurchaseDeps,
+  withLease,
+} from "./store";
+
+/** Our database and clock plus the app's own lookup key, as the idea run uses it (ZINC_API_KEY, T17). */
+export type QuoteDeps = DbDeps & { lookup: { http: ZincHttp; key: string } };
+
+/**
+ * `not_current`: the failure was fixed or replaced already (a stale tab). `not_open`: the round
+ * no longer needs attention, is closed, or has reached its ship-by day, so nothing can be bought.
+ * `zinc_off`: zinc_ordering_enabled isn't 1, so a re-buy would only be held (E7's off switch).
+ */
+export type QuoteResult =
+  | { oldCents: number; newCents: number }
+  | "not_allowed"
+  | "not_current"
+  | "not_open"
+  | "unavailable"
+  | "once"
+  | "zinc_off";
+
+/** replaceFailedOrder's own refusals, on top of approveAndBuy's. */
+export type ReplaceError =
+  /** The failed order is resolved, replaced already, or not a failure. */
+  | "not_current"
+  /** The price rose again above what the page showed (S1). */
+  | "price_changed"
+  /** This gift already had a price rise fixed (S2). */
+  | "once"
+  /** Today's price can't be looked up: gone, or priced from a list. */
+  | "unavailable";
+
+export type ReplaceResult = ApproveResult | { ok: false; error: ReplaceError };
+
+export type ReplaceInput = {
+  userId: string;
+  roundId: string;
+  failedOrderId: string;
+  /** The failed order's own idea (a price rise or an address failure), or the next-best one. */
+  ideaId: string;
+  /** For a price-rise re-buy: the total the page showed from quoteFailedOrder. */
+  shownTotalCents?: number;
+  /** The failed order's ship-to when left out; an address failure needs a fixed address (AC-15a). */
+  shipTo?: ShipTo;
+  overBudgetConfirmed?: boolean;
+};
+
+const ADDRESS_FAILURES: readonly string[] = ["address_withdrawn", "address_rejected"];
+
+/** A failed order can still be replaced: the round needs attention, isn't closed, and today (UTC) is before its ship-by day. */
+function canReplace(round: { status: string; closed_at: string | null; ship_by_deadline: string }, now: Date): boolean {
+  return round.status === "needs_attention" && round.closed_at === null && now.toISOString().slice(0, 10) < round.ship_by_deadline;
+}
+
+/** Is this the buyer's own unresolved failure in this round? */
+function isCurrentFailure(o: FailedOrderRow | null, userId: string, roundId: string): o is FailedOrderRow {
+  return o !== null && o.user_id === userId && o.round_id === roundId && o.status === "failed" && !o.resolved;
+}
+
+/**
+ * Today's estimated total for an idea (price, shipping, the tax estimate and the order fee,
+ * as the idea run works it out), or null when it can't be had. One paid lookup, logged as
+ * `order.requote` with its cost.
+ */
+async function requote(deps: QuoteDeps, idea: IdeaRow, feeCents: number, ids: Record<string, string>): Promise<number | null> {
+  const [taxPct, lookupCents] = await Promise.all([setting(deps, "idea_tax_estimate_pct"), setting(deps, "zinc_lookup_cents")]);
+  let calls = 0;
+  // Every Zinc call is charged (counted at zinc_lookup_cents); there's one at most here.
+  const step: ZincStep = async (call) => {
+    calls++;
+    return call();
+  };
+  let offer: ZincOffer | null = null;
+  let outcome = "priced";
+  try {
+    offer = await lookUp(deps.lookup, idea, step);
+    if (!offer) outcome = idea.retailer_product_id === null ? "no_live_price" : "unavailable";
+  } catch (e) {
+    if (!(e instanceof ZincError)) throw e;
+    outcome = `zinc_${e.kind}`;
+  }
+  const newCents = offer
+    ? estimatedTotalCents({
+        priceCents: offer.priceCents,
+        shippingCents: offer.shippingCents,
+        taxCents: Math.round((offer.priceCents * taxPct) / 100),
+        feeCents,
+      })
+    : null;
+  logEvent("order.requote", {
+    ...ids,
+    idea_id: idea.id,
+    outcome,
+    lookups: calls,
+    cents: calls * lookupCents,
+    ...(newCents !== null ? { old_cents: idea.est_total_cents, new_cents: newCents } : {}),
+  });
+  return newCents;
+}
+
+/** The idea's product at its store today (R1); null when it's gone or has no live price. */
+async function lookUp(lookup: QuoteDeps["lookup"], idea: IdeaRow, step: ZincStep): Promise<ZincOffer | null> {
+  const productId = idea.retailer_product_id;
+  const retailer = idea.retailer;
+  if (!productId || !retailer) return null;
+  const signal = new AbortController().signal;
+  if (retailer === "amazon" || retailer === "walmart") {
+    const offers = await step(() => productOffers(lookup.http, lookup.key, retailer, productId, signal));
+    if (offers === "stop") return null;
+    const own = idea.offer_id === null ? undefined : offers.find((o) => o.offerId === idea.offer_id);
+    // The idea's own seller when it still sells it new; otherwise the best offer, as the run picks.
+    return (own && pickOffer([own])) ?? pickOffer(offers);
+  }
+  // Zinc names a Shopify store by its domain; a "shopify" retailer takes the product link's host.
+  let zincRetailer = retailer;
+  if (retailer === "shopify") {
+    const route = idea.product_url ? listGiftRoute(idea.product_url, null) : null;
+    if (route?.kind !== "details" || route.retailer !== "shopify") return null;
+    zincRetailer = route.shop;
+  }
+  const d = await step(() => productDetails(lookup.http, lookup.key, zincRetailer, productId, signal));
+  if (d === "stop" || d === null) return null;
+  if (!(d.productId === productId || d.handle === productId) || d.priceCents === null || d.available === false) return null;
+  return {
+    offerId: null,
+    priceCents: d.priceCents,
+    shippingCents: d.shippingCents ?? 0,
+    available: true,
+    condition: "New",
+    buyBox: true,
+    firstParty: false,
+    sellerName: null,
+    handlingDaysMax: 0,
+    deliveryDaysMin: d.deliveryDaysMax ?? 0,
+    deliveryDaysMax: d.deliveryDaysMax ?? 0,
+  };
+}
+
+/**
+ * Today's price for a gift that failed with price_up (AC-14): read-only, one paid lookup,
+ * inside the paid-features check. Only on the buyer's tap, never on load (AC-4a).
+ */
+export async function quoteFailedOrder(input: { userId: string; roundId: string; orderId: string }, deps: QuoteDeps): Promise<QuoteResult> {
+  const { userId, roundId, orderId } = input;
+  const ids = { round_id: roundId, user_id: userId, order_id: orderId };
+  const round = await readRound(deps, roundId);
+  if (!round || round.user_id !== userId) return "not_allowed";
+  const failed = await readOrder(deps, orderId);
+  if (!failed || failed.user_id !== userId || failed.round_id !== roundId) return "not_allowed";
+  // Nothing can be bought on it any more, so no paid lookup.
+  if (!canReplace(round, deps.now)) return "not_open";
+  if (!isCurrentFailure(failed, userId, roundId)) return "not_current";
+  if (failed.failure_type !== "price_up") return "not_allowed";
+  if (!(await hasPaidFeatures(deps.db, userId))) return "not_allowed";
+  // Stop all ordering stops this paid lookup too: a re-buy would only be held as paused.
+  if ((await setting(deps, "zinc_ordering_enabled")) !== 1) return "zinc_off";
+  if (await priceRiseFixed(deps, failed.idea_id, failed.id)) return "once";
+  const idea = (await readIdeas(deps, [failed.idea_id])).get(failed.idea_id);
+  if (!idea) return "unavailable";
+  const newCents = await requote(deps, idea, await setting(deps, "zinc_order_fee_cents"), ids);
+  return newCents === null ? "unavailable" : { oldCents: idea.est_total_cents, newCents };
+}
+
+/**
+ * Replaces one failed order (AC-14, AC-15, AC-15a): with the next-best idea, the same gift at
+ * today's price (once, and never above what the page showed), or the same gift to a fixed
+ * address. Under the round lease, read again; then the budget check and caps with the other
+ * live orders counted, replace_failed_order, placing, and telling the buyer.
+ */
+/** `lookup` is null where the app's key isn't set: only a price-rise re-buy needs it. */
+export async function replaceFailedOrder(input: ReplaceInput, deps: PurchaseDeps & { lookup: QuoteDeps["lookup"] | null }): Promise<ReplaceResult> {
+  const { userId, roundId } = input;
+  const ids = { round_id: roundId, user_id: userId, order_id: input.failedOrderId };
+
+  // Only the buyer's own round is ever leased, and nothing paid runs without paid features.
+  const owned = await readRound(deps, roundId);
+  if (!owned || owned.user_id !== userId) return { ok: false, error: "not_found" };
+  if (!(await hasPaidFeatures(deps.db, userId))) return { ok: false, error: "not_allowed" };
+
+  const lock = await claimRoundNow(deps, roundId);
+  if (!lock) return { ok: false, error: "busy" };
+
+  const refused = await withLease(deps, roundId, lock, async (): Promise<ReplaceResult | null> => {
+    // The round, the failure and the idea as they are now, before any paid lookup.
+    const round = await readRound(deps, roundId);
+    if (!round || round.user_id !== userId) return { ok: false, error: "not_found" };
+    if (!canReplace(round, deps.now)) return { ok: false, error: "not_open" };
+    const failed = await readOrder(deps, input.failedOrderId);
+    if (!isCurrentFailure(failed, userId, roundId)) return { ok: false, error: "not_current" };
+    const idea = (await readIdeas(deps, [input.ideaId])).get(input.ideaId);
+    if (!idea || idea.round_id !== roundId) return { ok: false, error: "bad_ideas" };
+    const same = idea.id === failed.idea_id;
+    const addressFailure = ADDRESS_FAILURES.includes(failed.failure_type ?? "");
+    const priceUp = same && failed.failure_type === "price_up";
+    if (same ? !(priceUp || addressFailure) : idea.status !== "proposed") return { ok: false, error: "replaced" };
+
+    // A price-rise re-buy: once per gift, at no more than the page showed (S1, S2).
+    let total = idea.est_total_cents;
+    if (priceUp) {
+      if (await priceRiseFixed(deps, idea.id, failed.id)) return { ok: false, error: "once" };
+      if (input.shownTotalCents === undefined) return { ok: false, error: "price_changed" };
+      if (!deps.lookup) return { ok: false, error: "unavailable" };
+      const today = await requote({ ...deps, lookup: deps.lookup }, idea, deps.settings.feeCents, ids);
+      if (today === null) return { ok: false, error: "unavailable" };
+      if (today > input.shownTotalCents) return { ok: false, error: "price_changed" };
+      total = today;
+    }
+
+    // The budget check and the cap, with the round's other live orders counted.
+    const account = await readAccount(deps, userId);
+    if (!account) return { ok: false, error: "not_allowed" };
+    const others = (await liveOrders(deps, roundId)).filter((o) => o.id !== failed.id);
+    const committed = committedSpendCents(others.map(asCommitted));
+    const fit = capsFor(round, [total], account, input.overBudgetConfirmed === true, deps.settings, committed);
+    if (typeof fit === "string") return { ok: false, error: fit };
+
+    const dest = await replacementDestination(deps, failed, round.person_id, addressFailure, input.shipTo);
+    if (!dest) return { ok: false, error: "no_address" };
+
+    const { data, error } = await concierge(deps).rpc("replace_failed_order", {
+      p_round_id: roundId,
+      p_user_id: userId,
+      p_lock: lock,
+      p_failed_order_id: failed.id,
+      p_order: {
+        idea_id: idea.id,
+        max_price_cents: fit.caps[0],
+        fee_cents: deps.settings.feeCents,
+        gift_message: failed.gift_message,
+        ship_to: dest.ship_to,
+        address_source: dest.address_source,
+        address: dest.address,
+        ...(priceUp ? { new_total_cents: total } : {}),
+      },
+    });
+    if (error) {
+      const refusal = error.code === "P0001" ? REFUSALS[refusalOf(error.message, "replace_failed_order")] : undefined;
+      if (!refusal) throw new Error(`Replacing the order failed: ${error.message}`);
+      logEvent("order.replace_refused", { ...ids, reason: refusal });
+      return { ok: false, error: refusal };
+    }
+    const fresh = (data ?? [])[0];
+    logEvent("order.replaced", { ...ids, new_order_id: fresh?.id ?? null, idea_id: idea.id, max_price_cents: fit.caps[0] });
+    await saveDestination(deps, userId, round.person_id, dest, ids);
+    await placeRound(roundId, lock, deps);
+    return null;
+  });
+  if (refused) return refused;
+  return tellCustomer(deps, roundId, { round_id: roundId, user_id: userId });
+}
+
+/** replace_failed_order's refusals; "no new total" is a programming error and throws. */
+const REFUSALS: Record<string, ApproveError | ReplaceError> = {
+  "lease not held": "busy",
+  "not open": "not_open",
+  "not current": "not_current",
+  replaced: "replaced",
+  once: "once",
+  "fixed address": "no_address",
+  not_shared: "not_shared",
+  already_bought: "already_bought",
+  claimed: "claimed",
+};
+
+/**
+ * Where the replacement ships. An address failure (AC-15a, T61) goes to a fixed address: the
+ * buyer's, another one, or (asked as "recipient") the person's own address read now, only
+ * while no list owner shares one; never to the recipient again. Otherwise the choice given, or
+ * the failed order's own: the recipient read now, or its saved snapshot.
+ */
+async function replacementDestination(
+  deps: PurchaseDeps,
+  failed: FailedOrderRow,
+  personId: string,
+  addressFailure: boolean,
+  shipTo: ShipTo | undefined,
+): Promise<Destination | null> {
+  const userId = failed.user_id;
+  if (addressFailure) {
+    if (shipTo && shipTo.kind !== "recipient") return destinationFor(deps, userId, personId, shipTo);
+    const own = await recipientAddress(deps, personId);
+    if (!own || own.source !== "own" || !isShippableAddress(own.draft)) return null;
+    // Never back to the address the store refused, even when the person's own entry is the same.
+    if (failed.failure_type === "address_rejected") {
+      const refused = (await savedSnapshots(deps, [failed.id])).get(failed.id);
+      if (refused && sameAddress(refused, own.snapshot)) return null;
+    }
+    return { ship_to: "other", address_source: "own", address: own.snapshot };
+  }
+  if (shipTo) return destinationFor(deps, userId, personId, shipTo);
+  if (failed.ship_to === "recipient") return destinationFor(deps, userId, personId, { kind: "recipient" });
+  const saved = (await savedSnapshots(deps, [failed.id])).get(failed.id);
+  return saved
+    ? { ship_to: failed.ship_to as Destination["ship_to"], address_source: (failed.address_source ?? "own") as AddressSource, address: saved }
+    : null;
+}
+
+/** The same place to ship to: names and address lines, ignoring case and spacing (not the phone). */
+function sameAddress(a: AddressSnapshot, b: AddressSnapshot): boolean {
+  const keys = ["recipient_first_name", "recipient_last_name", "address_line1", "address_line2", "city", "state", "zip", "country"] as const;
+  const norm = (v: string | null) => (v ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+  return keys.every((k) => norm(a[k]) === norm(b[k]));
+}

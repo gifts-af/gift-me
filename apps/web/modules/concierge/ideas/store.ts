@@ -1,5 +1,6 @@
 import "server-only";
 import type { CalendarDate, OccasionKind, OccasionRule, ScheduleSettings } from "@gifts-af/core";
+import { z } from "zod";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { hasPaidFeatures } from "../paid-features";
 import { activeFacts, type ActiveFact } from "../profile/profile";
@@ -27,7 +28,21 @@ export type IdeaSettings = {
   zincLookupCents: number;
   zincRequestsPerSecond: number;
   orderFeeCents: number;
+  /** The most Zinc lookups of list gifts in one run (ALL-29). */
+  listLookupsMax: number;
+  /** With fewer list gifts than this qualifying, the brainstorm adds ideas. */
+  listMin: number;
   schedule: ScheduleSettings;
+};
+
+/** A gift on the person's linked list that may be offered (ALL-29, AC-27). Its name is the list owner's words: never sent to the AI (T42). */
+export type ListGift = {
+  itemId: string;
+  name: string;
+  url: string;
+  asin: string | null;
+  /** The list's own price; null when it has none. */
+  listPriceCents: number | null;
 };
 
 /** What a run knows about the person, before any choice of occasion or budget. */
@@ -37,27 +52,41 @@ export type IdeaInputs = {
   /** Each word of the person's and the buyer's names, longest first. Never logged. */
   names: string[];
   facts: ActiveFact[];
-  /** Retailer product ids already given or rejected for this person. */
+  /** Amazon product ids given, rejected as AI ideas, or already offered from the list in this round (excluded_offers). */
   excluded: string[];
-  /** Titles of those ideas, so the AI doesn't suggest them again. */
+  /** Titles of those ideas, so the AI doesn't suggest them again. Never a list gift's title (T42). */
   avoidTitles: string[];
   overBudgetPct: number;
-  /** A round's own occasion, date, deadline and budget; null on demand. */
-  round: { occasion: OccasionKind; occasionDate: CalendarDate; shipByDeadline: CalendarDate; budgetCents: number | null } | null;
+  /**
+   * A round's own occasion, date, deadline and budget; null on demand. `maxTotalCents`: the lowest
+   * total among the round's AI ideas rejected as "Too pricey" (a list gift never sets it), else null.
+   */
+  round: {
+    occasion: OccasionKind;
+    occasionDate: CalendarDate;
+    shipByDeadline: CalendarDate;
+    budgetCents: number | null;
+    maxTotalCents: number | null;
+  } | null;
   /** On demand: the person's enabled occasions, each with its own budget. */
   occasions: { rule: OccasionRule; ownBudgetCents: number | null }[];
   /** The person's base budget (a budgets row of kind 'any', T73). */
   baseBudgetCents: number | null;
   /** The buyer's default for this relationship. */
   defaultBudgetCents: number | null;
+  /** Rounds only: the linked list's offerable gifts, in list order (listGiftCandidates). Empty on demand. */
+  listGifts: ListGift[];
 };
 
-/** One idea to save, every price and day from a live Zinc offer (AC-2). */
+/**
+ * One idea to save, every price and day from a live Zinc offer (AC-2). A list gift Zinc can only
+ * check has the list's price, no product id, and planning_delivery_days as its delivery (AC-27).
+ */
 export type SavedIdea = {
   title: string;
   retailer: string;
   productUrl: string;
-  retailerProductId: string;
+  retailerProductId: string | null;
   offerId: string | null;
   sellerName: string | null;
   firstParty: boolean;
@@ -72,6 +101,11 @@ export type SavedIdea = {
   reason: string;
   overBudget: boolean;
   rank: number;
+  /** Zinc's photo, https only (AC-17); null without one. */
+  imageUrl: string | null;
+  source: "generated" | "list";
+  /** The list gift, for source "list". */
+  listItemId: string | null;
 };
 
 export type RunStage = "brainstormed" | "resolved" | "ranked";
@@ -105,6 +139,8 @@ const SETTING_KEYS = {
   zincLookupCents: "zinc_lookup_cents",
   zincRequestsPerSecond: "zinc_requests_per_second",
   orderFeeCents: "zinc_order_fee_cents",
+  listLookupsMax: "idea_list_lookups_max",
+  listMin: "idea_list_min",
 } as const;
 
 const SCHEDULE_KEYS: Record<keyof ScheduleSettings, string> = {
@@ -127,6 +163,98 @@ function fail(what: string, error: { message: string }): never {
 function nameWords(names: (string | null | undefined)[]): string[] {
   const words = new Set(names.flatMap((n) => (n ?? "").split(/\s+/)).filter((w) => w.length > 0));
   return [...words].sort((a, b) => b.length - a.length);
+}
+
+// Database replies are checked where they come in (E4). Any excluded_offers column can be null,
+// whatever the generated types say.
+const excludedOffer = z.object({ retailer: z.string().nullable(), product_id: z.string().nullable(), list_item_id: z.string().nullable() });
+type ExcludedOffer = z.infer<typeof excludedOffer>;
+const personList = z.object({ items: z.array(z.unknown()) }).nullable();
+const personListItem = z.object({
+  id: z.string(),
+  name: z.string(),
+  price_cents: z.number().int().nullable(),
+  product_url: z.string().nullable(),
+  asin: z.string().nullable(),
+  claimed: z.boolean(),
+});
+
+/** excluded_offers for a run in roundId (null on demand). */
+async function excludedOffers(db: AdminDb, personId: string, roundId: string | null): Promise<ExcludedOffer[]> {
+  const { data, error } = await db
+    .schema("concierge")
+    // PostgREST takes null for a uuid argument; the generated type says string.
+    .rpc("excluded_offers", { p_person_id: personId, p_round_id: roundId as string });
+  if (error) fail("Loading excluded offers failed", error);
+  return z.array(excludedOffer).parse(data);
+}
+
+/** The products the brainstorm mustn't offer again. Its ideas are all Amazon's; a row saved without a retailer counts as Amazon. */
+function excludedAmazonIds(rows: ExcludedOffer[]): string[] {
+  const ids = rows
+    .filter((r) => r.product_id !== null && (r.retailer === null || r.retailer.toLowerCase() === "amazon"))
+    .map((r) => r.product_id as string);
+  return [...new Set(ids)];
+}
+
+async function offerableListGifts(db: AdminDb, personId: string, excluded: ExcludedOffer[]): Promise<ListGift[]> {
+  const { data, error } = await db.schema("lists").rpc("person_list", { p_person_id: personId });
+  // A person removed since the round began has no list to offer.
+  if (error?.code === "P0002") return [];
+  if (error) fail("Loading the person's list failed", error);
+  const list = personList.parse(data);
+  if (list === null) return [];
+  const gone = new Set(excluded.map((r) => r.list_item_id).filter((id) => id !== null));
+  const out: ListGift[] = [];
+  for (const raw of list.items) {
+    const p = personListItem.safeParse(raw);
+    // A gift without a link can't be priced or bought; a claimed or given one, or one this round
+    // already offered, isn't offered (AC-31).
+    if (!p.success || p.data.claimed || p.data.product_url === null || gone.has(p.data.id)) continue;
+    const i = p.data;
+    out.push({
+      itemId: i.id,
+      name: i.name,
+      url: i.product_url as string,
+      asin: i.asin,
+      // The lists product saves 0 when it knows no price.
+      listPriceCents: i.price_cents !== null && i.price_cents > 0 ? i.price_cents : null,
+    });
+  }
+  return out;
+}
+
+/**
+ * The one read of offerable list gifts (S6), for a run in roundId, roundContext and the rejection
+ * outlook: the person's linked list through lists.person_list (service role, T19), unclaimed, in
+ * list order, without the ones excluded_offers names: given, or already offered in this round. A
+ * list gift rejected in another round is offered again (AC-31, owner 2026-11-22).
+ */
+export async function listGiftCandidates(db: AdminDb, personId: string, roundId: string | null): Promise<ListGift[]> {
+  return offerableListGifts(db, personId, await excludedOffers(db, personId, roundId));
+}
+
+/** The lowest total among the round's AI ideas rejected as "Too pricey"; list gifts never set it. */
+async function roundCeiling(db: AdminDb, roundId: string): Promise<number | null> {
+  const concierge = db.schema("concierge");
+  const { data: rejected, error } = await concierge
+    .from("rejections")
+    .select("idea_id")
+    .eq("round_id", roundId)
+    .eq("reason_code", "too_pricey")
+    .not("idea_id", "is", null);
+  if (error) fail("Loading the round's rejections failed", error);
+  const ids = rejected.map((r) => r.idea_id).filter((id): id is string => id !== null);
+  if (ids.length === 0) return null;
+  const { data: cheapest, error: ideaError } = await concierge
+    .from("gift_ideas")
+    .select("est_total_cents")
+    .in("id", ids)
+    .eq("source", "generated")
+    .order("est_total_cents", { ascending: true })
+    .limit(1);
+  if (ideaError) fail("Loading the rejected ideas failed", ideaError);
+  return cheapest[0]?.est_total_cents ?? null;
 }
 
 function toRule(kind: string, month: number | null, day: number | null): OccasionRule {
@@ -194,13 +322,14 @@ export function createSupabaseIdeaStore(db: AdminDb): IdeaStore {
           occasionDate: r.occasion_date,
           shipByDeadline: r.ship_by_deadline,
           budgetCents: r.budget_cents,
+          maxTotalCents: await roundCeiling(db, roundId),
         };
       }
 
       const [buyer, facts, excludedRows, account, occasions, budgets, byDefault] = await Promise.all([
         db.from("profiles").select("display_name").eq("id", userId).maybeSingle(),
         activeFacts(db, personId),
-        concierge.rpc("excluded_products", { p_person_id: personId }),
+        excludedOffers(db, personId, roundId),
         concierge.from("accounts").select("over_budget_pct").eq("user_id", userId).maybeSingle(),
         concierge
           .from("occasions")
@@ -218,14 +347,15 @@ export function createSupabaseIdeaStore(db: AdminDb): IdeaStore {
           .maybeSingle(),
       ]);
       if (buyer.error) fail("Loading the buyer failed", buyer.error);
-      if (excludedRows.error) fail("Loading excluded products failed", excludedRows.error);
       if (account.error) fail("Loading the account failed", account.error);
       if (!account.data) throw new Error("The buyer has no account row.");
       if (occasions.error) fail("Loading occasions failed", occasions.error);
       if (budgets.error) fail("Loading budgets failed", budgets.error);
       if (byDefault.error) fail("Loading the default budget failed", byDefault.error);
 
-      const excluded = excludedRows.data;
+      const excluded = excludedAmazonIds(excludedRows);
+      // Rounds only: on demand offers no list gifts.
+      const listGifts = round ? await offerableListGifts(db, personId, excludedRows) : [];
       let avoidTitles: string[] = [];
       if (excluded.length > 0) {
         // This person's ideas only (T42: another person's title may hold their name). Ideas
@@ -243,6 +373,8 @@ export function createSupabaseIdeaStore(db: AdminDb): IdeaStore {
           .from("gift_ideas")
           .select("title")
           .eq("user_id", userId)
+          // A list gift's title is the list owner's words: never sent to the AI (T42).
+          .eq("source", "generated")
           .in("retailer_product_id", excluded)
           .or(owner.join(","));
         if (titleError) fail("Loading excluded titles failed", titleError);
@@ -267,6 +399,7 @@ export function createSupabaseIdeaStore(db: AdminDb): IdeaStore {
         occasions: occasions.data.map((o) => ({ rule: toRule(o.kind, o.month, o.day), ownBudgetCents: budgetFor(o.kind) })),
         baseBudgetCents: budgetFor("any"),
         defaultBudgetCents: byDefault.data?.base_amount_cents ?? null,
+        listGifts,
       };
     },
 
@@ -321,6 +454,9 @@ export function createSupabaseIdeaStore(db: AdminDb): IdeaStore {
         reason: i.reason,
         over_budget: i.overBudget,
         rank: i.rank,
+        image_url: i.imageUrl,
+        source: i.source,
+        list_item_id: i.listItemId,
       }));
       const { data, error } = await concierge.rpc("save_ideas", { p_run_id: runId, p_ideas: rows });
       if (error) fail("Saving ideas failed", error);

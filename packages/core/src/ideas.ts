@@ -6,8 +6,8 @@ import { classifyTotal, estimatedTotalCents } from "./budget";
 import { compareDates, type CalendarDate } from "./dates";
 import { arriveBy, canArriveInTime, orderBy, type ScheduleSettings } from "./schedule";
 
-/** A search hit. The brand is matched against the title. */
-export type ZincHit = { productId: string; title: string; priceCents: number | null };
+/** A search hit. The brand is matched against the title. `imageUrl`: Zinc's photo, https only, when the hit has one. */
+export type ZincHit = { productId: string; title: string; priceCents: number | null; imageUrl?: string };
 
 export type ZincOffer = {
   offerId: string | null;
@@ -59,6 +59,8 @@ export type JudgeContext = {
   occasionDate: CalendarDate | null;
   orderDate: CalendarDate;
   excluded: ReadonlySet<string>;
+  /** After a "Too pricey" rejection (ALL-29): a total at or above this drops as over_limit. */
+  maxTotalCents: number | null;
 };
 
 export function judgeCandidate(
@@ -89,6 +91,7 @@ export function judgeCandidate(
     taxCents: Math.round((offer.priceCents * ctx.taxPct) / 100),
     feeCents: ctx.feeCents,
   });
+  if (ctx.maxTotalCents !== null && totalCents >= ctx.maxTotalCents) return { keep: false, reason: "over_limit" };
   const fit = classifyTotal(totalCents, ctx.budgetCents, ctx.overBudgetPct);
   if (fit === "dropped") return { keep: false, reason: "over_limit" };
   return {
@@ -147,9 +150,23 @@ export function onDemandOccasion(
   return reachable[0] ?? null;
 }
 
-/** Longest a run can take: AI and Zinc each get one retry; the lookups run in parallel. */
-export function ideaRunWorstMs(aiTimeoutMs: number, zincTimeoutMs: number): number {
-  return 2 * aiTimeoutMs + 2 * zincTimeoutMs;
+/** A true constant: rates are per second. */
+const SECOND_MS = 1000;
+
+/**
+ * Longest a run can take. The brainstorm: AI and Zinc each get one retry, and its lookups run in
+ * parallel. The list pass (ALL-29): its lookups start at the rate limit, plus two Zinc timeouts
+ * for the last gift, whose details lookup Zinc may reject before its store check runs. The photo
+ * calls run in parallel after that: one more Zinc timeout.
+ */
+export function ideaRunWorstMs(
+  aiTimeoutMs: number,
+  zincTimeoutMs: number,
+  listLookupsMax: number,
+  zincRequestsPerSecond: number,
+): number {
+  const listPassMs = Math.ceil((listLookupsMax * SECOND_MS) / zincRequestsPerSecond) + 2 * zincTimeoutMs;
+  return 2 * aiTimeoutMs + 2 * zincTimeoutMs + listPassMs + zincTimeoutMs;
 }
 
 /** True when another ranking call's worst-case cost still fits under the run's cap. */

@@ -69,6 +69,7 @@ export type { AddResult, DatedKind, ImportResult, PersonAddress, PersonCard, Per
 export {
   parseAddressForm,
   parseBirthYear,
+  MAX_BUDGET_CENTS,
   parseBudget,
   parseBudgetForm,
   parseImportRows,
@@ -107,7 +108,7 @@ export {
   startConnect,
 } from "./zinc/connect";
 export type { DisconnectDeps, PaymentResult, PaymentStatus, PaymentSummary } from "./zinc/connect";
-export type { PlaceAddressHeld, PlaceHeld, ZincDeps } from "./zinc/types";
+export type { DbDeps, PlaceAddressHeld, PlaceHeld, ZincDeps } from "./zinc/types";
 export { handleZincWebhook } from "./zinc/events";
 export { readWebhookBody } from "./zinc/guard";
 export { hasPaidFeatures } from "./paid-features";
@@ -115,6 +116,10 @@ export { hasPaidFeatures } from "./paid-features";
 // webhook route, Settings and the people actions bind these in app/settings/zinc-deps.ts.
 export { approveAndBuy } from "./purchase/approve";
 export type { ApproveError, ApproveInput, ApproveResult } from "./purchase/approve";
+export { capsFor } from "./purchase/approve";
+export type { ShipTo } from "./purchase/approve";
+export { quoteFailedOrder, replaceFailedOrder } from "./purchase/replace";
+export type { QuoteDeps, QuoteResult, ReplaceError, ReplaceInput, ReplaceResult } from "./purchase/replace";
 export { placeAddressHeld as placeAddressHeldFor, placeHeldForUser, placeRound, sweepStalePlacing } from "./purchase/place";
 export type { PlaceOutcome } from "./purchase/place";
 export type { PurchaseDeps } from "./purchase/store";
@@ -138,3 +143,6 @@ export type { ShownIdea } from "./ideas/read";
 export { amazonPasteDetails } from "./zinc/products";
 export type { AmazonPasteDetails, ZincProductDetails } from "./zinc/products";
 export type { ZincHttp } from "./zinc/client";
+// The round screen (ALL-29): "None of these", a budget typed on an open round, and the page reads.
+export { rejectionOutlook, rejectRoundIdeas, roundAccess, roundView, setRoundBudget } from "./rounds/approval";
+export type { BuyYourself, RejectInput, RejectResult, RoundPageIdea, RoundPageOrder, RoundPageView } from "./rounds/approval";

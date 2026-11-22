@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { splitRecipientName, type AddressDraft, type AddressField } from "@gifts-af/core";
 import { AddressForm, type AddressValues } from "@/components/address/address-form";
+import { ReturnTo } from "@/components/address/return-to";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import type { AddressSaveResult, PersonAddress, SaveResult } from "@/modules/concierge";
@@ -28,6 +29,7 @@ export function AddressSection({
   name,
   address,
   startOpen,
+  next,
   saveAction,
   removeAction,
 }: {
@@ -35,6 +37,8 @@ export function AddressSection({
   name: string;
   address: PersonAddress;
   startOpen: boolean;
+  /** A same-site path to go back to once saved (ALL-29: a gift's confirm or fix page). */
+  next?: string;
   /** `saveAddressAction` */
   saveAction: (previous: null, formData: FormData) => Promise<AddressSaveResult>;
   /** `removeAddressAction` */
@@ -42,6 +46,7 @@ export function AddressSection({
 }) {
   const shared = address.kind === "shared";
   const [editing, setEditing] = useState(startOpen && !shared);
+  const [saved, setSaved] = useState(false);
   const section = useRef<HTMLElement>(null);
 
   useEffect(() => {
@@ -71,12 +76,16 @@ export function AddressSection({
           start={startValues(name, address)}
           startErrors={address.kind === "own" ? address.problems : {}}
           submitLabel="Save address"
-          save={(form) => {
+          save={async (form) => {
             form.set("id", personId);
-            return saveAction(null, form);
+            const result = await saveAction(null, form);
+            if (result.ok) setSaved(true);
+            return result;
           }}
           onDone={() => setEditing(false)}
         />
+      ) : saved && next ? (
+        <ReturnTo to={next} />
       ) : address.kind === "own" ? (
         <SavedAddress
           personId={personId}

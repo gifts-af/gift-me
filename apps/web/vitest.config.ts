@@ -9,6 +9,7 @@ import path from "node:path";
 const LOCAL_DB_TESTS = [
   "app/settings/__tests__/zinc-deps.test.ts",
   "modules/concierge/__tests__/add-from-link.test.ts",
+  "modules/concierge/__tests__/approval-db.test.ts",
   "modules/concierge/__tests__/capture-store-scope.test.ts",
   "modules/concierge/__tests__/fanout-db.test.ts",
   "modules/concierge/__tests__/idea-daily-limit.test.ts",
@@ -17,6 +18,7 @@ const LOCAL_DB_TESTS = [
   "modules/concierge/__tests__/notify-store.test.ts",
   "modules/concierge/__tests__/placing-race.test.ts",
   "modules/concierge/__tests__/purchase.test.ts",
+  "modules/concierge/__tests__/replace.test.ts",
   "modules/concierge/__tests__/round-engine.test.ts",
   "modules/concierge/__tests__/zinc-connect.test.ts",
   "modules/concierge/__tests__/zinc-events.test.ts",

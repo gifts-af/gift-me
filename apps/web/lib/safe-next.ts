@@ -18,3 +18,12 @@ export function safeNext(value: string | null | undefined, origin?: string): str
     return "/";
   }
 }
+
+/**
+ * Where an address form goes back to once saved (ALL-29): only a gift's own page under
+ * /rounds/, checked like safeNext; undefined for anything else, which saves and stays.
+ */
+export function roundReturnPath(value: string | null | undefined): string | undefined {
+  const path = safeNext(value);
+  return path.startsWith("/rounds/") ? path : undefined;
+}

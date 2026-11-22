@@ -291,6 +291,8 @@ describe("runRoundJob", () => {
       idea_rounds_per_tick: 5,
       idea_ai_timeout_ms: 60_000,
       idea_zinc_timeout_ms: 15_000,
+      idea_list_lookups_max: 10,
+      zinc_requests_per_second: 10,
     })) store.settings.set(k, v);
     store.people.set("P", { name: "Zelda", hasAddress: true });
     store.people.set("P2", { name: "Yara", hasAddress: true });

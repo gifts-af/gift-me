@@ -5,6 +5,7 @@ import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { createFreshUser } from "./fresh-user";
 import { localSupabase } from "./local-supabase";
+import { personFor, readyBuyer, seedFailedOrder, seedRound } from "./rounds";
 import { addMother, addSavedGift, saveBudgets, saveOneGiftList } from "./seed";
 import { signIn, session, type Credentials } from "./sign-in";
 
@@ -49,8 +50,9 @@ const SIGNED_OUT: [name: string, url: string][] = [
   ["forgot-password", "/auth/forgot-password"],
 ];
 
-// Filled in by beforeAll: a fresh account with one person (with a saved gift) and a one-gift list.
-type Seeded = { user: Credentials; personId: string; shareToken: string };
+// Filled in by beforeAll: a fresh account with one person (with a saved gift) and a one-gift list,
+// plus a round awaiting approval and another with a gift to fix (ALL-29).
+type Seeded = { user: Credentials; personId: string; shareToken: string; round: { id: string; ideaIds: string[] }; fix: { roundId: string; orderId: string } };
 const SIGNED_IN: [name: string, url: (s: Seeded) => string][] = [
   ["home", () => "/"],
   ["my-list", () => "/lists"],
@@ -70,6 +72,9 @@ const SIGNED_IN: [name: string, url: (s: Seeded) => string][] = [
   ["settings-address", () => "/settings/address"],
   ["settings-paying", () => "/settings/paying"],
   ["shared-list", (s) => `/share/${s.shareToken}`],
+  ["round", (s) => `/rounds/${s.round.id}`],
+  ["round-buy", (s) => `/rounds/${s.round.id}/buy?ideas=${s.round.ideaIds.slice(0, 2).join(",")}`],
+  ["round-fix", (s) => `/rounds/${s.fix.roundId}/fix/${s.fix.orderId}`],
 ];
 
 for (const [name, url] of SIGNED_OUT) {
@@ -91,7 +96,7 @@ test.describe("signed in", () => {
     await saveBudgets(user, personId, { any: 7500, mothers_day: 5000 });
     await addOnDemandIdeas(user, personId);
     await saveOneGiftList(user);
-    seeded = { user, personId, shareToken: await shareToken(user) };
+    seeded = { user, personId, shareToken: await shareToken(user), ...(await addRounds(user)) };
   });
 
   for (const [name, url] of SIGNED_IN) {
@@ -167,6 +172,24 @@ async function addOnDemandIdeas(user: Credentials, personId: string): Promise<vo
     }),
   });
   if (!saved.ok) throw new Error(`saving the vise failed: ${saved.status} ${await saved.text()}`);
+}
+
+// A round awaiting approval for Dad (one idea over his budget), and one for Grandpa whose first
+// pick's price went up, written as the engine and Zinc would leave them (ALL-29). The buyer can buy,
+// so the confirm page shows the fake Zinc's balance.
+async function addRounds(user: Credentials): Promise<Pick<Seeded, "round" | "fix">> {
+  const { id } = await readyBuyer(user);
+  const ideas = [
+    { title: "Rotary fly-tying vise", totalCents: 3150, productId: "B0GALLERY3", reason: "He asked for a new vise, and this one turns as he ties." },
+    { title: "Waterproof fly box", totalCents: 1890, productId: "B0GALLERY4", reason: "Keeps the flies he ties dry on the river." },
+    { title: "Wading boots", totalCents: 8400, productId: "B0GALLERY5", reason: "His are worn through, and the season starts soon." },
+  ];
+  const dad = await personFor(id, "Dad");
+  const round = await seedRound(id, dad, { budgetCents: 7500, ideas });
+  const grandpa = await personFor(id, "Grandpa");
+  const fixRound = await seedRound(id, grandpa, { budgetCents: 7500, ideas });
+  const orderId = await seedFailedOrder(id, fixRound.roundId, fixRound.ideaIds[0], "price_up");
+  return { round: { id: round.roundId, ideaIds: round.ideaIds }, fix: { roundId: fixRound.roundId, orderId } };
 }
 
 async function shareToken(user: Credentials): Promise<string> {

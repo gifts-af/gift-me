@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { CAPTURE_READ_OFF, captureReadNotice, centsLabel, dollarsLabel, topUpFeeLabel, zincFeeNotice } from "./paid-features";
+import { CAPTURE_READ_OFF, captureReadNotice, centsLabel, dollarsLabel, priceCheckNotice, topUpFeeLabel, zincFeeNotice } from "./paid-features";
 
 describe("centsLabel", () => {
   it("shows cents under a dollar and dollars from there", () => {
@@ -13,6 +13,10 @@ describe("centsLabel", () => {
 describe("the money wording (no Alpha label, ALL-114 in ALL-116)", () => {
   it("says real money is spent, and about how much", () => {
     expect(captureReadNotice(2)).toBe("We read each capture with AI, which costs real money: about 2¢ each.");
+  });
+
+  it("says checking today's price is a paid lookup (ALL-29)", () => {
+    expect(priceCheckNotice(1)).toBe("Checking today's price is a live lookup, which costs real money: about 1¢.");
   });
 
   it("says why reading is off", () => {

@@ -168,7 +168,8 @@ describe("guided questions link (ALL-26 AC-10)", () => {
     const mail = render({ ...s.data, questions: 3 }, { ...s.links, questions: QUESTIONS_URL });
     expect(mail.html).toContain(QUESTIONS_URL);
     expect(mail.text).toContain(`Answer 3 quick questions about Mom: ${QUESTIONS_URL}`);
-    expect(mail.html.match(/<a[\s>]/g)).toHaveLength(2);
+    // The button, the questions link, and a Buy this link per idea (ALL-29).
+    expect(mail.html.match(/<a[\s>]/g)).toHaveLength(2 + 3);
     expect(mail.html.match(/background:#0f766e/g)).toHaveLength(1);
     expect(mail.html.indexOf(s.links.choose)).toBeLessThan(mail.html.indexOf(QUESTIONS_URL));
   });
@@ -258,8 +259,8 @@ describe("failed_several (ALL-116: two or more failed while the round is open)",
     );
     expect(mail.text).toContain("The good news: the Cast-iron herb planter is ordered and on its way.");
     expect(mail.text).toContain("- Le Creuset mug set (The price went up more than you allowed for. Approve the new price, or choose another gift.)");
-    expect(mail.text).toContain(`Review the new price for the Le Creuset mug set: ${s.links.open}`);
-    expect(mail.text).toContain(`Choose another gift instead of the Linen apron: ${s.links.open}`);
+    expect(mail.text).toContain(`Review the new price for the Le Creuset mug set: ${s.data.failed[0].url}`);
+    expect(mail.text).toContain(`Choose another gift instead of the Linen apron: ${s.data.failed[1].url}`);
     expect(mail.text).toContain("Choose by Thursday, March 5 so it arrives in time.");
     expect(mail.html.match(/background:#0f766e/g)).toHaveLength(1);
   });
@@ -271,7 +272,7 @@ describe("failed_several (ALL-116: two or more failed while the round is open)",
   });
 
   it("says none, and them, when three of three failed", () => {
-    const three = [...s.data.failed, { title: "Vase", detail: "The store ran out. Choose another gift." }];
+    const three = [...s.data.failed, { title: "Vase", detail: "The store ran out. Choose another gift.", url: "https://example.com/rounds/r1/fix/o3" }];
     const mail = TEMPLATES.failed_several({ ...s.data, tried: 3, failed: three, onItsWay: undefined }, s.links);
     expect(mail.text).toContain("and none of them went through. You haven't been charged for them.");
   });
@@ -356,6 +357,14 @@ describe("the other gift emails match the approved wording (ALL-116)", () => {
     expect(mail.subject).toBe("Sorry, Mom's gift can't arrive in time");
     expect(mail.text).toContain("you can still choose something that ships faster, by Thursday, March 5.");
     expect(mail.text).toContain("See faster gifts:");
+  });
+
+  it("needs_attention: the one button opens the gift's fix page and says so", () => {
+    const s = SAMPLE_DATA.needs_attention;
+    const mail = TEMPLATES.needs_attention(s.data, { open: "https://example.com/rounds/r1/fix/o1" });
+    expect(mail.text).toContain("Review the gift: https://example.com/rounds/r1/fix/o1");
+    expect(mail.html).toMatch(/background:#0f766e[^>]*>Review the gift</);
+    expect(mail.text).not.toContain("Open Mom's page");
   });
 
   it("needs_attention: says when to choose again, or what happens next once there's nothing to choose", () => {
@@ -581,5 +590,87 @@ describe("over-budget ideas (ALL-27)", () => {
     expect(TEMPLATES.reminder({ ...s.data, ideas }, s.links).text).toContain("Espresso machine · $95 (Over budget)");
     const f = SAMPLE_DATA.final_notice;
     expect(TEMPLATES.final_notice({ ...f.data, ideas }, f.links).text).toContain("Espresso machine · $95 (Over budget)");
+  });
+});
+
+// ─── ALL-29: Buy this links ───
+
+describe("the approval emails link each idea (ALL-29 AC-1)", () => {
+  const BUY = (i: number) => `https://example.com/rounds/r1/buy?ideas=i${i}`;
+  const links = { choose: "https://example.com/rounds/r1", buy0: BUY(0), buy1: BUY(1), buy2: BUY(2) };
+
+  it("the heads-up has a Buy this link per idea and one button to the round screen", () => {
+    const s = SAMPLE_DATA.heads_up;
+    const mail = TEMPLATES.heads_up(s.data, links);
+    expect(mail.html.match(/Buy this/g)).toHaveLength(3);
+    for (let i = 0; i < 3; i++) {
+      expect(mail.html).toContain(`href="${BUY(i)}"`);
+      expect(mail.text).toContain(`Buy this ›: ${BUY(i)}`);
+    }
+    expect(mail.html.match(/background:#0f766e/g)).toHaveLength(1);
+    expect(mail.html).toMatch(/background:#0f766e[^>]*>Pick several or none of these</);
+    expect(mail.html).toContain('href="https://example.com/rounds/r1"');
+    expect(mail.text).toContain("Pick several or none of these: https://example.com/rounds/r1");
+  });
+
+  it("each row shows when it arrives, the store and the reason", () => {
+    const s = SAMPLE_DATA.heads_up;
+    const mail = TEMPLATES.heads_up(s.data, links);
+    expect(mail.text).toContain("- Stoneware mug set · $42 (Arrives by Mar 5 · Amazon)");
+    expect(mail.text).toContain("Loves tea.");
+    expect(mail.html).toContain("font-style:italic");
+  });
+
+  it("an over-budget idea says so beside its arrival", () => {
+    const s = SAMPLE_DATA.heads_up;
+    const ideas = [{ ...s.data.ideas[0], overBudget: true }, ...s.data.ideas.slice(1)];
+    const mail = TEMPLATES.heads_up({ ...s.data, ideas }, links);
+    expect(mail.text).toContain("(Over budget · Arrives by Mar 5 · Amazon)");
+  });
+
+  it("a missing buy link is refused rather than sent as href=undefined", () => {
+    const s = SAMPLE_DATA.heads_up;
+    expect(() => TEMPLATES.heads_up(s.data, { choose: links.choose, buy0: BUY(0) })).toThrow(/buy1/);
+  });
+
+  it("reminder and final notice carry the same links", () => {
+    const r = SAMPLE_DATA.reminder;
+    const f = SAMPLE_DATA.final_notice;
+    for (const mail of [TEMPLATES.reminder(r.data, links), TEMPLATES.final_notice(f.data, links)]) {
+      expect(mail.html.match(/Buy this/g)).toHaveLength(3);
+      expect(mail.html).toContain(`href="${BUY(2)}"`);
+      expect(mail.html).toMatch(/background:#0f766e[^>]*>Pick several or none of these</);
+      expect(mail.html).toContain('href="https://example.com/rounds/r1"');
+      expect(mail.html.match(/background:#0f766e/g)).toHaveLength(1);
+    }
+  });
+
+  it("the auto-buy heads-up keeps its button and has no Buy this links", () => {
+    const s = SAMPLE_DATA.heads_up;
+    const mail = TEMPLATES.heads_up({ ...s.data, mode: "auto_buy", autoBuyIdea: "the mug", autoBuyDate: "March 5" }, links);
+    expect(mail.html).not.toContain("Buy this");
+    expect(mail.html).toContain("Review or change");
+  });
+});
+
+describe("failure emails link each gift to its own fix page (ALL-29 AC-16)", () => {
+  it("failed_several links each gift to its own fix page", () => {
+    const s = SAMPLE_DATA.failed_several;
+    const [a, b] = s.data.failed;
+    const mail = TEMPLATES.failed_several(s.data, s.links);
+    expect(mail.text).toContain(`${a.action}: ${a.url}`);
+    expect(mail.text).toContain(`${b.action}: ${b.url}`);
+    expect(a.url).not.toBe(b.url);
+    expect(mail.html).toContain(`href="${a.url}"`);
+    expect(mail.html).toContain(`href="${b.url}"`);
+    expect(mail.html.match(/background:#0f766e/g)).toHaveLength(1);
+  });
+
+  it("a single price_up email opens that order's fix page", () => {
+    const s = SAMPLE_DATA.price_up;
+    const url = "https://example.com/rounds/r1/fix/o1";
+    const mail = TEMPLATES.price_up(s.data, { open: url });
+    expect(mail.html).toContain(`href="${url}"`);
+    expect(mail.text).toContain(`Review the gift: ${url}`);
   });
 });

@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { AppNav } from "@/components/app-shell/app-nav";
 import { BackLink, PageFrame, PageTitle } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
+import { roundReturnPath } from "@/lib/safe-next";
 import { todayForRequest } from "@/lib/today";
 import { getPerson } from "@/modules/concierge";
 import { removeAddressAction, saveAddressAction } from "../../actions";
@@ -22,7 +23,7 @@ export default function AddressPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ open?: string }>;
+  searchParams: Promise<{ open?: string; next?: string }>;
 }) {
   return (
     <>
@@ -43,9 +44,9 @@ async function Loaded({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ open?: string }>;
+  searchParams: Promise<{ open?: string; next?: string }>;
 }) {
-  const [{ id }, { open }] = await Promise.all([params, searchParams]);
+  const [{ id }, { open, next }] = await Promise.all([params, searchParams]);
   const person = await getPerson(id, await todayForRequest());
   if (!person) notFound();
 
@@ -58,6 +59,7 @@ async function Loaded({
         name={person.name}
         address={person.address}
         startOpen={open === "1"}
+        next={roundReturnPath(next)}
         saveAction={saveAddressAction}
         removeAction={removeAddressAction}
       />

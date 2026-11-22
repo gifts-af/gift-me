@@ -10,6 +10,9 @@ export type ZincDeps = {
   now: Date;
 };
 
+/** What reads and writes on our own database need: the service-role client and the clock. */
+export type DbDeps = Pick<ZincDeps, "db" | "now">;
+
 export type PlaceHeld = (userId: string) => Promise<void>;
 
 /** After a person's address is saved: places that person's rounds held for an address. */

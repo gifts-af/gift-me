@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { Check } from "lucide-react";
 import { IDEA_RUN_OFF, ideaRunNotice } from "@gifts-af/core";
+import { IdeaPhoto } from "@/components/idea-photo";
 import { shortDate } from "@/components/occasion-format";
 import { Button } from "@/components/ui/button";
 import type { IdeaRunOffer, ShownIdea } from "@/modules/concierge";
@@ -154,7 +155,9 @@ export function IdeasScreen({
           {ideas.map((idea) => {
             const store = storeLabel(idea.retailer);
             return (
-              <li key={idea.id} className="flex flex-col gap-1 px-4 py-3" data-retailer-product-id={idea.retailerProductId ?? undefined}>
+              <li key={idea.id} className="flex items-start gap-3 px-4 py-3" data-retailer-product-id={idea.retailerProductId ?? undefined}>
+                <IdeaPhoto url={idea.imageUrl} title={idea.title} />
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <div className="flex items-start justify-between gap-3">
                   {idea.productUrl ? (
                     <a href={idea.productUrl} target="_blank" rel="noreferrer" className="text-[15px] font-semibold [overflow-wrap:anywhere]">
@@ -177,6 +180,7 @@ export function IdeasScreen({
                   <p className="text-[13px] text-muted-foreground">Arrives by {shortDate(idea.arriveBy)} if ordered today</p>
                 )}
                 {idea.reason && <p className="text-[15px]">{idea.reason}</p>}
+                </div>
               </li>
             );
           })}

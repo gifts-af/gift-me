@@ -5,13 +5,16 @@ import userEvent from "@testing-library/user-event";
 import type { AddressSaveResult, PersonAddress, SaveResult } from "@/modules/concierge";
 import { AddressSection } from "../address";
 
+const replace = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ replace }) }));
+
 const SAVED = {
   firstName: "Mary", lastName: "Smith", line1: "12 Oak Lane", line2: "Apt 3", city: "Tampa", state: "FL", zip: "33602",
 };
 
 function setup(
   address: PersonAddress,
-  opts: { name?: string; startOpen?: boolean; save?: AddressSaveResult; remove?: SaveResult } = {},
+  opts: { name?: string; startOpen?: boolean; save?: AddressSaveResult; remove?: SaveResult; next?: string } = {},
 ) {
   const saveAction = vi.fn(async (_p: null, f: FormData) => {
     void f;
@@ -27,6 +30,7 @@ function setup(
       name={opts.name ?? "Mary Jane Smith"}
       address={address}
       startOpen={opts.startOpen ?? false}
+      next={opts.next}
       saveAction={saveAction}
       removeAction={removeAction}
     />,
@@ -175,5 +179,14 @@ describe("AddressSection", () => {
     act(() => rerender(ui("visible")));
     expect(screen.queryByLabelText("Street address")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Add an address" })).toBeInTheDocument();
+  });
+
+  it("with ?next= from a gift, saving goes back to that gift (ALL-29)", async () => {
+    setup(
+      { kind: "own", address: { ...SAVED }, problems: {} },
+      { startOpen: true, next: "/rounds/00000000-0000-4000-8000-000000000001/buy?ideas=x" },
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Save address" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/rounds/00000000-0000-4000-8000-000000000001/buy?ideas=x"));
   });
 });

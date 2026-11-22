@@ -14,6 +14,7 @@ import { isShippableAddress } from "@gifts-af/core";
 import { logEvent } from "@/lib/log";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hasPaidFeatures } from "../paid-features";
+import { listGiftCandidates } from "../ideas/store";
 import { getOpenQuestions } from "../profile/profile";
 
 // Everything the round engine needs from the database (ALL-28). The interface
@@ -103,13 +104,29 @@ export type RoundContext = {
   /** Guided questions open for the person (ALL-26); the emails link them when above 0. */
   openQuestions: number;
   /** Proposed ideas, best first; `overBudget`: above the budget but within the allowance. */
-  ideas: { title: string; totalCents: number; overBudget: boolean }[];
+  ideas: {
+    id: string;
+    title: string;
+    totalCents: number;
+    overBudget: boolean;
+    /** The slowest-case arrival date (YYYY-MM-DD); null when unknown. */
+    arriveBy: string | null;
+    /** Why it was picked; a list gift says "On their list". Null when none. */
+    reason: string | null;
+    /** The retailer's name; null when unknown. */
+    store: string | null;
+  }[];
   /**
    * The idea checks (ALL-27, round_idea_state): the person has an active fact, and the round may
    * start another run. Only read before ideas are found (scheduled, needs_address, generating);
    * true otherwise, so a failed read can't hold up the money path.
    */
   hasFacts: boolean;
+  /**
+   * The person's list has a gift a run can offer (ALL-29 AC-28): listGiftCandidates, the read the
+   * run uses (S6). Read with hasFacts; false when not read, where hasFacts is true.
+   */
+  hasListGifts: boolean;
   ideaRunsLeft: boolean;
   /** A run started after the `no_ideas` email went (round-plan, ranSinceNoIdeas). */
   ranSinceNoIdeas: boolean;
@@ -283,12 +300,14 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
 
   async function readIdeaState(
     roundId: string,
-  ): Promise<Pick<RoundContext, "hasFacts" | "ideaRunsLeft" | "ranSinceNoIdeas" | "paid" | "ideaEngineOn">> {
-    const [state, told, lastRun, engineOn] = await Promise.all([
+    personId: string,
+  ): Promise<Pick<RoundContext, "hasFacts" | "hasListGifts" | "ideaRunsLeft" | "ranSinceNoIdeas" | "paid" | "ideaEngineOn">> {
+    const [state, told, lastRun, engineOn, listGifts] = await Promise.all([
       concierge.rpc("round_idea_state", { p_round_id: roundId }),
       concierge.from("round_sends").select("created_at").eq("round_id", roundId).eq("step", "no_ideas").maybeSingle(),
       concierge.from("idea_runs").select("started_at").eq("round_id", roundId).order("started_at", { ascending: false }).limit(1),
       setting("idea_engine_enabled"),
+      listGiftCandidates(db, personId, roundId),
     ]);
     if (state.error) fail("Reading the round's idea state failed", state.error);
     if (told.error) fail("Reading the round's no_ideas email failed", told.error);
@@ -298,6 +317,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
     const started = lastRun.data[0]?.started_at;
     return {
       hasFacts: row.has_facts,
+      hasListGifts: listGifts.length > 0,
       ideaRunsLeft: row.runs_left,
       ranSinceNoIdeas: told.data !== null && started !== undefined && Date.parse(started) > Date.parse(told.data.created_at),
       paid: row.paid,
@@ -455,7 +475,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
         concierge.from("occasions").select("kind").eq("id", round.occasion_id).single(),
         concierge
           .from("gift_ideas")
-          .select("title, est_total_cents, over_budget")
+          .select("id, title, est_total_cents, over_budget, arrive_by, reason, retailer")
           .eq("round_id", roundId)
           .eq("status", "proposed")
           .order("rank"),
@@ -494,8 +514,8 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
       }
       const a: AddressColumns = shared ?? p;
       const ideaState = round.status === "scheduled" || round.status === "needs_address" || round.status === "generating"
-        ? await readIdeaState(roundId)
-        : { hasFacts: true, ideaRunsLeft: true, ranSinceNoIdeas: false, paid: true, ideaEngineOn: true };
+        ? await readIdeaState(roundId, round.person_id)
+        : { hasFacts: true, hasListGifts: false, ideaRunsLeft: true, ranSinceNoIdeas: false, paid: true, ideaEngineOn: true };
       const draftOf = (x: AddressColumns) => ({
         firstName: x.recipient_first_name,
         lastName: x.recipient_last_name,
@@ -517,7 +537,15 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
         hasAddress: isShippableAddress(draftOf(a)),
         hasSharedAddress: shared !== null && isShippableAddress(draftOf(shared)),
         openQuestions: open.length,
-        ideas: ideas.data.map((i) => ({ title: i.title, totalCents: i.est_total_cents, overBudget: i.over_budget })),
+        ideas: ideas.data.map((i) => ({
+          id: i.id,
+          title: i.title,
+          totalCents: i.est_total_cents,
+          overBudget: i.over_budget,
+          arriveBy: i.arrive_by,
+          reason: i.reason,
+          store: i.retailer,
+        })),
         ...ideaState,
         orders: orders.data.map((o) => ({
           id: o.id,

@@ -4,6 +4,9 @@ import userEvent from "@testing-library/user-event";
 import type { MyAddress } from "@/lib/account-address";
 import { MyAddressSection } from "../my-address";
 
+const replace = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ replace }) }));
+
 const ADDRESS = { firstName: "Sam", lastName: "Rivera", line1: "44 Elm St", line2: "Apt 2", city: "Columbus", state: "OH", zip: "43215" };
 const NOTE = "Only you can see this here. It's used only if you let people with your list ship gifts to you.";
 const saved = (shared: boolean): MyAddress => ({ kind: "saved", address: ADDRESS, shared });
@@ -89,5 +92,13 @@ describe("MyAddressSection", () => {
     setup({ kind: "unavailable" });
     expect(screen.getByText("We couldn't load your address. Try again.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Add my address" })).not.toBeInTheDocument();
+  });
+
+  it("with ?next= from a gift, the form starts open and saving goes back to that gift (ALL-29)", async () => {
+    const saveAction = vi.fn(async (f: FormData) => (void f, { ok: true as const }));
+    const removeAction = vi.fn(async () => ({ ok: true as const }));
+    render(<MyAddressSection address={saved(false)} saveAction={saveAction} removeAction={removeAction} next="/rounds/r/fix/o" />);
+    await userEvent.click(screen.getByRole("button", { name: "Save address" }));
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/rounds/r/fix/o"));
   });
 });

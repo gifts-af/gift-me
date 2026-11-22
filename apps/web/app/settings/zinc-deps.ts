@@ -25,6 +25,8 @@ import {
   type PlaceAddressHeld,
   type PlaceHeld,
   type PurchaseDeps,
+  type DbDeps,
+  type QuoteDeps,
   type SendJobs,
   type ZincDeps,
 } from "@/modules/concierge";
@@ -51,10 +53,31 @@ export async function zincWiring(
   };
 }
 
-async function settingInt(db: SupabaseClient<Database>, key: string): Promise<number> {
+/**
+ * The round screen's deps (ALL-29): roundAccess, rejectionOutlook, rejectRoundIdeas,
+ * setRoundBudget and quoteFailedOrder's own reads only use the service-role client and the
+ * clock, so they work with Zinc off here too; their type gives them no way to reach Zinc.
+ */
+export function roundDbDeps(now: Date): DbDeps {
+  return { db: createAdminClient(), now };
+}
+
+export async function settingInt(db: SupabaseClient<Database>, key: string): Promise<number> {
   const { data, error } = await db.schema("concierge").rpc("setting_int", { p_key: key });
   if (error || typeof data !== "number") throw new Error(`Reading setting ${key} failed.`);
   return data;
+}
+
+/**
+ * Zinc's product lookups on the app's own key (ZINC_API_BASE, ZINC_API_KEY, T17), timed by
+ * idea_zinc_timeout_ms: the idea run's, and the fix page's price check (ALL-29 QuoteDeps.lookup).
+ * Null when either is missing here.
+ */
+export async function lookupWiring(db: SupabaseClient<Database>, env: Env = process.env): Promise<QuoteDeps["lookup"] | null> {
+  const base = env.ZINC_API_BASE;
+  const key = env.ZINC_API_KEY;
+  if (!base || !key) return null;
+  return { http: { base, timeoutMs: await settingInt(db, "idea_zinc_timeout_ms"), fetch }, key };
 }
 
 /**
@@ -65,14 +88,13 @@ async function settingInt(db: SupabaseClient<Database>, key: string): Promise<nu
 async function ideaDeps(db: SupabaseClient<Database>, env: Env, today: CalendarDate, zincShare = 1): Promise<IdeaDeps | null> {
   const gatewayBase = env.AI_GATEWAY_BASE;
   const gatewayKey = env.AI_GATEWAY_API_KEY;
-  const zincBase = env.ZINC_API_BASE;
-  const zincKey = env.ZINC_API_KEY;
-  if (!gatewayBase || !gatewayKey || !zincBase || !zincKey) return null;
-  const timeoutMs = await settingInt(db, "idea_zinc_timeout_ms");
+  if (!gatewayBase || !gatewayKey) return null;
+  const zinc = await lookupWiring(db, env);
+  if (!zinc) return null;
   return {
     store: createSupabaseIdeaStore(db),
     gateway: { base: gatewayBase, apiKey: gatewayKey, fetch },
-    zinc: { http: { base: zincBase, timeoutMs, fetch }, key: zincKey },
+    zinc,
     today,
     zincShare,
     clock: Date.now,

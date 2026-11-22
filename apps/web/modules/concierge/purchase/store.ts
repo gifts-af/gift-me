@@ -2,9 +2,9 @@
 // service-role client in `deps.db`; every write that changes an order or a round
 // goes through the money-path SQL functions (migration 20261109100000), which
 // lock the round row and leave its status to reconcile_round.
-import type { AddressDraft, CalendarDate, ScheduleSettings } from "@gifts-af/core";
+import type { Address, AddressDraft, CalendarDate, ScheduleSettings } from "@gifts-af/core";
 import { errorFields, logEvent } from "@/lib/log";
-import type { ZincDeps } from "../zinc/types";
+import type { DbDeps, ZincDeps } from "../zinc/types";
 
 export type PurchaseDeps = ZincDeps & {
   /** zinc_order_fee_cents and order_price_margin_pct, read by the caller (T23). */
@@ -22,7 +22,7 @@ export type PurchaseDeps = ZincDeps & {
   clock?: () => number;
 };
 
-export function concierge(deps: ZincDeps) {
+export function concierge(deps: DbDeps) {
   return deps.db.schema("concierge");
 }
 
@@ -30,7 +30,7 @@ export function fail(what: string, error: { message: string; code?: string }): n
   throw Object.assign(new Error(`${what}: ${error.message}`), { code: error.code });
 }
 
-export async function setting(deps: ZincDeps, key: string): Promise<number> {
+export async function setting(deps: DbDeps, key: string): Promise<number> {
   const { data, error } = await concierge(deps).rpc("setting_int", { p_key: key });
   if (error) fail(`Reading setting ${key} failed`, error);
   if (typeof data !== "number") throw new Error(`Setting ${key} is missing.`);
@@ -49,7 +49,7 @@ const SCHEDULE_KEYS: Record<keyof ScheduleSettings, string> = {
   holdFinalDays: "hold_final_days",
 };
 
-export async function scheduleSettings(deps: ZincDeps): Promise<ScheduleSettings> {
+export async function scheduleSettings(deps: DbDeps): Promise<ScheduleSettings> {
   const keys = Object.keys(SCHEDULE_KEYS) as (keyof ScheduleSettings)[];
   const values = await Promise.all(keys.map((k) => setting(deps, SCHEDULE_KEYS[k])));
   return Object.fromEntries(keys.map((k, i) => [k, values[i]])) as ScheduleSettings;
@@ -69,7 +69,7 @@ export type RoundRow = {
   closed_at: string | null;
 };
 
-export async function readRound(deps: ZincDeps, roundId: string): Promise<RoundRow | null> {
+export async function readRound(deps: DbDeps, roundId: string): Promise<RoundRow | null> {
   const { data, error } = await concierge(deps)
     .from("gift_rounds")
     .select("id, user_id, person_id, occasion_id, occasion_date, ship_by_deadline, budget_cents, status, attention_reason, locked_until, closed_at")
@@ -80,14 +80,14 @@ export async function readRound(deps: ZincDeps, roundId: string): Promise<RoundR
 }
 
 /** A failure the buyer hasn't been told about (untold_failures, ALL-116), whatever the round's reason. */
-export async function hasUntoldFailure(deps: ZincDeps, roundId: string): Promise<boolean> {
+export async function hasUntoldFailure(deps: DbDeps, roundId: string): Promise<boolean> {
   const { data, error } = await concierge(deps).rpc("untold_failures", { p_round_id: roundId });
   if (error) fail("Reading the round's failures failed", error);
   return (data ?? []).length > 0;
 }
 
 /** The person is live and the occasion still on. */
-export async function roundStillWanted(deps: ZincDeps, r: RoundRow): Promise<boolean> {
+export async function roundStillWanted(deps: DbDeps, r: RoundRow): Promise<boolean> {
   const [person, occasion] = await Promise.all([
     deps.db.from("people").select("id").eq("id", r.person_id).is("deleted_at", null).maybeSingle(),
     concierge(deps).from("occasions").select("id").eq("id", r.occasion_id).eq("enabled", true).is("deleted_at", null).maybeSingle(),
@@ -113,8 +113,47 @@ export type OrderRow = {
   created_at: string;
 };
 
+export type FailedOrderRow = {
+  id: string;
+  round_id: string;
+  user_id: string;
+  idea_id: string;
+  status: string;
+  failure_type: string | null;
+  resolved: boolean;
+  ship_to: string;
+  address_source: AddressSource | null;
+  gift_message: string | null;
+};
+
+/** One order, as replacing it needs; null when missing. */
+export async function readOrder(deps: DbDeps, orderId: string): Promise<FailedOrderRow | null> {
+  const { data, error } = await concierge(deps)
+    .from("orders")
+    .select("id, round_id, user_id, idea_id, status, failure_type, resolved, ship_to, address_source, gift_message")
+    .eq("id", orderId)
+    .maybeSingle();
+  if (error) fail("Loading the order failed", error);
+  return data as FailedOrderRow | null;
+}
+
+/** Whether this idea already had a price rise fixed: a resolved price_up order other than `exceptId` (once per gift, S2). */
+export async function priceRiseFixed(deps: DbDeps, ideaId: string, exceptId: string): Promise<boolean> {
+  const { data, error } = await concierge(deps)
+    .from("orders")
+    .select("id")
+    .eq("idea_id", ideaId)
+    .neq("id", exceptId)
+    .eq("status", "failed")
+    .eq("failure_type", "price_up")
+    .eq("resolved", true)
+    .limit(1);
+  if (error) fail("Loading the idea's orders failed", error);
+  return (data ?? []).length > 0;
+}
+
 /** The round's orders that still count (not cancelled, not a dealt-with failure), oldest first. */
-export async function liveOrders(deps: ZincDeps, roundId: string): Promise<OrderRow[]> {
+export async function liveOrders(deps: DbDeps, roundId: string): Promise<OrderRow[]> {
   const { data, error } = await concierge(deps)
     .from("orders")
     .select("id, idea_id, status, hold_reason, max_price_cents, fee_cents, total_cents, idempotency_key, gift_message, ship_to, address_source, created_at, resolved")
@@ -127,6 +166,7 @@ export async function liveOrders(deps: ZincDeps, roundId: string): Promise<Order
 }
 
 export type IdeaRow = {
+  round_id: string | null;
   id: string;
   product_url: string | null;
   est_total_cents: number;
@@ -135,13 +175,19 @@ export type IdeaRow = {
   over_budget: boolean;
   /** The idea's place in the round's list; picks get their caps and are sent in this order. */
   rank: number;
+  /** Only a `proposed` idea is on offer; a rejected or selected one was replaced (AC-12b). */
+  status: string;
+  /** Where a re-quote looks it up (R1): Zinc's retailer and product id, and the offer it was priced from. */
+  retailer: string | null;
+  retailer_product_id: string | null;
+  offer_id: string | null;
 };
 
-export async function readIdeas(deps: ZincDeps, ids: string[]): Promise<Map<string, IdeaRow>> {
+export async function readIdeas(deps: DbDeps, ids: string[]): Promise<Map<string, IdeaRow>> {
   if (ids.length === 0) return new Map();
   const { data, error } = await concierge(deps)
     .from("gift_ideas")
-    .select("id, product_url, est_total_cents, handling_days_max, delivery_days_max, over_budget, rank")
+    .select("id, round_id, product_url, est_total_cents, handling_days_max, delivery_days_max, over_budget, rank, status, retailer, retailer_product_id, offer_id")
     .in("id", ids);
   if (error) fail("Loading the ideas failed", error);
   return new Map((data ?? []).map((i) => [i.id, i as IdeaRow]));
@@ -154,7 +200,7 @@ export type Account = {
   over_budget_pct: number;
 };
 
-export async function readAccount(deps: ZincDeps, userId: string): Promise<Account | null> {
+export async function readAccount(deps: DbDeps, userId: string): Promise<Account | null> {
   const { data, error } = await concierge(deps)
     .from("accounts")
     .select("zinc_connected_at, buyer_phone, auto_topup_on, over_budget_pct")
@@ -165,7 +211,7 @@ export async function readAccount(deps: ZincDeps, userId: string): Promise<Accou
 }
 
 /** The user's Zinc key and the environment it was saved for, or null when not connected. */
-export async function readKey(deps: ZincDeps, userId: string): Promise<{ apiKey: string; env: string | null } | null> {
+export async function readKey(deps: DbDeps, userId: string): Promise<{ apiKey: string; env: string | null } | null> {
   const { data, error } = await concierge(deps).rpc("zinc_secrets", { p_user_id: userId });
   if (error) fail("Reading the Zinc key failed", error);
   const row = data?.[0];
@@ -223,7 +269,7 @@ function toSnapshot(a: AddressColumns): AddressSnapshot {
  * the person. Null when the person is gone. `draft` is for isShippableAddress.
  */
 export async function recipientAddress(
-  deps: ZincDeps,
+  deps: DbDeps,
   personId: string,
 ): Promise<{ snapshot: AddressSnapshot; draft: AddressDraft & { country?: string | null }; source: AddressSource } | null> {
   const shared = await deps.db.rpc("shared_address_for_person", { p_person_id: personId });
@@ -243,7 +289,42 @@ export async function recipientAddress(
   return { snapshot: toSnapshot(data), draft: toDraft(data), source: "own" };
 }
 
-export async function savedSnapshots(deps: ZincDeps, orderIds: string[]): Promise<Map<string, AddressSnapshot>> {
+/** The buyer's own address (public.account_addresses), for "Ship it to me"; null when they have none. */
+export async function buyerAddress(
+  deps: DbDeps,
+  userId: string,
+): Promise<{ snapshot: AddressSnapshot; draft: AddressDraft & { country?: string | null } } | null> {
+  const { data, error } = await deps.db
+    .from("account_addresses")
+    .select("recipient_first_name, recipient_last_name, address_line1, address_line2, city, state, zip, country, phone")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) fail("Reading the buyer's address failed", error);
+  return data ? { snapshot: toSnapshot(data), draft: toDraft(data) } : null;
+}
+
+/** Saves a checked address on the buyer's own person row (AC-10), checked at `now` (T51). */
+export async function savePersonAddress(deps: DbDeps, userId: string, personId: string, a: Address): Promise<void> {
+  const { error } = await deps.db
+    .from("people")
+    .update({
+      recipient_first_name: a.firstName,
+      recipient_last_name: a.lastName,
+      address_line1: a.line1,
+      address_line2: a.line2,
+      city: a.city,
+      state: a.state,
+      zip: a.zip,
+      country: "US",
+      address_checked_at: deps.now.toISOString(),
+    })
+    .eq("id", personId)
+    .eq("user_id", userId)
+    .is("deleted_at", null);
+  if (error) fail("Saving the person's address failed", error);
+}
+
+export async function savedSnapshots(deps: DbDeps, orderIds: string[]): Promise<Map<string, AddressSnapshot>> {
   if (orderIds.length === 0) return new Map();
   const { data, error } = await concierge(deps)
     .from("order_addresses")
@@ -255,7 +336,7 @@ export async function savedSnapshots(deps: ZincDeps, orderIds: string[]): Promis
 
 /** Runs a money-path SQL function that returns the round's status. */
 export async function roundRpc(
-  deps: ZincDeps,
+  deps: DbDeps,
   fn: "hold_orders" | "gate_held_orders" | "fail_order" | "record_outcomes" | "mark_unconfirmed",
   args: Record<string, unknown>,
 ): Promise<string | null> {
@@ -264,7 +345,7 @@ export async function roundRpc(
   return (data as string | null) ?? null;
 }
 
-export async function releaseRound(deps: ZincDeps, roundId: string, lock: string): Promise<void> {
+export async function releaseRound(deps: DbDeps, roundId: string, lock: string): Promise<void> {
   const { error } = await concierge(deps).rpc("release_round", { p_round_id: roundId, p_lock: lock });
   if (error) fail("Releasing the round failed", error);
 }
@@ -273,7 +354,7 @@ export async function releaseRound(deps: ZincDeps, roundId: string, lock: string
  * Runs `run` with the lease held, then gives it back. A release that fails is logged and
  * never masks run's own error or result: the lease runs out by itself (round_lock_minutes).
  */
-export async function withLease<T>(deps: ZincDeps, roundId: string, lock: string, run: () => Promise<T>): Promise<T> {
+export async function withLease<T>(deps: DbDeps, roundId: string, lock: string, run: () => Promise<T>): Promise<T> {
   const release = async () => {
     try {
       await releaseRound(deps, roundId, lock);
@@ -289,7 +370,7 @@ export async function withLease<T>(deps: ZincDeps, roundId: string, lock: string
 }
 
 /** Takes the round's lease now (ignores next_action_at); the lock value, or null when busy or not claimable. */
-export async function claimRoundNow(deps: ZincDeps, roundId: string): Promise<string | null> {
+export async function claimRoundNow(deps: DbDeps, roundId: string): Promise<string | null> {
   const { data, error } = await concierge(deps).rpc("claim_round_now", { p_round_id: roundId, p_now: deps.now.toISOString() });
   if (error) fail("Claiming the round failed", error);
   // A NULL row comes back through PostgREST as a row of nulls.

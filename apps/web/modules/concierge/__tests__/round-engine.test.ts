@@ -2,7 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { Client } from "pg";
-import { addDays, compareDates, type CalendarDate, type Database, type ScheduleSettings } from "@gifts-af/core";
+import { addDays, compareDates, type CalendarDate, type Database, type ScheduleSettings, type StepKey } from "@gifts-af/core";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { LOCAL_DB, localStack } from "../../../test/local-db";
 import type { Channel } from "../notify/channels";
@@ -23,6 +23,7 @@ import {
   type EngineZinc,
   type GenerateIdeas,
 } from "../rounds/engine";
+import { createSupabaseIdeaStore } from "../ideas/store";
 import { createSupabaseRoundStore } from "../rounds/store";
 import { FakeRoundStore } from "./fake-round-store";
 import { FakeStore } from "./fake-store";
@@ -65,6 +66,8 @@ function harness(opts: { hasAddress?: boolean; candidateFrom?: CalendarDate; zin
   store.settings.set("idea_rounds_per_tick", 5);
   store.settings.set("idea_ai_timeout_ms", 60_000);
   store.settings.set("idea_zinc_timeout_ms", 15_000);
+  store.settings.set("idea_list_lookups_max", 10);
+  store.settings.set("zinc_requests_per_second", 10);
   store.schedule = SCHEDULE;
   store.people.set(PERSON, { name: NAME, hasAddress: opts.hasAddress ?? true });
   store.occasionKinds.set(OCCASION, "birthday");
@@ -94,8 +97,8 @@ function harness(opts: { hasAddress?: boolean; candidateFrom?: CalendarDate; zin
   const generateIdeas = vi.fn<GenerateIdeas>(async (round) => {
     if (!store.ideas.has(round.id)) {
       store.ideas.set(round.id, [
-        { title: "Stoneware mug set", totalCents: 4200 },
-        { title: "Herb planter", totalCents: 3850 },
+        { id: "idea-1", title: "Stoneware mug set", totalCents: 4200, arriveBy: "2027-03-05", reason: "Loves tea." },
+        { id: "idea-2", title: "Herb planter", totalCents: 3850, arriveBy: "2027-03-06", reason: "Likes plants." },
       ]);
     }
     return { status: "saved", count: 2 };
@@ -258,12 +261,29 @@ describe("runTick", () => {
     const final = h.emails.find((e) => e.subject.startsWith("Last chance"))!;
     expect(final.text).toContain("by Wed, Mar 10");
 
+    // The approval emails link to the round screen with plain links; only the skipped email's button is a one-time link.
     const links = h.notifyStore.links;
-    expect(links).toHaveLength(5);
-    for (const l of links) {
-      expect(l).toMatchObject({ userId: USER, roundId: "round-1", action: "open_person" });
-      expect(l.expiresAt).toEqual(new Date("2027-03-11T23:59:00Z"));
+    expect(links).toHaveLength(1);
+    expect(links[0]).toMatchObject({ userId: USER, roundId: "round-1", action: "open_person" });
+    expect(links[0].expiresAt).toEqual(new Date("2027-03-11T23:59:00Z"));
+  });
+
+  it("the approval emails link each idea to its buy page and the button to the round screen (ALL-29 AC-1)", async () => {
+    const h = harness();
+    await h.runDays("2027-02-11", "2027-03-11");
+    const ids = h.store.ideas.get("round-1")!.map((i) => i.id);
+    expect(ids).toHaveLength(2);
+    const round = `${BASE}/rounds/round-1`;
+    const approval = h.emails.filter((e) => /gifts from their list|Reminder|Last chance/.test(e.subject));
+    expect(approval).toHaveLength(4);
+    for (const e of approval) {
+      expect(e.html).toContain(`href="${round}"`);
+      expect(e.text).toContain(`Pick several or none of these: ${round}`);
+      ids.forEach((id) => expect(e.html).toContain(`href="${round}/buy?ideas=${id}"`));
+      expect(e.html.match(/Buy this/g)).toHaveLength(2);
     }
+    expect(approval[0].text).toContain("Arrives by");
+    expect(approval[0].text).toContain("Loves tea.");
   });
 
   it("links open questions in the heads-up and reminders only (ALL-26 AC-10)", async () => {
@@ -557,7 +577,7 @@ describe("failures", () => {
     h.store.occasionKinds.set("occasion-2", "birthday");
     h.generateIdeas.mockImplementation(async (round) => {
       if (round.id === "round-1") throw new Error("ideas failed");
-      h.store.ideas.set(round.id, [{ title: "Book", totalCents: 2000 }]);
+      h.store.ideas.set(round.id, [{ id: "idea-1", title: "Book", totalCents: 2000, arriveBy: null, reason: null }]);
       return { status: "saved", count: 1 };
     });
     // Two people with a birthday the same day.
@@ -710,7 +730,7 @@ describe("the idea pass (ALL-27)", () => {
     return h;
   }
   const saved = (h: ReturnType<typeof harness>) => async (round: { id: string }): Promise<IdeaOutcome> => {
-    h.store.ideas.set(round.id, [{ title: "Book", totalCents: 2000 }]);
+    h.store.ideas.set(round.id, [{ id: "idea-1", title: "Book", totalCents: 2000, arriveBy: null, reason: null }]);
     return { status: "saved", count: 1 };
   };
 
@@ -735,7 +755,7 @@ describe("the idea pass (ALL-27)", () => {
     });
     h.generateIdeas.mockImplementation(async (round) => {
       order.push("ideas");
-      h.store.ideas.set(round.id, [{ title: "Book", totalCents: 2000 }]);
+      h.store.ideas.set(round.id, [{ id: "idea-1", title: "Book", totalCents: 2000, arriveBy: null, reason: null }]);
       return { status: "saved", count: 1 };
     });
 
@@ -751,7 +771,7 @@ describe("the idea pass (ALL-27)", () => {
     await h.tick("2027-02-11");
     expect(h.store.rounds[0].status).toBe("generating");
     // A run saved them, and its heads-up never went (a crash, say).
-    h.store.ideas.set("round-1", [{ title: "Book", totalCents: 2000 }]);
+    h.store.ideas.set("round-1", [{ id: "idea-1", title: "Book", totalCents: 2000, arriveBy: null, reason: null }]);
 
     await h.tick("2027-02-12");
 
@@ -822,7 +842,7 @@ describe("the idea pass (ALL-27)", () => {
 
   it("no run starts when the time left is under the worst case", async () => {
     const h = harness();
-    // The worst case is 2 × 60s + 2 × 15s = 150s; the tick has 100s.
+    // The worst case is 2 × 60s + 2 × 15s, plus 1s + 2 × 15s for the list pass and 15s for photos = 196s; the tick has 100s.
     h.store.settings.set("tick_deadline_ms", 100_000);
     h.today = "2027-02-11";
     h.store.candidateRows = [{ userId: USER, personId: PERSON, occasionId: OCCASION, rule, budgetCents: 5000 }];
@@ -1075,6 +1095,88 @@ describe("the idea pass (ALL-27)", () => {
   });
 });
 
+describe("after None of these, and list-only people (ALL-29 AC-13, AC-28)", () => {
+  /** Each run saves a fresh pair of ideas, numbered by run. */
+  function rejecting() {
+    const h = harness();
+    h.generateIdeas.mockImplementation(async (round) => {
+      const n = h.generateIdeas.mock.calls.length;
+      h.store.ideas.set(round.id, [{ title: `Idea set ${n}`, totalCents: 2000 }]);
+      return { status: "saved", count: 1 };
+    });
+    return h;
+  }
+
+  it("with heads_up@1 sent and no heads_up, a round with new ideas sends heads_up", async () => {
+    const h = rejecting();
+    h.store.sends.set("round-1", new Set<StepKey>(["heads_up@1", "reminder_1@1"]));
+    await h.tick("2027-02-11");
+    expect(h.sent()).toEqual(["heads_up@2027-02-11"]);
+    expect(h.store.sends.get("round-1")).toContain("heads_up");
+    expect(h.store.rounds[0].status).toBe("awaiting_approval");
+  });
+
+  it("a rejected round runs ideas on the next tick and sends a second heads-up with the new ideas", async () => {
+    const h = rejecting();
+    await h.runDays("2027-02-11", "2027-02-16"); // heads-up, then reminder 1
+    expect(h.sent()).toEqual(["heads_up@2027-02-11", "reminder@2027-02-16"]);
+
+    h.store.reject("round-1", at("2027-02-17", "09:00:00"));
+    await h.tick("2027-02-17");
+
+    expect(h.generateIdeas).toHaveBeenCalledTimes(2);
+    expect(h.sent()).toEqual(["heads_up@2027-02-11", "reminder@2027-02-16", "heads_up@2027-02-17"]);
+    expect(h.emails[2].text).toContain("Idea set 2");
+    expect(h.emails[2].text).not.toContain("Idea set 1");
+    expect(h.store.rounds[0]).toMatchObject({ status: "awaiting_approval", headsUpOn: "2027-02-17" });
+    expect([...h.store.sends.get("round-1")!].sort()).toEqual(["heads_up", "heads_up@1", "reminder_1@1"]);
+
+    // The new ideas get their own reminders: reminder 1 five days after the new heads-up.
+    await h.runDays("2027-02-18", "2027-02-22");
+    expect(h.sent().slice(3)).toEqual(["reminder@2027-02-22"]);
+    expect(h.generateIdeas).toHaveBeenCalledTimes(2);
+  });
+
+  it("a rejected round whose runs find nothing sends no_ideas once, and later ticks send nothing more", async () => {
+    const h = rejecting();
+    await h.tick("2027-02-11");
+    h.store.reject("round-1", at("2027-02-12", "09:00:00"));
+    h.generateIdeas.mockImplementation(async (round) => {
+      // Its runs are spent now: the extra one too.
+      h.store.ideaState.set(round.id, { ideaRunsLeft: false });
+      return { status: "none" };
+    });
+
+    await h.runDays("2027-02-12", "2027-03-10");
+
+    expect(h.generateIdeas).toHaveBeenCalledTimes(2);
+    expect(h.sent()).toEqual(["heads_up@2027-02-11", "no_ideas@2027-02-13"]);
+    expect([...h.store.sends.get("round-1")!].sort()).toEqual(["heads_up@1", "no_ideas"]);
+  });
+
+  it("the deadline skip emails a buyer whose only heads-up is heads_up@1", async () => {
+    const h = rejecting();
+    await h.tick("2027-02-11");
+    h.store.reject("round-1", at("2027-02-12", "09:00:00"));
+    // The engine is switched off after the rejection: no run, no no_ideas, until the deadline.
+    h.generateIdeas.mockResolvedValue({ status: "off" });
+    h.store.ideaState.set("round-1", { ideaEngineOn: false });
+
+    await h.runDays("2027-02-12", "2027-03-11");
+
+    expect(h.store.rounds[0].status).toBe("skipped");
+    expect(h.sent()).toEqual(["heads_up@2027-02-11", "skipped@2027-03-11"]);
+  });
+
+  it("a person with no facts but list gifts gets ideas and a heads-up, not no_ideas", async () => {
+    const h = rejecting();
+    h.store.ideaState.set("round-1", { hasFacts: false, hasListGifts: true });
+    await h.tick("2027-02-11");
+    expect(h.generateIdeas).toHaveBeenCalledTimes(1);
+    expect(h.sent()).toEqual(["heads_up@2027-02-11"]);
+  });
+});
+
 // ─── ALL-32: held rounds, against the real local database (E5); only Zinc is faked ───
 
 
@@ -1213,6 +1315,14 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     const ideaIds: string[] = [];
     for (const [i, total] of (o.totals ?? [4200]).entries()) {
       const item = o.listItems?.[i] ?? null;
+      // A list idea's person is linked to the item's list, as approve_round requires (AC-30a).
+      if (item)
+        await pg.query(
+          `insert into lists.person_links (person_id, buyer_id, list_id, share_token)
+           select $1, $2, l.id, l.share_token from lists.list_items li join lists.lists l on l.id = li.list_id where li.id = $3
+           on conflict (person_id) do nothing`,
+          [person.rows[0].id, u.userId, item],
+        );
       const idea = await pg.query(
         `insert into concierge.gift_ideas (user_id, round_id, title, product_url, price_cents, est_total_cents, handling_days_max, delivery_days_min, delivery_days_max, rank, source, list_item_id)
          values ($1, $2, $3, 'https://shop.test/pending', $4, $4, 2, 3, 5, $5, $6, $7) returning id`,
@@ -1261,6 +1371,46 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
   const inbox = (u: User) => mail.filter((m) => m.to === u.email).map((m) => `${m.subject}@${dayNumber(m.day)}`);
   const dayNumber = (d: CalendarDate) => Math.round((Date.parse(d) - Date.parse(today)) / 86_400_000);
   const walletReads = () => zinc.calls.filter((c) => c === "GET /wallet/me").length;
+
+  // ─── a round for a person with only a list (ALL-29 AC-28) ─────────────────
+
+  describe("hasListGifts (ALL-29 AC-28)", () => {
+    /** A generating round with no ideas, its person linked to a list owned by someone else. */
+    async function listRound() {
+      const u = await newUser({ connected: false });
+      const r = await newRound(u);
+      await pg.query("delete from concierge.gift_ideas where round_id = $1", [r.roundId]);
+      await pg.query("update concierge.gift_rounds set status = 'generating' where id = $1", [r.roundId]);
+      const personId = (await pg.query("select person_id from concierge.gift_rounds where id = $1", [r.roundId])).rows[0].person_id as string;
+      const owner = await newUser({ connected: false });
+      const list = await pg.query("insert into lists.lists (owner_id, title) values ($1, 'Wishes') returning id, share_token", [owner.userId]);
+      await pg.query("insert into lists.person_links (person_id, buyer_id, list_id, share_token) values ($1, $2, $3, $4)", [
+        personId,
+        u.userId,
+        list.rows[0].id,
+        list.rows[0].share_token,
+      ]);
+      const item = (
+        await pg.query(
+          "insert into lists.list_items (list_id, position, name, price_cents, product_url) values ($1, 0, 'Vase', 2500, 'https://shop.example/vase') returning id",
+          [list.rows[0].id],
+        )
+      ).rows[0].id as string;
+      const both = async () => ({
+        hasListGifts: (await createSupabaseRoundStore(client()).roundContext(r.roundId)).hasListGifts,
+        listGifts: (await createSupabaseIdeaStore(client()).inputs({ userId: u.userId, personId, roundId: r.roundId }))?.listGifts.length,
+      });
+      return { owner, item, both };
+    }
+
+    it("hasListGifts and the run's listGifts agree for a claimed-only list", async () => {
+      const { owner, item, both } = await listRound();
+      expect(await both()).toEqual({ hasListGifts: true, listGifts: 1 });
+
+      await pg.query("insert into lists.gift_claims (item_id, claimer_id, claimer_name) values ($1, $2, 'Bea')", [item, owner.userId]);
+      expect(await both()).toEqual({ hasListGifts: false, listGifts: 0 });
+    });
+  });
 
   // ─── a list owner's shared address (ALL-112, T61) ─────────────────────────
 
@@ -2196,6 +2346,9 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     expect(text).toContain("- Stoneware mug set (The price went up more than you allowed for. Approve the new price, or choose another gift.)");
     expect(text).toContain("- Linen apron (The store ran out. Choose another gift.)");
     expect(text).toContain("Review the new price for the Stoneware mug set:");
+    // Each gift links to its own fix page (ALL-29 AC-16).
+    expect(text).toContain(`Review the new price for the Stoneware mug set: ${BASE}/rounds/${r.roundId}/fix/${r.orderIds[0]}`);
+    expect(text).toContain(`Choose another gift instead of the Linen apron: ${BASE}/rounds/${r.roundId}/fix/${r.orderIds[1]}`);
     expect(await sends(r.roundId)).toEqual(expect.arrayContaining(r.orderIds.map((id) => `fail:${id}`)));
     // The price failure can still be re-approved.
     const priceUp = await pg.query("select status, failure_type, resolved from concierge.orders where id = $1", [r.orderIds[0]]);
@@ -2205,6 +2358,27 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
     await advance(r.roundId, 2);
     expect(inbox(u).slice(before)).toHaveLength(1);
   });
+
+  it("a single failure's button opens that order's fix page (ALL-29 AC-16)", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await placingRound(u, [4200]);
+    await settleFailed(u, r.orderIds[0], "price_up");
+    await advance(r.roundId, 1);
+    expect(inbox(u)).toHaveLength(1);
+    expect(lastText(u)).toContain(`Review the gift: ${BASE}/rounds/${r.roundId}/fix/${r.orderIds[0]}`);
+  });
+
+  it.each(["address_withdrawn", "address_rejected", "other_failure"])(
+    "a single %s failure's button opens that order's fix page (ALL-29 AC-16)",
+    async (type) => {
+      const u = await newUser({ autoTopUp: null });
+      const r = await placingRound(u, [4200]);
+      await settleFailed(u, r.orderIds[0], type);
+      await advance(r.roundId, 1);
+      expect(inbox(u)).toEqual(["Sorry, there's a problem with Mary's gift@1"]);
+      expect(lastText(u)).toContain(`Review the gift: ${BASE}/rounds/${r.roundId}/fix/${r.orderIds[0]}`);
+    },
+  );
 
   it("a later failure is told on its own, and the gift named is the one that failed (AC-2, AC-3)", async () => {
     const u = await newUser({ autoTopUp: null });

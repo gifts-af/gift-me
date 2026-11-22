@@ -55,6 +55,13 @@ describe("sampleEmails", () => {
     }
   });
 
+  it("the heads-up sample has 3 Buy this links, and the auto-buy one has none (ALL-29)", () => {
+    const get = (n: string) => samples.find((s) => s.name === n)!.email;
+    expect(get("heads_up-reminder").html.match(/Buy this/g)).toHaveLength(3);
+    expect(get("heads_up-over_budget").html.match(/Buy this/g)).toHaveLength(3);
+    expect(get("heads_up-auto_buy").html).not.toContain("Buy this");
+  });
+
   it("renders the auto-buy heads-up differently from the reminder one", () => {
     const [reminder, autoBuy] = samples.filter((s) => s.name.startsWith("heads_up"));
     expect(autoBuy.email.html).not.toEqual(reminder.email.html);

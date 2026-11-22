@@ -26,7 +26,7 @@ const CATEGORIES = ["interest", "dislike", "size", "brand", "owns", "wants", "st
 // order must be placed this many days from now (like a round's ship-by deadline).
 const OCCASION_IN_DAYS = 28;
 const ORDER_BY_IN_DAYS = 14;
-// The shipping defaults of the migration's app_settings rows (20261117100000_idea_engine and earlier),
+// The shipping defaults of the migration's app_settings rows (20261117100000_idea_engine, 20261122160000_approval and earlier),
 // since there is no database here. Change them here if the migration's change.
 const SETTINGS: IdeaSettings = {
   enabled: true,
@@ -41,6 +41,8 @@ const SETTINGS: IdeaSettings = {
   zincLookupCents: 1,
   zincRequestsPerSecond: 10,
   orderFeeCents: 100,
+  listLookupsMax: 10,
+  listMin: 3,
   schedule: {
     planningDeliveryDays: 7,
     safetyBufferDays: 2,
@@ -103,10 +105,12 @@ function inputsFor(p: Person, today: CalendarDate): IdeaInputs {
       occasionDate: addDays(today, OCCASION_IN_DAYS),
       shipByDeadline: addDays(today, ORDER_BY_IN_DAYS),
       budgetCents: p.budget_cents,
+      maxTotalCents: null,
     },
     occasions: [],
     baseBudgetCents: null,
     defaultBudgetCents: null,
+    listGifts: [],
   };
 }
 
