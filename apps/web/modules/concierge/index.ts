@@ -108,7 +108,7 @@ export {
   startConnect,
 } from "./zinc/connect";
 export type { DisconnectDeps, PaymentResult, PaymentStatus, PaymentSummary } from "./zinc/connect";
-export type { PlaceAddressHeld, PlaceHeld, ZincDeps } from "./zinc/types";
+export type { DbDeps, PlaceAddressHeld, PlaceHeld, ZincDeps } from "./zinc/types";
 export { handleZincWebhook } from "./zinc/events";
 export { readWebhookBody } from "./zinc/guard";
 export { hasPaidFeatures } from "./paid-features";

@@ -226,6 +226,23 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
     expect(zinc.calls).toEqual([]);
   });
 
+  it("a quote on a round that's closed, past its ship-by day or no longer needing attention is not_open and looks nothing up", async () => {
+    const userId = await newUser();
+    const r = await newRound(userId);
+    const [failed] = await boughtAndFailed(userId, r, { 0: "max_price_exceeded" });
+    expect(await round(r.roundId)).toMatchObject({ status: "needs_attention" });
+    const quote = () => quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps());
+    zinc.calls = [];
+
+    await pg.query("update concierge.gift_rounds set closed_at = now() where id = $1", [r.roundId]);
+    expect(await quote()).toBe("not_open");
+    await pg.query("update concierge.gift_rounds set closed_at = null, ship_by_deadline = current_date where id = $1", [r.roundId]);
+    expect(await quote()).toBe("not_open");
+    await pg.query("update concierge.gift_rounds set ship_by_deadline = current_date + 30, status = 'awaiting_approval' where id = $1", [r.roundId]);
+    expect(await quote()).toBe("not_open");
+    expect(zinc.calls).toEqual([]);
+  });
+
   it("a gift with no live price can't be re-quoted", async () => {
     const userId = await newUser();
     const r = await newRound(userId);
@@ -340,6 +357,47 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
   });
 
   // ─── an address failure (AC-15a, T61) ─────────────────────────────────────
+
+  it("an address_rejected gift isn't resent to the person's own address while it's the address the store refused", async () => {
+    const userId = await newUser();
+    const r = await newRound(userId);
+    // A list owner shares an address; the buyer saved the same one on the person.
+    const owner = await newUser();
+    await pg.query(
+      `insert into public.account_addresses (user_id, recipient_first_name, recipient_last_name, address_line1, city, state, zip, share_for_gifts)
+       values ($1, 'Sam', 'Rivera', '44 Shared St', 'Akron', 'OH', '44301', true)`,
+      [owner],
+    );
+    const list = await pg.query("insert into lists.lists (owner_id, title) values ($1, 'Birthday') returning id, share_token", [owner]);
+    await pg.query("insert into lists.person_links (person_id, buyer_id, list_id, share_token) values ($1, $2, $3, $4)", [
+      r.personId,
+      userId,
+      list.rows[0].id,
+      list.rows[0].share_token,
+    ]);
+    await pg.query("update public.people set linked_user_id = $2 where id = $1", [r.personId, owner]);
+    await pg.query(
+      `update public.people set recipient_first_name = 'Sam', recipient_last_name = 'Rivera', address_line1 = '44 Shared St',
+              city = 'Akron', state = 'OH', zip = '44301' where id = $1`,
+      [r.personId],
+    );
+    const [failed] = await boughtAndFailed(userId, r, { 0: "invalid_shipping_address" });
+    expect((await orders(r.roundId))[0]).toMatchObject({ status: "failed", failure_type: "address_rejected", address_source: "shared" });
+    // The owner stops sharing, so the person's own address is the one to use now.
+    await pg.query("update public.account_addresses set share_for_gifts = false where user_id = $1", [owner]);
+    zinc.posts = [];
+    const again = () => replaceFailedOrder({ userId, roundId: r.roundId, failedOrderId: failed, ideaId: r.ideaIds[0] }, deps());
+
+    // It's the address the store refused: not sent there again.
+    expect(await again()).toEqual({ ok: false, error: "no_address" });
+    expect(await orders(r.roundId)).toHaveLength(1);
+    expect(zinc.posts).toEqual([]);
+
+    // Fixed on the person: it ships there.
+    await pg.query("update public.people set address_line1 = '46 Shared St' where id = $1", [r.personId]);
+    expect(await again()).toEqual({ ok: true, status: "ordered", reason: null });
+    expect(zinc.posts).toEqual([expect.objectContaining({ city: "Akron" })]);
+  });
 
   it("an address_rejected gift re-bought to the buyer ships to the buyer, with the shared address still present", async () => {
     const userId = await newUser();

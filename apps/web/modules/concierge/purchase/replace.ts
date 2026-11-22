@@ -13,7 +13,7 @@ import { logEvent } from "@/lib/log";
 import { hasPaidFeatures } from "../paid-features";
 import { ZincError, type ZincHttp } from "../zinc/client";
 import { listGiftRoute, productDetails, productOffers, type ZincStep } from "../zinc/products";
-import type { ZincDeps } from "../zinc/types";
+import type { DbDeps } from "../zinc/types";
 import { capsFor, destinationFor, refusalOf, saveDestination, tellCustomer, type ApproveError, type ApproveResult, type Destination, type ShipTo } from "./approve";
 import { asCommitted, placeRound } from "./place";
 import {
@@ -28,6 +28,7 @@ import {
   recipientAddress,
   savedSnapshots,
   setting,
+  type AddressSnapshot,
   type AddressSource,
   type FailedOrderRow,
   type IdeaRow,
@@ -35,11 +36,14 @@ import {
   withLease,
 } from "./store";
 
-/** ZincDeps plus the app's own lookup key, as the idea run uses it (ZINC_API_KEY, T17). */
-export type QuoteDeps = ZincDeps & { lookup: { http: ZincHttp; key: string } };
+/** Our database and clock plus the app's own lookup key, as the idea run uses it (ZINC_API_KEY, T17). */
+export type QuoteDeps = DbDeps & { lookup: { http: ZincHttp; key: string } };
 
-/** `not_current`: the failure was fixed or replaced already (a stale tab). */
-export type QuoteResult = { oldCents: number; newCents: number } | "not_allowed" | "not_current" | "unavailable" | "once";
+/**
+ * `not_current`: the failure was fixed or replaced already (a stale tab). `not_open`: the round
+ * no longer needs attention, is closed, or has reached its ship-by day, so nothing can be bought.
+ */
+export type QuoteResult = { oldCents: number; newCents: number } | "not_allowed" | "not_current" | "not_open" | "unavailable" | "once";
 
 /** replaceFailedOrder's own refusals, on top of approveAndBuy's. */
 export type ReplaceError =
@@ -68,6 +72,11 @@ export type ReplaceInput = {
 };
 
 const ADDRESS_FAILURES: readonly string[] = ["address_withdrawn", "address_rejected"];
+
+/** A failed order can still be replaced: the round needs attention, isn't closed, and today (UTC) is before its ship-by day. */
+function canReplace(round: { status: string; closed_at: string | null; ship_by_deadline: string }, now: Date): boolean {
+  return round.status === "needs_attention" && round.closed_at === null && now.toISOString().slice(0, 10) < round.ship_by_deadline;
+}
 
 /** Is this the buyer's own unresolved failure in this round? */
 function isCurrentFailure(o: FailedOrderRow | null, userId: string, roundId: string): o is FailedOrderRow {
@@ -164,6 +173,8 @@ export async function quoteFailedOrder(input: { userId: string; roundId: string;
   if (!round || round.user_id !== userId) return "not_allowed";
   const failed = await readOrder(deps, orderId);
   if (!failed || failed.user_id !== userId || failed.round_id !== roundId) return "not_allowed";
+  // Nothing can be bought on it any more, so no paid lookup.
+  if (!canReplace(round, deps.now)) return "not_open";
   if (!isCurrentFailure(failed, userId, roundId)) return "not_current";
   if (failed.failure_type !== "price_up") return "not_allowed";
   if (!(await hasPaidFeatures(deps.db, userId))) return "not_allowed";
@@ -180,7 +191,8 @@ export async function quoteFailedOrder(input: { userId: string; roundId: string;
  * address. Under the round lease, read again; then the budget check and caps with the other
  * live orders counted, replace_failed_order, placing, and telling the buyer.
  */
-export async function replaceFailedOrder(input: ReplaceInput, deps: PurchaseDeps & QuoteDeps): Promise<ReplaceResult> {
+/** `lookup` is null where the app's key isn't set: only a price-rise re-buy needs it. */
+export async function replaceFailedOrder(input: ReplaceInput, deps: PurchaseDeps & { lookup: QuoteDeps["lookup"] | null }): Promise<ReplaceResult> {
   const { userId, roundId } = input;
   const ids = { round_id: roundId, user_id: userId, order_id: input.failedOrderId };
 
@@ -196,9 +208,7 @@ export async function replaceFailedOrder(input: ReplaceInput, deps: PurchaseDeps
     // The round, the failure and the idea as they are now, before any paid lookup.
     const round = await readRound(deps, roundId);
     if (!round || round.user_id !== userId) return { ok: false, error: "not_found" };
-    if (round.status !== "needs_attention" || round.closed_at !== null || !(deps.now.toISOString().slice(0, 10) < round.ship_by_deadline)) {
-      return { ok: false, error: "not_open" };
-    }
+    if (!canReplace(round, deps.now)) return { ok: false, error: "not_open" };
     const failed = await readOrder(deps, input.failedOrderId);
     if (!isCurrentFailure(failed, userId, roundId)) return { ok: false, error: "not_current" };
     const idea = (await readIdeas(deps, [input.ideaId])).get(input.ideaId);
@@ -213,7 +223,8 @@ export async function replaceFailedOrder(input: ReplaceInput, deps: PurchaseDeps
     if (priceUp) {
       if (await priceRiseFixed(deps, idea.id, failed.id)) return { ok: false, error: "once" };
       if (input.shownTotalCents === undefined) return { ok: false, error: "price_changed" };
-      const today = await requote(deps, idea, deps.settings.feeCents, ids);
+      if (!deps.lookup) return { ok: false, error: "unavailable" };
+      const today = await requote({ ...deps, lookup: deps.lookup }, idea, deps.settings.feeCents, ids);
       if (today === null) return { ok: false, error: "unavailable" };
       if (today > input.shownTotalCents) return { ok: false, error: "price_changed" };
       total = today;
@@ -292,9 +303,13 @@ async function replacementDestination(
   if (addressFailure) {
     if (shipTo && shipTo.kind !== "recipient") return destinationFor(deps, userId, personId, shipTo);
     const own = await recipientAddress(deps, personId);
-    return own && own.source === "own" && isShippableAddress(own.draft)
-      ? { ship_to: "other", address_source: "own", address: own.snapshot }
-      : null;
+    if (!own || own.source !== "own" || !isShippableAddress(own.draft)) return null;
+    // Never back to the address the store refused, even when the person's own entry is the same.
+    if (failed.failure_type === "address_rejected") {
+      const refused = (await savedSnapshots(deps, [failed.id])).get(failed.id);
+      if (refused && sameAddress(refused, own.snapshot)) return null;
+    }
+    return { ship_to: "other", address_source: "own", address: own.snapshot };
   }
   if (shipTo) return destinationFor(deps, userId, personId, shipTo);
   if (failed.ship_to === "recipient") return destinationFor(deps, userId, personId, { kind: "recipient" });
@@ -302,4 +317,11 @@ async function replacementDestination(
   return saved
     ? { ship_to: failed.ship_to as Destination["ship_to"], address_source: (failed.address_source ?? "own") as AddressSource, address: saved }
     : null;
+}
+
+/** The same place to ship to: names and address lines, ignoring case and spacing (not the phone). */
+function sameAddress(a: AddressSnapshot, b: AddressSnapshot): boolean {
+  const keys = ["recipient_first_name", "recipient_last_name", "address_line1", "address_line2", "city", "state", "zip", "country"] as const;
+  const norm = (v: string | null) => (v ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+  return keys.every((k) => norm(a[k]) === norm(b[k]));
 }

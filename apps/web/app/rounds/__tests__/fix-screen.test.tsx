@@ -126,6 +126,18 @@ describe("FixScreen: a price rise", () => {
     expect(replaceAction).not.toHaveBeenCalled();
   });
 
+  it("a price check on a round that can't change now says so", async () => {
+    setup({}, { check: { ok: false, error: "not_open" } });
+    await userEvent.click(screen.getByRole("button", { name: "Check today's price" }));
+    expect(await screen.findByText("This gift can't be changed now. Reload to see what happened.")).toBeInTheDocument();
+  });
+
+  it("with buying switched off, the price check says so", async () => {
+    setup({}, { check: { ok: false, error: "zinc_off" } });
+    await userEvent.click(screen.getByRole("button", { name: "Check today's price" }));
+    expect(await screen.findByText("Buying is switched off here right now, so we didn't check the price.")).toBeInTheDocument();
+  });
+
   it("a stale tab whose failure was already fixed says so in neutral words", async () => {
     setup({}, { check: { ok: false, error: "not_current" } });
     await userEvent.click(screen.getByRole("button", { name: "Check today's price" }));

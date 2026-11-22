@@ -17,7 +17,6 @@ import {
   replaceFailedOrder,
   roundAccess,
   setRoundBudget,
-  type QuoteDeps,
   type ShipTo,
 } from "@/modules/concierge";
 import type { BudgetResult, RejectResult } from "./[id]/round-screen";
@@ -153,18 +152,6 @@ function shipToOf(form: FormData): ShipTo | undefined | null {
 /** Only the "Buy anyway" button sends over=1. The module checks the budget and allowance either way. */
 const overOf = (form: FormData) => field(form, "over") === "1";
 
-/** Stands in for the lookup key where it isn't set: a replacement that isn't a price re-buy never uses it. */
-const NO_LOOKUP: QuoteDeps["lookup"] = {
-  key: "",
-  http: {
-    base: "zinc-not-used",
-    timeoutMs: 0,
-    fetch: async () => {
-      throw new Error("No Zinc lookup key here.");
-    },
-  },
-};
-
 /** The confirm page's one button (AC-2, AC-4, AC-6, AC-8, AC-10, AC-11). */
 export async function buyAction(roundId: string, form: FormData): Promise<BuyResult> {
   const id = RoundId.safeParse(roundId);
@@ -203,10 +190,13 @@ export async function checkPriceAction(roundId: string, orderId: string): Promis
   if (!id.success || !order.success) return { ok: false, error: "bad_form" };
   const user = await signedIn();
   if (!user) return { ok: false, error: "session" };
+  // With buying off here the gift can't be re-bought, so a paid lookup would be wasted.
+  const { purchase } = await buyingWiring(new Date(), process.env, { user_id: user.userId });
+  if (!purchase) return { ok: false, error: "zinc_off" };
   const lookup = await lookupWiring(createAdminClient());
   if (!lookup) return { ok: false, error: "unavailable" };
-  // quoteFailedOrder checks the round and order are this user's, reads with the service role and
-  // looks up on the app's own key; it never orders, so its Zinc ordering deps can't spend.
+  // quoteFailedOrder checks the round and order are this user's and the round can still change,
+  // reads with the service role and looks up on the app's own key; it never orders.
   const result = await quoteFailedOrder({ userId: user.userId, roundId: id.data, orderId: order.data }, { ...roundDbDeps(new Date()), lookup });
   return typeof result === "string" ? { ok: false, error: result } : { ok: true, oldCents: result.oldCents, newCents: result.newCents };
 }
@@ -240,7 +230,7 @@ export async function replaceAction(roundId: string, orderId: string, form: Form
       ...(shipTo ? { shipTo } : {}),
       overBudgetConfirmed: overOf(form),
     },
-    { ...purchase, lookup: lookup ?? NO_LOOKUP },
+    { ...purchase, lookup },
   );
   if (result.ok) revalidatePath(`/rounds/${id.data}`);
   return result;

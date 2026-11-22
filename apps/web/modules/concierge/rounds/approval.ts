@@ -19,7 +19,7 @@ import { storeName } from "@gifts-af/core/store-page/link";
 import { isId } from "../profile/rules";
 import { listGiftCandidates } from "../ideas/store";
 import { claimRoundNow, concierge, fail, withLease } from "../purchase/store";
-import type { ZincDeps } from "../zinc/types";
+import type { DbDeps } from "../zinc/types";
 import { createSupabaseRoundStore } from "./store";
 
 type UserDb = SupabaseClient<Database>;
@@ -29,7 +29,7 @@ type UserDb = SupabaseClient<Database>;
 type OfferedIdea = { id: string; title: string; source: "generated" | "list" };
 
 /** The round's ideas still on offer: the ones reject_round_ideas would reject. */
-async function offeredIdeas(deps: ZincDeps, roundId: string): Promise<OfferedIdea[]> {
+async function offeredIdeas(deps: DbDeps, roundId: string): Promise<OfferedIdea[]> {
   const { data, error } = await concierge(deps)
     .from("gift_ideas")
     .select("id, title, source")
@@ -51,7 +51,7 @@ function factsFor(ideas: OfferedIdea[], code: RejectionCode, text: string | null
  * Whether the person's list has a gift a new run in this round could offer: listGiftCandidates
  * leaves out the ones this round already offered, which "None of these" would reject.
  */
-async function listGiftsLeft(deps: ZincDeps, roundId: string, personId: string): Promise<boolean> {
+async function listGiftsLeft(deps: DbDeps, roundId: string, personId: string): Promise<boolean> {
   return (await listGiftCandidates(deps.db, personId, roundId)).length > 0;
 }
 
@@ -62,7 +62,7 @@ async function listGiftsLeft(deps: ZincDeps, roundId: string, personId: string):
  */
 export async function rejectionOutlook(
   input: { roundId: string; code: RejectionCode; text: string | null; ownedIdeaId: string | null },
-  deps: ZincDeps,
+  deps: DbDeps,
 ): Promise<boolean | null> {
   const facts = factsFor(await offeredIdeas(deps, input.roundId), input.code, input.text, input.ownedIdeaId);
   if (facts === null) return null;
@@ -92,7 +92,7 @@ export type RejectResult = { ok: true; more: boolean } | { ok: false; error: "no
 
 type OwnedRound = { id: string; user_id: string; person_id: string; occasion_id: string; status: string; budget_cents: number | null; closed_at: string | null };
 
-async function ownRound(deps: ZincDeps, roundId: string, userId: string): Promise<OwnedRound | null> {
+async function ownRound(deps: DbDeps, roundId: string, userId: string): Promise<OwnedRound | null> {
   if (!isId(roundId)) return null;
   const { data, error } = await concierge(deps)
     .from("gift_rounds")
@@ -115,7 +115,7 @@ function refusal(error: { message: string; code?: string }, fn: string): string 
  * are rejected and it goes back to generating, due now: the next tick runs ideas, so this
  * doesn't call advanceRound. With none left only the reason and its facts are saved.
  */
-export async function rejectRoundIdeas(input: RejectInput, deps: ZincDeps): Promise<RejectResult> {
+export async function rejectRoundIdeas(input: RejectInput, deps: DbDeps): Promise<RejectResult> {
   const { userId, roundId, code } = input;
   const text = input.text?.trim() || null;
   if (text && text.length > FACT_VALUE_MAX) return { ok: false, error: "too_long" };
@@ -170,7 +170,7 @@ export async function rejectRoundIdeas(input: RejectInput, deps: ZincDeps): Prom
 export async function setRoundBudget(
   input: { userId: string; roundId: string; budgetCents: number },
   userDb: UserDb,
-  deps: ZincDeps,
+  deps: DbDeps,
 ): Promise<"saved" | "busy" | "already_set" | "not_open"> {
   const { userId, roundId, budgetCents } = input;
   if (!Number.isSafeInteger(budgetCents) || budgetCents < 0) throw new Error("A budget is a whole number of cents, 0 or more.");
@@ -214,7 +214,7 @@ export async function setRoundBudget(
 // ─── page reads ──────────────────────────────────────────────────────────────
 
 /** Whose round this is, and nothing else (AC-3, S4): the only service-role read for the page. */
-export async function roundAccess(roundId: string, viewerId: string, deps: ZincDeps): Promise<"mine" | "other" | "missing"> {
+export async function roundAccess(roundId: string, viewerId: string, deps: DbDeps): Promise<"mine" | "other" | "missing"> {
   if (!isId(roundId)) return "missing";
   const { data, error } = await concierge(deps).from("gift_rounds").select("user_id").eq("id", roundId).maybeSingle();
   if (error) fail("Loading the round failed", error);

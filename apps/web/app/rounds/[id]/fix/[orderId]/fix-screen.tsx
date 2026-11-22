@@ -42,8 +42,10 @@ export type CheckResult =
       error:
         | "not_allowed"
         | "not_current"
+        | "not_open"
         | "unavailable"
         | "once"
+        | "zinc_off"
         | "session"
         | "bad_form";
     };
@@ -115,6 +117,8 @@ const CHECK_WORDS: Record<
   unavailable: "We can't get today's price for this one.",
   not_allowed: "Checking prices is open to test accounts during the alpha.",
   not_current: "This gift was already sorted out. Reload to see what happened.",
+  not_open: "This gift can't be changed now. Reload to see what happened.",
+  zinc_off: "Buying is switched off here right now, so we didn't check the price.",
   session: "Your session ended. Sign in again.",
   bad_form: "That didn't work. Reload and try again.",
 };

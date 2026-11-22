@@ -25,6 +25,7 @@ import {
   type PlaceAddressHeld,
   type PlaceHeld,
   type PurchaseDeps,
+  type DbDeps,
   type QuoteDeps,
   type SendJobs,
   type ZincDeps,
@@ -53,25 +54,12 @@ export async function zincWiring(
 }
 
 /**
- * The round screen's deps (ALL-29): roundAccess, rejectionOutlook, rejectRoundIdeas and
- * setRoundBudget only use the service-role client and the clock, so they work with Zinc off
- * here too. Their http never reaches Zinc: a call through it throws rather than spends.
+ * The round screen's deps (ALL-29): roundAccess, rejectionOutlook, rejectRoundIdeas,
+ * setRoundBudget and quoteFailedOrder's own reads only use the service-role client and the
+ * clock, so they work with Zinc off here too; their type gives them no way to reach Zinc.
  */
-export function roundDbDeps(now: Date, env: Env = process.env): ZincDeps {
-  return {
-    db: createAdminClient(),
-    http: {
-      base: "zinc-not-used",
-      timeoutMs: 0,
-      fetch: async () => {
-        throw new Error("The round screen's deps never call Zinc.");
-      },
-    },
-    // Unused by these functions; "live" only where Zinc really is live here.
-    env: env.ZINC_ENV === "live" ? "live" : "test",
-    webhookBaseUrl: siteUrl(env),
-    now,
-  };
+export function roundDbDeps(now: Date): DbDeps {
+  return { db: createAdminClient(), now };
 }
 
 export async function settingInt(db: SupabaseClient<Database>, key: string): Promise<number> {
