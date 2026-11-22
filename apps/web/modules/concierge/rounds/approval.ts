@@ -138,7 +138,8 @@ export async function rejectRoundIdeas(input: RejectInput, deps: ZincDeps): Prom
       round_id: roundId,
       user_id: userId,
       reason_code: code,
-      count: ideas.length,
+      // Ideas rejected: none when there's no search left (they stay buyable).
+      count: input.expectMore ? ideas.length : 0,
     });
     return { ok: true, more: input.expectMore };
   });
@@ -147,9 +148,9 @@ export async function rejectRoundIdeas(input: RejectInput, deps: ZincDeps): Prom
 // ─── the open round's budget ─────────────────────────────────────────────────
 
 /**
- * A budget typed on a round that has none (AC-9): saved as the person's budget for the round's
- * occasion (save_budgets, as the user, so RLS applies), then set on the round under its lease,
- * which marks each idea over the budget or not.
+ * A budget typed on a round that has none (AC-9), under the round's lease: set on the round first
+ * (which marks each idea over the budget or not), so a refusal leaves everything as it was, then
+ * saved as the person's budget for the round's occasion (save_budgets, as the user, so RLS applies).
  */
 export async function setRoundBudget(
   input: { userId: string; roundId: string; budgetCents: number },
@@ -172,12 +173,6 @@ export async function setRoundBudget(
   if (!lock) return "busy";
 
   return withLease(deps, roundId, lock, async () => {
-    const saved = await userDb.schema("concierge").rpc("save_budgets", {
-      p_person_id: round.person_id,
-      p_amounts: { [kind]: budgetCents },
-    });
-    if (saved.error) fail("Saving the person's budget failed", saved.error);
-
     const { error } = await concierge(deps).rpc("set_round_budget", {
       p_round_id: roundId,
       p_user_id: userId,
@@ -191,6 +186,11 @@ export async function setRoundBudget(
       if (why === "lease not held") return "busy";
       fail("Setting the round's budget failed", error);
     }
+    const saved = await userDb.schema("concierge").rpc("save_budgets", {
+      p_person_id: round.person_id,
+      p_amounts: { [kind]: budgetCents },
+    });
+    if (saved.error) fail("Saving the person's budget failed", saved.error);
     logEvent("round.budget_set", { round_id: roundId, user_id: userId, cents: budgetCents });
     return "saved";
   });
@@ -224,6 +224,11 @@ export type RoundPageIdea = {
   arriveBy: CalendarDate | null;
   /** A list gift someone else has claimed: greyed out, can't be picked (AC-30). */
   claimed: boolean;
+  /**
+   * A list gift this buyer holds the claim on: on one of their live orders, here or in another
+   * round, so the screen greys it out unless it's this round's own order (AC-30).
+   */
+  claimedByMe: boolean;
   /** A list gift whose list the buyer can no longer see: can't be picked (AC-30a). */
   noLongerShared: boolean;
 };
@@ -269,10 +274,7 @@ export type RoundPageView = {
   ideas: RoundPageIdea[];
   /** Orders that aren't cancelled or failed. */
   liveOrders: RoundPageOrder[];
-  /**
-   * Failed orders. Users can't read orders.resolved, so one already dealt with (replaced, or its
-   * round closed) is here too.
-   */
+  /** Failed orders still to fix: not yet replaced, and their round still open. */
   failedOrders: RoundPageOrder[];
   /** What happened, for a round that's no longer open (AC-18); null while it is. */
   closedText: string | null;
@@ -308,19 +310,20 @@ async function personList(userDb: UserDb, personId: string): Promise<ListItem[] 
   return ListShape.parse(data).items;
 }
 
-const CLOSED_STATUSES = new Set(["ordered", "delivered", "complete", "skipped"]);
-const NOT_LIVE = new Set(["cancelled", "failed"]);
+const ORDERED_STATUSES = new Set(["ordered", "delivered", "complete"]);
+// Not given, as concierge.order_is_given counts it (failed ones are split out below).
+const NOT_LIVE = new Set(["cancelled", "failed", "refunded"]);
 
 /**
  * The round screen's read, with the signed-in user's client: null when RLS hides the round
  * (it's someone else's, or gone). `now` is for "today" (UTC, like the tick).
  */
-export async function roundView(roundId: string, userDb: UserDb, now: Date = new Date()): Promise<RoundPageView | null> {
+export async function roundView(roundId: string, userDb: UserDb, now: Date): Promise<RoundPageView | null> {
   if (!isId(roundId)) return null;
   const db = userDb.schema("concierge");
   const round = await db
     .from("gift_rounds")
-    .select("id, user_id, person_id, occasion_id, occasion_date, ship_by_deadline, budget_cents, status, attention_reason")
+    .select("id, user_id, person_id, occasion_id, occasion_date, ship_by_deadline, budget_cents, status, attention_reason, closed_at")
     .eq("id", roundId)
     .maybeSingle();
   if (round.error) fail("Loading the round failed", round.error);
@@ -337,7 +340,7 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date = new
       .order("rank"),
     db
       .from("orders")
-      .select("id, idea_id, status, failure_type, total_cents, max_price_cents, fee_cents, est_delivery_date, created_at")
+      .select("id, idea_id, status, failure_type, resolved, total_cents, max_price_cents, fee_cents, est_delivery_date, created_at")
       .eq("round_id", roundId)
       .order("created_at")
       .order("id"),
@@ -372,13 +375,16 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date = new
       status: i.status,
       arriveBy: i.arrive_by,
       claimed: item !== undefined && item.claimed && !item.claimed_by_me,
+      claimedByMe: item !== undefined && item.claimed_by_me,
       // Off the list the buyer sees now, as lists.item_shared counts it.
       noLongerShared: i.list_item_id !== null && item === undefined,
     };
   });
 
   const titleOf = new Map(ideas.map((i) => [i.id, i.title]));
-  const orders: RoundPageOrder[] = ordersRes.data.map((o) => ({
+  // A failure already dealt with (replaced, or its round closed) is nothing to fix.
+  const current = ordersRes.data.filter((o) => !(o.status === "failed" && o.resolved));
+  const orders: RoundPageOrder[] = current.map((o) => ({
     id: o.id,
     ideaId: o.idea_id,
     title: titleOf.get(o.idea_id) ?? "",
@@ -395,8 +401,9 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date = new
   const today = now.toISOString().slice(0, 10);
   const pastDeadline = today > r.ship_by_deadline;
   let closedText: string | null = null;
-  if (CLOSED_STATUSES.has(r.status) && liveOrders.length > 0) closedText = `Already ordered: ${liveOrders.map((o) => o.title).join(", ")}`;
-  else if (CLOSED_STATUSES.has(r.status) || pastDeadline) closedText = "This occasion has passed";
+  if (ORDERED_STATUSES.has(r.status) && liveOrders.length > 0) closedText = `Already ordered: ${liveOrders.map((o) => o.title).join(", ")}`;
+  else if (r.closed_at !== null || r.status === "skipped" || ORDERED_STATUSES.has(r.status) || pastDeadline)
+    closedText = "This occasion has passed";
 
   const buyable = ideas.filter((i) => !i.claimed && !i.noLongerShared && !liveOrders.some((o) => o.ideaId === i.id));
   const nextBestIdeaId =

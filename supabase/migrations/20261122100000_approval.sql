@@ -1,5 +1,5 @@
 -- The approval screen (ALL-29). Expand-only (E7): a column, an index, two
--- settings and new functions (item_shared, claim_holder, order_is_given,
+-- column grants, two settings and new functions (item_shared, claim_holder, order_is_given,
 -- excluded_offers, replace_failed_order, runs_after_rejection,
 -- reject_round_ideas, set_round_budget) are added; start_idea_run,
 -- save_ideas and approve_round are re-created with the same signatures, so
@@ -14,6 +14,13 @@
 -- like every other gift_ideas column (the table has no column grants).
 alter table concierge.gift_ideas
   add column image_url text check (image_url is null or image_url ~ '^https://');
+
+-- ─── What the round screen reads (AC-14, AC-18) ──────────────────────────────
+-- Signed-in owners read orders and gift_rounds column by column
+-- (20261109100000_zinc_wallet.sql). The round screen needs to tell a failure
+-- already dealt with from one to fix, and an open round from a closed one.
+grant select (resolved) on concierge.orders to authenticated;
+grant select (closed_at) on concierge.gift_rounds to authenticated;
 
 -- A round offers each list gift once, so one approval can't buy it twice (AC-30).
 create unique index gift_ideas_round_list_item_key on concierge.gift_ideas (round_id, list_item_id)

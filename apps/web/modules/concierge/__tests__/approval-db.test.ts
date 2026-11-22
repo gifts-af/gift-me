@@ -256,8 +256,8 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
     const u = await newUser();
     const other = await newUser();
     const r = await newRound(u);
-    expect(await roundView(r.roundId, await signedIn(other))).toBeNull();
-    const mine = await roundView(r.roundId, await signedIn(u));
+    expect(await roundView(r.roundId, await signedIn(other), new Date())).toBeNull();
+    const mine = await roundView(r.roundId, await signedIn(u), new Date());
     expect(mine?.ideas.map((i) => i.title)).toEqual(["Fly rod", "Reel"]);
     expect(mine?.ideas[0]).toMatchObject({ imageUrl: "https://images.test/p.jpg", source: "generated", listItemId: null });
     expect(mine?.closedText).toBeNull();
@@ -281,16 +281,21 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
         { title: "Fly rod" },
       ],
     });
-    const view = await roundView(r.roundId, await signedIn(u));
-    expect(view?.ideas.map((i) => [i.title, i.claimed, i.noLongerShared])).toEqual([
-      ["Vase", false, false],
-      ["Lamp", true, false],
-      ["Fly rod", false, false],
+    const view = await roundView(r.roundId, await signedIn(u), new Date());
+    expect(view?.ideas.map((i) => [i.title, i.claimed, i.claimedByMe, i.noLongerShared])).toEqual([
+      ["Vase", false, false, false],
+      ["Lamp", true, false, false],
+      ["Fly rod", false, false, false],
     ]);
+    // The buyer's own claim (a live order in another round) shows as claimedByMe, not claimed.
+    await pg.query("insert into lists.gift_claims (item_id, claimer_id, claimer_name, for_order) values ($1, $2, 'Me', true)", [itemIds[0], u.id]);
+    const again = await roundView(r.roundId, await signedIn(u), new Date());
+    expect(again?.ideas.map((i) => [i.title, i.claimed, i.claimedByMe])[0]).toEqual(["Vase", false, true]);
+    await pg.query("delete from lists.gift_claims where item_id = $1", [itemIds[0]]);
     expect(view?.buyYourself).toEqual([expect.objectContaining({ itemId: itemIds[2], name: "Hand-thrown mug", productUrl: "https://www.etsy.com/listing/1", storeName: "etsy.com" })]);
     // A claimed list gift is never the next best.
     await pg.query("update concierge.gift_ideas set status = 'rejected' where id = $1", [r.ideaIds[0]]);
-    expect((await roundView(r.roundId, await signedIn(u)))?.nextBestIdeaId).toBe(r.ideaIds[2]);
+    expect((await roundView(r.roundId, await signedIn(u), new Date()))?.nextBestIdeaId).toBe(r.ideaIds[2]);
   });
 
   it("after the link is cut, roundView marks the round's list ideas no longer shared", async () => {
@@ -300,7 +305,7 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
     const r = await newRound(u, { listId, ideas: [{ title: "Vase", listItem: itemIds[0] }, { title: "Fly rod" }] });
     // A new share token revokes the old link (lists.handle_share_token_changed).
     await pg.query("update lists.lists set share_token = gen_random_uuid() where id = $1", [listId]);
-    const view = await roundView(r.roundId, await signedIn(u));
+    const view = await roundView(r.roundId, await signedIn(u), new Date());
     expect(view?.ideas.map((i) => [i.title, i.noLongerShared])).toEqual([
       ["Vase", true],
       ["Fly rod", false],
@@ -313,7 +318,7 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
     const u = await newUser();
     const r = await newRound(u, { ideas: [{ title: "LEGO Botanical Orchid" }, { title: "Reel" }] });
     await placedOrder(u, r, 0);
-    const view = await roundView(r.roundId, await signedIn(u));
+    const view = await roundView(r.roundId, await signedIn(u), new Date());
     expect(view?.closedText).toBe("Already ordered: LEGO Botanical Orchid");
     expect(view?.liveOrders).toEqual([expect.objectContaining({ ideaId: r.ideaIds[0], status: "placed", title: "LEGO Botanical Orchid" })]);
     expect(view?.failedOrders).toEqual([]);
@@ -322,10 +327,105 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
   it("a past round says the occasion has passed", async () => {
     const u = await newUser();
     const r = await newRound(u, { deadlineIn: -3, status: "skipped" });
-    const view = await roundView(r.roundId, await signedIn(u));
+    const view = await roundView(r.roundId, await signedIn(u), new Date());
     expect(view?.closedText).toBe("This occasion has passed");
     expect(view?.nextBestIdeaId).toBeNull();
   });
+
+  it("a failure resolved by replace_failed_order is no longer in failedOrders", async () => {
+    const u = await newUser();
+    const r = await newRound(u, { ideas: [{ title: "Fly rod" }, { title: "Reel" }] });
+    await pg.query("update concierge.gift_ideas set status = 'selected' where id = $1", [r.ideaIds[0]]);
+    const failed = await pg.query(
+      `insert into concierge.orders (user_id, round_id, idea_id, funding_mode, max_price_cents, fee_cents, ship_to, ship_city, ship_state, status, failure_type)
+       values ($1, $2, $3, 'zinc_wallet', 4520, 100, 'recipient', 'Dayton', 'OH', 'failed', 'out_of_stock') returning id`,
+      [u.id, r.roundId, r.ideaIds[0]],
+    );
+    await pg.query("update concierge.gift_rounds set status = 'needs_attention', attention_reason = 'out_of_stock' where id = $1", [r.roundId]);
+    const before = await roundView(r.roundId, await signedIn(u), new Date());
+    expect(before?.failedOrders.map((o) => o.id)).toEqual([failed.rows[0].id]);
+
+    const lock = (await pg.query("select locked_until::text from concierge.claim_round_now($1, now())", [r.roundId])).rows[0].locked_until;
+    const order = {
+      idea_id: r.ideaIds[1],
+      max_price_cents: 4520,
+      fee_cents: 100,
+      ship_to: "recipient",
+      address_source: "own",
+      address: { recipient_first_name: "Mary", recipient_last_name: "Allen", address_line1: "12 Oak St", city: "Dayton", state: "OH", zip: "45402", country: "US" },
+    };
+    await pg.query("select concierge.replace_failed_order($1, $2, $3, $4, $5)", [r.roundId, u.id, lock, failed.rows[0].id, JSON.stringify(order)]);
+    await pg.query("select concierge.release_round($1, $2)", [r.roundId, lock]);
+
+    const after = await roundView(r.roundId, await signedIn(u), new Date());
+    expect(after?.failedOrders).toEqual([]);
+    expect(after?.liveOrders.map((o) => o.ideaId)).toEqual([r.ideaIds[1]]);
+  });
+
+  it("a refunded order isn't live, and a closed round says the occasion has passed", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    await placedOrder(u, r, 0);
+    await pg.query("update concierge.orders set status = 'refunded' where round_id = $1", [r.roundId]);
+    await pg.query("update concierge.gift_rounds set status = 'needs_attention', closed_at = now() where id = $1", [r.roundId]);
+    const view = await roundView(r.roundId, await signedIn(u), new Date());
+    expect(view?.liveOrders).toEqual([]);
+    expect(view?.closedText).toBe("This occasion has passed");
+    expect(view?.nextBestIdeaId).toBeNull();
+  });
+
+  it("the lease is given back when reject_round_ideas throws", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    const d = { ...deps(), db: failingRpc("reject_round_ideas") };
+    await expect(rejectRoundIdeas({ userId: u.id, roundId: r.roundId, code: "not_style", text: null, ownedIdeaId: null, expectMore: true }, d)).rejects.toThrow();
+    expect(await roundRow(r.roundId)).toMatchObject({ status: "awaiting_approval", locked_until: null });
+  });
+
+  it("a refused round budget leaves the person's budget unchanged", async () => {
+    const u = await newUser();
+    const r = await newRound(u, { budget: null });
+    const d = { ...deps(), db: failingRpc("set_round_budget", { code: "P0001", message: "set_round_budget: already set" }) };
+    expect(await setRoundBudget({ userId: u.id, roundId: r.roundId, budgetCents: 5000 }, await signedIn(u), d)).toBe("already_set");
+    expect((await pg.query("select 1 from concierge.budgets where person_id = $1", [r.personId])).rows).toEqual([]);
+    expect(await roundRow(r.roundId)).toMatchObject({ budget_cents: null, locked_until: null });
+  });
+
+  it("a rejection with no search left logs round.rejection_noted with count 0", async () => {
+    const u = await newUser();
+    const r = await newRound(u, { deadlineIn: 1 });
+    // logEvent writes one JSON event per line.
+    const spy = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      expect(await reject(u, r, { expectMore: false })).toEqual({ ok: true, more: false });
+      const events = spy.mock.calls.map(([line]) => JSON.parse(String(line)));
+      expect(events).toContainEqual(
+        expect.objectContaining({ event: "round.rejection_noted", round_id: r.roundId, user_id: u.id, reason_code: "not_style", count: 0 }),
+      );
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  /** Our real database, with one concierge function failing, like a dropped connection would. */
+  function failingRpc(name: string, err: { code: string; message: string } = { code: "XX000", message: "down" }) {
+    const real = admin!;
+    return new Proxy(real, {
+      get(target, prop, receiver) {
+        if (prop !== "schema") return Reflect.get(target, prop, receiver);
+        return (schema: "concierge") => {
+          const sc = target.schema(schema);
+          return new Proxy(sc, {
+            get(t, p, rr) {
+              if (p !== "rpc") return Reflect.get(t, p, rr);
+              return (fn: string, args: Record<string, unknown>) =>
+                fn === name ? Promise.resolve({ data: null, error: err }) : (t.rpc as (f: string, a: unknown) => unknown).call(t, fn, args);
+            },
+          });
+        };
+      },
+    });
+  }
 
   async function placedOrder(u: User, r: Round, index: number) {
     await pg.query("update concierge.gift_ideas set status = 'selected' where id = $1", [r.ideaIds[index]]);
