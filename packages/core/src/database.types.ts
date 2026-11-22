@@ -1644,6 +1644,54 @@ export type Database = {
         Args: { p_api_key_secret_id: string; p_webhook_secret_id: string };
         Returns: undefined;
       };
+      replace_failed_order: {
+        Args: {
+          p_failed_order_id: string;
+          p_lock: string;
+          p_order: Json;
+          p_round_id: string;
+          p_user_id: string;
+        };
+        Returns: {
+          address_source: string | null;
+          created_at: string;
+          est_delivery_date: string | null;
+          failed_after_close: boolean;
+          failed_at: string | null;
+          failure_type: string | null;
+          fee_cents: number;
+          funding_mode: string;
+          gift_message: string | null;
+          hold_reason: string | null;
+          id: string;
+          idea_id: string;
+          idempotency_key: string;
+          is_gift: boolean;
+          max_price_cents: number;
+          merchant_order_id: string | null;
+          packages: NonNullable<Json>;
+          provider: string;
+          provider_order_id: string | null;
+          resolved: boolean;
+          round_id: string;
+          ship_city: string;
+          ship_state: string;
+          ship_to: string;
+          shipping_cents: number | null;
+          status: string;
+          subtotal_cents: number | null;
+          tax_cents: number | null;
+          total_cents: number | null;
+          updated_at: string;
+          user_id: string;
+        }[];
+        SetofOptions: {
+          from: "*";
+          to: "orders";
+          isOneToOne: false;
+          isSetofReturn: true;
+        };
+      };
       round_candidates: {
         Args: { p_today: string };
         Returns: {

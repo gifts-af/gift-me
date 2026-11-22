@@ -1,8 +1,9 @@
--- The approval screen (ALL-29). Expand-only (E7): a column, two settings and
--- three new functions are added; start_idea_run, save_ideas and approve_round
--- are re-created with the same signatures, so they keep their grants
--- (service_role only). excluded_products stays, unused, until a later
--- contract migration.
+-- The approval screen (ALL-29). Expand-only (E7): a column, an index, two
+-- settings and new functions (item_shared, claim_holder, order_is_given,
+-- excluded_offers, replace_failed_order) are added; start_idea_run,
+-- save_ideas and approve_round are re-created with the same signatures, so
+-- they keep their grants (service_role only). excluded_products and
+-- reapprove_order stay, unused, until a later contract migration.
 --
 -- Only the lines marked New, and the ones they need, differ from the copies
 -- named above each function.
@@ -370,3 +371,135 @@ begin
   return query select * from concierge.orders where id = any (v_ids);
 end;
 $$;
+
+-- ─── replace_failed_order (AC-14, AC-15, AC-15a, AC-12b, AC-30) ──────────────
+-- Replaces one unresolved failed order, under the round lease, in one
+-- transaction: the failure is resolved and a held order (hold_reason 'retry')
+-- takes its place, for placeRound to send. p_order is an approve_round element
+-- (idea_id, max_price_cents, fee_cents, gift_message, ship_to, address_source,
+-- address) plus new_total_cents for a price-up re-buy. The idea is a proposed
+-- one, or the failed order's own after a price rise (once, S2) or an address
+-- failure (to a fixed address, B2). The caller checked the cap against the
+-- budget (approveAndBuy's rule). reapprove_order stays, unused, until a later
+-- contract migration (E7).
+create function concierge.replace_failed_order(p_round_id uuid, p_user_id uuid, p_lock timestamptz,
+                                               p_failed_order_id uuid, p_order jsonb)
+returns setof concierge.orders
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  r concierge.gift_rounds;
+  v_old concierge.orders;
+  v_idea concierge.gift_ideas;
+  v_found boolean;
+  v_same boolean;
+  v_new_total integer := (p_order ->> 'new_total_cents')::integer;
+  v_order concierge.orders;
+begin
+  select * into r from concierge.gift_rounds where id = p_round_id for update;
+  if not found or r.user_id is distinct from p_user_id or r.locked_until is distinct from p_lock then
+    raise exception 'replace_failed_order: lease not held' using errcode = 'P0001';
+  end if;
+  -- Open, and before the ship-by deadline (the engine's UTC day), as approve_round.
+  if r.closed_at is not null or r.status <> 'needs_attention'
+     or (now() at time zone 'utc')::date >= r.ship_by_deadline then
+    raise exception 'replace_failed_order: not open' using errcode = 'P0001';
+  end if;
+  select * into v_old from concierge.orders
+   where id = p_failed_order_id and round_id = p_round_id and user_id = p_user_id
+     and status = 'failed' and not resolved
+     for update;
+  if not found then
+    raise exception 'replace_failed_order: not current' using errcode = 'P0001';
+  end if;
+
+  -- Only an idea still on offer (AC-12b), or the failed order's own one when
+  -- the gift itself was fine: a price rise or an address failure.
+  select * into v_idea from concierge.gift_ideas
+   where id = (p_order ->> 'idea_id')::uuid and round_id = p_round_id and user_id = p_user_id;
+  v_found := found;
+  v_same := v_found and v_idea.id = v_old.idea_id;
+  if not v_found
+     or (v_same and v_old.failure_type not in ('price_up', 'address_withdrawn', 'address_rejected'))
+     or (not v_same and v_idea.status <> 'proposed') then
+    raise exception 'replace_failed_order: replaced' using errcode = 'P0001';
+  end if;
+
+  -- A price-up re-buy, once per gift (S2), at the price the buyer saw.
+  if v_same and v_old.failure_type = 'price_up' then
+    if exists (select 1 from concierge.orders o
+                where o.idea_id = v_idea.id and o.id <> v_old.id
+                  and o.status = 'failed' and o.failure_type = 'price_up' and o.resolved) then
+      raise exception 'replace_failed_order: once' using errcode = 'P0001';
+    end if;
+    if v_new_total is null then
+      raise exception 'replace_failed_order: no new total' using errcode = 'P0001';
+    end if;
+  end if;
+
+  -- An address failure ships to a fixed address with its snapshot saved, never
+  -- re-read from the recipient (AC-15a, B2).
+  if v_old.failure_type in ('address_withdrawn', 'address_rejected')
+     and not coalesce(p_order ->> 'ship_to' in ('buyer', 'other') and p_order ->> 'address_source' = 'own', false) then
+    raise exception 'replace_failed_order: fixed address' using errcode = 'P0001';
+  end if;
+
+  -- The list checks, as approve_round's (AC-30, AC-30a), through the lists
+  -- product's functions (T19).
+  if v_idea.list_item_id is not null then
+    if not lists.item_shared(v_idea.list_item_id, r.person_id) then
+      raise exception 'replace_failed_order: not_shared' using errcode = 'P0001';
+    end if;
+    -- On another of this buyer's live orders, in any round (order_is_given).
+    -- The failed order being replaced doesn't count.
+    if exists (select 1
+                 from concierge.gift_ideas i2
+                 join concierge.orders o on o.idea_id = i2.id
+                where i2.user_id = p_user_id and i2.list_item_id = v_idea.list_item_id
+                  and o.id <> v_old.id
+                  and concierge.order_is_given(o.status, o.resolved)) then
+      raise exception 'replace_failed_order: already_bought' using errcode = 'P0001';
+    end if;
+    if lists.claim_holder(v_idea.list_item_id, p_user_id) = 'other' then
+      raise exception 'replace_failed_order: claimed' using errcode = 'P0001';
+    end if;
+  end if;
+
+  update concierge.orders set resolved = true where id = v_old.id;
+  -- placeRound's cap re-check follows the new price (B1).
+  if v_same and v_old.failure_type = 'price_up' then
+    update concierge.gift_ideas
+       set est_total_cents = v_new_total,
+           over_budget = v_new_total > r.budget_cents
+     where id = v_idea.id;
+  end if;
+
+  insert into concierge.orders (user_id, round_id, idea_id, funding_mode, max_price_cents, fee_cents, gift_message,
+                                status, hold_reason, ship_to, ship_city, ship_state, address_source)
+  values (p_user_id, p_round_id, v_idea.id, 'zinc_wallet', (p_order ->> 'max_price_cents')::integer,
+          (p_order ->> 'fee_cents')::integer, p_order ->> 'gift_message', 'held', 'retry', p_order ->> 'ship_to',
+          p_order -> 'address' ->> 'city', p_order -> 'address' ->> 'state', p_order ->> 'address_source')
+  returning * into v_order;
+  insert into concierge.order_addresses (order_id, user_id, recipient_first_name, recipient_last_name, address_line1,
+                                         address_line2, city, state, zip, country, phone)
+  values (v_order.id, p_user_id, p_order -> 'address' ->> 'recipient_first_name', p_order -> 'address' ->> 'recipient_last_name',
+          p_order -> 'address' ->> 'address_line1', p_order -> 'address' ->> 'address_line2', p_order -> 'address' ->> 'city',
+          p_order -> 'address' ->> 'state', p_order -> 'address' ->> 'zip', p_order -> 'address' ->> 'country',
+          p_order -> 'address' ->> 'phone');
+  update concierge.gift_ideas set status = 'selected' where id = v_idea.id;
+  -- A friend's claim that landed after the check above wins; the buyer's own is fine.
+  if v_idea.list_item_id is not null
+     and not lists.claim_for_order(v_idea.list_item_id, p_user_id)
+     and lists.claim_holder(v_idea.list_item_id, p_user_id) <> 'mine' then
+    raise exception 'replace_failed_order: claimed' using errcode = 'P0001';
+  end if;
+
+  perform concierge.reconcile_round(p_round_id);
+  return next v_order;
+end;
+$$;
+
+revoke all on function concierge.replace_failed_order(uuid, uuid, timestamptz, uuid, jsonb) from public, anon, authenticated;
+grant execute on function concierge.replace_failed_order(uuid, uuid, timestamptz, uuid, jsonb) to service_role;
