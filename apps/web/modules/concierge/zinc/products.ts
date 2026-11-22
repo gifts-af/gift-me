@@ -89,6 +89,7 @@ const detailsReply = z.object({
   status: z.string().nullish(),
   product_id: z.string().nullish(),
   title: z.unknown().optional(),
+  handle: z.unknown().optional(),
   main_image: z.unknown().optional(),
   price: z.unknown().optional(),
   currency_code: z.unknown().optional(),
@@ -106,6 +107,8 @@ export type ZincProductDetails = {
   name: string | null;
   priceCents: number | null;
   imageUrl: string | null;
+  /** Shopify only: the product handle. */
+  handle?: string;
   /** The next three are there only when Zinc's reply has them. */
   available?: boolean;
   shippingCents?: number;
@@ -141,6 +144,7 @@ export async function productDetails(
     name: name === "" ? null : name,
     priceCents: price.success && dollars ? price.data : null,
     imageUrl: image.success ? image.data : null,
+    ...(typeof r.handle === "string" ? { handle: r.handle } : {}),
     ...(typeof r.available === "boolean" ? { available: r.available } : {}),
     ...(ship.success ? { shippingCents: ship.data } : {}),
     ...(eta.success ? { deliveryDaysMax: eta.data.max } : {}),
@@ -181,15 +185,19 @@ export async function checkRetailer(h: ZincHttp, key: string, url: string, signa
 
 export type ListGiftRoute =
   | { kind: "offers"; retailer: "amazon" | "walmart"; productId: string }
-  | { kind: "details"; retailer: "bestbuy" | "etsy"; productId: string }
+  | { kind: "details"; retailer: "etsy"; productId: string }
   // Zinc names a Shopify store by its domain, so the shop's host rides along.
   | { kind: "details"; retailer: "shopify"; shop: string; productId: string }
   | { kind: "check" };
 
 /**
  * How to price a list gift. Zinc's id per store: Amazon the ASIN, Walmart the item id (the
- * number after /ip/), Best Buy the SKU (skuId, or the number before ".p"), Etsy the listing id
- * (/listing/<id>), Shopify the handle (/products/<handle>). Anything else is checked.
+ * number after /ip/), Etsy the listing id (/listing/<id>), Shopify the handle (/products/<handle>).
+ * Anything else is checked.
+ *
+ * Best Buy goes to the check too. [Verify] Zinc's get-product docs say `retailer=bestbuy`
+ * returns 400 for now, even in test mode (https://www.zinc.com/docs/v2/api-reference/products/get-product.md).
+ * When Zinc opens it, add a details route (id: the SKU, `skuId` or the number before ".p").
  */
 export function listGiftRoute(url: string, asin: string | null): ListGiftRoute {
   if (asin) return { kind: "offers", retailer: "amazon", productId: asin };
@@ -209,8 +217,7 @@ export function listGiftRoute(url: string, asin: string | null): ListGiftRoute {
     const id = after("ip").find((s) => /^\d+$/.test(s));
     if (id) return { kind: "offers", retailer: "walmart", productId: id };
   } else if (host === "bestbuy.com") {
-    const sku = u.searchParams.get("skuId") ?? /(?:^|\/)(\d+)\.p(?:$|\/)/.exec(u.pathname)?.[1];
-    if (sku && /^\d+$/.test(sku)) return { kind: "details", retailer: "bestbuy", productId: sku };
+    return { kind: "check" };
   } else if (host === "etsy.com") {
     const id = after("listing")[0];
     if (id && /^\d+$/.test(id)) return { kind: "details", retailer: "etsy", productId: id };
@@ -228,36 +235,64 @@ export function listGiftRoute(url: string, asin: string | null): ListGiftRoute {
 }
 
 export type ListGiftQuote =
-  | { kind: "offer"; offer: ZincOffer; productId: string; imageUrl: string | null }
+  | {
+      kind: "offer";
+      offer: ZincOffer;
+      productId: string;
+      imageUrl: string | null;
+      /**
+       * False when Zinc's reply had no delivery days: offer.deliveryDaysMin/Max and
+       * handlingDaysMax are then 0 placeholders, and the caller must use planning_delivery_days.
+       */
+      deliveryKnown: boolean;
+      /** False when the reply had no shipping price: offer.shippingCents is then a 0 placeholder. */
+      shippingKnown: boolean;
+    }
   | { kind: "listed"; priceCents: number }
-  | { kind: "unsupported" };
+  | { kind: "unsupported" }
+  /** The caller's step said stop (cost cap or time): nothing more was asked of Zinc. */
+  | { kind: "stopped" };
+
+/** The caller's gate for one paid Zinc call: charge it, rate-limit it, and run it, or answer "stop". */
+export type ZincStep = <T>(call: () => Promise<T>) => Promise<T | "stop">;
 
 /**
- * Prices one list gift. One or two paid calls, each charged by the caller: offers or details,
- * then, for details Zinc can't answer, the store check. A checked store is "listed" at the
- * list's own price. No list price means nothing to show, so the check is not even made.
+ * Prices one list gift. At most two paid calls (offers or details, then the store check), and
+ * every one goes through `step`, so the caller charges and rate-limits each. A checked store is
+ * "listed" at the list's own price. No list price means nothing to show, so the check is not made.
+ *
+ * Logging (E6): callers log only the ZincError kind, never e.message, because the path of a
+ * Shopify call holds the product handle.
  */
 export async function listGiftQuote(
   h: ZincHttp,
   key: string,
   item: { url: string; asin: string | null; listPriceCents: number | null },
+  step: ZincStep,
   signal: AbortSignal,
 ): Promise<ListGiftQuote> {
   const route = listGiftRoute(item.url, item.asin);
   if (route.kind === "offers") {
-    const best = pickOffer(await productOffers(h, key, route.retailer, route.productId, signal));
-    return best ? { kind: "offer", offer: best, productId: route.productId, imageUrl: null } : { kind: "unsupported" };
+    const offers = await step(() => productOffers(h, key, route.retailer, route.productId, signal));
+    if (offers === "stop") return { kind: "stopped" };
+    const best = pickOffer(offers);
+    return best
+      ? { kind: "offer", offer: best, productId: route.productId, imageUrl: null, deliveryKnown: true, shippingKnown: true }
+      : { kind: "unsupported" };
   }
   if (route.kind === "details") {
     const retailer = route.retailer === "shopify" ? route.shop : route.retailer;
     try {
-      const d = await productDetails(h, key, retailer, route.productId, signal);
-      if (d && d.priceCents !== null) {
+      const d = await step(() => productDetails(h, key, retailer, route.productId, signal));
+      if (d === "stop") return { kind: "stopped" };
+      // The reply must be about the product we asked for (Shopify may answer with its numeric id, so its handle counts).
+      const same = d !== null && (d.productId === route.productId || d.handle === route.productId);
+      if (d && same && d.priceCents !== null) {
         const offer: ZincOffer = {
           offerId: null,
           priceCents: d.priceCents,
-          // [Verify] Zinc's details have no shipping or delivery days for most stores; unknown counts as 0.
           shippingCents: d.shippingCents ?? 0,
+          // Unknown availability counts as available on purpose: the order's price cap and its failure path cover a sold-out item.
           available: d.available ?? true,
           condition: "New",
           buyBox: true,
@@ -267,15 +302,22 @@ export async function listGiftQuote(
           deliveryDaysMin: d.deliveryDaysMax ?? 0,
           deliveryDaysMax: d.deliveryDaysMax ?? 0,
         };
-        return { kind: "offer", offer, productId: route.productId, imageUrl: d.imageUrl };
+        return {
+          kind: "offer",
+          offer,
+          productId: route.productId,
+          imageUrl: d.imageUrl,
+          deliveryKnown: d.deliveryDaysMax !== undefined,
+          shippingKnown: d.shippingCents !== undefined,
+        };
       }
     } catch (e) {
-      // Zinc turned the lookup down (Best Buy details are not open yet: 400). The store check can still answer.
+      // Zinc turned the lookup down. The store check can still answer.
       if (!(e instanceof ZincError && e.kind === "rejected")) throw e;
     }
   }
   if (item.listPriceCents === null) return { kind: "unsupported" };
-  return (await checkRetailer(h, key, item.url, signal))
-    ? { kind: "listed", priceCents: item.listPriceCents }
-    : { kind: "unsupported" };
+  const ok = await step(() => checkRetailer(h, key, item.url, signal));
+  if (ok === "stop") return { kind: "stopped" };
+  return ok ? { kind: "listed", priceCents: item.listPriceCents } : { kind: "unsupported" };
 }
