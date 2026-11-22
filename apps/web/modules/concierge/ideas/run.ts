@@ -231,7 +231,7 @@ async function attempt(req: IdeaRequest, deps: IdeaDeps, t: Tally): Promise<Idea
       if (hits === "stop") return { stopped: true };
       const hit = matchHit(hits, c.brand);
       if (!hit) return { drop: "not_found" };
-      const offers = await lookup(() => productOffers(deps.zinc.http, deps.zinc.key, hit.productId, req.signal));
+      const offers = await lookup(() => productOffers(deps.zinc.http, deps.zinc.key, "amazon", hit.productId, req.signal));
       if (offers === "stop") return { stopped: true };
       const offer = pickOffer(offers);
       if (!offer) return { drop: "unavailable" };
