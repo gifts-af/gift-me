@@ -17,3 +17,4 @@ export * from "./database.types";
 export * from "./paid-features";
 export * from "./funding";
 export * from "./ideas";
+export * from "./approval";
