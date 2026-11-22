@@ -14,6 +14,7 @@ import {
   readAccount,
   readIdeas,
   hasUntoldFailure,
+  liveOrders,
   readRound,
   recipientAddress,
   savePersonAddress,
@@ -60,7 +61,9 @@ export type ApproveError =
   /** A list gift whose list the buyer can no longer see (AC-30a). */
   | "not_shared"
   /** A list gift already on another of the buyer's live orders (AC-30). */
-  | "already_bought";
+  | "already_bought"
+  /** A pick is on one of this round's live orders already: a second tab after the buy went through. */
+  | "already_ordered";
 
 /**
  * `held`: waiting (on funds, setup, an address, our switch, or a retry); `failed`: it needs
@@ -157,6 +160,11 @@ export function refusalOf(message: string, fn: string): string {
   return message.startsWith(`${fn}: `) ? message.slice(fn.length + 2) : "";
 }
 
+/** A pick already on one of the round's live orders (not a failure to fix): the buy went through in another tab. */
+async function alreadyOrdered(deps: PurchaseDeps, roundId: string, ideaIds: string[]): Promise<boolean> {
+  return (await liveOrders(deps, roundId)).some((o) => o.status !== "failed" && ideaIds.includes(o.idea_id));
+}
+
 export async function approveAndBuy(input: ApproveInput, deps: PurchaseDeps): Promise<ApproveResult> {
   const { userId, roundId, ideaIds } = input;
   const ids = { round_id: roundId, user_id: userId };
@@ -174,6 +182,11 @@ export async function approveAndBuy(input: ApproveInput, deps: PurchaseDeps): Pr
   //    after "None of these" can't be leased; its rejected ideas say they were replaced.
   const lock = await claimRoundNow(deps, roundId);
   if (!lock) {
+    // Ordered already, so the round can't be leased any more. One whose lease someone holds (a
+    // double tap while the first buy is placing) stays busy.
+    const now = await readRound(deps, roundId);
+    const leased = now?.locked_until != null && Date.parse(now.locked_until) > deps.now.getTime();
+    if (!leased && (await alreadyOrdered(deps, roundId, ideaIds))) return { ok: false, error: "already_ordered" };
     const ideas = await readIdeas(deps, ideaIds);
     const stale = [...ideas.values()].some((i) => i.round_id === roundId && i.status === "rejected");
     return { ok: false, error: stale ? "replaced" : "busy" };
@@ -186,6 +199,7 @@ export async function approveAndBuy(input: ApproveInput, deps: PurchaseDeps): Pr
     if (!round || round.user_id !== userId) return { ok: false, error: "not_found" };
     const ideas = await readIdeas(deps, input.ideaIds);
     if (input.ideaIds.some((id) => ideas.get(id)?.round_id !== roundId)) return { ok: false, error: "bad_ideas" };
+    if (await alreadyOrdered(deps, roundId, input.ideaIds)) return { ok: false, error: "already_ordered" };
     if (input.ideaIds.some((id) => ideas.get(id)!.status !== "proposed")) return { ok: false, error: "replaced" };
     if (round.status !== "awaiting_approval") return { ok: false, error: "not_open" };
     // Rank order, which placeRound's cap re-check uses too.
@@ -218,11 +232,13 @@ export async function approveAndBuy(input: ApproveInput, deps: PurchaseDeps): Pr
     if (error) {
       if (error.code !== "P0001") throw new Error(`Approving the round failed: ${error.message}`);
       const refusal = refusalOf(error.message, "approve_round");
+      // The refusal word only: approve_round's messages carry no personal data (E6).
+      logEvent("order.approve_refused", { ...ids, reason: refusal });
       if (refusal === "claimed" || refusal === "replaced" || refusal === "not_shared" || refusal === "already_bought") {
-        logEvent("order.approve_refused", { ...ids, reason: refusal });
         return { ok: false, error: refusal };
       }
-      logEvent("order.approve_refused", ids);
+      // Another tab or the tick took the lease in between.
+      if (refusal === "lease not held") return { ok: false, error: "busy" };
       return { ok: false, error: "not_open" };
     }
     logEvent("order.approved", { ...ids, orders: picks.length });

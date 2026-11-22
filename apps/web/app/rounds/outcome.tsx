@@ -61,6 +61,7 @@ const ERRORS: Record<BuyError, Words> = {
   not_allowed: { title: "Not on your account yet", body: "Buying gifts is open to test accounts during the alpha." },
   not_shared: { title: "Their list isn't shared with you any more", body: "Nothing was bought." },
   already_bought: { title: "Already on one of your orders", body: "Nothing was bought twice." },
+  already_ordered: { title: "Already ordered", body: "This gift was ordered already. Nothing more was bought." },
   gift_message_too_long: { title: "The gift note is too long", body: "Shorten it and try again." },
   bad_ideas: { title: "That link isn't right", body: "Nothing was bought. Open the gift's page and pick again." },
   not_found: { title: "That didn't go through", body: "Nothing was bought. Reload and try again." },

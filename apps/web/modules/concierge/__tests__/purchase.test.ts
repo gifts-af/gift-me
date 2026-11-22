@@ -60,8 +60,8 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     ...over,
   });
 
-  /** Our real database, with one named function failing for one round, like a dropped connection would. */
-  function failingRpc(name: string, roundId: string) {
+  /** Our real database, with one named function failing for one round, like a dropped connection would (or with `err`). */
+  function failingRpc(name: string, roundId: string, err: { code: string; message: string } = { code: "XX000", message: "down" }) {
     const real = createClient<Database>(supabase!.url, supabase!.serviceRoleKey, { auth: { persistSession: false } });
     return new Proxy(real, {
       get(target, prop, receiver) {
@@ -73,7 +73,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
               if (p !== "rpc") return Reflect.get(t, p, r);
               return (fn: string, args: Record<string, unknown>) =>
                 fn === name && args?.p_round_id === roundId
-                  ? Promise.resolve({ data: null, error: { code: "XX000", message: "down" } })
+                  ? Promise.resolve({ data: null, error: err })
                   : (t.rpc as (f: string, a: unknown) => unknown).call(t, fn, args);
             },
           });
@@ -957,6 +957,46 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     // Within a 5000 budget the cap is the pick plus the margin less the fee; with no budget it would be 4100.
     expect((await orders(r.roundId))[0].max_price_cents).toBe(4520);
     expect(zinc.posts).toEqual([expect.objectContaining({ maxPrice: 4520 })]);
+  });
+
+  it("a second tab after the buy went through says already ordered, not replaced", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    const buy = () => approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps());
+    expect(await buy()).toEqual(ORDERED);
+    expect(await buy()).toEqual({ ok: false, error: "already_ordered" });
+
+    // Held (setup not finished), so the round can still be leased.
+    const v = await newUser({ connected: false });
+    const s = await newRound(v);
+    const buyHeld = () => approveAndBuy({ userId: v.userId, roundId: s.roundId, ideaIds: s.ideaIds }, deps());
+    expect(await buyHeld()).toEqual({ ok: true, status: "held", reason: "setup" });
+    expect(await buyHeld()).toEqual({ ok: false, error: "already_ordered" });
+    expect(await orders(r.roundId)).toHaveLength(1);
+    expect(await orders(s.roundId)).toHaveLength(1);
+  });
+
+  it("approve_round's lease not held is busy, and each refusal's word is logged", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    const refused = (message: string) =>
+      approveAndBuy(
+        { userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds },
+        deps({ db: failingRpc("approve_round", r.roundId, { code: "P0001", message }) }),
+      );
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      expect(await refused("approve_round: lease not held")).toEqual({ ok: false, error: "busy" });
+      expect(await refused("approve_round: past the ship-by deadline")).toEqual({ ok: false, error: "not_open" });
+      const reasons = log.mock.calls
+        .map((c) => JSON.parse(String(c[0])))
+        .filter((e) => e.event === "order.approve_refused" && e.round_id === r.roundId)
+        .map((e) => e.reason);
+      expect(reasons).toEqual(["lease not held", "past the ship-by deadline"]);
+    } finally {
+      log.mockRestore();
+    }
+    expect(await orders(r.roundId)).toHaveLength(0);
   });
 
   it("a budget that tightens below the pick while approveAndBuy takes the lease asks to confirm and buys nothing", async () => {

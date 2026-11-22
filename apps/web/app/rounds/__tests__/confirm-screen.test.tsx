@@ -124,6 +124,14 @@ describe("ConfirmScreen", () => {
     expect(await screen.findByText("Someone else got it")).toBeInTheDocument();
   });
 
+  it("a second tab after the buy says it was ordered already, not replaced", async () => {
+    setup({}, { ok: false, error: "already_ordered" });
+    await userEvent.click(screen.getByRole("button", { name: "Buy now · about $54.20" }));
+    expect(await screen.findByText("Already ordered")).toBeInTheDocument();
+    expect(screen.getByText("This gift was ordered already. Nothing more was bought.")).toBeInTheDocument();
+    expect(screen.queryByText("These ideas were replaced")).toBeNull();
+  });
+
   it("a hold on the balance says so", async () => {
     setup({}, { ok: true, status: "held", reason: "funds" });
     await userEvent.click(screen.getByRole("button", { name: "Buy now · about $54.20" }));
