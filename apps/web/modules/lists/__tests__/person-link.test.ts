@@ -9,6 +9,8 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { localStack } from "../../../test/local-db";
 
 let current: SupabaseClient | null = null;
+// saveList reads list_max_items through lib/app-settings, which is server-only.
+vi.mock("server-only", () => ({}));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => current }));
 
 const { saveList } = await import("../actions/lists");

@@ -23,17 +23,18 @@ async function ownerWithList(longName = false): Promise<{ owner: Credentials; na
     Authorization: `Bearer ${access_token}`,
     "Content-Type": "application/json",
   };
-  const saved = await fetch(`${supabase.url}/rest/v1/rpc/save_list`, {
+  const saved = await fetch(`${supabase.url}/rest/v1/rpc/save_list_checked`, {
     method: "POST",
     headers: { ...headers, "Content-Profile": "lists" },
     body: JSON.stringify({
       p_list_id: null,
       p_title: null,
       p_items: [{ id: null, name: "Wool socks", price_cents: 1500, image_url: null, product_url: null, asin: null, source: "manual", added_at: null }],
+      p_expected: null,
     }),
   });
   if (!saved.ok) throw new Error(`Couldn't create a list: ${saved.status} ${await saved.text()}`);
-  const listId = (await saved.json()) as string;
+  const listId = ((await saved.json()) as { id: string }).id;
   const read = await fetch(`${supabase.url}/rest/v1/lists?select=share_token&id=eq.${listId}&owner_id=eq.${user.id}`, {
     headers: { ...headers, "Accept-Profile": "lists" },
   });
