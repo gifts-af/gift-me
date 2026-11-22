@@ -313,8 +313,8 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
       { name: "Mug", url: "https://www.etsy.com/listing/3" },
     ]);
     await pg.query("update lists.list_items set image_url = $2 where id = $1", [itemIds[0], "https://images.test/vase.jpg"]);
-    await pg.query("update lists.list_items set image_url = $2 where id = $1", [itemIds[1], "http://images.test/lamp.jpg"]);
-    await pg.query("update lists.list_items set image_url = $2 where id = $1", [itemIds[2], "list-photos/owner/mug.jpg"]);
+    // The database only lets http through for local storage (ALL-142); the page still shows https only.
+    await pg.query("update lists.list_items set image_url = $2 where id = $1", [itemIds[1], "http://127.0.0.1:54321/storage/v1/object/public/list-photos/lamp.jpg"]);
     const r = await newRound(u, { listId, ideas: [{ title: "Fly rod" }] });
     const view = await roundView(r.roundId, await signedIn(u), new Date());
     expect(view?.buyYourself.map((i) => [i.name, i.imageUrl])).toEqual([
