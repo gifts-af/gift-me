@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { addDays, compareDates, type CalendarDate } from "./dates";
-import { nextAction, PLACEABLE_HOLDS, roundToCreate, type RoundView, type StepKey } from "./round-plan";
+import { nextAction, PLACEABLE_HOLDS, roundToCreate, toldBefore, type RoundView, type StepKey } from "./round-plan";
 import type { ScheduleSettings } from "./schedule";
 
 const s: ScheduleSettings = {
@@ -21,8 +21,8 @@ const NO_HOLD = {
   seenBalanceCents: null,
   emailedBalanceCents: null,
   placeTried: false,
-  // A person with facts and a round with runs left: the idea checks (ALL-27) pass.
-  hasFacts: true,
+  // A person with facts (or list gifts) and a round with runs left: the idea checks (ALL-27) pass.
+  hasInputs: true,
   ideaRunsLeft: true,
   ranSinceNoIdeas: false,
   paid: true,
@@ -242,24 +242,24 @@ describe("nextAction: no ideas (ALL-27 AC-9, AC-13)", () => {
   const sent = (...keys: StepKey[]) => new Set<StepKey>(keys);
 
   it("no facts asks for facts before the address", () => {
-    expect(nextAction(round({ hasFacts: false, hasAddress: false }), "2027-02-22", s)).toEqual({ do: "send", send: "no_ideas" });
+    expect(nextAction(round({ hasInputs: false, hasAddress: false }), "2027-02-22", s)).toEqual({ do: "send", send: "no_ideas" });
     // A round already waiting on an address stops asking for it too.
-    const waiting = round({ status: "needs_address", hasFacts: false, hasAddress: false, headsUpOn: "2027-02-22", sent: sent("address_request") });
+    const waiting = round({ status: "needs_address", hasInputs: false, hasAddress: false, headsUpOn: "2027-02-22", sent: sent("address_request") });
     expect(nextAction(waiting, "2027-02-27", s)).toEqual({ do: "send", send: "no_ideas" });
   });
 
   it("no_ideas once, then waits for the deadline", () => {
-    for (const over of [{ hasFacts: false }, { ideaRunsLeft: false }, { status: "generating" as const, ideaRunsLeft: false }]) {
+    for (const over of [{ hasInputs: false }, { ideaRunsLeft: false }, { status: "generating" as const, ideaRunsLeft: false }]) {
       expect(nextAction(round(over), "2027-02-22", s)).toEqual({ do: "send", send: "no_ideas" });
       expect(nextAction(round({ ...over, sent: sent("no_ideas") }), "2027-02-23", s)).toEqual({ do: "wait", until: "2027-03-22" });
     }
     // Facts-only: runs are left, so there's no second email until a run has found nothing.
-    expect(nextAction(round({ hasFacts: false, sent: sent("no_ideas"), ranSinceNoIdeas: true }), "2027-02-23", s)).toEqual({
+    expect(nextAction(round({ hasInputs: false, sent: sent("no_ideas"), ranSinceNoIdeas: true }), "2027-02-23", s)).toEqual({
       do: "wait",
       until: "2027-03-22",
     });
     // The deadline still comes first.
-    expect(nextAction(round({ hasFacts: false }), "2027-03-22", s)).toEqual({ do: "skip", send: "skipped" });
+    expect(nextAction(round({ hasInputs: false }), "2027-03-22", s)).toEqual({ do: "skip", send: "skipped" });
   });
 
   it("no_ideas_again after the runs are spent", () => {
@@ -271,7 +271,7 @@ describe("nextAction: no ideas (ALL-27 AC-9, AC-13)", () => {
       until: "2027-03-22",
     });
     // A facts-only no_ideas, then two runs that found nothing: told again, never silent.
-    expect(nextAction(round({ ...spent, hasFacts: true, sent: sent("no_ideas") }), "2027-03-01", s)).toEqual({
+    expect(nextAction(round({ ...spent, hasInputs: true, sent: sent("no_ideas") }), "2027-03-01", s)).toEqual({
       do: "send",
       send: "no_ideas_again",
     });
@@ -287,19 +287,19 @@ describe("nextAction: no ideas (ALL-27 AC-9, AC-13)", () => {
   });
 
   it("with the idea engine off, no no_ideas email: the round goes on as if it could run", () => {
-    for (const over of [{ hasFacts: false }, { ideaRunsLeft: false }, { ideaRunsLeft: false, ranSinceNoIdeas: true, sent: sent("no_ideas") }]) {
+    for (const over of [{ hasInputs: false }, { ideaRunsLeft: false }, { ideaRunsLeft: false, ranSinceNoIdeas: true, sent: sent("no_ideas") }]) {
       expect(nextAction(round({ ...over, ideaEngineOn: false }), "2027-02-22", s)).toEqual({ do: "generate" });
       expect(nextAction(round({ ...over, ideaEngineOn: false, status: "generating" }), "2027-02-22", s)).toEqual({ do: "generate" });
     }
     // The address is still asked for as before.
-    expect(nextAction(round({ hasFacts: false, hasAddress: false, ideaEngineOn: false }), "2027-02-22", s)).toEqual({
+    expect(nextAction(round({ hasInputs: false, hasAddress: false, ideaEngineOn: false }), "2027-02-22", s)).toEqual({
       do: "request_address",
       send: "address_request",
     });
   });
 
   it("an unpaid round sends nothing and waits for its deadline, which skips it", () => {
-    for (const over of [{}, { hasFacts: false }, { ideaRunsLeft: false }, { hasAddress: false }, { ideaEngineOn: false }]) {
+    for (const over of [{}, { hasInputs: false }, { ideaRunsLeft: false }, { hasAddress: false }, { ideaEngineOn: false }]) {
       for (const status of ["scheduled", "needs_address", "generating"] as const) {
         const r = round({ ...over, status, headsUpOn: "2027-02-22", paid: false });
         expect(nextAction(r, "2027-02-23", s)).toEqual({ do: "wait", until: "2027-03-22" });
@@ -308,8 +308,21 @@ describe("nextAction: no ideas (ALL-27 AC-9, AC-13)", () => {
     }
   });
 
+  it("a list-only person (no facts, list gifts) generates instead of sending no_ideas", () => {
+    // hasInputs: active facts, or offerable list gifts (ALL-29 AC-28).
+    expect(nextAction(round({ hasInputs: true }), "2027-02-22", s)).toEqual({ do: "generate" });
+    expect(nextAction(round({ status: "generating", hasInputs: true }), "2027-02-22", s)).toEqual({ do: "generate" });
+    expect(nextAction(round({ hasInputs: false }), "2027-02-22", s)).toEqual({ do: "send", send: "no_ideas" });
+  });
+
+  it("after a rejection, reminders go under the usual keys, whatever the renamed ones say", () => {
+    // After "None of these" the old emails are renamed (ALL-29 AC-13): the new ideas get their own schedule.
+    const again = round({ status: "awaiting_approval", headsUpOn: "2027-02-22", sent: sent("heads_up@1", "reminder_1@1") });
+    expect(nextAction(again, "2027-02-27", s)).toEqual({ do: "send", send: "reminder_1" });
+  });
+
   it("leaves rounds past generating alone", () => {
-    const approving = round({ status: "awaiting_approval", headsUpOn: "2027-02-22", hasFacts: false, ideaRunsLeft: false });
+    const approving = round({ status: "awaiting_approval", headsUpOn: "2027-02-22", hasInputs: false, ideaRunsLeft: false });
     expect(nextAction(approving, "2027-02-23", s)).toEqual({ do: "wait", until: "2027-02-27" });
   });
 });
@@ -327,7 +340,7 @@ describe("nextAction: money holds (AC-20, AC-22, AC-23)", () => {
     seenBalanceCents: 1000,
     emailedBalanceCents: 1000,
     placeTried: false,
-    hasFacts: true,
+    hasInputs: true,
     ideaRunsLeft: true,
     ranSinceNoIdeas: false,
     paid: true,
@@ -478,5 +491,18 @@ describe("nextAction: money holds (AC-20, AC-22, AC-23)", () => {
   it("skips on the deadline day whatever the hold", () => {
     expect(nextAction(hold(), "2027-03-22", s)).toEqual({ do: "skip", send: "skipped" });
     expect(nextAction(hold({ attentionReason: "paused" }), "2027-03-22", s)).toEqual({ do: "skip", send: "skipped" });
+  });
+});
+
+describe("toldBefore", () => {
+  const told = (...keys: string[]) => toldBefore(new Set(keys as StepKey[]));
+
+  it("counts a heads-up, an address request or a no_ideas email, renamed by a rejection or not", () => {
+    for (const key of ["heads_up", "address_request", "no_ideas", "heads_up@1", "no_ideas@2"]) expect(told(key)).toBe(true);
+  });
+
+  it("doesn't count reminders, other emails or look-alike keys", () => {
+    expect(told()).toBe(false);
+    expect(told("reminder_1", "reminder_1@1", "final_notice@1", "no_ideas_again@1", "hold:1:notice", "heads_up_x", "heads_up@")).toBe(false);
   });
 });

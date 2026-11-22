@@ -2,7 +2,7 @@
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { Client } from "pg";
-import { addDays, compareDates, type CalendarDate, type Database, type ScheduleSettings } from "@gifts-af/core";
+import { addDays, compareDates, type CalendarDate, type Database, type ScheduleSettings, type StepKey } from "@gifts-af/core";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { LOCAL_DB, localStack } from "../../../test/local-db";
 import type { Channel } from "../notify/channels";
@@ -23,6 +23,7 @@ import {
   type EngineZinc,
   type GenerateIdeas,
 } from "../rounds/engine";
+import { createSupabaseIdeaStore } from "../ideas/store";
 import { createSupabaseRoundStore } from "../rounds/store";
 import { FakeRoundStore } from "./fake-round-store";
 import { FakeStore } from "./fake-store";
@@ -1077,6 +1078,88 @@ describe("the idea pass (ALL-27)", () => {
   });
 });
 
+describe("after None of these, and list-only people (ALL-29 AC-13, AC-28)", () => {
+  /** Each run saves a fresh pair of ideas, numbered by run. */
+  function rejecting() {
+    const h = harness();
+    h.generateIdeas.mockImplementation(async (round) => {
+      const n = h.generateIdeas.mock.calls.length;
+      h.store.ideas.set(round.id, [{ title: `Idea set ${n}`, totalCents: 2000 }]);
+      return { status: "saved", count: 1 };
+    });
+    return h;
+  }
+
+  it("with heads_up@1 sent and no heads_up, a round with new ideas sends heads_up", async () => {
+    const h = rejecting();
+    h.store.sends.set("round-1", new Set<StepKey>(["heads_up@1", "reminder_1@1"]));
+    await h.tick("2027-02-11");
+    expect(h.sent()).toEqual(["heads_up@2027-02-11"]);
+    expect(h.store.sends.get("round-1")).toContain("heads_up");
+    expect(h.store.rounds[0].status).toBe("awaiting_approval");
+  });
+
+  it("a rejected round runs ideas on the next tick and sends a second heads-up with the new ideas", async () => {
+    const h = rejecting();
+    await h.runDays("2027-02-11", "2027-02-16"); // heads-up, then reminder 1
+    expect(h.sent()).toEqual(["heads_up@2027-02-11", "reminder@2027-02-16"]);
+
+    h.store.reject("round-1", at("2027-02-17", "09:00:00"));
+    await h.tick("2027-02-17");
+
+    expect(h.generateIdeas).toHaveBeenCalledTimes(2);
+    expect(h.sent()).toEqual(["heads_up@2027-02-11", "reminder@2027-02-16", "heads_up@2027-02-17"]);
+    expect(h.emails[2].text).toContain("Idea set 2");
+    expect(h.emails[2].text).not.toContain("Idea set 1");
+    expect(h.store.rounds[0]).toMatchObject({ status: "awaiting_approval", headsUpOn: "2027-02-17" });
+    expect([...h.store.sends.get("round-1")!].sort()).toEqual(["heads_up", "heads_up@1", "reminder_1@1"]);
+
+    // The new ideas get their own reminders: reminder 1 five days after the new heads-up.
+    await h.runDays("2027-02-18", "2027-02-22");
+    expect(h.sent().slice(3)).toEqual(["reminder@2027-02-22"]);
+    expect(h.generateIdeas).toHaveBeenCalledTimes(2);
+  });
+
+  it("a rejected round whose runs find nothing sends no_ideas once, and later ticks send nothing more", async () => {
+    const h = rejecting();
+    await h.tick("2027-02-11");
+    h.store.reject("round-1", at("2027-02-12", "09:00:00"));
+    h.generateIdeas.mockImplementation(async (round) => {
+      // Its runs are spent now: the extra one too.
+      h.store.ideaState.set(round.id, { ideaRunsLeft: false });
+      return { status: "none" };
+    });
+
+    await h.runDays("2027-02-12", "2027-03-10");
+
+    expect(h.generateIdeas).toHaveBeenCalledTimes(2);
+    expect(h.sent()).toEqual(["heads_up@2027-02-11", "no_ideas@2027-02-13"]);
+    expect([...h.store.sends.get("round-1")!].sort()).toEqual(["heads_up@1", "no_ideas"]);
+  });
+
+  it("the deadline skip emails a buyer whose only heads-up is heads_up@1", async () => {
+    const h = rejecting();
+    await h.tick("2027-02-11");
+    h.store.reject("round-1", at("2027-02-12", "09:00:00"));
+    // The engine is switched off after the rejection: no run, no no_ideas, until the deadline.
+    h.generateIdeas.mockResolvedValue({ status: "off" });
+    h.store.ideaState.set("round-1", { ideaEngineOn: false });
+
+    await h.runDays("2027-02-12", "2027-03-11");
+
+    expect(h.store.rounds[0].status).toBe("skipped");
+    expect(h.sent()).toEqual(["heads_up@2027-02-11", "skipped@2027-03-11"]);
+  });
+
+  it("a person with no facts but list gifts gets ideas and a heads-up, not no_ideas", async () => {
+    const h = rejecting();
+    h.store.ideaState.set("round-1", { hasFacts: false, hasListGifts: true });
+    await h.tick("2027-02-11");
+    expect(h.generateIdeas).toHaveBeenCalledTimes(1);
+    expect(h.sent()).toEqual(["heads_up@2027-02-11"]);
+  });
+});
+
 // ─── ALL-32: held rounds, against the real local database (E5); only Zinc is faked ───
 
 
@@ -1271,6 +1354,46 @@ describe.skipIf(!dbUp)("held rounds (real local database, fake Zinc; ALL-32 AC-1
   const inbox = (u: User) => mail.filter((m) => m.to === u.email).map((m) => `${m.subject}@${dayNumber(m.day)}`);
   const dayNumber = (d: CalendarDate) => Math.round((Date.parse(d) - Date.parse(today)) / 86_400_000);
   const walletReads = () => zinc.calls.filter((c) => c === "GET /wallet/me").length;
+
+  // ─── a round for a person with only a list (ALL-29 AC-28) ─────────────────
+
+  describe("hasListGifts (ALL-29 AC-28)", () => {
+    /** A generating round with no ideas, its person linked to a list owned by someone else. */
+    async function listRound() {
+      const u = await newUser({ connected: false });
+      const r = await newRound(u);
+      await pg.query("delete from concierge.gift_ideas where round_id = $1", [r.roundId]);
+      await pg.query("update concierge.gift_rounds set status = 'generating' where id = $1", [r.roundId]);
+      const personId = (await pg.query("select person_id from concierge.gift_rounds where id = $1", [r.roundId])).rows[0].person_id as string;
+      const owner = await newUser({ connected: false });
+      const list = await pg.query("insert into lists.lists (owner_id, title) values ($1, 'Wishes') returning id, share_token", [owner.userId]);
+      await pg.query("insert into lists.person_links (person_id, buyer_id, list_id, share_token) values ($1, $2, $3, $4)", [
+        personId,
+        u.userId,
+        list.rows[0].id,
+        list.rows[0].share_token,
+      ]);
+      const item = (
+        await pg.query(
+          "insert into lists.list_items (list_id, position, name, price_cents, product_url) values ($1, 0, 'Vase', 2500, 'https://shop.example/vase') returning id",
+          [list.rows[0].id],
+        )
+      ).rows[0].id as string;
+      const both = async () => ({
+        hasListGifts: (await createSupabaseRoundStore(client()).roundContext(r.roundId)).hasListGifts,
+        listGifts: (await createSupabaseIdeaStore(client()).inputs({ userId: u.userId, personId, roundId: r.roundId }))?.listGifts.length,
+      });
+      return { owner, item, both };
+    }
+
+    it("hasListGifts and the run's listGifts agree for a claimed-only list", async () => {
+      const { owner, item, both } = await listRound();
+      expect(await both()).toEqual({ hasListGifts: true, listGifts: 1 });
+
+      await pg.query("insert into lists.gift_claims (item_id, claimer_id, claimer_name) values ($1, $2, 'Bea')", [item, owner.userId]);
+      expect(await both()).toEqual({ hasListGifts: false, listGifts: 0 });
+    });
+  });
 
   // ─── a list owner's shared address (ALL-112, T61) ─────────────────────────
 

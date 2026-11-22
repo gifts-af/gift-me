@@ -36,7 +36,14 @@ export type StepKey =
   | "shared_address"
   // The round couldn't get gift ideas (ALL-27 AC-9): once, and once more after the extra run.
   | "no_ideas"
-  | "no_ideas_again";
+  | "no_ideas_again"
+  | RenamedStepKey;
+
+/**
+ * An approval email sent before "None of these": reject_round_ideas renames it to `<step>@<n>`,
+ * so the new ideas get their own (ALL-29 AC-13). Only ever read; nothing sends one.
+ */
+export type RenamedStepKey = `${"heads_up" | "reminder_1" | "reminder_2" | "final_notice" | "no_ideas" | "no_ideas_again"}@${number}`;
 
 /** Why an order is held; `unconfirmed` is a round reason only. */
 export type HoldReason = "funds" | "setup" | "address" | "paused" | "not_allowed" | "retry";
@@ -99,8 +106,11 @@ export type RoundView = {
    * topping up wouldn't buy anything, so a funds hold gets no emails while it's off.
    */
   orderingPaused?: boolean;
-  /** The person has at least one active fact, so a run has something to go on (ALL-27 AC-13). */
-  hasFacts: boolean;
+  /**
+   * A run has something to go on: an active fact (ALL-27 AC-13), or a gift on the person's list
+   * it can offer (ALL-29 AC-28).
+   */
+  hasInputs: boolean;
   /** The round may start another idea run (round_idea_state). */
   ideaRunsLeft: boolean;
   /**
@@ -208,7 +218,7 @@ function holdAction(r: RoundView, today: CalendarDate, s: ScheduleSettings): Nex
 }
 
 /**
- * A round that can't run (no facts, or no runs left) tells the buyer once (`no_ideas`), and once
+ * A round that can't run (no facts or list gifts, or no runs left) tells the buyer once (`no_ideas`), and once
  * more if the extra run a new fact allowed also found nothing (`no_ideas_again`). Then it waits
  * for its deadline, unless a new fact brings it back sooner (the fact trigger). null: it can run.
  */
@@ -217,10 +227,22 @@ function noIdeasAction(r: RoundView): NextAction | null {
   if (!r.paid) return { do: "wait", until: r.shipByDeadline };
   // The engine is off: nothing is sorry about ideas we never looked for.
   if (!r.ideaEngineOn) return null;
-  if (r.hasFacts && r.ideaRunsLeft) return null;
+  if (r.hasInputs && r.ideaRunsLeft) return null;
   if (!r.sent.has("no_ideas")) return { do: "send", send: "no_ideas" };
   if (!r.ideaRunsLeft && r.ranSinceNoIdeas && !r.sent.has("no_ideas_again")) return { do: "send", send: "no_ideas_again" };
   return { do: "wait", until: r.shipByDeadline };
+}
+
+const TOLD = /^(heads_up|address_request|no_ideas)(@\d+)?$/;
+
+/**
+ * Whether the buyer was asked or told anything about the round: a heads-up, an address request or
+ * a no_ideas email, including one a rejection renamed to `<step>@<n>` (ALL-29 AC-13). The deadline
+ * skip emails only such a buyer (ruling 13, ALL-27 AC-9).
+ */
+export function toldBefore(sent: ReadonlySet<StepKey>): boolean {
+  for (const key of sent) if (TOLD.test(key)) return true;
+  return false;
 }
 
 /**

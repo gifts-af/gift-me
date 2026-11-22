@@ -24,7 +24,7 @@ export type FakeRound = Omit<NewRoundRow, "nextActionAt"> & {
 export type FakePerson = { name: string; hasAddress: boolean; openQuestions?: number };
 
 /** round_idea_state for one round, and whether a run started after its no_ideas email (ALL-27). */
-export type FakeIdeaState = { hasFacts: boolean; ideaRunsLeft: boolean; ranSinceNoIdeas: boolean; paid: boolean; ideaEngineOn: boolean };
+export type FakeIdeaState = { hasFacts: boolean; hasListGifts: boolean; ideaRunsLeft: boolean; ranSinceNoIdeas: boolean; paid: boolean; ideaEngineOn: boolean };
 
 const FINISHED: RoundStatus[] = ["complete", "skipped", "ordered", "delivered"];
 
@@ -169,6 +169,24 @@ export class FakeRoundStore implements RoundStore {
     return true;
   }
 
+  /**
+   * What reject_round_ideas does with a new search left (ALL-29 AC-12, AC-13): the ideas go, the
+   * sent approval emails become `<step>@<n>`, and the round is back to generating, due now.
+   * heads_up_on stays, as in SQL; the next heads-up sets it again.
+   */
+  reject(roundId: string, now: Date) {
+    const r = this.round(roundId);
+    const steps = ["heads_up", "reminder_1", "reminder_2", "final_notice", "no_ideas", "no_ideas_again"];
+    const sent = this.sends.get(roundId) ?? new Set<StepKey>();
+    const n = 1 + Math.max(0, ...[...sent].map((k) => /^([a-z_0-9]+)@(\d+)$/.exec(k)).filter((m) => m && steps.includes(m[1])).map((m) => Number(m![2])));
+    this.sends.set(roundId, new Set([...sent].map((k) => (steps.includes(k) ? (`${k}@${n}` as StepKey) : k))));
+    this.ideas.delete(roundId);
+    this.writes.push(`reject:${roundId}`);
+    if (r.status !== "generating") r.history.push("generating");
+    r.status = "generating";
+    r.nextActionAt = now;
+  }
+
   async sentSteps(roundId: string) {
     return new Set(this.sends.get(roundId));
   }
@@ -215,6 +233,7 @@ export class FakeRoundStore implements RoundStore {
       openQuestions: person.openQuestions ?? 0,
       ideas: (this.ideas.get(roundId) ?? []).map((i) => ({ ...i, overBudget: i.overBudget ?? false })),
       hasFacts: true,
+      hasListGifts: false,
       ideaRunsLeft: true,
       ranSinceNoIdeas: false,
       paid: true,

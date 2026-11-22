@@ -4,9 +4,11 @@ import {
   ideaRunWorstMs,
   nextAction,
   roundToCreate,
+  toldBefore,
   type AttentionReason,
   type CalendarDate,
   type OccasionKind,
+  type RenamedStepKey,
   type RoundStatus,
   type RoundView,
   type ScheduleSettings,
@@ -472,7 +474,8 @@ async function runStep(claimed: ClaimedRound, deps: EngineDeps, s: ScheduleSetti
     case "skip": {
       const ids = { round_id: round.id, user_id: round.userId };
       // Tell the buyer about a skip only if we asked or told them something (ruling 13, ALL-27 AC-9).
-      if (!sent.has("heads_up") && !sent.has("address_request") && !sent.has("no_ideas")) {
+      // A rejection renames what was sent (heads_up@1), and that still counts (ALL-29 AC-13).
+      if (!toldBefore(sent)) {
         logEvent("round_skipped_silently", { ...ids, status: round.status });
         return finishStep(round, ctx, sent, { status: "skipped" }, deps, s);
       }
@@ -1103,7 +1106,7 @@ function view(round: ClaimedRound, ctx: RoundContext, sent: Set<StepKey>, placeT
     emailedBalanceCents: round.emailedBalanceCents,
     placeTried,
     orderingPaused,
-    hasFacts: hasIdeas || ctx.hasFacts,
+    hasInputs: hasIdeas || ctx.hasFacts || ctx.hasListGifts,
     ideaRunsLeft: hasIdeas || ctx.ideaRunsLeft,
     ranSinceNoIdeas: ctx.ranSinceNoIdeas,
     paid: ctx.paid,
@@ -1325,7 +1328,8 @@ function occasionWord(kind: OccasionKind): string {
   return kind === "birthday" || kind === "anniversary" ? OCCASION_NAMES[kind].toLowerCase() : OCCASION_NAMES[kind];
 }
 
-type PlainStep = Exclude<StepKey, `hold:${string}` | `fail:${string}` | `ordered:${string}` | `late_fail:${string}` | "shared_address">;
+// A renamed key (heads_up@1) is only read, never sent.
+type PlainStep = Exclude<StepKey, `hold:${string}` | `fail:${string}` | `ordered:${string}` | `late_fail:${string}` | "shared_address" | RenamedStepKey>;
 /** Which email a step key sends; the numbered keys group by kind. Failures are told by tellFailures. */
 type EmailStep = PlainStep | "hold" | "hold_short" | "hold_deadline" | "fail" | "ordered";
 
