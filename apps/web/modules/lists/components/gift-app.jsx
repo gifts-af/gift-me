@@ -11,6 +11,7 @@ import GiftList from './gift-list.jsx'
 import GiftSummary from './gift-summary.jsx'
 import Link from 'next/link'
 import { PageFrame } from '@/components/app-shell/page-frame'
+import NamePrompt, { skippedNamePrompt } from './name-prompt.jsx'
 import ShareButton from './share-button.jsx'
 import { Banner, buttonClass, inputClass } from './ui.jsx'
 
@@ -125,12 +126,18 @@ export function GiftAppSkeleton() {
 const STATUS_TEXT = { idle: 'Saved', saving: 'Saving…', error: "Couldn't save" }
 
 /**
- * @param {{ initial: import('@/modules/lists/lib/lists').MyList | null, footer?: import('react').ReactNode }} props
+ * @param {{
+ *   initial: import('@/modules/lists/lib/lists').MyList | null,
+ *   footer?: import('react').ReactNode,
+ *   needsName?: boolean,
+ *   saveName?: ((name: string) => Promise<{ ok: true } | { ok: false, error: string }>) | null,
+ * }} props
  * `initial` is null for a guest. `footer` shows below the list once a saved list exists.
+ * `needsName` (no display name yet) makes Share ask for one, saved with `saveName` (ALL-136).
  * The list is built from `initial` once: a later render with new data (a
  * router refresh) doesn't replace what's on screen.
  */
-export default function GiftApp({ initial, footer = null }) {
+export default function GiftApp({ initial, footer = null, needsName = false, saveName = null }) {
   const isGuest = initial === null
   const loadError = initial?.loadError ?? null
   // Fixed at the first render, so a refresh that fails to load can't stop a
@@ -285,8 +292,23 @@ export default function GiftApp({ initial, footer = null }) {
     setAnnouncement('')
   }
 
+  // ALL-136: someone with no display name is asked for one on Share, until
+  // they give one or skip it on this device.
+  const [named, setNamed] = useState(!needsName)
+  const [askingName, setAskingName] = useState(false)
+  // Bumped when the prompt copies the link, so Share shows "Copied!" then too.
+  const [copiedAfterPrompt, setCopiedAfterPrompt] = useState(0)
+
+  async function handleShareClick() {
+    if (!named && saveName && !skippedNamePrompt()) {
+      setAskingName(true)
+      return false
+    }
+    return copyShareLink()
+  }
+
   // Resolves true once the link is on the clipboard.
-  async function handleShare() {
+  async function copyShareLink() {
     if (!list.shareToken) return false
     const url = `${window.location.origin}/share/${list.shareToken}`
     setAnnouncement('')
@@ -305,6 +327,16 @@ export default function GiftApp({ initial, footer = null }) {
   return (
     <>
       <PageFrame wide className="gap-4">
+        {saveName && (
+          <NamePrompt
+            open={askingName}
+            onOpenChange={setAskingName}
+            saveName={saveName}
+            copyLink={copyShareLink}
+            onCopied={() => setCopiedAfterPrompt((n) => n + 1)}
+            onNamed={() => setNamed(true)}
+          />
+        )}
         {isGuest && (
           <Banner>
             You’re not signed in.{' '}
@@ -345,7 +377,9 @@ export default function GiftApp({ initial, footer = null }) {
             >
               My list
             </h1>
-            {!isGuest && <ShareButton blockedReason={shareBlockedReason} onShare={handleShare} />}
+            {!isGuest && (
+              <ShareButton blockedReason={shareBlockedReason} onShare={handleShareClick} copiedSignal={copiedAfterPrompt} />
+            )}
           </div>
           <div className="flex min-h-6 flex-wrap items-center justify-between gap-x-3">
             <GiftSummary gifts={gifts} />

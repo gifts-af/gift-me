@@ -104,6 +104,8 @@ test.describe("which bar each page gets", () => {
     // With no clipboard the app shows the link, on every browser.
     await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { value: undefined }));
     await page.getByRole("button", { name: /Share/ }).click();
+    // A fresh account has no name yet, so Share asks first (ALL-136).
+    await page.getByRole("dialog").getByRole("button", { name: "Skip" }).click();
     const url = await page.getByLabel("Share link").inputValue();
     const path = new URL(url).pathname;
 
