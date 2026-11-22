@@ -24,7 +24,7 @@ select (lists.save_list_checked(null, 'My list', '[
   {"id": "bbbbbbbb-0000-4000-8000-000000000003", "name": "Kneeler", "price_cents": 3500}
 ]'::jsonb, null) ->> 'id')::uuid as list_a \gset
 select share_token as token_a from lists.lists where id = :'list_a' \gset
-insert into public.people (name, relationship) values ('Me', 'self') returning id as sam_self \gset
+insert into public.people (name, relationship) values ('Me', 'other') returning id as sam_self \gset
 
 select tests.act_as(:'pat');
 select (lists.save_list_checked(null, 'Pat''s list', '[]'::jsonb, null) ->> 'id')::uuid as list_b \gset
@@ -65,8 +65,8 @@ select is(lists.get_shared_list(:'token_a') -> 'card_enabled', 'true'::jsonb, 'a
 -- ─── link_unlinked_person ───────────────────────────────────────────────────
 
 select tests.act_as(:'buyer');
-insert into public.people (name, relationship) values ('Mom', 'parent') returning id as mom \gset
-insert into public.people (name, relationship) values ('Mother', 'parent') returning id as mother \gset
+insert into public.people (name, relationship) values ('Mom', 'mother') returning id as mom \gset
+insert into public.people (name, relationship) values ('Mother', 'mother') returning id as mother \gset
 insert into public.people (name, relationship) values ('Gone', 'friend') returning id as gone \gset
 select public.delete_person(:'gone');
 
@@ -228,7 +228,7 @@ select tests.act_as(:'sam');
 select count(*) as sam_people from public.people \gset
 select throws_ok(
   format('select concierge.add_person(p_name => %L, p_relationship => %L, p_kinds => null, p_share_token => %L)',
-         'Me again', 'self', :'token_a2'),
+         'Me again', 'other', :'token_a2'),
   '22023', null, 'the owner can''t add-and-link from her own list'
 );
 select is((select count(*) from public.people), :'sam_people'::bigint, 'and nothing is created for her');
@@ -237,7 +237,7 @@ select is((select count(*) from public.people), :'sam_people'::bigint, 'and noth
 select tests.act_as(:'buyer');
 select lives_ok(
   $q$select concierge.add_person(
-    p_name => 'Grandpa', p_relationship => 'grandparent', p_kinds => array['birthday', 'anniversary'],
+    p_name => 'Grandpa', p_relationship => 'grandmother', p_kinds => array['birthday', 'anniversary'],
     p_birthday_month => 1, p_birthday_day => 2, p_birth_year => 1940,
     p_anniversary_month => 5, p_anniversary_day => 6, p_google_contact_id => 'people/c123',
     p_recipient_first_name => 'Gramps', p_recipient_last_name => 'Lee', p_address_line1 => '1 Main St',

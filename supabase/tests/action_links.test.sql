@@ -6,7 +6,7 @@ select plan(14);
 
 select tests.create_user('a@example.com') as a \gset
 select tests.act_as(:'a');
-insert into public.people (name, relationship) values ('Mom', 'parent');
+insert into public.people (name, relationship) values ('Mom', 'mother');
 select id as mom from public.people where name = 'Mom' \gset
 insert into concierge.occasions (person_id, kind, month, day) values (:'mom', 'birthday', 3, 14) returning id as bday \gset
 
@@ -18,7 +18,7 @@ returning id as round \gset
 insert into concierge.notifications (user_id, round_id, kind) values (:'a', :'round', 'heads_up')
 returning id as notif \gset
 insert into concierge.action_links (user_id, round_id, notification_id, action, token_hash, expires_at)
-values (:'a', :'round', :'notif', 'approve', 'hash-1', now() + interval '1 day');
+values (:'a', :'round', :'notif', 'open_person', 'hash-1', now() + interval '1 day');
 insert into concierge.action_links (user_id, action, token_hash, expires_at)
 values (:'a', 'test', 'hash-expired', now() - interval '1 hour');
 
@@ -53,7 +53,7 @@ with u as (
 
 -- Token hashes are unique.
 select throws_ok(
-  format($q$insert into concierge.action_links (user_id, action, token_hash, expires_at) values (%L, 'x', 'hash-1', now())$q$, :'a'),
+  format($q$insert into concierge.action_links (user_id, action, token_hash, expires_at) values (%L, 'test', 'hash-1', now())$q$, :'a'),
   '23505', null, 'a token hash can only exist once'
 );
 

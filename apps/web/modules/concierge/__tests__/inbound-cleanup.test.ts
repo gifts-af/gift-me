@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@gifts-af/core";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
-import { clearUnfiledNotes } from "../inbound/cleanup";
+import { clearUnfiledNotes, pruneExpiredActionLinks } from "../inbound/cleanup";
 
 // The choosing (which messages, what is pruned) is the SQL function's job and is tested in
 // supabase/tests/inbound_notes.test.sql. This covers what the app does with what it returns.
@@ -59,5 +59,21 @@ describe("clearUnfiledNotes", () => {
     const f = fakeDb([]);
     f.rpc.mockResolvedValueOnce({ data: null as never, error: { message: "boom" } as never });
     await expect(clearUnfiledNotes(f.db)).rejects.toThrow(/Clearing unfiled notes failed/);
+  });
+});
+
+describe("pruneExpiredActionLinks", () => {
+  // What is deleted, and the off switch, are tested in supabase/tests/prune_old_rows.test.sql.
+  it("returns how many links the SQL function deleted", async () => {
+    const rpc = vi.fn(async () => ({ data: 4, error: null }));
+    const db = { schema: () => ({ rpc }) } as unknown as SupabaseClient<Database>;
+    await expect(pruneExpiredActionLinks(db)).resolves.toBe(4);
+    expect(rpc).toHaveBeenCalledWith("prune_expired_action_links");
+  });
+
+  it("throws when the prune fails", async () => {
+    const rpc = vi.fn(async () => ({ data: null, error: { message: "boom" } }));
+    const db = { schema: () => ({ rpc }) } as unknown as SupabaseClient<Database>;
+    await expect(pruneExpiredActionLinks(db)).rejects.toThrow(/Pruning expired action links failed/);
   });
 });

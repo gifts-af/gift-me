@@ -62,6 +62,8 @@ export type EngineDeps = {
   clock?: () => number;
   /** The daily clear-out of unfiled emailed notes (ALL-31), bound by the caller (E3). */
   clearUnfiledNotes?: () => Promise<{ cleared: number; imagesRemoved: number }>;
+  /** Deletes emailed buttons long past expiry and returns how many, bound by the caller (E3). */
+  pruneActionLinks?: () => Promise<number>;
   /** Queues due rounds for their own function calls (ALL-125); the tick runs them itself without it. */
   sendJobs?: SendJobs;
   /** A test clock: queued messages carry the tick's `now`. */
@@ -110,6 +112,17 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
       if (result.cleared > 0) logEvent("inbound.notes_cleared", { ...result });
     } catch (err) {
       logEvent("inbound.notes_clear_failed", { ...errorFields(err) });
+    }
+  }
+
+  // Spent emailed buttons are deleted. Housekeeping too, on its own so it can't fail the clear-out
+  // above or the tick; action_link_prune_days at 0 turns it off.
+  if (deps.pruneActionLinks) {
+    try {
+      const deleted = await deps.pruneActionLinks();
+      logEvent("housekeeping.action_links_pruned", { deleted });
+    } catch (err) {
+      logEvent("housekeeping.action_links_prune_failed", { ...errorFields(err) });
     }
   }
 

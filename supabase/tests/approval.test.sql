@@ -43,7 +43,7 @@ insert into lists.lists (owner_id, title) values (:'stranger', 'Other') returnin
 insert into lists.list_items (list_id, position, name, price_cents) values (:'other_list', 0, 'Kite', 1000) returning id as i_other \gset
 
 select tests.act_as(:'a');
-insert into public.people (name, relationship) values ('Mom', 'parent') returning id as p_mom \gset
+insert into public.people (name, relationship) values ('Mom', 'mother') returning id as p_mom \gset
 select lists.link_person(:'token', :'p_mom');
 insert into public.people (name, relationship) values ('Run', 'friend') returning id as p_run \gset
 insert into public.people (name, relationship) values ('Done', 'friend') returning id as p_done \gset

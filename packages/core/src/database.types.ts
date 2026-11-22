@@ -365,6 +365,13 @@ export type Database = {
             referencedRelation: "gift_rounds";
             referencedColumns: ["id", "user_id"];
           },
+          {
+            foreignKeyName: "gift_ideas_round_person_fkey";
+            columns: ["round_id", "person_id", "user_id"];
+            isOneToOne: false;
+            referencedRelation: "gift_rounds";
+            referencedColumns: ["id", "person_id", "user_id"];
+          },
         ];
       };
       gift_rounds: {
@@ -446,11 +453,11 @@ export type Database = {
         };
         Relationships: [
           {
-            foreignKeyName: "gift_rounds_occasion_id_user_id_fkey";
-            columns: ["occasion_id", "user_id"];
+            foreignKeyName: "gift_rounds_occasion_person_fkey";
+            columns: ["occasion_id", "person_id", "user_id"];
             isOneToOne: false;
             referencedRelation: "occasions";
-            referencedColumns: ["id", "user_id"];
+            referencedColumns: ["id", "person_id", "user_id"];
           },
         ];
       };
@@ -496,6 +503,13 @@ export type Database = {
             isOneToOne: false;
             referencedRelation: "gift_rounds";
             referencedColumns: ["id", "user_id"];
+          },
+          {
+            foreignKeyName: "idea_runs_round_person_fkey";
+            columns: ["round_id", "person_id", "user_id"];
+            isOneToOne: false;
+            referencedRelation: "gift_rounds";
+            referencedColumns: ["id", "person_id", "user_id"];
           },
         ];
       };
@@ -1571,6 +1585,10 @@ export type Database = {
         Args: { p_resolved: boolean; p_status: string };
         Returns: boolean;
       };
+      prune_expired_action_links: {
+        Args: Record<PropertyKey, never>;
+        Returns: number;
+      };
       reapprove_order: {
         Args: {
           p_lock: string;
@@ -2388,6 +2406,7 @@ export type Database = {
         Returns: undefined;
       };
       delete_person: { Args: { p_person_id: string }; Returns: undefined };
+      is_relationship: { Args: { p_value: string }; Returns: boolean };
       shared_address_for_person: {
         Args: { p_person_id: string };
         Returns: Json;

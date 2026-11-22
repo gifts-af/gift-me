@@ -7,7 +7,7 @@ select tests.create_user('a@example.com') as a \gset
 -- Rounds are for paid users only (ALL-27).
 insert into concierge.accounts (user_id, paid_features) values (:'a', true);
 select tests.act_as(:'a');
-insert into public.people (name, relationship) values ('Mom', 'parent'), ('Pal', 'friend'), ('Gone', 'friend');
+insert into public.people (name, relationship) values ('Mom', 'mother'), ('Pal', 'friend'), ('Gone', 'friend');
 select id as mom from public.people where name = 'Mom' \gset
 select id as pal from public.people where name = 'Pal' \gset
 select id as gone from public.people where name = 'Gone' \gset
@@ -19,7 +19,7 @@ insert into concierge.occasions (person_id, kind) values (:'mom', 'fathers_day')
 insert into concierge.occasions (person_id, kind, month, day) values (:'pal', 'birthday', 7, 4) returning id as p_bday \gset
 insert into concierge.occasions (person_id, kind) values (:'gone', 'christmas') returning id as g_xmas \gset
 insert into concierge.budgets (person_id, occasion_kind, amount_cents) values (:'mom', 'birthday', 7500);
-insert into concierge.budget_defaults (relationship, base_amount_cents) values ('parent', 10000);
+insert into concierge.budget_defaults (relationship, base_amount_cents) values ('mother', 10000);
 
 select tests.reset_role();
 update concierge.occasions set deleted_at = now() where id = :'m_del';

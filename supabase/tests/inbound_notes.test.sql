@@ -8,7 +8,7 @@ select plan(39);
 
 select tests.create_user('notes-a@example.com') as a \gset
 select tests.create_user('notes-b@example.com') as b \gset
-insert into public.people (user_id, name, relationship) values (:'a', 'Dad', 'parent') returning id as dad \gset
+insert into public.people (user_id, name, relationship) values (:'a', 'Dad', 'father') returning id as dad \gset
 insert into public.people (user_id, name, relationship) values (:'a', 'Gone', 'friend') returning id as gone \gset
 update public.people set deleted_at = now() where id = :'gone';
 

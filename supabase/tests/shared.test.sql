@@ -41,7 +41,7 @@ select is((select email from public.profiles where id = :'a'), 'a2@example.com',
 
 -- A's people are A's alone.
 select tests.act_as(:'a');
-insert into public.people (name, relationship) values ('Mom', 'parent');
+insert into public.people (name, relationship) values ('Mom', 'mother');
 select is((select count(*)::int from public.people), 1, 'A sees their own person');
 select is((select count(*)::int from public.profiles), 1, 'A sees only their own profile');
 
@@ -70,7 +70,7 @@ select throws_ok(
 );
 
 select tests.act_as(:'b');
-insert into public.people (name, relationship) values ('Jim', 'child');
+insert into public.people (name, relationship) values ('Jim', 'son');
 select is((select count(*)::int from public.people where name = 'Mom'), 0, 'B cannot see A''s people');
 
 -- Updates of someone else's row do nothing, and nobody hard-deletes people

@@ -14,7 +14,7 @@ select is(concierge.setting_int('readiness_ready_pct'), 60, 'ready from 60');
 select is(concierge.setting_int('readiness_meter_enabled'), 1, 'the meter is on');
 
 select tests.act_as(:'a');
-insert into public.people (name, relationship) values ('Dad', 'parent');
+insert into public.people (name, relationship) values ('Dad', 'father');
 select id as dad from public.people where name = 'Dad' \gset
 
 -- Answering: facts, marked as the buyer's own, and no raw text kept.

@@ -19,14 +19,14 @@ select (lists.save_list_checked(null, 'Birthday', '[
   {"id": "aaaaaaaa-0000-4000-8000-000000000003", "name": "Kneeler", "price_cents": 3500}
 ]'::jsonb, null) ->> 'id')::uuid as list_id \gset
 select share_token as token from lists.lists where id = :'list_id' \gset
-insert into public.people (name, relationship) values ('Me', 'self') returning id as mom_self \gset
+insert into public.people (name, relationship) values ('Me', 'other') returning id as mom_self \gset
 
 select tests.act_as(:'friend');
 select lists.claim_gift(:'token', 'aaaaaaaa-0000-4000-8000-000000000003', null);
 
 -- The buyer links their "Mom" with the share link.
 select tests.act_as(:'buyer');
-insert into public.people (name, relationship) values ('Mom', 'parent') returning id as person \gset
+insert into public.people (name, relationship) values ('Mom', 'mother') returning id as person \gset
 insert into public.people (name, relationship) values ('Gone', 'friend') returning id as gone \gset
 select public.delete_person(:'gone');
 
@@ -98,14 +98,14 @@ insert into lists.lists (owner_id, title) values (:'mom', 'New list') returning 
 insert into lists.list_items (list_id, position, name, price_cents) values (:'list2', 0, 'Scarf', 2000);
 select share_token as token2 from lists.lists where id = :'list2' \gset
 select tests.act_as(:'buyer');
-insert into public.people (name, relationship) values ('Mom 2', 'parent') returning id as person2 \gset
+insert into public.people (name, relationship) values ('Mom 2', 'mother') returning id as person2 \gset
 select lists.link_person(:'token2', :'person2');
 select public.delete_person(:'person2');
 select throws_ok(format('select lists.person_list(%L)', :'person2'), 'P0002', null, 'a deleted person has no picks');
 select throws_ok(format('select public.shared_city_for_person(%L)', :'person2'), 'P0002', null, 'or city');
 
 -- When Mom deletes her account, the link goes with it.
-insert into public.people (name, relationship) values ('Mom 3', 'parent') returning id as person3 \gset
+insert into public.people (name, relationship) values ('Mom 3', 'mother') returning id as person3 \gset
 select lists.link_person(:'token2', :'person3');
 select tests.reset_role();
 delete from auth.users where id = :'mom';

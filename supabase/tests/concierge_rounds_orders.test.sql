@@ -17,7 +17,7 @@ select is(
 
 -- A sets up Mom and Dad and their occasions.
 select tests.act_as(:'a');
-insert into public.people (name, relationship) values ('Mom', 'parent'), ('Dad', 'parent');
+insert into public.people (name, relationship) values ('Mom', 'mother'), ('Dad', 'father');
 select id as mom from public.people where name = 'Mom' \gset
 select id as dad from public.people where name = 'Dad' \gset
 insert into concierge.occasions (person_id, kind, month, day) values (:'mom', 'birthday', 3, 14) returning id as bday \gset
@@ -37,7 +37,7 @@ returning id as idea \gset
 insert into concierge.orders (user_id, round_id, idea_id, max_price_cents, fee_cents, funding_mode, ship_to, ship_city, ship_state)
 values (:'a', :'round', :'idea', 5000, 100, 'zinc_wallet', 'recipient', 'Dayton', 'OH')
 returning id as order_id \gset
-insert into concierge.rejections (user_id, round_id, reason_code) values (:'a', :'round', 'already_owns');
+insert into concierge.rejections (user_id, round_id, reason_code) values (:'a', :'round', 'has_it');
 insert into concierge.reactions (user_id, round_id, rating, source) values (:'a', :'round', 'loved', 'web');
 insert into concierge.notifications (user_id, round_id, kind) values (:'a', :'round', 'heads_up');
 insert into concierge.inbound_messages (user_id, subject, body, matched_person_id)

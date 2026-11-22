@@ -10,9 +10,9 @@ select tests.create_user('b@example.com') as b \gset
 -- ─── add_person ─────────────────────────────────────────────────────────────
 
 select tests.act_as(:'a');
-select concierge.add_person('Mom', 'parent', array['christmas', 'mothers_day'], null, null, null, null, null) as mom \gset
+select concierge.add_person('Mom', 'mother', array['christmas', 'mothers_day'], null, null, null, null, null) as mom \gset
 
-select is((select count(*)::int from public.people where id = :'mom' and name = 'Mom' and relationship = 'parent'), 1,
+select is((select count(*)::int from public.people where id = :'mom' and name = 'Mom' and relationship = 'mother'), 1,
   'add_person saves a person with only a name and relationship');
 select is((select array_agg(kind order by kind) from concierge.occasions where person_id = :'mom'),
   array['christmas', 'mothers_day'], 'add_person adds one occasion per kind');

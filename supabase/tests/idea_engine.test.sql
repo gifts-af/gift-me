@@ -145,8 +145,11 @@ select is(concierge.save_ideas(:'run_round', '[{"title":"X","price_cents":100,"e
 
 insert into concierge.idea_runs (user_id, person_id, started_at) values (:'a', :'p_busy', :'base') returning id as run_od1 \gset
 insert into concierge.idea_runs (user_id, person_id, started_at) values (:'a', :'p_busy', :'base') returning id as run_od2 \gset
+insert into concierge.occasions (user_id, person_id, kind) values (:'a', :'p_busy', 'christmas') returning id as o_busy \gset
+insert into concierge.gift_rounds (user_id, person_id, occasion_id, occasion_year, occasion_date, ship_by_deadline, budget_cents)
+values (:'a', :'p_busy', :'o_busy', 2030, '2030-12-25', '2030-12-15', 5000) returning id as r_busy \gset
 insert into concierge.gift_ideas (user_id, round_id, person_id, title, price_cents, est_total_cents, rank)
-values (:'a', :'r_done', :'p_busy', 'Not mine to touch', 1, 1, 1);
+values (:'a', :'r_busy', :'p_busy', 'Not mine to touch', 1, 1, 1);
 select concierge.save_ideas(:'run_od1',
   '[{"title":"A","price_cents":100,"est_total_cents":110,"rank":1},{"title":"B","price_cents":100,"est_total_cents":110,"rank":2}]'::jsonb) as n1 \gset
 select concierge.save_ideas(:'run_od2', '[{"title":"C","price_cents":100,"est_total_cents":110,"rank":1,"retailer_product_id":"B0C"}]'::jsonb) as n2 \gset
@@ -174,7 +177,7 @@ insert into concierge.orders (user_id, round_id, idea_id, funding_mode, max_pric
 select :'a', :'r_excl', id, 'zinc_wallet', 100, 0, 'recipient', 'Town', 'CA', case title when 'ordered' then 'placed' else 'failed' end
   from concierge.gift_ideas where round_id = :'r_excl' and title in ('ordered', 'failed order');
 insert into concierge.rejections (user_id, round_id, idea_id, reason_code)
-select :'a', :'r_excl', id, 'nope' from concierge.gift_ideas where title = 'rejected by row';
+select :'a', :'r_excl', id, 'not_style' from concierge.gift_ideas where title = 'rejected by row';
 -- Another person's ordered product never shows up here.
 insert into concierge.gift_ideas (user_id, round_id, title, retailer_product_id, price_cents, est_total_cents, rank)
 values (:'a', :'r_save', 'someone else', 'B0ELSE', 1, 1, 9) returning id as other_idea \gset

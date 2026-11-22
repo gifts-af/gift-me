@@ -5,7 +5,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readList } from "../lists";
-import { saveChecked } from "../save-list";
+import { saveChecked, toRow } from "../save-list";
 
 const LIST = "11111111-1111-4111-8111-111111111111";
 const row = {
@@ -75,5 +75,15 @@ describe("readList", () => {
     expect(await readList(db, LIST)).toEqual({ ok: false });
     expect(lastEvent()).toEqual({ event: "list_read_failed", at: expect.any(String), list_id: LIST, code: "42P01" });
     expect(error).not.toHaveBeenCalled();
+  });
+});
+
+describe("toRow source", () => {
+  it("keeps a source the database accepts", () => {
+    expect(toRow({ name: "Reel", priceCents: 100, source: "extension" })?.source).toBe("extension");
+  });
+
+  it("saves an unknown source as manual instead of failing the whole save", () => {
+    expect(toRow({ name: "Reel", priceCents: 100, source: "made-up" as never })?.source).toBe("manual");
   });
 });

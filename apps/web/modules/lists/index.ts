@@ -16,7 +16,7 @@ export {
 export { linkUnlinkedPerson, unlinkPerson } from "./lib/person-link";
 export type { MyList, SharedList as SharedListData } from "./lib/lists";
 // The close route drops gifts held for Undo when a tab goes away (ALL-127).
-export { removeGifts } from "./lib/save-list";
+export { LIST_ITEM_SOURCES, removeGifts } from "./lib/save-list";
 // Reading a pasted gift link, for saved gifts on a person's page (ALL-93).
 export { cleanGiftLink, readGiftLinkForUser } from "./actions/gift-link";
 export type { GiftLinkRead } from "./lib/gift-link";

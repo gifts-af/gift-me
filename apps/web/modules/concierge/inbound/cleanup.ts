@@ -41,3 +41,14 @@ export async function clearUnfiledNotes(db: SupabaseClient<Database>): Promise<I
   }
   return { cleared: data.length, imagesRemoved: rows.length };
 }
+
+/**
+ * Deletes emailed buttons (action_links) long past expiry and returns how many went. The SQL
+ * function reads action_link_prune_days and does nothing when it is unset or 0 (the off switch).
+ * Kept apart from clearUnfiledNotes so neither one's failure stops the other.
+ */
+export async function pruneExpiredActionLinks(db: SupabaseClient<Database>): Promise<number> {
+  const { data, error } = await db.schema("concierge").rpc("prune_expired_action_links");
+  if (error) throw new Error(`Pruning expired action links failed: ${error.message}`);
+  return data;
+}

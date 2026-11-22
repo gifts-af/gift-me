@@ -445,6 +445,7 @@ Users email a note to `notes@in.giftsaf.com` and it is filed on the right person
 | `inbound_thread_lookup_max` | 10 | Sent emails checked when matching a reply |
 | `inbound_thread_lookup_days` | 60 | How far back those are checked |
 | `inbound_prune_days` | 7 | Days before `inbound_seen` and `inbound_events` rows are pruned |
+| `action_link_prune_days` | 30 | Days after an emailed button expires before the daily tick deletes its `action_links` row; 0 or unset turns the prune off |
 
 **Turn it off:** set `inbound_email_enabled` to 0. Mail is then ignored; no deploy needed.
 
@@ -467,6 +468,8 @@ Users email a note to `notes@in.giftsaf.com` and it is filed on the right person
 | `inbound.notes_clear_failed` | The daily clear-out failed; it retries on the next tick |
 | `inbound.note_images_left` | Deleting cleared notes' images failed (count); the next tick retries |
 | `inbound.note_images_left_paths` | The storage paths still waiting, a few per line |
+| `housekeeping.action_links_pruned` | The daily tick deleted expired emailed buttons (`deleted` count, 0 included) |
+| `housekeeping.action_links_prune_failed` | That prune failed; it retries on the next tick |
 
 **A note can be lost:** the webhook claims the email (an `inbound_seen` row) before fetching it from Resend. If that fetch fails after the claim, Resend has already had its 200 and any repeat delivery is skipped as seen, so the note is gone; it's logged as `inbound.failed` with the `email_id`, and the user can send it again.
 
