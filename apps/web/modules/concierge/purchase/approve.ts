@@ -77,9 +77,9 @@ export type ApproveResult =
  * approveAndBuy, replaceFailedOrder and the confirm page.
  */
 export function capsFor(
-  round: RoundRow,
+  round: Pick<RoundRow, "budget_cents">,
   totals: number[],
-  account: Account,
+  account: Pick<Account, "over_budget_pct">,
   confirmed: boolean,
   settings: { feeCents: number; marginPct: number },
   committedCents: number,

@@ -4,19 +4,27 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { FACT_VALUE_MAX, type Database } from "@gifts-af/core";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { roundDbDeps } from "@/app/settings/zinc-deps";
+import { buyingWiring, lookupWiring, roundDbDeps } from "@/app/settings/zinc-deps";
 import {
+  approveAndBuy,
   MAX_BUDGET_CENTS,
   parseBudget,
+  quoteFailedOrder,
   rejectionOutlook,
   rejectRoundIdeas,
+  replaceFailedOrder,
   roundAccess,
   setRoundBudget,
+  type QuoteDeps,
+  type ShipTo,
 } from "@/modules/concierge";
 import type { BudgetResult, RejectResult } from "./[id]/round-screen";
+import type { CheckResult } from "./[id]/fix/[orderId]/fix-screen";
+import type { BuyResult } from "./outcome";
 
-// The round screen's server actions (ALL-29). Each takes the user from the session, validates
+// The round, confirm and fix pages' server actions (ALL-29). Each takes the user from the session, validates
 // its input, and leaves ownership to the module, which checks the round is theirs again on the
 // server (Next's server-actions.md > Security). They return only what the screen shows.
 
@@ -108,4 +116,129 @@ export async function setBudgetAction(roundId: string, form: FormData): Promise<
   const result = await setRoundBudget({ userId: user.userId, roundId: id.data, budgetCents: parsed.cents }, user.userDb, roundDbDeps(new Date()));
   if (result === "saved" || result === "already_set") revalidatePath(`/rounds/${id.data}`);
   return result === "saved" ? { ok: true } : { ok: false, error: BUDGET_MESSAGES[result] };
+}
+
+// ─── buying (the confirm and fix pages) ──────────────────────────────────────
+
+const Text = z.string().max(200);
+const ShipToForm = z.discriminatedUnion("shipTo", [
+  z.object({ shipTo: z.literal("recipient") }),
+  z.object({ shipTo: z.literal("buyer") }),
+  z.object({
+    shipTo: z.literal("other"),
+    firstName: Text,
+    lastName: Text,
+    line1: Text,
+    line2: Text,
+    city: Text,
+    state: Text,
+    zip: Text,
+    saveToPerson: z.literal("1").nullable(),
+  }),
+]);
+
+/** Where it ships, from the form: undefined when the form doesn't say, null when it's malformed. */
+function shipToOf(form: FormData): ShipTo | undefined | null {
+  if (form.get("shipTo") === null) return undefined;
+  const keys = ["shipTo", "firstName", "lastName", "line1", "line2", "city", "state", "zip", "saveToPerson"];
+  const parsed = ShipToForm.safeParse(Object.fromEntries(keys.map((k) => [k, field(form, k)])));
+  if (!parsed.success) return null;
+  const d = parsed.data;
+  if (d.shipTo !== "other") return { kind: d.shipTo };
+  // The address itself is checked in the module (checkAddress); a bad one is no_address.
+  const { firstName, lastName, line1, line2, city, state, zip } = d;
+  return { kind: "other", address: { firstName, lastName, line1, line2, city, state, zip }, saveToPerson: d.saveToPerson === "1" };
+}
+
+/** Only the "Buy anyway" button sends over=1. The module checks the budget and allowance either way. */
+const overOf = (form: FormData) => field(form, "over") === "1";
+
+/** Stands in for the lookup key where it isn't set: a replacement that isn't a price re-buy never uses it. */
+const NO_LOOKUP: QuoteDeps["lookup"] = {
+  key: "",
+  http: {
+    base: "zinc-not-used",
+    timeoutMs: 0,
+    fetch: async () => {
+      throw new Error("No Zinc lookup key here.");
+    },
+  },
+};
+
+/** The confirm page's one button (AC-2, AC-4, AC-6, AC-8, AC-10, AC-11). */
+export async function buyAction(roundId: string, form: FormData): Promise<BuyResult> {
+  const id = RoundId.safeParse(roundId);
+  const ideas = z.array(z.uuid()).min(1).safeParse((field(form, "ideas") ?? "").split(","));
+  const note = field(form, "note") ?? "";
+  const shipTo = shipToOf(form);
+  if (!id.success || !ideas.success || shipTo === null) return { ok: false, error: "bad_form" };
+  const user = await signedIn();
+  if (!user) return { ok: false, error: "session" };
+
+  const { purchase } = await buyingWiring(new Date(), process.env, { user_id: user.userId });
+  if (!purchase) return { ok: false, error: "zinc_off" };
+  const result = await approveAndBuy(
+    {
+      userId: user.userId,
+      roundId: id.data,
+      ideaIds: [...new Set(ideas.data)],
+      // Never logged (E6); the module checks it against zinc_gift_message_max_chars.
+      ...(note.trim() ? { giftMessage: note } : {}),
+      overBudgetConfirmed: overOf(form),
+      ...(shipTo ? { shipTo } : {}),
+    },
+    purchase,
+  );
+  if (result.ok) revalidatePath(`/rounds/${id.data}`);
+  return result;
+}
+
+/** The fix page's "Check today's price" (AC-14): one paid lookup, only on the tap. */
+export async function checkPriceAction(roundId: string, orderId: string): Promise<CheckResult> {
+  const id = RoundId.safeParse(roundId);
+  const order = RoundId.safeParse(orderId);
+  if (!id.success || !order.success) return { ok: false, error: "bad_form" };
+  const user = await signedIn();
+  if (!user) return { ok: false, error: "session" };
+  const lookup = await lookupWiring(createAdminClient());
+  if (!lookup) return { ok: false, error: "unavailable" };
+  // quoteFailedOrder checks the round and order are this user's, reads with the service role and
+  // looks up on the app's own key; it never orders, so its Zinc ordering deps can't spend.
+  const result = await quoteFailedOrder({ userId: user.userId, roundId: id.data, orderId: order.data }, { ...roundDbDeps(new Date()), lookup });
+  return typeof result === "string" ? { ok: false, error: result } : { ok: true, oldCents: result.oldCents, newCents: result.newCents };
+}
+
+/** The fix page's buttons (AC-14, AC-15, AC-15a): the same gift again, or the next-best one. */
+export async function replaceAction(roundId: string, orderId: string, form: FormData): Promise<BuyResult> {
+  const id = RoundId.safeParse(roundId);
+  const order = RoundId.safeParse(orderId);
+  const idea = RoundId.safeParse(field(form, "ideaId"));
+  const shownRaw = field(form, "shownTotalCents");
+  const shown = shownRaw === null ? null : z.coerce.number().int().min(0).safeParse(shownRaw);
+  const shipTo = shipToOf(form);
+  if (!id.success || !order.success || !idea.success || (shown !== null && !shown.success) || shipTo === null) {
+    return { ok: false, error: "bad_form" };
+  }
+  const user = await signedIn();
+  if (!user) return { ok: false, error: "session" };
+
+  const { purchase } = await buyingWiring(new Date(), process.env, { user_id: user.userId });
+  if (!purchase) return { ok: false, error: "zinc_off" };
+  const lookup = await lookupWiring(createAdminClient());
+  // A price-rise re-buy looks the price up again under the lease; without the key it can't.
+  if (!lookup && shown !== null) return { ok: false, error: "unavailable" };
+  const result = await replaceFailedOrder(
+    {
+      userId: user.userId,
+      roundId: id.data,
+      failedOrderId: order.data,
+      ideaId: idea.data,
+      ...(shown?.success ? { shownTotalCents: shown.data } : {}),
+      ...(shipTo ? { shipTo } : {}),
+      overBudgetConfirmed: overOf(form),
+    },
+    { ...purchase, lookup: lookup ?? NO_LOOKUP },
+  );
+  if (result.ok) revalidatePath(`/rounds/${id.data}`);
+  return result;
 }

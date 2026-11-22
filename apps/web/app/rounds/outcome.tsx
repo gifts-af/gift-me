@@ -1,0 +1,81 @@
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import type { ApproveError, ReplaceError } from "@/modules/concierge";
+
+// What the confirm and fix pages say after Buy (ALL-29 AC-2, AC-18, AC-19): every result of
+// approveAndBuy and replaceFailedOrder, in plain words, with what happens next (customers are
+// always told). The actions return only these codes; the words live here.
+
+export type BuyError = ApproveError | ReplaceError | "zinc_off" | "session" | "bad_form";
+export type BuyResult = { ok: true; status: "ordered" | "held" | "failed"; reason: string | null } | { ok: false; error: BuyError };
+
+/** For a thrown action: a purchase may have gone through, so never just "try again". */
+export const UNKNOWN = "Something went wrong. Check the gift's page before trying again.";
+
+type Words = { title: string; body: string | null };
+
+const HELD: Record<string, Words> = {
+  funds: { title: "Waiting on your Zinc balance", body: "Add money to your Zinc balance and we'll order it. We've emailed you how." },
+  setup: { title: "Waiting on your Zinc setup", body: "Finish Paying for gifts in Settings and we'll order it." },
+  address: { title: "Waiting on an address", body: "Add the address and we'll order it. We've emailed you how." },
+  unconfirmed: { title: "Waiting on Zinc", body: "Zinc hasn't confirmed the order yet. We'll email you either way." },
+  paused: { title: "Not ordered yet", body: "Buying is paused right now. We'll order it when it's back on." },
+  not_allowed: { title: "Not ordered yet", body: "Buying gifts is open to test accounts during the alpha." },
+};
+const HELD_OTHER: Words = { title: "Not ordered yet", body: "We'll try again shortly and email you what happens." };
+
+const FAILED: Record<string, Words> = {
+  price_up: { title: "Price went up", body: "We didn't buy it. We've emailed you what you can do." },
+  out_of_stock: { title: "It's out of stock", body: "We didn't buy it. We've emailed you what you can do." },
+  too_late: { title: "It can't arrive in time", body: "We didn't buy it. We've emailed you what you can do." },
+};
+const FAILED_OTHER: Words = { title: "The store couldn't take the order", body: "We didn't buy it. We've emailed you what you can do." };
+
+const ERRORS: Record<BuyError, Words> = {
+  replaced: { title: "These ideas were replaced", body: "Nothing was bought. See the ideas on offer now." },
+  claimed: { title: "Someone else got it", body: "Nothing was bought. Pick another gift." },
+  busy: { title: "Busy, try again", body: "This gift is being worked on right now. Try again in a minute." },
+  not_open: { title: "This can't be bought now", body: "Nothing was bought. See what happened on the gift's page." },
+  needs_confirmation: { title: "This is over the budget now", body: "Nothing was bought. Buy anyway, or pick something else." },
+  over_budget: { title: "Over the most you allowed", body: "Nothing was bought. Pick something cheaper." },
+  no_address: { title: "We need an address", body: "Nothing was bought." },
+  not_allowed: { title: "Not on your account yet", body: "Buying gifts is open to test accounts during the alpha." },
+  not_shared: { title: "Their list isn't shared with you any more", body: "Nothing was bought." },
+  already_bought: { title: "Already on one of your orders", body: "Nothing was bought twice." },
+  gift_message_too_long: { title: "The gift note is too long", body: "Shorten it and try again." },
+  bad_ideas: { title: "That link isn't right", body: "Nothing was bought. Open the gift's page and pick again." },
+  not_found: { title: "That didn't go through", body: "Nothing was bought. Reload and try again." },
+  not_current: { title: "Already sorted out", body: "This gift was replaced or fixed already. Nothing more was bought." },
+  price_changed: { title: "The price changed again", body: "Nothing was bought. Check today's price again." },
+  once: { title: "The price went up again", body: "Nothing was bought. Pick another idea." },
+  unavailable: { title: "We can't get today's price", body: "Nothing was bought. Pick another idea." },
+  zinc_off: { title: "Buying isn't switched on here", body: "Nothing was bought." },
+  session: { title: "Your session ended", body: "Sign in again. Nothing was bought." },
+  bad_form: { title: "That didn't go through", body: "Nothing was bought. Reload and try again." },
+};
+
+export function outcomeWords(result: BuyResult): Words {
+  if (!result.ok) return ERRORS[result.error];
+  if (result.status === "ordered") return { title: "Ordered", body: "We'll email you when it ships." };
+  if (result.status === "failed") return FAILED[result.reason ?? ""] ?? FAILED_OTHER;
+  return HELD[result.reason ?? ""] ?? HELD_OTHER;
+}
+
+/** The result panel after Buy: what happened, and the way back to the round. */
+export function Outcome({ result, roundId, children }: { result: BuyResult; roundId: string; children?: React.ReactNode }) {
+  const words = outcomeWords(result);
+  const good = result.ok && result.status === "ordered";
+  return (
+    <div className="flex flex-col gap-3">
+      <div role="status" className={cn("flex flex-col gap-1 rounded-xl p-3", good ? "bg-success-soft" : "border border-border")}>
+        <p className={cn("text-[17px] font-bold", good && "text-success")}>{words.title}</p>
+        {words.body && <p className="text-[15px] text-muted-foreground">{words.body}</p>}
+      </div>
+      {children}
+      <Button asChild variant="outline">
+        <Link href={`/rounds/${roundId}`}>{good ? "Back to the gift" : "See all ideas"}</Link>
+      </Button>
+    </div>
+  );
+}

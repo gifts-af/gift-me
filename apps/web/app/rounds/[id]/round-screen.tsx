@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { cn } from "@/lib/utils";
 import type { BuyYourself, RoundPageIdea, RoundPageView } from "@/modules/concierge";
 import { money } from "@/app/people/[id]/money";
+import { OverBudgetSheet } from "../over-budget-sheet";
 
 // The round screen (ALL-29, design/plans/ALL-29-approval.md AC-5–AC-7, AC-9, AC-12, AC-13a,
 // AC-17, AC-18, AC-29, AC-30): list gifts first, then the AI's ideas; tick one or more and go on
@@ -567,22 +568,7 @@ export function RoundScreen({
         </div>
       )}
 
-      <Dialog open={pendingOver !== null} onOpenChange={(o) => !o && keepWithin()}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Over budget</DialogTitle>
-            {budget !== null && (
-              <DialogDescription>{`${money(bar.totalCents)} is ${money(bar.totalCents - budget)} over the ${money(budget)} budget.`}</DialogDescription>
-            )}
-          </DialogHeader>
-          <Button type="button" onClick={pickAnyway}>
-            Yes, pick it
-          </Button>
-          <Button type="button" variant="outline" onClick={keepWithin}>
-            Keep within budget
-          </Button>
-        </DialogContent>
-      </Dialog>
+      <OverBudgetSheet open={pendingOver !== null} totalCents={bar.totalCents} budgetCents={budget} onYes={pickAnyway} onKeep={keepWithin} />
     </>
   );
 }

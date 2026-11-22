@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { safeNext } from "@/lib/safe-next";
+import { roundReturnPath, safeNext } from "@/lib/safe-next";
 
 describe("safeNext", () => {
   it.each(["/settings", "/share/abc?as=guest", "/"])("keeps the same-site path %s", (path) => {
@@ -66,5 +66,15 @@ describe("GET /auth/confirm", () => {
       ),
     ).rejects.toThrow("NEXT_REDIRECT");
     expect(redirect).toHaveBeenCalledWith("/lists");
+  });
+});
+
+describe("roundReturnPath", () => {
+  it("keeps a gift's page", () => {
+    expect(roundReturnPath("/rounds/r1/buy?ideas=a,b")).toBe("/rounds/r1/buy?ideas=a,b");
+  });
+
+  it.each(["/settings", "//evil.com/rounds/x", "https://evil.com/rounds/x", "/\evil.com", "", null, undefined])("refuses %j", (value) => {
+    expect(roundReturnPath(value)).toBeUndefined();
   });
 });
