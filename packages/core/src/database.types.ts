@@ -1632,6 +1632,18 @@ export type Database = {
         Args: { p_results: Json; p_round_id: string };
         Returns: Database["concierge"]["Enums"]["round_status"];
       };
+      reject_round_ideas: {
+        Args: {
+          p_expect_more: boolean;
+          p_facts: Json;
+          p_lock: string;
+          p_reason_code: string;
+          p_reason_text: string;
+          p_round_id: string;
+          p_user_id: string;
+        };
+        Returns: undefined;
+      };
       release_failure_notices: {
         Args: { p_order_ids: string[]; p_round_id: string };
         Returns: undefined;
@@ -1721,6 +1733,10 @@ export type Database = {
         Args: Record<PropertyKey, never>;
         Returns: string[];
       };
+      runs_after_rejection: {
+        Args: { p_facts: Json; p_now: string; p_round_id: string };
+        Returns: boolean;
+      };
       save_budgets: {
         Args: { p_amounts: Json; p_person_id: string };
         Returns: undefined;
@@ -1735,6 +1751,15 @@ export type Database = {
       };
       set_last_emailed_reason: {
         Args: { p_reason: string; p_round_id: string };
+        Returns: undefined;
+      };
+      set_round_budget: {
+        Args: {
+          p_budget_cents: number;
+          p_lock: string;
+          p_round_id: string;
+          p_user_id: string;
+        };
         Returns: undefined;
       };
       set_seen_balance: {

@@ -1,6 +1,7 @@
 -- The approval screen (ALL-29). Expand-only (E7): a column, an index, two
 -- settings and new functions (item_shared, claim_holder, order_is_given,
--- excluded_offers, replace_failed_order) are added; start_idea_run,
+-- excluded_offers, replace_failed_order, runs_after_rejection,
+-- reject_round_ideas, set_round_budget) are added; start_idea_run,
 -- save_ideas and approve_round are re-created with the same signatures, so
 -- they keep their grants (service_role only). excluded_products and
 -- reapprove_order stay, unused, until a later contract migration.
@@ -518,3 +519,174 @@ $$;
 
 revoke all on function concierge.replace_failed_order(uuid, uuid, timestamptz, uuid, jsonb) from public, anon, authenticated;
 grant execute on function concierge.replace_failed_order(uuid, uuid, timestamptz, uuid, jsonb) to service_role;
+
+-- ─── runs_after_rejection: whether "None of these" brings new ideas (AC-13a) ──
+-- For the sheet, before the buyer confirms: round_idea_state's runs rule, with
+-- each fact in p_facts ({category, value}) counted as newer than the last run
+-- only if it would end up active: a new fact, or an existing one that's on. A
+-- duplicate of a turned-off fact stays off, so it doesn't count (B3). False
+-- too when the next tick (p_now's UTC day plus one, T49) isn't before the
+-- ship-by day, so new ideas couldn't be bought in time (S1). A missing
+-- setting answers false (round_idea_state). With no facts it's exactly the
+-- rule reject_round_ideas checks after saving its facts.
+create function concierge.runs_after_rejection(p_round_id uuid, p_facts jsonb, p_now timestamptz)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select coalesce((
+    select (p_now at time zone 'utc')::date + 1 < r.ship_by_deadline
+       and (s.runs_left
+            or (n.runs = concierge.setting_int('idea_round_runs_max')
+                and n.last_started < p_now
+                and exists (
+                  select 1
+                    from jsonb_array_elements(coalesce(p_facts, '[]'::jsonb)) e
+                   where not exists (
+                     select 1 from concierge.profile_facts f
+                      where f.person_id = r.person_id
+                        and f.category = e ->> 'category'
+                        -- profile_facts.value_key's expression.
+                        and f.value_key = lower(regexp_replace(btrim(e ->> 'value'), '\s+', ' ', 'g'))
+                        and not f.active))))
+      from concierge.gift_rounds r
+      cross join lateral concierge.round_idea_state(r.id) s
+      cross join lateral (
+        select count(*) as runs, max(u.started_at) as last_started
+          from concierge.idea_runs u where u.round_id = r.id
+      ) n
+     where r.id = p_round_id), false);
+$$;
+
+revoke all on function concierge.runs_after_rejection(uuid, jsonb, timestamptz) from public, anon, authenticated;
+grant execute on function concierge.runs_after_rejection(uuid, jsonb, timestamptz) to service_role;
+
+-- ─── reject_round_ideas: "None of these" (AC-12, AC-13, AC-13a) ──────────────
+-- Under the round lease, for a round awaiting approval with no live order.
+-- The facts ({category, value}, owns or avoid) are saved first with source
+-- 'rejection'; one that already exists keeps its active flag and has its
+-- updated_at bumped, so it counts as new for the extra run. Then the runs
+-- rule is read again in this transaction: if it no longer matches what the
+-- sheet showed (p_expect_more), 'changed' rolls everything back (B3).
+--   A search left: a rejections row per idea still on offer (proposed, or
+--   selected with its order cancelled or resolved), those ideas rejected, the
+--   round's sent approval emails renamed to <step>@<n> so the new ideas get
+--   their own (S5), and the round back to generating, due now.
+--   None left: one rejections row with no idea; the ideas stay buyable and
+--   the round stays awaiting approval (decision b).
+create function concierge.reject_round_ideas(p_round_id uuid, p_user_id uuid, p_lock timestamptz, p_reason_code text,
+                                             p_reason_text text, p_facts jsonb, p_expect_more boolean)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  r concierge.gift_rounds;
+  v_facts jsonb := coalesce(p_facts, '[]'::jsonb);
+  v_n integer;
+  v_steps constant text[] := array['heads_up', 'reminder_1', 'reminder_2', 'final_notice', 'no_ideas', 'no_ideas_again'];
+begin
+  select * into r from concierge.gift_rounds where id = p_round_id for update;
+  if not found or r.user_id is distinct from p_user_id or r.locked_until is distinct from p_lock then
+    raise exception 'reject_round_ideas: lease not held' using errcode = 'P0001';
+  end if;
+  if r.status <> 'awaiting_approval' or r.closed_at is not null then
+    raise exception 'reject_round_ideas: not open' using errcode = 'P0001';
+  end if;
+  -- A live order, as approve_round counts one.
+  if exists (select 1 from concierge.orders
+              where round_id = p_round_id and status <> 'cancelled' and not (status = 'failed' and resolved)) then
+    raise exception 'reject_round_ideas: live order' using errcode = 'P0001';
+  end if;
+  if p_reason_code is null or p_reason_code not in ('has_it', 'not_style', 'too_pricey', 'too_generic') then
+    raise exception 'reject_round_ideas: unknown reason' using errcode = 'P0001';
+  end if;
+  if jsonb_typeof(v_facts) <> 'array'
+     or exists (select 1 from jsonb_array_elements(v_facts) e
+                 where (e ->> 'category') is null or (e ->> 'category') not in ('owns', 'avoid')) then
+    raise exception 'reject_round_ideas: fact category' using errcode = 'P0001';
+  end if;
+
+  -- The 500-character limit is profile_facts' own check (23514).
+  insert into concierge.profile_facts (user_id, person_id, category, value, source)
+  select r.user_id, r.person_id, e ->> 'category', e ->> 'value', 'rejection'
+    from jsonb_array_elements(v_facts) e
+  on conflict (person_id, category, value_key) do update set updated_at = now();
+
+  if concierge.runs_after_rejection(p_round_id, '[]'::jsonb, now()) is distinct from p_expect_more then
+    raise exception 'reject_round_ideas: changed' using errcode = 'P0001';
+  end if;
+
+  if not p_expect_more then
+    insert into concierge.rejections (user_id, round_id, idea_id, reason_code, reason_text)
+    values (r.user_id, p_round_id, null, p_reason_code, p_reason_text);
+    return;
+  end if;
+
+  -- No live order is left (checked above), so every idea still on offer goes.
+  insert into concierge.rejections (user_id, round_id, idea_id, reason_code, reason_text)
+  select r.user_id, p_round_id, i.id, p_reason_code, p_reason_text
+    from concierge.gift_ideas i
+   where i.round_id = p_round_id and i.status in ('proposed', 'selected');
+  update concierge.gift_ideas set status = 'rejected'
+   where round_id = p_round_id and status in ('proposed', 'selected');
+
+  -- The next free <n>: one more than any earlier rename of these steps.
+  select coalesce(max(split_part(s.step, '@', 2)::integer), 0) + 1 into v_n
+    from concierge.round_sends s
+   where s.round_id = p_round_id
+     and split_part(s.step, '@', 1) = any (v_steps)
+     and s.step ~ '@[0-9]+$';
+  update concierge.round_sends
+     set step = step || '@' || v_n
+   where round_id = p_round_id and step = any (v_steps);
+
+  update concierge.gift_rounds
+     set status = 'generating', next_action_at = now()
+   where id = p_round_id;
+end;
+$$;
+
+revoke all on function concierge.reject_round_ideas(uuid, uuid, timestamptz, text, text, jsonb, boolean) from public, anon, authenticated;
+grant execute on function concierge.reject_round_ideas(uuid, uuid, timestamptz, text, text, jsonb, boolean) to service_role;
+
+-- ─── set_round_budget: an open round's budget (AC-9) ─────────────────────────
+-- Under the round lease, for a round awaiting approval that has no budget yet
+-- (revises T73's "a round copies its budget when it starts" for this case).
+-- The caller saves the person's budget too (save_budgets). Each idea still on
+-- offer is marked over the new budget or not.
+create function concierge.set_round_budget(p_round_id uuid, p_user_id uuid, p_lock timestamptz, p_budget_cents integer)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  r concierge.gift_rounds;
+begin
+  select * into r from concierge.gift_rounds where id = p_round_id for update;
+  if not found or r.user_id is distinct from p_user_id or r.locked_until is distinct from p_lock then
+    raise exception 'set_round_budget: lease not held' using errcode = 'P0001';
+  end if;
+  if r.status <> 'awaiting_approval' or r.closed_at is not null then
+    raise exception 'set_round_budget: not open' using errcode = 'P0001';
+  end if;
+  if r.budget_cents is not null then
+    raise exception 'set_round_budget: already set' using errcode = 'P0001';
+  end if;
+  if p_budget_cents is null or p_budget_cents < 0 then
+    raise exception 'set_round_budget: negative' using errcode = 'P0001';
+  end if;
+
+  update concierge.gift_rounds set budget_cents = p_budget_cents where id = p_round_id;
+  update concierge.gift_ideas
+     set over_budget = est_total_cents > p_budget_cents
+   where round_id = p_round_id and status = 'proposed';
+end;
+$$;
+
+revoke all on function concierge.set_round_budget(uuid, uuid, timestamptz, integer) from public, anon, authenticated;
+grant execute on function concierge.set_round_budget(uuid, uuid, timestamptz, integer) to service_role;

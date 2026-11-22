@@ -3,10 +3,12 @@
 -- checked through the lists product's own functions (T19), approve_round
 -- refuses ideas that were replaced, list gifts no longer shared, and list
 -- gifts the buyer already has on a live order, and replace_failed_order
--- replaces a failed order under the round lease (Task 2).
+-- replaces a failed order under the round lease (Task 2); "None of these"
+-- rejects a round's ideas or saves only the reason, and an open round gets
+-- its budget (Task 3).
 begin;
 \ir _helpers.psql
-select plan(50);
+select plan(77);
 
 -- This file starts several round runs on one day; the daily limit has its own test (round_fanout).
 update concierge.app_settings set value = '1000' where key = 'idea_round_runs_per_day';
@@ -498,6 +500,238 @@ select ok(
   and not has_function_privilege('authenticated', 'concierge.replace_failed_order(uuid, uuid, timestamptz, uuid, jsonb)', 'execute')
   and has_function_privilege('service_role', 'concierge.replace_failed_order(uuid, uuid, timestamptz, uuid, jsonb)', 'execute'),
   'anon and authenticated can''t execute it');
+
+-- ─── None of these (AC-12, AC-13, AC-13a) ────────────────────────────────────
+
+select tests.act_as(:'a');
+insert into public.people (name, relationship) values ('Rej', 'friend') returning id as p_rej \gset
+insert into public.people (name, relationship) values ('Max', 'friend') returning id as p_max \gset
+insert into public.people (name, relationship) values ('Sel', 'friend') returning id as p_sel \gset
+insert into public.people (name, relationship) values ('Fact', 'friend') returning id as p_fact \gset
+insert into public.people (name, relationship) values ('Late', 'friend') returning id as p_late \gset
+insert into public.people (name, relationship) values ('Bud', 'friend') returning id as p_bud \gset
+select tests.reset_role();
+select concierge.setting_int('idea_round_runs_max') as runs_max \gset
+
+-- reject_round_ideas, with the reason text 'Not for her'.
+create function tests.rj_sql(p_round uuid, p_user uuid, p_lock timestamptz, p_code text, p_facts jsonb, p_expect boolean)
+returns text language sql as $$
+  select format($q$select concierge.reject_round_ideas(%L, %L, %L, %L, 'Not for her', %L, %L)$q$,
+                p_round, p_user, p_lock, p_code, p_facts, p_expect);
+$$;
+
+-- p_n finished idea runs of the round, all over an hour ago.
+create function tests.rj_runs(p_round uuid, p_n int)
+returns void language sql as $$
+  insert into concierge.idea_runs (user_id, person_id, round_id, started_at, finished_at, outcome)
+  select r.user_id, r.person_id, r.id, now() - make_interval(hours => 1 + g), now() - interval '1 hour', 'saved'
+    from concierge.gift_rounds r cross join generate_series(1, p_n) g
+   where r.id = p_round;
+$$;
+
+grant execute on all functions in schema tests to anon, authenticated, service_role;
+
+-- A search left: every idea rejected, the round back to generating (AC-12, AC-13).
+select tests.ap_round(:'a', :'p_rej') as rj1 \gset
+select tests.ap_idea(:'rj1', null) as rj1_a \gset
+select tests.ap_idea(:'rj1', null) as rj1_b \gset
+select locked_until as rj1_lock from concierge.gift_rounds where id = :'rj1' \gset
+insert into concierge.round_sends (round_id, user_id, step)
+values (:'rj1', :'a', 'heads_up'), (:'rj1', :'a', 'reminder_1'), (:'rj1', :'a', 'hold:1:notice');
+select tests.act_as_server();
+select concierge.reject_round_ideas(:'rj1', :'a', :'rj1_lock', 'not_style', 'Not for her',
+  '[{"category": "avoid", "value": "Not their style: Gift"}]', true);
+select tests.reset_role();
+select is(
+  array[(select count(*) from concierge.rejections
+          where round_id = :'rj1' and idea_id in (:'rj1_a', :'rj1_b') and reason_code = 'not_style' and reason_text = 'Not for her')::text,
+        (select count(*) from concierge.gift_ideas where round_id = :'rj1' and status = 'rejected')::text,
+        (select status::text from concierge.gift_rounds where id = :'rj1'),
+        (select (next_action_at = now())::text from concierge.gift_rounds where id = :'rj1')],
+  array['2', '2', 'generating', 'true'],
+  'with a search left, reject saves a rejection per idea, marks them rejected and sends the round back to generating, due now');
+select is(
+  (select array[f.category, f.value, f.source, f.active::text, (f.user_id = :'a')::text]
+     from concierge.profile_facts f where f.person_id = :'p_rej'),
+  array['avoid', 'Not their style: Gift', 'rejection', 'true', 'true'],
+  'the rejection''s fact is saved as the buyer''s, with source rejection');
+select set_eq(
+  format($q$select step from concierge.round_sends where round_id = %L$q$, :'rj1'),
+  $$values ('heads_up@1'), ('reminder_1@1'), ('hold:1:notice')$$,
+  'the sent heads_up and reminder_1 become heads_up@1 and reminder_1@1');
+
+-- New ideas and a new heads-up, then a second rejection.
+update concierge.gift_rounds set status = 'awaiting_approval' where id = :'rj1';
+select tests.ap_idea(:'rj1', null);
+insert into concierge.round_sends (round_id, user_id, step) values (:'rj1', :'a', 'heads_up');
+select tests.act_as_server();
+select concierge.reject_round_ideas(:'rj1', :'a', :'rj1_lock', 'too_generic', null, '[]', true);
+select tests.reset_role();
+select set_eq(
+  format($q$select step from concierge.round_sends where round_id = %L$q$, :'rj1'),
+  $$values ('heads_up@1'), ('heads_up@2'), ('reminder_1@1'), ('hold:1:notice')$$,
+  'a second rejection makes @2');
+
+-- The runs rule (AC-13a): max runs, then one more after a new fact.
+select tests.ap_round(:'a', :'p_max') as rmax \gset
+select tests.rj_runs(:'rmax', :runs_max);
+select tests.ap_round(:'a', :'p_max') as rmax1 \gset
+select tests.rj_runs(:'rmax1', :runs_max + 1);
+select tests.ap_idea(:'rmax1', null) as rmax1_idea \gset
+select locked_until as rmax_lock from concierge.gift_rounds where id = :'rmax' \gset
+select locked_until as rmax1_lock from concierge.gift_rounds where id = :'rmax1' \gset
+select tests.act_as_server();
+select is(
+  array[concierge.runs_after_rejection(:'rmax', '[{"category": "avoid", "value": "Too generic: Gift"}]', now()),
+        concierge.runs_after_rejection(:'rmax', '[]', now())],
+  array[true, false],
+  'runs_after_rejection: after idea_round_runs_max runs, true with a new fact, false without');
+select is(
+  array[concierge.runs_after_rejection(:'rmax1', '[{"category": "avoid", "value": "Too generic: Gift"}]', now()),
+        concierge.runs_after_rejection(:'rmax1', '[]', now())],
+  array[false, false],
+  'after max + 1 runs, false either way');
+select concierge.reject_round_ideas(:'rmax1', :'a', :'rmax1_lock', 'too_pricey', null, '[]', false);
+select tests.reset_role();
+select is(
+  array[(select count(*) from concierge.rejections where round_id = :'rmax1' and idea_id is null and reason_code = 'too_pricey')::text,
+        (select count(*) from concierge.rejections where round_id = :'rmax1')::text,
+        (select status from concierge.gift_ideas where id = :'rmax1_idea'),
+        (select status::text from concierge.gift_rounds where id = :'rmax1')],
+  array['1', '1', 'proposed', 'awaiting_approval'],
+  'with no search left, reject saves one reason and leaves the ideas proposed and the round awaiting_approval');
+
+-- A fact that duplicates a turned-off one doesn't end up active (B3).
+insert into concierge.profile_facts (user_id, person_id, category, value, source, active, updated_at)
+values (:'a', :'p_max', 'avoid', 'Loud toys', 'note', false, now() - interval '1 day');
+select tests.act_as_server();
+select is(concierge.runs_after_rejection(:'rmax', '[{"category": "avoid", "value": "  loud   TOYS "}]', now()), false,
+  'at max runs, a fact that duplicates a turned-off one doesn''t count');
+select throws_ok(tests.rj_sql(:'rmax', :'a', :'rmax_lock', 'not_style', '[{"category": "avoid", "value": "loud toys"}]', true),
+  'P0001', 'reject_round_ideas: changed', '... and a reject expecting a search is changed');
+select tests.reset_role();
+select is(
+  array[(select count(*) from concierge.rejections where round_id = :'rmax')::text,
+        (select (updated_at < now())::text from concierge.profile_facts where person_id = :'p_max' and value = 'Loud toys')],
+  array['0', 'true'],
+  '... and saves nothing');
+
+-- The next tick isn't before the ship-by day (S1).
+select tests.ap_round(:'a', :'p_late') as rlate \gset
+select tests.ap_idea(:'rlate', null) as rlate_idea \gset
+select locked_until as rlate_lock from concierge.gift_rounds where id = :'rlate' \gset
+update concierge.gift_rounds set ship_by_deadline = (now() at time zone 'utc')::date + 2 where id = :'rlate';
+select tests.act_as_server();
+select is(concierge.runs_after_rejection(:'rlate', '[]', now()), true, 'two days before the ship-by day there''s a new search');
+select tests.reset_role();
+update concierge.gift_rounds set ship_by_deadline = (now() at time zone 'utc')::date + 1 where id = :'rlate';
+select tests.act_as_server();
+select is(concierge.runs_after_rejection(:'rlate', '[]', now()), false, 'the day before the ship-by day there''s no new search');
+select concierge.reject_round_ideas(:'rlate', :'a', :'rlate_lock', 'has_it', null, '[]', false);
+select tests.reset_role();
+select is(
+  array[(select count(*) from concierge.rejections where round_id = :'rlate' and idea_id is null)::text,
+        (select status from concierge.gift_ideas where id = :'rlate_idea'),
+        (select status::text from concierge.gift_rounds where id = :'rlate')],
+  array['1', 'proposed', 'awaiting_approval'],
+  '... so reject keeps the ideas');
+
+-- A selected idea whose order was cancelled (AC-12a).
+select tests.ap_round(:'a', :'p_sel') as rsel \gset
+select tests.ap_idea(:'rsel', null, 'selected') as rsel_idea \gset
+select tests.ap_idea(:'rsel', null) as rsel_other \gset
+insert into concierge.orders (user_id, round_id, idea_id, funding_mode, max_price_cents, fee_cents, status, ship_to, ship_city, ship_state)
+values (:'a', :'rsel', :'rsel_idea', 'zinc_wallet', 4500, 100, 'cancelled', 'recipient', 'Dayton', 'OH');
+select locked_until as rsel_lock from concierge.gift_rounds where id = :'rsel' \gset
+select tests.act_as_server();
+select concierge.reject_round_ideas(:'rsel', :'a', :'rsel_lock', 'too_generic', null, '[]', true);
+select ok(s.run_id is not null and s.refusal is null
+          and (select count(*) from concierge.gift_ideas where round_id = :'rsel' and status = 'rejected') = 2,
+  'a selected idea with a cancelled order is rejected too, so the next run starts')
+  from concierge.start_idea_run(:'a', :'p_sel', :'rsel', now()) s;
+select tests.reset_role();
+
+-- A fact that already exists (AC-12).
+select tests.ap_round(:'a', :'p_fact') as rfact \gset
+select tests.ap_idea(:'rfact', null);
+select locked_until as rfact_lock from concierge.gift_rounds where id = :'rfact' \gset
+insert into concierge.profile_facts (user_id, person_id, category, value, source, active, updated_at)
+values (:'a', :'p_fact', 'owns', 'Gift', 'note', false, now() - interval '1 day');
+select tests.act_as_server();
+select concierge.reject_round_ideas(:'rfact', :'a', :'rfact_lock', 'has_it', null, '[{"category": "owns", "value": "gift"}]', true);
+select tests.reset_role();
+select is(
+  (select array[count(*)::text, bool_and(updated_at = now())::text, bool_or(active)::text, min(source)]
+     from concierge.profile_facts where person_id = :'p_fact'),
+  array['1', 'true', 'false', 'note'],
+  'a fact that already exists has its updated_at bumped and stays inactive if it was off');
+
+-- Refusals.
+select tests.ap_round(:'a', :'p_rej') as rbad \gset
+select tests.ap_idea(:'rbad', null, 'selected') as rbad_idea \gset
+select locked_until as rbad_lock from concierge.gift_rounds where id = :'rbad' \gset
+select tests.act_as_server();
+select throws_ok(tests.rj_sql(:'rbad', :'a', :'rbad_lock', 'not_style', jsonb_build_array(jsonb_build_object('category', 'avoid', 'value', repeat('x', 501))), true),
+  '23514', null, 'a 501-character fact is refused');
+select throws_ok(tests.rj_sql(:'rbad', :'a', :'rbad_lock', 'too_ugly', '[]', true),
+  'P0001', 'reject_round_ideas: unknown reason', 'an unknown reason code is refused');
+select throws_ok(tests.rj_sql(:'rbad', :'a', :'rbad_lock', 'not_style', '[{"category": "interest", "value": "Dogs"}]', true),
+  'P0001', 'reject_round_ideas: fact category', 'a fact other than owns or avoid is refused');
+select throws_ok(tests.rj_sql(:'rbad', :'a', now(), 'not_style', '[]', true),
+  'P0001', 'reject_round_ideas: lease not held', 'without the lease reject is refused');
+select throws_ok(tests.rj_sql(:'rbad', :'stranger', :'rbad_lock', 'not_style', '[]', true),
+  'P0001', 'reject_round_ideas: lease not held', 'another user''s round is refused');
+select tests.reset_role();
+insert into concierge.orders (user_id, round_id, idea_id, funding_mode, max_price_cents, fee_cents, status, ship_to, ship_city, ship_state)
+values (:'a', :'rbad', :'rbad_idea', 'zinc_wallet', 4500, 100, 'placed', 'recipient', 'Dayton', 'OH');
+select tests.act_as_server();
+select throws_ok(tests.rj_sql(:'rbad', :'a', :'rbad_lock', 'not_style', '[]', true),
+  'P0001', 'reject_round_ideas: live order', 'a round with a live order can''t be rejected');
+select tests.reset_role();
+update concierge.gift_rounds set status = 'needs_attention' where id = :'rbad';
+select tests.act_as_server();
+select throws_ok(tests.rj_sql(:'rbad', :'a', :'rbad_lock', 'not_style', '[]', true),
+  'P0001', 'reject_round_ideas: not open', 'a needs_attention round can''t be rejected');
+select tests.reset_role();
+
+-- ─── An open round's budget (AC-9) ───────────────────────────────────────────
+
+select tests.ap_round(:'a', :'p_bud') as rbud \gset
+update concierge.gift_rounds set budget_cents = null where id = :'rbud';
+select tests.ap_idea(:'rbud', null) as rbud_hi \gset
+select tests.ap_idea(:'rbud', null) as rbud_lo \gset
+update concierge.gift_ideas set est_total_cents = 6000 where id = :'rbud_hi';
+update concierge.gift_ideas set est_total_cents = 4000 where id = :'rbud_lo';
+select locked_until as rbud_lock from concierge.gift_rounds where id = :'rbud' \gset
+select tests.act_as_server();
+select throws_ok(format($q$select concierge.set_round_budget(%L, %L, %L, 5000)$q$, :'rbud', :'a', now()),
+  'P0001', 'set_round_budget: lease not held', 'without the lease set_round_budget is refused');
+select throws_ok(format($q$select concierge.set_round_budget(%L, %L, %L, -1)$q$, :'rbud', :'a', :'rbud_lock'),
+  'P0001', 'set_round_budget: negative', 'set_round_budget refuses a negative amount');
+select concierge.set_round_budget(:'rbud', :'a', :'rbud_lock', 5000);
+select tests.reset_role();
+select is(
+  array[(select budget_cents from concierge.gift_rounds where id = :'rbud')::text,
+        (select over_budget from concierge.gift_ideas where id = :'rbud_hi')::text,
+        (select over_budget from concierge.gift_ideas where id = :'rbud_lo')::text],
+  array['5000', 'true', 'false'],
+  'set_round_budget sets the budget and marks ideas over it');
+select tests.act_as_server();
+select throws_ok(format($q$select concierge.set_round_budget(%L, %L, %L, 9000)$q$, :'rbud', :'a', :'rbud_lock'),
+  'P0001', 'set_round_budget: already set', 'set_round_budget refuses a round that already has a budget');
+select tests.reset_role();
+
+select ok(
+  not has_function_privilege('anon', 'concierge.reject_round_ideas(uuid, uuid, timestamptz, text, text, jsonb, boolean)', 'execute')
+  and not has_function_privilege('authenticated', 'concierge.reject_round_ideas(uuid, uuid, timestamptz, text, text, jsonb, boolean)', 'execute')
+  and not has_function_privilege('anon', 'concierge.runs_after_rejection(uuid, jsonb, timestamptz)', 'execute')
+  and not has_function_privilege('authenticated', 'concierge.runs_after_rejection(uuid, jsonb, timestamptz)', 'execute')
+  and not has_function_privilege('anon', 'concierge.set_round_budget(uuid, uuid, timestamptz, integer)', 'execute')
+  and not has_function_privilege('authenticated', 'concierge.set_round_budget(uuid, uuid, timestamptz, integer)', 'execute')
+  and has_function_privilege('service_role', 'concierge.reject_round_ideas(uuid, uuid, timestamptz, text, text, jsonb, boolean)', 'execute')
+  and has_function_privilege('service_role', 'concierge.runs_after_rejection(uuid, jsonb, timestamptz)', 'execute')
+  and has_function_privilege('service_role', 'concierge.set_round_budget(uuid, uuid, timestamptz, integer)', 'execute'),
+  'anon and authenticated can''t execute them');
 
 -- ─── After the link is cut (AC-30a, B2) ──────────────────────────────────────
 -- Last, since resetting the share token cuts every link to Mom's list.
