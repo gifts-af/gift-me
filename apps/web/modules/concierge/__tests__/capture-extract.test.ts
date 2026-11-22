@@ -116,6 +116,17 @@ describe("processCapture", () => {
     expect(calls[0].known).toEqual(["Already has: UCF pocket t-shirt (dark gray)", "Into: golf"]);
   });
 
+  it("strips contact details from the known facts sent to the model, not from the saved ones (ALL-134)", async () => {
+    capture();
+    store.facts.push({ id: "f1", personId: "p1", captureId: "old", category: "interest", value: "letters, write to 12 Elm St", active: true });
+    reply = async () => [fact("interest", "letters, write to 12 Elm St")];
+    const result = await processCapture(store, extract, "cap-1");
+    expect(calls[0].known).toEqual(["Into: letters, write to [contact removed]"]);
+    // The duplicate check still uses the real value, so the same fact isn't saved twice.
+    expect(result.facts).toEqual([]);
+    expect(store.facts[0].value).toBe("letters, write to 12 Elm St");
+  });
+
   it("tells the model nothing is recorded for a new person", async () => {
     capture();
     await processCapture(store, extract, "cap-1");

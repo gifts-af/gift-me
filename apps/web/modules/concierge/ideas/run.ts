@@ -9,6 +9,7 @@ import {
   onDemandOccasion,
   pickOffer,
   redactNames,
+  stripContactDetails,
   relationshipLabel,
   type CalendarDate,
   type DropReason,
@@ -416,10 +417,11 @@ async function brainstormPass(
   // After start, so a failure here is a counted, failed run (retried, then no_ideas) rather than a silent round.
   const prices = await gatewayPrices(deps.gateway, AI_MODELS.ideas, req.signal);
 
-  // ─── brainstorm ── names never reach the AI (AC-21), nor list gift titles (T42) ──
+  // ─── brainstorm ── names (AC-21), contact details (ALL-134) and list gift titles never reach the AI (T42) ──
   const names = inputs.names;
+  const forAi = (text: string) => stripContactDetails(redactNames(text, names));
   const relationship = relationshipLabel(inputs.relationship).toLowerCase();
-  const facts = inputs.facts.map((f) => redactNames(`${f.category}: ${f.value}${f.source === "capture" ? " (captured)" : ""}`, names));
+  const facts = inputs.facts.map((f) => forAi(`${f.category}: ${f.value}${f.source === "capture" ? " (captured)" : ""}`));
   // An AI call cut off mid-way may have spent, but no reply says how much: the run's cost is then unknown.
   const ai = async <T>(call: (signal: AbortSignal) => Promise<T>): Promise<T> => {
     const signal = AbortSignal.any([req.signal, AbortSignal.timeout(s.aiTimeoutMs)]);
@@ -441,7 +443,7 @@ async function brainstormPass(
         occasion: plan.occasion,
         budgetCents,
         facts,
-        avoidTitles: inputs.avoidTitles.map((title) => redactNames(title, names)),
+        avoidTitles: inputs.avoidTitles.map(forAi),
       },
       { candidates: s.candidates, maxSearches: s.maxSearches, maxTokens: s.aiMaxTokens, overBudgetPct: inputs.overBudgetPct, prices, signal },
     ),

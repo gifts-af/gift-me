@@ -129,6 +129,51 @@ export function redactNames(text: string, names: string[]): string {
   return re ? text.replace(re, "them") : text;
 }
 
+/** What stripContactDetails puts in place of an email, phone number or street address. */
+export const CONTACT_REMOVED = "[contact removed]";
+
+// What contact details look like: true constants (T23), not business values.
+const EMAIL = /[\p{L}\p{N}._%+'-]+@[\p{L}\p{N}-]+(?:\.[\p{L}\p{N}-]+)+/gu;
+// Digit groups split by single spaces, dots, dashes or parentheses, with an optional +country code.
+// A slash, comma or $ before it means a date or price, so the match never starts there.
+const PHONE_GROUP = String.raw`(?:\(\d{1,4}\)|\d{1,4})`;
+const PHONE = new RegExp(
+  String.raw`(?<![\p{L}\p{N}.,$/+-])(?:\+\d{1,3}[\s.-]?)?${PHONE_GROUP}(?:[\s.-]?${PHONE_GROUP}){1,5}(?![\p{L}\p{N}])`,
+  "gu",
+);
+const STREET_SUFFIX = "St|Street|Ave|Avenue|Rd|Road|Blvd|Boulevard|Dr|Drive|Ln|Lane|Ct|Court|Way|Pl|Place|Ter|Terrace|Pkwy|Parkway|Cir|Circle|Hwy|Highway|Sq|Square";
+// A house number, an optional direction, one to three capitalised (or 5th-style) words, a street
+// suffix, then an optional unit: "12 Elm St", "4500 N. Main Street Apt 3", "221B Baker Street".
+const STREET = new RegExp(
+  String.raw`(?<![\p{L}\p{N}])\d{1,6}[A-Za-z]?\s+(?:(?:[NSEW]\.?|North|South|East|West)\s+)?(?:(?:\p{Lu}[\p{L}'-]*|\d+(?:st|nd|rd|th))\s+){1,3}(?:${STREET_SUFFIX})(?![\p{L}\p{N}])\.?(?:,?\s+(?:Apt|Apartment|Unit|Suite|Ste)\.?\s*#?\s*[\p{L}\p{N}-]+|\s*#\s*[\p{L}\p{N}-]+)?`,
+  "gu",
+);
+const PO_BOX = /(?<![\p{L}\p{N}])P\.?\s?O\.?\s+Box\s+\d+(?![\p{L}\p{N}])/giu;
+
+/** A phone number has 10 to 15 digits and looks dialled: a +country code, parentheses, or two separators. */
+function looksLikePhone(match: string): boolean {
+  const digits = match.replace(/\D/g, "").length;
+  if (digits < 10 || digits > 15) return false;
+  return match.startsWith("+") || match.includes("(") || (match.match(/[\s.-]/g)?.length ?? 0) >= 2;
+}
+
+/**
+ * Replaces emails, phone numbers and street addresses with CONTACT_REMOVED before fact text goes to
+ * an AI (T42, ALL-134). Only what's sent is filtered; saved facts and what the buyer sees are unchanged.
+ *
+ * It prefers missing an odd address shape over mangling a normal fact: a street address needs a house
+ * number, capitalised street words and a known suffix ("12 Elm St"), so "12 elm st", "Route 66" and
+ * "Main Street" pass through. A phone needs 10 to 15 digits written the way people dial them, so
+ * prices, years, dates, sizes and model numbers stay. PO boxes are caught too.
+ */
+export function stripContactDetails(text: string): string {
+  return text
+    .replace(EMAIL, CONTACT_REMOVED)
+    .replace(PHONE, (m) => (looksLikePhone(m) ? CONTACT_REMOVED : m))
+    .replace(STREET, CONTACT_REMOVED)
+    .replace(PO_BOX, CONTACT_REMOVED);
+}
+
 export function mentionsName(text: string, names: string[]): boolean {
   const re = nameRegex(names);
   return re ? re.test(text) : false;

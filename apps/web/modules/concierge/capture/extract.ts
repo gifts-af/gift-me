@@ -1,4 +1,4 @@
-import { factLine, type FactCategory } from "@gifts-af/core";
+import { factLine, stripContactDetails, type FactCategory } from "@gifts-af/core";
 import type { CandidateFact, Extract } from "@/lib/ai/extract";
 import { isSensitive } from "@/lib/ai/sensitive";
 import { logEvent } from "@/lib/log";
@@ -78,7 +78,8 @@ export async function processCapture(store: CaptureStore, extract: Extract, capt
       text: capture.text,
       note: capture.note,
       screenshot,
-      known: known.map((f) => factLine(f.category, f.value)),
+      // Contact details stay out of what the model reads (T42, ALL-134); the duplicate check below uses the real values.
+      known: known.map((f) => stripContactDetails(factLine(f.category, f.value))),
     }, { timeoutMs: settings.timeoutMs });
     const { keep, blocked } = selectFacts(
       candidates,

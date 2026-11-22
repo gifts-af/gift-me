@@ -10,6 +10,8 @@ import {
   onDemandOccasion,
   pickOffer,
   redactNames,
+  stripContactDetails,
+  CONTACT_REMOVED,
   type JudgeContext,
   type ZincOffer,
 } from "./ideas";
@@ -147,6 +149,68 @@ describe("redactNames", () => {
   });
   it("ignores names under 2 letters", () => {
     expect(redactNames("A big day", ["A"])).toBe("A big day");
+  });
+});
+
+describe("stripContactDetails (ALL-134)", () => {
+  const X = CONTACT_REMOVED;
+  it.each([
+    ["write to bob@example.com", `write to ${X}`],
+    ["email Jane.Doe+gifts@mail.co.uk please", `email ${X} please`],
+    ["call (555) 123-4567", `call ${X}`],
+    ["call 555-123-4567 after 5", `call ${X} after 5`],
+    ["cell 555.123.4567", `cell ${X}`],
+    ["cell 555 123 4567", `cell ${X}`],
+    ["+1 555 123 4567", X],
+    ["+1-555-123-4567", X],
+    ["+1 (555) 123-4567 evenings", `${X} evenings`],
+    ["uk +44 20 7946 0958", `uk ${X}`],
+    ["paris +33 1 23 45 67 89", `paris ${X}`],
+    ["berlin +49 30 12345678", `berlin ${X}`],
+    ["loves letters, write to 12 Elm St", `loves letters, write to ${X}`],
+    ["lives at 4500 N. Main Street Apt 3, Springfield", `lives at ${X}, Springfield`],
+    ["send it to 221B Baker Street", `send it to ${X}`],
+    ["moved to 77 West 5th Ave.", `moved to ${X}`],
+    ["10 Downing Road, Suite 200", X],
+    ["mail to PO Box 12", `mail to ${X}`],
+    ["mail to P.O. Box 4410", `mail to ${X}`],
+    ["two: a@b.co and 555-123-4567", `two: ${X} and ${X}`],
+  ])("strips %j", (text, want) => {
+    expect(stripContactDetails(text)).toBe(want);
+  });
+
+  it.each([
+    "wants a $24.99 mug",
+    "spends about 25 dollars",
+    "graduates in 2026",
+    "shoe size 10.5",
+    "jeans 32x34",
+    "8 oz coffee bags",
+    "has an iPhone 15",
+    "plays PS5",
+    "turns 40 this year",
+    "has 3 kids",
+    "loves the band Route 66",
+    "drove Route 66 in 2019",
+    "shops on Main Street",
+    "anniversary 2026-11-22",
+    "birthday 11/22/1980",
+    "wedding on 22.11.2026",
+    "married 2001-2026",
+    "ran a 5K and 2 marathons",
+    "owns a 1967 Mustang",
+    "reads 3 books a week",
+    "a 3 hour drive away",
+    "Nike Air Max 90",
+    "budget $1,250.00 for 2 people",
+    "Into: Taylor Swift 1989",
+    "Already has: Kindle Paperwhite 11th gen",
+  ])("leaves %j alone", (text) => {
+    expect(stripContactDetails(text)).toBe(text);
+  });
+
+  it("misses a lowercase address rather than risk mangling normal facts (documented trade-off)", () => {
+    expect(stripContactDetails("write to 12 elm st")).toBe("write to 12 elm st");
   });
 });
 
