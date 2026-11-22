@@ -85,7 +85,8 @@ export type { AddressSaveResult, ImportAddress, ImportRow, PersonInput } from ".
 
 // The round engine (ALL-28): the daily tick and advancing one round. Ideas come from the
 // idea engine below (ALL-27), bound in lib/wiring.ts.
-export { advanceRound, runRoundJob, runTick, tellOrdered } from "./rounds/engine";
+export { advanceRound, runRoundJob, runTick } from "./rounds/engine";
+export { tellOrdered } from "./rounds/money-path";
 export type { AdvanceResult, EngineDeps, EngineZinc, GenerateIdeas, JobResult, TickSummary } from "./rounds/engine";
 export { planJobs } from "./rounds/fanout";
 export type { JobMessage, QueuedJob, SendJobs } from "./rounds/fanout";

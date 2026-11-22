@@ -1,5 +1,5 @@
 // A fake Zinc HTTP API for tests against the real local database (E5: fake only what we don't own).
-// Shared by purchase.test.ts and round-engine.test.ts.
+// Shared by purchase.test.ts and the round-engine-*.test.ts files.
 
 // ─── fake Zinc ──────────────────────────────────────────────────────────────
 
