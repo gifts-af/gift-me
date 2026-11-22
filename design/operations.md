@@ -264,6 +264,30 @@ Since T76 a busy morning is handled by many function calls instead of one. With 
 
 **Invalid messages.** A message that doesn't parse logs `round_job {result: "invalid"}` and is acknowledged, since a retry can't fix it. It isn't an alert.
 
+## Approving and fixing gifts (ALL-29)
+
+Spec and plan: [design/plans/ALL-29-approval.md](plans/ALL-29-approval.md). Decisions T78 to T83. Pages: `/rounds/<id>`, `/rounds/<id>/buy`, `/rounds/<id>/fix/<orderId>`; changes are server actions in `app/rounds/actions.ts`. No new commands, settings beyond the two in the idea engine table, or environment variables.
+
+**How we see it working** (Vercel logs, ids only, E6):
+
+| Event | Means |
+|---|---|
+| `order.approved` | A buyer approved and orders were placed (`orders` count) |
+| `order.replaced` | A failed gift was replaced through `replace_failed_order` (new order id, idea id, cap in cents) |
+| `order.requote` | A price re-check on the fix page or at buy time: outcome and lookups made |
+| `round.ideas_rejected` | "None of these" with a new search to come: reason code, ideas rejected |
+| `round.rejection_noted` | "None of these" with no search left: only the reason was saved, the ideas stay buyable |
+| `round.budget_set` | A budget typed on an open round with none (cents) |
+| `ideas.list_gift` | One list gift looked up in an idea run: store route and outcome (qualified, unsupported, over budget, stopped, ...) |
+
+None of these is an alert. Rejected-then-regenerated rounds show up as `ideas.run_started` on the next tick.
+
+**Turning it off:** `zinc_ordering_enabled` = 0 stops all buying (the pages still open and say so); `round_engine_enabled` = 0 stops new rounds and emails; `idea_engine_enabled` = 0 stops idea runs, list lookups included; or roll back in Vercel. The migration only adds things and tightens guards, so the old code runs on it (E7).
+
+**Unused until a later contract migration:** the database function `reapprove_order` (replaced by `replace_failed_order`, T79) and the `excluded_products` helper (replaced by `concierge.order_is_given` and `excluded_offers`). Both stay so a Vercel rollback still works.
+
+**Known gap (needs a ticket):** adding gifts to a person's list doesn't wake a round waiting after `no_ideas`; only a new fact does (T80).
+
 ## Gift idea engine (ALL-27)
 
 The engine finds gift ideas for a round and on demand (a person's Gift ideas screen). Spec and plan: [design/plans/ALL-27-idea-engine.md](plans/ALL-27-idea-engine.md). **It ships off on every environment** (`idea_engine_enabled` = 0) until Jim allows spending, because every run costs real money.
@@ -290,6 +314,8 @@ The engine finds gift ideas for a round and on demand (a person's Gift ideas scr
 | `idea_ai_max_tokens` | 6000 | Output limit per AI call, which bounds the cost of the call in flight |
 | `idea_tax_estimate_pct` | 8 | Flat tax estimate (needs no address) |
 | `idea_run_estimate_cents` | 40 | The usual cost shown in the money notice |
+| `idea_list_lookups_max` | 10 | The most Zinc lookups of a person's list gifts in one run (ALL-29, T80). The list pass also stops once `idea_keep_max` qualify |
+| `idea_list_min` | 3 | With this many list gifts qualifying the AI brainstorm doesn't run; fewer and it adds ideas up to `idea_keep_max` (ALL-29, T80) |
 | `idea_run_max_cents` | 100 | The most one run may spend (AI plus Zinc), shown in the notice. A run stops resolving at this figure and skips ranking if its worst case wouldn't fit (`stopped: cost_cap`) |
 | `idea_round_runs_max` | 2 | Runs a round may use before it stops and emails the buyer. A new fact allows one more |
 | `idea_rounds_per_tick` | 1 | Most rounds that make ideas in one tick. Raise it only with timings from `ideas.run` events (AC-28) |
