@@ -45,7 +45,7 @@ Don't change hosted systems during install: no `pnpm db:push:*`, no Supabase CLI
 | `apps/web/` | The one web app (Next.js). Products live in `modules/lists` and `modules/concierge`; see its [README](../apps/web/README.md) | Lists live; concierge from Wave 2 |
 | `apps/extension/` | Chrome capture extension: add gifts to your list or save what's on screen to a person. How to build and load it is in its [README](../apps/extension/README.md) | On the Chrome Web Store, unlisted (ALL-65) |
 | `packages/core/` | Pure shared logic (dates, deadlines, budgets) and database types | W1-5 |
-| `supabase/` | Database migrations and local Supabase settings (`config.toml`) | Lists tables today |
+| `supabase/` | Database migrations and local Supabase settings (`config.toml`). The [database map](https://claude.ai/artifact/9uCRGGJL5Tu4X53VCYV3Rk) draws every table and how they connect | 33 tables in four schemas |
 | `scripts/` | Repo tooling, such as `dev-check.mjs` (the local setup check) | Done |
 | `spikes/` | Throwaway Wave 1 experiments (Zinc, AI, email) | Reference only |
 

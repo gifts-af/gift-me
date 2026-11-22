@@ -133,6 +133,8 @@ Tooling: pnpm workspaces, Vitest for tests, ESLint and Prettier, and GitHub Acti
 
 All tables have `id uuid`, `created_at`, and `updated_at`. Accounts (`profiles`) and `people` are shared by every product and live in `public`. The rest belong to the concierge and live in the `concierge` schema (§2.2, T19). User-owned tables have `user_id` with RLS: `user_id = auth.uid()`.
 
+A diagram of every table and how they connect, with each column listed, is the [database map](https://claude.ai/artifact/9uCRGGJL5Tu4X53VCYV3Rk) (read from the local database on 2026-11-22). The migrations stay the source; redraw the map when tables or foreign keys change.
+
 | Table | Key fields | Notes |
 |---|---|---|
 | `profiles` | user_id, display_name, email, phone, timezone, notification prefs, over_budget_pct (default 15), **funding_mode** (`zinc_wallet`; `connect` later), zinc_api_key (in Vault), zinc_webhook_secret (in Vault), zinc_connected_at, auto_topup_on (bool, last known) | One row per user. Push subscriptions are added with W5-4 if push goes ahead. Funding fields: §6.5a (T16). |
