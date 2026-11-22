@@ -155,8 +155,9 @@ const SECOND_MS = 1000;
 
 /**
  * Longest a run can take. The brainstorm: AI and Zinc each get one retry, and its lookups run in
- * parallel. The list pass (ALL-29): its lookups start at the rate limit, plus one Zinc timeout for
- * the last reply. The photo calls run in parallel after that: one more Zinc timeout.
+ * parallel. The list pass (ALL-29): its lookups start at the rate limit, plus two Zinc timeouts
+ * for the last gift, whose details lookup Zinc may reject before its store check runs. The photo
+ * calls run in parallel after that: one more Zinc timeout.
  */
 export function ideaRunWorstMs(
   aiTimeoutMs: number,
@@ -164,7 +165,7 @@ export function ideaRunWorstMs(
   listLookupsMax: number,
   zincRequestsPerSecond: number,
 ): number {
-  const listPassMs = Math.ceil((listLookupsMax * SECOND_MS) / zincRequestsPerSecond) + zincTimeoutMs;
+  const listPassMs = Math.ceil((listLookupsMax * SECOND_MS) / zincRequestsPerSecond) + 2 * zincTimeoutMs;
   return 2 * aiTimeoutMs + 2 * zincTimeoutMs + listPassMs + zincTimeoutMs;
 }
 

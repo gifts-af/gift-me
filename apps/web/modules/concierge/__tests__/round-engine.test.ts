@@ -842,7 +842,7 @@ describe("the idea pass (ALL-27)", () => {
 
   it("no run starts when the time left is under the worst case", async () => {
     const h = harness();
-    // The worst case is 2 × 60s + 2 × 15s, plus 1s + 15s for the list pass and 15s for photos = 181s; the tick has 100s.
+    // The worst case is 2 × 60s + 2 × 15s, plus 1s + 2 × 15s for the list pass and 15s for photos = 196s; the tick has 100s.
     h.store.settings.set("tick_deadline_ms", 100_000);
     h.today = "2027-02-11";
     h.store.candidateRows = [{ userId: USER, personId: PERSON, occasionId: OCCASION, rule, budgetCents: 5000 }];

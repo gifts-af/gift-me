@@ -842,6 +842,23 @@ describe("runIdeas: list gifts first", () => {
     expect(store.finished).toEqual([{ outcome: "saved", cost: 2 }]);
   });
 
+  it("a details lookup Zinc rejects, then the store check, is charged twice and counts twice toward idea_list_lookups_max", async () => {
+    // Etsy listings with no details reply (404, rejected): each falls back to the store check.
+    const etsy = (i: number) => gift(i, { url: `https://www.etsy.com/listing/${i}/mug`, asin: null, listPriceCents: 1500 });
+    const gifts = [etsy(1), etsy(2)];
+    for (const g of gifts) zinc.orderable.add(g.url);
+    store.s = settings({ listLookupsMax: 3 });
+    store.in = inputs({ facts: [], round: ROUND, listGifts: gifts });
+
+    expect(await runIdeas(roundReq(), deps())).toEqual({ status: "saved", count: 1 });
+
+    // Gift 1: details, then the check (2). Gift 2: details (3); its check would be the 4th.
+    // The two gifts' lookups run side by side, so only the set is fixed.
+    expect(zinc.calls.map((c) => `${c.kind} ${c.target}`).sort()).toEqual(["check https://www.etsy.com/listing/1/mug", "details 1", "details 2"]);
+    expect(store.saved.map((i) => i.listItemId)).toEqual(["item-1"]);
+    expect(store.finished).toEqual([{ outcome: "saved", cost: 3 }]);
+  });
+
   it("a list gift already given or rejected as a product isn't offered", async () => {
     store.in = inputs({ facts: [], round: ROUND, listGifts: listWorld(2, zinc), excluded: ["L1"] });
     expect(await runIdeas(roundReq(), deps())).toEqual({ status: "saved", count: 1 });

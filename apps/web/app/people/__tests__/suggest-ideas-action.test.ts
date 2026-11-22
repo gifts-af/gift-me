@@ -51,8 +51,9 @@ describe("suggestIdeasAction", () => {
     expect(req).toMatchObject({ userId: "u1", personId: ID, roundId: null });
     expect(req.signal).toBeInstanceOf(AbortSignal);
     expect(deps).toBe(DEPS);
-    // 2 × 60s + 2 × 15s, plus the list pass (10 lookups at 10 a second, then 15s) and the photos (15s).
-    expect(timeout).toHaveBeenCalledWith(181000);
+    // 2 × 60s + 2 × 15s, plus the list pass (10 lookups at 10 a second, then 2 × 15s for a
+    // rejected details lookup and its store check) and the photos (15s).
+    expect(timeout).toHaveBeenCalledWith(196000);
     expect(revalidatePath).toHaveBeenCalledWith(`/people/${ID}/ideas`);
     expect(revalidatePath).toHaveBeenCalledWith(`/people/${ID}`);
     timeout.mockRestore();
