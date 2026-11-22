@@ -231,6 +231,16 @@ describe("handleInbound: filing", () => {
     expect(captures.rows[0].title).toBe("Fwd: [email]");
   });
 
+  it("a phone or address in the email body and subject never reaches the AI (T42, ALL-134)", async () => {
+    const text = "Dad wants a fly rod, send to 12 Elm St or call 555-123-4567";
+    expect(await receive("e1", email({ subject: "Dad: 07700 900123", text }))).toBe("filed");
+    const sentToAi = extract.mock.calls[0][0];
+    expect(sentToAi.text).toBe("Dad wants a fly rod, send to [contact removed] or call [contact removed]");
+    expect(sentToAi.title).toBe("Dad: [contact removed]");
+    // Only what goes to the AI is filtered; the saved note is the buyer's.
+    expect(captures.rows[0].text).toBe(text);
+  });
+
   it("cuts the text to the capture limit", async () => {
     captures.limitValues = { ...captures.limitValues, textMaxChars: 10 };
     await receive("e1", email({ text: "Dad wants a new fly rod" }));

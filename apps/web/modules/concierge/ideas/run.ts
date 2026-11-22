@@ -419,7 +419,8 @@ async function brainstormPass(
 
   // ─── brainstorm ── names (AC-21), contact details (ALL-134) and list gift titles never reach the AI (T42) ──
   const names = inputs.names;
-  const forAi = (text: string) => stripContactDetails(redactNames(text, names));
+  // Contacts first: "12 Harris Rd" would become "12 them Rd" if names went first.
+  const forAi = (text: string) => redactNames(stripContactDetails(text), names);
   const relationship = relationshipLabel(inputs.relationship).toLowerCase();
   const facts = inputs.facts.map((f) => forAi(`${f.category}: ${f.value}${f.source === "capture" ? " (captured)" : ""}`));
   // An AI call cut off mid-way may have spent, but no reply says how much: the run's cost is then unknown.

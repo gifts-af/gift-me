@@ -605,6 +605,16 @@ describe("runIdeas: privacy and safety", () => {
     expect(store.in!.facts[0].value).toBe("loves letters, write to 12 Elm St");
   });
 
+  it("an address on a street named like the person is still stripped: contacts go before names (ALL-134)", async () => {
+    world([2000, 2000], { zinc, gateway });
+    store.in = inputs({ names: ["Harris"], facts: [fact("write to 12 Harris Rd")] });
+    await runIdeas(req(), deps());
+    for (const b of gateway.bodies) {
+      expect(b.content).toContain("write to [contact removed]");
+      expect(b.content).not.toContain("12 them");
+    }
+  });
+
   it("ideas.run carries no contact text (E6, ALL-134)", async () => {
     world([2000, 2000], { zinc, gateway });
     store.in = inputs({ facts: [fact("write to 12 Elm St, bob@example.com, 555-123-4567")] });

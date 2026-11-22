@@ -41,6 +41,7 @@ const read = <T>(file: string): T => JSON.parse(readFileSync(path.join(fixtures,
 const expected = read<Record<string, Expected>>("expected.json");
 const captures = read<Capture[]>("captures.json");
 const screens = read<Screen[]>("screens/manifest.json");
+// Calls the extractor directly, skipping processCapture's contact stripping (ALL-134): dev-only, on fixture pages.
 const extract = createExtractor(AI_MODELS.extraction);
 
 type Row = { id: string; found: number; missing: string; forbidden: string; secs: string };

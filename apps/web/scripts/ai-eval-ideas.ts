@@ -1,5 +1,6 @@
 // The `--ideas` mode of `pnpm ai:eval` (ALL-27, AC-22). SPENDS MONEY: it calls the real AI Gateway
 // and Zinc. Run by hand with Jim's go-ahead, never in CI. Called from ai-eval.ts.
+// Contact stripping (ALL-134) isn't skipped here: the fixture facts go through runIdeas, which strips them.
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import {
