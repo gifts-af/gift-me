@@ -6,11 +6,14 @@ import { call, ZincError, type ZincHttp } from "./client";
 
 // Each hit is checked on its own, like offers: a bad hit is dropped and never fails the search.
 // The search price is only a hint (offers set the real one), so one we can't read is kept as null.
-const hit = z.object({ product_id: z.string(), title: z.string(), price: z.unknown().optional() });
+// `image` is the hit's photo (Zinc's search reference, checked 2026-11-22); only an https one is kept.
+const hit = z.object({ product_id: z.string(), title: z.string(), price: z.unknown().optional(), image: z.unknown().optional() });
 const searchReply = z
   .object({ results: z.array(z.unknown()).optional(), products: z.array(z.unknown()).optional() })
   .refine((r) => r.results !== undefined || r.products !== undefined);
 const cents = z.number().int().min(0);
+// https only: a photo is shown on our pages.
+const webUrl = z.string().regex(/^https:\/\//i);
 
 export async function searchProducts(h: ZincHttp, key: string, query: string, signal: AbortSignal): Promise<ZincHit[]> {
   const r = await call(h, "GET", "/products/search", searchReply, { key, query: { retailer: "amazon", query }, signal });
@@ -19,7 +22,13 @@ export async function searchProducts(h: ZincHttp, key: string, query: string, si
     const p = hit.safeParse(raw);
     if (!p.success) continue;
     const price = cents.safeParse(p.data.price);
-    out.push({ productId: p.data.product_id, title: p.data.title, priceCents: price.success ? price.data : null });
+    const image = webUrl.safeParse(p.data.image);
+    out.push({
+      productId: p.data.product_id,
+      title: p.data.title,
+      priceCents: price.success ? price.data : null,
+      ...(image.success ? { imageUrl: image.data } : {}),
+    });
   }
   return out;
 }
@@ -98,8 +107,6 @@ const detailsReply = z.object({
   // [Verify] Zinc's docs list no delivery-days field on product details; read one if it ever appears.
   delivery_days: z.unknown().optional(),
 });
-// https only: the photo is shown on our pages.
-const webUrl = z.string().regex(/^https:\/\//i);
 const deliveryDays = z.object({ max: days });
 
 export type ZincProductDetails = {

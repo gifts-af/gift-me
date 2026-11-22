@@ -65,6 +65,8 @@ function harness(opts: { hasAddress?: boolean; candidateFrom?: CalendarDate; zin
   store.settings.set("idea_rounds_per_tick", 5);
   store.settings.set("idea_ai_timeout_ms", 60_000);
   store.settings.set("idea_zinc_timeout_ms", 15_000);
+  store.settings.set("idea_list_lookups_max", 10);
+  store.settings.set("zinc_requests_per_second", 10);
   store.schedule = SCHEDULE;
   store.people.set(PERSON, { name: NAME, hasAddress: opts.hasAddress ?? true });
   store.occasionKinds.set(OCCASION, "birthday");
@@ -822,7 +824,7 @@ describe("the idea pass (ALL-27)", () => {
 
   it("no run starts when the time left is under the worst case", async () => {
     const h = harness();
-    // The worst case is 2 × 60s + 2 × 15s = 150s; the tick has 100s.
+    // The worst case is 2 × 60s + 2 × 15s, plus 1s + 15s for the list pass and 15s for photos = 181s; the tick has 100s.
     h.store.settings.set("tick_deadline_ms", 100_000);
     h.today = "2027-02-11";
     h.store.candidateRows = [{ userId: USER, personId: PERSON, occasionId: OCCASION, rule, budgetCents: 5000 }];

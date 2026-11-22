@@ -16,7 +16,8 @@ vi.mock("next/navigation", () => ({ redirect: vi.fn() }));
 vi.mock("@/lib/today", () => ({ todayForRequest: async () => "2026-11-01" }));
 vi.mock("@/app/settings/zinc-deps", () => ({ placeAddressHeld: async () => {}, onDemandIdeaDeps }));
 vi.mock("@/lib/app-settings", () => ({
-  appSettingInt: async (key: string) => ({ idea_ai_timeout_ms: 60000, idea_zinc_timeout_ms: 15000 })[key],
+  appSettingInt: async (key: string) =>
+    ({ idea_ai_timeout_ms: 60000, idea_zinc_timeout_ms: 15000, idea_list_lookups_max: 10, zinc_requests_per_second: 10 })[key],
 }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ auth: { getClaims: async () => ({ data: claims.sub ? { claims: { sub: claims.sub } } : null }) } }),
@@ -50,7 +51,8 @@ describe("suggestIdeasAction", () => {
     expect(req).toMatchObject({ userId: "u1", personId: ID, roundId: null });
     expect(req.signal).toBeInstanceOf(AbortSignal);
     expect(deps).toBe(DEPS);
-    expect(timeout).toHaveBeenCalledWith(150000);
+    // 2 × 60s + 2 × 15s, plus the list pass (10 lookups at 10 a second, then 15s) and the photos (15s).
+    expect(timeout).toHaveBeenCalledWith(181000);
     expect(revalidatePath).toHaveBeenCalledWith(`/people/${ID}/ideas`);
     expect(revalidatePath).toHaveBeenCalledWith(`/people/${ID}`);
     timeout.mockRestore();

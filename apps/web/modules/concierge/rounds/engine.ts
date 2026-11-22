@@ -1143,13 +1143,15 @@ async function ideaPass(
   let worstMs: number;
   let perTick: number;
   try {
-    const [rounds, aiMs, zincMs] = await Promise.all([
+    const [rounds, aiMs, zincMs, listLookupsMax, zincPerSecond] = await Promise.all([
       maxRuns ?? store.setting("idea_rounds_per_tick"),
       store.setting("idea_ai_timeout_ms"),
       store.setting("idea_zinc_timeout_ms"),
+      store.setting("idea_list_lookups_max"),
+      store.setting("zinc_requests_per_second"),
     ]);
     perTick = rounds;
-    worstMs = ideaRunWorstMs(aiMs, zincMs);
+    worstMs = ideaRunWorstMs(aiMs, zincMs, listLookupsMax, zincPerSecond);
   } catch (err) {
     logEvent("ideas.pass_failed", { ...errorFields(err) });
     for (const round of turns) await releaseQuietly(round, deps);

@@ -67,6 +67,23 @@ describe("searchProducts", () => {
     ]);
   });
 
+  it("reads a hit's https photo from image, and never an http one", async () => {
+    const { h } = fake([
+      {
+        status: 200,
+        body: {
+          results: [
+            { product_id: "B01", title: "Tea Kettle", price: 3500, image: "https://m.media-amazon.com/images/I/k.jpg" },
+            { product_id: "B02", title: "Mug", image: "http://example.test/m.jpg" },
+            { product_id: "B03", title: "Cup", image: null },
+          ],
+        },
+      },
+    ]);
+    const hits = await searchProducts(h, KEY, "tea kettle", signal());
+    expect(hits.map((x) => x.imageUrl ?? null)).toEqual(["https://m.media-amazon.com/images/I/k.jpg", null, null]);
+  });
+
   it("also reads the list under products", async () => {
     const { h } = fake([{ status: 200, body: { products: [{ product_id: "B01", title: "Tea Kettle", price: 3500 }] } }]);
     expect(await searchProducts(h, KEY, "x", signal())).toEqual([{ productId: "B01", title: "Tea Kettle", priceCents: 3500 }]);
