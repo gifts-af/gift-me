@@ -75,7 +75,8 @@ export type PersonDetail = PersonCard & {
   address: PersonAddress;
 };
 
-export type AddResult = { ok: true; id: string } | { ok: false; error: string };
+/** `existingId`: the person already added from this list link (ALL-123); the form opens them. */
+export type AddResult = { ok: true; id: string } | { ok: false; error: string; existingId?: string };
 
 // The largest value of the database's integer column: a true constant.
 
@@ -184,7 +185,23 @@ function personAddress(stored: StoredAddress | null, shared: { city: string; sta
   return { kind: "own", address, problems: checked.ok ? {} : checked.errors };
 }
 
-export async function addPerson(store: PeopleStore, input: PersonInput): Promise<AddResult> {
+const LINK_NO_LONGER_WORKS = "This list link no longer works. Ask them for a new one.";
+
+/** The already-linked person's id when add_person refused with list_has_person (ALL-123). */
+function listHasPerson(e: unknown): string | null {
+  if (errorCode(e) !== "P0001" || !(e instanceof Error) || !e.message.includes("list_has_person")) return null;
+  const details = (e as { details?: unknown }).details;
+  return typeof details === "string" && isUuid(details) ? details : null;
+}
+
+/**
+ * Adds a person. With a share token (from a shared list's link, ALL-123),
+ * the person is linked to that list in the same transaction, so two Saves at
+ * once make one person, never two (T18).
+ */
+export async function addPerson(store: PeopleStore, input: PersonInput, shareToken?: string): Promise<AddResult> {
+  // A malformed token would fail Postgres's uuid cast; it's just a dead link.
+  if (shareToken !== undefined && !isUuid(shareToken)) return { ok: false, error: LINK_NO_LONGER_WORKS };
   const kinds = startingOccasions(input.relationship, {
     birthday: input.birthday !== null,
     anniversary: input.anniversary !== null,
@@ -197,10 +214,25 @@ export async function addPerson(store: PeopleStore, input: PersonInput): Promise
       birthday: input.birthday,
       birthYear: input.birthYear,
       anniversary: input.anniversary,
+      ...(shareToken !== undefined && { shareToken }),
     });
+    if (shareToken !== undefined) {
+      // list_id isn't returned by add_person; the person id finds the link.
+      const userId = await store.userId().catch(() => null);
+      logEvent("people.added_from_share", { user_id: userId, person_id: id });
+    }
     return { ok: true, id };
   } catch (e) {
-    console.error("adding a person failed", e);
+    if (shareToken !== undefined) {
+      const existingId = listHasPerson(e);
+      if (existingId) {
+        const existing = await store.person(existingId).catch(() => null);
+        return { ok: false, error: `${existing?.name ?? "This person"} is already in your people.`, existingId };
+      }
+      if (errorCode(e) === "P0002") return { ok: false, error: LINK_NO_LONGER_WORKS };
+      if (errorCode(e) === "22023") return { ok: false, error: "That's your own list." };
+    }
+    logEvent("person.add_failed", { from_share: shareToken !== undefined, ...errorFields(e) });
     return { ok: false, error: "That person couldn't be saved. Try again." };
   }
 }

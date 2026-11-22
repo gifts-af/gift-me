@@ -9,6 +9,8 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { localStack } from "../../../test/local-db";
 
 let current: SupabaseClient | null = null;
+// The action reads list_max_items through lib/app-settings, which is server-only.
+vi.mock("server-only", () => ({}));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => current }));
 
 const { saveList } = await import("../actions/lists");
@@ -110,6 +112,45 @@ describe.skipIf(!dbUp)("saving My list with its version", () => {
     const stale = events().find((e) => e?.event === "list_save_stale");
     expect(stale).toEqual({ event: "list_save_stale", at: expect.any(String), list_id: first.listId, user_id: me.id });
     expect((await getMyList())?.items.map((g) => g.name)).toEqual(["Kettle", "Scarf"]);
+  });
+
+  // ALL-142: the limit is the list_max_items setting, the same one the database enforces.
+  it("refuses more gifts than list_max_items, naming the limit", async () => {
+    const { data } = await admin!.schema("concierge").from("app_settings").select("value").eq("key", "list_max_items").single();
+    const limit = Number(data!.value);
+    const me = await signedInClient();
+    current = me.db;
+    const items = Array.from({ length: limit + 1 }, (_, i) => gift(`Gift ${i}`));
+    const result = await saveList({ listId: null, version: null, items });
+    expect(result).toEqual({ ok: false, error: `A list can hold up to ${limit} gifts.` });
+  });
+
+  // ALL-142: the database only takes https photos (or local storage), so an
+  // http one is moved to https and anything else is dropped before saving.
+  it("saves photo links as https, keeps local storage, and drops the rest", async () => {
+    const me = await signedInClient();
+    current = me.db;
+    const withPhoto = (name: string, imageUrl: string) => ({ ...gift(name), imageUrl });
+    const result = await saveList({
+      listId: null,
+      version: null,
+      items: [
+        withPhoto("Plain", "http://cdn.example.com/a.jpg"),
+        withPhoto("Local", "http://127.0.0.1:54321/storage/v1/object/public/list-photos/x.jpg"),
+        withPhoto("Script", "javascript:alert(1)"),
+        withPhoto("Secure", "https://cdn.example.com/b.jpg"),
+        withPhoto("Shouty", "HTTP://LOCALHOST:3000/x.jpg"),
+      ],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.items.map((g) => [g.name, g.imageUrl])).toEqual([
+      ["Plain", "https://cdn.example.com/a.jpg"],
+      ["Local", "http://127.0.0.1:54321/storage/v1/object/public/list-photos/x.jpg"],
+      ["Script", null],
+      ["Secure", "https://cdn.example.com/b.jpg"],
+      ["Shouty", "http://localhost:3000/x.jpg"],
+    ]);
   });
 
   it("refuses a second list from a tab that opened before the first existed", async () => {

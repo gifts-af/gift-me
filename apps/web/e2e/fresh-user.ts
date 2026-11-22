@@ -3,7 +3,8 @@ import { localSupabase } from "./local-supabase";
 
 // A brand-new account for one test, for anything that depends on an empty
 // list or no people. The shared test users race, because specs run in parallel.
-export async function createFreshUser(): Promise<{ email: string; password: string }> {
+// `displayName` sets the profile name, as sign-up's Name field does.
+export async function createFreshUser(displayName?: string): Promise<{ email: string; password: string }> {
   const { url, serviceRoleKey } = localSupabase();
   const user = { email: `e2e-${randomUUID()}@example.test`, password: "e2e-local-only-password" };
   const res = await fetch(`${url}/auth/v1/admin/users`, {
@@ -13,7 +14,11 @@ export async function createFreshUser(): Promise<{ email: string; password: stri
       Authorization: `Bearer ${serviceRoleKey}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ ...user, email_confirm: true }),
+    body: JSON.stringify({
+      ...user,
+      email_confirm: true,
+      ...(displayName ? { user_metadata: { display_name: displayName } } : {}),
+    }),
   });
   if (!res.ok) throw new Error(`Couldn't create a fresh user: ${res.status} ${await res.text()}`);
   return user;

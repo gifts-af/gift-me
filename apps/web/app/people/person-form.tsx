@@ -43,8 +43,12 @@ type Props = {
   userId: string;
   maxUploadBytes: number;
   px: number;
-  /** Where to go once saved. */
+  /** Where to go once saved. Added from a list link, the new person's page instead. */
   doneHref: string;
+  /** The list owner's name, from a list link (ALL-123). */
+  initialName?: string;
+  /** A shared list's token (ALL-123): sent as `list`, so the save also links that list. */
+  shareToken?: string;
   /** Test seams, same as PhotoPicker. */
   storage?: PhotoStorage;
   resize?: (file: File, px: number) => Promise<Blob>;
@@ -130,7 +134,7 @@ export function PersonForm(props: Props) {
   const router = useRouter();
   const input = useRef<HTMLInputElement>(null);
   const hydrated = useHydrated();
-  const [name, setName] = useState("");
+  const [name, setName] = useState(props.initialName ?? "");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [relationship, setRelationship] = useState("");
   const [bMonth, setBMonth] = useState("");
@@ -193,6 +197,12 @@ export function PersonForm(props: Props) {
     }
     if (!result.ok) {
       setError(result.error);
+      // Already added from this list (ALL-123): open them, and stay busy so
+      // a second tap can't try again on the way.
+      if (result.existingId) {
+        router.push(`/people/${result.existingId}`);
+        return;
+      }
       setBusy(false);
       return;
     }
@@ -223,11 +233,20 @@ export function PersonForm(props: Props) {
     }
     // The person exists either way. A failed photo goes to their page, where
     // a note and the picker let the user try again.
-    router.push(photoFailed ? `/people/${newId}?photo=failed` : props.doneHref);
+    // Added from a list link, the new person's page shows the link (ALL-123).
+    router.push(photoFailed ? `/people/${newId}?photo=failed` : props.shareToken ? `/people/${newId}` : props.doneHref);
   }
 
   return (
     <form onSubmit={onSubmit} className="flex flex-col gap-6" noValidate>
+      {props.shareToken && (
+        <>
+          <input type="hidden" name="list" value={props.shareToken} />
+          <p className="rounded-xl bg-muted px-4 py-3 text-[13px] text-muted-foreground">
+            If a gift for them is waiting on an address, it will ship to this list&apos;s owner.
+          </p>
+        </>
+      )}
       <section aria-label="Who they are" className={CARD_CLASS}>
         <div className="flex flex-col items-center gap-1">
           <input

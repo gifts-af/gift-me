@@ -3,7 +3,17 @@
 // boundaries/entry-point enforces it.
 export { default as GiftApp, GiftAppSkeleton } from "./components/gift-app";
 export { default as SharedList } from "./components/shared-list";
-export { getMyList, getMyListSummary, getSharedList } from "./lib/lists";
+export {
+  getMyList,
+  getMyListSummary,
+  getPersonShareToken,
+  getSharedList,
+  getSharePreview,
+  UUID_PATTERN,
+} from "./lib/lists";
+// Link or unlink a person's list (ALL-123). Plain functions: the share page's
+// server actions call them and log the events.
+export { linkUnlinkedPerson, unlinkPerson } from "./lib/person-link";
 export type { MyList, SharedList as SharedListData } from "./lib/lists";
 // The close route drops gifts held for Undo when a tab goes away (ALL-127).
 export { removeGifts } from "./lib/save-list";

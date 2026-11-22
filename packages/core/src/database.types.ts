@@ -1151,6 +1151,7 @@ export type Database = {
           p_recipient_first_name?: string;
           p_recipient_last_name?: string;
           p_relationship: string;
+          p_share_token?: string;
           p_state?: string;
           p_zip?: string;
         };
@@ -2133,6 +2134,7 @@ export type Database = {
           outcome: string;
         }[];
       };
+      check_item_limit: { Args: { p_list_ids: string[] }; Returns: undefined };
       claim_for_order: {
         Args: { p_item_id: string; p_user_id: string };
         Returns: boolean;
@@ -2150,6 +2152,7 @@ export type Database = {
         Returns: undefined;
       };
       get_shared_list: { Args: { p_token: string }; Returns: Json };
+      is_allowed_image_url: { Args: { p_url: string }; Returns: boolean };
       is_amazon_host: { Args: { p_host: string }; Returns: boolean };
       item_shared: {
         Args: { p_item_id: string; p_person_id: string };
@@ -2159,16 +2162,17 @@ export type Database = {
         Args: { p_person_id: string; p_token: string };
         Returns: undefined;
       };
+      link_unlinked_person: {
+        Args: { p_person_id: string; p_token: string };
+        Returns: Json;
+      };
       match_key: { Args: { p_asin: string; p_url: string }; Returns: string };
       person_list: { Args: { p_person_id: string }; Returns: Json };
+      person_share_token: { Args: { p_person_id: string }; Returns: string };
       queue_photo: { Args: { p_item_id: string }; Returns: undefined };
       release_for_order: {
         Args: { p_item_id: string; p_user_id: string };
         Returns: boolean;
-      };
-      save_list: {
-        Args: { p_items: Json; p_list_id: string; p_title: string };
-        Returns: string;
       };
       save_list_checked: {
         Args: {
@@ -2179,6 +2183,7 @@ export type Database = {
         };
         Returns: Json;
       };
+      share_preview: { Args: { p_token: string }; Returns: Json };
       store_host: { Args: { p_url: string }; Returns: string };
       take_amazon_lookup: {
         Args: Record<PropertyKey, never>;

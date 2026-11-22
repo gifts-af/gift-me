@@ -45,7 +45,7 @@ select set_eq(
     'zinc_topup_fee_bps', 'zinc_topup_fee_fixed_cents', 'check_address_link_days', 'check_address_retry_days',
     'inbound_email_enabled', 'inbound_match_max_choices', 'inbound_max_per_user_per_day', 'inbound_link_hours',
     'inbound_thread_lookup_max', 'inbound_thread_lookup_days', 'inbound_prune_days',
-    'saved_gifts_max',
+    'saved_gifts_max', 'list_link_card_enabled',
     'idea_engine_enabled', 'idea_candidates', 'idea_max_searches', 'idea_ai_max_tokens', 'idea_keep_min', 'idea_keep_max',
     'idea_ai_timeout_ms', 'idea_zinc_timeout_ms', 'idea_tax_estimate_pct', 'idea_run_estimate_cents', 'idea_run_max_cents',
     'idea_round_runs_max', 'idea_rounds_per_tick', 'idea_run_lease_ms', 'tick_deadline_ms', 'zinc_lookup_cents',
@@ -53,7 +53,7 @@ select set_eq(
     'extension_add_enabled', 'list_photo_cleanup_batch', 'list_photo_cleanup_min_age_minutes',
     'amazon_paste_lookup_enabled', 'amazon_paste_lookups_per_user_per_day', 'amazon_paste_lookup_timeout_ms',
     'amazon_paste_lookups_per_day_total', 'round_fanout_enabled', 'idea_round_runs_per_day',
-    'idea_list_lookups_max', 'idea_list_min'
+    'idea_list_lookups_max', 'idea_list_min', 'list_max_items'
   ],
   'every fee, limit, default and schedule setting is seeded'
 );

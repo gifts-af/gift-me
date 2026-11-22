@@ -27,16 +27,18 @@ export async function POST(request: Request) {
     const user = await createBearerClient(token);
     if (!user) return json(request, allowed, { error: "Sign in again." }, 401);
 
-    // setting_int is for signed-in users, so both are read as this one.
-    const [enabled, photoMaxBytes] = await Promise.allSettled([
+    // setting_int is for signed-in users, so these are read as this one.
+    const [enabled, photoMaxBytes, maxItems] = await Promise.allSettled([
       appSettingInt("extension_add_enabled", user.db),
       appSettingInt("list_photo_max_bytes", user.db),
+      appSettingInt("list_max_items", user.db),
     ]);
     // The off switch (AC-20, E7). A switch that can't be read counts as off.
     if (enabled.status !== "fulfilled" || enabled.value !== 1) {
       return json(request, allowed, { error: "Adding from the extension is paused." }, 503);
     }
     if (photoMaxBytes.status !== "fulfilled") throw photoMaxBytes.reason;
+    if (maxItems.status !== "fulfilled") throw maxItems.reason;
 
     let form: FormData;
     try {
@@ -54,6 +56,7 @@ export async function POST(request: Request) {
       ...parsed.input,
       itemId: randomUUID(),
       photoMaxBytes: photoMaxBytes.value,
+      maxItems: maxItems.value,
     });
     return json(request, allowed, result.body, result.status);
   } catch (error) {

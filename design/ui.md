@@ -130,7 +130,7 @@ The gift list and the concierge each **work on their own**, and are linked light
 - **Each product stands alone.** Someone who only uses lists never has to set up the concierge: "People" shows a quiet one-line "Add someone you buy for" empty state, not a setup wizard. Someone who only uses the concierge sees one small "You" card inviting them to start a wish list.
 - **Links between them are low-key** and appear only where they help, never as prompts or pop-ups. For example, a person's profile can later show their own shared list when they've linked their account (T19's `people.linked_user_id`). These come with the screens that need them, not in the MVP mock-ups.
 - **People cards** show an avatar (their photo, or their initials on a tinted circle), their name, the next occasion, and where ideas come from: "Their own list" when you've linked their shared list, otherwise "We suggest ideas". Without a birthday the card offers "Add birthday" (ALL-21, T41).
-- **Products keep their own paths** (`/lists`, `/concierge`, design §2.2). Share links (`/share/…`) work signed out and don't show Get and Give.
+- **Products keep their own paths** (`/lists`, `/concierge`, design §2.2). Share links (`/share/…`) work signed out; signed-in viewers get Get and Give, signed-out visitors don't (T78).
 - A list-only user who signs in later lands on Give, one press from their list on the "You" card or the Get tab.
 
 ## UI kit
@@ -218,9 +218,9 @@ My list saves as you go too, with no Save button and no "Unsaved changes" bar. W
 
 **Pages kept in the background:** Next keeps visited screens in the page, hidden. Leaving About saves a change still waiting (a bad one is dropped), and leaving the address screen closes its form, so coming back shows what's saved.
 
-## Approval screens (ALL-29, T78 to T83)
+## Approval screens (ALL-29, T80 to T85)
 
-Mock-ups: [ALL-29 approval](https://claude.ai/artifact/UB35r46GYrCddcLj2Frxhh), owner-approved 2026-11-22, on top of ALL-41's signed-off screens. The pages are plain app URLs that only read when loaded (T78); built for the phone first, with 44px tap targets.
+Mock-ups: [ALL-29 approval](https://claude.ai/artifact/UB35r46GYrCddcLj2Frxhh), owner-approved 2026-11-22, on top of ALL-41's signed-off screens. The pages are plain app URLs that only read when loaded (T80); built for the phone first, with 44px tap targets.
 
 | Screen | URL | What it shows |
 |---|---|---|
@@ -259,7 +259,7 @@ A clickable, phone-first prototype, published as a private shareable artifact pa
 | Sign-in | Google sign-in (email and password stays for existing list users) | ALL-20 |
 | Extension popup | "Capture for…" with a person picker | C-1 |
 | Extension popup: Add to my list | Product card on top (name, price, photo with ‹ ›, recent people as buttons), "or save it for someone" below; the added, already-there, likely-duplicate and full states; one success banner after any save. [Approved mock-ups](https://claude.ai/artifact/YU7tRxcSdDyP8GRCs1SjkP) (owner, 2026-11-20, ALL-78) | C-1, T77 |
-| Heads-up email | Two kinds. **Reminder:** the options as small read-only rows and "Choose a gift"; nothing is bought until you choose. **Auto-buy on** (opt-in, A-7): says which gift will be bought and on what date, marks it, and offers "Review or change" and how to skip. The "Buy this" and button links are plain app URLs for the signed-in owner (T78, see Approval screens); other buttons are signed one-time links (design §6.4) | N-1, A-7, decision 40 |
+| Heads-up email | Two kinds. **Reminder:** the options as small read-only rows and "Choose a gift"; nothing is bought until you choose. **Auto-buy on** (opt-in, A-7): says which gift will be bought and on what date, marks it, and offers "Review or change" and how to skip. The "Buy this" and button links are plain app URLs for the signed-in owner (T80, see Approval screens); other buttons are signed one-time links (design §6.4) | N-1, A-7, decision 40 |
 | Computer width | Give and the gift list only | — |
 
 **As built on the person page (ALL-26, D51, ALL-127):** "What we know" is one list of facts by category, each with its source and ✨ on unconfirmed AI suggestions. Tapping a fact opens it in place, and it saves as you go (T71), with no Save button:

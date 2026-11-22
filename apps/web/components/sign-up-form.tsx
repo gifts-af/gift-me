@@ -72,7 +72,7 @@ export function SignUpForm({ next: rawNext }: { next?: string }) {
             aria-describedby="name-hint"
           />
           <p id="name-hint" className="text-[13px] text-muted-foreground">
-            Shown to others when you claim a gift. Leave it blank to show your email instead.
+            Shown on your shared list and when you claim a gift. Leave it blank to show your email to people you claim with.
           </p>
         </div>
         <div className="grid gap-1.5">

@@ -10,7 +10,9 @@ vi.mock("next/navigation", () => ({ useRouter: () => useRouterMock() }));
 
 const photo = new File(["x".repeat(100)], "me.png", { type: "image/png" });
 
-function setup(addResult: { ok: true; id: string } | { ok: false; error: string } = { ok: true, id: "new1" }) {
+type Result = { ok: true; id: string } | { ok: false; error: string; existingId?: string };
+
+function setup(addResult: Result = { ok: true, id: "new1" }, extra: { initialName?: string; shareToken?: string } = {}) {
   const calls: string[] = [];
   const action = vi.fn(async (...args: [unknown, FormData]) => {
     void args;
@@ -37,6 +39,7 @@ function setup(addResult: { ok: true; id: string } | { ok: false; error: string 
       doneHref="/"
       storage={storage}
       resize={resize}
+      {...extra}
     />,
   );
   return { calls, action, photoAction, upload, resize };
@@ -241,5 +244,43 @@ describe("PersonForm", () => {
     expect(waiting).toBeDisabled();
     finish(new Blob(["j"], { type: "image/jpeg" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Add Mom" })).toBeEnabled());
+  });
+
+  // From a shared list's "Add Sam to your people" (ALL-123 AC-7–9).
+  describe("from a list link", () => {
+    const TOKEN = "3f2b8c1e-9d4a-4e6b-8a1f-0c5d7e9b2a46";
+    const NOTICE = "If a gift for them is waiting on an address, it will ship to this list's owner.";
+
+    it("starts with the owner's name, says where held gifts ship, and sends the token", async () => {
+      const t = setup(undefined, { initialName: "Sam", shareToken: TOKEN });
+      expect(screen.getByLabelText("Name")).toHaveValue("Sam");
+      expect(screen.getByText(NOTICE)).toBeInTheDocument();
+      await userEvent.selectOptions(relationship(), "Friend");
+      await save();
+      await waitFor(() => expect(push).toHaveBeenCalledWith("/people/new1"));
+      expect(sent(t).get("list")).toBe(TOKEN);
+    });
+
+    it("has no notice and no token without a link", async () => {
+      const t = setup();
+      expect(screen.queryByText(NOTICE)).toBeNull();
+      await fill();
+      await save();
+      await waitFor(() => expect(push).toHaveBeenCalledWith("/"));
+      expect(sent(t).has("list")).toBe(false);
+    });
+
+    it("goes to the person already added from this list", async () => {
+      const t = setup(
+        { ok: false, error: "Sam is already in your people.", existingId: "p0" },
+        { initialName: "Sam", shareToken: TOKEN },
+      );
+      await userEvent.selectOptions(relationship(), "Friend");
+      await save();
+      expect(await screen.findByRole("alert")).toHaveTextContent("Sam is already in your people.");
+      await waitFor(() => expect(push).toHaveBeenCalledWith("/people/p0"));
+      expect(screen.getByRole("button", { name: "Saving…" })).toBeDisabled();
+      expect(t.action).toHaveBeenCalledTimes(1);
+    });
   });
 });

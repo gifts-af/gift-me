@@ -146,7 +146,7 @@ None left for the owner. The choices marked **[Claude's call]** are open to the 
 - **Events (E6):** through `logEvent`, ids only: `round_id`, `user_id`, `order_id`, `idea_id`, counts, cents, reason codes, store route names. Never a gift note, free-text reason, title, address, URL or photo URL. New events: `round.ideas_rejected`, `round.rejection_noted`, `round.budget_set`, `order.replaced`, `order.requote`, `ideas.list_gift`.
 - **Photos (AC-17):** only from Zinc, `https://` only (adapter and column check), shown with `referrerpolicy="no-referrer"`; the gift icon otherwise. "Buy it yourself" links open with `rel="noopener noreferrer"`.
 - **Phones (AC-26):** every new screen fits at phone width with no sideways scroll and every tap target is at least 44px (`MIN_TAP_PX`, `e2e/phone-layout.ts`). Layout checks are short `@layout` tests; journeys stay untagged (T62). Sign in with `signIn(page)`.
-- **Migration:** one file, `supabase/migrations/20261122100000_approval.sql`, re-dated past `main`'s newest just before merge. Expand-only (E7): `reapprove_order` stays, unused, until a later contract migration. Don't push it to dev before merge. Run `pnpm db:types` after it changes.
+- **Migration:** one file, `supabase/migrations/20261122160000_approval.sql`, re-dated past `main`'s newest just before merge. Expand-only (E7): `reapprove_order` stays, unused, until a later contract migration. Don't push it to dev before merge. Run `pnpm db:types` after it changes.
 - **Fakes (E5):** the database is always real for money, rounds, lists and privacy (pgTAP, `pnpm test:db`, Playwright on local Supabase). Zinc, the AI Gateway and email are faked. The unit-test fake Zinc refuses an order whose `max_price` is below its product's price, as Zinc does.
 - **Before the PR:** `pnpm lint && pnpm typecheck && pnpm test && pnpm test:db && pnpm db:test && pnpm build`, then `pnpm --filter @gifts-af/web e2e` (check the exit code).
 
@@ -154,7 +154,7 @@ None left for the owner. The choices marked **[Claude's call]** are open to the 
 
 | File | Change |
 |---|---|
-| `supabase/migrations/20261122100000_approval.sql` | New: `image_url`, two settings, two `lists` functions, `excluded_offers`, idea counting, `save_ideas` list fields, `approve_round` guards, four functions |
+| `supabase/migrations/20261122160000_approval.sql` | New: `image_url`, two settings, two `lists` functions, `excluded_offers`, idea counting, `save_ideas` list fields, `approve_round` guards, four functions |
 | `supabase/tests/approval.test.sql` | New pgTAP |
 | `packages/core/src/approval.ts` (+ `index.ts`, test) | New: `rejectionFacts`, `nextBestIdea`, `picksBar` |
 | `packages/core/src/{ideas,round-plan}.ts` | `JudgeContext.maxTotalCents`, `ideaRunWorstMs` with the list pass; `hasFacts` becomes `hasInputs`; the skip rule's prefix check |

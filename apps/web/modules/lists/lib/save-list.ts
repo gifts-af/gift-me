@@ -8,7 +8,6 @@ import { readList, rowToGift, UUID_PATTERN, type Gift, type ListItemRow } from "
 // lists.save_list_checked, which refuses one made from an out-of-date version
 // (ALL-127, T74).
 
-export const MAX_ITEMS = 500;
 export const MAX_NAME_LENGTH = 300;
 const MAX_URL_LENGTH = 2048;
 // Postgres prints a timestamptz in well under this.
@@ -34,6 +33,18 @@ export function cleanUrl(value: unknown): string | null {
   } catch {
     return null;
   }
+}
+
+// A gift's photo, by the database's rule (lists.is_allowed_image_url, ALL-142):
+// https, or http on this machine (local Supabase storage). Any other http photo
+// is moved to https; anything else is dropped. cleanUrl's `new URL().href`
+// lower-cases the scheme and host and adds the path's "/", which is what lets
+// these two simple patterns match the database's regex.
+const LOCAL_HTTP = /^http:\/\/(localhost|127\.0\.0\.1)(:[0-9]+)?\//;
+export function cleanImageUrl(value: unknown): string | null {
+  const url = cleanUrl(value);
+  if (!url || url.startsWith("https://") || LOCAL_HTTP.test(url)) return url;
+  return `https://${url.slice("http://".length)}`;
 }
 
 function cleanShortText(value: unknown, max: number): string | null {
@@ -67,7 +78,7 @@ export function toRow(input: Partial<Gift>) {
     id: typeof input.id === "string" && UUID_PATTERN.test(input.id) ? input.id : null,
     name,
     price_cents: priceCents,
-    image_url: cleanUrl(input.imageUrl),
+    image_url: cleanImageUrl(input.imageUrl),
     product_url: cleanUrl(input.productUrl),
     asin: cleanShortText(input.asin, 20),
     source: cleanShortText(input.source, 40) ?? "manual",

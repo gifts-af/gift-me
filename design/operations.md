@@ -266,7 +266,7 @@ Since T76 a busy morning is handled by many function calls instead of one. With 
 
 ## Approving and fixing gifts (ALL-29)
 
-Spec and plan: [design/plans/ALL-29-approval.md](plans/ALL-29-approval.md). Decisions T78 to T83. Pages: `/rounds/<id>`, `/rounds/<id>/buy`, `/rounds/<id>/fix/<orderId>`; changes are server actions in `app/rounds/actions.ts`. No new commands, settings beyond the two in the idea engine table, or environment variables.
+Spec and plan: [design/plans/ALL-29-approval.md](plans/ALL-29-approval.md). Decisions T80 to T85. Pages: `/rounds/<id>`, `/rounds/<id>/buy`, `/rounds/<id>/fix/<orderId>`; changes are server actions in `app/rounds/actions.ts`. No new commands, settings beyond the two in the idea engine table, or environment variables.
 
 **How we see it working** (Vercel logs, ids only, E6):
 
@@ -284,9 +284,9 @@ None of these is an alert. Rejected-then-regenerated rounds show up as `ideas.ru
 
 **Turning it off:** `zinc_ordering_enabled` = 0 stops all buying (the pages still open and say so); `round_engine_enabled` = 0 stops new rounds and emails; `idea_engine_enabled` = 0 stops idea runs, list lookups included; or roll back in Vercel. The migration only adds things and tightens guards, so the old code runs on it (E7).
 
-**Unused until a later contract migration:** the database function `reapprove_order` (replaced by `replace_failed_order`, T79) and the `excluded_products` helper (replaced by `concierge.order_is_given` and `excluded_offers`). Both stay so a Vercel rollback still works.
+**Unused until a later contract migration:** the database function `reapprove_order` (replaced by `replace_failed_order`, T81) and the `excluded_products` helper (replaced by `concierge.order_is_given` and `excluded_offers`). Both stay so a Vercel rollback still works.
 
-**Known gap (needs a ticket):** adding gifts to a person's list doesn't wake a round waiting after `no_ideas`; only a new fact does (T80).
+**Known gap (needs a ticket):** adding gifts to a person's list doesn't wake a round waiting after `no_ideas`; only a new fact does (T82).
 
 ## Gift idea engine (ALL-27)
 
@@ -314,8 +314,8 @@ The engine finds gift ideas for a round and on demand (a person's Gift ideas scr
 | `idea_ai_max_tokens` | 6000 | Output limit per AI call, which bounds the cost of the call in flight |
 | `idea_tax_estimate_pct` | 8 | Flat tax estimate (needs no address) |
 | `idea_run_estimate_cents` | 40 | The usual cost shown in the money notice |
-| `idea_list_lookups_max` | 10 | The most Zinc lookups of a person's list gifts in one run (ALL-29, T80). The list pass also stops once `idea_keep_max` qualify |
-| `idea_list_min` | 3 | With this many list gifts qualifying the AI brainstorm doesn't run; fewer and it adds ideas up to `idea_keep_max` (ALL-29, T80) |
+| `idea_list_lookups_max` | 10 | The most Zinc lookups of a person's list gifts in one run (ALL-29, T82). The list pass also stops once `idea_keep_max` qualify |
+| `idea_list_min` | 3 | With this many list gifts qualifying the AI brainstorm doesn't run; fewer and it adds ideas up to `idea_keep_max` (ALL-29, T82) |
 | `idea_run_max_cents` | 100 | The most one run may spend (AI plus Zinc), shown in the notice. A run stops resolving at this figure and skips ranking if its worst case wouldn't fit (`stopped: cost_cap`) |
 | `idea_round_runs_max` | 2 | Runs a round may use before it stops and emails the buyer. A new fact allows one more |
 | `idea_rounds_per_tick` | 1 | Most rounds that make ideas in one tick. Raise it only with timings from `ideas.run` events (AC-28) |
@@ -352,9 +352,27 @@ My list saves each change as it's made, through `lists.save_list_checked`, which
 | `list_close_sent` | A hidden or closing tab sent its removes. `outcome` is `saved`, `stale`, `not_found` or `error`; `behind` says the tab's version was already out of date. Anything but `saved`, repeating, means removes made just before leaving a tab are coming back. |
 | `list_save_failed`, `list_read_failed` | A save or a read of a list failed in the database (`code` is the Postgres or PostgREST code). The person sees "Couldn't save" or a load error. Repeating means My list is down. |
 
-**Rolling back:** Vercel's instant rollback brings back the old Save button, which still saves through the untouched `lists.save_list`. Nothing in the database needs undoing.
+**Rolling back:** Vercel's instant rollback goes back as far as save-as-you-go (ALL-127). The old `lists.save_list` that the Save button before it used was dropped in ALL-130, so a rollback past ALL-127 would leave My list unable to save. Code from before ALL-142 also stores `http://` photo links as they come, which the database now refuses, so on that code a save with a newly added http photo fails as a whole.
 
-**Cleanup still to do:** once this has been live without a rollback, a later migration drops `lists.save_list` (E7, expand then contract). Before it does, these must stop calling it: the tests in `supabase/tests/lists.test.sql` that call it or pin it as untouched, and `secondUserShareLink` in `apps/web/e2e/people.spec.ts`, which makes a list for a shared test user on every run (with `save_list_checked` it would need to reuse that user's list, so it was left for the cleanup). No app code calls it any more.
+**Rules the database enforces (ALL-142):** however a gift is written (My list, the extension, or straight through Supabase's API), a list holds at most `list_max_items` (500) gifts, and a gift's photo address starts with `https://` (or `http://` on localhost, for local Supabase storage). A save past the limit fails with `23514`; My list and the extension check the same setting first and say so plainly. An https photo on someone else's server can still see who opens a shared list; ALL-143 serves them through our server.
+
+## Adding a list's owner from their link (ALL-123)
+
+A signed-in buyer who opens someone's share link sees whose list it is and a card to add the owner to their people or link someone they already have; a person with no list gets a prompt at the top of their page to paste one (T78). Spec: [design/plans/ALL-123-add-from-list-link.md](plans/ALL-123-add-from-list-link.md).
+
+| Setting (`concierge.app_settings`) | Default | What it does |
+|---|---|---|
+| `list_link_card_enabled` | 1 | Off switch. On only when the value is exactly 1; any other value is off. |
+
+**What off looks like:** no add/link card on a shared list, no "Does … have a GiftsAF list?" prompt on a person's page, and no owner name anywhere: the shared list's heading reads "Their list" (even for a buyer whose own person is linked to it; the owner still sees their own title), and link previews show the generic card. A person's **Their list** row opens the old screen instead of the share page, for linked and unlinked people alike: paste a link when there isn't one, **Unlink** when there is.
+
+**Turn it off:** `update concierge.app_settings set value = '0' where key = 'list_link_card_enabled';` (Supabase SQL editor as allensforever711, no deploy). Links already made stay.
+
+**Turn it back on:** `update concierge.app_settings set value = '1' where key = 'list_link_card_enabled';` Pages pick it up on the next load.
+
+**Seeing it work on production (E9):** events, ids only: `lists.linked_from_share` (a person linked from the card or the prompt), `lists.unlinked_from_share` (Remove on the card) and `people.added_from_share` (a person added and linked in one save). Failures log `person_link_failed`, `person_unlink_failed`, `person_share_token_failed`, `person.add_failed` and `share_preview_failed` with the Postgres code.
+
+**Rolling back:** Vercel's instant rollback. The migration replaces `add_person` with one that takes an optional 18th argument, so the old code's 17-argument calls still work, and otherwise only adds; nothing in the database needs undoing.
 
 ## Extension: Add to my list (ALL-78, T77)
 

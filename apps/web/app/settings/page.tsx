@@ -46,7 +46,7 @@ async function LoadedList() {
   const { data: auth } = await supabase.auth.getClaims();
   const userId = auth?.claims?.sub;
   const [{ data: profile }, concierge, myList, address, requestHeaders, payment] = await Promise.all([
-    supabase.from("profiles").select("timezone").maybeSingle(),
+    supabase.from("profiles").select("timezone, display_name").maybeSingle(),
     getConciergeSettings(),
     getMyList(),
     userId ? getMyAddress(supabase, userId) : Promise.resolve<MyAddress>({ kind: "unavailable" }),
@@ -63,6 +63,7 @@ async function LoadedList() {
   return (
     <div className="flex flex-col gap-6">
       <Group title="You">
+        <SettingsRow href="/settings/name" label="Name" value={profile?.display_name || "Not set"} />
         <div className="px-4">
           <TimeZoneRow zones={zones} saved={saved} fallback={fallback} action={saveTimezone} />
         </div>

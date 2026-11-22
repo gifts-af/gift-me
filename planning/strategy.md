@@ -94,16 +94,15 @@ How the concierge's intelligence works (matches design §3.1):
 
 | Phase | What happens |
 |---|---|
-| **0. Friends and family (now)** | Gift lists soft launch; Gift Concierge MVP for the owner, Jim and 1–2 friends; pick one platform name. Paid features (AI and Zinc) are for test and admin users only (decision 53); friends wait until premium is scoped (ALL-76), owner 2026-11-06 |
+| **0. Friends and family (now)** | Gift lists soft launch; Gift Concierge MVP for the owner, Jim and 1–2 friends; pick one platform name. Paid features (AI and Zinc) are for test and admin users only (decision 53); friends wait until premium is scoped (ALL-76), owner 2026-11-06. Once it is, friends use it before billing exists, and we cover our own costs until the fee is charged at public launch (D58, owner 2026-11-22) |
 | **1. Seed a campus** | Free buy-me-a-drink shirts to friends' and family's college networks on one campus. Learn whether people scan, pay and come back. Bridge every scanner to a list. |
 | **2. Events and seasons** | Bachelor and bachelorette gear for wedding season, with wedding lists. QR cards for Valentine's Day, Mother's Day, graduations and Christmas. Plushie chains with seasonal characters. Cookie promotions with local bakeries. |
 | **3. Convert and charge** | Concierge public launch with premium automation. Offer it to list guests and frequent givers first. Help loyal customers build profiles, including the social media tour, then automate their recurring gifts. Per-gift fees. |
 
-## 6. Money model (direction, not decided) (D34)
+## 6. Money model (D34, D58)
 - **Free:** managing and sharing gift lists.
-- **Premium:** automated giving and receiving (the concierge). Receiving includes the concierge curating suggestions for your own list, which you add for others to buy (ideas.md idea 7).
-- **Per gift:** a fee on scan-to-gift and custom gifts. Zinc's $1 per order can be passed to the buyer.
-- **Per run (option):** concierge runs people schedule for their own list could carry a small fee that covers our AI cost plus a margin, instead of or alongside limits per plan (idea 7).
+- **A transparent fee per gift (D58, owner 2026-11-22):** each gift bought through GiftsAF shows a flat "GiftsAF fee" as its own line at checkout. The fee's name links to a breakdown with an amount for each part, our average cost per gift, read from cost tracking (ALL-144). At launch it covers our costs only and says so ("launch pricing"); a margin is added as adoption grows. This replaces the premium subscription idea for the concierge. The amount is still to set (ALL-76).
+- **Per run (option):** concierge runs people schedule for their own list could carry a small fee that covers our AI cost, instead of or alongside limits (idea 7).
 - **Affiliate links (option):** commission on purchases made through GiftsAF, never used to rank or pick gifts (PRD G-5; idea 10, ALL-84).
 
 **What paid features cost us** (estimates from the spikes and ALL-27's spec; Jim, 2026-11-10). Pricing (ALL-76) should cover these with a margin:
@@ -118,7 +117,7 @@ How the concierge's intelligence works (matches design §3.1):
 
 Rough yearly cost per buyer: about 40¢ per occasion, so 5 people with one birthday each is about $2, plus captures and taps.
 
-To be decided before we take money: ALL-76. Until then, anything that costs us money (AI calls, Zinc lookups, rounds) is only for test and admin users (decision 53), so pricing also gates opening the concierge beyond us, friends included (owner, 2026-11-06). Taking money also means moving off free hosting plans and making the repo private (ALL-75).
+Still to set before we take money: the fee amount (ALL-76). Because rounds that find nothing still cost us, the at-cost fee is cost per completed purchase, not per order. Until then, anything that costs us money (AI calls, Zinc lookups, rounds) is only for test and admin users (decision 53), so pricing also gates opening the concierge beyond us, friends included (owner, 2026-11-06). Taking money also means moving off free hosting plans and making the repo private (ALL-75).
 
 Billing stays out of MVP scope.
 

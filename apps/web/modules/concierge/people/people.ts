@@ -20,8 +20,9 @@ export function getPerson(id: string, today: CalendarDate): Promise<service.Pers
   return service.getPerson(createSupabasePeopleStore(), id, today);
 }
 
-export function addPerson(input: PersonInput): Promise<service.AddResult> {
-  return service.addPerson(createSupabasePeopleStore(), input);
+/** With a share token, the person is also linked to that list, in one transaction (ALL-123). */
+export function addPerson(input: PersonInput, shareToken?: string): Promise<service.AddResult> {
+  return service.addPerson(createSupabasePeopleStore(), input, shareToken);
 }
 
 // About's fields, one at a time (ALL-127). None of these moves rounds on.

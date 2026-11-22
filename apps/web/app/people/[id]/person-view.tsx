@@ -4,6 +4,7 @@ import { relationshipLabel } from "@gifts-af/core";
 import { OCCASION_NAMES, monthDay, shortDate } from "@/components/occasion-format";
 import { PersonAvatar } from "@/components/person-avatar";
 import { PageTitle } from "@/components/app-shell/page-frame";
+import { appSettingInt } from "@/lib/app-settings";
 import { createClient } from "@/lib/supabase/server";
 import { todayForRequest } from "@/lib/today";
 import { getPerson, countSavedGifts, getProfile, onDemandIdeas, type Db, type PersonDetail } from "@/modules/concierge";
@@ -12,12 +13,14 @@ import {
   deleteFactAction,
   deletePersonAction,
   editFactAction,
+  linkUnlinkedListAction,
   readCapturesAction,
   setFactActiveAction,
   setOccasionEnabledAction,
 } from "../actions";
 import { BudgetRow } from "./budget-row";
 import { DeletePerson } from "./delete-person";
+import { ListLink } from "./list-link";
 import { Occasions } from "./occasions";
 import { ReadinessBanner } from "./readiness";
 import { WhatWeKnow } from "./what-we-know";
@@ -57,11 +60,14 @@ export async function PersonView({ id, photoFailed }: { id: string; photoFailed:
   if (!userId) redirect("/");
   const person = await getPerson(id, await todayForRequest());
   if (!person) notFound();
-  const [profile, savedGifts, ideas] = await Promise.all([
+  const [profile, savedGifts, ideas, cardSetting] = await Promise.all([
     getProfile(supabase as unknown as Db, person.id, person.keepsList),
     countSavedGifts(person.id),
     onDemandIdeas(supabase as unknown as Db, person.id),
+    appSettingInt("list_link_card_enabled"),
   ]);
+  // With the card on, an unlinked person gets the prompt at the top instead of the Their list row.
+  const askForList = cardSetting === 1 && !person.keepsList;
   const base = `/people/${person.id}`;
 
   return (
@@ -84,6 +90,10 @@ export async function PersonView({ id, photoFailed }: { id: string; photoFailed:
           </p>
         </div>
       </header>
+
+      {askForList && (
+        <ListLink variant="prompt" name={person.name} personId={person.id} keepsList={false} linkAction={linkUnlinkedListAction} />
+      )}
 
       {photoFailed && (
         <p role="status" className="text-[13px] text-muted-foreground">
@@ -123,7 +133,9 @@ export async function PersonView({ id, photoFailed }: { id: string; photoFailed:
           label="Saved gifts"
           value={savedGifts > 0 ? String(savedGifts) : "None"}
         />
-        <SettingsRow href={`${base}/list`} label="Their list" value={person.keepsList ? "Linked" : "Not linked"} />
+        {!askForList && (
+          <SettingsRow href={`${base}/list`} label="Their list" value={person.keepsList ? "Linked" : "Not linked"} />
+        )}
         <SettingsRow href={`${base}/address`} label="Shipping address" value={addressSummary(person.address)} />
       </RowGroup>
 

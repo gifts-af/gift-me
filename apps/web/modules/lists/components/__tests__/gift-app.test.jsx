@@ -582,6 +582,81 @@ describe("GiftApp", () => {
     expect(title.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  describe("asking for a name on Share (ALL-136)", () => {
+    const SKIP_KEY = "giftsaf:skip-name-prompt";
+    let writeText;
+    beforeEach(() => {
+      writeText = vi.fn(async () => {});
+      Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+      localStorage.removeItem(SKIP_KEY);
+    });
+
+    it("asks first, then saves the name and copies the link", async () => {
+      const saveName = vi.fn(async () => ({ ok: true }));
+      render(<GiftApp initial={member} needsName saveName={saveName} />);
+      await user.click(screen.getByRole("button", { name: /Share/ }));
+      const dialog = await screen.findByRole("dialog", { name: "What name should your list show?" });
+      expect(within(dialog).getByLabelText("Your name")).toHaveValue("");
+      await user.type(within(dialog).getByLabelText("Your name"), "  Aaron ");
+      await user.click(within(dialog).getByRole("button", { name: "Save and copy link" }));
+      expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/share/tok`);
+      expect(saveName).toHaveBeenCalledWith("Aaron");
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: /Copied!/ })).toBeInTheDocument();
+
+      // Named now: the next Share just copies.
+      await user.click(screen.getByRole("button", { name: /Copied!/ }));
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(writeText).toHaveBeenCalledTimes(2);
+    });
+
+    it("Skip copies the link without a name, and isn't asked again on this device", async () => {
+      const saveName = vi.fn();
+      const { unmount } = render(<GiftApp initial={member} needsName saveName={saveName} />);
+      await user.click(screen.getByRole("button", { name: /Share/ }));
+      await user.click(await screen.findByRole("button", { name: "Skip" }));
+      expect(writeText).toHaveBeenCalledTimes(1);
+      expect(await screen.findByRole("button", { name: /Copied!/ })).toBeInTheDocument();
+      expect(saveName).not.toHaveBeenCalled();
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      unmount();
+
+      render(<GiftApp initial={member} needsName saveName={saveName} />);
+      await user.click(screen.getByRole("button", { name: /Share/ }));
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(writeText).toHaveBeenCalledTimes(2);
+    });
+
+    it("keeps the dialog open with the error when the name can't be saved", async () => {
+      const saveName = vi.fn(async () => ({ ok: false, error: "Your name couldn't be saved. Try again." }));
+      render(<GiftApp initial={member} needsName saveName={saveName} />);
+      await user.click(screen.getByRole("button", { name: /Share/ }));
+      const dialog = await screen.findByRole("dialog");
+      await user.type(within(dialog).getByLabelText("Your name"), "Aaron");
+      await user.click(within(dialog).getByRole("button", { name: "Save and copy link" }));
+      expect(await within(dialog).findByRole("alert")).toHaveTextContent("Your name couldn't be saved. Try again.");
+      expect(writeText).toHaveBeenCalledTimes(1);
+    });
+
+    it("needs a name to save: an empty one is refused without calling the server", async () => {
+      const saveName = vi.fn();
+      render(<GiftApp initial={member} needsName saveName={saveName} />);
+      await user.click(screen.getByRole("button", { name: /Share/ }));
+      const dialog = await screen.findByRole("dialog");
+      await user.click(within(dialog).getByRole("button", { name: "Save and copy link" }));
+      expect(within(dialog).getByRole("alert")).toHaveTextContent("Type a name, or tap Skip.");
+      expect(saveName).not.toHaveBeenCalled();
+      expect(writeText).not.toHaveBeenCalled();
+    });
+
+    it("doesn't ask someone who has a name", async () => {
+      render(<GiftApp initial={member} saveName={vi.fn()} />);
+      await user.click(screen.getByRole("button", { name: /Share/ }));
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+      expect(writeText).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe("a guest (AC-16)", () => {
     it("keeps today's behaviour: nothing saves, a remove is immediate, no Undo or status", async () => {
       render(<GiftApp initial={null} />);

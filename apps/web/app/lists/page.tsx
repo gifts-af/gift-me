@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { saveMyAddressAction, setSharingAction } from "@/app/settings/address-actions";
+import { saveDisplayName } from "@/app/settings/actions";
 import { ShareAddressSwitch } from "@/components/address/share-address-switch";
 import { AppNav } from "@/components/app-shell/app-nav";
 import { TopBar } from "@/components/app-shell/top-bar";
@@ -16,10 +17,17 @@ async function ListLoader() {
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
   const userId = data?.claims?.sub;
-  const sharing: Sharing = userId ? await getSharing(supabase, userId) : { kind: "unavailable" };
+  const [sharing, profile] = await Promise.all([
+    userId ? getSharing(supabase, userId) : Promise.resolve<Sharing>({ kind: "unavailable" }),
+    // ALL-136: no name yet means Share asks for one. A failed read doesn't ask.
+    supabase.from("profiles").select("display_name").maybeSingle(),
+  ]);
+  const needsName = !profile.error && profile.data != null && !profile.data.display_name;
   return (
     <GiftApp
       initial={initial}
+      needsName={needsName}
+      saveName={saveDisplayName}
       footer={<ShareAddressSwitch sharing={sharing} saveAction={saveMyAddressAction} setSharingAction={setSharingAction} />}
     />
   );

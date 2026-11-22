@@ -29,8 +29,8 @@ async function deleteLeftovers(name: string) {
   if (!res.ok) throw new Error(`Couldn't clear old test people: ${res.status} ${await res.text()}`);
 }
 
-// SECOND_USER saves a list through the lists RPC, as the app does, and we
-// return its share link path.
+// SECOND_USER's share link path. They keep one list across runs: a run makes
+// it with save_list_checked, as the app does, only when they have none yet.
 async function secondUserShareLink(): Promise<string> {
   const { token, id } = await signInApi(SECOND_USER);
   const headers = {
@@ -38,24 +38,33 @@ async function secondUserShareLink(): Promise<string> {
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
   };
-  const saved = await fetch(`${supabase.url}/rest/v1/rpc/save_list`, {
-    method: "POST",
-    headers: { ...headers, "Content-Profile": "lists" },
-    body: JSON.stringify({
-      p_list_id: null,
-      p_title: null,
-      p_items: [{ id: null, name: "Wool socks", price_cents: 1500, image_url: null, product_url: null, asin: null, source: "manual", added_at: null }],
-    }),
-  });
-  if (!saved.ok) throw new Error(`Couldn't create a list: ${saved.status} ${await saved.text()}`);
-  const listId = (await saved.json()) as string;
-  const read = await fetch(
-    `${supabase.url}/rest/v1/lists?select=share_token&id=eq.${listId}&owner_id=eq.${id}`,
-    { headers: { ...headers, "Accept-Profile": "lists" } },
-  );
-  const rows = (await read.json()) as { share_token: string }[];
-  expect(rows).toHaveLength(1);
-  return `/share/${rows[0].share_token}`;
+  const readToken = async (): Promise<string | null> => {
+    const read = await fetch(
+      `${supabase.url}/rest/v1/lists?select=share_token&owner_id=eq.${id}&order=created_at.asc&limit=1`,
+      { headers: { ...headers, "Accept-Profile": "lists" } },
+    );
+    if (!read.ok) throw new Error(`Couldn't read the list: ${read.status} ${await read.text()}`);
+    const rows = (await read.json()) as { share_token: string }[];
+    return rows[0]?.share_token ?? null;
+  };
+  let shareToken = await readToken();
+  if (!shareToken) {
+    const saved = await fetch(`${supabase.url}/rest/v1/rpc/save_list_checked`, {
+      method: "POST",
+      headers: { ...headers, "Content-Profile": "lists" },
+      body: JSON.stringify({
+        p_list_id: null,
+        p_title: null,
+        p_items: [{ id: null, name: "Wool socks", price_cents: 1500, image_url: null, product_url: null, asin: null, source: "manual", added_at: null }],
+        p_expected: null,
+      }),
+    });
+    // 409-style refusal (GL409) means another run made it first: read it again.
+    if (!saved.ok && !(await saved.text()).includes("GL409")) throw new Error(`Couldn't create a list: ${saved.status}`);
+    shareToken = await readToken();
+  }
+  expect(shareToken).toBeTruthy();
+  return `/share/${shareToken}`;
 }
 
 /** The person's birthday occasion, read with the service role (no RLS). */
@@ -115,11 +124,13 @@ test("the Add form, Home, a person's page, About and the moved screens fit the s
     ["Person page", `/people/${personId}`, async () => {
       await expect(page.getByRole("link", { name: /^Budget/ })).toContainText("$75 · Christmas $125 · Mother's Day $50.50");
       await expect(page.getByRole("link", { name: /^About Mom/ })).toContainText("Mother · Birthday Mar 14");
+      // The list prompt at the top (ALL-123), in place of the Their list row.
+      await expect(page.getByRole("heading", { name: "Does Mom have a GiftsAF list?" })).toBeVisible();
+      await expect(page.getByRole("textbox", { name: "Their list link" })).toBeVisible();
     }],
     ["About", `/people/${personId}/about`, () => expect(page.getByRole("button", { name: "Remove birthday" })).toBeVisible()],
     ["Budget screen", `/people/${personId}/budget`, () => expect(page.getByRole("textbox", { name: "Any occasion" })).toBeVisible()],
     ["Saved gifts", `/people/${personId}/saved-gifts`, () => expect(page.getByRole("region", { name: "Saved gifts" }).getByRole("listitem")).toHaveCount(1)],
-    ["Their list", `/people/${personId}/list`, () => expect(page.getByRole("textbox", { name: "Their list link" })).toBeVisible()],
     ["Shipping address", `/people/${personId}/address`, () => expect(page.getByRole("button", { name: "Add an address" })).toBeVisible()],
   ];
   for (const scheme of ["light", "dark"] as const) {
@@ -288,17 +299,13 @@ test("add Mom, set her occasions and budget, link her list, delete her", async (
   await expect(budgetRow).toContainText("$75");
   await expect(budgetRow).not.toContainText("Mother's Day");
 
-  // 4. SECOND_USER's list, linked by its share link on Their list: "Their own list".
+  // 4. SECOND_USER's list, linked by its share link in the prompt at the top (ALL-123): "Their own list".
   const sharePath = await secondUserShareLink();
-  const listRow = page.getByRole("link", { name: /^Their list/ });
-  await expect(listRow).toContainText("Not linked");
-  await listRow.click();
-  await expect(page).toHaveURL(/\/list$/);
+  await expect(page.getByRole("link", { name: /^Their list/ })).toHaveCount(0);
   await page.getByRole("textbox", { name: "Their list link" }).fill(new URL(sharePath, page.url()).toString());
   await page.getByRole("button", { name: "Link", exact: true }).click();
-  await expect(page.getByText("Linked.")).toBeVisible();
-  await page.getByRole("link", { name: mom }).first().click();
   await expect(page.getByRole("link", { name: /^Their list/ })).toContainText("Linked");
+  await expect(page.getByRole("heading", { name: `Does ${mom} have a GiftsAF list?` })).toHaveCount(0);
   await page.goto("/");
   await expect(page.locator("div", { has: momLink }).last()).toContainText("Their own list");
 
