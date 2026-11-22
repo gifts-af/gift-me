@@ -62,6 +62,9 @@ function rankReply(prompt: string) {
 }
 
 export function startFakeGateway(): Promise<Server> {
+  // Every message body, for GET /__calls?match=… (how many asked about this text): the approval
+  // journeys check a run with enough list gifts makes no AI call (ALL-29 AC-28).
+  const bodies: string[] = [];
   const server = createServer((req, res) => {
     const chunks: Buffer[] = [];
     req.on("data", (c: Buffer) => chunks.push(c));
@@ -75,8 +78,13 @@ export function startFakeGateway(): Promise<Server> {
         // Dollars per token, and per 1,000 searches, as the real listing gives them.
         return send(200, { data: [{ id: AI_MODELS.ideas, pricing: { input: "0.000003", output: "0.000015", web_search: "10" } }] });
       }
+      if (route === "GET /__calls") {
+        const match = new URL(req.url ?? "/", FAKE_GATEWAY_URL).searchParams.get("match") ?? "";
+        return send(200, { count: bodies.filter((b) => match !== "" && b.includes(match)).length });
+      }
       if (route === "POST /v1/messages") {
         if (req.headers["x-api-key"] !== FAKE_GATEWAY_KEY) return send(401, { error: "unauthorized" });
+        bodies.push(Buffer.concat(chunks).toString());
         const body = JSON.parse(Buffer.concat(chunks).toString()) as { tools?: unknown[]; messages: { content: string }[] };
         return send(200, body.tools ? brainstormReply() : rankReply(body.messages[0].content));
       }
