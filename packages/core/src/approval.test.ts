@@ -24,13 +24,12 @@ describe("rejectionFacts", () => {
     expect(rejectionFacts("has_it", null, [], null)).toEqual([]);
   });
 
-  it('not_style names only AI ideas; with only list gifts it saves "Not their style" alone', () => {
+  it("not_style names only AI ideas; with only list gifts it saves nothing", () => {
     expect(rejectionFacts("not_style", null, [ai("Kettle"), list("Mug")], null)).toEqual([
       { category: "avoid", value: "Not their style: Kettle" },
     ]);
-    expect(rejectionFacts("not_style", null, [list("Mug")], null)).toEqual([
-      { category: "avoid", value: "Not their style" },
-    ]);
+    // A bare "Not their style" teaches the AI nothing and would count as a fact for a new run.
+    expect(rejectionFacts("not_style", null, [list("Mug")], null)).toEqual([]);
   });
 
   it("not_style and too_generic save one avoid fact naming the titles; too_pricey saves nothing", () => {
@@ -40,9 +39,7 @@ describe("rejectionFacts", () => {
     expect(rejectionFacts("too_generic", null, [ai("A"), ai("B")], null)).toEqual([
       { category: "avoid", value: "Too generic: A, B" },
     ]);
-    expect(rejectionFacts("too_generic", null, [list("A")], null)).toEqual([
-      { category: "avoid", value: "Too generic" },
-    ]);
+    expect(rejectionFacts("too_generic", null, [list("A")], null)).toEqual([]);
     expect(rejectionFacts("too_pricey", null, [ai("A")], null)).toEqual([]);
   });
 
@@ -64,6 +61,25 @@ describe("rejectionFacts", () => {
     expect(rejectionFacts("too_pricey", "   ", [], null)).toEqual([]);
     const long = rejectionFacts("too_pricey", "y".repeat(600), [], null);
     expect(long[0]!.value).toHaveLength(FACT_VALUE_MAX);
+  });
+
+  it("cuts at 500 characters as the database counts them, never splitting an emoji", () => {
+    // With the u flag a whole emoji is one character, so \p{Cs} matches only half of one.
+    const loneSurrogate = /\p{Cs}/u;
+    const title = `a${"🎁".repeat(600)}`;
+    for (const [fact] of [
+      rejectionFacts("has_it", null, [], ai(title)),
+      rejectionFacts("too_pricey", title, [], null),
+      rejectionFacts("not_style", null, [ai(title)], null),
+    ]) {
+      expect(fact!.value).not.toMatch(loneSurrogate);
+      expect([...fact!.value]).toHaveLength(FACT_VALUE_MAX);
+    }
+  });
+
+  it("an owned AI idea with a blank title saves no owns fact", () => {
+    expect(rejectionFacts("has_it", null, [], ai("   "))).toEqual([]);
+    expect(rejectionFacts("has_it", null, [], ai("  Kettle "))).toEqual([{ category: "owns", value: "Kettle" }]);
   });
 
   it("a free text that repeats a generated fact isn't saved twice", () => {

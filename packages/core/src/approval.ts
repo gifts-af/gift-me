@@ -15,14 +15,23 @@ export type RejectionFact = { category: "owns" | "avoid"; value: string };
 // Same as profile_facts.value_key: lower(regexp_replace(btrim(value), '\s+', ' ', 'g')).
 const factKey = (f: RejectionFact) => `${f.category}\u0000${f.value.trim().replace(/\s+/g, " ").toLowerCase()}`;
 
+/** The number of characters as the database counts them: code points, so an emoji is one. */
+const chars = (s: string) => Array.from(s).length;
+
+/** The first n characters as the database counts them, never splitting an emoji in two. */
+function cut(s: string, n: number): string {
+  const all = Array.from(s);
+  return all.length > n ? all.slice(0, n).join("") : s;
+}
+
 function listFact(prefix: string, titles: string[]): string {
   let value = prefix;
   let sep = ": ";
   for (const title of titles) {
     const next = value + sep + title;
-    if (next.length > FACT_VALUE_MAX) {
+    if (chars(next) > FACT_VALUE_MAX) {
       // Even the first title doesn't fit: cut it rather than lose the fact.
-      if (sep === ": ") value = next.slice(0, FACT_VALUE_MAX);
+      if (sep === ": ") value = cut(next, FACT_VALUE_MAX);
       break;
     }
     value = next;
@@ -39,17 +48,21 @@ export function rejectionFacts(
   owned: IdeaRef | null,
 ): RejectionFact[] {
   const facts: RejectionFact[] = [];
-  if (code === "has_it" && owned && owned.source === "generated") {
-    facts.push({ category: "owns", value: owned.title.slice(0, FACT_VALUE_MAX) });
+  const ownedTitle = owned?.source === "generated" ? owned.title.trim() : "";
+  if (code === "has_it" && ownedTitle) {
+    facts.push({ category: "owns", value: cut(ownedTitle, FACT_VALUE_MAX) });
   }
   if (code === "not_style" || code === "too_generic") {
     const titles = ideas.filter((i) => i.source === "generated").map((i) => i.title);
-    facts.push({
-      category: "avoid",
-      value: listFact(code === "not_style" ? "Not their style" : "Too generic", titles),
-    });
+    // With no AI titles, a bare "Not their style" teaches the AI nothing (and would count as a fact for a new run).
+    if (titles.length > 0) {
+      facts.push({
+        category: "avoid",
+        value: listFact(code === "not_style" ? "Not their style" : "Too generic", titles),
+      });
+    }
   }
-  const reason = text?.trim().slice(0, FACT_VALUE_MAX).trim();
+  const reason = cut(text?.trim() ?? "", FACT_VALUE_MAX).trim();
   if (reason) facts.push({ category: "avoid", value: reason });
 
   // The database refuses two facts with the same category and value key (error 21000).
