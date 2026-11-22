@@ -2,13 +2,13 @@
 
 **Goal:** a buyer can buy a suggested gift from the heads-up email in two taps, pick several or none of a round's ideas in the app, and fix a gift that hit a problem, and rounds are switched on in production for test and admin users.
 
-**Status:** Spec draft, 2026-11-22 (owner). Waiting on the adversarial review (T55).
+**Status:** Spec approved by the owner, 2026-11-22, after its adversarial review (T55) and the owner's six answers.
 
 **Links:** [ALL-29](https://linear.app/allens-forever/issue/ALL-29). Design §4.2, §6.5. PRD A-1, A-3, A-4, B-4, G-2, G-3. Planning decisions 2, 23, 36, 37, 38, 45, 53. Technical decisions T18, T29, T31, T51, T56, T68, T71, T76. Mock-ups: [ALL-29 approval](https://claude.ai/artifact/UB35r46GYrCddcLj2Frxhh) (this ticket, owner approved 2026-11-22) and the signed-off ALL-41 screens [Mom: pick from her list](https://claude.ai/artifact/BvdSVB6RPatUPRbBDyPRzW#approval), [Dad: suggested ideas](https://claude.ai/artifact/BvdSVB6RPatUPRbBDyPRzW#ideas), [Where it goes](https://claude.ai/artifact/BvdSVB6RPatUPRbBDyPRzW#ship-to) and [Price went up](https://claude.ai/artifact/BvdSVB6RPatUPRbBDyPRzW#needs-attention).
 
 **Depends on (all merged):** ALL-27 idea engine (#92), ALL-125 fan-out (#95), ALL-116 failure summaries, ALL-32/ALL-30 `approveAndBuy` and Zinc ordering, ALL-112 shared-address failures, ALL-120 base budgets.
 
-**Switching on in production (AC-20) also needs:** ALL-134 (strip contact details from facts before the AI, T75 (3)), and Jim's go-ahead to spend on production AI (T75 (4)).
+**Switching on in production (AC-20) also needs:** ALL-134 (strip contact details from facts before the AI, T75 (3)), built by the owner's session as its own PR during this work (owner, 2026-11-22), and Jim's go-ahead to spend on production AI (T75 (4)).
 
 **Hands off to:** ALL-33 (order tracking reuses the re-approval screen), ALL-36 (end-to-end dry run), ALL-37 (privacy and security pass).
 
@@ -57,8 +57,8 @@
 | AC-20 | Rounds are switched on in production (moved from ALL-27, decision 53), after ALL-134 ships and Jim approves the AI spend | The owner sets `round_engine_enabled` for test and admin users | One real round goes from start to heads-up email to approval with real ideas. Evidence on this ticket |
 | AC-21 | Rounds are on (moved from ALL-28) | The morning cron runs | The production Vercel log shows `round_tick` between 12:00 and 12:59 UTC, with no errors on `/api/rounds/tick` |
 | AC-22 | That real round's heads-up or reminder email (moved from ALL-26) | The owner opens the guided-questions link on a phone | The question form opens on production and an answer saves |
-| AC-23 | One real order (moved from ALL-32/ALL-30) | With `zinc_ordering_enabled` on, the owner approves one cheap gift on production | The order is placed from the owner's Zinc wallet, the "gift is ordered" email arrives, and the gift is delivered. A sandbox order on dev first |
-| AC-24 | Auto top-up (moved from ALL-32) | Turned on only for this test, with Zinc's $15 minimum and a daily limit of about $30, and a gift costing more than the balance | Zinc charges the card and the order goes ahead. Auto top-up goes off again afterwards |
+| AC-23 | One real order (moved from ALL-32/ALL-30) | With `zinc_ordering_enabled` on, the owner approves one cheap gift on production | The order is placed from the owner's Zinc wallet (Zinc reports `placed`) and the "gift is ordered" email arrives. Delivery is checked in ALL-36 (owner, 2026-11-22). A sandbox order on dev first |
+| AC-24 | Auto top-up (moved from ALL-32). Charges the owner's real card, so the owner confirms right before it runs (owner, 2026-11-22) | Turned on only for this test, with Zinc's $15 minimum and a daily limit of about $30, and a gift costing more than the balance | Zinc charges the card and the order goes ahead. Auto top-up goes off again afterwards |
 | AC-25 | A rejection reason saved from AC-12 | The person's page is opened, and the next ideas are made | The reason shows under what we know about them, and the next ideas avoid it (ticket AC) |
 | AC-26 | A phone and a computer, light and dark | Each new screen is shown | It fits with no sideways scroll, and every tap target is at least 44px (`@layout` tests) |
 
@@ -86,12 +86,12 @@ None left for the owner. The choices below marked **[Claude's call]** are open t
 | Ship-to on the confirm page | A "Ships to" row with the recipient as the default. Changing it opens the ALL-41 "Where it goes" choices **[Claude's call]** | A separate ship-to step would make the email path 3 taps |
 | When does "None of these" search again? | On the next tick, not right away | A new search costs money and takes minutes; the tick already runs ideas inside its limits (ALL-27 AC-25, T76) |
 | Reason chips | "Already has one", "Not their style", "Too pricey", "Too generic", plus optional text. ALL-41 said "He has one"; the app doesn't know pronouns, so the chips don't use them. Codes: `has_it`, `not_style`, `too_pricey`, `too_generic` **[Claude's call]** | ALL-41's signed-off chips; the ticket's "too practical" is covered by the free text |
-| What facts a rejection saves | "Already has one" saves `owns`; "Not their style" and "Too generic" save `avoid`; the free text is its own fact. "Too pricey" saves no lasting fact and only lowers the next search's price (AC-12) **[Claude's call, owner to confirm]** | The engine already excludes rejected products (ALL-27 AC-7), so the fact carries only the reason. A price complaint is about this occasion, not the person (T42 (3), "ask, don't infer") |
+| What facts a rejection saves | "Already has one" saves `owns`; "Not their style" and "Too generic" save `avoid`; the free text is its own fact. "Too pricey" saves no lasting fact and only lowers the next search's price (AC-12) **Owner, 2026-11-22** | The engine already excludes rejected products (ALL-27 AC-7), so the fact carries only the reason. A price complaint is about this occasion, not the person (T42 (3), "ask, don't infer") |
 | Which idea is "next-best" | The highest-ranked `proposed` idea in the round that still arrives in time. Not offered for address failures, which re-offer the same gift with a different address (AC-15a) | §6.5 step 5; no new search needed. For an address failure the gift was fine (T61, ALL-112) |
 | How a failed order is replaced | A new database function, `replace_failed_order`, does it in one transaction under the round lease (AC-15). `approve_round` stays for first approvals. Both refuse ideas that aren't `proposed` (AC-12b). New T# | `approve_round` refuses rounds outside `awaiting_approval` and counts an unresolved failure as a live order, so it can't do this. `reapprove_order` takes any price it's given and checks no budget, so it's replaced by the new function |
-| Where "Buy at $new" gets the price | One product lookup ($0.01) when the fix page opens, inside the paid-features check **[Verify]** first whether Zinc's `max_price_exceeded` failure carries the price, and use that if so | Nothing records the new price today (`zinc/events.ts` keeps only the failure type) |
+| Where "Buy at $new" gets the price | One product lookup ($0.01) when the fix page opens, inside the paid-features check. **[Verify]** first whether Zinc's `max_price_exceeded` failure carries the price, and use that if so. **Owner, 2026-11-22** | Nothing records the new price today (`zinc/events.ts` keeps only the failure type) |
 | Old email links after "None of these" | Stay valid as plain URLs; the server refuses ideas that were rejected (AC-12b) and the page says they were replaced | Simpler than expiring them; the status check protects the money path |
-| What "None of these" does when runs are used up | Saves the reason, keeps the round open until its deadline, and says plainly there are no more new ideas this time (AC-13a) **[Claude's call, owner to confirm]** | ALL-27 caps a round at `idea_round_runs_max` (2) plus one after a new fact, about $1.20 |
+| What "None of these" does when runs are used up | Saves the reason, keeps the round open until its deadline, and says plainly there are no more new ideas this time (AC-13a). **Owner, 2026-11-22** | ALL-27 caps a round at `idea_round_runs_max` (2) plus one after a new fact, about $1.20 |
 
 ## Principles check
 
