@@ -69,6 +69,7 @@ export type { AddResult, DatedKind, ImportResult, PersonAddress, PersonCard, Per
 export {
   parseAddressForm,
   parseBirthYear,
+  MAX_BUDGET_CENTS,
   parseBudget,
   parseBudgetForm,
   parseImportRows,

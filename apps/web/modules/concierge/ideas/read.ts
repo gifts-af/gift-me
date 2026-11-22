@@ -10,6 +10,8 @@ export type ShownIdea = {
   title: string;
   retailer: string | null;
   productUrl: string | null;
+  /** The product's photo from Zinc, https only (ALL-29 AC-17). */
+  imageUrl: string | null;
   retailerProductId: string | null;
   sellerName: string | null;
   totalCents: number;
@@ -22,7 +24,7 @@ export async function onDemandIdeas(db: Db, personId: string): Promise<ShownIdea
   const { data, error } = await db
     .schema("concierge")
     .from("gift_ideas")
-    .select("id, title, retailer, product_url, retailer_product_id, seller_name, est_total_cents, arrive_by, reason, over_budget")
+    .select("id, title, retailer, product_url, image_url, retailer_product_id, seller_name, est_total_cents, arrive_by, reason, over_budget")
     .eq("person_id", personId)
     .is("round_id", null)
     .order("rank");
@@ -32,6 +34,7 @@ export async function onDemandIdeas(db: Db, personId: string): Promise<ShownIdea
     title: i.title,
     retailer: i.retailer,
     productUrl: i.product_url,
+    imageUrl: i.image_url,
     retailerProductId: i.retailer_product_id,
     sellerName: i.seller_name,
     totalCents: i.est_total_cents,

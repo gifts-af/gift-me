@@ -51,6 +51,28 @@ export async function zincWiring(
   };
 }
 
+/**
+ * The round screen's deps (ALL-29): roundAccess, rejectionOutlook, rejectRoundIdeas and
+ * setRoundBudget only use the service-role client and the clock, so they work with Zinc off
+ * here too. Their http never reaches Zinc: a call through it throws rather than spends.
+ */
+export function roundDbDeps(now: Date, env: Env = process.env): ZincDeps {
+  return {
+    db: createAdminClient(),
+    http: {
+      base: "zinc-not-used",
+      timeoutMs: 0,
+      fetch: async () => {
+        throw new Error("The round screen's deps never call Zinc.");
+      },
+    },
+    // Unused by these functions; "live" only where Zinc really is live here.
+    env: env.ZINC_ENV === "live" ? "live" : "test",
+    webhookBaseUrl: siteUrl(env),
+    now,
+  };
+}
+
 async function settingInt(db: SupabaseClient<Database>, key: string): Promise<number> {
   const { data, error } = await db.schema("concierge").rpc("setting_int", { p_key: key });
   if (error || typeof data !== "number") throw new Error(`Reading setting ${key} failed.`);

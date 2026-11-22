@@ -17,6 +17,7 @@ const VISE: ShownIdea = {
   title: "Rotary fly-tying vise",
   retailer: "amazon",
   productUrl: "https://www.amazon.com/dp/B0FAKEVISE",
+  imageUrl: "https://m.media-amazon.com/images/I/vise.jpg",
   retailerProductId: "B0FAKEVISE",
   sellerName: "Amazon.com",
   totalCents: 4754,
@@ -178,5 +179,13 @@ describe("Save on an idea (ALL-128)", () => {
   it("offers no Save for an idea with no product id", () => {
     setup({ ideas: [{ ...VISE, retailerProductId: null }] });
     expect(screen.queryByRole("button", { name: /^Save / })).toBeNull();
+  });
+
+  it("shows each idea's photo with no referrer, or the gift icon without one (ALL-29 AC-17)", () => {
+    setup({ ideas: [VISE, { ...VISE, id: "i2", title: "Fly box", imageUrl: null, retailerProductId: "B0BOX" }] });
+    const photo = screen.getByRole("img", { name: VISE.title });
+    expect(photo.tagName).toBe("IMG");
+    expect(photo).toHaveAttribute("referrerpolicy", "no-referrer");
+    expect(screen.getByRole("img", { name: "Fly box" }).tagName).not.toBe("IMG");
   });
 });
