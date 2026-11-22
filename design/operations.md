@@ -282,7 +282,7 @@ Spec and plan: [design/plans/ALL-29-approval.md](plans/ALL-29-approval.md). Deci
 
 None of these is an alert. Rejected-then-regenerated rounds show up as `ideas.run_started` on the next tick.
 
-**Turning it off:** `zinc_ordering_enabled` = 0 stops all buying (the pages still open and say so); `round_engine_enabled` = 0 stops new rounds and emails; `idea_engine_enabled` = 0 stops idea runs, list lookups included; or roll back in Vercel. The migration only adds things and tightens guards, so the old code runs on it (E7).
+**Turning it off:** `zinc_ordering_enabled` = 0 stops all buying (the pages still open and say so); `round_engine_enabled` = 0 stops new rounds and emails; `idea_engine_enabled` = 0 stops idea runs, list lookups included; or roll back in Vercel. The fix page's **Check today's price** (a paid lookup on the app's key) is off wherever buying is off: with Zinc not set up in that environment (`ZINC_ENV`, `ZINC_API_BASE` or `ZINC_WALLET_URL` missing) it looks nothing up and says "Buying is switched off here right now, so we didn't check the price." (`zinc_off`). It also refuses, with no lookup, once the round no longer needs attention, is closed, or reaches its ship-by day (`not_open`). The migration only adds things and tightens guards, so the old code runs on it (E7).
 
 **Unused until a later contract migration:** the database function `reapprove_order` (replaced by `replace_failed_order`, T81) and the `excluded_products` helper (replaced by `concierge.order_is_given` and `excluded_offers`). Both stay so a Vercel rollback still works.
 
