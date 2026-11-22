@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef, useState } from 'react'
 import { lookupProductLink, storeName } from '@/modules/lists/lib/product-link.js'
 import { centsToInputValue, formatCents, parsePriceToCents } from '@/modules/lists/lib/format.js'
+import { useExtensionStoreUrl } from '@/components/extension-link'
 import LookupStatus from './lookup-status.jsx'
 import { buttonClass, inputClass, labelClass } from './ui.jsx'
 
@@ -113,6 +114,7 @@ export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }) {
   const [announcement, setAnnouncement] = useState('')
   // 'closed' | 'found' (confirm a full match) | 'details' (the editable fields)
   const [mode, setMode] = useState('closed')
+  const storeUrl = useExtensionStoreUrl()
 
   // Discards out-of-order lookups: paste A, add, paste B, add -- A's response
   // must not land on top of B's.
@@ -284,6 +286,15 @@ export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }) {
           </button>
         </div>
         <LookupStatus lookup={lookup} pending={pending} />
+        {/* Desktop Chrome only, and only before a gift is under way (ALL-65). */}
+        {storeUrl && mode === 'closed' && !lookup && !pending && (
+          <p className="text-[13px] text-muted-foreground">
+            Shopping elsewhere?{' '}
+            <a href={storeUrl} target="_blank" rel="noreferrer" className="font-semibold text-primary underline-offset-2 hover:underline">
+              Save from any shop with the extension
+            </a>
+          </p>
+        )}
 
         {mode === 'found' && (
           <div className="flex items-center gap-3 rounded-lg border bg-card p-3">
