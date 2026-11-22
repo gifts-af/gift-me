@@ -2045,6 +2045,7 @@ export type Database = {
           outcome: string;
         }[];
       };
+      check_item_limit: { Args: { p_list_ids: string[] }; Returns: undefined };
       claim_for_order: {
         Args: { p_item_id: string; p_user_id: string };
         Returns: boolean;
@@ -2058,7 +2059,6 @@ export type Database = {
         Returns: undefined;
       };
       get_shared_list: { Args: { p_token: string }; Returns: Json };
-      check_item_limit: { Args: { p_list_ids: string[] }; Returns: undefined };
       is_allowed_image_url: { Args: { p_url: string }; Returns: boolean };
       is_amazon_host: { Args: { p_host: string }; Returns: boolean };
       link_person: {
