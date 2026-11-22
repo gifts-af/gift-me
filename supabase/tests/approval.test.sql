@@ -8,7 +8,7 @@
 -- its budget (Task 3).
 begin;
 \ir _helpers.psql
-select plan(77);
+select plan(78);
 
 -- This file starts several round runs on one day; the daily limit has its own test (round_fanout).
 update concierge.app_settings set value = '1000' where key = 'idea_round_runs_per_day';
@@ -751,6 +751,14 @@ select tests.act_as_server();
 select throws_ok(tests.rf_sql(:'rf10_round_id', :'a', :'rf10_lock', :'rf10_failed_order', tests.rf_order(:'rf10_next_idea')),
   'P0001', 'replace_failed_order: not_shared', 'a list gift whose link was cut is refused');
 select tests.reset_role();
+
+-- ─── What the round screen reads (AC-14, AC-18) ──────────────────────────────
+select ok(
+  has_column_privilege('authenticated', 'concierge.orders', 'resolved', 'select')
+  and has_column_privilege('authenticated', 'concierge.gift_rounds', 'closed_at', 'select')
+  and not has_column_privilege('anon', 'concierge.orders', 'resolved', 'select')
+  and not has_column_privilege('anon', 'concierge.gift_rounds', 'closed_at', 'select'),
+  'signed-in owners read orders.resolved and gift_rounds.closed_at');
 
 select * from finish();
 rollback;

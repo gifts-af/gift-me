@@ -8,6 +8,7 @@ import path from "node:path";
 // another's run (ALL-32).
 const LOCAL_DB_TESTS = [
   "app/settings/__tests__/zinc-deps.test.ts",
+  "modules/concierge/__tests__/approval-db.test.ts",
   "modules/concierge/__tests__/capture-store-scope.test.ts",
   "modules/concierge/__tests__/fanout-db.test.ts",
   "modules/concierge/__tests__/idea-daily-limit.test.ts",
