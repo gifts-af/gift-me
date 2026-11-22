@@ -2,7 +2,7 @@
 -- share links anyone can open, and claims (design §2.2).
 begin;
 \ir _helpers.psql
-select plan(45);
+select plan(43);
 
 select tests.create_user('a@example.com', 'Aaron') as a \gset
 select tests.create_user('b@example.com', 'Bee') as b \gset
@@ -23,10 +23,10 @@ select is(
 
 -- A saves a list with two gifts.
 select tests.act_as(:'a');
-select lists.save_list(null, 'Birthday', '[
+select (lists.save_list_checked(null, 'Birthday', '[
   {"id": "aaaaaaaa-0000-4000-8000-000000000001", "name": "Kneeler", "price_cents": 2500},
   {"id": "aaaaaaaa-0000-4000-8000-000000000002", "name": "Gloves", "price_cents": 1500}
-]'::jsonb) as list_id \gset
+]'::jsonb, null) ->> 'id')::uuid as list_id \gset
 select share_token as token from lists.lists where id = :'list_id' \gset
 select is((select count(*)::int from lists.list_items), 2, 'A sees their two gifts');
 
@@ -75,10 +75,10 @@ select is(
 
 -- Re-saving the list keeps existing claims (item ids stay the same).
 select tests.act_as(:'a');
-select lists.save_list(:'list_id', null, '[
+select lists.save_list_checked(:'list_id', null, '[
   {"id": "aaaaaaaa-0000-4000-8000-000000000001", "name": "Kneeler", "price_cents": 2700},
   {"id": "aaaaaaaa-0000-4000-8000-000000000002", "name": "Gloves", "price_cents": 1500}
-]'::jsonb);
+]'::jsonb, (select updated_at::text from lists.lists where id = :'list_id'));
 select tests.act_as_anon();
 select is(
   (select count(*)::int from jsonb_array_elements(lists.get_shared_list(:'token') -> 'items') i where i -> 'claim' is not null and i -> 'claim' <> 'null'::jsonb),
@@ -106,22 +106,13 @@ select is(
 select ok(has_function_privilege('anon', 'lists.get_shared_list(uuid)', 'execute'), 'anon can open share links');
 select ok(has_function_privilege('anon', 'lists.claim_gift(uuid, uuid, text)', 'execute'), 'anon can claim as a guest');
 select ok(
-  not has_function_privilege('anon', 'lists.save_list(uuid, text, jsonb)', 'execute')
-  and not has_function_privilege('anon', 'lists.unclaim_gift(uuid, uuid)', 'execute')
+  not has_function_privilege('anon', 'lists.unclaim_gift(uuid, uuid)', 'execute')
   and not has_function_privilege('anon', 'lists.viewer_display_name()', 'execute'),
-  'anon cannot save, unclaim or look up display names'
+  'anon cannot unclaim or look up display names'
 );
 select ok(
-  has_function_privilege('authenticated', 'lists.save_list(uuid, text, jsonb)', 'execute')
-  and has_function_privilege('authenticated', 'lists.unclaim_gift(uuid, uuid)', 'execute'),
-  'signed-in users can save and unclaim'
-);
-
--- Signed-out visitors can't save lists.
-select tests.act_as_anon();
-select throws_ok(
-  $q$select lists.save_list(null, 'x', '[]'::jsonb)$q$,
-  '42501', null, 'anon cannot save a list'
+  has_function_privilege('authenticated', 'lists.unclaim_gift(uuid, uuid)', 'execute'),
+  'signed-in users can unclaim'
 );
 
 -- ─── save_list_checked (ALL-127) ────────────────────────────────────────────
@@ -219,14 +210,6 @@ select ok(
   not has_function_privilege('anon', 'lists.save_list_checked(uuid, text, jsonb, text)', 'execute')
   and has_function_privilege('authenticated', 'lists.save_list_checked(uuid, text, jsonb, text)', 'execute'),
   'only signed-in users can make a checked save'
-);
-
--- The old save_list stays exactly as it was, so a rolled-back deploy still
--- saves (E7). A later cleanup migration drops it, and this check with it.
-select is(
-  md5((select replace(prosrc, E'\r', '') from pg_proc where oid = 'lists.save_list(uuid, text, jsonb)'::regprocedure)),
-  '96212f4322fbd178166a3b69caf9e19b',
-  'the old save_list is untouched'
 );
 
 select * from finish();

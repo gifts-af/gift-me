@@ -50,7 +50,7 @@ select throws_ok('select * from public.account_addresses', '42501', null, 'signe
 -- The buyer links their "Mom" through her list's share link. (Setting
 -- people.linked_user_id alone shares nothing: decision 43.)
 select tests.act_as(:'mom');
-select lists.save_list(null, 'Birthday', '[]'::jsonb) as list_id \gset
+select (lists.save_list_checked(null, 'Birthday', '[]'::jsonb, null) ->> 'id')::uuid as list_id \gset
 select share_token as token from lists.lists where id = :'list_id' \gset
 select tests.act_as(:'buyer');
 insert into public.people (name, relationship) values ('Mom', 'parent') returning id as person \gset

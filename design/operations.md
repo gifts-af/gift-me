@@ -326,9 +326,9 @@ My list saves each change as it's made, through `lists.save_list_checked`, which
 | `list_close_sent` | A hidden or closing tab sent its removes. `outcome` is `saved`, `stale`, `not_found` or `error`; `behind` says the tab's version was already out of date. Anything but `saved`, repeating, means removes made just before leaving a tab are coming back. |
 | `list_save_failed`, `list_read_failed` | A save or a read of a list failed in the database (`code` is the Postgres or PostgREST code). The person sees "Couldn't save" or a load error. Repeating means My list is down. |
 
-**Rolling back:** Vercel's instant rollback brings back the old Save button, which still saves through the untouched `lists.save_list`. Nothing in the database needs undoing.
+**Rolling back:** Vercel's instant rollback goes back as far as save-as-you-go (ALL-127). The old `lists.save_list` that the Save button before it used was dropped in ALL-130, so a rollback past ALL-127 would leave My list unable to save. Code from before ALL-142 also stores `http://` photo links as they come, which the database now refuses, so on that code a save with a newly added http photo fails as a whole.
 
-**Cleanup still to do:** once this has been live without a rollback, a later migration drops `lists.save_list` (E7, expand then contract). Before it does, these must stop calling it: the tests in `supabase/tests/lists.test.sql` that call it or pin it as untouched, `secondUserShareLink` in `apps/web/e2e/people.spec.ts` and `ownerWithList` in `apps/web/e2e/add-from-list-link.spec.ts`, which make lists for the browser tests (with `save_list_checked` the first would need to reuse its shared test user's list, so both were left for the cleanup). No app code calls it any more.
+**Rules the database enforces (ALL-142):** however a gift is written (My list, the extension, or straight through Supabase's API), a list holds at most `list_max_items` (500) gifts, and a gift's photo address starts with `https://` (or `http://` on localhost, for local Supabase storage). A save past the limit fails with `23514`; My list and the extension check the same setting first and say so plainly. An https photo on someone else's server can still see who opens a shared list; ALL-143 serves them through our server.
 
 ## Adding a list's owner from their link (ALL-123)
 

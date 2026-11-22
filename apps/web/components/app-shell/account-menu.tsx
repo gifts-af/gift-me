@@ -1,8 +1,9 @@
 "use client";
 
-import { Laptop, LogOut, Moon, Settings, Sun, User } from "lucide-react";
+import { Laptop, LogOut, Moon, Puzzle, Settings, Sun, User } from "lucide-react";
 import Link from "next/link";
 import { useTheme } from "next-themes";
+import { useExtensionStoreUrl } from "@/components/extension-link";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -21,6 +22,7 @@ import { createClient } from "@/lib/supabase/client";
 // (design/ui.md > Colours: the manual switch lives in the account menu).
 export function AccountMenu({ email }: { email?: string | null }) {
   const { theme, setTheme } = useTheme();
+  const storeUrl = useExtensionStoreUrl();
 
   async function signOut() {
     // My list may still be sending a remove held for Undo (ALL-127).
@@ -50,6 +52,15 @@ export function AccountMenu({ email }: { email?: string | null }) {
             Settings
           </Link>
         </DropdownMenuItem>
+        {/* Desktop Chrome only; opens a new tab, so the page isn't left (ALL-65). */}
+        {storeUrl && (
+          <DropdownMenuItem asChild className="min-h-11">
+            <a href={storeUrl} target="_blank" rel="noreferrer">
+              <Puzzle aria-hidden="true" />
+              Get the Chrome extension
+            </a>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuSeparator />
         <DropdownMenuLabel className="text-xs text-muted-foreground">Theme</DropdownMenuLabel>
         <DropdownMenuRadioGroup value={theme} onValueChange={setTheme}>
