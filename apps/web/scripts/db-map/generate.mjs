@@ -156,7 +156,7 @@ function build(DB) {
   const missingEdges = [];
   for (const e of layout.edges) {
     if (!pos[e.from] || !pos[e.to]) { missingEdges.push(e); continue; }
-    const [cx, cy] = pos[e.from], [px, py] = pos[e.to];
+    const [cx, cy] = pos[e.from], [, py] = pos[e.to];
     let d, lx = 0, ly = 0, anchor = "middle";
     if (e.kind === "down") { const x = cx + 30; d = `M${x} ${cy} V${py + H}`; lx = x + 8; ly = (cy + py + H) / 2 + 4; anchor = "start"; }
     else if (e.kind === "side") {
