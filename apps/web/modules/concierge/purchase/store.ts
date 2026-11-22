@@ -2,7 +2,7 @@
 // service-role client in `deps.db`; every write that changes an order or a round
 // goes through the money-path SQL functions (migration 20261109100000), which
 // lock the round row and leave its status to reconcile_round.
-import type { AddressDraft, CalendarDate, ScheduleSettings } from "@gifts-af/core";
+import type { Address, AddressDraft, CalendarDate, ScheduleSettings } from "@gifts-af/core";
 import { errorFields, logEvent } from "@/lib/log";
 import type { ZincDeps } from "../zinc/types";
 
@@ -113,6 +113,45 @@ export type OrderRow = {
   created_at: string;
 };
 
+export type FailedOrderRow = {
+  id: string;
+  round_id: string;
+  user_id: string;
+  idea_id: string;
+  status: string;
+  failure_type: string | null;
+  resolved: boolean;
+  ship_to: string;
+  address_source: AddressSource | null;
+  gift_message: string | null;
+};
+
+/** One order, as replacing it needs; null when missing. */
+export async function readOrder(deps: ZincDeps, orderId: string): Promise<FailedOrderRow | null> {
+  const { data, error } = await concierge(deps)
+    .from("orders")
+    .select("id, round_id, user_id, idea_id, status, failure_type, resolved, ship_to, address_source, gift_message")
+    .eq("id", orderId)
+    .maybeSingle();
+  if (error) fail("Loading the order failed", error);
+  return data as FailedOrderRow | null;
+}
+
+/** Whether this idea already had a price rise fixed: a resolved price_up order other than `exceptId` (once per gift, S2). */
+export async function priceRiseFixed(deps: ZincDeps, ideaId: string, exceptId: string): Promise<boolean> {
+  const { data, error } = await concierge(deps)
+    .from("orders")
+    .select("id")
+    .eq("idea_id", ideaId)
+    .neq("id", exceptId)
+    .eq("status", "failed")
+    .eq("failure_type", "price_up")
+    .eq("resolved", true)
+    .limit(1);
+  if (error) fail("Loading the idea's orders failed", error);
+  return (data ?? []).length > 0;
+}
+
 /** The round's orders that still count (not cancelled, not a dealt-with failure), oldest first. */
 export async function liveOrders(deps: ZincDeps, roundId: string): Promise<OrderRow[]> {
   const { data, error } = await concierge(deps)
@@ -127,6 +166,7 @@ export async function liveOrders(deps: ZincDeps, roundId: string): Promise<Order
 }
 
 export type IdeaRow = {
+  round_id: string | null;
   id: string;
   product_url: string | null;
   est_total_cents: number;
@@ -135,13 +175,19 @@ export type IdeaRow = {
   over_budget: boolean;
   /** The idea's place in the round's list; picks get their caps and are sent in this order. */
   rank: number;
+  /** Only a `proposed` idea is on offer; a rejected or selected one was replaced (AC-12b). */
+  status: string;
+  /** Where a re-quote looks it up (R1): Zinc's retailer and product id, and the offer it was priced from. */
+  retailer: string | null;
+  retailer_product_id: string | null;
+  offer_id: string | null;
 };
 
 export async function readIdeas(deps: ZincDeps, ids: string[]): Promise<Map<string, IdeaRow>> {
   if (ids.length === 0) return new Map();
   const { data, error } = await concierge(deps)
     .from("gift_ideas")
-    .select("id, product_url, est_total_cents, handling_days_max, delivery_days_max, over_budget, rank")
+    .select("id, round_id, product_url, est_total_cents, handling_days_max, delivery_days_max, over_budget, rank, status, retailer, retailer_product_id, offer_id")
     .in("id", ids);
   if (error) fail("Loading the ideas failed", error);
   return new Map((data ?? []).map((i) => [i.id, i as IdeaRow]));
@@ -241,6 +287,41 @@ export async function recipientAddress(
   if (error) fail("Reading the person's address failed", error);
   if (!data) return null;
   return { snapshot: toSnapshot(data), draft: toDraft(data), source: "own" };
+}
+
+/** The buyer's own address (public.account_addresses), for "Ship it to me"; null when they have none. */
+export async function buyerAddress(
+  deps: ZincDeps,
+  userId: string,
+): Promise<{ snapshot: AddressSnapshot; draft: AddressDraft & { country?: string | null } } | null> {
+  const { data, error } = await deps.db
+    .from("account_addresses")
+    .select("recipient_first_name, recipient_last_name, address_line1, address_line2, city, state, zip, country, phone")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) fail("Reading the buyer's address failed", error);
+  return data ? { snapshot: toSnapshot(data), draft: toDraft(data) } : null;
+}
+
+/** Saves a checked address on the buyer's own person row (AC-10), checked at `now` (T51). */
+export async function savePersonAddress(deps: ZincDeps, userId: string, personId: string, a: Address): Promise<void> {
+  const { error } = await deps.db
+    .from("people")
+    .update({
+      recipient_first_name: a.firstName,
+      recipient_last_name: a.lastName,
+      address_line1: a.line1,
+      address_line2: a.line2,
+      city: a.city,
+      state: a.state,
+      zip: a.zip,
+      country: "US",
+      address_checked_at: deps.now.toISOString(),
+    })
+    .eq("id", personId)
+    .eq("user_id", userId)
+    .is("deleted_at", null);
+  if (error) fail("Saving the person's address failed", error);
 }
 
 export async function savedSnapshots(deps: ZincDeps, orderIds: string[]): Promise<Map<string, AddressSnapshot>> {
