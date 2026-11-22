@@ -74,16 +74,10 @@ export async function settingInt(db: SupabaseClient<Database>, key: string): Pro
  * Null when either is missing here.
  */
 export async function lookupWiring(db: SupabaseClient<Database>, env: Env = process.env): Promise<QuoteDeps["lookup"] | null> {
-  const app = zincAppKey(env);
-  if (!app) return null;
-  return { http: { base: app.base, timeoutMs: await settingInt(db, "idea_zinc_timeout_ms"), fetch }, key: app.key };
-}
-
-/** The app's own Zinc key and API address (T17), never a person's wallet key. Null when either is missing. */
-export function zincAppKey(env: Env = process.env): { base: string; key: string } | null {
   const base = env.ZINC_API_BASE;
   const key = env.ZINC_API_KEY;
-  return base && key ? { base, key } : null;
+  if (!base || !key) return null;
+  return { http: { base, timeoutMs: await settingInt(db, "idea_zinc_timeout_ms"), fetch }, key };
 }
 
 /**

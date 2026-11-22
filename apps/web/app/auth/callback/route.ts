@@ -14,8 +14,10 @@ export async function GET(request: NextRequest) {
   // Google's own refusal, e.g. the user pressed Cancel.
   const providerError = searchParams.get("error_description") ?? searchParams.get("error");
   if (providerError) {
-    // Google's description is free text, so only the fact is logged.
-    logEvent("auth.google_refused", {});
+    // OAuth's `error` is a fixed code (access_denied, server_error); the description is
+    // free text, so only the code is logged.
+    const code = searchParams.get("error");
+    logEvent("auth.google_refused", { code: code && /^[a-z_]{1,64}$/.test(code) ? code : null });
     return fail("cancelled");
   }
 
