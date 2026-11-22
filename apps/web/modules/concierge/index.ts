@@ -138,3 +138,6 @@ export type { ShownIdea } from "./ideas/read";
 export { amazonPasteDetails } from "./zinc/products";
 export type { AmazonPasteDetails, ZincProductDetails } from "./zinc/products";
 export type { ZincHttp } from "./zinc/client";
+// The round screen (ALL-29): "None of these", a budget typed on an open round, and the page reads.
+export { rejectionOutlook, rejectRoundIdeas, roundAccess, roundView, setRoundBudget } from "./rounds/approval";
+export type { BuyYourself, RejectInput, RejectResult, RoundPageIdea, RoundPageOrder, RoundPageView } from "./rounds/approval";

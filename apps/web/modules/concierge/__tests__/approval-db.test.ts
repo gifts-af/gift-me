@@ -1,0 +1,339 @@
+// @vitest-environment node
+// Rejecting a round's ideas, the open round's budget, and the round screen's reads (ALL-29
+// Task 9: AC-3, AC-9, AC-12, AC-13a, AC-18, AC-25, AC-29, AC-30, AC-30a) on the real local
+// database (E5): the service-role client for the writes and roundAccess, and a signed-in
+// user's client for roundView, so RLS is the real thing. Skipped when the stack isn't running.
+import { randomUUID } from "node:crypto";
+import { createClient } from "@supabase/supabase-js";
+import { Client } from "pg";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import type { Database } from "@gifts-af/core";
+import { LOCAL_DB, localStack } from "../../../test/local-db";
+import type { ZincDeps } from "../zinc/types";
+
+vi.mock("server-only", () => ({}));
+const { rejectionOutlook, rejectRoundIdeas, roundAccess, roundView, setRoundBudget } = await import("../rounds/approval");
+const { activeFacts } = await import("../profile/profile");
+
+const stack = await localStack({ api: true });
+const dbUp = stack !== null;
+
+describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page reads (real local database)", () => {
+  const s = stack?.supabase;
+  const admin = s ? createClient<Database>(s.url, s.serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } }) : null;
+  const password = "local-only-password";
+  let pg: Client;
+  const users: string[] = [];
+
+  const deps = (): ZincDeps => ({
+    db: admin!,
+    http: { base: "https://zinc.test", timeoutMs: 1000, fetch: async () => new Response("{}", { status: 500 }) },
+    env: "test",
+    webhookBaseUrl: "https://giftsaf.test",
+    now: new Date(),
+  });
+
+  beforeAll(async () => {
+    pg = new Client({ connectionString: LOCAL_DB });
+    await pg.connect();
+  });
+  afterAll(async () => {
+    for (const id of users) await admin!.auth.admin.deleteUser(id);
+    await pg.end();
+  });
+
+  // ─── fixtures ─────────────────────────────────────────────────────────────
+
+  type User = { id: string; email: string };
+  async function newUser(): Promise<User> {
+    const email = `approval-${randomUUID()}@example.test`;
+    const { data, error } = await admin!.auth.admin.createUser({ email, password, email_confirm: true });
+    if (error) throw error;
+    users.push(data.user.id);
+    await pg.query("insert into concierge.accounts (user_id, paid_features, over_budget_pct) values ($1, true, 20)", [data.user.id]);
+    return { id: data.user.id, email };
+  }
+
+  async function signedIn(u: User) {
+    const db = createClient<Database>(s!.url, s!.publishableKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    const r = await db.auth.signInWithPassword({ email: u.email, password });
+    if (r.error) throw r.error;
+    return db;
+  }
+
+  type IdeaSpec = { title: string; total?: number; listItem?: string };
+  type Round = { roundId: string; personId: string; ideaIds: string[] };
+  async function newRound(
+    u: User,
+    o: { budget?: number | null; ideas?: IdeaSpec[]; deadlineIn?: number; status?: string; listId?: string } = {},
+  ): Promise<Round> {
+    const person = await pg.query("insert into public.people (user_id, name, relationship) values ($1, 'Mary', 'friend') returning id", [u.id]);
+    const personId = person.rows[0].id as string;
+    const occasion = await pg.query("insert into concierge.occasions (user_id, person_id, kind) values ($1, $2, 'christmas') returning id", [
+      u.id,
+      personId,
+    ]);
+    if (o.listId)
+      await pg.query(
+        "insert into lists.person_links (person_id, buyer_id, list_id, share_token) select $1, $2, l.id, l.share_token from lists.lists l where l.id = $3",
+        [personId, u.id, o.listId],
+      );
+    const deadlineIn = o.deadlineIn ?? 30;
+    const round = await pg.query(
+      `insert into concierge.gift_rounds (user_id, person_id, occasion_id, occasion_year, occasion_date, ship_by_deadline, budget_cents, status, next_action_at, heads_up_on)
+       values ($1, $2, $3, 2030, current_date + $4::int + 7, current_date + $4::int, $5, $6::concierge.round_status, now() + interval '1 day', current_date) returning id`,
+      [u.id, personId, occasion.rows[0].id, deadlineIn, o.budget === undefined ? 10000 : o.budget, o.status ?? "awaiting_approval"],
+    );
+    const roundId = round.rows[0].id as string;
+    const ideaIds: string[] = [];
+    const specs = o.ideas ?? [{ title: "Fly rod" }, { title: "Reel" }];
+    for (const [i, spec] of specs.entries()) {
+      const idea = await pg.query(
+        `insert into concierge.gift_ideas (user_id, round_id, person_id, title, product_url, price_cents, est_total_cents, handling_days_max, delivery_days_min, delivery_days_max, rank, source, list_item_id, image_url)
+         values ($1, $2, $3, $4, 'https://shop.test/p', $5, $5, 2, 3, 5, $6, $7, $8, 'https://images.test/p.jpg') returning id`,
+        [u.id, roundId, personId, spec.title, spec.total ?? 4000, i + 1, spec.listItem ? "list" : "generated", spec.listItem ?? null],
+      );
+      ideaIds.push(idea.rows[0].id as string);
+    }
+    return { roundId, personId, ideaIds };
+  }
+
+  async function newList(owner: User, items: { name: string; url?: string }[]) {
+    const list = await pg.query("insert into lists.lists (owner_id, title) values ($1, 'Mary''s list') returning id", [owner.id]);
+    const listId = list.rows[0].id as string;
+    const itemIds: string[] = [];
+    for (const [i, it] of items.entries()) {
+      const item = await pg.query(
+        "insert into lists.list_items (list_id, position, name, price_cents, product_url) values ($1, $2, $3, 3000, $4) returning id",
+        [listId, i, it.name, it.url ?? null],
+      );
+      itemIds.push(item.rows[0].id as string);
+    }
+    return { listId, itemIds };
+  }
+
+  const roundRow = async (roundId: string) =>
+    (
+      await pg.query(
+        "select status::text as status, budget_cents, locked_until, next_action_at <= now() as due from concierge.gift_rounds where id = $1",
+        [roundId],
+      )
+    ).rows[0];
+  const ideaStatuses = async (roundId: string) =>
+    (await pg.query("select status from concierge.gift_ideas where round_id = $1 order by rank", [roundId])).rows.map((r) => r.status);
+  const rejections = async (roundId: string) =>
+    (await pg.query("select idea_id, reason_code, reason_text from concierge.rejections where round_id = $1", [roundId])).rows;
+  const facts = async (personId: string) =>
+    (await pg.query("select category, value, source from concierge.profile_facts where person_id = $1 order by created_at, value", [personId])).rows;
+
+  const reject = (u: User, r: Round, o: Partial<Parameters<typeof rejectRoundIdeas>[0]> = {}) =>
+    rejectRoundIdeas({ userId: u.id, roundId: r.roundId, code: "not_style", text: null, ownedIdeaId: null, expectMore: true, ...o }, deps());
+
+  // ─── rejecting (AC-12, AC-13a, AC-25) ─────────────────────────────────────
+
+  it("None of these with a search left saves the reason and the facts and sends the round back to generating", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    const input = { roundId: r.roundId, code: "not_style" as const, text: "Nothing plastic", ownedIdeaId: null };
+    expect(await rejectionOutlook(input, deps())).toBe(true);
+
+    expect(await reject(u, r, { text: "Nothing plastic" })).toEqual({ ok: true, more: true });
+    expect(await ideaStatuses(r.roundId)).toEqual(["rejected", "rejected"]);
+    const rows = await rejections(r.roundId);
+    expect(rows).toHaveLength(2);
+    expect(rows.every((x) => x.reason_code === "not_style" && x.reason_text === "Nothing plastic")).toBe(true);
+    expect(await facts(r.personId)).toEqual(
+      expect.arrayContaining([
+        { category: "avoid", value: "Not their style: Fly rod, Reel", source: "rejection" },
+        { category: "avoid", value: "Nothing plastic", source: "rejection" },
+      ]),
+    );
+    // Back to generating, due now, and the lease given back so the tick picks it up.
+    expect(await roundRow(r.roundId)).toMatchObject({ status: "generating", due: true, locked_until: null });
+  });
+
+  it("None of these with no search left keeps the ideas buyable", async () => {
+    const u = await newUser();
+    // The next tick isn't before the ship-by day: new ideas couldn't be bought in time.
+    const r = await newRound(u, { deadlineIn: 1 });
+    expect(await rejectionOutlook({ roundId: r.roundId, code: "has_it", text: null, ownedIdeaId: r.ideaIds[1] }, deps())).toBe(false);
+
+    expect(await reject(u, r, { code: "has_it", ownedIdeaId: r.ideaIds[1], expectMore: false })).toEqual({ ok: true, more: false });
+    expect(await ideaStatuses(r.roundId)).toEqual(["proposed", "proposed"]);
+    expect(await rejections(r.roundId)).toEqual([{ idea_id: null, reason_code: "has_it", reason_text: null }]);
+    expect(await facts(r.personId)).toEqual([{ category: "owns", value: "Reel", source: "rejection" }]);
+    expect(await roundRow(r.roundId)).toMatchObject({ status: "awaiting_approval", locked_until: null });
+  });
+
+  it("a stale outlook returns changed and saves nothing", async () => {
+    const u = await newUser();
+    const r = await newRound(u, { deadlineIn: 1 });
+    expect(await reject(u, r, { text: "No more mugs", expectMore: true })).toEqual({ ok: false, error: "changed" });
+    expect(await ideaStatuses(r.roundId)).toEqual(["proposed", "proposed"]);
+    expect(await rejections(r.roundId)).toEqual([]);
+    expect(await facts(r.personId)).toEqual([]);
+    expect(await roundRow(r.roundId)).toMatchObject({ status: "awaiting_approval", locked_until: null });
+  });
+
+  it("a busy round returns busy and changes nothing", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    await pg.query("update concierge.gift_rounds set locked_until = now() + interval '5 minutes' where id = $1", [r.roundId]);
+    expect(await reject(u, r)).toEqual({ ok: false, error: "busy" });
+    expect(await ideaStatuses(r.roundId)).toEqual(["proposed", "proposed"]);
+    expect(await rejections(r.roundId)).toEqual([]);
+    expect(await facts(r.personId)).toEqual([]);
+  });
+
+  it("after an order was placed it returns not_open", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    await placedOrder(u, r, 0);
+    expect(await reject(u, r)).toEqual({ ok: false, error: "not_open" });
+    expect(await rejections(r.roundId)).toEqual([]);
+  });
+
+  it("someone else's round is not_found, and an over-long reason is too_long", async () => {
+    const u = await newUser();
+    const other = await newUser();
+    const r = await newRound(u);
+    expect(await rejectRoundIdeas({ userId: other.id, roundId: r.roundId, code: "too_pricey", text: null, ownedIdeaId: null, expectMore: true }, deps())).toEqual({
+      ok: false,
+      error: "not_found",
+    });
+    expect(await reject(u, r, { text: "x".repeat(501) })).toEqual({ ok: false, error: "too_long" });
+    expect(await ideaStatuses(r.roundId)).toEqual(["proposed", "proposed"]);
+  });
+
+  it("the saved reason shows in activeFacts for the person", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    expect(await reject(u, r, { code: "too_generic", text: "Something handmade" })).toEqual({ ok: true, more: true });
+    const shown = (await activeFacts(await signedIn(u), r.personId)).map((f) => f.value);
+    expect(shown).toEqual(expect.arrayContaining(["Too generic: Fly rod, Reel", "Something handmade"]));
+  });
+
+  // ─── the round's budget (AC-9) ────────────────────────────────────────────
+
+  it("a budget typed on the round is saved for the person and the occasion, and sets the round's budget", async () => {
+    const u = await newUser();
+    const r = await newRound(u, { budget: null, ideas: [{ title: "Fly rod", total: 4000 }, { title: "Waders", total: 9000 }] });
+    expect(await setRoundBudget({ userId: u.id, roundId: r.roundId, budgetCents: 5000 }, await signedIn(u), deps())).toBe("saved");
+    expect((await roundRow(r.roundId)).budget_cents).toBe(5000);
+    expect(await roundRow(r.roundId)).toMatchObject({ locked_until: null });
+    const budget = await pg.query("select occasion_kind, amount_cents from concierge.budgets where person_id = $1", [r.personId]);
+    expect(budget.rows).toEqual([{ occasion_kind: "christmas", amount_cents: 5000 }]);
+    const over = await pg.query("select over_budget from concierge.gift_ideas where round_id = $1 order by rank", [r.roundId]);
+    expect(over.rows.map((x) => x.over_budget)).toEqual([false, true]);
+
+    // Once set, it isn't set again.
+    expect(await setRoundBudget({ userId: u.id, roundId: r.roundId, budgetCents: 7000 }, await signedIn(u), deps())).toBe("already_set");
+    expect((await roundRow(r.roundId)).budget_cents).toBe(5000);
+  });
+
+  it("a budget on a busy round is busy, and on a closed round not_open", async () => {
+    const u = await newUser();
+    const busy = await newRound(u, { budget: null });
+    await pg.query("update concierge.gift_rounds set locked_until = now() + interval '5 minutes' where id = $1", [busy.roundId]);
+    expect(await setRoundBudget({ userId: u.id, roundId: busy.roundId, budgetCents: 5000 }, await signedIn(u), deps())).toBe("busy");
+    const closed = await newRound(u, { budget: null, status: "skipped" });
+    expect(await setRoundBudget({ userId: u.id, roundId: closed.roundId, budgetCents: 5000 }, await signedIn(u), deps())).toBe("not_open");
+  });
+
+  // ─── page reads (AC-3, AC-18, AC-29, AC-30, AC-30a) ────────────────────────
+
+  it('roundAccess tells another account only "other"', async () => {
+    const u = await newUser();
+    const other = await newUser();
+    const r = await newRound(u);
+    expect(await roundAccess(r.roundId, u.id, deps())).toBe("mine");
+    expect(await roundAccess(r.roundId, other.id, deps())).toBe("other");
+    expect(await roundAccess(randomUUID(), u.id, deps())).toBe("missing");
+    expect(await roundAccess("not-a-uuid", u.id, deps())).toBe("missing");
+  });
+
+  it("roundView as another user returns nothing", async () => {
+    const u = await newUser();
+    const other = await newUser();
+    const r = await newRound(u);
+    expect(await roundView(r.roundId, await signedIn(other))).toBeNull();
+    const mine = await roundView(r.roundId, await signedIn(u));
+    expect(mine?.ideas.map((i) => i.title)).toEqual(["Fly rod", "Reel"]);
+    expect(mine?.ideas[0]).toMatchObject({ imageUrl: "https://images.test/p.jpg", source: "generated", listItemId: null });
+    expect(mine?.closedText).toBeNull();
+    expect(mine?.nextBestIdeaId).toBe(r.ideaIds[0]);
+  });
+
+  it("roundView greys a claimed list gift and lists an unbuyable one for Buy it yourself", async () => {
+    const u = await newUser();
+    const owner = await newUser();
+    const { listId, itemIds } = await newList(owner, [
+      { name: "Vase", url: "https://www.amazon.com/dp/B0VASE" },
+      { name: "Lamp", url: "https://www.amazon.com/dp/B0LAMP" },
+      { name: "Hand-thrown mug", url: "https://www.etsy.com/listing/1" },
+    ]);
+    await pg.query("insert into lists.gift_claims (item_id, claimer_id, claimer_name) values ($1, $2, 'Bea')", [itemIds[1], owner.id]);
+    const r = await newRound(u, {
+      listId,
+      ideas: [
+        { title: "Vase", listItem: itemIds[0] },
+        { title: "Lamp", listItem: itemIds[1] },
+        { title: "Fly rod" },
+      ],
+    });
+    const view = await roundView(r.roundId, await signedIn(u));
+    expect(view?.ideas.map((i) => [i.title, i.claimed, i.noLongerShared])).toEqual([
+      ["Vase", false, false],
+      ["Lamp", true, false],
+      ["Fly rod", false, false],
+    ]);
+    expect(view?.buyYourself).toEqual([expect.objectContaining({ itemId: itemIds[2], name: "Hand-thrown mug", productUrl: "https://www.etsy.com/listing/1", storeName: "etsy.com" })]);
+    // A claimed list gift is never the next best.
+    await pg.query("update concierge.gift_ideas set status = 'rejected' where id = $1", [r.ideaIds[0]]);
+    expect((await roundView(r.roundId, await signedIn(u)))?.nextBestIdeaId).toBe(r.ideaIds[2]);
+  });
+
+  it("after the link is cut, roundView marks the round's list ideas no longer shared", async () => {
+    const u = await newUser();
+    const owner = await newUser();
+    const { listId, itemIds } = await newList(owner, [{ name: "Vase" }, { name: "Mug" }]);
+    const r = await newRound(u, { listId, ideas: [{ title: "Vase", listItem: itemIds[0] }, { title: "Fly rod" }] });
+    // A new share token revokes the old link (lists.handle_share_token_changed).
+    await pg.query("update lists.lists set share_token = gen_random_uuid() where id = $1", [listId]);
+    const view = await roundView(r.roundId, await signedIn(u));
+    expect(view?.ideas.map((i) => [i.title, i.noLongerShared])).toEqual([
+      ["Vase", true],
+      ["Fly rod", false],
+    ]);
+    expect(view?.buyYourself).toEqual([]);
+    expect(view?.nextBestIdeaId).toBe(r.ideaIds[1]);
+  });
+
+  it("an ordered round's view says what was ordered", async () => {
+    const u = await newUser();
+    const r = await newRound(u, { ideas: [{ title: "LEGO Botanical Orchid" }, { title: "Reel" }] });
+    await placedOrder(u, r, 0);
+    const view = await roundView(r.roundId, await signedIn(u));
+    expect(view?.closedText).toBe("Already ordered: LEGO Botanical Orchid");
+    expect(view?.liveOrders).toEqual([expect.objectContaining({ ideaId: r.ideaIds[0], status: "placed", title: "LEGO Botanical Orchid" })]);
+    expect(view?.failedOrders).toEqual([]);
+  });
+
+  it("a past round says the occasion has passed", async () => {
+    const u = await newUser();
+    const r = await newRound(u, { deadlineIn: -3, status: "skipped" });
+    const view = await roundView(r.roundId, await signedIn(u));
+    expect(view?.closedText).toBe("This occasion has passed");
+    expect(view?.nextBestIdeaId).toBeNull();
+  });
+
+  async function placedOrder(u: User, r: Round, index: number) {
+    await pg.query("update concierge.gift_ideas set status = 'selected' where id = $1", [r.ideaIds[index]]);
+    await pg.query(
+      `insert into concierge.orders (user_id, round_id, idea_id, funding_mode, max_price_cents, fee_cents, ship_to, ship_city, ship_state, status, total_cents)
+       values ($1, $2, $3, 'zinc_wallet', 4520, 100, 'recipient', 'Dayton', 'OH', 'placed', 4000)`,
+      [u.id, r.roundId, r.ideaIds[index]],
+    );
+    await pg.query("update concierge.gift_rounds set status = 'ordered' where id = $1", [r.roundId]);
+  }
+});
