@@ -52,7 +52,8 @@ select set_eq(
     'zinc_requests_per_second', 'list_photo_width_px', 'list_photo_jpeg_quality', 'list_photo_max_bytes',
     'extension_add_enabled', 'list_photo_cleanup_batch', 'list_photo_cleanup_min_age_minutes',
     'amazon_paste_lookup_enabled', 'amazon_paste_lookups_per_user_per_day', 'amazon_paste_lookup_timeout_ms',
-    'amazon_paste_lookups_per_day_total', 'round_fanout_enabled', 'idea_round_runs_per_day'
+    'amazon_paste_lookups_per_day_total', 'round_fanout_enabled', 'idea_round_runs_per_day',
+    'idea_list_lookups_max', 'idea_list_min'
   ],
   'every fee, limit, default and schedule setting is seeded'
 );

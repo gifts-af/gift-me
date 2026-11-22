@@ -29,6 +29,14 @@ end $$;
 
 create function tests.ag_idea(p_round uuid, p_item uuid)
 returns uuid language sql as $$
+  -- A list idea's person is linked to the item's list, as approve_round requires (AC-30a).
+  with link as (
+    insert into lists.person_links (person_id, buyer_id, list_id, share_token)
+    select r.person_id, r.user_id, l.id, l.share_token
+      from concierge.gift_rounds r, lists.list_items li join lists.lists l on l.id = li.list_id
+     where r.id = p_round and li.id = p_item
+    on conflict (person_id) do nothing
+  )
   insert into concierge.gift_ideas (user_id, round_id, title, price_cents, est_total_cents, rank, source, list_item_id)
   select r.user_id, r.id, 'Vase', 4000, 4500, 1, case when p_item is null then 'generated' else 'list' end, p_item
     from concierge.gift_rounds r where r.id = p_round
