@@ -1,7 +1,7 @@
 import { productLink } from "@gifts-af/core/store-page/link";
 import { z } from "zod";
 import { logEvent } from "@/lib/log";
-import { MAX_PRICE_CENTS } from "./format.js";
+import { MAX_PRICE_CENTS } from "./format";
 import { cleanUrl, MAX_NAME_LENGTH } from "./save-list";
 
 // "Add to my list" from the Chrome extension (ALL-78): the form the extension

@@ -1,4 +1,4 @@
-import GiftCard from './gift-card.jsx'
+import GiftCard from './gift-card'
 
 const DEFAULT_EMPTY_MESSAGE = 'Nothing here yet. Paste a link from any store above, or add a gift by hand.'
 

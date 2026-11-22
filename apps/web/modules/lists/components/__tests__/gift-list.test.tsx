@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
-import GiftList from "../gift-list.jsx";
+import GiftList from "../gift-list";
 
 describe("GiftList", () => {
   it("invites a link from any store when the list is empty (ALL-10)", () => {

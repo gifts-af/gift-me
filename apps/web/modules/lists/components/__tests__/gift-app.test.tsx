@@ -9,7 +9,7 @@ vi.mock("@/modules/lists/actions/lists", () => ({ saveList: vi.fn() }));
 vi.mock("@/modules/lists/actions/store-page", () => ({ readStorePage: vi.fn() }));
 vi.mock("@/modules/lists/actions/amazon-lookup", () => ({ lookUpAmazon: vi.fn() }));
 const { saveList } = await import("@/modules/lists/actions/lists");
-const { default: GiftApp, GiftAppSkeleton, UNDO_MS } = await import("../gift-app.jsx");
+const { default: GiftApp, GiftAppSkeleton, UNDO_MS } = await import("../gift-app");
 
 const gift = (id, name) => ({
   id,

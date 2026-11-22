@@ -1,6 +1,6 @@
-import { storeName } from '@/modules/lists/lib/product-link.js'
-import Modal from './modal.jsx'
-import { buttonClass } from './ui.jsx'
+import { storeName } from '@/modules/lists/lib/product-link'
+import Modal from './modal'
+import { buttonClass } from './ui'
 
 /**
  * Shown before opening an unclaimed gift's product page, as a reminder to

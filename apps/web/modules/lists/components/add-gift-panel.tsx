@@ -1,9 +1,9 @@
 import { useLayoutEffect, useRef, useState } from 'react'
-import { lookupProductLink, storeName } from '@/modules/lists/lib/product-link.js'
-import { centsToInputValue, formatCents, parsePriceToCents } from '@/modules/lists/lib/format.js'
+import { lookupProductLink, storeName } from '@/modules/lists/lib/product-link'
+import { centsToInputValue, formatCents, parsePriceToCents } from '@/modules/lists/lib/format'
 import { useExtensionStoreUrl } from '@/components/extension-link'
-import LookupStatus from './lookup-status.jsx'
-import { buttonClass, inputClass, labelClass } from './ui.jsx'
+import LookupStatus from './lookup-status'
+import { buttonClass, inputClass, labelClass } from './ui'
 
 const EMPTY_DRAFT = { name: '', price: '', imageUrl: '' }
 const EMPTY_META = { productUrl: null, asin: null, source: 'manual' }

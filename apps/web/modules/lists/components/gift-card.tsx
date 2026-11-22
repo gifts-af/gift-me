@@ -1,7 +1,7 @@
 import { X } from 'lucide-react'
 import { useState } from 'react'
-import { storeName } from '@/modules/lists/lib/product-link.js'
-import { formatCents } from '@/modules/lists/lib/format.js'
+import { storeName } from '@/modules/lists/lib/product-link'
+import { formatCents } from '@/modules/lists/lib/format'
 
 /**
  * `onView`, when given, intercepts the product link (the shared list asks

@@ -1,6 +1,6 @@
 import { Share } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { BlockedButton, buttonClass } from './ui.jsx'
+import { BlockedButton, buttonClass } from './ui'
 
 const COPIED_MS = 2000
 

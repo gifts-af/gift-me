@@ -24,7 +24,7 @@ describe("product boundaries", () => {
   it("blocks another product from reaching into its internals", async () => {
     const errors = await boundaryErrors(
       "modules/concierge/probe.ts",
-      'import { formatCents } from "@/modules/lists/lib/format.js";\nexport const x = formatCents;\n',
+      'import { formatCents } from "@/modules/lists/lib/format";\nexport const x = formatCents;\n',
     );
     expect(errors).toHaveLength(1);
   });
@@ -32,7 +32,7 @@ describe("product boundaries", () => {
   it("blocks routes from reaching into a product's internals", async () => {
     const errors = await boundaryErrors(
       "app/probe.ts",
-      'import { formatCents } from "@/modules/lists/lib/format.js";\nexport const x = formatCents;\n',
+      'import { formatCents } from "@/modules/lists/lib/format";\nexport const x = formatCents;\n',
     );
     expect(errors).toHaveLength(1);
   });
@@ -40,7 +40,7 @@ describe("product boundaries", () => {
   it("lets a product use its own internals", async () => {
     const errors = await boundaryErrors(
       "modules/lists/probe.ts",
-      'import { formatCents } from "@/modules/lists/lib/format.js";\nexport const x = formatCents;\n',
+      'import { formatCents } from "@/modules/lists/lib/format";\nexport const x = formatCents;\n',
     );
     expect(errors).toEqual([]);
   });

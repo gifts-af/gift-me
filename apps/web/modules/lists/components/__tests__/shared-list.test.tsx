@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 vi.mock("@/modules/lists/actions/claims", () => ({ claimGift: vi.fn(), unclaimGift: vi.fn() }));
 const { claimGift } = await import("@/modules/lists/actions/claims");
-const { default: SharedList } = await import("../shared-list.jsx");
+const { default: SharedList } = await import("../shared-list");
 
 beforeAll(() => {
   // jsdom has <dialog> but not its modal methods.

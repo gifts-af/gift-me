@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { useState } from 'react'
-import Modal from './modal.jsx'
-import { Banner, buttonClass, inputClass, labelClass } from './ui.jsx'
+import Modal from './modal'
+import { Banner, buttonClass, inputClass, labelClass } from './ui'
 
 const NAME_KEY = 'giftme:guest-name'
 const MAX_NAME_LENGTH = 80

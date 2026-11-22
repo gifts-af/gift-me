@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import AddGiftPanel from "../add-gift-panel.jsx";
+import AddGiftPanel from "../add-gift-panel";
 
 async function lookUp(url) {
   const onAdd = vi.fn();

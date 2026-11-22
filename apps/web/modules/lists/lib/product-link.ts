@@ -1,6 +1,6 @@
 import { cleanLink, extractAsin, isAmazonHost, storeName } from '@gifts-af/core/store-page/link'
 export { storeName }
-import { AMAZON_FIXTURES } from './fixtures.js'
+import { AMAZON_FIXTURES } from './fixtures'
 
 // Turns a pasted product link into gift details. Client-only, best effort.
 //

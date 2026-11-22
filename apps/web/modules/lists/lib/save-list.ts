@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { logEvent } from "@/lib/log";
-import { MAX_PRICE_CENTS } from "./format.js";
+import { MAX_PRICE_CENTS } from "./format";
 import { readList, rowToGift, UUID_PATTERN, type Gift, type ListItemRow } from "./lists";
 
 // Saving My list, shared by the saveList action and the close route

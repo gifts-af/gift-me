@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { lookupProductLink } from '../product-link.js'
+import { lookupProductLink } from '../product-link'
 
 describe('lookupProductLink: links from stores other than Amazon (ALL-10)', () => {
   it('takes the name from a Walmart link and asks for the price', async () => {
@@ -73,7 +73,7 @@ describe('lookupProductLink: links from stores other than Amazon (ALL-10)', () =
 
 describe('storeName', () => {
   it('says Amazon for any Amazon site and the bare domain for other stores', async () => {
-    const { storeName } = await import('../product-link.js')
+    const { storeName } = await import('../product-link')
     expect(storeName('https://www.amazon.co.uk/dp/B0EXAMPLE1')).toBe('Amazon')
     expect(storeName('https://www.walmart.com/ip/x/1')).toBe('walmart.com')
     expect(storeName('https://shop.example.co/p/1')).toBe('shop.example.co')

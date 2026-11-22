@@ -7,11 +7,11 @@ import { claimGift, unclaimGift } from '@/modules/lists/actions/claims'
 import { PageFrame } from '@/components/app-shell/page-frame'
 import { TopBar } from '@/components/app-shell/top-bar'
 import { DEFAULT_LIST_TITLE } from '@/modules/lists/lib/list-title'
-import ClaimDialog from './claim-dialog.jsx'
-import GiftList from './gift-list.jsx'
-import GiftSummary from './gift-summary.jsx'
-import { Banner, buttonClass } from './ui.jsx'
-import ViewDialog from './view-dialog.jsx'
+import ClaimDialog from './claim-dialog'
+import GiftList from './gift-list'
+import GiftSummary from './gift-summary'
+import { Banner, buttonClass } from './ui'
+import ViewDialog from './view-dialog'
 
 /**
  * `nav` fills the top bar (the page builds it; this is a client component), and
