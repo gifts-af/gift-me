@@ -213,11 +213,21 @@ const m = build(DB);
 const stats =
   `<div class="stats"><span><b>${m.counts.tables}</b>tables</span><span><b>${m.counts.schemas}</b>schemas</span>` +
   `<span><b>${m.counts.fks}</b>foreign keys</span><span><b>${m.counts.checks}</b>check rules</span></div>`;
+// Replacer functions, not strings: a replacement string treats "$'" and "$&" as patterns, and the
+// schema has them (a check rule like phone ~ '^[0-9]{10}$').
 const page = readFileSync(path.join(HERE, "template.html"), "utf8")
-  .replace("<!--STATS-->", stats)
-  .replace("<!--SVG-->", m.svg)
-  .replace("<!--INDEX-->", m.idx)
-  .replace("/*DATA*/null", JSON.stringify(m.data).replace(/<\//g, "<\\/"));
+  .replace("<!--STATS-->", () => stats)
+  .replace("<!--SVG-->", () => m.svg)
+  .replace("<!--INDEX-->", () => m.idx)
+  .replace("/*DATA*/null", () => JSON.stringify(m.data).replace(/<\//g, "<\\/"));
+// The page must carry the data exactly: a template fill that mangles it leaves every table unclickable.
+const shipped = page.match(/const DATA = (.*);\n/)?.[1] ?? "";
+let roundTrip = null;
+try { roundTrip = JSON.parse(shipped.replace(/<\\\//g, "</")); } catch {}
+if (JSON.stringify(roundTrip) !== JSON.stringify(m.data)) {
+  console.error("The page's embedded table data doesn't match the database read: the template fill is broken.");
+  process.exit(1);
+}
 if (CHECK) {
   let current = "";
   try { current = readFileSync(OUT, "utf8"); } catch {}
