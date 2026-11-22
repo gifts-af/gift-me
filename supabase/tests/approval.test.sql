@@ -8,12 +8,12 @@
 -- its budget (Task 3).
 begin;
 \ir _helpers.psql
-select plan(86);
+select plan(89);
 
 -- This file starts several round runs on one day; the daily limit has its own test (round_fanout).
 update concierge.app_settings set value = '1000' where key = 'idea_round_runs_per_day';
--- New ideas need the idea engine on (runs_after_rejection); it ships off.
-update concierge.app_settings set value = '1' where key = 'idea_engine_enabled';
+-- New ideas need the idea and round engines on (runs_after_rejection); both ship off.
+update concierge.app_settings set value = '1' where key in ('idea_engine_enabled', 'round_engine_enabled');
 
 select tests.create_user('buyer@example.com', 'Buyer') as a \gset
 select tests.create_user('mom@example.com', 'Mom') as mom \gset
@@ -710,6 +710,25 @@ select is(concierge.runs_after_rejection(:'rlo', '[{"category": "avoid", "value"
   'with idea_engine_enabled 0 there are no new ideas');
 select tests.reset_role();
 update concierge.app_settings set value = '1' where key = 'idea_engine_enabled';
+
+-- With the round engine off no tick would run the search, so a reject keeps the ideas.
+select tests.ap_round(:'a', :'p_lo') as roff \gset
+select tests.ap_idea(:'roff', null) as roff_idea \gset
+select locked_until as roff_lock from concierge.gift_rounds where id = :'roff' \gset
+update concierge.app_settings set value = '0' where key = 'round_engine_enabled';
+select tests.act_as_server();
+select is(concierge.runs_after_rejection(:'roff', '[{"category": "avoid", "value": "Loud"}]', now(), true), false,
+  'with round_engine_enabled 0 there are no new ideas');
+select throws_ok(tests.rj_sql(:'roff', :'a', :'roff_lock', 'not_style', '[]', true, true),
+  'P0001', 'reject_round_ideas: changed', '... and a reject expecting new ideas is changed');
+select concierge.reject_round_ideas(:'roff', :'a', :'roff_lock', 'not_style', null, '[]', false, true);
+select tests.reset_role();
+select is(
+  array[(select status from concierge.gift_ideas where id = :'roff_idea'),
+        (select status::text from concierge.gift_rounds where id = :'roff')],
+  array['proposed', 'awaiting_approval'],
+  '... so the reject keeps the ideas and the round awaiting approval');
+update concierge.app_settings set value = '1' where key = 'round_engine_enabled';
 
 select tests.create_user('unpaid@example.com', 'Unpaid') as unpaid \gset
 insert into concierge.accounts (user_id, paid_features) values (:'unpaid', false);

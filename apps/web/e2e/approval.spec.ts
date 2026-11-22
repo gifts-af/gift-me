@@ -185,8 +185,9 @@ test("None of these saves the reason, the next tick brings new ideas and a secon
   // The first heads-up, as the engine sent it.
   await rest("round_sends", { method: "POST", body: { round_id: roundId, user_id: b.id, step: "heads_up" } });
   await rest("notifications", { method: "POST", body: { user_id: b.id, round_id: roundId, kind: "heads_up", sent_at: new Date().toISOString() } });
-  // New ideas need the idea engine on (runs_after_rejection); no spec turns it off before the end.
+  // New ideas need the idea and round engines on (runs_after_rejection); no spec turns either off before the end.
   await setSetting("idea_engine_enabled", 1);
+  await setSetting("round_engine_enabled", 1);
 
   await signIn(page, b.creds);
   await page.goto(`/rounds/${roundId}`);

@@ -544,8 +544,9 @@ grant execute on function concierge.replace_failed_order(uuid, uuid, timestamptz
 -- setting answers false (round_idea_state). With no facts it's exactly the
 -- rule reject_round_ideas checks after saving its facts.
 --   New (none of these can strand the buyer): a run must also be able to
--- happen and find something. The idea engine is on (idea_engine_enabled = 1),
--- the buyer has paid features, and the person has an active fact (counting
+-- happen and find something. The round engine is on (round_engine_enabled =
+-- 1, or no tick runs the search), the idea engine is on (idea_engine_enabled
+-- = 1), the buyer has paid features, and the person has an active fact (counting
 -- the ones this choice saves) or p_list_gifts: the caller found offerable list
 -- gifts beyond the ones this round already offered (listGiftCandidates for
 -- this round, which the lists product answers, T19). Otherwise false, so the
@@ -559,6 +560,7 @@ set search_path = ''
 as $$
   select coalesce((
     select (p_now at time zone 'utc')::date + 1 < r.ship_by_deadline
+       and concierge.setting_int('round_engine_enabled') = 1
        and concierge.setting_int('idea_engine_enabled') = 1
        and s.paid
        and (s.has_facts or nf.any_new or coalesce(p_list_gifts, false))
