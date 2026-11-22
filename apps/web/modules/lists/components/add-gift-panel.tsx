@@ -1,22 +1,48 @@
-import { useLayoutEffect, useRef, useState } from 'react'
-import { lookupProductLink, storeName } from '@/modules/lists/lib/product-link'
-import { centsToInputValue, formatCents, parsePriceToCents } from '@/modules/lists/lib/format'
-import { useExtensionStoreUrl } from '@/components/extension-link'
-import LookupStatus from './lookup-status'
-import { buttonClass, inputClass, labelClass } from './ui'
+import { useLayoutEffect, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
+import { lookupProductLink, storeName, type MissingField } from "@/modules/lists/lib/product-link";
+import { centsToInputValue, formatCents, parsePriceToCents } from "@/modules/lists/lib/format";
+import type { PageProduct } from "@gifts-af/core/store-page";
+import { useExtensionStoreUrl } from "@/components/extension-link";
+import type { AmazonLookupResult, AmazonProduct } from "@/modules/lists/lib/amazon-lookup";
+import type { ReadPage } from "@/modules/lists/lib/gift-link";
+import type { Gift } from "@/modules/lists/lib/lists";
+import LookupStatus, { type Lookup, type LookupProduct } from "./lookup-status";
+import { buttonClass, inputClass, labelClass } from "./ui";
 
-const EMPTY_DRAFT = { name: '', price: '', imageUrl: '' }
-const EMPTY_META = { productUrl: null, asin: null, source: 'manual' }
+// The editable fields, held as typed: the price stays a string until submit.
+type Draft = { name: string; price: string; imageUrl: string };
+type FieldErrors = Partial<Record<keyof Draft, string>>;
+// Where the gift came from, carried through to onAdd untouched.
+type Meta = Pick<Gift, "productUrl" | "asin" | "source">;
+type Mode = "closed" | "found" | "details";
+// A lookup that found a product, complete or partial.
+type FoundLookup = Exclude<Lookup, { status: "error" }>;
 
-function ImagePreview({ src }) {
-  const [failed, setFailed] = useState(false)
-  if (!src.trim()) return null
+/** What a confirmed gift hands up: a Gift before it gets an id and a date. */
+export type NewGift = Omit<Gift, "id" | "addedAt">;
+
+export type AddGiftPanelProps = {
+  onAdd: (gift: NewGift) => void;
+  readStorePage?: ReadPage;
+  lookUpAmazon?: (asin: string) => Promise<AmazonLookupResult>;
+};
+
+type ImagePreviewProps = { src: string };
+
+type FieldErrorProps = { id: string; children: ReactNode };
+
+const EMPTY_DRAFT: Draft = { name: "", price: "", imageUrl: "" };
+const EMPTY_META: Meta = { productUrl: null, asin: null, source: "manual" };
+
+function ImagePreview({ src }: ImagePreviewProps) {
+  const [failed, setFailed] = useState(false);
+  if (!src.trim()) return null;
   if (failed) {
     return (
       <span className="grid size-11 flex-none place-items-center rounded-md bg-muted text-[13px]" aria-hidden="true">
         n/a
       </span>
-    )
+    );
   }
   return (
     <img
@@ -26,35 +52,35 @@ function ImagePreview({ src }) {
       // Amazon returns a 1x1 GIF placeholder (HTTP 200) for ASINs it lacks a
       // photo for, so onError never fires -- catch it via naturalWidth.
       onLoad={(event) => {
-        if (event.currentTarget.naturalWidth <= 1) setFailed(true)
+        if (event.currentTarget.naturalWidth <= 1) setFailed(true);
       }}
       onError={() => setFailed(true)}
     />
-  )
+  );
 }
 
-function FieldError({ id, children }) {
+function FieldError({ id, children }: FieldErrorProps) {
   return (
     <p className="text-[13px] font-normal text-destructive" id={id}>
       {children}
     </p>
-  )
+  );
 }
 
 /**
  * Merges what the server read off a store page (ALL-10) into the link-only
  * result. The page's name beats the one guessed from the link.
  */
-function withStorePage(result, page) {
-  const product = {
+function withStorePage(result: FoundLookup, page: PageProduct): Lookup {
+  const product: LookupProduct = {
     ...result.product,
     name: page.name ?? result.product.name,
     priceCents: page.priceCents,
     imageUrl: page.imageUrl,
-    source: 'store-page',
+    source: "store-page",
     pageRead: true,
-  }
-  return withMissing(product)
+  };
+  return withMissing(product);
 }
 
 // Amazon (ALL-141): the link already gives a name from its path and a photo
@@ -65,30 +91,30 @@ function withStorePage(result, page) {
 //
 // An answer for a different product (Zinc's productId isn't this ASIN) is
 // ignored.
-function withAmazonProduct(result, page) {
-  if (typeof page.productId !== 'string' || page.productId.toUpperCase() !== result.product.asin) return result
-  const product = {
+function withAmazonProduct(result: FoundLookup, page: AmazonProduct): Lookup {
+  if (typeof page.productId !== "string" || page.productId.toUpperCase() !== result.product.asin) return result;
+  const product: LookupProduct = {
     ...result.product,
     name: page.name ?? result.product.name,
     priceCents: page.priceCents,
     imageUrl: page.imageUrl ?? result.product.imageUrl,
-    source: 'amazon-zinc',
+    source: "amazon-zinc",
     store: storeName(result.product.productUrl),
     pageRead: true,
     pageFound: { name: page.name !== null, image: page.imageUrl !== null },
-  }
-  return withMissing(product)
+  };
+  return withMissing(product);
 }
 
-function withMissing(product) {
-  const missing = []
-  if (!product.name) missing.push('name')
-  if (product.priceCents === null) missing.push('priceCents')
-  return { status: missing.length === 0 ? 'complete' : 'partial', product, missing, error: null }
+function withMissing(product: LookupProduct): Lookup {
+  const missing: MissingField[] = [];
+  if (!product.name) missing.push("name");
+  if (product.priceCents === null) missing.push("priceCents");
+  return { status: missing.length === 0 ? "complete" : "partial", product, missing, error: null };
 }
 
-function isAmazonSource(source) {
-  return source === 'amazon-url' || source === 'amazon-fixture'
+function isAmazonSource(source: LookupProduct["source"] | null): boolean {
+  return source === "amazon-url" || source === "amazon-fixture";
 }
 
 /**
@@ -102,129 +128,129 @@ function isAmazonSource(source) {
  * reads). Without them, or when either comes back empty, only what's in the
  * link is used.
  */
-export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }) {
-  const [url, setUrl] = useState('')
+export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }: AddGiftPanelProps) {
+  const [url, setUrl] = useState("");
   // Every field is seeded with '' and never undefined, so React never has to
   // switch an input from uncontrolled to controlled when autofill lands.
-  const [draft, setDraft] = useState(EMPTY_DRAFT)
-  const [meta, setMeta] = useState(EMPTY_META)
-  const [lookup, setLookup] = useState(null)
-  const [pending, setPending] = useState(false)
-  const [errors, setErrors] = useState({})
-  const [announcement, setAnnouncement] = useState('')
+  const [draft, setDraft] = useState(EMPTY_DRAFT);
+  const [meta, setMeta] = useState(EMPTY_META);
+  const [lookup, setLookup] = useState<Lookup | null>(null);
+  const [pending, setPending] = useState(false);
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [announcement, setAnnouncement] = useState("");
   // 'closed' | 'found' (confirm a full match) | 'details' (the editable fields)
-  const [mode, setMode] = useState('closed')
-  const storeUrl = useExtensionStoreUrl()
+  const [mode, setMode] = useState<Mode>("closed");
+  const storeUrl = useExtensionStoreUrl();
 
   // Discards out-of-order lookups: paste A, add, paste B, add -- A's response
   // must not land on top of B's.
-  const requestId = useRef(0)
-  const urlRef = useRef(null)
-  const nameRef = useRef(null)
-  const priceRef = useRef(null)
-  const addRef = useRef(null)
+  const requestId = useRef(0);
+  const urlRef = useRef<HTMLInputElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+  const priceRef = useRef<HTMLInputElement>(null);
+  const addRef = useRef<HTMLButtonElement>(null);
 
-  function setField(field, value) {
-    setDraft((prev) => ({ ...prev, [field]: value }))
-    setErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev))
+  function setField(field: keyof Draft, value: string) {
+    setDraft((prev) => ({ ...prev, [field]: value }));
+    setErrors((prev) => (prev[field] ? { ...prev, [field]: undefined } : prev));
   }
 
   // Focus has to wait for the fields to render after a mode change, so it's
   // queued here and applied straight after that render -- never on a timer,
   // which could pull a fast typist out of the field they'd moved to.
-  const pendingFocus = useRef(null)
-  function focusSoon(ref) {
-    pendingFocus.current = ref
+  const pendingFocus = useRef<RefObject<HTMLElement | null>>(null);
+  function focusSoon(ref: RefObject<HTMLElement | null>) {
+    pendingFocus.current = ref;
   }
   useLayoutEffect(() => {
-    if (!pendingFocus.current) return
-    pendingFocus.current.current?.focus()
-    pendingFocus.current = null
-  })
+    if (!pendingFocus.current) return;
+    pendingFocus.current.current?.focus();
+    pendingFocus.current = null;
+  });
 
   async function handleAutofill() {
-    const myRequest = ++requestId.current
-    setPending(true)
-    setAnnouncement('')
+    const myRequest = ++requestId.current;
+    setPending(true);
+    setAnnouncement("");
 
-    let result
+    let result: Lookup;
     try {
-      result = await lookupProductLink(url)
+      result = await lookupProductLink(url);
     } catch {
       result = {
-        status: 'error',
+        status: "error",
         product: null,
         missing: [],
-        error: { code: 'NETWORK_ERROR', message: 'That lookup failed. Try again.' },
-      }
+        error: { code: "NETWORK_ERROR", message: "That lookup failed. Try again." },
+      };
     }
 
-    const source = result.status === 'error' ? null : result.product.source
+    const source = result.status === "error" ? null : result.product.source;
     try {
-      if (lookUpAmazon && isAmazonSource(source)) {
-        const found = await lookUpAmazon(result.product.asin)
-        if (found?.ok) result = withAmazonProduct(result, found.product)
-      } else if (readStorePage && source === 'store-url') {
-        const page = await readStorePage(result.product.productUrl)
-        if (page?.ok) result = withStorePage(result, page.product)
+      if (lookUpAmazon && result.status !== "error" && result.product.asin && isAmazonSource(source)) {
+        const found = await lookUpAmazon(result.product.asin);
+        if (found?.ok) result = withAmazonProduct(result, found.product);
+      } else if (readStorePage && result.status !== "error" && source === "store-url") {
+        const page = await readStorePage(result.product.productUrl);
+        if (page?.ok) result = withStorePage(result, page.product);
       }
     } catch {
       // Keep the link-only result: the person can still add it by hand.
     }
 
-    if (myRequest !== requestId.current) return // superseded
-    setPending(false)
-    setLookup(result)
+    if (myRequest !== requestId.current) return; // superseded
+    setPending(false);
+    setLookup(result);
 
-    if (result.status === 'error') {
+    if (result.status === "error") {
       // Leave the fields alone -- a failed lookup must never wipe typed input.
-      urlRef.current?.focus()
-      return
+      urlRef.current?.focus();
+      return;
     }
 
     // A new link is a new gift: start from an empty draft so nothing from an
     // earlier link or typed value survives, including fields added later (ALL-91).
-    const { product } = result
+    const { product } = result;
     setDraft({
       ...EMPTY_DRAFT,
-      name: product.name ?? '',
-      price: product.priceCents === null ? '' : centsToInputValue(product.priceCents),
-      imageUrl: product.imageUrl ?? '',
-    })
-    setMeta({ productUrl: product.productUrl, asin: product.asin, source: product.source })
-    setErrors({})
+      name: product.name ?? "",
+      price: product.priceCents === null ? "" : centsToInputValue(product.priceCents),
+      imageUrl: product.imageUrl ?? "",
+    });
+    setMeta({ productUrl: product.productUrl, asin: product.asin, source: product.source });
+    setErrors({});
 
     // Land the cursor on the first thing still needed.
-    if (result.missing.includes('name')) {
-      setMode('details')
-      focusSoon(nameRef)
-    } else if (result.missing.includes('priceCents')) {
-      setMode('details')
-      focusSoon(priceRef)
+    if (result.missing.includes("name")) {
+      setMode("details");
+      focusSoon(nameRef);
+    } else if (result.missing.includes("priceCents")) {
+      setMode("details");
+      focusSoon(priceRef);
     } else {
-      setMode('found')
-      focusSoon(addRef)
+      setMode("found");
+      focusSoon(addRef);
     }
   }
 
-  function handleSubmit(event) {
-    event.preventDefault()
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
 
     // Validate the draft unconditionally: autofill may have been edited since,
     // so where the data came from is irrelevant here.
-    const name = draft.name.trim()
-    const priceCents = parsePriceToCents(draft.price)
-    const nextErrors = {}
+    const name = draft.name.trim();
+    const priceCents = parsePriceToCents(draft.price);
+    const nextErrors: FieldErrors = {};
 
-    if (!name) nextErrors.name = 'Give the gift a name.'
-    if (draft.price.trim() === '') nextErrors.price = 'Add a price.'
-    else if (priceCents === null) nextErrors.price = 'Enter a price like 24.99.'
+    if (!name) nextErrors.name = "Give the gift a name.";
+    if (draft.price.trim() === "") nextErrors.price = "Add a price.";
+    else if (priceCents === null) nextErrors.price = "Enter a price like 24.99.";
 
-    if (Object.keys(nextErrors).length > 0) {
-      setErrors(nextErrors)
-      setMode('details')
-      focusSoon(nextErrors.name ? nameRef : priceRef)
-      return
+    if (Object.keys(nextErrors).length > 0 || priceCents === null) {
+      setErrors(nextErrors);
+      setMode("details");
+      focusSoon(nextErrors.name ? nameRef : priceRef);
+      return;
     }
 
     onAdd({
@@ -234,16 +260,16 @@ export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }) {
       productUrl: meta.productUrl,
       asin: meta.asin,
       source: meta.source,
-    })
+    });
 
-    setUrl('')
-    setDraft(EMPTY_DRAFT)
-    setMeta(EMPTY_META)
-    setLookup(null)
-    setErrors({})
-    setMode('closed')
-    setAnnouncement(`Added ${name} to your list.`)
-    urlRef.current?.focus()
+    setUrl("");
+    setDraft(EMPTY_DRAFT);
+    setMeta(EMPTY_META);
+    setLookup(null);
+    setErrors({});
+    setMode("closed");
+    setAnnouncement(`Added ${name} to your list.`);
+    urlRef.current?.focus();
   }
 
   return (
@@ -266,45 +292,48 @@ export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }) {
               onChange={(event) => setUrl(event.target.value)}
               onKeyDown={(event) => {
                 // After pasting a link, Enter should mean "look it up".
-                if (event.key === 'Enter') {
-                  event.preventDefault()
-                  handleAutofill()
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  handleAutofill();
                 }
               }}
             />
           </div>
           {/* type="button" is essential: the default is submit, and being the
               first button in the form it would become the implicit Enter target. */}
-          <button
-            type="button"
-            className={buttonClass.secondary}
-            onClick={handleAutofill}
-            disabled={pending}
-            aria-busy={pending}
-          >
-            {pending ? 'Looking…' : 'Add'}
+          <button type="button" className={buttonClass.secondary} onClick={handleAutofill} disabled={pending} aria-busy={pending}>
+            {pending ? "Looking…" : "Add"}
           </button>
         </div>
         <LookupStatus lookup={lookup} pending={pending} />
         {/* Desktop Chrome only, and only before a gift is under way (ALL-65). */}
-        {storeUrl && mode === 'closed' && !lookup && !pending && (
+        {storeUrl && mode === "closed" && !lookup && !pending && (
           <p className="text-[13px] text-muted-foreground">
-            Shopping elsewhere?{' '}
-            <a href={storeUrl} target="_blank" rel="noreferrer" className="font-semibold text-primary underline-offset-2 hover:underline">
+            Shopping elsewhere?{" "}
+            <a
+              href={storeUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="font-semibold text-primary underline-offset-2 hover:underline"
+            >
               Save from any shop with the extension
             </a>
           </p>
         )}
 
-        {mode === 'found' && (
+        {mode === "found" && (
           <div className="flex items-center gap-3 rounded-lg border bg-card p-3">
             <ImagePreview key={draft.imageUrl} src={draft.imageUrl} />
             <div className="min-w-0 flex-1">
               <p className="text-[15px] font-semibold [overflow-wrap:anywhere]">{draft.name}</p>
               <p className="num text-[13px] text-muted-foreground">
-                {formatCents(parsePriceToCents(draft.price) ?? 0)} · found on {storeName(meta.productUrl)}
+                {formatCents(parsePriceToCents(draft.price) ?? 0)} · found on {storeName(meta.productUrl ?? "")}
               </p>
-              <button type="button" className="text-[13px] text-muted-foreground underline underline-offset-[3px]" onClick={() => setMode('details')}>
+              <button
+                type="button"
+                className="text-[13px] text-muted-foreground underline underline-offset-[3px]"
+                onClick={() => setMode("details")}
+              >
                 Edit details
               </button>
             </div>
@@ -314,20 +343,20 @@ export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }) {
           </div>
         )}
 
-        {mode !== 'details' && (
+        {mode !== "details" && (
           <button
             type="button"
             className={`${buttonClass.link} self-start`}
             onClick={() => {
-              setMode('details')
-              focusSoon(nameRef)
+              setMode("details");
+              focusSoon(nameRef);
             }}
           >
             Add by hand
           </button>
         )}
 
-        {mode === 'details' && (
+        {mode === "details" && (
           <fieldset className="flex flex-col gap-3">
             <legend className="sr-only">Gift details</legend>
             <div className="flex flex-col gap-1.5">
@@ -340,9 +369,9 @@ export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }) {
                 type="text"
                 className={inputClass}
                 value={draft.name}
-                onChange={(event) => setField('name', event.target.value)}
-                aria-invalid={errors.name ? 'true' : undefined}
-                aria-describedby={errors.name ? 'gift-name-error' : undefined}
+                onChange={(event) => setField("name", event.target.value)}
+                aria-invalid={errors.name ? "true" : undefined}
+                aria-describedby={errors.name ? "gift-name-error" : undefined}
               />
               {errors.name && <FieldError id="gift-name-error">{errors.name}</FieldError>}
             </div>
@@ -365,9 +394,9 @@ export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }) {
                   placeholder="24.99"
                   className={`${inputClass} num pl-7`}
                   value={draft.price}
-                  onChange={(event) => setField('price', event.target.value)}
-                  aria-invalid={errors.price ? 'true' : undefined}
-                  aria-describedby={errors.price ? 'gift-price-error' : undefined}
+                  onChange={(event) => setField("price", event.target.value)}
+                  aria-invalid={errors.price ? "true" : undefined}
+                  aria-describedby={errors.price ? "gift-price-error" : undefined}
                 />
               </div>
               {errors.price && <FieldError id="gift-price-error">{errors.price}</FieldError>}
@@ -386,7 +415,7 @@ export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }) {
                   placeholder="https://…"
                   className={inputClass}
                   value={draft.imageUrl}
-                  onChange={(event) => setField('imageUrl', event.target.value)}
+                  onChange={(event) => setField("imageUrl", event.target.value)}
                 />
                 {/* key resets the preview's failure flag whenever the URL changes. */}
                 <ImagePreview key={draft.imageUrl} src={draft.imageUrl} />
@@ -401,8 +430,8 @@ export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }) {
                 type="button"
                 className={buttonClass.link}
                 onClick={() => {
-                  setMode('closed')
-                  setErrors({})
+                  setMode("closed");
+                  setErrors({});
                 }}
               >
                 Cancel
@@ -416,5 +445,5 @@ export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }) {
         {announcement}
       </p>
     </section>
-  )
+  );
 }

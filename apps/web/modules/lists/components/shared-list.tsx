@@ -1,98 +1,102 @@
-'use client'
+"use client";
 
-import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import { useState } from 'react'
-import { claimGift, unclaimGift } from '@/modules/lists/actions/claims'
-import { PageFrame } from '@/components/app-shell/page-frame'
-import { TopBar } from '@/components/app-shell/top-bar'
-import { DEFAULT_LIST_TITLE } from '@/modules/lists/lib/list-title'
-import ClaimDialog from './claim-dialog'
-import GiftList from './gift-list'
-import GiftSummary from './gift-summary'
-import { Banner, buttonClass } from './ui'
-import ViewDialog from './view-dialog'
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState, type ReactNode } from "react";
+import { claimGift, unclaimGift, type UnclaimResult } from "@/modules/lists/actions/claims";
+import { PageFrame } from "@/components/app-shell/page-frame";
+import { TopBar } from "@/components/app-shell/top-bar";
+import { DEFAULT_LIST_TITLE } from "@/modules/lists/lib/list-title";
+import type { GiftClaim, SharedGift, SharedList as SharedListData } from "@/modules/lists/lib/lists";
+import ClaimDialog from "./claim-dialog";
+import GiftList from "./gift-list";
+import GiftSummary from "./gift-summary";
+import { Banner, buttonClass } from "./ui";
+import ViewDialog from "./view-dialog";
 
 /**
  * `nav` fills the top bar (the page builds it; this is a client component), and
  * `top` renders above the heading.
- * @param {{ list: import('@/modules/lists/lib/lists').SharedList, token: string, nav?: import('react').ReactNode, top?: import('react').ReactNode }} props
  */
-export default function SharedList({ list, token, nav, top }) {
-  const router = useRouter()
+export type SharedListProps = {
+  list: SharedListData;
+  token: string;
+  nav?: ReactNode;
+  top?: ReactNode;
+};
+
+export default function SharedList({ list, token, nav, top }: SharedListProps) {
+  const router = useRouter();
   // Claims change here without a reload. A refresh hands down a new
   // list.items, which replaces the local copy (React's "adjust state when a
   // prop changes" pattern, rather than an effect that renders twice).
-  const [items, setItems] = useState(list.items)
-  const [sourceItems, setSourceItems] = useState(list.items)
+  const [items, setItems] = useState(list.items);
+  const [sourceItems, setSourceItems] = useState(list.items);
   if (sourceItems !== list.items) {
-    setSourceItems(list.items)
-    setItems(list.items)
+    setSourceItems(list.items);
+    setItems(list.items);
   }
 
-  const [claiming, setClaiming] = useState(null)
-  const [viewing, setViewing] = useState(null)
-  const [unclaimingId, setUnclaimingId] = useState(null)
-  const [actionError, setActionError] = useState('')
-  const [announcement, setAnnouncement] = useState('')
+  const [claiming, setClaiming] = useState<SharedGift | null>(null);
+  const [viewing, setViewing] = useState<SharedGift | null>(null);
+  const [unclaimingId, setUnclaimingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState("");
+  const [announcement, setAnnouncement] = useState("");
 
-  const loginHref = `/auth/login?next=${encodeURIComponent(`/share/${token}`)}`
+  const loginHref = `/auth/login?next=${encodeURIComponent(`/share/${token}`)}`;
 
   // The owner sees their own title; everyone else sees whose list it is, with
   // a custom title as a smaller line (ALL-123). With the switch off it names
   // nobody, not even your own linked person (AC-25).
-  const name = list.cardEnabled ? (list.linkedPerson?.name ?? list.ownerName) : null
-  const heading = list.isOwner ? list.title : name ? `${name}'s list` : 'Their list'
-  const showTitle = !list.isOwner && list.title !== DEFAULT_LIST_TITLE
+  const name = list.cardEnabled ? (list.linkedPerson?.name ?? list.ownerName) : null;
+  const heading = list.isOwner ? list.title : name ? `${name}'s list` : "Their list";
+  const showTitle = !list.isOwner && list.title !== DEFAULT_LIST_TITLE;
 
-  function setClaim(itemId, claim) {
-    setItems((prev) => prev.map((gift) => (gift.id === itemId ? { ...gift, claim } : gift)))
+  function setClaim(itemId: string, claim: GiftClaim | null) {
+    setItems((prev) => prev.map((gift) => (gift.id === itemId ? { ...gift, claim } : gift)));
   }
 
-  async function handleClaim(name) {
-    const gift = claiming
-    const result = await claimGift({ token, itemId: gift.id, name })
+  async function handleClaim(gift: SharedGift, name: string | undefined) {
+    const result = await claimGift({ token, itemId: gift.id, name });
     if (result.ok) {
-      setClaim(gift.id, result.claim)
-      setClaiming(null)
-      setActionError('')
-      setAnnouncement(`You claimed ${gift.name}.`)
+      setClaim(gift.id, result.claim);
+      setClaiming(null);
+      setActionError("");
+      setAnnouncement(`You claimed ${gift.name}.`);
     } else if (result.alreadyClaimed) {
       // The dialog says so; the refresh shows who got there first.
-      router.refresh()
+      router.refresh();
     }
-    return result
+    return result;
   }
 
-  async function handleUnclaim(gift) {
-    setUnclaimingId(gift.id)
-    setActionError('')
-    let result
+  async function handleUnclaim(gift: SharedGift) {
+    setUnclaimingId(gift.id);
+    setActionError("");
+    let result: UnclaimResult;
     try {
-      result = await unclaimGift({ token, itemId: gift.id })
+      result = await unclaimGift({ token, itemId: gift.id });
     } catch {
-      result = { ok: false, error: "This gift couldn't be unclaimed. Check your connection and try again." }
+      result = { ok: false, error: "This gift couldn't be unclaimed. Check your connection and try again." };
     }
-    setUnclaimingId(null)
+    setUnclaimingId(null);
     if (!result.ok) {
-      setActionError(result.error)
-      return
+      setActionError(result.error);
+      return;
     }
-    setClaim(gift.id, null)
-    setAnnouncement(`You unclaimed ${gift.name}.`)
+    setClaim(gift.id, null);
+    setAnnouncement(`You unclaimed ${gift.name}.`);
   }
 
-  function renderActions(gift) {
+  function renderActions(gift: SharedGift) {
     // The owner never sees claims (product decision 39); the database sends
     // none, and there's nothing for them to claim.
-    if (list.isOwner) return null
+    if (list.isOwner) return null;
 
     if (gift.claim) {
       return (
         <>
-          <span className="text-[13px] text-muted-foreground">
-            Claimed by {gift.claim.mine ? 'you' : gift.claim.name}
-          </span>
+          <span className="text-[13px] text-muted-foreground">Claimed by {gift.claim.mine ? "you" : gift.claim.name}</span>
           {gift.claim.mine && (
             <button
               type="button"
@@ -102,11 +106,11 @@ export default function SharedList({ list, token, nav, top }) {
               aria-busy={unclaimingId === gift.id}
               aria-label={`Unclaim ${gift.name}`}
             >
-              {unclaimingId === gift.id ? 'Unclaiming…' : 'Unclaim'}
+              {unclaimingId === gift.id ? "Unclaiming…" : "Unclaim"}
             </button>
           )}
         </>
-      )
+      );
     }
 
     return (
@@ -114,14 +118,14 @@ export default function SharedList({ list, token, nav, top }) {
         type="button"
         className={`${buttonClass.secondarySm} w-full`}
         onClick={() => {
-          setActionError('')
-          setClaiming(gift)
+          setActionError("");
+          setClaiming(gift);
         }}
         aria-label={`Claim ${gift.name}`}
       >
         Claim
       </button>
-    )
+    );
   }
 
   return (
@@ -130,9 +134,7 @@ export default function SharedList({ list, token, nav, top }) {
       <PageFrame wide className="gap-4">
         {top}
         {list.isOwner && (
-          <Banner tone="accent">
-            This is your list. Claims are hidden from you, so your gifts stay a surprise.
-          </Banner>
+          <Banner tone="accent">This is your list. Claims are hidden from you, so your gifts stay a surprise.</Banner>
         )}
         <div className="flex flex-col gap-1">
           <h1 id="list-heading" className="text-[22px] font-bold leading-tight [overflow-wrap:anywhere]">
@@ -162,11 +164,11 @@ export default function SharedList({ list, token, nav, top }) {
               list.isOwner
                 ? undefined
                 : (gift) => {
-                    const current = items.find((item) => item.id === gift.id)
+                    const current = items.find((item) => item.id === gift.id);
                     if (current?.claim) {
-                      window.open(gift.productUrl, '_blank', 'noopener,noreferrer')
+                      window.open(gift.productUrl ?? undefined, "_blank", "noopener,noreferrer");
                     } else {
-                      setViewing(gift)
+                      setViewing(gift);
                     }
                   }
             }
@@ -187,7 +189,7 @@ export default function SharedList({ list, token, nav, top }) {
           gift={claiming}
           viewer={list.viewer}
           loginHref={loginHref}
-          onConfirm={handleClaim}
+          onConfirm={(name) => handleClaim(claiming, name)}
           onClose={() => setClaiming(null)}
         />
       )}
@@ -196,5 +198,5 @@ export default function SharedList({ list, token, nav, top }) {
         {announcement}
       </p>
     </>
-  )
+  );
 }

@@ -1,9 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import Link from "next/link";
-import { Activity } from "react";
+import { Activity, type ComponentProps } from "react";
 import { finishBeforeLeaving } from "@/lib/leaving-page";
+import type { Gift, MyList } from "@/modules/lists/lib/lists";
 
 vi.mock("@/modules/lists/actions/lists", () => ({ saveList: vi.fn() }));
 vi.mock("@/modules/lists/actions/store-page", () => ({ readStorePage: vi.fn() }));
@@ -11,7 +12,13 @@ vi.mock("@/modules/lists/actions/amazon-lookup", () => ({ lookUpAmazon: vi.fn() 
 const { saveList } = await import("@/modules/lists/actions/lists");
 const { default: GiftApp, GiftAppSkeleton, UNDO_MS } = await import("../gift-app");
 
-const gift = (id, name) => ({
+type SaveListResult = Awaited<ReturnType<typeof saveList>>;
+type SaveName = NonNullable<ComponentProps<typeof GiftApp>["saveName"]>;
+
+// The app always sends whole gifts; saveList takes partial ones because it re-checks them.
+const whole = (items: Partial<Gift>[]) => items as Gift[];
+
+const gift = (id: string, name: string): Gift => ({
   id,
   name,
   priceCents: 1999,
@@ -22,7 +29,7 @@ const gift = (id, name) => ({
   addedAt: 0,
 });
 
-const member = {
+const member: MyList = {
   user: { email: "jim@example.test" },
   list: { id: "list-1", title: "My list", shareToken: "tok", version: "v1" },
   items: [gift("a", "Kettle"), gift("b", "Novel")],
@@ -35,9 +42,9 @@ const STASH = "giftme:guest-list";
 const sentNames = () => vi.mocked(saveList).mock.calls.map(([input]) => input.items.map((g) => g.name));
 
 // A save that answers only when the test says so.
-function deferred() {
-  let resolve;
-  const promise = new Promise((r) => (resolve = r));
+function deferred<T = void>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((r) => (resolve = r));
   return { promise, resolve };
 }
 
@@ -48,19 +55,19 @@ function savesSucceed() {
     listId: "list-1",
     shareToken: "tok",
     version: `v${++version}`,
-    items,
+    items: whole(items),
   }));
 }
 
-let user;
-async function addByHand(name) {
+let user: ReturnType<typeof userEvent.setup>;
+async function addByHand(name: string) {
   await user.click(screen.getByRole("button", { name: "Add by hand" }));
   await user.type(screen.getByLabelText("Gift name"), name);
   await user.type(screen.getByLabelText("Price"), "12");
   await user.click(screen.getByRole("button", { name: "Add to list" }));
 }
 
-const remove = (name) => user.click(screen.getByRole("button", { name: new RegExp(`Remove ${name}`) }));
+const remove = (name: string) => user.click(screen.getByRole("button", { name: new RegExp(`Remove ${name}`) }));
 const beforeUnloadBlocked = () => {
   const event = new Event("beforeunload", { cancelable: true });
   window.dispatchEvent(event);
@@ -133,7 +140,7 @@ describe("GiftApp", () => {
     });
 
     it("shows Saving… while a save is on its way", async () => {
-      const save = deferred();
+      const save = deferred<SaveListResult>();
       vi.mocked(saveList).mockReturnValueOnce(save.promise);
       render(<GiftApp initial={member} />);
       await addByHand("Lamp");
@@ -151,7 +158,7 @@ describe("GiftApp", () => {
         most = Math.max(most, inFlight);
         if (vi.mocked(saveList).mock.calls.length === 1) await first.promise;
         inFlight--;
-        return { ok: true, listId: "list-1", shareToken: "tok", version: `v${++version}`, items };
+        return { ok: true, listId: "list-1", shareToken: "tok", version: `v${++version}`, items: whole(items) };
       });
       render(<GiftApp initial={member} />);
       await addByHand("Lamp");
@@ -200,7 +207,7 @@ describe("GiftApp", () => {
         await remove("Novel");
         await leaveUndo();
         await act(async () => vi.advanceTimersByTime(UNDO_MS - 1000));
-        const bar = screen.getByText("Removed Novel").parentElement;
+        const bar = screen.getByText("Removed Novel").parentElement!;
         fireEvent.mouseEnter(bar);
         await act(async () => vi.advanceTimersByTime(UNDO_MS * 3));
         expect(saveList).not.toHaveBeenCalled();
@@ -225,12 +232,18 @@ describe("GiftApp", () => {
     it("never removes a gift it didn't remove, even when its record of the list is off", async () => {
       const first = deferred();
       const dad = gift("d", "Dad's pick");
-      let firstItems;
+      let firstItems: Gift[] = [];
       vi.mocked(saveList)
         // The first save reports a gift ("Dad's pick") this tab never showed.
         .mockImplementationOnce(({ items }) => {
-          firstItems = items;
-          return first.promise.then(() => ({ ok: true, listId: "list-1", shareToken: "tok", version: "v2", items: [...items, dad] }));
+          firstItems = whole(items);
+          return first.promise.then(() => ({
+            ok: true,
+            listId: "list-1",
+            shareToken: "tok",
+            version: "v2",
+            items: [...firstItems, dad],
+          }));
         })
         .mockImplementationOnce(async () => ({
           ok: false,
@@ -289,9 +302,7 @@ describe("GiftApp", () => {
           document.dispatchEvent(new Event("visibilitychange"));
         });
       const closeRoute = (version = "v2", behind = false) =>
-        vi
-          .spyOn(globalThis, "fetch")
-          .mockImplementation(async () => Response.json({ version, behind }, { status: 200 }));
+        vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({ version, behind }, { status: 200 }));
 
       // Phones often never fire pagehide, so a hidden tab sends it the way a
       // closing one does.
@@ -301,7 +312,7 @@ describe("GiftApp", () => {
         await remove("Novel");
         await hideTab();
         expect(fetch).toHaveBeenCalledTimes(1);
-        expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ listId: "list-1", version: "v1", removeIds: ["b"] });
+        expect(JSON.parse(fetch.mock.calls[0][1]?.body as string)).toEqual({ listId: "list-1", version: "v1", removeIds: ["b"] });
         expect(saveList).not.toHaveBeenCalled();
       });
 
@@ -332,7 +343,7 @@ describe("GiftApp", () => {
         const [url, init] = fetch.mock.calls[0];
         expect(url).toBe("/api/lists/save-on-close");
         expect(init).toMatchObject({ method: "POST", keepalive: true, headers: { "Content-Type": "application/json" } });
-        expect(JSON.parse(init.body)).toEqual({ listId: "list-1", version: "v1", removeIds: ["b"] });
+        expect(JSON.parse(init?.body as string)).toEqual({ listId: "list-1", version: "v1", removeIds: ["b"] });
         // The tab hiding just after, or the window closing, sends nothing more.
         await hideTab();
         await act(async () => vi.advanceTimersByTime(UNDO_MS));
@@ -349,7 +360,7 @@ describe("GiftApp", () => {
     });
 
     it("holds Sign out until the held remove is saved (AC-18)", async () => {
-      const save = deferred();
+      const save = deferred<SaveListResult>();
       vi.mocked(saveList).mockReturnValueOnce(save.promise);
       const signOut = vi.fn();
       render(
@@ -371,14 +382,14 @@ describe("GiftApp", () => {
     // Next keeps a page left in the app mounted under <Activity mode="hidden">;
     // its effects clean up, but what they started has to finish safely.
     describe("hidden by the router", () => {
-      const app = (mode) => (
+      const app = (mode: "visible" | "hidden") => (
         <Activity mode={mode}>
           <GiftApp initial={member} />
         </Activity>
       );
 
       it("sends a held remove, and Sign out still waits for it", async () => {
-        const save = deferred();
+        const save = deferred<SaveListResult>();
         vi.mocked(saveList).mockReturnValueOnce(save.promise);
         const view = render(app("visible"));
         await remove("Novel");
@@ -394,7 +405,7 @@ describe("GiftApp", () => {
       });
 
       it("still warns before the tab closes while a save there is on its way, or has failed", async () => {
-        const save = deferred();
+        const save = deferred<SaveListResult>();
         vi.mocked(saveList).mockReturnValueOnce(save.promise);
         const view = render(app("visible"));
         await addByHand("Lamp");
@@ -411,7 +422,7 @@ describe("GiftApp", () => {
 
     describe("a stale tab (AC-14)", () => {
       const latest = [gift("a", "Kettle"), gift("b", "Novel"), gift("x", "Scarf")];
-      const stale = { ok: false, stale: true, listId: "list-1", shareToken: "tok", version: "v9", items: latest };
+      const stale: SaveListResult = { ok: false, stale: true, listId: "list-1", shareToken: "tok", version: "v9", items: latest };
 
       it("takes the latest list, puts its own add back on top, saves once more, and says so", async () => {
         vi.mocked(saveList).mockResolvedValueOnce(stale);
@@ -445,7 +456,9 @@ describe("GiftApp", () => {
       });
 
       it("shows Couldn't save if the second save is refused too", async () => {
-        vi.mocked(saveList).mockResolvedValueOnce(stale).mockResolvedValueOnce({ ...stale, version: "v10" });
+        vi.mocked(saveList)
+          .mockResolvedValueOnce(stale)
+          .mockResolvedValueOnce({ ...stale, version: "v10" });
         render(<GiftApp initial={member} />);
         await addByHand("Socks");
         expect(saveList).toHaveBeenCalledTimes(2);
@@ -458,7 +471,7 @@ describe("GiftApp", () => {
     });
 
     describe("a failed save (AC-15)", () => {
-      const failed = { ok: false, error: "Your list couldn't be saved. Try again." };
+      const failed: SaveListResult = { ok: false, error: "Your list couldn't be saved. Try again." };
 
       it("says Couldn't save, keeps the gifts, warns before leaving, and Try again saves", async () => {
         vi.mocked(saveList).mockResolvedValueOnce(failed);
@@ -476,7 +489,7 @@ describe("GiftApp", () => {
       });
 
       it("warns before leaving while a save is on its way", async () => {
-        const save = deferred();
+        const save = deferred<SaveListResult>();
         vi.mocked(saveList).mockReturnValueOnce(save.promise);
         render(<GiftApp initial={member} />);
         await addByHand("Lamp");
@@ -509,7 +522,7 @@ describe("GiftApp", () => {
         return { reached, prevented: click.defaultPrevented };
       }
 
-      const withLink = (initial) => (
+      const withLink = (initial: MyList | null) => (
         <>
           <Link href="/">Give</Link>
           <GiftApp initial={initial} />
@@ -557,7 +570,7 @@ describe("GiftApp", () => {
 
   it("puts Share in the title row for a member", () => {
     render(<GiftApp initial={member} />);
-    const row = screen.getByRole("heading", { level: 1, name: "My list" }).parentElement;
+    const row = screen.getByRole("heading", { level: 1, name: "My list" }).parentElement!;
     expect(within(row).getByRole("button", { name: /Share/ })).toBeInTheDocument();
   });
 
@@ -584,15 +597,15 @@ describe("GiftApp", () => {
 
   describe("asking for a name on Share (ALL-136)", () => {
     const SKIP_KEY = "giftsaf:skip-name-prompt";
-    let writeText;
+    let writeText: Mock<(text: string) => Promise<void>>;
     beforeEach(() => {
-      writeText = vi.fn(async () => {});
+      writeText = vi.fn<(text: string) => Promise<void>>(async () => {});
       Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
       localStorage.removeItem(SKIP_KEY);
     });
 
     it("asks first, then saves the name and copies the link", async () => {
-      const saveName = vi.fn(async () => ({ ok: true }));
+      const saveName = vi.fn<SaveName>(async () => ({ ok: true }));
       render(<GiftApp initial={member} needsName saveName={saveName} />);
       await user.click(screen.getByRole("button", { name: /Share/ }));
       const dialog = await screen.findByRole("dialog", { name: "What name should your list show?" });
@@ -611,7 +624,7 @@ describe("GiftApp", () => {
     });
 
     it("Skip copies the link without a name, and isn't asked again on this device", async () => {
-      const saveName = vi.fn();
+      const saveName = vi.fn<SaveName>();
       const { unmount } = render(<GiftApp initial={member} needsName saveName={saveName} />);
       await user.click(screen.getByRole("button", { name: /Share/ }));
       await user.click(await screen.findByRole("button", { name: "Skip" }));
@@ -628,7 +641,7 @@ describe("GiftApp", () => {
     });
 
     it("keeps the dialog open with the error when the name can't be saved", async () => {
-      const saveName = vi.fn(async () => ({ ok: false, error: "Your name couldn't be saved. Try again." }));
+      const saveName = vi.fn<SaveName>(async () => ({ ok: false, error: "Your name couldn't be saved. Try again." }));
       render(<GiftApp initial={member} needsName saveName={saveName} />);
       await user.click(screen.getByRole("button", { name: /Share/ }));
       const dialog = await screen.findByRole("dialog");
@@ -639,7 +652,7 @@ describe("GiftApp", () => {
     });
 
     it("needs a name to save: an empty one is refused without calling the server", async () => {
-      const saveName = vi.fn();
+      const saveName = vi.fn<SaveName>();
       render(<GiftApp initial={member} needsName saveName={saveName} />);
       await user.click(screen.getByRole("button", { name: /Share/ }));
       const dialog = await screen.findByRole("dialog");
@@ -650,7 +663,7 @@ describe("GiftApp", () => {
     });
 
     it("doesn't ask someone who has a name", async () => {
-      render(<GiftApp initial={member} saveName={vi.fn()} />);
+      render(<GiftApp initial={member} saveName={vi.fn<SaveName>()} />);
       await user.click(screen.getByRole("button", { name: /Share/ }));
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       expect(writeText).toHaveBeenCalledTimes(1);
@@ -680,7 +693,7 @@ describe("GiftApp", () => {
 
     it("takes the stash once, however often the page is hidden and shown", async () => {
       localStorage.setItem(STASH, JSON.stringify({ items: [gift("x", "Socks")], at: Date.now() }));
-      const app = (mode) => (
+      const app = (mode: "visible" | "hidden") => (
         <Activity mode={mode}>
           <GiftApp initial={null} />
         </Activity>
@@ -701,7 +714,7 @@ describe("GiftApp", () => {
       const again = render(<GiftApp initial={null} />);
       expect(screen.getByText("Socks")).toBeInTheDocument();
       again.unmount();
-      expect(JSON.parse(localStorage.getItem(STASH)).items.map((g) => g.name)).toEqual(["Socks"]);
+      expect(JSON.parse(localStorage.getItem(STASH)!).items.map((g: Gift) => g.name)).toEqual(["Socks"]);
     });
 
     it("is told to sign in to keep their list", () => {

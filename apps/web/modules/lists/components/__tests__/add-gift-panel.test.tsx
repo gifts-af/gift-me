@@ -8,7 +8,7 @@ function openDetails() {
   fireEvent.click(screen.getByRole("button", { name: "Add by hand" }));
 }
 
-function fireLoad(img, naturalWidth) {
+function fireLoad(img: HTMLElement, naturalWidth: number) {
   Object.defineProperty(img, "naturalWidth", { configurable: true, value: naturalWidth });
   fireEvent.load(img);
 }

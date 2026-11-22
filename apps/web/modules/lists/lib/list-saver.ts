@@ -15,33 +15,77 @@
 //   top of it and saved once more. A second refusal shows "Couldn't save".
 //   Only gifts this tab removed are removed: never one it merely didn't see.
 
-export const UNDO_MS = 6000
+import type { saveList } from "../actions/lists";
+import type { Gift, MyList } from "./lists";
+import type { SaveListResult } from "./save-list";
 
-export const STALE_NOTICE = "Your list changed somewhere else. We've loaded the latest."
-const OFFLINE_ERROR = "Your list couldn't be saved. Check your connection and try again."
+export const UNDO_MS = 6000;
+
+export const STALE_NOTICE = "Your list changed somewhere else. We've loaded the latest.";
+const OFFLINE_ERROR = "Your list couldn't be saved. Check your connection and try again.";
+
+/** A removed gift, waiting out the Undo window, and where it was. */
+export type HeldGift = { gift: Gift; index: number };
+
+export type SaveStatus = "idle" | "saving" | "error";
+
+/** Why the Undo window is waiting. */
+export type UndoPauseReason = "focus" | "hover";
+
+/** What the close route is sent: ids only. */
+export type CloseBody = { listId: string; version: string; removeIds: string[] };
+
+/** The close route's answer when it saved, or null. */
+export type CloseResult = { version: string; behind: boolean } | null;
+
+/** What GiftApp renders from, via useSyncExternalStore. */
+export type ListSaverSnapshot = {
+  gifts: Gift[];
+  held: HeldGift | null;
+  status: SaveStatus;
+  error: string;
+  notice: string;
+  dirty: boolean;
+  listId: string | null;
+  shareToken: string | null;
+};
+
+export type ListSaverDeps = {
+  initial: MyList | null;
+  enabled: boolean;
+  save: typeof saveList;
+  sendOnClose: (body: CloseBody) => Promise<CloseResult>;
+};
+
+export type ListSaver = ReturnType<typeof createListSaver>;
 
 /** The list with the held gift back in its old place. */
-function withHeld(gifts, held) {
-  if (!held) return gifts
-  const next = [...gifts]
-  next.splice(Math.min(held.index, next.length), 0, held.gift)
-  return next
+function withHeld(gifts: Gift[], held: HeldGift | null): Gift[] {
+  if (!held) return gifts;
+  const next = [...gifts];
+  next.splice(Math.min(held.index, next.length), 0, held.gift);
+  return next;
 }
 
 /**
- * @param {{
- *   initial: import('./lists').MyList | null,
- *   enabled: boolean,
- *   save: typeof import('../actions/lists').saveList,
- *   sendOnClose: (body: { listId: string, version: string, removeIds: string[] }) =>
- *     Promise<{ version: string, behind: boolean } | null>,
- * }} deps
  * With `enabled` false (a guest, or a list that couldn't load) changes stay on
  * this device: nothing is held or saved.
  */
-export function createListSaver({ initial, enabled, save, sendOnClose }) {
-  const items = initial?.items ?? []
-  const s = {
+export function createListSaver({ initial, enabled, save, sendOnClose }: ListSaverDeps) {
+  const items = initial?.items ?? [];
+  const s: {
+    gifts: Gift[];
+    held: HeldGift | null;
+    listId: string | null;
+    version: string | null;
+    shareToken: string | null;
+    known: Set<string>;
+    removing: Set<string>;
+    status: SaveStatus;
+    error: string;
+    notice: string;
+    dirty: boolean;
+  } = {
     gifts: items, // on screen
     held: null, // { gift, index }: removed, waiting out the Undo window
     listId: initial?.list?.id ?? null,
@@ -52,22 +96,22 @@ export function createListSaver({ initial, enabled, save, sendOnClose }) {
     known: new Set(items.map((g) => g.id)),
     // Gifts this tab removed (past the Undo window) that no save has
     // confirmed yet. A merge removes only these.
-    removing: new Set(),
-    status: 'idle', // 'idle' | 'saving' | 'error'
-    error: '',
-    notice: '',
+    removing: new Set<string>(),
+    status: "idle", // 'idle' | 'saving' | 'error'
+    error: "",
+    notice: "",
     dirty: false, // changed since load, for a list that can't save
-  }
-  let changes = 0 // bumped when the list a save would send changes
-  let running = null // the save loop, while it runs
-  let wanted = false // a change waits for the next save
-  let timer = null
-  let deadline = 0
-  let remaining = UNDO_MS
-  const pauses = new Set() // why the Undo window is waiting: 'focus', 'hover'
-  const closeSent = new Set() // ids on their way to the close route
-  const listeners = new Set()
-  let snapshot
+  };
+  let changes = 0; // bumped when the list a save would send changes
+  let running: Promise<void> | null = null; // the save loop, while it runs
+  let wanted = false; // a change waits for the next save
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let deadline = 0;
+  let remaining = UNDO_MS;
+  const pauses = new Set<UndoPauseReason>(); // why the Undo window is waiting: 'focus', 'hover'
+  const closeSent = new Set<string>(); // ids on their way to the close route
+  const listeners = new Set<() => void>();
+  let snapshot: ListSaverSnapshot;
 
   function publish() {
     snapshot = {
@@ -79,192 +123,195 @@ export function createListSaver({ initial, enabled, save, sendOnClose }) {
       dirty: s.dirty,
       listId: s.listId,
       shareToken: s.shareToken,
-    }
-    listeners.forEach((listener) => listener())
+    };
+    listeners.forEach((listener) => listener());
   }
-  publish()
+  publish();
 
-  const full = () => withHeld(s.gifts, s.held)
+  const full = () => withHeld(s.gifts, s.held);
 
-  function requestSave() {
-    if (!enabled) return Promise.resolve()
-    wanted = true
-    if (!running) running = loop()
-    return running
+  function requestSave(): Promise<void> {
+    if (!enabled) return Promise.resolve();
+    wanted = true;
+    if (!running) running = loop();
+    return running;
   }
 
-  async function loop() {
+  async function loop(): Promise<void> {
     while (wanted) {
-      wanted = false
-      s.status = 'saving'
-      publish()
+      wanted = false;
+      s.status = "saving";
+      publish();
       if (!(await saveOnce())) {
-        s.status = 'error'
-        running = null
-        publish()
-        return
+        s.status = "error";
+        running = null;
+        publish();
+        return;
       }
     }
-    s.status = 'idle'
-    running = null
-    publish()
+    s.status = "idle";
+    running = null;
+    publish();
   }
 
   // One save, and if it's refused as stale, one more on top of the latest.
-  async function saveOnce() {
+  async function saveOnce(): Promise<boolean> {
     for (let attempt = 0; attempt < 2; attempt++) {
-      const sent = full()
-      const sentIds = new Set(sent.map((g) => g.id))
-      const at = changes
-      let result
+      const sent = full();
+      const sentIds = new Set(sent.map((g) => g.id));
+      const at = changes;
+      let result: SaveListResult;
       try {
-        result = await save({ listId: s.listId, version: s.version, items: sent })
+        result = await save({ listId: s.listId, version: s.version, items: sent });
       } catch {
-        result = { ok: false, error: OFFLINE_ERROR }
+        result = { ok: false, error: OFFLINE_ERROR };
       }
       if (result.ok) {
-        s.listId = result.listId
-        s.version = result.version
-        if (result.shareToken) s.shareToken = result.shareToken
-        s.known = new Set(result.items.map((g) => g.id))
+        s.listId = result.listId;
+        s.version = result.version;
+        if (result.shareToken) s.shareToken = result.shareToken;
+        s.known = new Set(result.items.map((g) => g.id));
         // A remove this save didn't carry is now confirmed gone.
-        for (const id of s.removing) if (!sentIds.has(id)) s.removing.delete(id)
+        for (const id of s.removing) if (!sentIds.has(id)) s.removing.delete(id);
         // Take the server's rows only if nothing changed mid-save.
-        if (changes === at) adopt(result.items)
-        if (attempt === 1) s.notice = STALE_NOTICE
-        s.error = ''
-        return true
+        if (changes === at) adopt(result.items);
+        if (attempt === 1) s.notice = STALE_NOTICE;
+        s.error = "";
+        return true;
       }
       if (!result.stale) {
-        s.error = result.error
-        return false
+        s.error = result.error;
+        return false;
       }
-      rebase(result)
-      publish()
+      rebase(result);
+      publish();
     }
-    s.error = '' // refused twice: the header says "Couldn't save"
-    return false
+    s.error = ""; // refused twice: the header says "Couldn't save"
+    return false;
   }
 
-  function adopt(rows) {
+  function adopt(rows: Gift[]) {
     if (!s.held) {
-      s.gifts = rows
-      return
+      s.gifts = rows;
+      return;
     }
-    const index = rows.findIndex((g) => g.id === s.held.gift.id)
-    if (index === -1) return
-    s.held = { gift: rows[index], index }
-    s.gifts = rows.filter((_, i) => i !== index)
+    const heldId = s.held.gift.id;
+    const index = rows.findIndex((g) => g.id === heldId);
+    if (index === -1) return;
+    s.held = { gift: rows[index], index };
+    s.gifts = rows.filter((_, i) => i !== index);
   }
 
   // This tab's adds and removes, put back on top of the latest list.
-  function rebase(latest) {
-    const added = full().filter((g) => !s.known.has(g.id))
-    const kept = latest.items.filter((g) => !s.removing.has(g.id))
-    const keptIds = new Set(kept.map((g) => g.id))
-    const merged = [...kept, ...added.filter((g) => !keptIds.has(g.id))]
+  function rebase(latest: Extract<SaveListResult, { stale: true }>) {
+    const added = full().filter((g) => !s.known.has(g.id));
+    const kept = latest.items.filter((g) => !s.removing.has(g.id));
+    const keptIds = new Set(kept.map((g) => g.id));
+    const merged = [...kept, ...added.filter((g) => !keptIds.has(g.id))];
 
-    s.listId = latest.listId
-    s.version = latest.version
-    s.shareToken = latest.shareToken ?? s.shareToken
-    s.known = new Set(latest.items.map((g) => g.id))
+    s.listId = latest.listId;
+    s.version = latest.version;
+    s.shareToken = latest.shareToken ?? s.shareToken;
+    s.known = new Set(latest.items.map((g) => g.id));
     if (s.held) {
-      const index = merged.findIndex((g) => g.id === s.held.gift.id)
+      const heldId = s.held.gift.id;
+      const index = merged.findIndex((g) => g.id === heldId);
       if (index === -1) {
         // Removed somewhere else too: nothing left to hold.
-        clearHeld()
+        clearHeld();
       } else {
-        s.held = { gift: merged[index], index }
-        merged.splice(index, 1)
+        s.held = { gift: merged[index], index };
+        merged.splice(index, 1);
       }
     }
-    s.gifts = merged
-    changes++
+    s.gifts = merged;
+    changes++;
   }
 
   function startTimer() {
-    clearTimeout(timer)
-    timer = null
-    if (!s.held || pauses.size > 0) return
-    deadline = Date.now() + remaining
-    timer = setTimeout(release, remaining)
+    if (timer) clearTimeout(timer);
+    timer = null;
+    if (!s.held || pauses.size > 0) return;
+    deadline = Date.now() + remaining;
+    timer = setTimeout(release, remaining);
   }
 
   function clearHeld() {
-    clearTimeout(timer)
-    timer = null
-    pauses.clear()
-    s.held = null
+    if (timer) clearTimeout(timer);
+    timer = null;
+    pauses.clear();
+    s.held = null;
   }
 
   /** Lets the held remove go: it's now one of this tab's removes. */
   function letGo() {
-    s.removing.add(s.held.gift.id)
-    clearHeld()
-    changes++
-    publish()
+    if (!s.held) return;
+    s.removing.add(s.held.gift.id);
+    clearHeld();
+    changes++;
+    publish();
   }
 
   /** Sends the held remove now. Resolves when every save so far has finished. */
-  function release() {
-    if (!s.held) return running ?? Promise.resolve()
-    letGo()
-    return requestSave()
+  function release(): Promise<void> {
+    if (!s.held) return running ?? Promise.resolve();
+    letGo();
+    return requestSave();
   }
 
   return {
-    subscribe(listener) {
-      listeners.add(listener)
-      return () => listeners.delete(listener)
+    subscribe(listener: () => void) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
     },
     getSnapshot: () => snapshot,
 
-    add(...gifts) {
-      s.gifts = [...s.gifts, ...gifts]
-      s.notice = ''
-      s.dirty = true
-      changes++
-      publish()
-      requestSave()
+    add(...gifts: Gift[]) {
+      s.gifts = [...s.gifts, ...gifts];
+      s.notice = "";
+      s.dirty = true;
+      changes++;
+      publish();
+      requestSave();
     },
 
-    remove(id) {
+    remove(id: string) {
       if (!enabled) {
-        s.gifts = s.gifts.filter((g) => g.id !== id)
-        s.dirty = true
-        publish()
-        return
+        s.gifts = s.gifts.filter((g) => g.id !== id);
+        s.dirty = true;
+        publish();
+        return;
       }
-      if (s.held) release() // one held remove at a time: the first goes now
-      const index = s.gifts.findIndex((g) => g.id === id)
-      if (index === -1) return
-      s.held = { gift: s.gifts[index], index }
-      s.gifts = s.gifts.filter((_, i) => i !== index)
-      s.notice = ''
-      remaining = UNDO_MS
-      startTimer()
-      publish()
+      if (s.held) release(); // one held remove at a time: the first goes now
+      const index = s.gifts.findIndex((g) => g.id === id);
+      if (index === -1) return;
+      s.held = { gift: s.gifts[index], index };
+      s.gifts = s.gifts.filter((_, i) => i !== index);
+      s.notice = "";
+      remaining = UNDO_MS;
+      startTimer();
+      publish();
     },
 
     undo() {
-      if (!s.held) return
-      s.gifts = withHeld(s.gifts, s.held)
-      clearHeld()
-      publish()
+      if (!s.held) return;
+      s.gifts = withHeld(s.gifts, s.held);
+      clearHeld();
+      publish();
     },
 
     /** The Undo window waits while the bar has focus or the pointer. */
-    pauseUndo(reason) {
-      if (pauses.has(reason)) return
-      pauses.add(reason)
+    pauseUndo(reason: UndoPauseReason) {
+      if (pauses.has(reason)) return;
+      pauses.add(reason);
       if (timer) {
-        remaining = Math.max(0, deadline - Date.now())
-        clearTimeout(timer)
-        timer = null
+        remaining = Math.max(0, deadline - Date.now());
+        clearTimeout(timer);
+        timer = null;
       }
     },
-    resumeUndo(reason) {
-      if (pauses.delete(reason) && pauses.size === 0) startTimer()
+    resumeUndo(reason: UndoPauseReason) {
+      if (pauses.delete(reason) && pauses.size === 0) startTimer();
     },
 
     retry: () => requestSave(),
@@ -279,32 +326,32 @@ export function createListSaver({ initial, enabled, save, sendOnClose }) {
      * route saved, if nothing else changed meanwhile.
      */
     closing() {
-      if (!enabled) return
+      if (!enabled) return;
       if (s.held) {
         // A gift the server never had (or no list yet) is a normal save.
-        if (!s.listId || !s.version || !s.known.has(s.held.gift.id)) release()
-        else letGo()
+        if (!s.listId || !s.version || !s.known.has(s.held.gift.id)) release();
+        else letGo();
       }
-      if (!s.listId || !s.version) return
-      const removeIds = [...s.removing].filter((id) => s.known.has(id) && !closeSent.has(id))
-      if (removeIds.length === 0) return
-      removeIds.forEach((id) => closeSent.add(id))
-      const body = { listId: s.listId, version: s.version, removeIds }
-      const at = changes
+      if (!s.listId || !s.version) return;
+      const removeIds = [...s.removing].filter((id) => s.known.has(id) && !closeSent.has(id));
+      if (removeIds.length === 0) return;
+      removeIds.forEach((id) => closeSent.add(id));
+      const body: CloseBody = { listId: s.listId, version: s.version, removeIds };
+      const at = changes;
       Promise.resolve(sendOnClose(body))
         .then((result) => {
           // Not saved, and the tab is still here: the next save carries it.
-          if (!result) return requestSave()
-          if (result.behind || typeof result.version !== 'string') return
-          if (running || changes !== at || s.version !== body.version) return
-          s.version = result.version
+          if (!result) return requestSave();
+          if (result.behind || typeof result.version !== "string") return;
+          if (running || changes !== at || s.version !== body.version) return;
+          s.version = result.version;
           for (const id of removeIds) {
-            s.known.delete(id)
-            s.removing.delete(id)
+            s.known.delete(id);
+            s.removing.delete(id);
           }
         })
         .catch(() => {})
-        .finally(() => removeIds.forEach((id) => closeSent.delete(id)))
+        .finally(() => removeIds.forEach((id) => closeSent.delete(id)));
     },
-  }
+  };
 }

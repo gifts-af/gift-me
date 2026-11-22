@@ -6,7 +6,10 @@
 //
 // Each image was checked by eye against its ASIN. Prices are representative list
 // prices for the demo, not live figures.
-export const AMAZON_FIXTURES = {
+export type AmazonFixture = { name: string; priceCents: number };
+
+// Keyed by ASIN; a lookup for any other ASIN finds nothing.
+export const AMAZON_FIXTURES: Partial<Record<string, AmazonFixture>> = {
   B08N5WRWNW: {
     name: 'Apple MacBook Pro 13" (M1, 8GB RAM, 256GB SSD) - Space Gray',
     priceCents: 99900,
@@ -16,19 +19,19 @@ export const AMAZON_FIXTURES = {
     priceCents: 249900,
   },
   B07FZ8S74R: {
-    name: 'Echo Dot (3rd Gen) Smart Speaker with Alexa - Charcoal',
+    name: "Echo Dot (3rd Gen) Smart Speaker with Alexa - Charcoal",
     priceCents: 3999,
   },
   B09B8V1LZ3: {
-    name: 'Echo Dot (5th Gen) Smart Speaker with Alexa - Charcoal',
+    name: "Echo Dot (5th Gen) Smart Speaker with Alexa - Charcoal",
     priceCents: 4999,
   },
   B0863TXGM3: {
-    name: 'Sony WH-1000XM4 Wireless Noise Cancelling Headphones - Black',
+    name: "Sony WH-1000XM4 Wireless Noise Cancelling Headphones - Black",
     priceCents: 34800,
   },
   B01LTHP2ZK: {
-    name: 'Nintendo Switch Console with Gray Joy-Con',
+    name: "Nintendo Switch Console with Gray Joy-Con",
     priceCents: 29999,
   },
-}
+};

@@ -1,8 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
+import type { Gift } from "@/modules/lists/lib/lists";
 import GiftCard from "../gift-card";
 
-const baseGift = {
+const baseGift: Gift = {
   id: "g1",
   name: "Sony WH-1000XM4",
   priceCents: 34800,
@@ -15,7 +16,7 @@ const baseGift = {
 
 // jsdom never fetches the image, so naturalWidth is always 0 by default.
 // Spoof it before firing load to simulate what the browser reports.
-function fireLoad(img, naturalWidth) {
+function fireLoad(img: HTMLElement, naturalWidth: number) {
   Object.defineProperty(img, "naturalWidth", { configurable: true, value: naturalWidth });
   fireEvent.load(img);
 }
@@ -50,7 +51,7 @@ describe("GiftCard image handling", () => {
   });
 
   it("calls onRemove with the gift id", () => {
-    const onRemove = vi.fn();
+    const onRemove = vi.fn<(id: string) => void>();
     render(<GiftCard gift={baseGift} onRemove={onRemove} />);
     fireEvent.click(screen.getByRole("button", { name: /Remove Sony WH-1000XM4/ }));
     expect(onRemove).toHaveBeenCalledWith("g1");
