@@ -4,7 +4,7 @@
 -- needs the owner by id only.
 begin;
 \ir _helpers.psql
-select plan(42);
+select plan(48);
 
 -- Rounds here need new ideas to be possible (runs_after_rejection); both engines ship off.
 update concierge.app_settings set value = '1' where key in ('idea_engine_enabled', 'round_engine_enabled');
@@ -239,15 +239,17 @@ as $$
   returning id;
 $$;
 
--- An order on its own idea, with the status, hold reason and creation time given.
-create function tests.hs_order(p_round_id uuid, p_status text, p_hold_reason text, p_created_at timestamptz)
+-- An order on its own idea, with the status, hold reason and times given; it
+-- was last changed when it was created unless p_updated_at says otherwise.
+create function tests.hs_order(p_round_id uuid, p_status text, p_hold_reason text, p_created_at timestamptz,
+                               p_updated_at timestamptz default null)
 returns uuid
 language sql
 as $$
   insert into concierge.orders (user_id, round_id, idea_id, funding_mode, max_price_cents, fee_cents, status,
-                                hold_reason, ship_to, ship_city, ship_state, created_at)
+                                hold_reason, ship_to, ship_city, ship_state, created_at, updated_at)
   select r.user_id, r.id, tests.hs_idea(r.id), 'zinc_wallet', 4500, 100, p_status, p_hold_reason,
-         'recipient', 'Dayton', 'OH', p_created_at
+         'recipient', 'Dayton', 'OH', p_created_at, coalesce(p_updated_at, p_created_at)
     from concierge.gift_rounds r where r.id = p_round_id
   returning id;
 $$;
@@ -267,6 +269,10 @@ select tests.hs_round(:'j', 'ordered', null, '2030-12-15') as r_orders \gset
 select tests.hs_round(:'j', 'needs_address', null, '2030-04-01') as r_far \gset
 select tests.hs_round(:'j', 'needs_address', null, '2030-03-14') as r_near \gset
 select tests.hs_round(:'j', 'needs_attention', 'funds', '2030-12-15') as r_funds \gset
+select tests.hs_round(:'j', 'needs_attention', 'setup', '2030-12-15') as r_setup \gset
+select tests.hs_round(:'j', 'needs_attention', 'address', '2030-03-13') as r_attn_address \gset
+select tests.hs_round(:'j', 'complete', null, '2030-12-15', :max_attempts) as r_complete \gset
+select tests.hs_round(:'j', 'delivered', null, '2030-12-15', :max_attempts) as r_delivered \gset
 select tests.hs_round(:'j', 'awaiting_approval', null, '2030-12-15') as r_approval \gset
 select tests.hs_round(:'j', 'needs_address', null, '2030-03-13', 0, '2030-03-01') as r_closed \gset
 select tests.hs_round(:'j', 'skipped', null, '2030-12-15', :max_attempts) as r_skipped \gset
@@ -274,11 +280,16 @@ select tests.hs_round(:'j', 'generating', null, '2030-03-13') as r_gen_empty \gs
 select tests.hs_round(:'j', 'generating', null, '2030-03-13') as r_gen_proposed \gset
 select tests.hs_idea(:'r_gen_proposed', 'proposed');
 select tests.hs_round(:'j', 'generating', null, '2030-12-15') as r_gen_far \gset
+select tests.hs_round(:'j', 'generating', null, '2030-03-13') as r_gen_rejected \gset
+select tests.hs_idea(:'r_gen_rejected', 'rejected');
 select tests.hs_round(:'j', 'skipped', null, '2030-12-15', 0, null, '2030-03-10') as r_noideas \gset
 select tests.hs_round(:'j', 'skipped', null, '2030-12-15', 0, null, '2030-03-04') as r_noideas_old \gset
+-- Skipped after p_now, so not yet this week's.
+select tests.hs_round(:'j', 'skipped', null, '2030-12-15', 0, null, '2030-03-13') as r_noideas_future \gset
 insert into concierge.round_sends (user_id, round_id, step) values
-  (:'j', :'r_noideas', 'no_ideas'),
-  (:'j', :'r_noideas_old', 'no_ideas_again');
+  (:'j', :'r_noideas', 'no_ideas_again'),
+  (:'j', :'r_noideas_old', 'no_ideas'),
+  (:'j', :'r_noideas_future', 'no_ideas');
 
 -- Orders.
 select tests.hs_order(:'r_unconf', 'unconfirmed', null, '2030-03-10') as o_unconf \gset
@@ -288,29 +299,33 @@ select tests.hs_order(:'r_orders', 'placing', null, '2030-03-20 13:45Z') as o_yo
 select tests.hs_order(:'r_orders', 'held', 'retry', '2030-03-10') as o_retry \gset
 select tests.hs_order(:'r_orders', 'held', 'paused', '2030-03-10') as o_paused \gset
 select tests.hs_order(:'r_orders', 'held', 'funds', '2030-03-10') as o_funds \gset
+select tests.hs_order(:'r_orders', 'held', 'not_allowed', '2030-03-10') as o_not_allowed \gset
+-- Held for days, then moved to placing by today's tick.
+select tests.hs_order(:'r_orders', 'placing', null, '2030-03-01', '2030-03-12 12:30Z') as o_moved \gset
 
--- Idea runs: one no_credit run in the last day, one older, and a saved one.
+-- Idea runs: one no_credit run in the last day, one older, one after p_now, and a saved one.
 insert into concierge.idea_runs (user_id, person_id, round_id, started_at, finished_at, outcome)
 select user_id, person_id, id, t, t, o
   from concierge.gift_rounds,
        (values ('2030-03-12 12:00Z'::timestamptz, 'no_credit'), ('2030-03-11 13:00Z', 'no_credit'),
-               ('2030-03-12 13:00Z', 'saved')) v (t, o)
+               ('2030-03-12 15:00Z', 'no_credit'), ('2030-03-12 13:00Z', 'saved')) v (t, o)
  where id = :'r_stuck';
 
--- Captures: one failed this week, one failed earlier, one extracted this week.
+-- Captures: one failed this week, one failed earlier, one failed after p_now, one extracted this week.
 insert into concierge.captures (user_id, person_id, page_title, status, updated_at)
 select user_id, person_id, 'Lego castle', s, u
   from concierge.gift_rounds,
-       (values ('failed', '2030-03-10'::timestamptz), ('failed', '2030-03-01'), ('extracted', '2030-03-10')) v (s, u)
+       (values ('failed', '2030-03-10'::timestamptz), ('failed', '2030-03-01'), ('failed', '2030-03-13'), ('extracted', '2030-03-10')) v (s, u)
  where id = :'r_stuck';
 
 -- Heartbeats: 7 days ago (outside the week), 6 days ago, a failed yesterday,
--- an ok today, and a failed one a week on with nothing ok after it.
+-- an ok today, an ok one after p_now, and a failed one a week on with nothing ok after it.
 insert into concierge.tick_heartbeats (day, started_at, finished_at, result, rounds_failed, fanout_failed) values
   ('2030-03-05', '2030-03-05 12:00Z', '2030-03-05 12:03Z', 'ok', 10, 0),
   ('2030-03-06', '2030-03-06 12:00Z', '2030-03-06 12:03Z', 'ok', 2, 0),
   ('2030-03-11', '2030-03-11 12:00Z', '2030-03-11 12:03Z', 'failed', 1, 0),
   ('2030-03-12', '2030-03-12 12:00Z', '2030-03-12 12:04Z', 'ok', 0, 1),
+  ('2030-03-15', '2030-03-15 12:00Z', '2030-03-15 12:03Z', 'ok', 0, 0),
   ('2030-03-19', '2030-03-19 12:00Z', '2030-03-19 12:03Z', 'failed', 0, 0);
 
 select tests.act_as_server();
@@ -332,6 +347,7 @@ select is(
   'held_zinc carries the order, round, user and hold reason');
 select is(tests.hs_count(:'snap', 'stuck_rounds', 'round_id', :'r_unconf'), 0, 'the unconfirmed order''s round isn''t also a stuck round');
 select is(tests.hs_count(:'snap', 'placing_stale', 'order_id', :'o_after'), 0, 'a placing order created after today''s tick started isn''t listed');
+select is(tests.hs_count(:'snap', 'placing_stale', 'order_id', :'o_moved'), 0, 'an old order moved to placing after today''s tick started isn''t listed');
 select is(
   array[tests.hs_count(:'snap_later', 'placing_stale', 'order_id', :'o_young'),
         tests.hs_count(:'snap_later', 'placing_stale', 'order_id', :'o_after')],
@@ -341,6 +357,10 @@ select is(
   tests.hs_count(:'snap', 'held_zinc', 'order_id', :'o_paused') + tests.hs_count(:'snap', 'held_zinc', 'order_id', :'o_funds'),
   0,
   'a held paused or funds order isn''t in held_zinc');
+select is(
+  (select e ->> 'hold_reason' from jsonb_array_elements(:'snap'::jsonb -> 'held_zinc') e where e ->> 'order_id' = :'o_not_allowed'),
+  'not_allowed',
+  'a held not_allowed order is in held_zinc');
 
 select is(tests.hs_count(:'snap', 'deadline_close', 'round_id', :'r_far'), 0, 'AC-2: a needs_address round 20 days out isn''t deadline_close');
 select is(
@@ -348,32 +368,50 @@ select is(
   jsonb_build_object('round_id', :'r_near'::uuid, 'user_id', :'j'::uuid, 'reason', 'address', 'ship_by_deadline', '2030-03-14'),
   'AC-4: one within hold_final_days is');
 select is(tests.hs_count(:'snap', 'deadline_close', 'round_id', :'r_closed'), 0, 'a closed round isn''t deadline_close');
+select is(
+  (select e ->> 'reason' from jsonb_array_elements(:'snap'::jsonb -> 'deadline_close') e where e ->> 'round_id' = :'r_attn_address'),
+  'address',
+  'a needs_attention address round within hold_final_days is deadline_close');
 
 select is(
   tests.hs_count(:'snap', 'stuck_rounds', 'round_id', :'r_skipped') + tests.hs_count(:'snap', 'stuck_rounds', 'round_id', :'r_noideas'),
   0,
   'a skipped round with closed_at null is not open');
+select is(
+  tests.hs_count(:'snap', 'stuck_rounds', 'round_id', :'r_complete') + tests.hs_count(:'snap', 'stuck_rounds', 'round_id', :'r_delivered'),
+  0,
+  'a complete or delivered round at round_max_attempts isn''t a stuck round');
 
--- Address: r_far and r_near (r_closed is closed). Funds: r_funds. Approval: r_approval.
+-- Address: r_far and r_near (needs_address) and r_attn_address (needs_attention);
+-- r_closed is closed. Funds: r_funds.
 select is(
   array[(:'snap'::jsonb #>> '{weekly,waiting_address}')::int - (:'baseline'::jsonb #>> '{weekly,waiting_address}')::int,
-        (:'snap'::jsonb #>> '{weekly,waiting_funds}')::int - (:'baseline'::jsonb #>> '{weekly,waiting_funds}')::int,
-        (:'snap'::jsonb #>> '{weekly,waiting_setup}')::int - (:'baseline'::jsonb #>> '{weekly,waiting_setup}')::int,
-        (:'snap'::jsonb #>> '{weekly,waiting_approval}')::int - (:'baseline'::jsonb #>> '{weekly,waiting_approval}')::int],
-  array[2, 1, 0, 1],
+        (:'snap'::jsonb #>> '{weekly,waiting_funds}')::int - (:'baseline'::jsonb #>> '{weekly,waiting_funds}')::int],
+  array[3, 1],
   'AC-3 counts: one waiting on an address, one on funds');
+select is(
+  array[(:'snap'::jsonb #>> '{weekly,waiting_setup}')::int - (:'baseline'::jsonb #>> '{weekly,waiting_setup}')::int,
+        (:'snap'::jsonb #>> '{weekly,waiting_approval}')::int - (:'baseline'::jsonb #>> '{weekly,waiting_approval}')::int],
+  array[1, 1],
+  'a setup round and an awaiting_approval round each add one to their weekly count');
 
 select is(
   array[tests.hs_count(:'snap', 'ideas_waiting', 'round_id', :'r_gen_empty'),
         tests.hs_count(:'snap', 'ideas_waiting', 'round_id', :'r_gen_proposed'),
-        tests.hs_count(:'snap', 'ideas_waiting', 'round_id', :'r_gen_far')],
-  array[1, 0, 0],
-  'ideas_waiting lists a generating round with no ideas within hold_final_days, not one with proposed ideas or one further out');
+        tests.hs_count(:'snap', 'ideas_waiting', 'round_id', :'r_gen_far'),
+        tests.hs_count(:'snap', 'ideas_waiting', 'round_id', :'r_gen_rejected')],
+  array[1, 0, 0, 1],
+  'ideas_waiting lists a generating round with no ideas within hold_final_days, not one with proposed ideas or one further out; rejected ideas don''t count');
 
 select is((:'snap'::jsonb ->> 'no_credit_runs')::int, 1, 'no_credit_runs counts the last day only');
 select is((:'snap'::jsonb #>> '{weekly,rounds_failed}')::int, 3, 'weekly rounds_failed sums the last 7 days of heartbeat rows');
 select is((:'snap'::jsonb #>> '{weekly,no_ideas}')::int, 1, 'no_ideas counts a round skipped this week after a no_ideas send, not one from 8 days ago');
 select is((:'snap'::jsonb #>> '{weekly,failed_captures}')::int, 1, 'failed_captures counts the last 7 days only');
+select is(
+  array[(:'snap'::jsonb ->> 'no_credit_runs')::int, (:'snap'::jsonb #>> '{weekly,no_ideas}')::int,
+        (:'snap'::jsonb #>> '{weekly,failed_captures}')::int],
+  array[1, 1, 1],
+  'a run, skipped round or capture after p_now isn''t counted');
 
 select is(
   :'snap'::jsonb -> 'tick',
@@ -381,10 +419,10 @@ select is(
     'last_ok_finished_at', '2030-03-12T12:04:00+00:00',
     'today', jsonb_build_object('started_at', '2030-03-12T12:00:00+00:00', 'finished_at', '2030-03-12T12:04:00+00:00',
                                 'result', 'ok', 'rounds_failed', 0, 'fanout_failed', 1)),
-  'tick holds today''s row and the latest ok finish');
+  'tick holds today''s row and the latest ok finish up to p_now');
 select is(
   :'snap_later'::jsonb -> 'tick',
-  jsonb_build_object('last_ok_finished_at', '2030-03-12T12:04:00+00:00', 'today', null),
+  jsonb_build_object('last_ok_finished_at', '2030-03-15T12:03:00+00:00', 'today', null),
   'today is null when the tick hasn''t started; last_ok_finished_at skips a failed row');
 
 select ok(
