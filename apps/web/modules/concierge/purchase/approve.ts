@@ -109,6 +109,8 @@ export function capsFor(
 export type Destination = {
   ship_to: "recipient" | "buyer" | "other";
   address_source: AddressSource;
+  /** The list owner whose shared address it is, read with it (T88); null for any other address. */
+  address_owner_id: string | null;
   address: AddressSnapshot;
   /** Saved to the person once the order is written (AC-10). */
   saveToPerson?: Address;
@@ -118,11 +120,11 @@ export type Destination = {
 export async function destinationFor(deps: PurchaseDeps, userId: string, personId: string, shipTo: ShipTo): Promise<Destination | null> {
   if (shipTo.kind === "recipient") {
     const a = await recipientAddress(deps, personId);
-    return a && isShippableAddress(a.draft) ? { ship_to: "recipient", address_source: a.source, address: a.snapshot } : null;
+    return a && isShippableAddress(a.draft) ? { ship_to: "recipient", address_source: a.source, address_owner_id: a.ownerId, address: a.snapshot } : null;
   }
   if (shipTo.kind === "buyer") {
     const a = await buyerAddress(deps, userId);
-    return a && isShippableAddress(a.draft) ? { ship_to: "buyer", address_source: "own", address: a.snapshot } : null;
+    return a && isShippableAddress(a.draft) ? { ship_to: "buyer", address_source: "own", address_owner_id: null, address: a.snapshot } : null;
   }
   const checked = checkAddress(shipTo.address);
   if (!checked.ok) return null;
@@ -130,6 +132,7 @@ export async function destinationFor(deps: PurchaseDeps, userId: string, personI
   return {
     ship_to: "other",
     address_source: "own",
+    address_owner_id: null,
     address: {
       recipient_first_name: a.firstName,
       recipient_last_name: a.lastName,
@@ -226,6 +229,7 @@ export async function approveAndBuy(input: ApproveInput, deps: PurchaseDeps): Pr
         gift_message: giftMessage,
         ship_to: dest.ship_to,
         address_source: dest.address_source,
+        address_owner_id: dest.address_owner_id,
         address: dest.address,
       })),
     });
@@ -239,6 +243,9 @@ export async function approveAndBuy(input: ApproveInput, deps: PurchaseDeps): Pr
       }
       // Another tab or the tick took the lease in between.
       if (refusal === "lease not held") return { ok: false, error: "busy" };
+      // The person was relinked after the address was read (T88). Trying again reads the
+      // address afresh, so it's a "try again", not a missing address.
+      if (refusal === "address changed") return { ok: false, error: "busy" };
       return { ok: false, error: "not_open" };
     }
     logEvent("order.approved", { ...ids, orders: picks.length });

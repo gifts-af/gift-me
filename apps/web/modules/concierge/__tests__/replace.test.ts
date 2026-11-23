@@ -449,4 +449,55 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
     const shared = await pg.query("select share_for_gifts from public.account_addresses where user_id = $1", [owner]);
     expect(shared.rows[0].share_for_gifts).toBe(true);
   });
+
+  it("a relink while a replacement is bought is busy; the next one records the new owner (AC-1)", async () => {
+    const userId = await newUser();
+    const r = await newRound(userId, { totals: [3000, 2000] });
+    /** A list owner sharing an address in `city`, and the person linked to their list. */
+    const linkTo = async (city: string) => {
+      const owner = await newUser();
+      await pg.query(
+        `insert into public.account_addresses (user_id, recipient_first_name, recipient_last_name, address_line1, city, state, zip, share_for_gifts)
+         values ($1, 'Sam', 'Rivera', '44 Shared St', $2, 'OH', '44301', true)`,
+        [owner, city],
+      );
+      const list = await pg.query("insert into lists.lists (owner_id, title) values ($1, 'Birthday') returning id, share_token", [owner]);
+      await pg.query("delete from lists.person_links where person_id = $1", [r.personId]);
+      await pg.query("insert into lists.person_links (person_id, buyer_id, list_id, share_token) values ($1, $2, $3, $4)", [
+        r.personId,
+        userId,
+        list.rows[0].id,
+        list.rows[0].share_token,
+      ]);
+      return owner;
+    };
+    const first = await linkTo("Akron");
+    const [failed] = await boughtAndFailed(userId, r, { 0: "out_of_stock" });
+    expect((await pg.query("select address_owner_id from concierge.orders where id = $1", [failed])).rows).toEqual([{ address_owner_id: first }]);
+    zinc.posts = [];
+
+    // The buyer relinks the person right after the replacement read the shared address.
+    let second: string | null = null;
+    const real = deps().db;
+    const racing = new Proxy(real, {
+      get(target, prop, receiver) {
+        if (prop !== "rpc") return Reflect.get(target, prop, receiver);
+        return async (fn: string, args: Record<string, unknown>) => {
+          const res = await (target.rpc as (f: string, a: unknown) => PromiseLike<unknown>).call(target, fn, args);
+          if (fn === "shared_address_for_person" && second === null) second = await linkTo("Toledo");
+          return res;
+        };
+      },
+    });
+    const input = { userId, roundId: r.roundId, failedOrderId: failed, ideaId: r.ideaIds[1] };
+    expect(await replaceFailedOrder(input, deps({ db: racing }))).toEqual({ ok: false, error: "busy" });
+    expect(await orders(r.roundId)).toHaveLength(1);
+    expect(zinc.posts).toEqual([]);
+
+    // Bought again, it goes to the owner the person links to now, and says so.
+    expect(await replaceFailedOrder(input, deps())).toEqual({ ok: true, status: "ordered", reason: null });
+    const fresh = await pg.query("select address_owner_id from concierge.orders where round_id = $1 and idea_id = $2", [r.roundId, r.ideaIds[1]]);
+    expect(fresh.rows).toEqual([{ address_owner_id: second }]);
+    expect(zinc.posts).toEqual([expect.objectContaining({ city: "Toledo" })]);
+  });
 });

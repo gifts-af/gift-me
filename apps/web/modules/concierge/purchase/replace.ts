@@ -263,6 +263,7 @@ export async function replaceFailedOrder(input: ReplaceInput, deps: PurchaseDeps
         gift_message: failed.gift_message,
         ship_to: dest.ship_to,
         address_source: dest.address_source,
+        address_owner_id: dest.address_owner_id,
         address: dest.address,
         ...(priceUp ? { new_total_cents: total } : {}),
       },
@@ -291,6 +292,8 @@ const REFUSALS: Record<string, ApproveError | ReplaceError> = {
   replaced: "replaced",
   once: "once",
   "fixed address": "no_address",
+  // The person was relinked after the address was read (T88); trying again reads it afresh.
+  "address changed": "busy",
   not_shared: "not_shared",
   already_bought: "already_bought",
   claimed: "claimed",
@@ -319,13 +322,18 @@ async function replacementDestination(
       const refused = (await savedSnapshots(deps, [failed.id])).get(failed.id);
       if (refused && sameAddress(refused, own.snapshot)) return null;
     }
-    return { ship_to: "other", address_source: "own", address: own.snapshot };
+    return { ship_to: "other", address_source: "own", address_owner_id: null, address: own.snapshot };
   }
   if (shipTo) return destinationFor(deps, userId, personId, shipTo);
   if (failed.ship_to === "recipient") return destinationFor(deps, userId, personId, { kind: "recipient" });
   const saved = (await savedSnapshots(deps, [failed.id])).get(failed.id);
   return saved
-    ? { ship_to: failed.ship_to as Destination["ship_to"], address_source: (failed.address_source ?? "own") as AddressSource, address: saved }
+    ? {
+        ship_to: failed.ship_to as Destination["ship_to"],
+        address_source: (failed.address_source ?? "own") as AddressSource,
+        address_owner_id: failed.address_owner_id,
+        address: saved,
+      }
     : null;
 }
 

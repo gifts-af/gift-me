@@ -19,7 +19,7 @@ Today an order approved to a shared address remembers only `address_source = 'sh
 |---|---|---|---|
 | AC-1 | A buyer approves a gift to a list owner's shared address | The order is written (approval or a replacement) | The order records the owner's account id (`address_owner_id`, ids only). Orders not shipping to a shared address record none. The database refuses a shared order whose owner is missing or isn't the person's current link. |
 | AC-2 | An order whose address was read fresh at placing turns out to be a shared one | Placing begins | The owner it read the address from is recorded with the address, in the same write. |
-| AC-3 | A held order approved to owner A's shared address | The person is relinked to owner B's list (whether or not B shares an address) and the tick places | The order ends as `address_withdrawn`: nothing is bought, the address isn't sent, and the buyer gets ALL-112's email. Event `order.address_withdrawn` carries `relinked: true`. |
+| AC-3 | A held order approved to owner A's shared address | The person is relinked to owner B's list (whether or not B shares an address) and the tick places | The order ends as `address_withdrawn`: nothing is bought, the address isn't sent, and the buyer gets ALL-112's email. |
 | AC-4 | The same, but the relink happens between the app's check and `begin_placing`, or the app sends the wrong owner or source | `begin_placing` runs | It refuses before writing anything: a stored shared order only places with a shared address from its stored owner, who must still be the current link. The next tick ends the order as in AC-3. |
 | AC-5 | A held order approved to owner A, still linked to A (A may have changed address or list) | The tick places | It's placed as today, to A's current shared address. |
 | AC-6 | A shared-address order with no recorded owner (none exist on production; see below) | The tick places | It ends as `address_withdrawn` (fail closed). |
@@ -60,9 +60,13 @@ Recorded as T88 in `design/decisions.md` (narrows T61).
 
 ## Deploy, seeing it work, turning it off (E9)
 
-- **Order:** the migration applies first (CI's `migrate` job on merge), then the code. `begin_placing` accepts the old code's calls (no owner sent) by checking the stored owner against the current link, so the gap, or a Vercel rollback, still places correctly instead of refusing every tick.
-- **Seeing it work:** `order.address_withdrawn` with `relinked: true` on production after the QA account's relink check; no `order.begin_refused` for shared orders.
-- **Off switch:** `zinc_ordering_enabled` stops all ordering, as today. Rolling back the code is safe for the reason above.
+- **Ship order:** the migration ships as its own PR first (the migration, its pgTAP tests, the regenerated types and the database map). It merges, and its CI `migrate` job must finish green on dev and prod before the code PR merges, as in `design/operations.md` > My list saving and Inbound notes.
+- **In that gap, and after a rollback of the code:** the old code sends no owner.
+  - Approving or replacing a gift to a shared address still works: when no owner is sent at all, the database records the person's current link owner (an owner sent as null, or a different one, is refused). The tiny window between the old code reading the address and the database reading the link only exists during this gap. The existing app tests pass against the migration with the old code.
+  - A held shared order still linked to its owner places as before. An `own` order whose fresh address turns out to be shared records the current link's owner.
+  - A shared order whose person was relinked isn't ended by the old code: `begin_placing` refuses it every tick (`order.begin_refused`) and nothing is bought. The fix is to roll forward to the new code, which ends it as `address_withdrawn`.
+- **Seeing it work:** `order.address_withdrawn` on production after the QA account's relink check.
+- **Off switch:** `zinc_ordering_enabled` stops all ordering, as today.
 
 ## Plan
 
@@ -76,7 +80,7 @@ New migration `supabase/migrations/20261124100000_order_address_owner.sql`, head
 
 - `alter table concierge.orders add column address_owner_id uuid references auth.users (id) on delete set null`, with `check (address_owner_id is null or address_source = 'shared')`. Server-only, like `address_source`: no grant.
 - `public.shared_address_for_person`: same signature and grants, adds `'owner_id', link.owner_id`.
-- `approve_round` and `replace_failed_order` (latest in `20261122160000_approval.sql`): insert `address_owner_id` from the order JSON when `address_source = 'shared'`, else null. Raise (`P0001`, `... address changed`) when a shared order's owner is null or differs from `lists.active_link(person)`'s owner; the app maps it to the existing `no_address` error.
+- `approve_round` and `replace_failed_order` (latest in `20261122160000_approval.sql`): insert `address_owner_id` from the order JSON when `address_source = 'shared'`, else null. Raise (`P0001`, `... address changed`) when a shared order's owner is null or differs from `lists.active_link(person)`'s owner; the app maps it to the existing `busy` error ("try again"), since trying again reads the address afresh.
 - `reapprove_order` and `fail_order_row` stay as they are: a shared order never reaches `fail_order_row`'s replacement insert (it becomes `address_rejected`), and `reapprove_order` is unused (T81). Failing closed covers both.
 - `begin_placing`, before any write, refuses (returns nothing) when, for any named held order:
   - it's stored as `shared` and the element carries a fresh address whose source isn't `shared`, or whose `address_owner_id` key is present and differs from the stored owner; or
@@ -93,8 +97,8 @@ New migration `supabase/migrations/20261124100000_order_address_owner.sql`, head
 
 - `purchase/store.ts`: `recipientAddress` returns `ownerId: string | null` (from `owner_id`; null for `own`). `FailedOrderRow`/held-order selects add `address_owner_id`.
 - `purchase/approve.ts`: `Destination` gains `address_owner_id: string | null`; `destinationFor` fills it; approval sends it in the order JSON. `replace.ts` passes it through, and its saved-snapshot branch copies the failed order's.
-- `purchase/place.ts` step 3: per held order with `ship_to = 'recipient'` and `address_source = 'shared'`, end it as `address_withdrawn` when the recipient read isn't a shippable shared address **or** `recipient.ownerId !== o.address_owner_id`. `relinked: true` on the event whenever the person's current link owner differs from the stored owner, shared address or not (so `recipientAddress` also returns the current link owner when there's no shared address). Pass `address_owner_id: recipient.ownerId` with each fresh address to `begin_placing`.
-- Local-db test in `__tests__/round-engine-held-address.test.ts` (or a new `purchase-relink-db.test.ts` if that file doesn't fit): approve to A's shared address, relink the person to B (B shares), run placing: the order is `failed`/`address_withdrawn`, no Zinc POST, the buyer's email is the ALL-112 one. A relink to an owner who doesn't share (still `relinked: true`), and a still-linked case that places. Update the fixtures that write shared orders without an owner: `__tests__/round-engine-held-address.test.ts` (around lines 204, 342) and `__tests__/purchase.test.ts` (around 162, 653, 727, 739).
+- `purchase/place.ts` step 3: per held order with `ship_to = 'recipient'` and `address_source = 'shared'`, end it as `address_withdrawn` when the recipient read isn't a shippable shared address **or** `recipient.ownerId !== o.address_owner_id`. The event keeps its shape. Pass `address_owner_id: recipient.ownerId` with each fresh address to `begin_placing`.
+- Local-db test in `__tests__/round-engine-held-address.test.ts` (or a new `purchase-relink-db.test.ts` if that file doesn't fit): approve to A's shared address, relink the person to B (B shares), run placing: the order is `failed`/`address_withdrawn`, no Zinc POST, the buyer's email is the ALL-112 one. A relink to an owner who doesn't share, a missing owner (AC-6), a deleted owner (AC-7), and still-linked cases that place (AC-5). Update the fixtures that write shared orders without an owner: `__tests__/round-engine-held-address.test.ts` (around lines 204, 342) and `__tests__/purchase.test.ts` (around 162, 653, 727, 739).
 
 - [ ] Write the failing tests; run them red
 - [ ] Implement; `pnpm --filter web typecheck`, `pnpm test:db` and the unit suite green
