@@ -1109,6 +1109,34 @@ export type Database = {
         };
         Relationships: [];
       };
+      tick_heartbeats: {
+        Row: {
+          day: string;
+          fanout_failed: number;
+          finished_at: string | null;
+          result: string | null;
+          rounds_failed: number;
+          started_at: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          day: string;
+          fanout_failed?: number;
+          finished_at?: string | null;
+          result?: string | null;
+          rounds_failed?: number;
+          started_at: string;
+        };
+        Update: {
+          day?: string;
+          fanout_failed?: number;
+          finished_at?: string | null;
+          result?: string | null;
+          rounds_failed?: number;
+          started_at?: string;
+        };
+        Relationships: [];
+      };
       zinc_connect_attempts: {
         Row: {
           created_at: string;
@@ -1170,6 +1198,10 @@ export type Database = {
           p_zip?: string;
         };
         Returns: string;
+      };
+      add_tick_counts: {
+        Args: { p_at: string; p_day: string; p_rounds_failed: number };
+        Returns: undefined;
       };
       answer_questions: {
         Args: { p_answers: Json; p_person_id: string };
@@ -1477,6 +1509,16 @@ export type Database = {
         };
         Returns: boolean;
       };
+      finish_tick: {
+        Args: {
+          p_at: string;
+          p_day: string;
+          p_fanout_failed: number;
+          p_result: string;
+          p_rounds_failed: number;
+        };
+        Returns: undefined;
+      };
       forget_inbound_images: {
         Args: { p_message_ids: string[] };
         Returns: undefined;
@@ -1486,6 +1528,7 @@ export type Database = {
         Returns: Database["concierge"]["Enums"]["round_status"];
       };
       has_paid_features: { Args: { p_user_id: string }; Returns: boolean };
+      health_snapshot: { Args: { p_now: string }; Returns: Json };
       held_rounds_for_user: {
         Args: { p_user_id: string };
         Returns: {
@@ -1864,6 +1907,7 @@ export type Database = {
           run_id: string;
         }[];
       };
+      start_tick: { Args: { p_at: string; p_day: string }; Returns: undefined };
       untold_failures: { Args: { p_round_id: string }; Returns: string[] };
       zinc_claim_poll: {
         Args: { p_now: string; p_user_id: string };
