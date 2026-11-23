@@ -232,6 +232,11 @@ update concierge.app_settings set value = '0' where key = 'zinc_ordering_enabled
 | `round_job` with `alert: true` and `result: "failed"` | **This is the alert.** A job failed before it claimed any round: the wiring (Zinc or email setup, an environment variable) or a setting it reads first (`round_fanout_enabled`, `round_engine_enabled`, the schedule settings, `zinc_place_budget_ms`). It is redelivered, up to `maxDeliveries` (3); `delivery_count` says which try, and the error's `name`/`code` say what threw. A `round_job` with `result: "failed"` and no `alert` is a step failing after the claim: a log, not an alert (see the runbook). | **Round fan-out** below, "A job failed before it claimed". |
 | `round_job` with `reason: "bad_signature"` | The job route got a message whose signature doesn't check. It ran nothing and acknowledged the message. | **Round fan-out** below, "Bad signature". |
 | `ideas.daily_limit_reached` | A round's idea run was refused because today's `idea_round_runs_per_day` is used up. Nothing failed; the round waits for tomorrow's tick. | **Round fan-out** below, "Daily limit reached". |
+| `ideas.no_credit` | An idea run found the AI Gateway credit gone (a 402) before any AI reply was paid for. The run isn't counted and the buyer isn't emailed: the round waits and the tick starts no further idea run. The event carries `round_id` and `user_id`. The next 14:00 UTC health email says the same. | **AI credit** under **Health email** below: top up by hand, since auto top-up is off. |
+| `tick.heartbeat_failed` | Writing the tick's heartbeat row (or a job adding its failure to it) failed. The tick or job itself is unaffected. | Nothing if it's one-off. If it repeats, check the database; the health email's "tick didn't finish" line can then be wrong for that day. |
+| `health.send_failed` | Resend refused the owner's health email. The route answers 500. | Check Resend (status, key, a bounced inbox). The next day's check sends again; read `concierge.health_snapshot` by hand meanwhile. |
+
+Log-only alerts (rows above with no health-email line) need the Vercel logs, and Hobby keeps them about an hour (ALL-135), so look soon after one fires. The health email doesn't depend on logs: it reads the database and the vendor balances.
 
 ### Rolling back ALL-116 (failure emails)
 
