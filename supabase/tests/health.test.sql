@@ -137,14 +137,16 @@ select throws_ok(
 -- ─── Settings ────────────────────────────────────────────────────────────────
 select is(
   array[concierge.setting_int('health_email_enabled'), concierge.setting_int('health_all_clear_weekday'),
-        concierge.setting_int('ai_credit_low_cents'), concierge.setting_int('zinc_app_balance_low_cents')],
-  array[1, 1, 500, 500],
-  'the four health settings exist with their defaults');
+        concierge.setting_int('ai_credit_low_cents'), concierge.setting_int('zinc_app_balance_low_cents'),
+        concierge.setting_int('health_vendor_timeout_ms')],
+  array[1, 1, 500, 500, 10000],
+  'the five health settings exist with their defaults');
 select is(
   (select count(*)::int from concierge.app_settings
-    where key in ('health_email_enabled', 'health_all_clear_weekday', 'ai_credit_low_cents', 'zinc_app_balance_low_cents')
+    where key in ('health_email_enabled', 'health_all_clear_weekday', 'ai_credit_low_cents', 'zinc_app_balance_low_cents',
+                  'health_vendor_timeout_ms')
       and coalesce(description, '') <> ''),
-  4,
+  5,
   'each health setting has a description');
 
 -- ─── no_credit runs don't count ──────────────────────────────────────────────

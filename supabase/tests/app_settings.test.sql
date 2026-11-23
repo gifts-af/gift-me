@@ -55,7 +55,8 @@ select set_eq(
     'amazon_paste_lookup_enabled', 'amazon_paste_lookups_per_user_per_day', 'amazon_paste_lookup_timeout_ms',
     'amazon_paste_lookups_per_day_total', 'round_fanout_enabled', 'idea_round_runs_per_day',
     'idea_list_lookups_max', 'idea_list_min', 'list_max_items',
-    'health_email_enabled', 'health_all_clear_weekday', 'ai_credit_low_cents', 'zinc_app_balance_low_cents'
+    'health_email_enabled', 'health_all_clear_weekday', 'ai_credit_low_cents', 'zinc_app_balance_low_cents',
+    'health_vendor_timeout_ms'
   ],
   'every fee, limit, default and schedule setting is seeded'
 );

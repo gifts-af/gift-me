@@ -29,7 +29,8 @@ insert into concierge.app_settings (key, value, description) values
   ('health_email_enabled', '1', 'Switch for the owner''s daily health email: 1 sends it, 0 is off.'),
   ('health_all_clear_weekday', '1', 'The weekday the health email is sent even when all is well, as Date.getUTCDay() numbers it (0 is Sunday, 1 is Monday). Other days it is sent only when something needs attention.'),
   ('ai_credit_low_cents', '500', 'The health email warns when the AI Gateway credit is below this many cents, before ideas pause for lack of credit.'),
-  ('zinc_app_balance_low_cents', '500', 'The health email warns when the Zinc app balance is below this many cents.')
+  ('zinc_app_balance_low_cents', '500', 'The health email warns when the Zinc app balance is below this many cents.'),
+  ('health_vendor_timeout_ms', '10000', 'How long the daily health check waits for each vendor balance (AI Gateway credit, Zinc app wallet), in milliseconds. Kept well under the health route''s 60 s limit so a hung vendor can''t stop the email.')
 on conflict (key) do nothing;
 
 -- ─── start_tick, finish_tick, add_tick_counts ────────────────────────────────

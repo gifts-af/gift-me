@@ -16,14 +16,22 @@ beforeEach(() => {
 });
 afterEach(() => vi.restoreAllMocks());
 
-/** A client whose every query throws, as when Supabase is paused. */
-function downDb() {
+/**
+ * A client that can't reach the database: every query throws (as when the network is down), or
+ * comes back with supabase-js's `{ error }` (as when Supabase answers but Postgres doesn't).
+ */
+function downDb(how: "throws" | "errors") {
   const calls: string[] = [];
+  const failure = () => {
+    const e = new Error("connect ECONNREFUSED 10.0.0.1:5432 for jordan@example.com");
+    return Object.assign(e, { code: "ECONNREFUSED" });
+  };
   const fail = (what: string) => () => {
     calls.push(what);
-    const e = new Error("connect ECONNREFUSED 10.0.0.1:5432 for jordan@example.com");
-    (e as Error & { code: string }).code = "ECONNREFUSED";
-    throw e;
+    if (how === "throws") throw failure();
+    const answer = { data: null, error: { message: failure().message, code: "ECONNREFUSED" } };
+    // The ping's builder chain, ending in the reply.
+    return { select: () => ({ limit: async () => answer }) };
   };
   const db = {
     schema: () => ({ from: fail("from"), rpc: fail("rpc") }),
@@ -40,6 +48,7 @@ const SETTINGS: Record<string, number> = {
   zinc_app_balance_low_cents: 500,
   idea_engine_enabled: 0,
   capture_extraction_enabled: 0,
+  health_vendor_timeout_ms: 10000,
 };
 
 const SNAPSHOT = {
@@ -87,8 +96,8 @@ function deps(over: Partial<HealthDeps> = {}): HealthDeps & { sent: OutgoingEmai
 }
 
 describe("runHealthCheck", () => {
-  it("AC-8: retries once, sends the db_down email, reads no setting, and the event holds errorFields only", async () => {
-    const { db, calls } = downDb();
+  it.each(["throws", "errors"] as const)("AC-8: retries once, sends the db_down email, reads no setting, and the event holds errorFields only (a client that %s)", async (how) => {
+    const { db, calls } = downDb(how);
     const d = deps({ db });
     const out = await runHealthCheck(d);
 
@@ -107,7 +116,8 @@ describe("runHealthCheck", () => {
       problems: 1,
       sent: true,
       weekly: false,
-      name: "Error",
+      // A supabase-js error is a plain object, so it has no Error name.
+      name: how === "throws" ? "Error" : "unknown",
       code: "ECONNREFUSED",
     });
     expect(JSON.stringify(events())).not.toContain("jordan@example.com");
@@ -126,13 +136,16 @@ describe("runHealthCheck", () => {
 
   it("a vendor call that throws is logged and the rest still runs", async () => {
     const boom = Object.assign(new Error("gateway said: key sk-live-123 refused"), { status: 503 });
-    const d = deps({
-      aiCredits: async () => {
-        throw boom;
-      },
-      zincBalance: async () => 100,
+    const aiCredits = vi.fn(async () => {
+      throw boom;
     });
+    const zincBalance = vi.fn(async () => 100);
+    const d = deps({ aiCredits, zincBalance });
     const out = await runHealthCheck(d);
+
+    // Each vendor call gets health_vendor_timeout_ms, so a hung one can't outlast the route.
+    expect(aiCredits).toHaveBeenCalledWith(10000);
+    expect(zincBalance).toHaveBeenCalledWith(10000);
 
     expect(out).toEqual({ result: "sent", problems: 2 });
     const vendorEvents = events().filter((e) => e.event === "health.vendor_check_failed");
@@ -143,16 +156,18 @@ describe("runHealthCheck", () => {
     expect(d.sent[0].text).toContain("The app's Zinc balance is low");
   });
 
-  it("a setting that can't be read fails loudly, and nothing is sent", async () => {
-    const was = SETTINGS.ai_credit_low_cents;
-    delete SETTINGS.ai_credit_low_cents;
+  it.each(["ai_credit_low_cents", "health_vendor_timeout_ms"])("a setting that can't be read (%s) fails loudly, and nothing is called or sent", async (key) => {
+    const was = SETTINGS[key];
+    delete SETTINGS[key];
     try {
-      const d = deps();
+      const aiCredits = vi.fn(async () => 5000);
+      const d = deps({ aiCredits });
       expect(await runHealthCheck(d)).toEqual({ result: "failed", problems: 0 });
+      expect(aiCredits).not.toHaveBeenCalled();
       expect(d.sent).toHaveLength(0);
       expect(events().find((e) => e.event === "health.checked")).toMatchObject({ result: "failed", alert: true });
     } finally {
-      SETTINGS.ai_credit_low_cents = was;
+      SETTINGS[key] = was;
     }
   });
 

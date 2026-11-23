@@ -1,8 +1,8 @@
 // The health job against the real health_snapshot, settings and heartbeat (E5), with Resend and
-// the vendors faked. The database is shared, so each test runs on its own far-future days and
-// deletes its users afterwards. The snapshot's lists are global, so open rounds or orders left
-// behind elsewhere would show here too (pnpm db:reset clears them). Skipped when the local stack
-// isn't running.
+// the vendors faked. The database is shared, so each test runs on its own far-future days,
+// deletes its users afterwards, and checks its own ids. The snapshot's lists are global, so the
+// tests that need nothing else open (no email, exact counts) first check that's so. Skipped when
+// the local stack isn't running.
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { Client } from "pg";
@@ -144,6 +144,15 @@ describe.skipIf(!stack)("runHealthCheck (real local database)", () => {
   const checked = () => healthEvents().find((e) => e.event === "health.checked");
   const rows = (text: string) => text.split("\n").filter((l) => l.startsWith("- "));
 
+  /** Nothing open from elsewhere that the snapshot would list or count on this day. */
+  async function expectNothingElseOpen(now: Date) {
+    const s = await readSnapshot(db(), now);
+    const lists = [s.stuckRounds, s.unconfirmed, s.placingStale, s.heldZinc, s.deadlineClose, s.ideasWaiting];
+    const w = s.weekly;
+    const open = lists.reduce((n, l) => n + l.length, 0) + w.waitingAddress + w.waitingFunds + w.waitingSetup + w.waitingApproval;
+    expect(open, "the shared local database has open rounds or orders left from elsewhere: run pnpm db:reset").toBe(0);
+  }
+
   beforeAll(async () => {
     pg = new Client({ connectionString: LOCAL_DB });
     await pg.connect();
@@ -185,12 +194,12 @@ describe.skipIf(!stack)("runHealthCheck (real local database)", () => {
     const held = await order(ordered, "held", "retry");
 
     const { deps: d, sent } = deps(now);
-    expect(await runHealthCheck(d)).toEqual({ result: "sent", problems: 4 });
+    expect(await runHealthCheck(d)).toMatchObject({ result: "sent" });
 
     expect(sent).toHaveLength(1);
     for (const id of [stuck, unconfirmed, placing, held, u]) expect(sent[0].text).toContain(id);
     expect(sent[0].text.split(unconfRound)).toHaveLength(2);
-    expect(checked()).toMatchObject({ result: "sent", problems: 4, sent: true, weekly: false });
+    expect(checked()).toMatchObject({ result: "sent", sent: true, weekly: false });
   });
 
   /** Nothing the owner can act on: an address 20 days from its deadline, and a funds hold. */
@@ -202,6 +211,7 @@ describe.skipIf(!stack)("runHealthCheck (real local database)", () => {
 
   it("AC-2: no email and health.checked {problems: 0, sent: false}", async () => {
     const { now, today } = dayIn(2);
+    await expectNothingElseOpen(now);
     await tickRan(today);
     await buyerWaits(today);
 
@@ -213,6 +223,7 @@ describe.skipIf(!stack)("runHealthCheck (real local database)", () => {
 
   it("AC-3 on a Monday: the weekly email with All clear and the counts", async () => {
     const { now, today } = dayIn(1);
+    await expectNothingElseOpen(now);
     await tickRan(today);
     await buyerWaits(today);
 
@@ -314,7 +325,8 @@ describe.skipIf(!stack)("runHealthCheck (real local database)", () => {
     expect(await runHealthCheck(d)).toMatchObject({ result: "sent" });
     expect(sent).toHaveLength(1);
     expect(sent[0].text).toContain(u);
-    const where = { subject: sent[0].subject, html: sent[0].html ?? "", text: sent[0].text, events: JSON.stringify(healthEvents()) };
+    expect(sent[0].html).toEqual(expect.any(String));
+    const where = { subject: sent[0].subject, html: sent[0].html!, text: sent[0].text, events: JSON.stringify(healthEvents()) };
     for (const [part, body] of Object.entries(where)) {
       for (const s of PRIVATE) expect(body.includes(s), `${s} in the ${part}`).toBe(false);
     }

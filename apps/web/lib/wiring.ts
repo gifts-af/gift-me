@@ -218,8 +218,7 @@ const RUNBOOKS = "https://github.com/gifts-af/gift-me/blob/main/design/operation
 
 /**
  * The daily health check's deps (T87): the admin client, Resend, and the two vendor balances
- * when their env vars are set here. Each vendor call reads its own timeout setting when it runs,
- * after the check has reached the database.
+ * when their env vars are set here, each within the check's health_vendor_timeout_ms.
  */
 export function healthWiring(now: Date, env: Env = process.env): HealthDeps {
   const db = createAdminClient();
@@ -234,16 +233,11 @@ export function healthWiring(now: Date, env: Env = process.env): HealthDeps {
     now,
     send: (e) => sendEmail(e, { apiKey: env.RESEND_API_KEY, fetch }),
     aiCredits: aiConfigured
-      ? async () => {
-          const signal = AbortSignal.timeout(await settingInt(db, "idea_ai_timeout_ms"));
-          return (await gatewayCredits({ base: gatewayBase!, apiKey: gatewayKey!, fetch }, signal)).balanceCents;
-        }
+      ? async (timeoutMs) =>
+          (await gatewayCredits({ base: gatewayBase!, apiKey: gatewayKey!, fetch }, AbortSignal.timeout(timeoutMs))).balanceCents
       : null,
     zincBalance: zincConfigured
-      ? async () => {
-          const http = { base: zincBase!, timeoutMs: await settingInt(db, "zinc_timeout_ms"), fetch };
-          return (await getWallet(http, zincKey!)).balanceCents;
-        }
+      ? async (timeoutMs) => (await getWallet({ base: zincBase!, timeoutMs, fetch }, zincKey!)).balanceCents
       : null,
     aiConfigured,
     zincConfigured,

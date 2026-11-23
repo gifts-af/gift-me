@@ -352,6 +352,7 @@ Once a day Vercel Cron calls `GET /api/health` at 14:00 UTC, two hours after the
 - **Turning it off:** set `health_email_enabled` to `0` in `concierge.app_settings`, no deploy needed. The ping still runs, so the database stays awake, and it logs `health.checked {result: "off"}`.
 - **How we see it working:** one `health.checked` event a day, with `result` (`sent`, `quiet`, `off`, `db_down`, `send_failed` or `failed`), `problems`, `sent` and `weekly`. The route answers 500 for `db_down`, `send_failed` and `failed`, so Vercel's cron list shows the failure too. `health.send_failed` (an alert) means Resend refused the email. `health.vendor_check_failed {vendor}` means a balance couldn't be read, so that check was skipped that day.
 - **Off production,** `?now=` sets the check's clock, as on the tick.
+- **The links** point at this file on the public GitHub repo (`main`), set in `healthWiring` (`apps/web/lib/wiring.ts`). If the engineering docs are hidden before launch, move the runbooks and change that link, or the email's links break.
 
 **Settings** (rows in `concierge.app_settings`):
 
@@ -361,8 +362,9 @@ Once a day Vercel Cron calls `GET /api/health` at 14:00 UTC, two hours after the
 | `health_all_clear_weekday` | 1 | The day the email always goes, in `Date.getUTCDay()` numbers (0 is Sunday) |
 | `ai_credit_low_cents` | 500 | Warn when the AI Gateway credit drops below this |
 | `zinc_app_balance_low_cents` | 500 | Warn when the app's Zinc balance drops below this |
+| `health_vendor_timeout_ms` | 10000 | How long each vendor balance call may take. Both run together, so keep it well under the route's 60 s |
 
-It also reads `round_max_attempts`, `placing_stale_minutes`, `hold_final_days`, `idea_engine_enabled`, `capture_extraction_enabled`, `idea_ai_timeout_ms` and `zinc_timeout_ms`. A setting it can't read fails the check (`health.checked {result: "failed", alert: true}`); there's no fallback value.
+It also reads `round_max_attempts`, `placing_stale_minutes`, `hold_final_days`, `idea_engine_enabled` and `capture_extraction_enabled`. A setting it can't read fails the check (`health.checked {result: "failed", alert: true}`); there's no fallback value.
 
 ### The database can't be reached
 

@@ -16,10 +16,10 @@ export type HealthDeps = {
   db: Db;
   now: Date;
   send: (e: OutgoingEmail) => Promise<SendResult>;
-  /** The AI Gateway credit left, in cents; null when the Gateway isn't set up here. */
-  aiCredits: (() => Promise<number>) | null;
-  /** The app's own Zinc balance, in cents; null when the app's Zinc key isn't set up here. */
-  zincBalance: (() => Promise<number>) | null;
+  /** The AI Gateway credit left, in cents, within timeoutMs; null when the Gateway isn't set up here. */
+  aiCredits: ((timeoutMs: number) => Promise<number>) | null;
+  /** The app's own Zinc balance, in cents, within timeoutMs; null when the app's Zinc key isn't set up here. */
+  zincBalance: ((timeoutMs: number) => Promise<number>) | null;
   aiConfigured: boolean;
   zincConfigured: boolean;
   /** design/operations.md, where each line's runbook heading is. */
@@ -45,20 +45,29 @@ async function setting(db: Db, key: string): Promise<number> {
   return data;
 }
 
-async function settings(db: Db): Promise<HealthSettings> {
-  const [allClearWeekday, aiCreditLowCents, zincAppBalanceLowCents, ideas, capture] = await Promise.all(
-    ["health_all_clear_weekday", "ai_credit_low_cents", "zinc_app_balance_low_cents", "idea_engine_enabled", "capture_extraction_enabled"].map(
-      (k) => setting(db, k),
-    ),
+/** The report's settings, and how long each vendor call may take (it must fit the route's 60 s). */
+async function settings(db: Db): Promise<{ report: HealthSettings; vendorTimeoutMs: number }> {
+  const [allClearWeekday, aiCreditLowCents, zincAppBalanceLowCents, ideas, capture, vendorTimeoutMs] = await Promise.all(
+    [
+      "health_all_clear_weekday",
+      "ai_credit_low_cents",
+      "zinc_app_balance_low_cents",
+      "idea_engine_enabled",
+      "capture_extraction_enabled",
+      "health_vendor_timeout_ms",
+    ].map((k) => setting(db, k)),
   );
-  return { allClearWeekday, aiCreditLowCents, zincAppBalanceLowCents, ideaEngineEnabled: ideas === 1, captureExtractionEnabled: capture === 1 };
+  return {
+    report: { allClearWeekday, aiCreditLowCents, zincAppBalanceLowCents, ideaEngineEnabled: ideas === 1, captureExtractionEnabled: capture === 1 },
+    vendorTimeoutMs,
+  };
 }
 
 /** A vendor balance, or null when it isn't checked here or the call failed (logged, never thrown). */
-async function balance(vendor: string, read: (() => Promise<number>) | null): Promise<number | null> {
+async function balance(vendor: string, read: ((timeoutMs: number) => Promise<number>) | null, timeoutMs: number): Promise<number | null> {
   if (!read) return null;
   try {
-    return await read();
+    return await read(timeoutMs);
   } catch (e) {
     logEvent("health.vendor_check_failed", { vendor, ...errorFields(e) });
     return null;
@@ -100,14 +109,14 @@ export async function runHealthCheck(deps: HealthDeps): Promise<{ result: Health
 
   try {
     if ((await setting(db, "health_email_enabled")) === 0) return done("off", 0, false, false);
-    const [s, snapshot, aiCreditCents, zincAppBalanceCents] = await Promise.all([
-      settings(db),
+    const s = await settings(db);
+    const [snapshot, aiCreditCents, zincAppBalanceCents] = await Promise.all([
       readSnapshot(db, now),
-      balance("ai_gateway", deps.aiCredits),
-      balance("zinc", deps.zincBalance),
+      balance("ai_gateway", deps.aiCredits, s.vendorTimeoutMs),
+      balance("zinc", deps.zincBalance, s.vendorTimeoutMs),
     ]);
     const vendors = { aiCreditCents, zincAppBalanceCents, aiConfigured: deps.aiConfigured, zincConfigured: deps.zincConfigured };
-    const report = healthReport(snapshot, vendors, s, now);
+    const report = healthReport(snapshot, vendors, s.report, now);
     const problems = report.problems.length;
     if (problems === 0 && !report.isWeekly) return done("quiet", 0, false, false);
     const sent = await send(deps, report);
