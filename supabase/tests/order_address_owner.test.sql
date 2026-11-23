@@ -4,7 +4,7 @@
 -- refuses and the order ends as address_withdrawn.
 begin;
 \ir _helpers.psql
-select plan(41);
+select plan(43);
 
 -- A round waiting on approval, for its own person, linked to p_list when given.
 create function tests.oo_round(p_user uuid, p_list uuid)
@@ -163,11 +163,22 @@ select is((select address_source || '/' || coalesce(address_owner_id::text, '-')
 select tests.oo_round(:'buyer', :'list_a') as a3 \gset
 select tests.oo_idea(:'a3') as a3_idea \gset
 select throws_ok(format('select concierge.approve_round(%L, %L, %L, %L)', :'a3', :'buyer', tests.oo_lock(:'a3'),
-    jsonb_build_array(tests.oo_el(:'a3_idea', 'shared'))),
-  'P0001', 'approve_round: address changed', 'approve_round refuses a shared order with no owner');
+    jsonb_build_array(tests.oo_el(:'a3_idea', 'shared') || '{"address_owner_id": null}'::jsonb)),
+  'P0001', 'approve_round: address changed', 'approve_round refuses a shared order whose owner is sent as null');
 select throws_ok(format('select concierge.approve_round(%L, %L, %L, %L)', :'a3', :'buyer', tests.oo_lock(:'a3'),
     jsonb_build_array(tests.oo_el(:'a3_idea', 'shared', :'owner_b'))),
   'P0001', 'approve_round: address changed', '... or one whose owner isn''t the person''s current link');
+-- A caller that sends no owner (the app before this change) gets the current link owner.
+select concierge.approve_round(:'a3', :'buyer', tests.oo_lock(:'a3'), jsonb_build_array(tests.oo_el(:'a3_idea', 'shared')));
+select is((select address_owner_id::text from concierge.orders where round_id = :'a3'), :'owner_a',
+  'approve_round records the current link owner when the caller sends none');
+
+select tests.oo_round(:'buyer', :'list_a') as a4 \gset
+select tests.oo_idea(:'a4') as a4_idea \gset
+delete from lists.person_links where person_id = tests.oo_person(:'a4');
+select throws_ok(format('select concierge.approve_round(%L, %L, %L, %L)', :'a4', :'buyer', tests.oo_lock(:'a4'),
+    jsonb_build_array(tests.oo_el(:'a4_idea', 'shared'))),
+  'P0001', 'approve_round: address changed', '... and refuses it when the person links to no one');
 
 -- ─── replace_failed_order (AC-1) ─────────────────────────────────
 
@@ -180,15 +191,16 @@ select concierge.reconcile_round(:'f1');
 select tests.oo_idea(:'f1') as f1_next \gset
 select tests.act_as_server();
 select throws_ok(format('select * from concierge.replace_failed_order(%L, %L, %L, %L, %L)', :'f1', :'buyer', tests.oo_lock(:'f1'),
-    :'f1_failed', tests.oo_el(:'f1_next', 'shared')),
-  'P0001', 'replace_failed_order: address changed', 'replace_failed_order refuses a shared order with no owner');
+    :'f1_failed', tests.oo_el(:'f1_next', 'shared') || '{"address_owner_id": null}'::jsonb),
+  'P0001', 'replace_failed_order: address changed', 'replace_failed_order refuses a shared order whose owner is sent as null');
 select throws_ok(format('select * from concierge.replace_failed_order(%L, %L, %L, %L, %L)', :'f1', :'buyer', tests.oo_lock(:'f1'),
     :'f1_failed', tests.oo_el(:'f1_next', 'shared', :'owner_b')),
   'P0001', 'replace_failed_order: address changed', '... or with the wrong owner');
 select id as f1_new from concierge.replace_failed_order(:'f1', :'buyer', tests.oo_lock(:'f1'), :'f1_failed',
-  tests.oo_el(:'f1_next', 'shared', :'owner_a')) \gset
+  tests.oo_el(:'f1_next', 'shared')) \gset
 select tests.reset_role();
-select is((select address_owner_id::text from concierge.orders where id = :'f1_new'), :'owner_a', 'replace_failed_order records the owner');
+select is((select address_owner_id::text from concierge.orders where id = :'f1_new'), :'owner_a',
+  'replace_failed_order records the current link owner when the caller sends none');
 
 -- A price-up re-buy of a shared order, as the same idea.
 select tests.oo_round(:'buyer', :'list_a') as f2 \gset

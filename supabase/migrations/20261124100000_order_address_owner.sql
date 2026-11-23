@@ -135,13 +135,17 @@ begin
     raise exception 'approve_round: claimed' using errcode = 'P0001';
   end if;
   -- New: a shared address only from the owner the person links to now, so the
-  -- order records who the buyer chose (T88). A missing owner never matches.
+  -- order records who the buyer chose (T88). An owner sent as null never matches.
+  -- A caller that sends no owner at all (the app before this change, during a
+  -- deploy or rollback) gets the current link owner recorded instead.
   if exists (select 1
                from jsonb_array_elements(p_orders) e
               where e ->> 'address_source' = 'shared'
-                and ((e ->> 'address_owner_id') is null
-                     or (e ->> 'address_owner_id') is distinct from
-                        (select l.owner_id::text from lists.active_link(r.person_id) l))) then
+                and (not exists (select 1 from lists.active_link(r.person_id))
+                     or (e ? 'address_owner_id'
+                         and ((e ->> 'address_owner_id') is null
+                              or (e ->> 'address_owner_id') is distinct from
+                                 (select l.owner_id::text from lists.active_link(r.person_id) l))))) then
     raise exception 'approve_round: address changed' using errcode = 'P0001';
   end if;
 
@@ -153,7 +157,9 @@ begin
             (v_el ->> 'fee_cents')::integer, v_el ->> 'gift_message', 'held', 'retry', v_el ->> 'ship_to',
             v_el -> 'address' ->> 'city', v_el -> 'address' ->> 'state',
             v_el ->> 'address_source',
-            case when v_el ->> 'address_source' = 'shared' then (v_el ->> 'address_owner_id')::uuid end) -- New.
+            case when v_el ->> 'address_source' = 'shared'
+                 then coalesce((v_el ->> 'address_owner_id')::uuid,
+                               (select l.owner_id from lists.active_link(r.person_id) l)) end) -- New.
     returning * into v_order;
     insert into concierge.order_addresses (order_id, user_id, recipient_first_name, recipient_last_name, address_line1,
                                            address_line2, city, state, zip, country, phone)
@@ -246,11 +252,13 @@ begin
   end if;
 
   -- New: a shared address only from the owner the person links to now, as
-  -- approve_round (T88).
+  -- approve_round, including its rule for a caller that sends no owner (T88).
   if p_order ->> 'address_source' = 'shared'
-     and ((p_order ->> 'address_owner_id') is null
-          or (p_order ->> 'address_owner_id') is distinct from
-             (select l.owner_id::text from lists.active_link(r.person_id) l)) then
+     and (not exists (select 1 from lists.active_link(r.person_id))
+          or (p_order ? 'address_owner_id'
+              and ((p_order ->> 'address_owner_id') is null
+                   or (p_order ->> 'address_owner_id') is distinct from
+                      (select l.owner_id::text from lists.active_link(r.person_id) l)))) then
     raise exception 'replace_failed_order: address changed' using errcode = 'P0001';
   end if;
 
@@ -290,7 +298,9 @@ begin
   values (p_user_id, p_round_id, v_idea.id, 'zinc_wallet', (p_order ->> 'max_price_cents')::integer,
           (p_order ->> 'fee_cents')::integer, p_order ->> 'gift_message', 'held', 'retry', p_order ->> 'ship_to',
           p_order -> 'address' ->> 'city', p_order -> 'address' ->> 'state', p_order ->> 'address_source',
-          case when p_order ->> 'address_source' = 'shared' then (p_order ->> 'address_owner_id')::uuid end) -- New.
+          case when p_order ->> 'address_source' = 'shared'
+               then coalesce((p_order ->> 'address_owner_id')::uuid,
+                             (select l.owner_id from lists.active_link(r.person_id) l)) end) -- New.
   returning * into v_order;
   insert into concierge.order_addresses (order_id, user_id, recipient_first_name, recipient_last_name, address_line1,
                                          address_line2, city, state, zip, country, phone)
