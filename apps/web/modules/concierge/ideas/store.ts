@@ -109,7 +109,9 @@ export type SavedIdea = {
 };
 
 export type RunStage = "brainstormed" | "resolved" | "ranked";
-export type RunEnd = "saved" | "none" | "failed" | "cost_cap" | "deadline";
+/** How a run ends: idea_runs.outcome's CHECK list. `no_credit` (the AI credit ran out) doesn't count as a run. */
+export const RUN_ENDS = ["saved", "none", "failed", "cost_cap", "deadline", "no_credit"] as const;
+export type RunEnd = (typeof RUN_ENDS)[number];
 
 export interface IdeaStore {
   settings(): Promise<IdeaSettings>;

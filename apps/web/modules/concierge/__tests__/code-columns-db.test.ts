@@ -6,7 +6,7 @@ import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, expectTypeOf, it, vi } from "vitest";
 import type { RejectionCode } from "@gifts-af/core";
 import { LOCAL_DB, localStack } from "@/test/local-db";
-import type { RunStage } from "@/modules/concierge/ideas/store";
+import type { RunEnd, RunStage } from "@/modules/concierge/ideas/store";
 
 // Next's guard that keeps server modules out of browser code; not something of ours.
 vi.mock("server-only", () => ({}));
@@ -66,6 +66,12 @@ describe.skipIf(!stack)("code column CHECK lists match the app (real local datab
 
   it("idea_runs.stage allows exactly the run stages", async () => {
     expect(await allowed(pg, "idea_runs_stage_check")).toEqual(sorted(RUN_STAGES));
+  });
+
+  it("idea_runs.outcome allows exactly the run ends", async () => {
+    const { RUN_ENDS } = await import("@/modules/concierge/ideas/store");
+    expectTypeOf<(typeof RUN_ENDS)[number]>().toEqualTypeOf<RunEnd>();
+    expect(await allowed(pg, "idea_runs_outcome_check")).toEqual(sorted(RUN_ENDS));
   });
 
   it("rejections.reason_code allows exactly the rejection codes", async () => {

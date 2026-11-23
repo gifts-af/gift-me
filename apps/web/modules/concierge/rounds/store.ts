@@ -305,7 +305,14 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
     const [state, told, lastRun, engineOn, listGifts] = await Promise.all([
       concierge.rpc("round_idea_state", { p_round_id: roundId }),
       concierge.from("round_sends").select("created_at").eq("round_id", roundId).eq("step", "no_ideas").maybeSingle(),
-      concierge.from("idea_runs").select("started_at").eq("round_id", roundId).order("started_at", { ascending: false }).limit(1),
+      // A no_credit run bought nothing, so it isn't the run after a no_ideas email (T68).
+      concierge
+        .from("idea_runs")
+        .select("started_at")
+        .eq("round_id", roundId)
+        .or("outcome.is.null,outcome.neq.no_credit")
+        .order("started_at", { ascending: false })
+        .limit(1),
       setting("idea_engine_enabled"),
       listGiftCandidates(db, personId, roundId),
     ]);
