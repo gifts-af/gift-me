@@ -755,6 +755,8 @@ export type Database = {
           address_owner_id: string | null;
           address_source: string | null;
           created_at: string;
+          delivered_at: string | null;
+          delivered_by: string | null;
           est_delivery_date: string | null;
           failed_after_close: boolean;
           failed_at: string | null;
@@ -770,6 +772,7 @@ export type Database = {
           max_price_cents: number;
           merchant_order_id: string | null;
           packages: NonNullable<Json>;
+          placed_at: string | null;
           provider: string;
           provider_order_id: string | null;
           resolved: boolean;
@@ -782,6 +785,7 @@ export type Database = {
           subtotal_cents: number | null;
           tax_cents: number | null;
           total_cents: number | null;
+          tracking_event_at: string | null;
           updated_at: string;
           user_id: string;
         };
@@ -790,6 +794,8 @@ export type Database = {
           address_owner_id?: string | null;
           address_source?: string | null;
           created_at?: string;
+          delivered_at?: string | null;
+          delivered_by?: string | null;
           est_delivery_date?: string | null;
           failed_after_close?: boolean;
           failed_at?: string | null;
@@ -805,6 +811,7 @@ export type Database = {
           max_price_cents: number;
           merchant_order_id?: string | null;
           packages?: NonNullable<Json>;
+          placed_at?: string | null;
           provider?: string;
           provider_order_id?: string | null;
           resolved?: boolean;
@@ -817,6 +824,7 @@ export type Database = {
           subtotal_cents?: number | null;
           tax_cents?: number | null;
           total_cents?: number | null;
+          tracking_event_at?: string | null;
           updated_at?: string;
           user_id?: string;
         };
@@ -824,6 +832,8 @@ export type Database = {
           address_owner_id?: string | null;
           address_source?: string | null;
           created_at?: string;
+          delivered_at?: string | null;
+          delivered_by?: string | null;
           est_delivery_date?: string | null;
           failed_after_close?: boolean;
           failed_at?: string | null;
@@ -839,6 +849,7 @@ export type Database = {
           max_price_cents?: number;
           merchant_order_id?: string | null;
           packages?: NonNullable<Json>;
+          placed_at?: string | null;
           provider?: string;
           provider_order_id?: string | null;
           resolved?: boolean;
@@ -851,6 +862,7 @@ export type Database = {
           subtotal_cents?: number | null;
           tax_cents?: number | null;
           total_cents?: number | null;
+          tracking_event_at?: string | null;
           updated_at?: string;
           user_id?: string;
         };
@@ -1221,6 +1233,8 @@ export type Database = {
           address_owner_id: string | null;
           address_source: string | null;
           created_at: string;
+          delivered_at: string | null;
+          delivered_by: string | null;
           est_delivery_date: string | null;
           failed_after_close: boolean;
           failed_at: string | null;
@@ -1236,6 +1250,7 @@ export type Database = {
           max_price_cents: number;
           merchant_order_id: string | null;
           packages: NonNullable<Json>;
+          placed_at: string | null;
           provider: string;
           provider_order_id: string | null;
           resolved: boolean;
@@ -1248,6 +1263,7 @@ export type Database = {
           subtotal_cents: number | null;
           tax_cents: number | null;
           total_cents: number | null;
+          tracking_event_at: string | null;
           updated_at: string;
           user_id: string;
         }[];
@@ -1269,6 +1285,8 @@ export type Database = {
           address_owner_id: string | null;
           address_source: string | null;
           created_at: string;
+          delivered_at: string | null;
+          delivered_by: string | null;
           est_delivery_date: string | null;
           failed_after_close: boolean;
           failed_at: string | null;
@@ -1284,6 +1302,7 @@ export type Database = {
           max_price_cents: number;
           merchant_order_id: string | null;
           packages: NonNullable<Json>;
+          placed_at: string | null;
           provider: string;
           provider_order_id: string | null;
           resolved: boolean;
@@ -1296,6 +1315,7 @@ export type Database = {
           subtotal_cents: number | null;
           tax_cents: number | null;
           total_cents: number | null;
+          tracking_event_at: string | null;
           updated_at: string;
           user_id: string;
         }[];
@@ -1466,6 +1486,13 @@ export type Database = {
         }[];
       };
       delete_occasion: { Args: { p_occasion_id: string }; Returns: undefined };
+      delivered_rounds_untold: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          round_id: string;
+          user_id: string;
+        }[];
+      };
       due_rounds: {
         Args: { p_now: string };
         Returns: {
@@ -1583,6 +1610,10 @@ export type Database = {
           status: Database["concierge"]["Enums"]["round_status"];
         }[];
       };
+      mark_delivered: {
+        Args: { p_by: string; p_order_id: string; p_user_id: string };
+        Returns: Database["concierge"]["Enums"]["round_status"];
+      };
       mark_unconfirmed: {
         Args: { p_order_id: string };
         Returns: Database["concierge"]["Enums"]["round_status"];
@@ -1593,6 +1624,8 @@ export type Database = {
           address_owner_id: string | null;
           address_source: string | null;
           created_at: string;
+          delivered_at: string | null;
+          delivered_by: string | null;
           est_delivery_date: string | null;
           failed_after_close: boolean;
           failed_at: string | null;
@@ -1608,6 +1641,7 @@ export type Database = {
           max_price_cents: number;
           merchant_order_id: string | null;
           packages: NonNullable<Json>;
+          placed_at: string | null;
           provider: string;
           provider_order_id: string | null;
           resolved: boolean;
@@ -1620,6 +1654,7 @@ export type Database = {
           subtotal_cents: number | null;
           tax_cents: number | null;
           total_cents: number | null;
+          tracking_event_at: string | null;
           updated_at: string;
           user_id: string;
         }[];
@@ -1638,6 +1673,10 @@ export type Database = {
         Args: Record<PropertyKey, never>;
         Returns: number;
       };
+      prune_tracking_numbers: {
+        Args: Record<PropertyKey, never>;
+        Returns: number;
+      };
       reapprove_order: {
         Args: {
           p_lock: string;
@@ -1650,6 +1689,8 @@ export type Database = {
           address_owner_id: string | null;
           address_source: string | null;
           created_at: string;
+          delivered_at: string | null;
+          delivered_by: string | null;
           est_delivery_date: string | null;
           failed_after_close: boolean;
           failed_at: string | null;
@@ -1665,6 +1706,7 @@ export type Database = {
           max_price_cents: number;
           merchant_order_id: string | null;
           packages: NonNullable<Json>;
+          placed_at: string | null;
           provider: string;
           provider_order_id: string | null;
           resolved: boolean;
@@ -1677,6 +1719,7 @@ export type Database = {
           subtotal_cents: number | null;
           tax_cents: number | null;
           total_cents: number | null;
+          tracking_event_at: string | null;
           updated_at: string;
           user_id: string;
         }[];
@@ -1700,6 +1743,17 @@ export type Database = {
       record_outcomes: {
         Args: { p_results: Json; p_round_id: string };
         Returns: Database["concierge"]["Enums"]["round_status"];
+      };
+      record_tracking: {
+        Args: {
+          p_est: string;
+          p_event_at: string;
+          p_order_id: string;
+          p_packages: Json;
+          p_shipped: boolean;
+          p_user_id: string;
+        };
+        Returns: string;
       };
       reject_round_ideas: {
         Args: {
@@ -1738,6 +1792,8 @@ export type Database = {
           address_owner_id: string | null;
           address_source: string | null;
           created_at: string;
+          delivered_at: string | null;
+          delivered_by: string | null;
           est_delivery_date: string | null;
           failed_after_close: boolean;
           failed_at: string | null;
@@ -1753,6 +1809,7 @@ export type Database = {
           max_price_cents: number;
           merchant_order_id: string | null;
           packages: NonNullable<Json>;
+          placed_at: string | null;
           provider: string;
           provider_order_id: string | null;
           resolved: boolean;
@@ -1765,6 +1822,7 @@ export type Database = {
           subtotal_cents: number | null;
           tax_cents: number | null;
           total_cents: number | null;
+          tracking_event_at: string | null;
           updated_at: string;
           user_id: string;
         }[];
@@ -1867,6 +1925,8 @@ export type Database = {
           address_owner_id: string | null;
           address_source: string | null;
           created_at: string;
+          delivered_at: string | null;
+          delivered_by: string | null;
           est_delivery_date: string | null;
           failed_after_close: boolean;
           failed_at: string | null;
@@ -1882,6 +1942,7 @@ export type Database = {
           max_price_cents: number;
           merchant_order_id: string | null;
           packages: NonNullable<Json>;
+          placed_at: string | null;
           provider: string;
           provider_order_id: string | null;
           resolved: boolean;
@@ -1894,6 +1955,7 @@ export type Database = {
           subtotal_cents: number | null;
           tax_cents: number | null;
           total_cents: number | null;
+          tracking_event_at: string | null;
           updated_at: string;
           user_id: string;
         }[];
@@ -1917,6 +1979,31 @@ export type Database = {
         }[];
       };
       start_tick: { Args: { p_at: string; p_day: string }; Returns: undefined };
+      store_cancel_order: {
+        Args: { p_order_id: string; p_today: string; p_user_id: string };
+        Returns: Database["concierge"]["Enums"]["round_status"];
+      };
+      tracking_candidates: {
+        Args: { p_today: string };
+        Returns: {
+          delivery_days_max: number;
+          est_delivery_date: string;
+          failure_type: string;
+          handling_days_max: number;
+          occasion_date: string;
+          occasion_kind: string;
+          order_id: string;
+          person_name: string;
+          placed_at: string;
+          resolved: boolean;
+          round_id: string;
+          sent_steps: string[];
+          status: string;
+          title: string;
+          total_cents: number;
+          user_id: string;
+        }[];
+      };
       untold_failures: { Args: { p_round_id: string }; Returns: string[] };
       zinc_claim_poll: {
         Args: { p_now: string; p_user_id: string };
