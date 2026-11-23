@@ -52,8 +52,9 @@ export async function localStack(opts: { api: boolean }): Promise<{ supabase: Lo
 }
 
 /**
- * The real client, except that stale_placing_orders (what sweepStalePlacing settles) and
- * tracking_candidates (what the daily news tells) list only these users' orders. Both runs are
+ * The real client, except that stale_placing_orders (what sweepStalePlacing settles),
+ * tracking_candidates (what the daily news tells) and delivered_rounds_untold (the delivered
+ * email's retry) list only these users' orders. Both runs are
  * global, so without this a test would settle, or email about, the orders of leftovers and of
  * other runs on the shared database. The queries themselves still run for real. `userIds` is
  * read at each call, so users added later count.
@@ -71,7 +72,7 @@ export function ownStaleOrders<T extends object>(db: T, userIds: readonly string
             if (p !== "rpc" || typeof rpc !== "function") return rpc;
             return (fn: string, ...rest: unknown[]) => {
               const call = rpc.call(s, fn, ...rest);
-              if (fn !== "stale_placing_orders" && fn !== "tracking_candidates") return call;
+              if (fn !== "stale_placing_orders" && fn !== "tracking_candidates" && fn !== "delivered_rounds_untold") return call;
               return Promise.resolve(call).then((res: { data: { user_id: string }[] | null }) => ({
                 ...res,
                 data: res.data?.filter((o) => userIds.includes(o.user_id)) ?? null,

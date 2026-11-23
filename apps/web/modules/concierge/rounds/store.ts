@@ -92,6 +92,8 @@ export type RoundOrder = {
   totalCents: number | null;
   /** The retailer's name, as stored ("walmart"); null when unknown. */
   store: string | null;
+  /** When it was delivered (ISO); null before then. */
+  deliveredAt: string | null;
 };
 
 /**
@@ -262,6 +264,8 @@ export interface RoundStore {
   roundsMissingOrderedEmail(): Promise<string[]>;
   /** The gifts the daily tracking news looks at on `today` (ALL-33). */
   trackingCandidates(today: CalendarDate): Promise<TrackingCandidate[]>;
+  /** Delivered rounds whose `delivered` email isn't recorded (ALL-33): the tick tells them again. */
+  deliveredRoundsUntold(): Promise<{ roundId: string; userId: string }[]>;
 }
 
 const SCHEDULE_KEYS: Record<keyof ScheduleSettings, string> = {
@@ -531,7 +535,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
           .order("rank"),
         concierge
           .from("orders")
-          .select("id, idea_id, status, hold_reason, failure_type, resolved, failed_at, failed_after_close, max_price_cents, fee_cents, total_cents, ship_city, created_at, gift_ideas(title, retailer)")
+          .select("id, idea_id, status, hold_reason, failure_type, resolved, failed_at, failed_after_close, max_price_cents, fee_cents, total_cents, ship_city, delivered_at, created_at, gift_ideas(title, retailer)")
           .eq("round_id", roundId)
           .order("created_at")
           .order("id"),
@@ -612,6 +616,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
           maxPriceCents: o.max_price_cents,
           feeCents: o.fee_cents,
           totalCents: o.total_cents,
+          deliveredAt: o.delivered_at,
         })),
         personRemoved: p.deleted_at !== null,
         // Closed on a day before its ship-by day: not by the deadline.
@@ -708,6 +713,12 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
       const told = new Set(sends.map((s) => s.step));
       const late = await lateFailures();
       return [...new Set([...orders.filter((o) => !told.has(`ordered:${o.id}`)).map((o) => o.round_id), ...late])];
+    },
+
+    async deliveredRoundsUntold() {
+      const { data, error } = await concierge.rpc("delivered_rounds_untold");
+      if (error) fail("Loading the delivered rounds failed", error);
+      return (data ?? []).map((r) => ({ roundId: r.round_id, userId: r.user_id }));
     },
 
     async trackingCandidates(today) {

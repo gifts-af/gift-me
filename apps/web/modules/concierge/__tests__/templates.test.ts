@@ -5,7 +5,7 @@ const kinds = Object.keys(SAMPLE_DATA) as NotificationKind[];
 
 // store_cancelled_late: nothing more can ship in time, so there is nothing to tap (ALL-33 mock-up).
 // gift_on_time and tracking_news: plain links only; nothing needs one main action.
-const NO_BUTTON: NotificationKind[] = ["notes_tip", "who_is_this", "notes_not_read", "notes_cant_cancel", "store_cancelled_late", "gift_on_time", "tracking_news"];
+const NO_BUTTON: NotificationKind[] = ["notes_tip", "who_is_this", "notes_not_read", "notes_cant_cancel", "store_cancelled_late", "gift_on_time", "tracking_news", "delivered"];
 
 /** The Zinc wallet address some emails carry as data rather than a one-time link. */
 function walletUrl(kind: NotificationKind): string[] {
@@ -770,6 +770,21 @@ describe("gift_on_time (a late gift is back on time)", () => {
     expect(mail.text).toContain("The Cozy throw blanket is now expected Friday, March 13, in time for Mom's birthday on Saturday, March 14.");
     expect(mail.text).toContain("There's nothing you need to do.");
     expect(mail.text).toContain(`See Mom's gift: ${s.links.open}`);
+  });
+});
+
+describe("delivered (every gift of the occasion arrived)", () => {
+  it("names each gift with its date, links to the round, and says what happens next without a gender", () => {
+    const s = SAMPLE_DATA.delivered;
+    const mail = TEMPLATES.delivered(s.data, s.links);
+    expect(mail.subject).toBe("Mom's gift was delivered");
+    expect(mail.text).toContain("Everything you chose for Mom's birthday on Saturday, March 14 has arrived.");
+    expect(mail.text).toContain("Cozy throw blanket");
+    expect(mail.text).toContain("Delivered Friday, March 13");
+    expect(mail.text).toContain("Delivered Saturday, March 14");
+    expect(mail.text).toContain(`See Mom's gift: ${s.links.open}`);
+    expect(mail.text).toContain("What happens next: after the occasion we'll ask how they liked it.");
+    expect(mail.text).not.toMatch(/(she|her)/);
   });
 });
 

@@ -30,6 +30,8 @@ export type NotificationKind =
   | "gift_late"
   | "gift_on_time"
   | "tracking_news"
+  // ALL-33: every gift of an occasion has arrived.
+  | "delivered"
   // ALL-112: to a list owner, whose shared address a store couldn't use. Says nothing of a gift.
   | "check_your_address"
   // ALL-31: emailed notes. The tip, the "Who is this about?" question, and two one-off replies.
@@ -155,6 +157,8 @@ export type TemplateData = {
   gift_on_time: OneGift & { expectedText: string };
   /** ALL-33: two or more gifts' news, across the buyer's people and occasions, in the order told. */
   tracking_news: { items: NewsItem[] };
+  /** ALL-33: every gift of the round arrived; `deliveredText` is each gift's delivered date, formatted. */
+  delivered: Occasion & { gifts: { title: string; deliveredText: string }[] };
   check_your_address: Record<string, never>;
   notes_tip: { personName: string };
   /** `subject`: the note's subject line, empty when it had none; `choices`: one link each, in order. */
@@ -196,6 +200,7 @@ export type TemplateLinks = {
   gift_on_time: { open: string };
   // Each shipped late gift carries its own round screen link in `NewsItem.url`.
   tracking_news: Record<string, never>;
+  delivered: { open: string };
   check_your_address: { open: string };
   notes_tip: Record<string, never>;
   // `choice{i}` files the note to `choices[i]`; `someoneElse` is the plain people page.
@@ -756,6 +761,20 @@ export const TEMPLATES: {
     };
   },
 
+  delivered: (d, links) => {
+    const title = `${d.personName}'s gift was delivered`;
+    return {
+      subject: title,
+      ...renderEmail({
+        heading: title,
+        paragraphs: [`Everything you chose for ${d.personName}'s ${d.occasion} on ${d.dateText} has arrived.`],
+        rows: d.gifts.map((g) => ({ title: g.title, detail: `Delivered ${g.deliveredText}` })),
+        link: { label: `See ${d.personName}'s gift`, url: links.open },
+        footer: "What happens next: after the occasion we'll ask how they liked it.",
+      }),
+    };
+  },
+
   // Bad news first, with an apology (owner, 2026-11-23); the caller orders the items.
   tracking_news: (d) => {
     const bad = d.items.filter((i) => i.kind !== "on_time").length;
@@ -1001,6 +1020,10 @@ export const SAMPLE_DATA: {
       ],
     },
     links: {},
+  },
+  delivered: {
+    data: { ...OCC, gifts: [{ title: "Cozy throw blanket", deliveredText: "Friday, March 13" }, { title: "Reading lamp", deliveredText: "Saturday, March 14" }] },
+    links: { open: "https://example.com/rounds/r1" },
   },
   gift_late: {
     data: { ...OCC, giftTitle: "Cozy throw blanket", expectedText: "Monday, March 16", daysLate: 2 },

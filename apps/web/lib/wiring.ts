@@ -23,6 +23,7 @@ import {
   placeRound,
   runIdeas,
   runTrackingNews,
+  tellDelivered,
   sweepStalePlacing,
   type EngineDeps,
   type GenerateIdeas,
@@ -194,8 +195,13 @@ export async function buyingWiring(
  * needs them through advanceRound with justPlaced, so the engine only emails and never places
  * inside Zinc's request; an order Zinc placed through tellOrdered.
  */
-export function webhookTellers(): { advanceRound: (roundId: string) => Promise<unknown>; orderPlaced: (roundId: string) => Promise<unknown> } {
+export function webhookTellers(): {
+  advanceRound: (roundId: string) => Promise<unknown>;
+  orderPlaced: (roundId: string) => Promise<unknown>;
+  tellDelivered: (roundId: string) => Promise<unknown>;
+} {
   return {
+    tellDelivered: async (roundId) => tellDelivered(roundId, (await buyingWiring(new Date())).engine),
     advanceRound: async (roundId) => advanceRound(roundId, (await buyingWiring(new Date())).engine, { justPlaced: true }),
     orderPlaced: async (roundId) => tellOrdered(roundId, (await buyingWiring(new Date())).engine),
   };

@@ -4,6 +4,7 @@ import type { IdeaOutcome } from "../ideas/run";
 import type { NotifyDeps } from "../notify/notify";
 import { planJobs, type JobMessage, type SendJobs } from "./fanout";
 import type { ClaimedRound, RoundStore } from "./store";
+import { retryDeliveredEmails } from "../tracking/delivered";
 import { runHeld, retryOrderedEmails, tellOwnerOfRejection, tellOwnersOfRejections } from "./money-path";
 import { dayOf, releaseQuietly, view, sendHeadsUp, ideaPass, moveToGenerating, sendStep, trySend, finishStep } from "./steps";
 
@@ -105,6 +106,13 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
     await retryOrderedEmails(deps);
   } catch (err) {
     logEvent("order.ordered_retry_failed", { ...errorFields(err) });
+  }
+  // Delivered emails the service refused before go out now (ALL-33), on their own so a failure
+  // can't stop the tick.
+  try {
+    await retryDeliveredEmails(deps);
+  } catch (err) {
+    logEvent("tracking.delivered_retry_failed", { ...errorFields(err), alert: true });
   }
 
   // Emailed notes nobody filed are cleared, and old dedupe rows pruned. Housekeeping, so it runs

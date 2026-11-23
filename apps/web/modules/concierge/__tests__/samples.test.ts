@@ -37,6 +37,7 @@ describe("sampleEmails", () => {
       "failed_several",
       "store_cancelled_late",
       "tracking_news",
+      "delivered",
       "gift_late",
       "gift_on_time",
       "check_your_address",
