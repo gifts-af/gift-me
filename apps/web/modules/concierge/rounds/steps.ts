@@ -93,7 +93,8 @@ const USES_TURN: IdeaOutcome["status"][] = ["saved", "none", "failed", "deadline
  * The idea pass (ALL-27, design §5.1 "Long steps"): the rounds waiting for ideas, nearest
  * deadline first. Each run starts only while fewer than idea_rounds_per_tick have started and
  * its worst case fits before the tick's deadline; a refusal doesn't use a turn. Rounds that
- * get no turn are released, with no run counted, for the next tick.
+ * get no turn are released, with no run counted, for the next tick. Once a run finds the AI
+ * credit gone (no_credit), every later run would too, so the rest are released without one.
  */
 export async function ideaPass(
   turns: ClaimedRound[],
@@ -127,9 +128,10 @@ export async function ideaPass(
   let advanced = 0;
   let failed = 0;
   let started = 0;
+  let noCredit = false;
   const byDeadline = [...turns].sort((a, b) => (a.shipByDeadline < b.shipByDeadline ? -1 : a.shipByDeadline > b.shipByDeadline ? 1 : 0));
   for (const claimed of byDeadline) {
-    if (started >= perTick || tickDeadline - clock() < worstMs) {
+    if (noCredit || started >= perTick || tickDeadline - clock() < worstMs) {
       await releaseQuietly(claimed, deps);
       continue;
     }
@@ -147,6 +149,7 @@ export async function ideaPass(
         AbortSignal.timeout(Math.max(0, tickDeadline - clock())),
       );
       if (USES_TURN.includes(outcome.status)) started++;
+      if (outcome.status === "no_credit") noCredit = true;
       await afterIdeaRun(round, outcome, deps, s);
       advanced++;
     } catch (err) {
@@ -172,6 +175,10 @@ async function afterIdeaRun(round: ClaimedRound, outcome: IdeaOutcome, deps: Eng
       // None saved: the person was removed mid-run. The deadline closes the round.
       return outcome.count > 0 ? sendHeadsUp(round, deps, s) : atDeadline();
     case "off":
+      return release();
+    case "no_credit":
+      // No AI was bought, so the round waits where it is, still due, until the credit is topped up (T68).
+      logEvent("ideas.no_credit", { round_id: round.id, user_id: round.userId, alert: true });
       return release();
     case "refused":
       switch (outcome.reason) {

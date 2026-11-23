@@ -1,7 +1,7 @@
 import { buyingWiring } from "@/lib/wiring";
 import { appSettingInt } from "@/lib/app-settings";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { runTick } from "@/modules/concierge";
+import { runTick, tickHeartbeat } from "@/modules/concierge";
 import { removeDeletedPhotos } from "@/modules/lists";
 import { queueSendJobs } from "../queue";
 import { handleTick, isTestClock } from "./tick";
@@ -31,5 +31,6 @@ export async function GET(request: Request) {
       const admin = createAdminClient();
       return removeDeletedPhotos(admin, (key) => appSettingInt(key, admin));
     },
+    tickHeartbeat(createAdminClient()),
   );
 }

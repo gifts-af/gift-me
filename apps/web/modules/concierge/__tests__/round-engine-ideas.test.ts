@@ -390,6 +390,53 @@ describe("the idea pass (ALL-27)", () => {
     }
     expect(named("round_step")).toContainEqual(expect.objectContaining({ round_id: "round-1", step: "ideas:none" }));
   });
+
+  describe("out of AI credit (no_credit)", () => {
+    it("AC-10: a no_credit run releases the round, sends the buyer nothing and logs ideas.no_credit with alert", async () => {
+      const h = harness();
+      h.generateIdeas.mockResolvedValue({ status: "no_credit" });
+
+      const summary = await h.tick("2027-02-11");
+
+      expect(summary).toMatchObject({ failed: 0 });
+      expect(h.store.round("round-1")).toMatchObject({ status: "generating", lockedUntil: null, attempts: 0 });
+      expect(h.store.round("round-1").nextActionAt!.getTime()).toBeLessThanOrEqual(at("2027-02-11").getTime());
+      expect(h.store.writes).toContain("release:round-1");
+      expect(h.notifyStore.notifications).toEqual([]);
+      const alerts = named("ideas.no_credit");
+      expect(alerts).toHaveLength(1);
+      expect(alerts[0]).toMatchObject({ round_id: "round-1", user_id: USER, alert: true });
+      for (const key of Object.keys(alerts[0])) expect(["event", "at", "round_id", "user_id", "alert"]).toContain(key);
+      expect(named("round_step")).toContainEqual(expect.objectContaining({ round_id: "round-1", step: "ideas:no_credit" }));
+    });
+
+    it("after a no_credit run the tick starts no other run and releases the rest", async () => {
+      const h = two();
+      h.generateIdeas.mockResolvedValue({ status: "no_credit" });
+
+      await runTick(h.deps(at("2027-02-11")));
+
+      expect(h.generateIdeas).toHaveBeenCalledTimes(1);
+      for (const r of h.store.rounds) {
+        expect(r.lockedUntil).toBeNull();
+        expect(h.store.writes).toContain(`release:${r.id}`);
+      }
+      expect(h.notifyStore.notifications).toEqual([]);
+    });
+
+    it("the next tick runs it again", async () => {
+      const h = harness();
+      h.generateIdeas.mockResolvedValueOnce({ status: "no_credit" });
+      await h.tick("2027-02-11");
+      expect(h.generateIdeas).toHaveBeenCalledTimes(1);
+
+      await h.tick("2027-02-12");
+
+      expect(h.generateIdeas).toHaveBeenCalledTimes(2);
+      expect(h.sent()).toEqual(["heads_up@2027-02-12"]);
+      expect(h.store.round("round-1").status).toBe("awaiting_approval");
+    });
+  });
 });
 
 describe("after None of these, and list-only people (ALL-29 AC-13, AC-28)", () => {

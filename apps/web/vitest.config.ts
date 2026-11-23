@@ -13,6 +13,7 @@ const LOCAL_DB_TESTS = [
   "modules/concierge/__tests__/approval-db.test.ts",
   "modules/concierge/__tests__/capture-store-scope.test.ts",
   "modules/concierge/__tests__/fanout-db.test.ts",
+  "modules/concierge/__tests__/heartbeat-db.test.ts",
   "modules/concierge/__tests__/idea-daily-limit.test.ts",
   "modules/concierge/__tests__/idea-store.test.ts",
   "modules/concierge/__tests__/inbound-store.test.ts",

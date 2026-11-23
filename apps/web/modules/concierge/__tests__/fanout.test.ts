@@ -162,7 +162,7 @@ describe("runTick with fan-out", () => {
     expect(claimMoney).not.toHaveBeenCalled();
     expect(emails).toEqual([]);
     expect(events()).toContainEqual(expect.objectContaining({ event: "round_fanout", enabled: true, due: 4, sent: 4, failed: 0 }));
-    expect(summary).toEqual({ enabled: true, created: 1, advanced: 0, failed: 0 });
+    expect(summary).toEqual({ enabled: true, created: 1, advanced: 0, failed: 0, fanoutFailed: 0 });
   });
 
   it("alerts when sends fail, and the rounds stay due", async () => {
