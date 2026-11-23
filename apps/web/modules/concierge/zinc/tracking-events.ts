@@ -4,7 +4,7 @@
 // nothing twice. Packages are whitelisted before and again inside SQL (T42). Logs carry ids
 // only: never tracking numbers or links (E6).
 import { z } from "zod";
-import { latestEstimate, packagesFromZinc, packagesToRows, type TrackedPackage } from "@gifts-af/core";
+import { calendarDay, latestEstimate, packagesFromZinc, packagesToRows, type TrackedPackage } from "@gifts-af/core";
 import { errorFields, logEvent } from "@/lib/log";
 import { call } from "./client";
 import { eventTime, findOurOrder, userZincKey } from "./events";
@@ -29,7 +29,15 @@ export const TRACKING_EVENTS = new Set([
 ]);
 
 const zincTracking = z.object({ tracking_numbers: z.unknown() });
-const day = /^\d{4}-\d{2}-\d{2}/;
+
+/** Whether any of Zinc's package entries gives an estimate that isn't a real calendar day. */
+function hasBadEstimate(raw: unknown): boolean {
+  if (!Array.isArray(raw)) return false;
+  return raw.some((e) => {
+    const v: unknown = typeof e === "object" && e !== null ? (e as Record<string, unknown>).estimated_delivery_date : null;
+    return v !== null && v !== undefined && v !== "" && calendarDay(v) === null;
+  });
+}
 
 /** Applies one tracking event to the user's own order. Throws only where a Zinc retry could help. */
 export async function handleTrackingEvent(userId: string, event: ZincEvent, deps: TrackingDeps): Promise<void> {
@@ -99,21 +107,32 @@ export async function handleTrackingEvent(userId: string, event: ZincEvent, deps
   let packages: TrackedPackage[] | null = null;
   let est: string | null = null;
   if (event.event === "order.estimated_delivery_updated") {
-    est = event.estimatedDelivery && day.test(event.estimatedDelivery) ? event.estimatedDelivery.slice(0, 10) : null;
-    if (!est) {
+    if (!event.estimatedDelivery) {
       logEvent("tracking.event_ignored", { ...ids, reason: "no_estimate" });
+      return;
+    }
+    // An impossible date ("2030-02-30") would make SQL's date cast throw and Zinc retry an
+    // event that can never apply; this event carries nothing else, so there's nothing to save.
+    est = calendarDay(event.estimatedDelivery);
+    if (!est) {
+      logEvent("tracking.bad_estimate", ids);
       return;
     }
   } else {
     packages = packagesFromZinc(event.trackingNumbers);
+    let bad = hasBadEstimate(event.trackingNumbers);
     if ((await deps.setting("zinc_tracking_fetch_enabled")) === 1) {
-      const fetched = await fetchPackages(userId, event.orderId, deps);
-      if (fetched) {
+      const raw = await fetchTracking(userId, event.orderId, deps);
+      if (raw !== null) {
+        const fetched = packagesFromZinc(raw);
         // Zinc's own order comes last, so its entry wins for a package both name.
         packages = [...packages, ...fetched];
         est = latestEstimate(fetched);
+        bad ||= hasBadEstimate(raw);
       }
     }
+    // packagesFromZinc already dropped those estimates; the packages are still saved.
+    if (bad) logEvent("tracking.bad_estimate", ids);
   }
 
   const { data: status, error } = await concierge.rpc("record_tracking", {
@@ -138,12 +157,12 @@ export async function handleTrackingEvent(userId: string, event: ZincEvent, deps
  * the carrier's estimate and Zinc's tracking link. Null on any failure: the event's own
  * packages are saved without an estimate, and a later event or the daily run catches up.
  */
-async function fetchPackages(userId: string, zincOrderId: string, deps: TrackingDeps): Promise<TrackedPackage[] | null> {
+async function fetchTracking(userId: string, zincOrderId: string, deps: TrackingDeps): Promise<unknown> {
   try {
     const key = await userZincKey(userId, deps);
     if (!key) return null;
     const order = await call(deps.http, "GET", `/orders/${encodeURIComponent(zincOrderId)}`, zincTracking, { key });
-    return packagesFromZinc(order.tracking_numbers);
+    return order.tracking_numbers ?? [];
   } catch (error) {
     logEvent("tracking.estimate_fetch_failed", { user_id: userId, ...errorFields(error) });
     return null;

@@ -31,12 +31,17 @@ function text(v: unknown): string | null {
   return typeof v === "string" && v.trim() !== "" ? v : null;
 }
 
-function validDate(v: unknown): string | null {
+/**
+ * The calendar day of a vendor date ("2030-12-05", or the date part of a timestamp), or null
+ * when it isn't a real day: "2030-02-30" would make the database's date cast throw.
+ */
+export function calendarDay(v: unknown): string | null {
   const s = text(v);
-  if (!s) return null;
+  const day = s && /^\d{4}-\d{2}-\d{2}(?:T|$)/.test(s) ? s.slice(0, 10) : null;
+  if (!day) return null;
   try {
-    parseDate(s);
-    return s;
+    parseDate(day);
+    return day;
   } catch {
     return null;
   }
@@ -60,7 +65,7 @@ export function packagesFromZinc(raw: unknown): TrackedPackage[] {
       carrier,
       trackingNumber,
       status: text(e.status),
-      estimatedDeliveryDate: validDate(e.estimated_delivery_date),
+      estimatedDeliveryDate: calendarDay(e.estimated_delivery_date),
       trackingUrl: text(e.zinc_tracking_url) ?? text(e.tracking_url),
     });
   }

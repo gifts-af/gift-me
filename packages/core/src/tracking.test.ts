@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  calendarDay,
   expectedArrival,
   isLate,
   latestEstimate,
@@ -19,7 +20,28 @@ const pkg = (over: Partial<TrackedPackage> = {}): TrackedPackage => ({
   ...over,
 });
 
+describe("calendarDay", () => {
+  it("keeps a real date, or the date part of a timestamp", () => {
+    expect(calendarDay("2030-12-05")).toBe("2030-12-05");
+    expect(calendarDay("2030-12-05T00:00:00Z")).toBe("2030-12-05");
+    expect(calendarDay("2032-02-29")).toBe("2032-02-29");
+  });
+
+  it("is null for an impossible date, a bad shape or not a string", () => {
+    for (const v of ["2030-02-30", "2030-02-30T00:00:00Z", "2030-13-01", "2030-12-5", "soon", "", null, undefined, 20301205]) {
+      expect(calendarDay(v)).toBeNull();
+    }
+  });
+});
+
 describe("packagesFromZinc", () => {
+  it("keeps a package whose estimate is an impossible date, without the estimate", () => {
+    expect(packagesFromZinc([{ carrier: "UPS", tracking_number: "1Z", estimated_delivery_date: "2030-02-30" }])).toEqual([
+      { carrier: "UPS", trackingNumber: "1Z", status: null, estimatedDeliveryDate: null, trackingUrl: null },
+    ]);
+  });
+
+
   it("keeps only whitelisted fields", () => {
     const out = packagesFromZinc([
       {

@@ -204,6 +204,46 @@ describe.skipIf(!dbUp)("Zinc tracking events (real local database, fake Zinc)", 
     expect(orderPlaced).toHaveBeenCalledWith(roundId);
   });
 
+  it("an impossible estimate date is 200, logged with ids only, and changes nothing", async () => {
+    const a = await newAccount();
+    const zincId = randomUUID();
+    const { orderId } = await newOrder(a, zincId);
+    zincOrderWithEstimate(zincId);
+    await send(a, shippedBody(zincId));
+    const before = await orderRow(orderId);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const body = event("order.estimated_delivery_updated", zincId, { estimated_delivery: "2030-02-30" }, "2030-12-02T10:00:00Z");
+      expect(await send(a, body)).toEqual({ status: 200 });
+      const lines = logLines(log, "tracking.bad_estimate");
+      expect(lines).toEqual([expect.objectContaining({ user_id: a.userId, order_id: orderId })]);
+      expect(JSON.stringify(lines)).not.toContain("2030-02-30");
+    } finally {
+      log.mockRestore();
+    }
+    expect(await orderRow(orderId)).toEqual(before);
+  });
+
+  it("a shipped event with an impossible package estimate saves the package without it", async () => {
+    const a = await newAccount();
+    const zincId = randomUUID();
+    const { orderId } = await newOrder(a, zincId);
+    zincOrderWithEstimate(zincId, "2030-02-30");
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const body = event("order.shipped", zincId, { tracking_numbers: [{ ...ups, estimated_delivery_date: "2030-02-30" }] });
+      expect(await send(a, body)).toEqual({ status: 200 });
+      expect(logLines(log, "tracking.bad_estimate")).toEqual([expect.objectContaining({ user_id: a.userId, order_id: orderId })]);
+    } finally {
+      log.mockRestore();
+    }
+    const row = await orderRow(orderId);
+    expect(row).toMatchObject({ status: "shipped", est: null });
+    expect(row.packages).toEqual([
+      { carrier: "UPS", tracking_number: "1Z999", status: "in_transit", tracking_url: "https://track.zinc.test/1Z999" },
+    ]);
+  });
+
   it("estimate updated saves the new date", async () => {
     const a = await newAccount();
     const zincId = randomUUID();
