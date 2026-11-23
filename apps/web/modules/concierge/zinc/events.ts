@@ -7,9 +7,10 @@ import { z } from "zod";
 import { errorFields, logEvent } from "@/lib/log";
 import { call, ZincError } from "./client";
 import { parseEvent, verifySignature, type ZincEvent } from "./signature";
+import { handleTrackingEvent, TRACKING_EVENTS, type TrackingDeps } from "./tracking-events";
 import type { PlaceHeld, ZincDeps } from "./types";
 
-type Deps = ZincDeps & {
+type Deps = TrackingDeps & {
   placeHeld: PlaceHeld;
   /**
    * The round engine's advanceRound, bound with justPlaced so it only tells the buyer and never
@@ -59,6 +60,8 @@ export async function handleZincWebhook(
   try {
     if (event.event === "order.placed" || event.event === "order.failed") {
       await settle(userId, event, deps);
+    } else if (TRACKING_EVENTS.has(event.event)) {
+      await handleTrackingEvent(userId, event, deps);
     } else if (event.event === "wallet.auto_topup.succeeded") {
       if (await setAutoTopup(userId, true, event, deps)) await deps.placeHeld(userId);
     } else if (event.event === "wallet.auto_topup.disabled") {
@@ -76,7 +79,7 @@ export async function handleZincWebhook(
 }
 
 /** Zinc's timestamps are UTC and may lack the Z. Null when absent or unreadable. */
-function eventTime(timestamp: string | undefined): string | null {
+export function eventTime(timestamp: string | undefined): string | null {
   if (!timestamp) return null;
   const t = new Date(/(Z|[+-]\d\d:?\d\d)$/i.test(timestamp) ? timestamp : `${timestamp}Z`);
   return Number.isNaN(t.getTime()) ? null : t.toISOString();
@@ -106,7 +109,7 @@ async function setAutoTopup(userId: string, on: boolean, event: ZincEvent, deps:
 }
 
 /** Our order id for a Zinc order id: the row that holds it, else the reference we sent Zinc in metadata. */
-async function findOurOrder(userId: string, zincOrderId: string, deps: Deps): Promise<string | null> {
+export async function findOurOrder(userId: string, zincOrderId: string, deps: ZincDeps): Promise<string | null> {
   const concierge = deps.db.schema("concierge");
   const { data, error } = await concierge
     .from("orders")
@@ -119,12 +122,10 @@ async function findOurOrder(userId: string, zincOrderId: string, deps: Deps): Pr
 
   // The webhook carries only Zinc's order id. Our row may not have it yet (a crash between
   // sending and saving), so ask Zinc for the order and read back our own reference.
-  const keys = await concierge.rpc("zinc_secrets", { p_user_id: userId });
-  if (keys.error) throw new Error("Reading the Zinc key failed.");
-  const key = keyRow.safeParse(keys.data?.[0]);
-  if (!key.success || !key.data.api_key) return null;
+  const key = await userZincKey(userId, deps);
+  if (!key) return null;
   try {
-    const order = await call(deps.http, "GET", `/orders/${encodeURIComponent(zincOrderId)}`, zincOrder, { key: key.data.api_key });
+    const order = await call(deps.http, "GET", `/orders/${encodeURIComponent(zincOrderId)}`, zincOrder, { key });
     const ref = uuid.safeParse(order.metadata?.order_id);
     return ref.success ? ref.data : null;
   } catch (error) {
@@ -132,6 +133,14 @@ async function findOurOrder(userId: string, zincOrderId: string, deps: Deps): Pr
     if (error instanceof ZincError && error.kind === "unavailable") throw error;
     return null;
   }
+}
+
+/** The user's own Zinc API key, or null when they have none. Throws when it can't be read. */
+export async function userZincKey(userId: string, deps: Pick<ZincDeps, "db">): Promise<string | null> {
+  const keys = await deps.db.schema("concierge").rpc("zinc_secrets", { p_user_id: userId });
+  if (keys.error) throw new Error("Reading the Zinc key failed.");
+  const key = keyRow.safeParse(keys.data?.[0]);
+  return key.success && key.data.api_key ? key.data.api_key : null;
 }
 
 // Zinc's error_type to the failure types our SQL understands; anything else is a plain failure.

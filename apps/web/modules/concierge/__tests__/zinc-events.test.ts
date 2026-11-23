@@ -73,6 +73,10 @@ describe.skipIf(!dbUp)("Zinc webhooks (real local database, fake Zinc)", () => {
     placeHeld,
     advanceRound,
     orderPlaced,
+    // These events read no tracking setting; zinc-tracking-events.test.ts covers those.
+    setting: async (key: string): Promise<number> => {
+      throw new Error(`Unexpected setting ${key}.`);
+    },
   });
 
   type Account = { userId: string; webhookId: string; secret: string };

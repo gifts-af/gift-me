@@ -9,13 +9,16 @@ export function verifySignature(rawBody: string, header: string | null | undefin
   return got.length === want.length && timingSafeEqual(got, want);
 }
 
-// order_id is top level; error_type and the wallet fields live in `data`.
+// order_id is top level; error_type, the wallet fields and tracking live in `data`.
 const eventData = z
   .object({
     error_type: z.string(),
     error: z.string(),
     amount_cents: z.number(),
     status: z.string(),
+    // Checked package by package by packagesFromZinc, which keeps only whitelisted fields.
+    tracking_numbers: z.unknown(),
+    estimated_delivery: z.string().nullable(),
   })
   .partial();
 
@@ -38,6 +41,10 @@ export type ZincEvent = {
   /** wallet.auto_topup.* */
   amountCents?: number;
   status?: string;
+  /** order.tracking_received, order.shipped: Zinc's packages, unchecked. */
+  trackingNumbers?: unknown;
+  /** order.estimated_delivery_updated: the new estimate. */
+  estimatedDelivery?: string;
   raw: unknown;
 };
 
@@ -52,6 +59,8 @@ export function parseEvent(json: unknown): ZincEvent {
     error: e.data?.error,
     amountCents: e.data?.amount_cents,
     status: e.data?.status,
+    trackingNumbers: e.data?.tracking_numbers,
+    estimatedDelivery: e.data?.estimated_delivery ?? undefined,
     raw: json,
   };
 }
