@@ -518,7 +518,7 @@ Needs Tasks 2–5.
 
 ## Before coding: consistency check
 
-- [ ] Every acceptance criterion maps to a task and a test:
+- [x] Every acceptance criterion maps to a task and a test:
 
 | Criterion | Tasks |
 |---|---|
@@ -536,7 +536,7 @@ Needs Tasks 2–5.
 | AC-15 | 2, 6 |
 | AC-16 | 4 |
 
-- [ ] Every task traces back to a story or criterion (nothing extra).
+- [x] Every task traces back to a story or criterion (nothing extra).
 - [x] Where each plan-review finding is fixed:
   - **B1:** Tasks 1 and 3: the lateral filter, `readIdeaState`, and the extra-run tests.
   - **S1:** Tasks 3 and 4: `aiPaid`, and the pass stopping.
@@ -550,7 +550,7 @@ Needs Tasks 2–5.
   - **S9:** Task 3: `RUN_ENDS` and the code-columns test.
   - **N1:** Task 2's SQL comment. **N2:** Task 1's grant. **N3:** `add_tick_counts`' `p_at`. **N4:** `start_tick` resets the counts. **N5:** `sampleEmails`.
 - [x] No open questions are left: owner rulings (a) and (b), 2026-11-23.
-- [ ] Adversarial review of the spec done, and of the plan (done); a re-review of this revision is still to do.
+- [x] Adversarial review of the spec, the plan, each task, and the whole branch (final review and its fix wave re-reviewed), 2026-11-23.
 
 ## Done: evidence on the ticket (T44)
 
