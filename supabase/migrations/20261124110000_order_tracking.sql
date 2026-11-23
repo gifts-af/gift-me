@@ -3,7 +3,9 @@
 --
 -- - Order status only moves forward: placing/unconfirmed → placed → shipped →
 --   delivered. A store cancel moves placed or shipped to failed/store_cancelled.
---   Anything else (an older event, a cancel on a delivered gift) changes nothing.
+--   Anything else (a cancel on a delivered gift, a delivered on a placed one by
+--   the buyer) changes nothing. An older Zinc event can only add package numbers
+--   never seen before; it changes no estimate, status or known package.
 -- - Every writer here locks the round, then the order, like settle_order, so a
 --   webhook and the buyer's "It arrived" tap run one after the other.
 -- - reconcile_round stays the one writer of round status (T14) and learns one
@@ -11,14 +13,15 @@
 -- - A store cancel on or after the ship-by date, or on a closed round, is
 --   resolved at once and told by the daily news run (cancel_late:<id>), never
 --   by the "we couldn't buy it" email, because the gift was bought (T89).
--- - Tracking numbers are cleared tracking_prune_days after delivery (T42).
+-- - Only whitelisted package fields are stored, whatever the caller sends, and
+--   tracking numbers are cleared tracking_prune_days after delivery (T42).
 
 -- ─── settings (T23, E7) ─────────────────────────────────────────────────────
 insert into concierge.app_settings (key, value, description) values
   ('order_tracking_enabled', '1', 'Zinc tracking, shipped, estimate and delivered events, and the buyer''s "It arrived" button. 0 logs and ignores them; store cancellations are always handled.'),
   ('zinc_tracking_fetch_enabled', '1', 'Fetch the order from Zinc (Get Order) on a tracking event to read its delivery estimate. 0 saves only what the event carries.'),
   ('late_check_enabled', '1', 'The daily late and back-on-time check and its emails. 0 turns them off; late store cancellations are still told.'),
-  ('tracking_prune_days', '30', 'Days after an order is delivered (or failed) before the daily run clears its tracking numbers. Null or 0 or below turns the prune off.')
+  ('tracking_prune_days', '30', 'Days after an order is delivered (or failed) before the daily run clears its tracking numbers. 0 or below turns the prune off; a missing value stops the prune with an error.')
 on conflict (key) do nothing;
 
 -- ─── columns ────────────────────────────────────────────────────────────────
@@ -33,6 +36,9 @@ alter table concierge.orders
 
 update concierge.orders set placed_at = updated_at
  where status in ('placed', 'shipped', 'delivered') and placed_at is null;
+-- Without delivered_at, an already-delivered order would never be pruned.
+update concierge.orders set delivered_at = updated_at
+ where status = 'delivered' and delivered_at is null;
 
 -- Order columns are granted one by one (T56).
 grant select (placed_at, delivered_at, delivered_by) on concierge.orders to authenticated;
@@ -262,8 +268,11 @@ $$;
 -- ─── record_tracking ────────────────────────────────────────────────────────
 -- A Zinc tracking, shipped or estimate event on a placed or shipped order.
 -- Packages are merged by tracking number (added or updated, never removed); a
--- package without one is ignored. The estimate is replaced only by an event no
--- older than the last one applied, and a null estimate leaves it as it is.
+-- package without one is ignored. Each package keeps only carrier,
+-- tracking_number, status, estimated_delivery_date and tracking_url (T42).
+-- An event older than the last one applied only adds package numbers never
+-- seen before: it changes no known package and no estimate, so it can't roll
+-- anything back. A null estimate leaves the estimate as it is.
 -- Returns the order's status after the call, or null when it isn't this user's.
 create function concierge.record_tracking(p_user_id uuid, p_order_id uuid, p_shipped boolean, p_packages jsonb,
                                           p_est date, p_event_at timestamptz)
@@ -295,17 +304,28 @@ begin
   v_status := case when p_shipped then 'shipped' else v_order.status end;
   v_est := case when v_newer and p_est is not null then p_est else v_order.est_delivery_date end;
   v_event_at := case when v_newer then p_event_at else v_order.tracking_event_at end;
-  select coalesce(jsonb_agg(coalesce(had.e, '{}'::jsonb) || coalesce(got.e, '{}'::jsonb)
-                            order by had.n nulls last, got.n), '[]'::jsonb)
+  select coalesce(jsonb_agg(jsonb_strip_nulls(jsonb_build_object(
+                              'carrier', m -> 'carrier',
+                              'tracking_number', m -> 'tracking_number',
+                              'status', m -> 'status',
+                              'estimated_delivery_date', m -> 'estimated_delivery_date',
+                              'tracking_url', m -> 'tracking_url'))
+                            order by hn nulls last, gn), '[]'::jsonb)
     into v_packages
-    from (select e, n from jsonb_array_elements(v_order.packages) with ordinality t (e, n)) had
-    full join (
-      -- The last entry wins when one event names a package twice.
-      select distinct on (e ->> 'tracking_number') e, n
-        from jsonb_array_elements(coalesce(p_packages, '[]'::jsonb)) with ordinality t (e, n)
-       where e ->> 'tracking_number' is not null
-       order by e ->> 'tracking_number', n desc
-    ) got on got.e ->> 'tracking_number' = had.e ->> 'tracking_number';
+    from (
+      -- A stale event only adds numbers never seen before.
+      select coalesce(had.e, '{}'::jsonb)
+               || case when v_newer or had.e is null then coalesce(got.e, '{}'::jsonb) else '{}'::jsonb end as m,
+             had.n as hn, got.n as gn
+        from (select e, n from jsonb_array_elements(v_order.packages) with ordinality t (e, n)) had
+        full join (
+          -- The last entry wins when one event names a package twice.
+          select distinct on (e ->> 'tracking_number') e, n
+            from jsonb_array_elements(coalesce(p_packages, '[]'::jsonb)) with ordinality t (e, n)
+           where e ->> 'tracking_number' is not null
+           order by e ->> 'tracking_number', n desc
+        ) got on got.e ->> 'tracking_number' = had.e ->> 'tracking_number'
+    ) merged;
 
   -- A repeated event leaves the row (and updated_at) alone.
   if (v_status, v_packages, v_est, v_event_at)
@@ -322,9 +342,10 @@ $$;
 -- Zinc's delivered event ('zinc', on placed or shipped) or the buyer's "It
 -- arrived" tap ('buyer', shipped only: on a placed gift a mistaken tap could
 -- hide a later store cancel). Anything else changes nothing. Returns the
--- round's status, or null when the order isn't this user's.
+-- round's status and whether the move applied, so the caller can log a no-op;
+-- (null, false) when the order isn't this user's.
 create function concierge.mark_delivered(p_user_id uuid, p_order_id uuid, p_by text)
-returns concierge.round_status
+returns table (round_status concierge.round_status, applied boolean)
 language plpgsql
 security definer
 set search_path = ''
@@ -336,9 +357,10 @@ begin
   if p_by is null or p_by not in ('zinc', 'buyer') then
     raise exception 'Unknown delivered_by %', p_by using errcode = '22023';
   end if;
-  select round_id into v_round_id from concierge.orders where id = p_order_id and user_id = p_user_id;
+  select o.round_id into v_round_id from concierge.orders o where o.id = p_order_id and o.user_id = p_user_id;
   if v_round_id is null then
-    return null;
+    return query select null::concierge.round_status, false;
+    return;
   end if;
   select * into v_round from concierge.gift_rounds where id = v_round_id for update;
 
@@ -347,13 +369,14 @@ begin
      and status = any (case p_by when 'buyer' then array['shipped'] else array['placed', 'shipped'] end)
      for update;
   if not found then
-    return v_round.status;
+    return query select v_round.status, false;
+    return;
   end if;
 
   update concierge.orders
      set status = 'delivered', delivered_at = now(), delivered_by = p_by
    where id = p_order_id;
-  return concierge.reconcile_round(v_round_id);
+  return query select concierge.reconcile_round(v_round_id), true;
 end;
 $$;
 
@@ -367,8 +390,10 @@ $$;
 -- time: it's resolved at once and told by the daily news, not as "we couldn't
 -- buy it" (failed_after_close stays false), and the round is skipped only if
 -- no given order is left.
+-- Returns the round's status and whether the cancel applied, so the caller can
+-- log a no-op; (null, false) when the order isn't this user's.
 create function concierge.store_cancel_order(p_user_id uuid, p_order_id uuid, p_today date)
-returns concierge.round_status
+returns table (round_status concierge.round_status, applied boolean)
 language plpgsql
 security definer
 set search_path = ''
@@ -378,9 +403,10 @@ declare
   v_round_id uuid;
   v_order concierge.orders;
 begin
-  select round_id into v_round_id from concierge.orders where id = p_order_id and user_id = p_user_id;
+  select o.round_id into v_round_id from concierge.orders o where o.id = p_order_id and o.user_id = p_user_id;
   if v_round_id is null then
-    return null;
+    return query select null::concierge.round_status, false;
+    return;
   end if;
   select * into r from concierge.gift_rounds where id = v_round_id for update;
   select * into v_order from concierge.orders where id = p_order_id for update;
@@ -391,7 +417,8 @@ begin
     returning * into v_order;
   end if;
   if v_order.status not in ('placed', 'shipped') then
-    return r.status;
+    return query select r.status, false;
+    return;
   end if;
 
   perform concierge.fail_order_row(v_order, 'store_cancelled');
@@ -400,10 +427,11 @@ begin
     update concierge.orders set resolved = true, failed_after_close = false where id = p_order_id;
     if not exists (select 1 from concierge.orders o
                     where o.round_id = v_round_id and concierge.order_is_given(o.status, o.resolved)) then
-      return concierge.reconcile_round(v_round_id, 'deadline');
+      return query select concierge.reconcile_round(v_round_id, 'deadline'), true;
+      return;
     end if;
   end if;
-  return concierge.reconcile_round(v_round_id);
+  return query select concierge.reconcile_round(v_round_id), true;
 end;
 $$;
 
@@ -455,7 +483,8 @@ $$;
 -- ─── prune_tracking_numbers ─────────────────────────────────────────────────
 -- Clears the packages (tracking numbers) of orders delivered, or failed, more
 -- than tracking_prune_days ago. Returns how many orders it cleared; 0 when the
--- setting is missing, null or 0 or below (E7, T23).
+-- setting is 0 or below (E7). No fallback value (T23): a missing setting fails
+-- loudly instead of quietly stopping a privacy clean-up.
 create function concierge.prune_tracking_numbers()
 returns integer
 language plpgsql
@@ -466,7 +495,10 @@ declare
   v_days integer := concierge.setting_int('tracking_prune_days');
   v_cleared integer;
 begin
-  if v_days is null or v_days <= 0 then
+  if v_days is null then
+    raise exception 'prune_tracking_numbers: missing setting';
+  end if;
+  if v_days <= 0 then
     return 0;
   end if;
 

@@ -1612,7 +1612,10 @@ export type Database = {
       };
       mark_delivered: {
         Args: { p_by: string; p_order_id: string; p_user_id: string };
-        Returns: Database["concierge"]["Enums"]["round_status"];
+        Returns: {
+          applied: boolean;
+          round_status: Database["concierge"]["Enums"]["round_status"];
+        }[];
       };
       mark_unconfirmed: {
         Args: { p_order_id: string };
@@ -1981,7 +1984,10 @@ export type Database = {
       start_tick: { Args: { p_at: string; p_day: string }; Returns: undefined };
       store_cancel_order: {
         Args: { p_order_id: string; p_today: string; p_user_id: string };
-        Returns: Database["concierge"]["Enums"]["round_status"];
+        Returns: {
+          applied: boolean;
+          round_status: Database["concierge"]["Enums"]["round_status"];
+        }[];
       };
       tracking_candidates: {
         Args: { p_today: string };
