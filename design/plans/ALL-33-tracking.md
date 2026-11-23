@@ -52,10 +52,17 @@ There's no tracking link in the payload. We build one from the carrier's public 
 **When it's checked:** on each tracking event above, and in its own daily-run step (like the housekeeping prune) for every `placed` or `shipped` order whose occasion date is today or later.
 
 **Told once:**
-- **Late:** the late email goes out once per order (`late:<order id>`).
-- **Back on time:** if the estimate later moves back on or before the occasion, one good-news email (`ontime:<order id>`).
-- **Not after the day:** nothing is sent once the occasion date has passed.
+- **Late:** each order is told late once (`late:<order id>`).
+- **Back on time:** if the estimate later moves back on or before the occasion, the order is told good news once (`ontime:<order id>`).
+- **Not after the day:** nothing is told once the occasion date has passed.
 - **Same as failures:** keys are claimed in `round_sends` the same way the failure notices are.
+
+**One daily summary per buyer (owner, 2026-11-23):**
+- **Sent from the daily run:** late, back-on-time and store-cancelled-after-ship-by news are told only from the daily run. A webhook saves the new estimate or status straight away, but leaves the telling to the next run.
+- **One email per buyer per day:** it lists every gift with news, across all their people and occasions. Bad news comes first, with an apology.
+- **One item:** with a single item, the email uses that item's own wording (late, back on time, or store cancelled), like ALL-116's one-or-summary rule.
+- **If it fails:** the claimed keys are given back, like `release_failure_notices`, so the next run tries again.
+- **Not in the summary:** a store cancel before the ship-by date is told right away through the failure path, because the buyer still has time to choose another gift. The delivered email stays one per occasion, sent when it happens.
 
 **The late email** (tone per `design/ui.md` > Tone in emails, owner 2026-11-23: explain clearly, list the real options):
 - **Opens with:** an apology, the gift, its expected date and the occasion date.
@@ -91,12 +98,14 @@ There's no tracking link in the payload. We build one from the carrier's public 
 | AC-1 | A placed order | `order.tracking_received` or `order.shipped` arrives (signed) | Its packages (whitelisted fields only) and the latest estimate are saved; `order.shipped` moves it to `shipped` |
 | AC-2 | Any order | The same event arrives twice, or an older event after a newer one | Nothing changes the second time; status never moves backwards |
 | AC-3 | An order still `placing` or `unconfirmed` | `order.shipped` arrives | It's settled `placed` (with the "ordered" email), then `shipped` |
-| AC-4 | A shipped order whose estimate is after the occasion | The estimate arrives (webhook or daily run) | One late email with the options and the "It already arrived" button; a second check sends nothing |
+| AC-4 | A shipped order whose estimate is after the occasion | The estimate arrives by webhook, then the daily run | The webhook saves it and sends nothing; the daily run sends the late email once, with the options and the "It already arrived" button; the next run sends nothing |
 | AC-5 | A placed order with no carrier estimate whose store range ends after the occasion | The daily run | Same as AC-4 |
-| AC-6 | A buyer told a gift was late | The estimate moves on or before the occasion | One good-news email; never two |
+| AC-6 | A buyer told a gift was late | The estimate moves on or before the occasion | One good-news item in the next daily run; never two |
+| AC-6a | One buyer with two late gifts (different people) and one back on time | The daily run | One summary email listing all three, bad news first; each gift is told once |
+| AC-6b | The summary email is refused by the email service | The daily run | The keys are given back; the next run sends it |
 | AC-7 | Any late or on-time change | The occasion date has passed (UTC) | No email |
 | AC-8 | A placed order on an open round before its ship-by date | `order.cancelled` arrives | Order `failed` / `store_cancelled`; one failure email; the fix page offers the next-best idea; after the replacement, the cancelled order's spend no longer counts |
-| AC-9 | A placed or shipped order on or after its round's ship-by date | `order.cancelled` arrives | Order `failed` / `store_cancelled`, failure resolved; one store-cancelled email (refund, too late to ship another, what to do); round stays `ordered` if another given order remains, else `skipped`; no "No gift was chosen" email |
+| AC-9 | A placed or shipped order on or after its round's ship-by date | `order.cancelled` arrives, then the daily run | Order `failed` / `store_cancelled`, failure resolved at once; the daily run tells it once (refund, too late to ship another, what to do); round stays `ordered` if another given order remains, else `skipped`; no "No gift was chosen" email |
 | AC-10 | A `delivered` order | `order.cancelled` arrives | Ignored and logged; nothing changes |
 | AC-11 | A shipped order | The buyer taps "It arrived", or `order.delivered` arrives | Order `delivered` (`delivered_by` buyer or zinc); when it's the round's last given order, round → `delivered` and one delivered email |
 | AC-12 | A placed (not shipped) order | The buyer tries "It arrived" | Refused |
@@ -128,6 +137,8 @@ There's no tracking link in the payload. We build one from the carrier's public 
 | No carrier estimate | Order date + the store's own range (owner OK'd) | The real order (spike) never got one |
 | "It arrived" button | Yes, on shipped gifts only (owner OK'd; "shipped only" from the review) | Zinc's delivered event lagged on the real order; a tap on a placed gift could hide a later store cancel |
 | Store cancelled before ship-by | Same as a failed gift: email + fix page (owner OK'd) | One failure path (T81) |
+| One email per gift, or combined? | Combined: late, back-on-time and after-ship-by cancel news go in one daily summary per buyer; a one-item summary uses that item's own email (owner, 2026-11-23) | Matches the owner's ALL-116 rule (one summary, not a burst). Nothing can be bought for these, so a day's wait costs nothing |
+| Mock-ups | Signed off 2026-11-23: [ALL-33 mock-ups](https://claude.ai/artifact/64XUHT7xfzaibNtWtWpSXx) | — |
 | Approach | A: extend the webhook and daily run; no daily polling (owner, 2026-11-23) | Polling returns the same stale data at a cost. Add B only if needed |
 
 ## Approaches considered
