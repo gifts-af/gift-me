@@ -9,7 +9,7 @@ describe("isPublicPath", () => {
     "/share/abc",
     "/auth/login",
     "/auth/callback",
-    "/api/keepalive",
+    "/api/health",
     "/api/rounds/tick",
     // Only Vercel's queue calls the job route (ALL-125).
     "/api/rounds/job",
@@ -45,7 +45,7 @@ describe("isPublicPath", () => {
     "/a/abc",
   ])("lets signed-out visitors reach %s", (path) => expect(isPublicPath(path)).toBe(true));
 
-  it.each(["/", "/settings", "/api/other", "/lists/123", "/api/captures/x/other", "/api/captures/a/b/extract", "/api/lists/items/x"])(
+  it.each(["/", "/settings", "/api/other", "/api/keepalive", "/lists/123", "/api/captures/x/other", "/api/captures/a/b/extract", "/api/lists/items/x"])(
     "sends signed-out visitors on %s to sign in",
     (path) => expect(isPublicPath(path)).toBe(false),
   );

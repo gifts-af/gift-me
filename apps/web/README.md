@@ -67,7 +67,7 @@ Run these from `apps/web` unless noted. Install dependencies once from the repo 
 
 `proxy.ts` refreshes the session cookie on every request and sends signed-out visitors to
 `/auth/login?next=<the page they asked for>`, except on `/lists`, `/share/*`, `/auth/*`,
-`/api/keepalive` and the install files (`isPublicPath` in `lib/supabase/proxy.ts`). After sign-in
+`/api/health` and the install files (`isPublicPath` in `lib/supabase/proxy.ts`). After sign-in
 the app goes to `next` if it's a same-site path (`lib/safe-next.ts`), otherwise Home.
 
 In Supabase → Authentication → URL Configuration, set the Site URL to the Vercel production

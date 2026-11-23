@@ -345,6 +345,100 @@ The engine finds gift ideas for a round and on demand (a person's Gift ideas scr
 
 **Tests and money.** Browser tests use the fake Gateway (`apps/web/e2e/fake-gateway.ts`) and the fake Zinc (`e2e/fake-zinc.ts`), so they spend nothing. `pnpm ai:eval --ideas` is the only command that calls the real AI and Zinc for ideas; it spends money, so run it only with Jim's go-ahead, never in CI.
 
+## Health email (ALL-35)
+
+Once a day Vercel Cron calls `GET /api/health` at 14:00 UTC, two hours after the tick (T87). The route checks `CRON_SECRET` as the tick does. Its first query pings the database, which also keeps the free Supabase project from pausing (it replaced `/api/keepalive`, T22). Then it reads `concierge.health_snapshot`, the AI Gateway credit and the app's Zinc balance, and emails the owner inbox when something needs the owner. On `health_all_clear_weekday` (Monday) it always emails: the week's counts, plus "All clear" or the problems. Each line in the email carries ids only (round, order, user) and a **What to do** link to its heading below.
+
+- **Turning it off:** set `health_email_enabled` to `0` in `concierge.app_settings`, no deploy needed. The ping still runs, so the database stays awake, and it logs `health.checked {result: "off"}`.
+- **How we see it working:** one `health.checked` event a day, with `result` (`sent`, `quiet`, `off`, `db_down`, `send_failed` or `failed`), `problems`, `sent` and `weekly`. The route answers 500 for `db_down`, `send_failed` and `failed`, so Vercel's cron list shows the failure too. `health.send_failed` (an alert) means Resend refused the email. `health.vendor_check_failed {vendor}` means a balance couldn't be read, so that check was skipped that day.
+- **Off production,** `?now=` sets the check's clock, as on the tick.
+
+**Settings** (rows in `concierge.app_settings`):
+
+| Key | Default | What it does |
+|---|---|---|
+| `health_email_enabled` | 1 | 0 stops the email; the ping still runs |
+| `health_all_clear_weekday` | 1 | The day the email always goes, in `Date.getUTCDay()` numbers (0 is Sunday) |
+| `ai_credit_low_cents` | 500 | Warn when the AI Gateway credit drops below this |
+| `zinc_app_balance_low_cents` | 500 | Warn when the app's Zinc balance drops below this |
+
+It also reads `round_max_attempts`, `placing_stale_minutes`, `hold_final_days`, `idea_engine_enabled`, `capture_extraction_enabled`, `idea_ai_timeout_ms` and `zinc_timeout_ms`. A setting it can't read fails the check (`health.checked {result: "failed", alert: true}`); there's no fallback value.
+
+### The database can't be reached
+
+The ping failed twice. Nothing else was read, so this is the only line.
+
+1. Open the Supabase dashboard for the environment (as allensforever711). A paused project shows a **Restore** button: restore it. If Supabase shows an incident, wait for it to clear.
+2. If the project is up, check the deployment's Supabase env vars in Vercel (`SUPABASE_SECRET_KEY`, or `GIFT_SUPABASE_SECRET_KEY` on production).
+3. Call the route again with the cron secret, or wait for tomorrow's check, to confirm.
+
+### The tick didn't finish
+
+There's no heartbeat row for today in `concierge.tick_heartbeats`, or today's row started and never finished (Vercel stopped the tick at its 300 s limit). The line gives the last successful finish.
+
+1. In Vercel, check the project's Cron Jobs list and the latest production deployment: crons only run on production.
+2. Check `CRON_SECRET` on production. A tick refused for the secret writes no row.
+3. Read the tick's function logs for `round_tick_failed` and `tick.heartbeat_failed`. A row that never finished means the run hit its time limit; see **Round fan-out** and `tick_deadline_ms` under **Gift idea engine**.
+4. Once it's fixed, call the tick by hand with the secret: the rounds catch up.
+
+### The tick reported failures
+
+Today's tick finished with `result = 'failed'`, or some rounds couldn't be handed to the queue (fan-out sends). The line gives both counts.
+
+- **Fan-out sends failed:** **Round fan-out**, "Sends are failing".
+- **The tick failed:** read its function logs around 12:00 UTC for `round_tick_failed`, and see **Round engine on/off** under **Environments**. A round step that fails alone retries and isn't listed here: it's counted in the weekly email, and repeats show up as **Stuck rounds**.
+
+### Stuck rounds
+
+An open round has used `round_max_attempts` claims without finishing a step. The engine logs `round_stuck` on each retry.
+
+1. Search the Vercel logs for the `round_id` (kept about an hour on Hobby, so look soon) and read the failing step's error `name` and `code`.
+2. Fix the cause (a setting, Zinc, Resend), then reset the round's attempts: `update concierge.gift_rounds set attempts = 0 where id = 'ROUND_ID';`. The next tick tries again.
+3. To stop the engine while you look: **Round engine on/off**.
+
+### Order unconfirmed
+
+We sent an order to Zinc and Zinc has no record of it. Follow **Unconfirmed orders** under **Zinc wallet ordering**, with the `order_id` and `user_id` in the line.
+
+### Order stuck placing
+
+An order has been `placing` since before today's tick, and for longer than `placing_stale_minutes`, so the tick's sweep already looked and couldn't settle it.
+
+1. Search the logs for `order.sweep_skipped` or `order.sweep_failed` with that `order_id` (see **Alerts**).
+2. Find the order in the buyer's Zinc dashboard by our `order_id`, then settle it as placed or failed, as in **Unconfirmed orders**.
+
+### Held for a Zinc problem
+
+An order is `held` with `hold_reason` `retry` (Zinc failed in a way worth trying again) or `not_allowed` (Zinc refused the buyer's account). Funds, setup, address and paused holds are the buyer's to fix, or the owner's own switch, and aren't listed.
+
+- **`retry`:** check Zinc's status. The next tick tries again; if it keeps failing, read the logs for the `order_id`.
+- **`not_allowed`:** check the buyer's Zinc account (verification, limits). The buyer has been told; reach out if they're stuck.
+
+### Ideas can't run here
+
+`idea_engine_enabled` or `capture_extraction_enabled` is 1, but the AI Gateway (`AI_GATEWAY_BASE`, `AI_GATEWAY_API_KEY`), or for ideas Zinc (`ZINC_API_BASE`, `ZINC_API_KEY`), isn't set on this environment. The line says which. Set the missing env vars in Vercel and redeploy, or set the switch to 0. See **Gift idea engine**.
+
+### AI credit
+
+Two lines lead here:
+
+- **Out of AI credit: ideas are paused.** An idea run ended `no_credit` in the last day, or the AI Gateway credit is 0. A run that hits it isn't counted against the round and the buyer gets no email: the round waits and tries again on a later tick. The line lists open rounds still waiting on ideas within `hold_final_days` of their ship-by deadline; those are the ones to watch.
+- **AI credit is low.** The credit is below `ai_credit_low_cents` ($5).
+
+Auto top-up is off for now, so the owner tops up by hand:
+
+1. Vercel dashboard (as allensforever711) > AI Gateway > Credits: add credit.
+2. If the Gateway refuses because the $100 monthly team budget is used up, raise the budget there or wait for the new month.
+3. The next tick runs the waiting rounds. To stop spending instead, set `idea_engine_enabled` to 0.
+
+### Zinc app balance low
+
+The app's own Zinc account (the `ZINC_API_KEY` used for product lookups, T17) is below `zinc_app_balance_low_cents` ($5). When it runs out, idea runs can't look products up. Add funds in that account's Zinc dashboard. Buyers' own wallets aren't checked here; they're told about their own funds holds.
+
+### Waiting on the buyer
+
+An open round is waiting on the buyer (an address, funds or setup) within `hold_final_days` of its ship-by deadline. The buyer has already been emailed. Nothing is required: step in only if you want to nudge them. These rounds are also counted in the weekly email.
+
 ## My list saving (ALL-127)
 
 My list saves each change as it's made, through `lists.save_list_checked`, which refuses a save made from an out-of-date version and returns the gifts it wrote with the new version (T74; behaviour in `design/ui.md` > Editing and saving > My list).

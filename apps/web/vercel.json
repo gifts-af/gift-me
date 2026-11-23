@@ -9,7 +9,7 @@
     }
   },
   "crons": [
-    { "path": "/api/keepalive", "schedule": "0 12 * * *" },
+    { "path": "/api/health", "schedule": "0 14 * * *" },
     { "path": "/api/rounds/tick", "schedule": "0 12 * * *" }
   ]
 }
