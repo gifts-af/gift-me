@@ -128,6 +128,16 @@ describe("expectedArrival", () => {
       }),
     ).toEqual({ date: "2026-12-08", source: "store_range" });
   });
+  it("uses the UTC day of an offset timestamp", () => {
+    expect(
+      expectedArrival({ estDeliveryDate: null, placedAt: "2026-11-30T23:30:00-05:00", handlingDaysMax: 0, deliveryDaysMax: 0 }),
+    ).toEqual({ date: "2026-12-01", source: "store_range" });
+  });
+  it("ignores an unparseable placed_at", () => {
+    expect(
+      expectedArrival({ estDeliveryDate: null, placedAt: "nope", handlingDaysMax: 1, deliveryDaysMax: 1 }),
+    ).toBeNull();
+  });
   it("with nothing is null", () => {
     expect(
       expectedArrival({ estDeliveryDate: null, placedAt: null, handlingDaysMax: 2, deliveryDaysMax: 5 }),
@@ -191,6 +201,14 @@ describe("trackingLink", () => {
   it("amazon has no link", () => {
     expect(trackingLink(pkg({ carrier: "amazon" }))).toBeNull();
     expect(trackingLink(pkg({ carrier: "mystery" }))).toBeNull();
+  });
+  it("ignores inherited property names as carriers", () => {
+    for (const c of ["constructor", "toString", "__proto__"]) {
+      expect(trackingLink(pkg({ carrier: c }))).toBeNull();
+    }
+  });
+  it("normalizes the carrier name", () => {
+    expect(trackingLink(pkg({ carrier: " UPS " }))).toBe("https://www.ups.com/track?tracknum=1Z%20999");
   });
   it("zinc's https link wins", () => {
     expect(trackingLink(pkg({ trackingUrl: "https://z.example/t" }))).toBe("https://z.example/t");

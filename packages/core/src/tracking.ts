@@ -19,12 +19,13 @@ type PackageRow = {
 };
 
 // Carrier tracking pages (public, fixed by the carriers, not tunable values).
-const CARRIER_TRACKING: Record<string, string> = {
-  ups: "https://www.ups.com/track?tracknum=",
-  fedex: "https://www.fedex.com/fedextrack/?trknbr=",
-  usps: "https://tools.usps.com/go/TrackConfirmAction?tLabels=",
-  dhl: "https://www.dhl.com/us-en/home/tracking.html?tracking-id=",
-};
+// A Map, because the carrier name comes from the vendor.
+const CARRIER_TRACKING = new Map<string, string>([
+  ["ups", "https://www.ups.com/track?tracknum="],
+  ["fedex", "https://www.fedex.com/fedextrack/?trknbr="],
+  ["usps", "https://tools.usps.com/go/TrackConfirmAction?tLabels="],
+  ["dhl", "https://www.dhl.com/us-en/home/tracking.html?tracking-id="],
+]);
 
 function text(v: unknown): string | null {
   return typeof v === "string" && v.trim() !== "" ? v : null;
@@ -96,8 +97,9 @@ export function expectedArrival(o: {
 }): { date: string; source: "carrier" | "store_range" } | null {
   if (o.estDeliveryDate) return { date: o.estDeliveryDate, source: "carrier" };
   if (!o.placedAt || o.handlingDaysMax === null || o.deliveryDaysMax === null) return null;
-  const placedDay = validDate(o.placedAt.slice(0, 10));
-  if (!placedDay) return null;
+  const placed = new Date(o.placedAt);
+  if (Number.isNaN(placed.getTime())) return null;
+  const placedDay = placed.toISOString().slice(0, 10);
   return {
     date: addDays(placedDay, o.handlingDaysMax + o.deliveryDaysMax),
     source: "store_range",
@@ -133,6 +135,6 @@ export function trackingLink(p: TrackedPackage): string | null {
       // not a URL, fall through to the carrier page
     }
   }
-  const base = CARRIER_TRACKING[p.carrier.toLowerCase()];
+  const base = CARRIER_TRACKING.get(p.carrier.trim().toLowerCase());
   return base ? base + encodeURIComponent(p.trackingNumber) : null;
 }
