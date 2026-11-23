@@ -80,18 +80,16 @@ select tests.as_round(:'buyer') as r1 \gset
 select tests.as_idea(:'r1') as r1_idea \gset
 update concierge.gift_rounds set locked_until = now() + interval '10 minutes' where id = :'r1' returning locked_until as r1_lock \gset
 select concierge.approve_round(:'r1', :'buyer', :'r1_lock', jsonb_build_array(jsonb_build_object(
-  'idea_id', :'r1_idea', 'max_price_cents', 4500, 'fee_cents', 100, 'ship_to', 'recipient', 'address_source', 'shared',
+  'idea_id', :'r1_idea', 'max_price_cents', 4500, 'fee_cents', 100, 'ship_to', 'recipient', 'address_source', 'own',
   'address', jsonb_build_object('recipient_first_name', 'Mary', 'recipient_last_name', 'Allen', 'address_line1', '12 Oak St',
                                 'city', 'Dayton', 'state', 'OH', 'zip', '45402', 'country', 'US'))));
-select is((select address_source from concierge.orders where round_id = :'r1'), 'shared', 'approve_round saves the source');
+-- A shared order also needs its owner: order_address_owner.test.sql.
+select is((select address_source from concierge.orders where round_id = :'r1'), 'own', 'approve_round saves the source');
 
 -- ─── begin_placing writes it, beside a fresh snapshot ────────────
 
 select id as r1_order from concierge.orders where round_id = :'r1' \gset
-select is_empty(
-  format($$select 1 from concierge.orders where id = %L and address_source = 'own'$$, :'r1_order'),
-  'not own yet'
-);
+select is((select ship_city from concierge.orders where id = :'r1_order'), 'Dayton', 'not at the fresh address yet');
 select concierge.begin_placing(:'r1', :'r1_lock', current_date, jsonb_build_array(jsonb_build_object(
   'id', :'r1_order', 'max_price_cents', 4500, 'address_source', 'own',
   'address', jsonb_build_object('recipient_first_name', 'Mary', 'recipient_last_name', 'Allen', 'address_line1', '9 Elm St',

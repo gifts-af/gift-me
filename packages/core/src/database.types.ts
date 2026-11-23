@@ -752,6 +752,7 @@ export type Database = {
       };
       orders: {
         Row: {
+          address_owner_id: string | null;
           address_source: string | null;
           created_at: string;
           est_delivery_date: string | null;
@@ -786,6 +787,7 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
+          address_owner_id?: string | null;
           address_source?: string | null;
           created_at?: string;
           est_delivery_date?: string | null;
@@ -819,6 +821,7 @@ export type Database = {
           user_id?: string;
         };
         Update: {
+          address_owner_id?: string | null;
           address_source?: string | null;
           created_at?: string;
           est_delivery_date?: string | null;
@@ -1215,6 +1218,7 @@ export type Database = {
           p_user_id: string;
         };
         Returns: {
+          address_owner_id: string | null;
           address_source: string | null;
           created_at: string;
           est_delivery_date: string | null;
@@ -1262,6 +1266,7 @@ export type Database = {
           p_today: string;
         };
         Returns: {
+          address_owner_id: string | null;
           address_source: string | null;
           created_at: string;
           est_delivery_date: string | null;
@@ -1585,6 +1590,7 @@ export type Database = {
       order_by_reference: {
         Args: { p_order_id: string; p_user_id: string };
         Returns: {
+          address_owner_id: string | null;
           address_source: string | null;
           created_at: string;
           est_delivery_date: string | null;
@@ -1641,6 +1647,7 @@ export type Database = {
           p_user_id: string;
         };
         Returns: {
+          address_owner_id: string | null;
           address_source: string | null;
           created_at: string;
           est_delivery_date: string | null;
@@ -1728,6 +1735,7 @@ export type Database = {
           p_user_id: string;
         };
         Returns: {
+          address_owner_id: string | null;
           address_source: string | null;
           created_at: string;
           est_delivery_date: string | null;
@@ -1856,6 +1864,7 @@ export type Database = {
       stale_placing_orders: {
         Args: { p_now: string };
         Returns: {
+          address_owner_id: string | null;
           address_source: string | null;
           created_at: string;
           est_delivery_date: string | null;
