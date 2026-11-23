@@ -15,7 +15,7 @@ export const FEEDBACK_EMAIL = "allensforever711@gmail.com";
 
 // Each form emails a Gmail plus-address of that inbox, so Gmail filters and
 // labels can sort them (ALL-71): allensforever711+access@gmail.com and so on.
-export function inboxFor(tag: "access" | "waitlist" | "feedback"): string {
+export function inboxFor(tag: "access" | "waitlist" | "feedback" | "health"): string {
   const at = FEEDBACK_EMAIL.indexOf("@");
   return `${FEEDBACK_EMAIL.slice(0, at)}+${tag}${FEEDBACK_EMAIL.slice(at)}`;
 }
