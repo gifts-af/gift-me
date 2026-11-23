@@ -77,6 +77,11 @@ async function clean(db) {
     const unknown = await db.query("select key from concierge.app_settings where key <> all($1::text[]) order by key", [[...seeded.keys()]]);
     await db.query("commit");
     const keys = reset.rows.map((r) => r.key).sort();
+    // CI starts from a fresh database, so a value to put back there means the migrations set it
+    // in a way seededSettings() can't read. Fail, rather than reset settings to stale values.
+    if (process.env.CI && keys.length) {
+      throw new Error(`db:clean misread the seeded value of: ${keys.join(", ")}. Teach seededSettings() the migration's form.`);
+    }
     console.log(`db:clean: removed ${users.rowCount} test users; settings put back: ${keys.length ? keys.join(", ") : "none needed"}`);
     if (unknown.rowCount) console.log(`db:clean: left alone, not in this checkout's migrations: ${unknown.rows.map((r) => r.key).join(", ")}`);
   } catch (e) {
