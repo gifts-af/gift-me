@@ -110,6 +110,8 @@ export type OrderRow = {
   ship_to: string;
   /** Which address it was approved against (ALL-112); null on older orders, which count as own. */
   address_source: AddressSource | null;
+  /** The list owner whose shared address it was approved for; null unless address_source is shared (T88). */
+  address_owner_id: string | null;
   created_at: string;
 };
 
@@ -123,6 +125,7 @@ export type FailedOrderRow = {
   resolved: boolean;
   ship_to: string;
   address_source: AddressSource | null;
+  address_owner_id: string | null;
   gift_message: string | null;
 };
 
@@ -130,7 +133,7 @@ export type FailedOrderRow = {
 export async function readOrder(deps: DbDeps, orderId: string): Promise<FailedOrderRow | null> {
   const { data, error } = await concierge(deps)
     .from("orders")
-    .select("id, round_id, user_id, idea_id, status, failure_type, resolved, ship_to, address_source, gift_message")
+    .select("id, round_id, user_id, idea_id, status, failure_type, resolved, ship_to, address_source, address_owner_id, gift_message")
     .eq("id", orderId)
     .maybeSingle();
   if (error) fail("Loading the order failed", error);
@@ -156,7 +159,7 @@ export async function priceRiseFixed(deps: DbDeps, ideaId: string, exceptId: str
 export async function liveOrders(deps: DbDeps, roundId: string): Promise<OrderRow[]> {
   const { data, error } = await concierge(deps)
     .from("orders")
-    .select("id, idea_id, status, hold_reason, max_price_cents, fee_cents, total_cents, idempotency_key, gift_message, ship_to, address_source, created_at, resolved")
+    .select("id, idea_id, status, hold_reason, max_price_cents, fee_cents, total_cents, idempotency_key, gift_message, ship_to, address_source, address_owner_id, created_at, resolved")
     .eq("round_id", roundId)
     .neq("status", "cancelled")
     .order("created_at")
@@ -266,17 +269,19 @@ function toSnapshot(a: AddressColumns): AddressSnapshot {
 /**
  * The recipient's current address, read now: the address the linked list owner shares
  * (public.shared_address_for_person) when there is one, else the one the buyer saved on
- * the person. Null when the person is gone. `draft` is for isShippableAddress.
+ * the person. Null when the person is gone. `draft` is for isShippableAddress. `ownerId` is
+ * the list owner whose address it is, read with the address so the two always match (T88);
+ * null for the buyer's own entry.
  */
 export async function recipientAddress(
   deps: DbDeps,
   personId: string,
-): Promise<{ snapshot: AddressSnapshot; draft: AddressDraft & { country?: string | null }; source: AddressSource } | null> {
+): Promise<{ snapshot: AddressSnapshot; draft: AddressDraft & { country?: string | null }; source: AddressSource; ownerId: string | null } | null> {
   const shared = await deps.db.rpc("shared_address_for_person", { p_person_id: personId });
   if (shared.error) fail("Reading the shared address failed", shared.error);
   if (shared.data && typeof shared.data === "object") {
-    const a = shared.data as AddressColumns;
-    return { snapshot: toSnapshot(a), draft: toDraft(a), source: "shared" };
+    const a = shared.data as AddressColumns & { owner_id?: string | null };
+    return { snapshot: toSnapshot(a), draft: toDraft(a), source: "shared", ownerId: a.owner_id ?? null };
   }
   const { data, error } = await deps.db
     .from("people")
@@ -286,7 +291,7 @@ export async function recipientAddress(
     .maybeSingle();
   if (error) fail("Reading the person's address failed", error);
   if (!data) return null;
-  return { snapshot: toSnapshot(data), draft: toDraft(data), source: "own" };
+  return { snapshot: toSnapshot(data), draft: toDraft(data), source: "own", ownerId: null };
 }
 
 /** The buyer's own address (public.account_addresses), for "Ship it to me"; null when they have none. */

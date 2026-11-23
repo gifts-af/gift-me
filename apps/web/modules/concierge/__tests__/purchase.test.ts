@@ -150,8 +150,11 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
   }
   const urlOf = (ideaId: string) => `https://shop.test/p/${ideaId}`;
 
-  /** Approved the way approveAndBuy does it, then "crashed" before placing: held/retry, lease given back. */
-  async function approvedOnly(u: User, r: Round, cap = 4520, source?: "shared" | "own"): Promise<void> {
+  /**
+   * Approved the way approveAndBuy does it, then "crashed" before placing: held/retry, lease given back.
+   * A shared order names the list owner it was approved for (`owner`).
+   */
+  async function approvedOnly(u: User, r: Round, cap = 4520, source?: "shared" | "own", owner?: string): Promise<void> {
     const claimed = await pg.query("select locked_until::text from concierge.claim_round_now($1, now())", [r.roundId]);
     const lock = claimed.rows[0].locked_until;
     const orders = r.ideaIds.map((id) => ({
@@ -160,6 +163,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
       fee_cents: 100,
       ship_to: "recipient",
       ...(source ? { address_source: source } : {}),
+      ...(owner ? { address_owner_id: owner } : {}),
       address: { recipient_first_name: "Mary", recipient_last_name: "Allen", address_line1: "12 Oak St", city: "Dayton", state: "OH", zip: "45402", country: "US" },
     }));
     await pg.query("select concierge.approve_round($1, $2, $3, $4)", [r.roundId, u.userId, lock, JSON.stringify(orders)]);
@@ -615,30 +619,62 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
   const orderDetail = async (orderId: string) =>
     (
       await pg.query(
-        `select o.status, o.failure_type, o.resolved, o.ship_city, o.ship_state, o.address_source,
+        `select o.status, o.failure_type, o.resolved, o.ship_city, o.ship_state, o.address_source, o.address_owner_id,
                 (select count(*)::int from concierge.order_addresses x where x.order_id = o.id) as snapshots
            from concierge.orders o where o.id = $1`,
         [orderId],
       )
     ).rows[0];
 
-  it("approving records whether the address was shared or the buyer's own (AC-1)", async () => {
+  it("approving records whether the address was shared or the buyer's own, and whose it was (AC-1)", async () => {
     const u = await newUser();
     const shared = await newRound(u);
-    await shareWith(shared, u);
+    const owner = await shareWith(shared, u);
     await approveAndBuy({ userId: u.userId, roundId: shared.roundId, ideaIds: shared.ideaIds }, deps());
-    expect(await orderDetail((await orders(shared.roundId))[0].id)).toMatchObject({ address_source: "shared", ship_city: "Akron" });
+    expect(await orderDetail((await orders(shared.roundId))[0].id)).toMatchObject({
+      address_source: "shared",
+      address_owner_id: owner,
+      ship_city: "Akron",
+    });
 
     const own = await newRound(u);
     await approveAndBuy({ userId: u.userId, roundId: own.roundId, ideaIds: own.ideaIds }, deps());
-    expect(await orderDetail((await orders(own.roundId))[0].id)).toMatchObject({ address_source: "own", ship_city: "Dayton" });
+    expect(await orderDetail((await orders(own.roundId))[0].id)).toMatchObject({ address_source: "own", address_owner_id: null, ship_city: "Dayton" });
+  });
+
+  it("a relink between reading the shared address and approving is busy, and writes nothing (AC-1)", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    await shareWith(r, u);
+    // The buyer relinks the person to another owner's list right after the approval read the address.
+    const real = deps().db;
+    const racing = new Proxy(real, {
+      get(target, prop, receiver) {
+        if (prop !== "rpc") return Reflect.get(target, prop, receiver);
+        return async (fn: string, args: Record<string, unknown>) => {
+          const res = await (target.rpc as (f: string, a: unknown) => PromiseLike<unknown>).call(target, fn, args);
+          if (fn === "shared_address_for_person") {
+            await pg.query("delete from lists.person_links where person_id = $1", [r.personId]);
+            await shareWith(r, u, { city: "Toledo" });
+          }
+          return res;
+        };
+      },
+    });
+
+    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps({ db: racing }))).toEqual({
+      ok: false,
+      error: "busy",
+    });
+    expect(zinc.posts).toEqual([]);
+    expect(await orders(r.roundId)).toEqual([]);
   });
 
   it("sharing stopped after approval: nothing ships to the buyer's hidden entry, and the order ends (AC-3)", async () => {
     const u = await newUser();
     const r = await newRound(u);
     const owner = await shareWith(r, u);
-    await approvedOnly(u, r, 4520, "shared");
+    await approvedOnly(u, r, 4520, "shared", owner);
     await stopSharing(owner);
 
     await placeHeldForUser(u.userId, deps());
@@ -651,6 +687,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
       ship_city: "",
       ship_state: "",
       address_source: "shared",
+      address_owner_id: owner,
       snapshots: 0,
     });
     expect(await round(r.roundId)).toMatchObject({ status: "needs_attention", attention_reason: "failed" });
@@ -662,7 +699,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     const u = await newUser();
     const r = await newRound(u);
     const owner = await shareWith(r, u);
-    await approvedOnly(u, r, 4520, "shared");
+    await approvedOnly(u, r, 4520, "shared", owner);
     await pg.query("update public.people set address_line1 = null, city = null where id = $1", [r.personId]);
     await pg.query("delete from public.account_addresses where user_id = $1", [owner]);
 
@@ -676,7 +713,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     const u = await newUser();
     const r = await newRound(u);
     const owner = await shareWith(r, u);
-    await approvedOnly(u, r, 4520, "shared");
+    await approvedOnly(u, r, 4520, "shared", owner);
     await pg.query("select concierge.hold_orders($1, 'funds')", [r.roundId]);
     expect(await round(r.roundId)).toMatchObject({ attention_reason: "funds" });
     await stopSharing(owner);
@@ -691,7 +728,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     const u = await newUser();
     const r = await newRound(u, { totals: [2000, 2000] });
     const owner = await shareWith(r, u);
-    await approvedOnly(u, r, 2100, "shared");
+    await approvedOnly(u, r, 2100, "shared", owner);
     await stopSharing(owner);
 
     await placeHeldForUser(u.userId, deps());
@@ -705,8 +742,8 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
   it("a shared address that fails the format check ends the order, even with a good own entry (AC-4)", async () => {
     const u = await newUser();
     const r = await newRound(u);
-    await shareWith(r, u, { state: "Ohio" });
-    await approvedOnly(u, r, 4520, "shared");
+    const owner = await shareWith(r, u, { state: "Ohio" });
+    await approvedOnly(u, r, 4520, "shared", owner);
 
     await placeHeldForUser(u.userId, deps());
 
@@ -718,7 +755,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     const u = await newUser();
     const r = await newRound(u);
     const owner = await shareWith(r, u);
-    await approvedOnly(u, r, 4520, "shared");
+    await approvedOnly(u, r, 4520, "shared", owner);
     await pg.query("update public.account_addresses set city = 'Toledo' where user_id = $1", [owner]);
 
     await placeHeldForUser(u.userId, deps());
@@ -731,19 +768,19 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     const u = await newUser();
     const r = await newRound(u);
     await approvedOnly(u, r, 4520, "own");
-    await shareWith(r, u);
+    const owner = await shareWith(r, u);
 
     await placeHeldForUser(u.userId, deps());
 
     expect(zinc.posts).toEqual([expect.objectContaining({ city: "Akron" })]);
-    expect(await orderDetail((await orders(r.roundId))[0].id)).toMatchObject({ status: "placing", address_source: "shared" });
+    expect(await orderDetail((await orders(r.roundId))[0].id)).toMatchObject({ status: "placing", address_source: "shared", address_owner_id: owner });
   });
 
   it("a pick already placed is untouched when the other one ends (AC-16)", async () => {
     const u = await newUser();
     const r = await newRound(u, { totals: [2000, 2000] });
     const owner = await shareWith(r, u);
-    await approvedOnly(u, r, 2100, "shared");
+    await approvedOnly(u, r, 2100, "shared", owner);
     const [first, second] = await orders(r.roundId);
     await pg.query("update concierge.orders set status = 'placed', hold_reason = null where id = $1", [first.id]);
     await pg.query("select concierge.reconcile_round($1)", [r.roundId]);
