@@ -1,6 +1,7 @@
 import vercelJson from "../../../../vercel.json";
 import { buyingWiring } from "@/lib/wiring";
-import { runRoundJob } from "@/modules/concierge";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { addTickCounts, dayOf, runRoundJob } from "@/modules/concierge";
 import { handleCallback } from "../queue";
 import { handleJob, jobMaxConcurrency } from "./job";
 
@@ -10,7 +11,12 @@ export const maxDuration = 300;
 // Vercel's queue calls this (the trigger is in vercel.json), once per message. Idea runs share
 // Zinc's rate by the trigger's maxConcurrency, read from that same file inside the call (E3).
 export const POST = handleCallback(async (message, metadata) => {
-  await handleJob(message, metadata, { vercelEnv: process.env.VERCEL_ENV, cronSecret: process.env.CRON_SECRET }, async (m, now) =>
-    runRoundJob(m, (await buyingWiring(now, process.env, {}, { zincShare: jobMaxConcurrency(vercelJson) })).engine),
+  await handleJob(
+    message,
+    metadata,
+    { vercelEnv: process.env.VERCEL_ENV, cronSecret: process.env.CRON_SECRET },
+    async (m, now) => runRoundJob(m, (await buyingWiring(now, process.env, {}, { zincShare: jobMaxConcurrency(vercelJson) })).engine),
+    // A failed job counts toward the day's heartbeat, on the job's clock like the tick's.
+    (_m, now) => addTickCounts(createAdminClient(), dayOf(now), now, { roundsFailed: 1 }),
   );
 });

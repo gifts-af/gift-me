@@ -4,6 +4,9 @@ import { strayKeys } from "@/test/fanout-event-keys";
 import { signMessage } from "../../sign";
 import { handleJob, jobMaxConcurrency } from "../job";
 
+// The job imports the tick, which takes dayOf from the concierge module (server-only).
+vi.mock("server-only", () => ({}));
+
 const SECRET = "s3cret";
 const ENV = { cronSecret: SECRET };
 const sign = (m: object) => signMessage(m, SECRET);
@@ -131,5 +134,49 @@ describe("vercel.json", () => {
       functions: { "app/api/rounds/job/route.ts": { experimentalTriggers: [{ topic: "round-jobs", maxConcurrency: 0 }] } },
     };
     expect(() => jobMaxConcurrency(bad)).toThrow();
+  });
+});
+
+describe("handleJob's onFailed", () => {
+  const msg = () => sign({ kind: "round", roundId: U });
+
+  it("AC-7: a failed result calls onFailed once", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const onFailed = vi.fn(async () => {});
+    const at = "2027-03-20T12:00:00.000Z";
+    const result = await handleJob(sign({ kind: "round", roundId: U, now: at }), { deliveryCount: 1 }, { ...ENV, vercelEnv: "preview" }, vi.fn().mockResolvedValue("failed"), onFailed);
+    expect(result).toBe("failed");
+    expect(onFailed).toHaveBeenCalledTimes(1);
+    expect(onFailed).toHaveBeenCalledWith({ kind: "round", roundId: U, now: at }, new Date(at));
+  });
+
+  it.each(["advanced", "busy", "off"])("a %s result doesn't", async (r) => {
+    const onFailed = vi.fn(async () => {});
+    expect(await handleJob(msg(), { deliveryCount: 1 }, ENV, vi.fn().mockResolvedValue(r), onFailed)).toBe(r);
+    expect(onFailed).not.toHaveBeenCalled();
+  });
+
+  it("an invalid message doesn't", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const onFailed = vi.fn(async () => {});
+    expect(await handleJob(null, { deliveryCount: 1 }, ENV, vi.fn(), onFailed)).toBe("invalid");
+    expect(await handleJob({ kind: "round", roundId: U }, { deliveryCount: 1 }, ENV, vi.fn(), onFailed)).toBe("invalid");
+    expect(onFailed).not.toHaveBeenCalled();
+  });
+
+  it("an onFailed that throws is logged and the result is unchanged", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const onFailed = vi.fn().mockRejectedValue(Object.assign(new Error("Zelda at 1 Main St"), { code: "57P01" }));
+    expect(await handleJob(msg(), { deliveryCount: 1 }, ENV, vi.fn().mockResolvedValue("failed"), onFailed)).toBe("failed");
+    const failed = events(log).filter((e) => e.event === "tick.heartbeat_failed");
+    expect(failed).toEqual([expect.objectContaining({ alert: true, code: "57P01", round_id: U })]);
+    expect(JSON.stringify(failed)).not.toMatch(/Zelda|Main St/);
+  });
+
+  it("a run that throws doesn't call onFailed (the queue redelivers it)", async () => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    const onFailed = vi.fn(async () => {});
+    await expect(handleJob(msg(), { deliveryCount: 1 }, ENV, vi.fn().mockRejectedValue(new Error("wiring")), onFailed)).rejects.toThrow("wiring");
+    expect(onFailed).not.toHaveBeenCalled();
   });
 });

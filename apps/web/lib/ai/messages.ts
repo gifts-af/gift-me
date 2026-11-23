@@ -9,17 +9,29 @@ export type GatewayHttp = { base: string; apiKey: string; fetch: typeof fetch };
 /** Prices in cents: per token for input and output, per search for web search. */
 export type GatewayPrices = { inputCentsPerToken: number; outputCentsPerToken: number; searchCents: number };
 
-/** The message is always a fixed phrase: never request or response text (T42, S5). */
+const AI_ERROR_MESSAGES = {
+  unavailable: "AI request failed",
+  malformed: "AI reply was not understood",
+  no_credit: "AI credit is used up",
+} as const;
+
+/**
+ * The message is always a fixed phrase: never request or response text (T42, S5). `no_credit`:
+ * the Gateway's credit ran out, so the AI call was refused and cost nothing.
+ */
 export class AiError extends Error {
   /** What a reply we received and priced cost before it failed, so the caller still counts it. A number, never text. */
   constructor(
-    public kind: "unavailable" | "malformed",
+    public kind: keyof typeof AI_ERROR_MESSAGES,
     public costCents?: number,
   ) {
-    super(kind === "unavailable" ? "AI request failed" : "AI reply was not understood");
+    super(AI_ERROR_MESSAGES[kind]);
     this.name = "AiError";
   }
 }
+
+/** HTTP 402: the Gateway sends both insufficient_funds and quota_for_entity_exceeded this way. */
+const PAYMENT_REQUIRED = 402;
 
 async function call(h: GatewayHttp, path: string, init: RequestInit): Promise<unknown> {
   let res: Response;
@@ -29,6 +41,7 @@ async function call(h: GatewayHttp, path: string, init: RequestInit): Promise<un
     if (init.signal?.aborted) throw error;
     throw new AiError("unavailable");
   }
+  if (res.status === PAYMENT_REQUIRED) throw new AiError("no_credit");
   if (!res.ok) throw new AiError("unavailable");
   try {
     return await res.json();
@@ -64,6 +77,20 @@ export async function gatewayPrices(h: GatewayHttp, model: string, signal: Abort
   const search = price(p?.web_search);
   if (input === null || output === null || search === null) throw new AiError("unavailable");
   return { inputCentsPerToken: input * 100, outputCentsPerToken: output * 100, searchCents: (search * 100) / 1000 };
+}
+
+// The Gateway's credits reply, in dollars (gatewayCreditsResponseSchema in @ai-sdk/gateway).
+const creditsReply = z.object({ balance: z.string(), total_used: z.string() });
+
+/** Reads the free GET /v1/credits: the team's AI credit left, in whole cents. */
+export async function gatewayCredits(h: GatewayHttp, signal: AbortSignal): Promise<{ balanceCents: number }> {
+  const parsed = creditsReply.safeParse(
+    await call(h, "/v1/credits", { headers: { Authorization: `Bearer ${h.apiKey}` }, signal }),
+  );
+  if (!parsed.success) throw new AiError("malformed");
+  const dollars = parsed.data.balance.trim() === "" ? NaN : Number(parsed.data.balance);
+  if (!Number.isFinite(dollars)) throw new AiError("malformed");
+  return { balanceCents: Math.round(dollars * 100) };
 }
 
 const messagesReply = z.object({

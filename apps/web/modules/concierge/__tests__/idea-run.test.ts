@@ -102,6 +102,8 @@ class FakeGateway {
   bodies: { system: string; content: string; tools: boolean }[] = [];
   brainstormUsage = { input_tokens: 1000, output_tokens: 1000, server_tool_use: { web_search_requests: 3 } };
   reasons: Record<string, string> = {};
+  /** The call the Gateway answers with 402, out of credit. */
+  outOfCredit: "brainstorm" | "rank" | null = null;
   fetch = (async (url: string, init?: RequestInit) => {
     if (url.endsWith("/v1/models")) {
       // 0.001¢ an input token, 0.01¢ an output token, 1¢ a search.
@@ -110,6 +112,9 @@ class FakeGateway {
     const body = JSON.parse(String(init?.body));
     const content = body.messages[0].content as string;
     this.bodies.push({ system: body.system, content, tools: Boolean(body.tools) });
+    if (this.outOfCredit === (body.tools ? "brainstorm" : "rank")) {
+      return json({ error: { type: "insufficient_funds", message: "team-secret has $0.00 left" } }, 402);
+    }
     if (body.tools) {
       return json({ content: [{ type: "text", text: JSON.stringify({ ideas: this.ideas }) }], usage: this.brainstormUsage });
     }
@@ -494,6 +499,63 @@ describe("runIdeas: vendor trouble", () => {
     expect(store.finished).toEqual([{ outcome: "failed", cost: 0 }]);
     expect(zinc.calls).toEqual([]);
     expect(event("ideas.run")).toMatchObject({ run_id: "run-1", outcome: "failed", stage: "started" });
+  });
+});
+
+describe("runIdeas: out of AI credit", () => {
+  it("a 402 on the brainstorm ends the run as no_credit", async () => {
+    world([2000, 2000], { zinc, gateway });
+    gateway.outOfCredit = "brainstorm";
+    expect(await runIdeas(req(), deps())).toEqual({ status: "no_credit" });
+    expect(store.started).toHaveLength(1);
+    expect(store.finished).toEqual([{ outcome: "no_credit", cost: 0 }]);
+    expect(zinc.calls).toEqual([]);
+  });
+
+  it("a 402 on the ranking call after a paid brainstorm ends as failed and counts", async () => {
+    world([2000, 2000], { zinc, gateway });
+    gateway.outOfCredit = "rank";
+    expect(await runIdeas(req(), deps())).toEqual({ status: "failed" });
+    // 14¢ of brainstorm and 4¢ of lookups were paid for.
+    expect(store.finished).toEqual([{ outcome: "failed", cost: 18 }]);
+    expect(event("ideas.run")).toMatchObject({ outcome: "failed", error_kind: "no_credit" });
+  });
+
+  it("with list gifts kept, a 402 still saves them", async () => {
+    world([2000, 2000], { zinc, gateway });
+    gateway.outOfCredit = "brainstorm";
+    store.in = inputs({ round: ROUND, listGifts: listWorld(1, zinc) });
+    expect(await runIdeas(roundReq(), deps())).toEqual({ status: "saved", count: 1 });
+    expect(store.saved.map((i) => i.listItemId)).toEqual(["item-1"]);
+    expect(store.finished).toEqual([{ outcome: "saved", cost: expect.any(Number) }]);
+  });
+
+  it("a list pass that spent Zinc lookups and kept nothing, then a 402, still ends no_credit", async () => {
+    // The trade-off: an uncounted run can spend Zinc cents; idea_round_runs_per_day still counts it.
+    world([2000], { zinc, gateway });
+    gateway.outOfCredit = "brainstorm";
+    store.in = inputs({ round: ROUND, listGifts: listWorld(1, zinc, 9000) });
+    expect(await runIdeas(roundReq(), deps())).toEqual({ status: "no_credit" });
+    expect(zinc.count("offers")).toBe(1);
+    expect(store.finished).toEqual([{ outcome: "no_credit", cost: 1 }]);
+    expect(event("ideas.run")).toMatchObject({ outcome: "no_credit", cost_cents: 1 });
+  });
+
+  it("ideas.run logs outcome no_credit, ids only", async () => {
+    world([2000, 2000], { zinc, gateway });
+    gateway.outOfCredit = "brainstorm";
+    await runIdeas(req(), deps());
+    expect(event("ideas.run")).toMatchObject({
+      run_id: "run-1",
+      user_id: "user-1",
+      person_id: "person-1",
+      outcome: "no_credit",
+      error: "AiError",
+      error_kind: "no_credit",
+      cost_cents: 0,
+    });
+    const all = lines().join("\n");
+    for (const text of ["team-secret", "insufficient_funds", "fishing", "Bob"]) expect(all).not.toContain(text);
   });
 });
 

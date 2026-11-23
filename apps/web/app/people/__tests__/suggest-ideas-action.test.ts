@@ -74,6 +74,11 @@ describe("suggestIdeasAction", () => {
     expect(await suggestIdeasAction(ID)).toEqual({ ok: false, error });
   });
 
+  it("an on-demand no_credit run shows the failed message", async () => {
+    runIdeas.mockResolvedValue({ status: "no_credit" });
+    expect(await suggestIdeasAction(ID)).toEqual({ ok: false, error: IDEA_MESSAGES.failed });
+  });
+
   it("runs nothing for a person who isn't on the buyer's list", async () => {
     getPerson.mockResolvedValue(null);
     expect(await suggestIdeasAction(ID)).toEqual({ ok: false, error: IDEA_MESSAGES.notFound });

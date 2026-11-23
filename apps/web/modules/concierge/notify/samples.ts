@@ -1,3 +1,5 @@
+import { buildHealthEmail } from "../health/email";
+import { checkFailedReport, type HealthReport, type Problem } from "../health/report";
 import { type NotificationKind, type RenderedEmail, SAMPLE_DATA, TEMPLATES } from "./templates";
 
 export type SampleEmail = { name: string; email: RenderedEmail };
@@ -50,7 +52,40 @@ export function sampleEmails(link: string): SampleEmail[] {
       add("hold_funds-still", kind, { ...SAMPLE_DATA.hold_funds.data, still: true, placedTitle: "Linen apron" }, links);
     }
   }
+  list.push(...healthSamples(link));
   return list;
+}
+
+// The owner's health emails: every problem kind once, the Monday all-clear, and a check that couldn't run. Their
+// runbook links lose their section anchor so they point at `link` like every other sample's buttons.
+function healthSamples(link: string): SampleEmail[] {
+  const id = (n: string) => `00000000-0000-0000-0000-${n.padStart(12, "0")}`;
+  const ref = (n: string) => ({ roundId: id(n), userId: id("1") });
+  const problems: Problem[] = [
+    { kind: "db_down" },
+    { kind: "tick_missed", detail: { lastOkFinishedAt: "2026-03-09T10:04:00Z" } },
+    { kind: "no_credit", detail: { noCreditRuns: 1 }, waiting: [{ roundId: id("2"), userId: id("1"), shipByDeadline: "2026-03-12" }] },
+    { kind: "tick_failed", detail: { roundsFailed: 2, fanoutFailed: 1 } },
+    { kind: "stuck_round", ids: ref("3"), detail: { attempts: 3 } },
+    { kind: "unconfirmed", ids: { ...ref("4"), orderId: id("40") } },
+    { kind: "placing", ids: { ...ref("5"), orderId: id("50") } },
+    { kind: "held_zinc", ids: { ...ref("6"), orderId: id("60") }, detail: { holdReason: "retry" } },
+    { kind: "ideas_not_configured", detail: { missing: "AI Gateway" } },
+    { kind: "credit_low", detail: { balanceCents: 320, lowCents: 500 } },
+    { kind: "zinc_low", detail: { balanceCents: 210, lowCents: 500 } },
+    { kind: "deadline_close", ids: ref("7"), detail: { reason: "address", shipByDeadline: "2026-03-14" } },
+  ];
+  const weekly = { waitingAddress: 1, waitingFunds: 1, waitingSetup: 0, waitingApproval: 2, noIdeas: 0, roundsFailed: 0, failedCaptures: 1 };
+  const render = (name: string, report: HealthReport): SampleEmail => {
+    const { subject, html, text } = buildHealthEmail(report, link);
+    const plain = (s: string) => s.split(`${link}#`).map((part, n) => (n === 0 ? part : part.replace(/^[a-z-]+/, ""))).join(link);
+    return { name, email: { subject, html: plain(html ?? ""), text: plain(text) } };
+  };
+  return [
+    render("health-problems", { problems, weekly, isWeekly: true }),
+    render("health-weekly-all-clear", { problems: [], weekly, isWeekly: true }),
+    render("health-check-failed", checkFailedReport("snapshot")),
+  ];
 }
 
 /** The Zinc wallet address and each failed gift's fix page, which some emails carry as data, point at `link` too. */

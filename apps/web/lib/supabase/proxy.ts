@@ -3,8 +3,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { hasEnvVars } from "../utils";
 import { supabaseKey, supabaseUrl } from "./env";
 
-// Paths signed-out visitors may open. /api/keepalive checks its own secret
-// (ALL-43). The manifest and icons must load signed out, or "Add to Home
+// Paths signed-out visitors may open. /api/health checks its own cron secret
+// (T87). The manifest and icons must load signed out, or "Add to Home
 // Screen" breaks on the sign-in page. The home page (/welcome) and the tour
 // are public (ALL-46), and so is the link-preview image (ALL-55); "/" itself is the app home, so it's not listed here:
 // homeRewrite shows signed-out visitors the home page there instead. Email
@@ -17,7 +17,7 @@ export function isPublicPath(pathname: string) {
     pathname.startsWith("/apple-icon") ||
     pathname.startsWith("/pwa-icon/") ||
     pathname === "/email-logo.png" ||
-    pathname === "/api/keepalive" ||
+    pathname === "/api/health" ||
     // The daily round tick checks its own cron secret (ALL-28).
     pathname === "/api/rounds/tick" ||
     // The queue calls the round job route without a session (ALL-125). Vercel makes trigger

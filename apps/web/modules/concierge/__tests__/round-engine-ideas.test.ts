@@ -1,7 +1,7 @@
 import type { StepKey } from "@gifts-af/core";
 import { describe, expect, it, vi } from "vitest";
 import type { IdeaOutcome } from "../ideas/run";
-import { runTick, type EngineZinc } from "../rounds/engine";
+import { runRoundJob, runTick, type EngineZinc } from "../rounds/engine";
 import { USER, PERSON, OCCASION, NAME, EMAIL, at, harness, events, named, captureLog } from "./round-engine-fakes";
 
 vi.mock("server-only", () => ({}));
@@ -389,6 +389,87 @@ describe("the idea pass (ALL-27)", () => {
       expect(text).not.toContain(EMAIL);
     }
     expect(named("round_step")).toContainEqual(expect.objectContaining({ round_id: "round-1", step: "ideas:none" }));
+  });
+
+  describe("out of AI credit (no_credit)", () => {
+    it("AC-10: a no_credit run releases the round, sends the buyer nothing and logs ideas.no_credit with alert", async () => {
+      const h = harness();
+      h.generateIdeas.mockResolvedValue({ status: "no_credit" });
+
+      const summary = await h.tick("2027-02-11");
+
+      expect(summary).toMatchObject({ failed: 0 });
+      expect(h.store.round("round-1")).toMatchObject({ status: "generating", lockedUntil: null, attempts: 0 });
+      expect(h.store.round("round-1").nextActionAt!.getTime()).toBeLessThanOrEqual(at("2027-02-11").getTime());
+      expect(h.store.writes).toContain("release:round-1");
+      expect(h.notifyStore.notifications).toEqual([]);
+      const alerts = named("ideas.no_credit");
+      expect(alerts).toHaveLength(1);
+      expect(alerts[0]).toMatchObject({ round_id: "round-1", user_id: USER, alert: true });
+      for (const key of Object.keys(alerts[0])) expect(["event", "at", "round_id", "user_id", "alert"]).toContain(key);
+      expect(named("round_step")).toContainEqual(expect.objectContaining({ round_id: "round-1", step: "ideas:no_credit" }));
+    });
+
+    it("after a no_credit run the tick starts no other run and releases the rest", async () => {
+      const h = two();
+      h.generateIdeas.mockResolvedValue({ status: "no_credit" });
+
+      await runTick(h.deps(at("2027-02-11")));
+
+      expect(h.generateIdeas).toHaveBeenCalledTimes(1);
+      for (const r of h.store.rounds) {
+        expect(r.lockedUntil).toBeNull();
+        expect(h.store.writes).toContain(`release:${r.id}`);
+      }
+      expect(h.notifyStore.notifications).toEqual([]);
+    });
+
+    it("with fan-out on the stop holds per job, not per tick: each due round's job starts its own run and logs its own alert", async () => {
+      // The daily guard (idea_round_runs_per_day, in start_idea_run) bounds these runs; here each
+      // job is a separate call, so nothing carries one job's no_credit to the next.
+      const h = two();
+      h.generateIdeas.mockResolvedValue({ status: "no_credit" });
+      await runTick(h.deps(at("2027-02-11")));
+      expect(h.generateIdeas).toHaveBeenCalledTimes(1);
+      const alertsBefore = named("ideas.no_credit").length;
+
+      h.store.settings.set("round_fanout_enabled", 1);
+      for (const r of h.store.rounds) {
+        expect(await runRoundJob({ kind: "round", roundId: r.id }, h.deps(at("2027-02-12")))).toBe("advanced");
+      }
+
+      expect(h.generateIdeas).toHaveBeenCalledTimes(3);
+      expect(named("ideas.no_credit")).toHaveLength(alertsBefore + 2);
+      for (const r of h.store.rounds) expect(r).toMatchObject({ status: "generating", lockedUntil: null });
+      expect(h.notifyStore.notifications).toEqual([]);
+    });
+
+    it("a round still waiting on credit at its deadline is skipped with the skipped email, not silently", async () => {
+      const h = harness();
+      h.generateIdeas.mockResolvedValue({ status: "no_credit" });
+      // What the real store reads once the round's latest run ended no_credit (no-credit-db.test.ts).
+      h.store.ideaState.set("round-1", { waitingOnCredit: true });
+      const silentBefore = named("round_skipped_silently").length;
+
+      await h.runDays("2027-02-11", "2027-03-11");
+
+      expect(h.store.rounds[0].status).toBe("skipped");
+      expect(h.sent()).toEqual(["skipped@2027-03-11"]);
+      expect(named("round_skipped_silently")).toHaveLength(silentBefore);
+    });
+
+    it("the next tick runs it again", async () => {
+      const h = harness();
+      h.generateIdeas.mockResolvedValueOnce({ status: "no_credit" });
+      await h.tick("2027-02-11");
+      expect(h.generateIdeas).toHaveBeenCalledTimes(1);
+
+      await h.tick("2027-02-12");
+
+      expect(h.generateIdeas).toHaveBeenCalledTimes(2);
+      expect(h.sent()).toEqual(["heads_up@2027-02-12"]);
+      expect(h.store.round("round-1").status).toBe("awaiting_approval");
+    });
   });
 });
 

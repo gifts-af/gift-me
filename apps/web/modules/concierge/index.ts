@@ -86,6 +86,11 @@ export type { AddressSaveResult, ImportAddress, ImportRow, PersonInput } from ".
 // The round engine (ALL-28): the daily tick and advancing one round. Ideas come from the
 // idea engine below (ALL-27), bound in lib/wiring.ts.
 export { advanceRound, runRoundJob, runTick } from "./rounds/engine";
+export { dayOf } from "./rounds/steps";
+export { addTickCounts, tickHeartbeat } from "./health/heartbeat";
+export type { TickHeartbeat } from "./health/heartbeat";
+export { runHealthCheck, sendCheckFailed } from "./health/run";
+export type { HealthDeps, HealthResult } from "./health/run";
 export { tellOrdered } from "./rounds/money-path";
 export type { AdvanceResult, EngineDeps, EngineZinc, GenerateIdeas, JobResult, TickSummary } from "./rounds/engine";
 export { planJobs } from "./rounds/fanout";
@@ -144,6 +149,8 @@ export type { ShownIdea } from "./ideas/read";
 export { amazonPasteDetails } from "./zinc/products";
 export type { AmazonPasteDetails, ZincProductDetails } from "./zinc/products";
 export type { ZincHttp } from "./zinc/client";
+// A wallet's balance at Zinc; the health check reads the app's own (T17).
+export { getWallet } from "./zinc/account";
 // The round screen (ALL-29): "None of these", a budget typed on an open round, and the page reads.
 export { rejectionOutlook, rejectRoundIdeas, roundAccess, roundView, setRoundBudget } from "./rounds/approval";
 export type { BuyYourself, RejectInput, RejectResult, RoundPageIdea, RoundPageOrder, RoundPageView } from "./rounds/approval";

@@ -70,7 +70,8 @@ export type EngineDeps = {
   testClock?: boolean;
 };
 
-export type TickSummary = { enabled: boolean; created: number; advanced: number; failed: number };
+/** `failed` includes `fanoutFailed`, the fan-out's sends that failed, set only when it fanned out. */
+export type TickSummary = { enabled: boolean; created: number; advanced: number; failed: number; fanoutFailed?: number };
 
 /** "off": the engine is switched off (`round_engine_enabled`), so nothing was touched. */
 export type AdvanceResult = "advanced" | "busy" | "failed" | "off";
@@ -145,7 +146,7 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
     const result = await deps.sendJobs(planJobs(due, on, now, deps.testClock ?? false));
     logEvent("round_fanout", { enabled: on, due: due.length, sent: result.sent, failed: result.failed });
     if (result.failed > 0) logEvent("round_fanout_send_failed", { count: result.failed, alert: true });
-    const summary = { enabled: on, created, advanced: 0, failed: createFailed + result.failed };
+    const summary = { enabled: on, created, advanced: 0, failed: createFailed + result.failed, fanoutFailed: result.failed };
     logEvent("round_tick", summary);
     return summary;
   }
@@ -455,8 +456,9 @@ async function runStep(claimed: ClaimedRound, deps: EngineDeps, s: ScheduleSetti
     case "skip": {
       const ids = { round_id: round.id, user_id: round.userId };
       // Tell the buyer about a skip only if we asked or told them something (ruling 13, ALL-27 AC-9).
-      // A rejection renames what was sent (heads_up@1), and that still counts (ALL-29 AC-13).
-      if (!toldBefore(sent)) {
+      // A rejection renames what was sent (heads_up@1), and that still counts (ALL-29 AC-13). A
+      // round left waiting on our AI credit (T87) is told too: the miss is ours, not the buyer's.
+      if (!toldBefore(sent) && !ctx.waitingOnCredit) {
         logEvent("round_skipped_silently", { ...ids, status: round.status });
         return finishStep(round, ctx, sent, { status: "skipped" }, deps, s);
       }

@@ -53,7 +53,8 @@ export type IdeaOutcome =
   | { status: "refused"; reason: IdeaRefusal }
   | { status: "failed" }
   | { status: "cost_cap" }
-  | { status: "deadline" };
+  | { status: "deadline" }
+  | { status: "no_credit" };
 
 export type IdeaDeps = {
   store: IdeaStore;
@@ -87,6 +88,8 @@ type Tally = {
   error: { name: string; kind: string | null } | null;
   /** An AI call was cut off (timeout or the tick's deadline), so what it used was never reported. */
   costUnknown: boolean;
+  /** An AI reply's cost was added: a later out-of-credit error ends the run as a counted failure. */
+  aiPaid: boolean;
 };
 
 type Found = { c: IdeaCandidate; hit: ZincHit; offer: ZincOffer; totalCents: number; fit: "within" | "over"; arriveBy: CalendarDate | null };
@@ -109,16 +112,20 @@ export async function runIdeas(req: IdeaRequest, deps: IdeaDeps): Promise<IdeaOu
     refusal: null,
     error: null,
     costUnknown: false,
+    aiPaid: false,
   };
   let outcome: IdeaOutcome = { status: "failed" };
   try {
     outcome = await attempt(req, deps, t);
   } catch (e) {
     // An AI reply we paid for but couldn't read still counts toward the cap.
-    if (e instanceof AiError && e.costCents) t.spent += e.costCents;
+    if (e instanceof AiError && e.costCents) paidAi(t, e.costCents);
     const f = errorFields(e);
     t.error = { name: String(f.name), kind: typeof f.kind === "string" ? f.kind : null };
-    outcome = { status: req.signal.aborted ? "deadline" : "failed" };
+    // Out of credit before any AI reply was paid for: no AI was bought, so the run doesn't count (T68).
+    // It may still have spent Zinc lookup cents in the list pass; idea_round_runs_per_day counts it, which bounds that.
+    const noCredit = e instanceof AiError && e.kind === "no_credit" && !t.aiPaid;
+    outcome = { status: req.signal.aborted ? "deadline" : noCredit ? "no_credit" : "failed" };
     if (t.runId !== null) await deps.store.finish(t.runId, outcome.status as RunEnd, cents(t.spent));
   } finally {
     logEvent("ideas.run", {
@@ -138,6 +145,12 @@ export async function runIdeas(req: IdeaRequest, deps: IdeaDeps): Promise<IdeaOu
     });
   }
   return outcome;
+}
+
+/** Adds an AI reply's cost to the run. */
+function paidAi(t: Tally, costCents: number) {
+  t.spent += costCents;
+  t.aiPaid = true;
 }
 
 function ids(req: IdeaRequest, runId: string | null) {
@@ -223,7 +236,7 @@ async function attempt(req: IdeaRequest, deps: IdeaDeps, t: Tally): Promise<Idea
     } catch (e) {
       if (listed.length === 0) throw e;
       // Keep the list gifts. The failure is still reported in ideas.run.
-      if (e instanceof AiError && e.costCents) t.spent += e.costCents;
+      if (e instanceof AiError && e.costCents) paidAi(t, e.costCents);
       const f = errorFields(e);
       t.error = { name: String(f.name), kind: typeof f.kind === "string" ? f.kind : null };
     }
@@ -449,7 +462,7 @@ async function brainstormPass(
       { candidates: s.candidates, maxSearches: s.maxSearches, maxTokens: s.aiMaxTokens, overBudgetPct: inputs.overBudgetPct, prices, signal },
     ),
   );
-  t.spent += b.costCents;
+  paidAi(t, b.costCents);
   t.candidates = b.candidates.length;
   t.stage = "brainstormed";
   await store.progress(runId, "brainstormed", cents(t.spent));
@@ -527,7 +540,7 @@ async function brainstormPass(
   const worst = rankWorstCents(prices, s.aiMaxTokens, rankInputTokensMax(rankInput, s));
   if (!canAffordRank(t.spent, worst, s.runMaxCents)) return { end: "cost_cap" };
   const r = await ai((signal) => rank(deps.gateway, rankInput, { maxTokens: s.aiMaxTokens, keepMin: s.keepMin, keepMax: s.keepMax, prices, signal }));
-  t.spent += r.costCents;
+  paidAi(t, r.costCents);
   t.stage = "ranked";
   await store.progress(runId, "ranked", cents(t.spent));
 

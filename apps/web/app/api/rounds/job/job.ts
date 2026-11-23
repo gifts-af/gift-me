@@ -25,13 +25,15 @@ type Env = { vercelEnv?: string; cronSecret?: string };
  * before it claimed any round (the wiring, or a setting runRoundJob reads first, the fan-out
  * switch among them), so no lease is held: log an alert and rethrow, so the queue redelivers, up
  * to the trigger's maxDeliveries. A failure after a claim comes back as "failed" and is
- * acknowledged; the next tick picks the round up.
+ * acknowledged; the next tick picks the round up, and `onFailed` adds it to the day's heartbeat
+ * (with fan-out on, jobs run outside the tick). A thrown job isn't counted: the queue retries it.
  */
 export async function handleJob(
   raw: unknown,
   meta: { deliveryCount: number },
   env: Env,
   run: (message: JobMessage, now: Date) => Promise<JobResult>,
+  onFailed?: (message: JobMessage, now: Date) => Promise<void>,
 ): Promise<JobResult | "invalid"> {
   const parsed = messageSchema.safeParse(raw);
   if (!parsed.success) {
@@ -45,13 +47,22 @@ export async function handleJob(
   const message: JobMessage & { sig?: string } = { ...parsed.data };
   delete message.sig; // the engine gets the message without it
   const at = message.now && isTestClock(env.vercelEnv) ? new Date(message.now) : new Date();
+  const who: Record<string, string> = message.kind === "round" ? { round_id: message.roundId } : { user_id: message.userId };
+  let result: JobResult;
   try {
-    return await run(message, at);
+    result = await run(message, at);
   } catch (err) {
-    const who: Record<string, string> = message.kind === "round" ? { round_id: message.roundId } : { user_id: message.userId };
     logEvent("round_job", { ...errorFields(err), kind: message.kind, result: "failed", ...who, delivery_count: meta.deliveryCount, alert: true });
     throw err;
   }
+  if (result === "failed" && onFailed) {
+    try {
+      await onFailed(message, at);
+    } catch (err) {
+      logEvent("tick.heartbeat_failed", { ...errorFields(err), ...who, alert: true });
+    }
+  }
+  return result;
 }
 
 type Triggers = { functions: Record<string, { experimentalTriggers: { topic: string; maxConcurrency?: number }[] }> };

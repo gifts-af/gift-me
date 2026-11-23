@@ -1,7 +1,9 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { CalendarDate, Database } from "@gifts-af/core";
+import { gatewayCredits } from "@/lib/ai/messages";
 import { logEvent } from "@/lib/log";
+import { sendEmail } from "@/lib/resend";
 import { siteUrl } from "@/lib/site-url";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
@@ -14,6 +16,7 @@ import {
   defaultChannels,
   fundingLookahead,
   tellOrdered,
+  getWallet,
   getZincWallet,
   placeAddressHeldFor,
   placeHeldForUser,
@@ -22,6 +25,7 @@ import {
   sweepStalePlacing,
   type EngineDeps,
   type GenerateIdeas,
+  type HealthDeps,
   type IdeaDeps,
   type PlaceAddressHeld,
   type PlaceHeld,
@@ -208,3 +212,37 @@ export const placeAddressHeld: PlaceAddressHeld = async (userId, personId) => {
   const { purchase } = await buyingWiring(new Date(), process.env, { user_id: userId });
   if (purchase) await placeAddressHeldFor(userId, personId, purchase);
 };
+
+// Where the health email's "What to do" links point: the runbooks in the repo's operations doc.
+const RUNBOOKS = "https://github.com/gifts-af/gift-me/blob/main/design/operations.md";
+
+/** How the health check reaches the owner: Resend and the runbook links, no database, so it works when the rest can't be built. */
+export function healthAlertWiring(env: Env = process.env): Pick<HealthDeps, "send" | "runbookBase"> {
+  return { send: (e) => sendEmail(e, { apiKey: env.RESEND_API_KEY, fetch }), runbookBase: RUNBOOKS };
+}
+
+/**
+ * The daily health check's deps (T87): the admin client, Resend, and the two vendor balances
+ * when their env vars are set here, each within the check's health_vendor_timeout_ms.
+ */
+export function healthWiring(now: Date, env: Env = process.env): HealthDeps {
+  const db = createAdminClient();
+  const gatewayBase = env.AI_GATEWAY_BASE;
+  const gatewayKey = env.AI_GATEWAY_API_KEY;
+  const zincBase = env.ZINC_API_BASE;
+  const zincKey = env.ZINC_API_KEY;
+  const aiConfigured = Boolean(gatewayBase && gatewayKey);
+  const zincConfigured = Boolean(zincBase && zincKey);
+  return {
+    ...healthAlertWiring(env),
+    db,
+    now,
+    aiCredits: aiConfigured
+      ? async (timeoutMs) =>
+          (await gatewayCredits({ base: gatewayBase!, apiKey: gatewayKey!, fetch }, AbortSignal.timeout(timeoutMs))).balanceCents
+      : null,
+    zincBalance: zincConfigured
+      ? async (timeoutMs) => (await getWallet({ base: zincBase!, timeoutMs, fetch }, zincKey!)).balanceCents
+      : null,
+  };
+}

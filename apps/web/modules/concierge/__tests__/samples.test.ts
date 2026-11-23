@@ -42,12 +42,15 @@ describe("sampleEmails", () => {
       "notes_cant_cancel",
       "no_ideas",
       "no_ideas-again",
+      "health-problems",
+      "health-weekly-all-clear",
+      "health-check-failed",
     ]);
   });
 
   it("points every button at the given link, so tapping a sample is harmless", () => {
-    // These three are answered by replying, or need nothing back, so they have no links (ALL-31).
-    const noLinks = ["notes_tip", "notes_not_read", "notes_cant_cancel"];
+    // These are answered by replying, or need nothing back, so they have no links; the all-clear lists no problem to link.
+    const noLinks = ["notes_tip", "notes_not_read", "notes_cant_cancel", "health-weekly-all-clear"];
     for (const { name, email } of samples.filter((s) => !noLinks.includes(s.name))) {
       const hrefs = [...email.html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
       expect(hrefs.length, name).toBeGreaterThan(0);

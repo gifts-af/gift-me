@@ -30,12 +30,13 @@ Each check reads the database or a vendor directly. None of them reads Vercel lo
 | Tick failed | tick heartbeat row | today's tick finished with `result = 'failed'`, or fan-out sends failed above 0. A failed round step alone isn't listed: it retries and repeats surface as stuck rounds (T76); its count goes in the weekly email (owner, plan review) | Round engine on/off; Round fan-out |
 | Stuck rounds | `gift_rounds.attempts` | open and `attempts >= round_max_attempts` (the same rule as the `round_stuck` event) | Round engine |
 | Unconfirmed orders | `orders.status = 'unconfirmed'` | any | Unconfirmed orders |
-| Orders stuck placing | `orders.status = 'placing'` | created before today's tick started and older than `placing_stale_minutes`: the sweep already looked and couldn't settle it | Unconfirmed orders |
+| Orders stuck placing | `orders.status = 'placing'` | last updated before today's tick started and longer ago than `placing_stale_minutes`: the sweep already looked and couldn't settle it | Unconfirmed orders |
 | Orders held for a Zinc problem | `orders.status = 'held'` | `hold_reason` in (`retry`, `not_allowed`) | Zinc wallet ordering |
 | Ideas can't run here | `idea_engine_enabled` or `capture_extraction_enabled` = 1 and the AI Gateway (or, for ideas, Zinc) env vars missing | always | Gift idea engine |
-| Out of AI credit | `idea_runs` with `outcome = 'no_credit'` started in the last day, or AI Gateway `/v1/credits` balance at 0 (plan review). While it's flagged, open rounds still waiting on ideas within `hold_final_days` of `ship_by_deadline` are listed under it (owner, plan review) | any | AI credit |
-| AI credit low | AI Gateway `/v1/credits` balance | below `ai_credit_low_cents` (500) | AI credit |
-| App's Zinc balance low | Zinc `/wallet/me` with the app key (T17) | below `zinc_app_balance_low_cents` (500) | Zinc wallet ordering |
+| Out of AI credit | `idea_runs` with `outcome = 'no_credit'` started in the last day, or AI Gateway `/v1/credits` balance at or below 0 while ideas or capture extraction are on (plan review, final review). While it's flagged, open rounds still waiting on ideas within `hold_final_days` of `ship_by_deadline` are listed under it (owner, plan review) | any | AI credit |
+| AI credit low | AI Gateway `/v1/credits` balance, while ideas or capture extraction are on | below `ai_credit_low_cents` (500) | AI credit |
+| App's Zinc balance low | Zinc `/wallet/me` with the app key (T17), while ideas or Amazon paste lookups are on | below `zinc_app_balance_low_cents` (500) | Zinc wallet ordering |
+| The check couldn't run | a setting, the snapshot, a vendor call or the route's wiring threw | always; the line names the stage (`settings`, `snapshot`, `vendors`, `wiring`), never the error (final review) | The health check couldn't run |
 | Buyer-waiting round near its deadline | open rounds in `needs_address`, or `needs_attention` with `attention_reason` in (`funds`, `setup`, `address`) | within `hold_final_days` of `ship_by_deadline` | none: the buyer has been told; the owner may step in |
 
 `needs_attention` rounds whose reason is `unconfirmed` appear once, under Unconfirmed orders. Held orders with `hold_reason = 'paused'` are the owner's own switch (`zinc_ordering_enabled` = 0) and aren't listed. Funds, setup and address holds are the buyer's to fix and appear only near the deadline or in the weekly counts.
@@ -57,8 +58,8 @@ Every line carries ids only (round, order, user) and a link to its runbook secti
 | AC-7 | With `round_fanout_enabled` = 1, two queue jobs fail and one idea run gets a 402 | The health job runs on a Monday | The heartbeat's `rounds_failed` includes the two jobs (the job route adds them) and the weekly email shows the count; the 402 leads the email as "Out of AI credit", read from its `idea_runs` row (plan review) |
 | AC-8 | The database can't be reached (a client whose queries throw) | The health job runs | It retries once, then sends "The database can't be reached", reading no settings; the email holds no error message, only `errorFields` |
 | AC-9 | `idea_engine_enabled` = 1 and `AI_GATEWAY_API_KEY` unset | The health job runs | The email says ideas can't run on this environment |
-| AC-10 | The AI Gateway answers an idea run's call with 402 (`insufficient_funds` or `quota_for_entity_exceeded`) | A round's idea run happens on the tick | The run isn't counted against the round's runs (only when the 402 came before any AI reply was paid for; a 402 after that ends the run as `failed`, which counts, T68, plan review), no email goes to the buyer, the round stays `generating` (released, not stuck) and a later tick tries again, no other idea run starts that tick, and `ideas.no_credit {alert: true}` is logged; the run's `idea_runs` row has `outcome = 'no_credit'` (plan review) |
-| AC-11 | An idea run refused with `no_credit` in the last day, or the credits balance is 0 (plan review) | The health job runs | The email leads with "Out of AI credit: ideas are paused", listing open rounds waiting on ideas within `hold_final_days` of their ship-by deadline (owner, plan review) |
+| AC-10 | The AI Gateway answers an idea run's call with 402 (`insufficient_funds` or `quota_for_entity_exceeded`) | A round's idea run happens on the tick | The run isn't counted against the round's runs (only when the 402 came before any AI reply was paid for; a 402 after that ends the run as `failed`, which counts, T68, plan review), no email goes to the buyer, the round stays `generating` (released, not stuck) and a later tick tries again; with fan-out off no other idea run starts that tick, while with fan-out on each due round's job tries its own run, and `idea_round_runs_per_day` bounds both (final review); and `ideas.no_credit {alert: true}` is logged; the run's `idea_runs` row has `outcome = 'no_credit'` (plan review) |
+| AC-11 | An idea run refused with `no_credit` in the last day, or the credits balance is at or below 0 while ideas or capture extraction are on (plan review, final review) | The health job runs | The email leads with "Out of AI credit: ideas are paused", listing open rounds waiting on ideas within `hold_final_days` of their ship-by deadline (owner, plan review) |
 | AC-12 | AI credit balance below `ai_credit_low_cents` | The health job runs | The email says AI credit is low |
 | AC-13 | The health route is called without the cron secret | — | 401, nothing read or sent, no heartbeat touched |
 | AC-14 | `health_email_enabled` = 0 | The health job runs | It still does the keepalive query, sends nothing, logs `health.checked {result: "off"}` |
@@ -78,7 +79,7 @@ Every line carries ids only (round, order, user) and a link to its runbook secti
 |---|---|---|
 | AI spend cap and alerts | Vercel AI Gateway team budget: $100 a month, alerts at 50/75/100%, refuses at 100% | Already set; revises §7's $60 and 50/80% (owner, 2026-11-23) |
 | Auto top-up | Off for now; revisit with many users | Manual top-ups at ~$5–15 a month; the low-credit warning gives time (owner, 2026-11-23) |
-| Out of credit during an idea run | A new `AiError` kind `no_credit` for 402; the run is uncounted, like `ideas.not_configured`, only when no AI reply in it was paid for (otherwise `failed`, counted: T68, plan review); the tick starts no further run; no buyer email | Our outage must not burn buyers' runs or send a false "no ideas" (§5.1, customers always informed) **[Claude's call]** |
+| Out of credit during an idea run | A new `AiError` kind `no_credit` for 402; the run is uncounted, like `ideas.not_configured`, only when no AI reply in it was paid for (otherwise `failed`, counted: T68, plan review); the tick starts no further run with fan-out off, each job tries once with fan-out on, and the daily guard bounds both; no buyer email, but a round whose latest run was `no_credit` gets the "skipped" email at its deadline (owner, final review) | Our outage must not burn buyers' runs or send a false "no ideas" (§5.1, customers always informed) **[Claude's call]** |
 | Where problems come from | Database state and vendor balances, not logs | Hobby keeps runtime logs about an hour; drains need Pro **[Claude's call]** |
 | Scheduled job | No new cron: the keepalive cron becomes the health job (`/api/health`), moved to 14:00 UTC; its first query is the keepalive (T22) | E1: no new scheduled job; 14:00 clears the tick's anywhere-in-the-hour start and 300 s run on Hobby (T87) **[Claude's call]** |
 | Tick heartbeat | A one-row-per-tick table `concierge.tick_heartbeats` (service role only): `day`, `started_at`, `finished_at`, `result`, `rounds_failed`, `fanout_failed`; written only after the secret check. `no_credit` runs are read from `idea_runs`, not copied here (plan review) | "Started" alone misses a tick that fails every day (T87) **[Claude's call]** |
@@ -88,7 +89,7 @@ Every line carries ids only (round, order, user) and a link to its runbook secti
 ## Principles check
 
 - **Simplest version?** One route (the keepalive's replacement), one module of read-only checks, one email template, one small table. Cut: app-side spend tracking (Vercel does it), an alerts table, a dashboard, per-buyer balances.
-- **Hard-coded values?** New settings: `health_email_enabled` (1), `health_all_clear_weekday` (1, Monday), `ai_credit_low_cents` (500), `zinc_app_balance_low_cents` (500). Reused: `round_max_attempts`, `placing_stale_minutes`, `hold_final_days`. The cron time is in `vercel.json`. The $100 budget lives in Vercel only.
+- **Hard-coded values?** New settings: `health_email_enabled` (1), `health_all_clear_weekday` (1, Monday), `ai_credit_low_cents` (500), `zinc_app_balance_low_cents` (500), `health_vendor_timeout_ms` (10000). Reused: `round_max_attempts`, `placing_stale_minutes`, `hold_final_days`, `idea_engine_enabled`, `capture_extraction_enabled`, `amazon_paste_lookup_enabled`. The cron time is in `vercel.json`. The $100 budget lives in Vercel only.
 - **Product boundaries?** Concierge module only.
 - **New personal data?** None. The heartbeat holds counts and times; the email holds ids and counts.
 - **Docs and decisions:** T87 in `design/decisions.md`, revising T22, T24 and T68, with a "revised by T87" note on each (plan review); design §5.1 (heartbeat, `no_credit`), §7 (cap is the Vercel budget, $100, 50/75/100%), §9 (monitoring), §10 (cap figure); operations.md (Health email section with a runbook per line, AI credit runbook, `ideas.no_credit` in Alerts, log retention note, keepalive replaced); the round engine page; the database map (`pnpm db:map`, publish after merge); the screens and emails page (new email).
@@ -98,7 +99,7 @@ Every line carries ids only (round, order, user) and a link to its runbook secti
 **Revised 2026-11-23** after the plan's adversarial review (`B1`, `S1`–`S9`, `N1`–`N5`) and the owner's two rulings: while AI credit is out, rounds waiting on ideas near their deadline are listed; a single self-healing round failure stays out of the daily email (T76 stands).
 
 **Architecture:**
-- **The database answers "what's wrong".** One migration adds `concierge.tick_heartbeats` and three service-role functions that write it, plus four settings. It also adds a `no_credit` run outcome that no run-counting rule counts (`round_idea_state`, `runs_after_rejection`, and the store's last-run read). `concierge.health_snapshot(p_now)` returns every flagged id and weekly count as one JSON value. pgTAP pins its rules.
+- **The database answers "what's wrong".** One migration adds `concierge.tick_heartbeats` and three service-role functions that write it, plus five settings. It also adds a `no_credit` run outcome that no run-counting rule counts (`round_idea_state`, `runs_after_rejection`, and the store's last-run read). `concierge.health_snapshot(p_now)` returns every flagged id and weekly count as one JSON value. pgTAP pins its rules.
 - **One module, `modules/concierge/health/`,** turns that snapshot plus two vendor balances into a report (pure), renders it through `renderEmail` (pure) and runs the job (`runHealthCheck`, with every client passed in, E3). `/api/health` replaces `/api/keepalive`: the same secret check and the same daily cron slot, moved to 14:00 UTC.
 - **The tick writes its heartbeat at the route** (`handleTick`), after the secret check. Queue jobs add their failures through `handleJob`'s new `onFailed` callback, because with fan-out on they run outside the tick's function call. `no_credit` runs are never copied: the snapshot reads them from `idea_runs`.
 
@@ -112,7 +113,7 @@ Every line carries ids only (round, order, user) and a link to its runbook secti
 
 ### Global constraints
 
-- **Settings, not constants (T23).** New rows, each with a description: `health_email_enabled` = 1, `health_all_clear_weekday` = 1 (Monday, in `Date.getUTCDay()` numbering), `ai_credit_low_cents` = 500 (a $5 warning before ideas pause), `zinc_app_balance_low_cents` = 500. Reused: `round_max_attempts`, `placing_stale_minutes`, `hold_final_days`, `idea_engine_enabled`, `capture_extraction_enabled`, `zinc_timeout_ms`. The cron time lives in `vercel.json`. True constants: "the last day" (one day between daily checks) and "this week" (7 days). If a setting can't be read, the check fails loudly (`health.checked {result: "failed"}`). There's no fallback value.
+- **Settings, not constants (T23).** New rows, each with a description: `health_email_enabled` = 1, `health_all_clear_weekday` = 1 (Monday, in `Date.getUTCDay()` numbering), `ai_credit_low_cents` = 500 (a $5 warning before ideas pause), `zinc_app_balance_low_cents` = 500, `health_vendor_timeout_ms` = 10000 (each vendor balance call's limit, inside the route's 60 s). Reused: `round_max_attempts`, `placing_stale_minutes`, `hold_final_days`, `idea_engine_enabled`, `capture_extraction_enabled`, `amazon_paste_lookup_enabled`. The cron time lives in `vercel.json`. True constants: "the last day" (one day between daily checks) and "this week" (7 days). If a setting can't be read, the check fails loudly (`health.checked {result: "failed"}`). There's no fallback value.
 - **"Open" round.** `closed_at is null` **and** `status not in ('skipped', 'complete', 'delivered')`. `closed_at` is only set on the money path (cancel_held, a removed person or occasion), so a round that `finish_round` moved to `skipped` keeps it null. Written once, in `health_snapshot`.
 - **"Today"** is the UTC day of the job's `now`, as on the tick (`dayOf`). The heartbeat's `day` and its times come from the tick's own clock, so `?now=` off production moves them, as it moves the tick. That includes rows a job creates (N3).
 - **Ids only (E6, T42).** The snapshot, the events and the email hold round, order and user ids, counts, cents, reasons and dates. No names, emails, addresses, gift titles, notes or vendor error text. Errors are logged through `errorFields`.
@@ -162,7 +163,7 @@ Every line carries ids only (round, order, user) and a link to its runbook secti
   - Upserts the day's row, with `started_at = p_at` if it's new (N3).
   - Adds the count in one statement, so concurrent jobs don't lose one.
 - All three: `security definer`, `search_path = ''`, execute for service_role only.
-- The four settings (Global constraints).
+- The five settings (Global constraints).
 - `idea_runs.outcome`'s check gains `'no_credit'` (drop and re-add `idea_runs_outcome_check`).
 - `round_idea_state` (from `20261117100000_idea_engine.sql`) and `runs_after_rejection` (from `20261122160000_approval.sql`) are re-created. Their lateral run subquery filters `u.outcome is distinct from 'no_credit'`, so both `runs` and `last_started` skip it (B1).
   - `start_idea_run` needs no change: it asks `round_idea_state`.
@@ -207,7 +208,7 @@ Each rule is written once, here:
 - **`no_credit_runs`:** `idea_runs` with `outcome = 'no_credit'` and `started_at >= p_now - interval '1 day'` (S2).
 - **`stuck_rounds`:** open, `attempts >= round_max_attempts`, and not a `needs_attention` round with `attention_reason = 'unconfirmed'` (that one shows under `unconfirmed`). A SQL comment says why this is `>=` while the engine's `round_stuck` uses `>`: the engine counts the claim it's making, and this reads the stored value between ticks, so both mean the same number of failed claims (N1).
 - **`unconfirmed`:** `orders.status = 'unconfirmed'`.
-- **`placing_stale`:** `status = 'placing'`, `created_at` before today's `started_at` (with no row today, any), and `created_at < p_now - placing_stale_minutes`.
+- **`placing_stale`:** `status = 'placing'`, `updated_at` before today's `started_at` (with no row today, any), and `updated_at < p_now - placing_stale_minutes`. Aged by `updated_at`, the last time the order moved, not `created_at` (Task 2 review).
 - **`held_zinc`:** `status = 'held'` and `hold_reason in ('retry', 'not_allowed')`.
 - **`deadline_close`:** open, and either `status = 'needs_address'` (reason `address`) or `needs_attention` with `attention_reason in ('funds', 'setup', 'address')`, and `ship_by_deadline <= p_now's UTC day + hold_final_days`.
 - **`ideas_waiting`** (owner ruling a): open, `status in ('scheduled', 'generating')`, no idea with `status <> 'rejected'`, and within `hold_final_days` of `ship_by_deadline`.
@@ -357,7 +358,7 @@ Needs only Task 2's snapshot shape (above). It runs alongside Tasks 3 and 4.
 **Produces:**
 - `store.ts`: `type HealthSnapshot` (camelCase, with Task 2's fields) and `readSnapshot(db, now: Date): Promise<HealthSnapshot>`, validated with zod (E4).
 - `report.ts`:
-  - `type HealthSettings = { allClearWeekday: number; aiCreditLowCents: number; zincAppBalanceLowCents: number; ideaEngineEnabled: boolean; captureExtractionEnabled: boolean }`.
+  - `type HealthSettings = { allClearWeekday: number; aiCreditLowCents: number; zincAppBalanceLowCents: number; ideaEngineEnabled: boolean; captureExtractionEnabled: boolean; amazonPasteLookupEnabled: boolean }`.
   - `type Vendors = { aiCreditCents: number | null; zincAppBalanceCents: number | null; aiConfigured: boolean; zincConfigured: boolean }`. Null means not checked, or the call failed.
   - `type ProblemKind = "db_down" | "tick_missed" | "no_credit" | "tick_failed" | "stuck_round" | "unconfirmed" | "placing" | "held_zinc" | "ideas_not_configured" | "credit_low" | "zinc_low" | "deadline_close"` and `type Problem = { kind: ProblemKind; ids?: {…}; detail?: Record<string, number | string>; waiting?: HealthSnapshot["ideasWaiting"] }`.
   - `healthReport(snap: HealthSnapshot | null, vendors: Vendors | null, s: HealthSettings | null, now: Date): { problems: Problem[]; weekly: HealthSnapshot["weekly"] | null; isWeekly: boolean }`. The rules:
@@ -365,8 +366,9 @@ Needs only Task 2's snapshot shape (above). It runs alongside Tasks 3 and 4.
     - **Order:** `db_down`, `tick_missed`, `no_credit`, `tick_failed`, then the order of the spec's table.
     - **`tick_missed`:** `today` is null, or `today.finishedAt` is null. A row that started and never finished is a killed tick. Its detail carries `lastOkFinishedAt`. The round and order checks always run.
     - **`tick_failed`:** `today.result === "failed"`, or `today.fanoutFailed > 0`. `roundsFailed` alone isn't a problem (owner ruling b, T76); it goes in `weekly`.
-    - **`no_credit`:** `noCreditRuns > 0`, or `aiCreditCents === 0`. It carries `ideasWaiting` (owner ruling a).
-    - **`credit_low`:** `0 < aiCreditCents < aiCreditLowCents`.
+    - **`no_credit`:** `noCreditRuns > 0`, or `aiCreditCents <= 0` while ideas or capture extraction are on. It carries `ideasWaiting` (owner ruling a).
+    - **`credit_low`:** `0 < aiCreditCents < aiCreditLowCents`, while ideas or capture extraction are on.
+    - **`zinc_low`:** `zincAppBalanceCents < zincAppBalanceLowCents`, while ideas or Amazon paste lookups are on (final review).
     - **`ideas_not_configured`:** `ideaEngineEnabled` and (`!aiConfigured` or `!zincConfigured`), or `captureExtractionEnabled` and `!aiConfigured`.
     - **`isWeekly`:** `now.getUTCDay() === allClearWeekday`.
 - `email.ts`:
@@ -422,19 +424,20 @@ Needs Tasks 2–5.
 - Deleted: `app/api/keepalive/route.ts`, `lib/keepalive.ts`, `test/keepalive.test.ts`.
 
 **Produces:**
-- `type HealthDeps = { db: SupabaseClient<Database>; now: Date; send: (e: OutgoingEmail) => Promise<SendResult>; aiCredits: (() => Promise<number>) | null; zincBalance: (() => Promise<number>) | null; aiConfigured: boolean; zincConfigured: boolean; runbookBase: string }`.
+- `type HealthDeps = { db: SupabaseClient<Database>; now: Date; send: (e: OutgoingEmail) => Promise<SendResult>; aiCredits: ((timeoutMs: number) => Promise<number>) | null; zincBalance: ((timeoutMs: number) => Promise<number>) | null; runbookBase: string }`. A null vendor function means that vendor isn't set up here; each call gets `health_vendor_timeout_ms`.
 - `runHealthCheck(deps: HealthDeps): Promise<{ result: "sent" | "quiet" | "off" | "db_down" | "send_failed" | "failed"; problems: number }>`, in order:
   1. Ping the database (`select day from concierge.tick_heartbeats limit 1`), once more if that fails. If both fail, send the `db_down` email without reading any setting.
   2. Read `health_email_enabled`. If it's 0, the result is `off` and nothing else happens.
   3. Read the settings, the snapshot and both vendor balances. A vendor call that fails logs `health.vendor_check_failed {vendor, ...errorFields}` and passes null.
   4. Send when there are problems, or when it's the weekly day.
   - It always logs `health.checked {result, problems, sent, weekly}`. A refused send logs `health.send_failed {alert: true}`.
+  - A step that throws ends `failed`: it sends the fixed "The health check couldn't run" email with the stage (`settings`, `snapshot`, `vendors`) and logs it as `stage` (final review). `sendCheckFailed(deps, stage)` does the sending; `handleHealth` calls it with `wiring` when building the deps throws.
 - `healthWiring(now: Date, env: Env): HealthDeps`:
   - The admin client.
   - `send` from `sendEmail`, with `RESEND_API_KEY`.
   - `aiCredits` from `gatewayCredits`, when `AI_GATEWAY_BASE` and `AI_GATEWAY_API_KEY` are both set.
   - `zincBalance` from `getWallet`, with `ZINC_API_BASE`, `ZINC_API_KEY` and `zinc_timeout_ms`, when both env vars are set.
-- `handleHealth(request: Request, env: { cronSecret?: string; vercelEnv?: string }, run: (now: Date) => Promise<unknown>): Promise<Response>`:
+- `handleHealth(request: Request, env: { cronSecret?: string; vercelEnv?: string }, run: (now: Date) => Promise<unknown>, tellOwner: () => Promise<boolean>): Promise<Response>`:
   - 401 without the bearer, and `run` isn't called.
   - `?now=` is honored off production only, through `isTestClock`.
   - Answers 200 or 500.
@@ -515,7 +518,7 @@ Needs Tasks 2–5.
 
 ## Before coding: consistency check
 
-- [ ] Every acceptance criterion maps to a task and a test:
+- [x] Every acceptance criterion maps to a task and a test:
 
 | Criterion | Tasks |
 |---|---|
@@ -533,7 +536,7 @@ Needs Tasks 2–5.
 | AC-15 | 2, 6 |
 | AC-16 | 4 |
 
-- [ ] Every task traces back to a story or criterion (nothing extra).
+- [x] Every task traces back to a story or criterion (nothing extra).
 - [x] Where each plan-review finding is fixed:
   - **B1:** Tasks 1 and 3: the lateral filter, `readIdeaState`, and the extra-run tests.
   - **S1:** Tasks 3 and 4: `aiPaid`, and the pass stopping.
@@ -547,7 +550,7 @@ Needs Tasks 2–5.
   - **S9:** Task 3: `RUN_ENDS` and the code-columns test.
   - **N1:** Task 2's SQL comment. **N2:** Task 1's grant. **N3:** `add_tick_counts`' `p_at`. **N4:** `start_tick` resets the counts. **N5:** `sampleEmails`.
 - [x] No open questions are left: owner rulings (a) and (b), 2026-11-23.
-- [ ] Adversarial review of the spec done, and of the plan (done); a re-review of this revision is still to do.
+- [x] Adversarial review of the spec, the plan, each task, and the whole branch (final review and its fix wave re-reviewed), 2026-11-23.
 
 ## Done: evidence on the ticket (T44)
 

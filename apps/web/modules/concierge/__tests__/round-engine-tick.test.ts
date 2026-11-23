@@ -207,6 +207,14 @@ describe("runTick", () => {
       "open_person",
     ]);
   });
+
+  it("the fan-out summary carries fanoutFailed", async () => {
+    const h = harness();
+    h.store.settings.set("round_fanout_enabled", 1);
+    const sendJobs = vi.fn(async () => ({ sent: 0, failed: 1 }));
+    const summary = await runTick({ ...h.deps(at("2027-02-11")), sendJobs });
+    expect(summary).toEqual({ enabled: true, created: 0, advanced: 0, failed: 1, fanoutFailed: 1 });
+  });
 });
 
 describe("an address arriving", () => {

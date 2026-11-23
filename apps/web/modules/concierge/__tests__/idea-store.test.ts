@@ -218,6 +218,40 @@ describe.skipIf(!dbUp)("createSupabaseIdeaStore", () => {
     expect(run.finished_at).not.toBeNull();
   });
 
+  it("finish saves outcome no_credit and round_idea_state still has runs left", async () => {
+    const buyer = await newUser("Jim");
+    const person = await newPerson(buyer.id, "Dad");
+    await addFact(buyer.id, person, "Loves fishing");
+    const occasion = (
+      await pg.query("insert into concierge.occasions (user_id, person_id, kind) values ($1, $2, 'christmas') returning id", [buyer.id, person])
+    ).rows[0].id;
+    const roundId = (
+      await pg.query(
+        `insert into concierge.gift_rounds (user_id, person_id, occasion_id, occasion_year, occasion_date, ship_by_deadline, status, next_action_at)
+         values ($1, $2, $3, 2030, current_date + 40, current_date + 30, 'generating', now()) returning id`,
+        [buyer.id, person, occasion],
+      )
+    ).rows[0].id as string;
+    const max = Number((await pg.query("select concierge.setting_int('idea_round_runs_max') as n")).rows[0].n);
+    // Every counted run but the last is used, so one more counted run would spend them.
+    for (let i = 0; i < max - 1; i++) {
+      await pg.query(
+        "insert into concierge.idea_runs (user_id, person_id, round_id, started_at, finished_at, outcome) values ($1, $2, $3, now() - interval '1 day', now() - interval '1 day', 'none')",
+        [buyer.id, person, roundId],
+      );
+    }
+
+    const started = await store().start({ userId: buyer.id, personId: person, roundId }, new Date());
+    if (!("runId" in started)) throw new Error(`refused: ${started.refused}`);
+    await store().finish(started.runId, "no_credit", 0);
+
+    const run = (await pg.query("select outcome, finished_at from concierge.idea_runs where id = $1", [started.runId])).rows[0];
+    expect(run.outcome).toBe("no_credit");
+    expect(run.finished_at).not.toBeNull();
+    const state = (await pg.query("select runs_left from concierge.round_idea_state($1)", [roundId])).rows[0];
+    expect(state.runs_left).toBe(true);
+  });
+
   it("excluded comes from excluded_products", async () => {
     const buyer = await newUser("Jim");
     const person = await newPerson(buyer.id, "Dad");
