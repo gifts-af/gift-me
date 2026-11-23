@@ -1,7 +1,7 @@
 import { buyingWiring } from "@/lib/wiring";
 import { appSettingInt } from "@/lib/app-settings";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { runTick, tickHeartbeat } from "@/modules/concierge";
+import { runTick, tickHeartbeat, type TickHeartbeat } from "@/modules/concierge";
 import { removeDeletedPhotos } from "@/modules/lists";
 import { queueSendJobs } from "../queue";
 import { handleTick, isTestClock } from "./tick";
@@ -31,6 +31,17 @@ export async function GET(request: Request) {
       const admin = createAdminClient();
       return removeDeletedPhotos(admin, (key) => appSettingInt(key, admin));
     },
-    tickHeartbeat(createAdminClient()),
+    lazyHeartbeat(),
   );
+}
+
+// Built on first use, after handleTick's secret check, so a call without the secret never needs
+// the admin client (and can't fail before the 401 when its env is missing).
+function lazyHeartbeat(): TickHeartbeat {
+  let made: TickHeartbeat | null = null;
+  const get = () => (made ??= tickHeartbeat(createAdminClient()));
+  return {
+    started: (day, at) => get().started(day, at),
+    finished: (day, at, result, counts) => get().finished(day, at, result, counts),
+  };
 }

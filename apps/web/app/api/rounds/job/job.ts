@@ -47,11 +47,11 @@ export async function handleJob(
   const message: JobMessage & { sig?: string } = { ...parsed.data };
   delete message.sig; // the engine gets the message without it
   const at = message.now && isTestClock(env.vercelEnv) ? new Date(message.now) : new Date();
+  const who: Record<string, string> = message.kind === "round" ? { round_id: message.roundId } : { user_id: message.userId };
   let result: JobResult;
   try {
     result = await run(message, at);
   } catch (err) {
-    const who: Record<string, string> = message.kind === "round" ? { round_id: message.roundId } : { user_id: message.userId };
     logEvent("round_job", { ...errorFields(err), kind: message.kind, result: "failed", ...who, delivery_count: meta.deliveryCount, alert: true });
     throw err;
   }
@@ -59,7 +59,7 @@ export async function handleJob(
     try {
       await onFailed(message, at);
     } catch (err) {
-      logEvent("tick.heartbeat_failed", { ...errorFields(err), alert: true });
+      logEvent("tick.heartbeat_failed", { ...errorFields(err), ...who, alert: true });
     }
   }
   return result;

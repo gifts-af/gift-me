@@ -177,7 +177,7 @@ async function afterIdeaRun(round: ClaimedRound, outcome: IdeaOutcome, deps: Eng
     case "off":
       return release();
     case "no_credit":
-      // No AI was bought, so the round waits where it is, still due, until the credit is topped up (T68).
+      // No AI was bought, so the round waits where it is, still due, until the credit is topped up (T87).
       logEvent("ideas.no_credit", { round_id: round.id, user_id: round.userId, alert: true });
       return release();
     case "refused":

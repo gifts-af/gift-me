@@ -169,7 +169,7 @@ describe("handleJob's onFailed", () => {
     const onFailed = vi.fn().mockRejectedValue(Object.assign(new Error("Zelda at 1 Main St"), { code: "57P01" }));
     expect(await handleJob(msg(), { deliveryCount: 1 }, ENV, vi.fn().mockResolvedValue("failed"), onFailed)).toBe("failed");
     const failed = events(log).filter((e) => e.event === "tick.heartbeat_failed");
-    expect(failed).toEqual([expect.objectContaining({ alert: true, code: "57P01" })]);
+    expect(failed).toEqual([expect.objectContaining({ alert: true, code: "57P01", round_id: U })]);
     expect(JSON.stringify(failed)).not.toMatch(/Zelda|Main St/);
   });
 
