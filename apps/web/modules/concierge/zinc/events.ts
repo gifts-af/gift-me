@@ -60,6 +60,9 @@ export async function handleZincWebhook(
   try {
     if (event.event === "order.placed" || event.event === "order.failed") {
       await settle(userId, event, deps);
+    } else if (event.event === "order.cancelled") {
+      // Never behind order_tracking_enabled: money came back, so the buyer is always told.
+      await storeCancelled(userId, event, deps);
     } else if (TRACKING_EVENTS.has(event.event)) {
       await handleTrackingEvent(userId, event, deps);
     } else if (event.event === "wallet.auto_topup.succeeded") {
@@ -148,6 +151,59 @@ export function failureType(errorType: string | undefined): string {
   if (errorType === "max_price_exceeded") return "price_up";
   if (errorType === "out_of_stock" || errorType === "invalid_shipping_address") return errorType;
   return "failed";
+}
+
+/**
+ * The store cancelled after placing, and Zinc refunded the wallet (store_cancel_order). Before
+ * the ship-by date the buyer is told now through the failure path, with the fix page; on or
+ * after it nothing is sent here, and the daily news tells it. A cancel that leaves every other
+ * gift delivered sends the delivered email. Today is the UTC day of `now`, as in the engine.
+ */
+async function storeCancelled(userId: string, event: ZincEvent, deps: Deps): Promise<void> {
+  if (!event.orderId) {
+    logEvent("zinc.webhook_unmatched", { user_id: userId, reason: "no_order_id" });
+    return;
+  }
+  const ourId = await findOurOrder(userId, event.orderId, deps);
+  if (!ourId) {
+    logEvent("zinc.webhook_unmatched", { user_id: userId, provider_order_id: event.orderId, alert: true });
+    return;
+  }
+  const concierge = deps.db.schema("concierge");
+  const found = await concierge.rpc("order_by_reference", { p_user_id: userId, p_order_id: ourId });
+  if (found.error) throw new Error("Looking up the order failed.");
+  const order = found.data?.[0];
+  const ids = { user_id: userId, order_id: order?.id ?? null, zinc_event: event.event };
+  if (!order) {
+    logEvent("tracking.event_ignored", { ...ids, status: null });
+    return;
+  }
+  if (order.provider_order_id && order.provider_order_id !== event.orderId) {
+    logEvent("zinc.webhook_provider_id_mismatch", { user_id: userId, order_id: order.id });
+    return;
+  }
+  const { data, error } = await concierge.rpc("store_cancel_order", {
+    p_user_id: userId,
+    p_order_id: order.id,
+    p_today: deps.now.toISOString().slice(0, 10),
+  });
+  if (error) throw new Error(`Cancelling the order failed (${error.code}).`);
+  const result = data?.[0];
+  if (!result?.applied) {
+    const now = await concierge.rpc("order_by_reference", { p_user_id: userId, p_order_id: order.id });
+    logEvent("tracking.event_ignored", { ...ids, status: now.data?.[0]?.status ?? order.status });
+    return;
+  }
+  logEvent("tracking.store_cancelled", { user_id: userId, order_id: order.id, round_id: order.round_id, round_status: result.round_status });
+  const tell =
+    result.round_status === "needs_attention" ? deps.advanceRound : result.round_status === "delivered" ? deps.tellDelivered : undefined;
+  if (!tell) return;
+  try {
+    await tell(order.round_id);
+  } catch (e) {
+    // The tick tells them instead; Zinc mustn't retry a cancel that's done.
+    logEvent("order.hold_notice_deferred", { user_id: userId, round_id: order.round_id, ...errorFields(e) });
+  }
 }
 
 async function settle(userId: string, event: ZincEvent, deps: Deps): Promise<void> {

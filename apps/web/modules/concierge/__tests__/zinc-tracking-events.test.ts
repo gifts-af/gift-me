@@ -393,6 +393,125 @@ describe.skipIf(!dbUp)("Zinc tracking events (real local database, fake Zinc)", 
     expect(await orderRow(orderId)).toEqual(before);
   });
 
+  // ─── Store cancellations: always handled, whatever the tracking switch says ───
+
+  /** Another gift on the same round, placed with Zinc as `zincId`. */
+  async function secondOrder(a: Account, roundId: string, zincId: string) {
+    const idea = await pg.query(
+      "insert into concierge.gift_ideas (user_id, round_id, title, price_cents, est_total_cents, rank) values ($1, $2, 'Apron', 3000, 3500, 2) returning id",
+      [a.userId, roundId],
+    );
+    const order = await pg.query(
+      `insert into concierge.orders (user_id, round_id, idea_id, funding_mode, max_price_cents, fee_cents, status, provider_order_id, ship_to, ship_city, ship_state)
+       values ($1, $2, $3, 'zinc_wallet', 3500, 100, 'placing', $4, 'recipient', 'Dayton', 'OH') returning id`,
+      [a.userId, roundId, idea.rows[0].id, zincId],
+    );
+    await pg.query("select concierge.settle_order($1, $2, 'placed', 'failed', '{}'::jsonb)", [a.userId, order.rows[0].id]);
+    return order.rows[0].id as string;
+  }
+  const cancelled = (zincId: string) => event("order.cancelled", zincId, { refund_amount: 4500 });
+  const failureRow = async (id: string) =>
+    (await pg.query("select status, failure_type, resolved, failed_after_close, placed_at is not null as placed from concierge.orders where id = $1", [id])).rows[0];
+
+  it("cancel before ship-by fails the order and tells the buyer through the failure path (AC-8)", async () => {
+    const a = await newAccount();
+    const zincId = randomUUID();
+    const { orderId, roundId } = await newOrder(a, zincId);
+    expect(await send(a, cancelled(zincId))).toEqual({ status: 200 });
+    expect(await failureRow(orderId)).toMatchObject({ status: "failed", failure_type: "store_cancelled", resolved: false });
+    expect(await roundStatus(roundId)).toBe("needs_attention");
+    expect(advanceRound).toHaveBeenCalledTimes(1);
+    expect(advanceRound).toHaveBeenCalledWith(roundId);
+    expect(tellDelivered).not.toHaveBeenCalled();
+  });
+
+  it("cancel is handled with order_tracking_enabled = 0 (AC-15)", async () => {
+    const a = await newAccount();
+    const zincId = randomUUID();
+    const { orderId, roundId } = await newOrder(a, zincId);
+    overrides.order_tracking_enabled = 0;
+    overrides.late_check_enabled = 0;
+    expect(await send(a, cancelled(zincId))).toEqual({ status: 200 });
+    expect(await failureRow(orderId)).toMatchObject({ status: "failed", failure_type: "store_cancelled" });
+    expect(advanceRound).toHaveBeenCalledWith(roundId);
+  });
+
+  it("cancel after ship-by sends nothing now and leaves the order resolved (AC-9)", async () => {
+    const a = await newAccount();
+    const zincId = randomUUID();
+    // The occasion is in 3 days, so the ship-by date has passed.
+    const { orderId, roundId } = await newOrder(a, zincId, "placed", 3);
+    const other = await secondOrder(a, roundId, randomUUID());
+    expect(await send(a, cancelled(zincId))).toEqual({ status: 200 });
+    expect(await failureRow(orderId)).toMatchObject({ status: "failed", failure_type: "store_cancelled", resolved: true, failed_after_close: false });
+    // Another gift is still on its way.
+    expect(await roundStatus(roundId)).toBe("ordered");
+    for (const f of [orderPlaced, advanceRound, tellDelivered, placeHeld]) expect(f).not.toHaveBeenCalled();
+    expect((await failureRow(other)).status).toBe("placed");
+  });
+
+  it("cancel on a delivered order is ignored (AC-10)", async () => {
+    const a = await newAccount();
+    const zincId = randomUUID();
+    const { orderId, roundId } = await newOrder(a, zincId);
+    await send(a, event("order.delivered", zincId));
+    tellDelivered.mockClear();
+    const before = await orderRow(orderId);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      expect(await send(a, cancelled(zincId))).toEqual({ status: 200 });
+      expect(logLines(log, "tracking.event_ignored")).toEqual([
+        expect.objectContaining({ user_id: a.userId, order_id: orderId, zinc_event: "order.cancelled", status: "delivered" }),
+      ]);
+    } finally {
+      log.mockRestore();
+    }
+    expect(await orderRow(orderId)).toEqual(before);
+    expect(await roundStatus(roundId)).toBe("delivered");
+    for (const f of [advanceRound, tellDelivered, orderPlaced]) expect(f).not.toHaveBeenCalled();
+  });
+
+  it("cancel on a placing order settles it placed, then cancels", async () => {
+    const a = await newAccount();
+    const zincId = randomUUID();
+    const { orderId, roundId } = await newOrder(a, zincId, "placing");
+    expect(await send(a, cancelled(zincId))).toEqual({ status: 200 });
+    expect(await failureRow(orderId)).toMatchObject({ status: "failed", failure_type: "store_cancelled", placed: true });
+    expect(advanceRound).toHaveBeenCalledWith(roundId);
+  });
+
+  it("cancel leaving every other gift delivered sends the delivered email", async () => {
+    const a = await newAccount();
+    const zincId = randomUUID();
+    const { orderId, roundId } = await newOrder(a, zincId, "placed", 3);
+    const otherZinc = randomUUID();
+    await secondOrder(a, roundId, otherZinc);
+    await send(a, event("order.delivered", otherZinc));
+    expect(await roundStatus(roundId)).toBe("ordered");
+    expect(tellDelivered).not.toHaveBeenCalled();
+    await send(a, cancelled(zincId));
+    expect((await failureRow(orderId)).status).toBe("failed");
+    expect(await roundStatus(roundId)).toBe("delivered");
+    expect(tellDelivered).toHaveBeenCalledTimes(1);
+    expect(tellDelivered).toHaveBeenCalledWith(roundId);
+    expect(advanceRound).not.toHaveBeenCalled();
+  });
+
+  it("a cancel's logs carry ids only", async () => {
+    const a = await newAccount();
+    const zincId = randomUUID();
+    const { orderId, roundId } = await newOrder(a, zincId);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      await send(a, cancelled(zincId));
+      expect(logLines(log, "tracking.store_cancelled")).toEqual([
+        { event: "tracking.store_cancelled", at: expect.any(String), user_id: a.userId, order_id: orderId, round_id: roundId, round_status: "needs_attention" },
+      ]);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it("logs tracking.order_updated with ids only", async () => {
     const a = await newAccount();
     const zincId = randomUUID();

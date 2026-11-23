@@ -88,6 +88,10 @@ export type RoundOrder = {
   failedAfterClose: boolean;
   maxPriceCents: number;
   feeCents: number;
+  /** What Zinc charged, once placed; null before then or when Zinc didn't say. */
+  totalCents: number | null;
+  /** The retailer's name, as stored ("walmart"); null when unknown. */
+  store: string | null;
 };
 
 /** What the round's emails say. Read with the service role; never logged. */
@@ -497,7 +501,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
           .order("rank"),
         concierge
           .from("orders")
-          .select("id, idea_id, status, hold_reason, failure_type, resolved, failed_at, failed_after_close, max_price_cents, fee_cents, ship_city, created_at, gift_ideas(title)")
+          .select("id, idea_id, status, hold_reason, failure_type, resolved, failed_at, failed_after_close, max_price_cents, fee_cents, total_cents, ship_city, created_at, gift_ideas(title, retailer)")
           .eq("round_id", roundId)
           .order("created_at")
           .order("id"),
@@ -567,6 +571,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
           id: o.id,
           ideaId: o.idea_id,
           title: (o.gift_ideas as { title: string } | null)?.title ?? "gift",
+          store: (o.gift_ideas as { retailer: string | null } | null)?.retailer ?? null,
           shipCity: o.ship_city,
           status: o.status,
           holdReason: o.hold_reason,
@@ -576,6 +581,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
           failedAfterClose: o.failed_after_close,
           maxPriceCents: o.max_price_cents,
           feeCents: o.fee_cents,
+          totalCents: o.total_cents,
         })),
         personRemoved: p.deleted_at !== null,
         // Closed on a day before its ship-by day: not by the deadline.

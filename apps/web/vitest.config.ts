@@ -26,6 +26,7 @@ const LOCAL_DB_TESTS = [
   "modules/concierge/__tests__/round-engine-held-address.test.ts",
   "modules/concierge/__tests__/round-engine-held-failures.test.ts",
   "modules/concierge/__tests__/round-engine-held-holds.test.ts",
+  "modules/concierge/__tests__/round-engine-store-cancel.test.ts",
   "modules/concierge/__tests__/zinc-connect.test.ts",
   "modules/concierge/__tests__/zinc-events.test.ts",
   "modules/concierge/__tests__/zinc-tracking-events.test.ts",

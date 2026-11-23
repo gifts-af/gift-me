@@ -3,7 +3,8 @@ import { SAMPLE_DATA, TEMPLATES, type NotificationKind } from "../notify/templat
 
 const kinds = Object.keys(SAMPLE_DATA) as NotificationKind[];
 
-const NO_BUTTON: NotificationKind[] = ["notes_tip", "who_is_this", "notes_not_read", "notes_cant_cancel"];
+// store_cancelled_late: nothing more can ship in time, so there is nothing to tap (ALL-33 mock-up).
+const NO_BUTTON: NotificationKind[] = ["notes_tip", "who_is_this", "notes_not_read", "notes_cant_cancel", "store_cancelled_late"];
 
 /** The Zinc wallet address some emails carry as data rather than a one-time link. */
 function walletUrl(kind: NotificationKind): string[] {
@@ -672,5 +673,39 @@ describe("failure emails link each gift to its own fix page (ALL-29 AC-16)", () 
     const mail = TEMPLATES.price_up(s.data, { open: url });
     expect(mail.html).toContain(`href="${url}"`);
     expect(mail.text).toContain(`Review the gift: ${url}`);
+  });
+});
+
+describe("store_cancelled_late (the store cancelled, too late to ship another)", () => {
+  const s = () => SAMPLE_DATA.store_cancelled_late;
+
+  it("one gift: sorry, the store and the refund, too late, what you can do, what happens next", () => {
+    const mail = TEMPLATES.store_cancelled_late(s().data, s().links);
+    expect(mail.subject).toBe("Sorry, the store cancelled Mom's gift");
+    expect(mail.text).toContain("We're sorry. Walmart cancelled the Le Creuset mug set for Mom's birthday on Saturday, March 14.");
+    expect(mail.text).toContain("The $42.18 is back in your Zinc wallet.");
+    expect(mail.text).toContain("It's too late for us to ship another gift in time.");
+    expect(mail.text).toContain("Get something locally for the day");
+    expect(mail.text).toContain("Or send something a little late");
+    expect(mail.text).toContain("What happens next: nothing more is bought for this birthday, and we'll start on Mom's next occasion as usual.");
+    expect(mail.text).not.toMatch(/couldn't buy|No gift was chosen/);
+  });
+
+  it("drops the store or the amount when it isn't known, rather than inventing it", () => {
+    const mail = TEMPLATES.store_cancelled_late({ ...s().data, gifts: [{ title: "Mug" }] }, s().links);
+    expect(mail.text).toContain("We're sorry. The store cancelled the Mug for Mom's birthday");
+    expect(mail.text).toContain("The money is back in your Zinc wallet.");
+  });
+
+  it("several gifts: one email with a row each", () => {
+    const gifts = [
+      { title: "Mug", store: "Walmart", amountText: "$42.18" },
+      { title: "Apron" },
+    ];
+    const mail = TEMPLATES.store_cancelled_late({ ...s().data, gifts }, s().links);
+    expect(mail.subject).toBe("Sorry, the store cancelled 2 of Mom's gifts");
+    expect(mail.text).toContain("- Mug (Walmart cancelled it. The $42.18 is back in your Zinc wallet.)");
+    expect(mail.text).toContain("- Apron (The store cancelled it. The money is back in your Zinc wallet.)");
+    expect(mail.text).toContain("It's too late for us to ship other gifts in time.");
   });
 });

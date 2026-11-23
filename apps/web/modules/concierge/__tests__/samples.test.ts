@@ -35,6 +35,7 @@ describe("sampleEmails", () => {
       "failed_late-partial",
       "failed_late-several",
       "failed_several",
+      "store_cancelled_late",
       "check_your_address",
       "notes_tip",
       "who_is_this",
@@ -49,8 +50,9 @@ describe("sampleEmails", () => {
   });
 
   it("points every button at the given link, so tapping a sample is harmless", () => {
-    // These are answered by replying, or need nothing back, so they have no links; the all-clear lists no problem to link.
-    const noLinks = ["notes_tip", "notes_not_read", "notes_cant_cancel", "health-weekly-all-clear"];
+    // These are answered by replying, or need nothing back, so they have no links; the all-clear lists no problem to link,
+    // and a late store cancel has nothing left to do in the app.
+    const noLinks = ["notes_tip", "notes_not_read", "notes_cant_cancel", "health-weekly-all-clear", "store_cancelled_late"];
     for (const { name, email } of samples.filter((s) => !noLinks.includes(s.name))) {
       const hrefs = [...email.html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
       expect(hrefs.length, name).toBeGreaterThan(0);

@@ -24,6 +24,8 @@ export type NotificationKind =
   | "failed_late"
   // ALL-116: two or more of a round's gifts failed, told together.
   | "failed_several"
+  // ALL-33: the store cancelled a bought gift, and it's too late to ship another in time.
+  | "store_cancelled_late"
   // ALL-112: to a list owner, whose shared address a store couldn't use. Says nothing of a gift.
   | "check_your_address"
   // ALL-31: emailed notes. The tip, the "Who is this about?" question, and two one-off replies.
@@ -65,6 +67,8 @@ type Failure = OneGift & { orderByText: string };
 /** A failed gift in a summary (ALL-116): what happened, and the link text for what to do now. */
 // `url` is that gift's own fix page (ALL-29).
 export type FailedGift = { title: string; detail: string; action?: string; url: string };
+/** A gift the store cancelled after it was bought (ALL-33). */
+export type CancelledGift = { title: string; store?: string; amountText?: string };
 
 export type TemplateData = {
   test: Record<string, never>;
@@ -125,6 +129,11 @@ export type TemplateData = {
   };
   /** ALL-116: `tried`, how many gifts were ordered in the round. */
   failed_several: Occasion & { tried: number; failed: FailedGift[]; onItsWay?: string[]; orderByText: string };
+  /**
+   * ALL-33: gifts the store cancelled after they were bought, too late to ship another. `store`
+   * and `amountText` (the refund) are left out when unknown, never guessed.
+   */
+  store_cancelled_late: Occasion & { gifts: CancelledGift[] };
   check_your_address: Record<string, never>;
   notes_tip: { personName: string };
   /** `subject`: the note's subject line, empty when it had none; `choices`: one link each, in order. */
@@ -159,6 +168,8 @@ export type TemplateLinks = {
   failed_late: { open: string };
   // `open` is the person's page; each failed gift carries its own fix page in `FailedGift.url`.
   failed_several: { open: string };
+  // Nothing more can ship in time, so there's nothing to tap.
+  store_cancelled_late: Record<string, never>;
   check_your_address: { open: string };
   notes_tip: Record<string, never>;
   // `choice{i}` files the note to `choices[i]`; `someoneElse` is the plain people page.
@@ -605,6 +616,42 @@ export const TEMPLATES: {
     };
   },
 
+  store_cancelled_late: (d) => {
+    const refund = (g: CancelledGift) => `The ${g.amountText ?? "money"} is back in your Zinc wallet.`;
+    if (d.gifts.length === 1) {
+      const [g] = d.gifts;
+      return {
+        subject: `Sorry, the store cancelled ${d.personName}'s gift`,
+        ...renderEmail({
+          heading: `Sorry, the store cancelled ${d.personName}'s gift`,
+          paragraphs: [
+            `We're sorry. ${g.store ?? "The store"} cancelled the ${g.title} for ${d.personName}'s ${d.occasion} on ${d.dateText}.`,
+            refund(g),
+            "It's too late for us to ship another gift in time.",
+          ],
+          rows: [
+            { title: "Get something locally for the day", detail: "A card, flowers or something from a shop nearby." },
+            { title: "Or send something a little late", detail: "Order it yourself from any store." },
+          ],
+          footer: `What happens next: nothing more is bought for this ${d.occasion}, and we'll start on ${d.personName}'s next occasion as usual.`,
+        }),
+      };
+    }
+    const what = `${d.gifts.length} of ${d.personName}'s gifts`;
+    return {
+      subject: `Sorry, the store cancelled ${what}`,
+      ...renderEmail({
+        heading: `Sorry, the store cancelled ${what}`,
+        paragraphs: [
+          `We're sorry. The store cancelled these gifts for ${d.personName}'s ${d.occasion} on ${d.dateText}.`,
+          "It's too late for us to ship other gifts in time. You can get something locally for the day, or order something yourself from any store and send it a little late.",
+        ],
+        rows: d.gifts.map((g) => ({ title: g.title, detail: `${g.store ?? "The store"} cancelled it. ${refund(g)}` })),
+        footer: `What happens next: nothing more is bought for this ${d.occasion}, and we'll start on ${d.personName}'s next occasion as usual.`,
+      }),
+    };
+  },
+
   failed_several: (d, links) => ({
     subject: `Sorry, ${d.failed.length} of ${d.personName}'s ${d.occasion} gifts couldn't be bought`,
     ...renderEmail({
@@ -801,6 +848,10 @@ export const SAMPLE_DATA: {
       orderByText: "Thursday, March 5",
     },
     links: { open: "https://example.com/a/open-token" },
+  },
+  store_cancelled_late: {
+    data: { ...OCC, gifts: [{ title: "Le Creuset mug set", store: "Walmart", amountText: "$42.18" }] },
+    links: {},
   },
   check_your_address: { data: {}, links: { open: "https://example.com/a/open-token" } },
   notes_tip: { data: { personName: "Dad" }, links: {} },

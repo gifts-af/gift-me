@@ -37,6 +37,11 @@ export type StepKey =
   // The round couldn't get gift ideas (ALL-27 AC-9): once, and once more after the extra run.
   | "no_ideas"
   | "no_ideas_again"
+  // Once per round, when every gift arrived (ALL-33).
+  | "delivered"
+  // Once per order (ALL-33): told it may be late, back on time, or that the store cancelled it
+  // too late to ship another.
+  | `${"late" | "ontime" | "cancel_late"}:${string}`
   | RenamedStepKey;
 
 /**

@@ -2,9 +2,9 @@ import { EMAILED_HOLDS, nextAction, type ScheduleSettings, type StepKey } from "
 import { shortDate } from "@/lib/occasion-format";
 import { errorFields, logEvent } from "@/lib/log";
 import { notify, type NotifyResult } from "../notify/notify";
-import { endedAddressReason, type FailedGift } from "../notify/templates";
+import { endedAddressReason, type CancelledGift, type FailedGift } from "../notify/templates";
 import type { ClaimedRound, RoundContext, RoundOrder } from "./store";
-import { chooseBy, fixPath, occasionWord, LIVE_HELD } from "./emails";
+import { chooseBy, fixPath, money, occasionWord, LIVE_HELD } from "./emails";
 import type { EngineDeps } from "./engine";
 import { dayOf, view, type Extra, sendStep, trySend } from "./steps";
 
@@ -118,6 +118,8 @@ async function closeAtDeadline(
   // (gate_held_orders never replaces funds with paused), or the hold says paused.
   const skipStep: StepKey = round.attentionReason === "paused" || orderingPaused ? "missed_on_us" : "skipped";
 
+  // Store cancels still open: a replaced one is resolved, and its replacement speaks for it.
+  const unreplaced = ctx.orders.filter((o) => STORE_CANCELLED(o) && !o.resolved);
   let emailed = false;
   // The email that decides what the buyer hears goes before closing; a refusal keeps the round
   // open for the next look. Past the deadline that means a gift held open: alert the owner (once
@@ -149,6 +151,14 @@ async function closeAtDeadline(
     const partial = { cancelled: held.map((o) => o.title), onItsWay: placed.map((o) => o.title) };
     await before("held_cancelled", { partial });
     emailed = true;
+  } else if (placed.length === 0 && !pending && held.length === 0 && skipStep === "skipped" && unreplaced.length > 0) {
+    // The store cancelled what was bought, and nothing replaced it: say so, not "No gift was
+    // chosen" (owner, 2026-11-23). A refusal keeps the round open for the next look.
+    if ((await tellStoreCancelled(round, ctx, unreplaced, deps)) === "refused") {
+      heldOpen();
+      throw new Error("Sending the deadline's store-cancelled email failed");
+    }
+    emailed = true;
   } else if (placed.length === 0 && !pending) {
     await before(skipStep);
     emailed = true;
@@ -157,7 +167,16 @@ async function closeAtDeadline(
   const status = await deps.store.cancelHeld(round.id);
   // A failure the close found untold (one that arrived while we closed) goes to the late email,
   // which says what happened better than "skipped": send it now rather than at the next tick.
-  const late = (await deps.store.roundContext(round.id)).orders.some((o) => o.status === "failed" && o.failedAfterClose);
+  const closed = await deps.store.roundContext(round.id);
+  const late = closed.orders.some((o) => o.status === "failed" && o.failedAfterClose);
+  // The store cancelled the last gift while we closed (it was placed when we looked): the round
+  // ended skipped for that, so say so rather than "No gift was chosen". Only cancels never told
+  // (no fail:<id>); best effort now the round is closed, and a refusal leaves it to the daily
+  // news, which tells it once.
+  const cancelledNow = status === "skipped" && !emailed && !late && skipStep === "skipped"
+    ? closed.orders.filter((o) => STORE_CANCELLED(o) && !sent.has(`fail:${o.id}`))
+    : [];
+  if (cancelledNow.length > 0) await tellStoreCancelled(round, closed, cancelledNow, deps);
   if (late) {
     try {
       await tellOrdered(round.id, deps);
@@ -168,7 +187,7 @@ async function closeAtDeadline(
   // A placing order failed while we closed (rare), so the round ended skipped after all: the
   // skipped email still goes (its own key, so never twice), best effort now the round is closed,
   // unless the late email just told them what happened.
-  if (status === "skipped" && (!emailed || pending) && !late) {
+  if (status === "skipped" && (!emailed || pending) && !late && cancelledNow.length === 0) {
     if (!(await trySend(round, ctx, skipStep, sent, deps))) logEvent("round_skip_email_failed", { ...ids, alert: true });
   } else if (status === "needs_attention" && !emailed) {
     const after = await deps.store.refresh(round);
@@ -361,9 +380,76 @@ function lateDetail(o: RoundOrder, personName: string): string {
       return `We couldn't use the address ${personName} was sharing.`;
     case "address_rejected":
       return `The store couldn't use the address ${personName} saved.`;
+    case "store_cancelled":
+      return "The store cancelled it, and the money is back in your Zinc wallet.";
     default:
       return "The store couldn't place the order.";
   }
+}
+
+/**
+ * A store-cancelled gift for its emails: the store's name and the refund, each only when known
+ * (what Zinc charged, else the most it could have).
+ */
+function cancelledGift(o: RoundOrder): CancelledGift {
+  const cents = o.totalCents ?? o.maxPriceCents;
+  return {
+    title: o.title,
+    ...(o.store ? { store: o.store.charAt(0).toUpperCase() + o.store.slice(1) } : {}),
+    ...(cents > 0 ? { amountText: money(cents) } : {}),
+  };
+}
+
+const STORE_CANCELLED = (o: RoundOrder) => o.status === "failed" && o.failureType === "store_cancelled";
+
+/**
+ * The store-cancelled email (owner, 2026-11-23), for a round ending skipped because the store
+ * cancelled its gift: said in place of "No gift was chosen", and keyed `cancel_late:<id>` per
+ * gift so the daily news never tells it again. Only the keys this call recorded are its own; a
+ * refusal or an error gives them back. "none": another run told them all.
+ */
+async function tellStoreCancelled(
+  round: ClaimedRound,
+  ctx: RoundContext,
+  cancelled: RoundOrder[],
+  deps: EngineDeps,
+): Promise<"sent" | "none" | "refused"> {
+  const { store } = deps;
+  const ids = { round_id: round.id, user_id: round.userId };
+  const sent = await store.sentSteps(round.id);
+  const fresh: RoundOrder[] = [];
+  let result: NotifyResult;
+  try {
+    for (const o of cancelled.filter((x) => !sent.has(`cancel_late:${x.id}`))) {
+      if (await store.recordSend(round.id, round.userId, `cancel_late:${o.id}`)) fresh.push(o);
+    }
+    if (fresh.length === 0) return "none";
+    result = await notify(
+      {
+        userId: round.userId,
+        roundId: round.id,
+        kind: "store_cancelled_late",
+        data: {
+          personName: ctx.personName,
+          occasion: occasionWord(ctx.occasionKind),
+          dateText: shortDate(ctx.occasionDate),
+          gifts: fresh.map(cancelledGift),
+        },
+        links: {},
+      },
+      deps.notify,
+    );
+  } catch (err) {
+    logEvent("round_store_cancelled_email_failed", { ...ids, ...errorFields(err), alert: true });
+    result = { ok: false, error: "threw" };
+  }
+  if (!result.ok) {
+    for (const o of fresh) await store.forgetSend(round.id, `cancel_late:${o.id}`);
+    if (result.error !== "threw") logEvent("round_store_cancelled_email_failed", { ...ids, alert: true });
+    return "refused";
+  }
+  logEvent("round_store_cancelled_told", { ...ids, count: fresh.length });
+  return "sent";
 }
 
 /** Why a gift failed and what the buyer can do now, for a summary while the round is open. */
@@ -381,6 +467,8 @@ function openRow(o: RoundOrder, personName: string, ownerAsked: boolean, url: st
       return { title: o.title, detail: "The store ran out. Choose another gift.", action: choose, url };
     case "too_late":
       return { title: o.title, detail: "It wouldn't arrive in time anymore. Choose something that ships faster.", action: choose, url };
+    case "store_cancelled":
+      return { title: o.title, detail: `${lateDetail(o, personName)} Choose another gift.`, action: choose, url };
     case "address_withdrawn":
     case "address_rejected": {
       const asked = o.failureType === "address_rejected" && ownerAsked ? ` We'll ask ${personName} to check it, without mentioning a gift.` : "";
@@ -482,6 +570,11 @@ async function sendOpenFailures(
     case "address_withdrawn":
     case "address_rejected": {
       const reason = endedAddressReason(o.failureType, ctx.personName, [o.title], ownerAsked);
+      return notify({ ...base, kind: "needs_attention", data: { ...occasion, reason, orderByText }, links: fix(o) }, deps.notify);
+    }
+    case "store_cancelled": {
+      const g = cancelledGift(o);
+      const reason = `${g.store ?? "the store"} cancelled the ${o.title}, and the ${g.amountText ?? "money"} is back in your Zinc wallet.`;
       return notify({ ...base, kind: "needs_attention", data: { ...occasion, reason, orderByText }, links: fix(o) }, deps.notify);
     }
     default: {

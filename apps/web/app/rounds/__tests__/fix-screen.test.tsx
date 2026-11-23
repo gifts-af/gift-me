@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { zincFeeNotice } from "@gifts-af/core";
 import type { RoundPageIdea, RoundPageOrder } from "@/modules/concierge";
+import { outcomeWords } from "../outcome";
 import { FixScreen, type CheckResult, type FixResult, type FixScreenProps } from "../[id]/fix/[orderId]/fix-screen";
 
 // The fix page (ALL-29 Task 12). The server actions are faked here; the real ones run in the
@@ -179,6 +180,22 @@ describe("FixScreen: other failures", () => {
     await userEvent.click(screen.getByRole("button", { name: "Buy this instead" }));
     expect(replaceAction.mock.calls[0][2].get("ideaId")).not.toBeNull();
     expect(checkPriceAction).not.toHaveBeenCalled();
+  });
+
+  it("fix screen shows the store-cancelled message", async () => {
+    const { replaceAction } = setup({ order: order({ failureType: "store_cancelled" }) });
+    expect(screen.getByRole("heading", { name: "The store cancelled it" })).toBeInTheDocument();
+    expect(screen.getByText(/^The money is back in your Zinc wallet\. Choose another gift\./)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Check today's price" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "Buy this instead" }));
+    expect(replaceAction.mock.calls[0][2].get("ideaId")).not.toBeNull();
+  });
+
+  it("a replacement that fails as store_cancelled says so after Buy", () => {
+    expect(outcomeWords({ ok: true, status: "failed", reason: "store_cancelled" })).toEqual({
+      title: "The store cancelled it",
+      body: "The money is back in your Zinc wallet. We've emailed you what you can do.",
+    });
   });
 
   it("with no next-best idea the fix page shows See all ideas", () => {

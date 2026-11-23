@@ -103,6 +103,10 @@ const WHAT_HAPPENED: Record<string, { title: string; body: string }> = {
     title: "The store couldn't ship to that address",
     body: "The address was refused, so we didn't send it.",
   },
+  store_cancelled: {
+    title: "The store cancelled it",
+    body: "The money is back in your Zinc wallet. Choose another gift.",
+  },
 };
 const FAILED_OTHER = {
   title: "The store couldn't take the order",
