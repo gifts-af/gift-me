@@ -6,6 +6,7 @@ export type HealthSettings = {
   zincAppBalanceLowCents: number;
   ideaEngineEnabled: boolean;
   captureExtractionEnabled: boolean;
+  amazonPasteLookupEnabled: boolean;
 };
 
 /** Null means not checked, or the call failed. */
@@ -28,7 +29,11 @@ export type ProblemKind =
   | "ideas_not_configured"
   | "credit_low"
   | "zinc_low"
-  | "deadline_close";
+  | "deadline_close"
+  | "check_failed";
+
+/** Where a health check that couldn't run stopped: a fixed token, never the error's text (E6). */
+export type HealthStage = "settings" | "snapshot" | "vendors" | "wiring";
 
 export type Problem = {
   kind: ProblemKind;
@@ -39,6 +44,11 @@ export type Problem = {
 };
 
 export type HealthReport = { problems: Problem[]; weekly: HealthSnapshot["weekly"] | null; isWeekly: boolean };
+
+/** The one-line report for a check that couldn't run, so a dead checker isn't silent. */
+export function checkFailedReport(stage: HealthStage): HealthReport {
+  return { problems: [{ kind: "check_failed", detail: { stage } }], weekly: null, isWeekly: false };
+}
 
 /**
  * What needs the owner today, in the order the email shows it. Pure: the
@@ -64,8 +74,13 @@ export function healthReport(
     });
   }
 
-  const credit = vendors?.aiCreditCents ?? null;
-  if (snap.noCreditRuns > 0 || credit === 0) {
+  // A balance only matters while something spends it (E8): AI for ideas and capture, the app's
+  // Zinc key for ideas and Amazon paste lookups. Otherwise the owner who switched ideas off to stop
+  // spending would be told every day. At or below 0 is out: an overrun comes back negative.
+  const aiInUse = s !== null && (s.ideaEngineEnabled || s.captureExtractionEnabled);
+  const zincInUse = s !== null && (s.ideaEngineEnabled || s.amazonPasteLookupEnabled);
+  const credit = aiInUse ? (vendors?.aiCreditCents ?? null) : null;
+  if (snap.noCreditRuns > 0 || (credit !== null && credit <= 0)) {
     problems.push({ kind: "no_credit", detail: { noCreditRuns: snap.noCreditRuns }, waiting: snap.ideasWaiting });
   }
 
@@ -101,7 +116,7 @@ export function healthReport(
     if (credit !== null && credit > 0 && credit < s.aiCreditLowCents) {
       problems.push({ kind: "credit_low", detail: { balanceCents: credit, lowCents: s.aiCreditLowCents } });
     }
-    const zinc = vendors.zincAppBalanceCents;
+    const zinc = zincInUse ? vendors.zincAppBalanceCents : null;
     if (zinc !== null && zinc < s.zincAppBalanceLowCents) {
       problems.push({ kind: "zinc_low", detail: { balanceCents: zinc, lowCents: s.zincAppBalanceLowCents } });
     }

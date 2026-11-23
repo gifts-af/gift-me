@@ -10,7 +10,16 @@ type Env = { cronSecret?: string; vercelEnv?: string };
 // A check that didn't reach the owner, or couldn't look: 500, so Vercel's cron list shows it.
 const FAILED = new Set(["db_down", "send_failed", "failed"]);
 
-export async function handleHealth(request: Request, env: Env, run: (now: Date) => Promise<unknown>): Promise<Response> {
+/**
+ * `tellOwner` sends the fixed "couldn't run" email when the wiring itself throws; it needs no
+ * database, so it can still reach the owner then.
+ */
+export async function handleHealth(
+  request: Request,
+  env: Env,
+  run: (now: Date) => Promise<unknown>,
+  tellOwner: () => Promise<boolean>,
+): Promise<Response> {
   if (!env.cronSecret || request.headers.get("authorization") !== `Bearer ${env.cronSecret}`) {
     return Response.json({ ok: false }, { status: 401 });
   }
@@ -25,7 +34,13 @@ export async function handleHealth(request: Request, env: Env, run: (now: Date) 
     out = await run(now);
   } catch (e) {
     // The wiring itself failed (an env var missing), before the check could log anything.
-    logEvent("health.checked", { result: "failed", problems: 0, sent: false, weekly: false, ...errorFields(e), alert: true });
+    let sent = false;
+    try {
+      sent = await tellOwner();
+    } catch {
+      // Logged below as sent: false; the owner can't be told any other way.
+    }
+    logEvent("health.checked", { result: "failed", problems: 1, sent, weekly: false, stage: "wiring", ...errorFields(e), alert: true });
     return Response.json({ ok: false }, { status: 500 });
   }
   const result = (out as { result?: unknown } | null)?.result;

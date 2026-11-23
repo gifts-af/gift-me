@@ -10,7 +10,11 @@ export const settings: HealthSettings = {
   zincAppBalanceLowCents: 500,
   ideaEngineEnabled: false,
   captureExtractionEnabled: false,
+  amazonPasteLookupEnabled: false,
 };
+
+/** The credit and Zinc balance checks run only while something spends them. */
+export const spending: HealthSettings = { ...settings, captureExtractionEnabled: true, amazonPasteLookupEnabled: true };
 
 export const vendors: Vendors = { aiCreditCents: 5000, zincAppBalanceCents: 5000, aiConfigured: true, zincConfigured: true };
 

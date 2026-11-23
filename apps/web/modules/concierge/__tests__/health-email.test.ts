@@ -47,6 +47,9 @@ describe("buildHealthEmail", () => {
     const e = build(snapshot({ weekly: { ...snapshot().weekly, waitingAddress: 1, waitingFunds: 1, failedCaptures: 2 } }), MONDAY);
     expect(e.subject).toContain("All clear");
     expect(e.text).toContain("All clear");
+    // The heading says All clear; the body line doesn't repeat it.
+    expect(e.text).toContain("Nothing needs you.");
+    expect(e.text).not.toContain("All clear: nothing");
     expect(e.text).toContain("1 waiting on an address");
     expect(e.text).toContain("1 waiting on funds");
     expect(e.text).toContain("2 failed captures");

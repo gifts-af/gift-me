@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { healthReport, type Problem } from "../health/report";
-import { MONDAY, settings, snapshot, TUESDAY, vendors, withToday } from "./health-fixtures";
+import { MONDAY, settings, snapshot, spending, TUESDAY, vendors, withToday } from "./health-fixtures";
 
 const kinds = (ps: Problem[]) => ps.map((p) => p.kind);
 const run = (snap = snapshot(), v = vendors, s = settings, now = TUESDAY) => healthReport(snap, v, s, now);
@@ -110,10 +110,42 @@ describe("healthReport", () => {
 
   it("AC-11: no_credit_runs 1, or a 0 balance, leads with no_credit (after tick_missed when both)", () => {
     expect(kinds(run(snapshot({ noCreditRuns: 1 })).problems)).toEqual(["no_credit"]);
-    expect(kinds(run(snapshot(), { ...vendors, aiCreditCents: 0 }).problems)).toEqual(["no_credit"]);
+    expect(kinds(run(snapshot(), { ...vendors, aiCreditCents: 0 }, spending).problems)).toEqual(["no_credit"]);
     const base = snapshot({ noCreditRuns: 1 });
-    const r = run({ ...base, tick: { ...base.tick, today: null } }, { ...vendors, aiCreditCents: 0 });
+    const r = run({ ...base, tick: { ...base.tick, today: null } }, { ...vendors, aiCreditCents: 0 }, spending);
     expect(kinds(r.problems)).toEqual(["tick_missed", "no_credit"]);
+  });
+
+  it("AC-11: a negative balance (an overrun, -42) is out of credit, not low", () => {
+    expect(kinds(run(snapshot(), { ...vendors, aiCreditCents: -42 }, spending).problems)).toEqual(["no_credit"]);
+  });
+
+  it.each([
+    ["the idea engine", { ideaEngineEnabled: true }],
+    ["capture extraction", { captureExtractionEnabled: true }],
+  ])("AI credit is checked while %s is on", (_n, on) => {
+    const s = { ...settings, ...on };
+    expect(kinds(run(snapshot(), { ...vendors, aiCreditCents: 0 }, s).problems)).toContain("no_credit");
+    expect(kinds(run(snapshot(), { ...vendors, aiCreditCents: 499 }, s).problems)).toContain("credit_low");
+  });
+
+  it("with ideas and capture both off, a 0 or low AI balance flags nothing, but a no_credit run still does", () => {
+    const off = { ...settings, amazonPasteLookupEnabled: true };
+    expect(run(snapshot(), { ...vendors, aiCreditCents: 0 }, off).problems).toEqual([]);
+    expect(run(snapshot(), { ...vendors, aiCreditCents: 499 }, off).problems).toEqual([]);
+    expect(kinds(run(snapshot({ noCreditRuns: 1 }), vendors, off).problems)).toEqual(["no_credit"]);
+  });
+
+  it.each([
+    ["the idea engine", { ideaEngineEnabled: true }],
+    ["Amazon paste lookups", { amazonPasteLookupEnabled: true }],
+  ])("the Zinc app balance is checked while %s is on", (_n, on) => {
+    expect(kinds(run(snapshot(), { ...vendors, zincAppBalanceCents: 120 }, { ...settings, ...on }).problems)).toContain("zinc_low");
+  });
+
+  it("with ideas and Amazon paste lookups both off, a low Zinc app balance flags nothing", () => {
+    const off = { ...settings, captureExtractionEnabled: true };
+    expect(run(snapshot(), { ...vendors, zincAppBalanceCents: 120 }, off).problems).toEqual([]);
   });
 
   it("AC-11: while no_credit, ideas_waiting rounds are listed under it; without it they aren't", () => {
@@ -125,17 +157,17 @@ describe("healthReport", () => {
   });
 
   it("AC-12: 499 cents is credit_low, 500 isn't", () => {
-    expect(kinds(run(snapshot(), { ...vendors, aiCreditCents: 499 }).problems)).toEqual(["credit_low"]);
-    expect(kinds(run(snapshot(), { ...vendors, aiCreditCents: 500 }).problems)).toEqual([]);
+    expect(kinds(run(snapshot(), { ...vendors, aiCreditCents: 499 }, spending).problems)).toEqual(["credit_low"]);
+    expect(kinds(run(snapshot(), { ...vendors, aiCreditCents: 500 }, spending).problems)).toEqual([]);
   });
 
   it("the Zinc app balance below 500 is zinc_low", () => {
-    const r = run(snapshot(), { ...vendors, zincAppBalanceCents: 120 });
+    const r = run(snapshot(), { ...vendors, zincAppBalanceCents: 120 }, spending);
     expect(r.problems).toEqual([{ kind: "zinc_low", detail: { balanceCents: 120, lowCents: 500 } }]);
   });
 
   it("a failed vendor call (null) adds no problem", () => {
-    const r = run(snapshot(), { ...vendors, aiCreditCents: null, zincAppBalanceCents: null });
+    const r = run(snapshot(), { ...vendors, aiCreditCents: null, zincAppBalanceCents: null }, spending);
     expect(r.problems).toEqual([]);
   });
 
@@ -146,7 +178,7 @@ describe("healthReport", () => {
       deadlineClose: [{ roundId: "r5", userId: "u1", reason: "funds", shipByDeadline: "2026-12-01" }],
     });
     const snap = { ...base, tick: { ...base.tick, today: { ...base.tick.today!, result: "failed" as const } } };
-    expect(kinds(run(snap, { ...vendors, zincAppBalanceCents: 1 }).problems)).toEqual([
+    expect(kinds(run(snap, { ...vendors, zincAppBalanceCents: 1 }, spending).problems)).toEqual([
       "no_credit",
       "tick_failed",
       "stuck_round",

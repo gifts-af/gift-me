@@ -89,7 +89,7 @@ export { advanceRound, runRoundJob, runTick } from "./rounds/engine";
 export { dayOf } from "./rounds/steps";
 export { addTickCounts, tickHeartbeat } from "./health/heartbeat";
 export type { TickHeartbeat } from "./health/heartbeat";
-export { runHealthCheck } from "./health/run";
+export { runHealthCheck, sendCheckFailed } from "./health/run";
 export type { HealthDeps, HealthResult } from "./health/run";
 export { tellOrdered } from "./rounds/money-path";
 export type { AdvanceResult, EngineDeps, EngineZinc, GenerateIdeas, JobResult, TickSummary } from "./rounds/engine";

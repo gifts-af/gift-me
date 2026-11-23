@@ -132,8 +132,6 @@ describe.skipIf(!stack)("runHealthCheck (real local database)", () => {
         send,
         aiCredits: async () => aiCreditCents,
         zincBalance: async () => 5000,
-        aiConfigured: true,
-        zincConfigured: true,
         runbookBase: "https://example.test/operations.md",
       },
     };

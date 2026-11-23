@@ -216,6 +216,11 @@ export const placeAddressHeld: PlaceAddressHeld = async (userId, personId) => {
 // Where the health email's "What to do" links point: the runbooks in the repo's operations doc.
 const RUNBOOKS = "https://github.com/gifts-af/gift-me/blob/main/design/operations.md";
 
+/** How the health check reaches the owner: Resend and the runbook links, no database, so it works when the rest can't be built. */
+export function healthAlertWiring(env: Env = process.env): Pick<HealthDeps, "send" | "runbookBase"> {
+  return { send: (e) => sendEmail(e, { apiKey: env.RESEND_API_KEY, fetch }), runbookBase: RUNBOOKS };
+}
+
 /**
  * The daily health check's deps (T87): the admin client, Resend, and the two vendor balances
  * when their env vars are set here, each within the check's health_vendor_timeout_ms.
@@ -229,9 +234,9 @@ export function healthWiring(now: Date, env: Env = process.env): HealthDeps {
   const aiConfigured = Boolean(gatewayBase && gatewayKey);
   const zincConfigured = Boolean(zincBase && zincKey);
   return {
+    ...healthAlertWiring(env),
     db,
     now,
-    send: (e) => sendEmail(e, { apiKey: env.RESEND_API_KEY, fetch }),
     aiCredits: aiConfigured
       ? async (timeoutMs) =>
           (await gatewayCredits({ base: gatewayBase!, apiKey: gatewayKey!, fetch }, AbortSignal.timeout(timeoutMs))).balanceCents
@@ -239,8 +244,5 @@ export function healthWiring(now: Date, env: Env = process.env): HealthDeps {
     zincBalance: zincConfigured
       ? async (timeoutMs) => (await getWallet({ base: zincBase!, timeoutMs, fetch }, zincKey!)).balanceCents
       : null,
-    aiConfigured,
-    zincConfigured,
-    runbookBase: RUNBOOKS,
   };
 }

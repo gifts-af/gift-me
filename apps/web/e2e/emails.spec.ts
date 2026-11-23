@@ -20,12 +20,13 @@ function renderSamples(): { name: string; html: string }[] {
 
 const samples = renderSamples();
 
-test("every email sample was rendered: 39 concierge, five forms (ALL-71, ALL-32, ALL-116, ALL-31, ALL-27)", () => {
+test("every email sample was rendered: 40 concierge, five forms (ALL-71, ALL-32, ALL-116, ALL-31, ALL-27)", () => {
   expect(samples.map((s) => s.name).sort()).toEqual(
     [
       "final_notice",
       "health-problems",
       "health-weekly-all-clear",
+      "health-check-failed",
       "heads_up-auto_buy",
       "heads_up-reminder",
       "heads_up-over_budget",

@@ -232,7 +232,7 @@ update concierge.app_settings set value = '0' where key = 'zinc_ordering_enabled
 | `round_job` with `alert: true` and `result: "failed"` | **This is the alert.** A job failed before it claimed any round: the wiring (Zinc or email setup, an environment variable) or a setting it reads first (`round_fanout_enabled`, `round_engine_enabled`, the schedule settings, `zinc_place_budget_ms`). It is redelivered, up to `maxDeliveries` (3); `delivery_count` says which try, and the error's `name`/`code` say what threw. A `round_job` with `result: "failed"` and no `alert` is a step failing after the claim: a log, not an alert (see the runbook). | **Round fan-out** below, "A job failed before it claimed". |
 | `round_job` with `reason: "bad_signature"` | The job route got a message whose signature doesn't check. It ran nothing and acknowledged the message. | **Round fan-out** below, "Bad signature". |
 | `ideas.daily_limit_reached` | A round's idea run was refused because today's `idea_round_runs_per_day` is used up. Nothing failed; the round waits for tomorrow's tick. | **Round fan-out** below, "Daily limit reached". |
-| `ideas.no_credit` | An idea run found the AI Gateway credit gone (a 402) before any AI reply was paid for. The run isn't counted and the buyer isn't emailed: the round waits and the tick starts no further idea run. The event carries `round_id` and `user_id`. The next 14:00 UTC health email says the same. | **AI credit** under **Health email** below: top up by hand, since auto top-up is off. |
+| `ideas.no_credit` | An idea run found the AI Gateway credit gone (a 402) before any AI reply was paid for. The run isn't counted and the buyer isn't emailed: the round waits. With fan-out off the tick starts no further idea run; with fan-out on each due round's job starts its own run, so expect one of these (or `ideas.daily_limit_reached`) per due round, up to `idea_round_runs_per_day` runs a day. The event carries `round_id` and `user_id`. The next 14:00 UTC health email says the same. | **AI credit** under **Health email** below: top up by hand, since auto top-up is off. |
 | `tick.heartbeat_failed` | Writing the tick's heartbeat row (or a job adding its failure to it) failed. The tick or job itself is unaffected. | Nothing if it's one-off. If it repeats, check the database; the health email's "tick didn't finish" line can then be wrong for that day. |
 | `health.send_failed` | Resend refused the owner's health email. The route answers 500. | Check Resend (status, key, a bounced inbox). The next day's check sends again; read `concierge.health_snapshot` by hand meanwhile. |
 
@@ -354,8 +354,10 @@ The engine finds gift ideas for a round and on demand (a person's Gift ideas scr
 
 Once a day Vercel Cron calls `GET /api/health` at 14:00 UTC, two hours after the tick (T87). The route checks `CRON_SECRET` as the tick does. Its first query pings the database, which also keeps the free Supabase project from pausing (it replaced `/api/keepalive`, T22). Then it reads `concierge.health_snapshot`, the AI Gateway credit and the app's Zinc balance, and emails the owner inbox when something needs the owner. On `health_all_clear_weekday` (Monday) it always emails: the week's counts, plus "All clear" or the problems. Each line in the email carries ids only (round, order, user) and a **What to do** link to its heading below.
 
-- **Turning it off:** set `health_email_enabled` to `0` in `concierge.app_settings`, no deploy needed. The ping still runs, so the database stays awake, and it logs `health.checked {result: "off"}`.
-- **How we see it working:** one `health.checked` event a day, with `result` (`sent`, `quiet`, `off`, `db_down`, `send_failed` or `failed`), `problems`, `sent` and `weekly`. The route answers 500 for `db_down`, `send_failed` and `failed`, so Vercel's cron list shows the failure too. `health.send_failed` (an alert) means Resend refused the email. `health.vendor_check_failed {vendor}` means a balance couldn't be read, so that check was skipped that day.
+- **Turning it off:** set `health_email_enabled` to `0` in `concierge.app_settings`, no deploy needed. The ping still runs, so the database stays awake, and it logs `health.checked {result: "off"}`. Two emails still go with it at 0, because the setting can't be read first: "The database can't be reached" (the ping runs before any setting) and "The health check couldn't run" when the setting itself can't be read or the route's wiring fails.
+- **How we see it working:** one `health.checked` event a day, with `result` (`sent`, `quiet`, `off`, `db_down`, `send_failed` or `failed`), `problems`, `sent` and `weekly`; a `failed` one also has `stage`. The route answers 500 for `db_down`, `send_failed` and `failed`, so Vercel's cron list shows the failure too. `health.send_failed` (an alert) means Resend refused the email. `health.vendor_check_failed {vendor}` means a balance couldn't be read, so that check was skipped that day.
+- **A check that can't run says so.** If a setting, the snapshot or the route's own wiring fails, the owner still gets a short fixed email, "The health check couldn't run", naming the stage it stopped at (see its heading below), so a broken checker never looks like a quiet day.
+- **Rolling back:** an instant rollback also restores the older deployment's cron list ([Vercel: rollbacks and cron jobs](https://vercel.com/docs/cron-jobs/manage-cron-jobs#rollbacks-and-promotions-with-cron-jobs)). Rolled back past this change, Vercel calls the old `/api/keepalive` again, which that deployment still has, so the database stays awake; only the health email stops. A run due in the minutes of the switch can be missed or reach the other deployment.
 - **Off production,** `?now=` sets the check's clock, as on the tick.
 - **The links** point at this file on the public GitHub repo (`main`), set in `healthWiring` (`apps/web/lib/wiring.ts`). If the engineering docs are hidden before launch, move the runbooks and change that link, or the email's links break.
 
@@ -369,7 +371,7 @@ Once a day Vercel Cron calls `GET /api/health` at 14:00 UTC, two hours after the
 | `zinc_app_balance_low_cents` | 500 | Warn when the app's Zinc balance drops below this |
 | `health_vendor_timeout_ms` | 10000 | How long each vendor balance call may take. Both run together, so keep it well under the route's 60 s |
 
-It also reads `round_max_attempts`, `placing_stale_minutes`, `hold_final_days`, `idea_engine_enabled` and `capture_extraction_enabled`. A setting it can't read fails the check (`health.checked {result: "failed", alert: true}`); there's no fallback value.
+It also reads `round_max_attempts`, `placing_stale_minutes`, `hold_final_days`, `idea_engine_enabled`, `capture_extraction_enabled` and `amazon_paste_lookup_enabled`. The AI credit is only checked while ideas or capture extraction are on, and the app's Zinc balance only while ideas or Amazon paste lookups are on, so switching those off doesn't bring a daily warning. A setting it can't read fails the check (`health.checked {result: "failed", stage: "settings", alert: true}`) and sends "The health check couldn't run"; there's no fallback value.
 
 ### The database can't be reached
 
@@ -386,7 +388,7 @@ There's no heartbeat row for today in `concierge.tick_heartbeats`, or today's ro
 1. In Vercel, check the project's Cron Jobs list and the latest production deployment: crons only run on production.
 2. Check `CRON_SECRET` on production. A tick refused for the secret writes no row.
 3. Read the tick's function logs for `round_tick_failed` and `tick.heartbeat_failed`. A row that never finished means the run hit its time limit; see **Round fan-out** and `tick_deadline_ms` under **Gift idea engine**.
-4. Once it's fixed, call the tick by hand with the secret: the rounds catch up.
+4. Once it's fixed, call the tick by hand with the secret: the rounds catch up. Running the tick again the same UTC day starts that day's heartbeat row afresh, so failures the morning's jobs already added drop out of that day's count (and the weekly email's).
 
 ### The tick reported failures
 
@@ -429,8 +431,10 @@ An order is `held` with `hold_reason` `retry` (Zinc failed in a way worth trying
 
 Two lines lead here:
 
-- **Out of AI credit: ideas are paused.** An idea run ended `no_credit` in the last day, or the AI Gateway credit is 0. A run that hits it isn't counted against the round and the buyer gets no email: the round waits and tries again on a later tick. The line lists open rounds still waiting on ideas within `hold_final_days` of their ship-by deadline; those are the ones to watch.
+- **Out of AI credit: ideas are paused.** An idea run ended `no_credit` in the last day, or the AI Gateway credit is at or below 0 (an overrun shows negative). A run that hits it isn't counted against the round and the buyer gets no email: the round waits and tries again on a later tick. With fan-out off, the tick starts no other idea run after the first `no_credit`; with fan-out on, each due round's job tries its own run, and `idea_round_runs_per_day` bounds both. The line lists open rounds still waiting on ideas within `hold_final_days` of their ship-by deadline; those are the ones to watch. A round still waiting on credit at its ship-by deadline is skipped and the buyer gets the "skipped" email, never a silent skip.
 - **AI credit is low.** The credit is below `ai_credit_low_cents` ($5).
+
+Both balance lines only appear while `idea_engine_enabled` or `capture_extraction_enabled` is 1, since nothing else spends the credit. A run's `no_credit` line appears regardless. The Gateway answers both an empty balance (`insufficient_funds`) and a used-up budget (`quota_for_entity_exceeded`, [Vercel: budgets](https://vercel.com/docs/ai-gateway/observability-and-spend/budgets)) with HTTP 402, and the app treats any 402 as out of credit.
 
 Auto top-up is off for now, so the owner tops up by hand:
 
@@ -440,11 +444,22 @@ Auto top-up is off for now, so the owner tops up by hand:
 
 ### Zinc app balance low
 
-The app's own Zinc account (the `ZINC_API_KEY` used for product lookups, T17) is below `zinc_app_balance_low_cents` ($5). When it runs out, idea runs can't look products up. Add funds in that account's Zinc dashboard. Buyers' own wallets aren't checked here; they're told about their own funds holds.
+The app's own Zinc account (the `ZINC_API_KEY` used for product lookups, T17) is below `zinc_app_balance_low_cents` ($5). Checked only while `idea_engine_enabled` or `amazon_paste_lookup_enabled` is 1, the two things that use that key. When it runs out, idea runs and Amazon paste lookups can't look products up. Add funds in that account's Zinc dashboard. Buyers' own wallets aren't checked here; they're told about their own funds holds.
 
 ### Waiting on the buyer
 
-An open round is waiting on the buyer (an address, funds or setup) within `hold_final_days` of its ship-by deadline. The buyer has already been emailed. Nothing is required: step in only if you want to nudge them. These rounds are also counted in the weekly email.
+An open round is waiting on the buyer (an address, funds or setup) within `hold_final_days` of its ship-by deadline. The buyer has already been emailed, and the round skips at its deadline with the "skipped" email if nothing changes. The owner may contact the buyer to help them finish in time (find them by `user_id` in Supabase). These rounds are also counted in the weekly email.
+
+### The health check couldn't run
+
+The check itself failed, so today's other lines are unknown. The line names the stage it stopped at, never the error:
+
+- **`settings`:** a setting it reads (listed above under **Settings**) is missing or can't be read. Check `concierge.app_settings` for the row, and whether a migration renamed or removed it.
+- **`snapshot`:** `concierge.health_snapshot` failed, or its answer didn't match the shape the code expects. Usually a migration changed a table it reads, or the function and the code are out of step after a deploy or rollback. Run `select concierge.health_snapshot(now());` in the SQL editor to see the error.
+- **`vendors`:** a vendor balance call broke in a way that wasn't caught. Read `health.checked` in the logs for the error `name`.
+- **`wiring`:** the route couldn't build its clients, usually an environment variable missing on that deployment (`SUPABASE_SECRET_KEY`, or `GIFT_SUPABASE_SECRET_KEY` on production). Check them in Vercel and redeploy.
+
+Read `health.checked {result: "failed"}` in the function logs soon (Hobby keeps them about an hour) for the error's `name` and `code`. Once fixed, call `/api/health` with the cron secret to confirm.
 
 ## My list saving (ALL-127)
 

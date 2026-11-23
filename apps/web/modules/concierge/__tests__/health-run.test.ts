@@ -48,6 +48,7 @@ const SETTINGS: Record<string, number> = {
   zinc_app_balance_low_cents: 500,
   idea_engine_enabled: 0,
   capture_extraction_enabled: 0,
+  amazon_paste_lookup_enabled: 1,
   health_vendor_timeout_ms: 10000,
 };
 
@@ -66,12 +67,20 @@ const SNAPSHOT = {
   weekly: { waiting_address: 0, waiting_funds: 0, waiting_setup: 0, waiting_approval: 0, no_ideas: 0, rounds_failed: 0, failed_captures: 0 },
 };
 
-/** A client that answers the ping, setting_int from SETTINGS and health_snapshot with SNAPSHOT. */
-function upDb() {
+/**
+ * A client that answers the ping, setting_int from SETTINGS and health_snapshot with SNAPSHOT,
+ * or with an error whose text must never reach the email or the logs.
+ */
+function upDb(snapshotFails = false) {
+  const snapshotError = { message: "column r.updated_at does not exist near jordan@example.com", code: "42703" };
   const concierge = {
     from: () => ({ select: () => ({ limit: async () => ({ data: [], error: null }) }) }),
     rpc: async (fn: string, args: { p_key?: string }) =>
-      fn === "setting_int" ? { data: SETTINGS[args.p_key!] ?? null, error: null } : { data: SNAPSHOT, error: null },
+      fn === "setting_int"
+        ? { data: SETTINGS[args.p_key!] ?? null, error: null }
+        : snapshotFails
+          ? { data: null, error: snapshotError }
+          : { data: SNAPSHOT, error: null },
   };
   return { schema: () => concierge } as unknown as HealthDeps["db"];
 }
@@ -87,8 +96,6 @@ function deps(over: Partial<HealthDeps> = {}): HealthDeps & { sent: OutgoingEmai
     },
     aiCredits: async () => 5000,
     zincBalance: async () => 5000,
-    aiConfigured: true,
-    zincConfigured: true,
     runbookBase: "https://example.test/operations.md",
     sent,
     ...over,
@@ -156,19 +163,50 @@ describe("runHealthCheck", () => {
     expect(d.sent[0].text).toContain("The app's Zinc balance is low");
   });
 
-  it.each(["ai_credit_low_cents", "health_vendor_timeout_ms"])("a setting that can't be read (%s) fails loudly, and nothing is called or sent", async (key) => {
-    const was = SETTINGS[key];
-    delete SETTINGS[key];
-    try {
-      const aiCredits = vi.fn(async () => 5000);
-      const d = deps({ aiCredits });
-      expect(await runHealthCheck(d)).toEqual({ result: "failed", problems: 0 });
-      expect(aiCredits).not.toHaveBeenCalled();
-      expect(d.sent).toHaveLength(0);
-      expect(events().find((e) => e.event === "health.checked")).toMatchObject({ result: "failed", alert: true });
-    } finally {
-      SETTINGS[key] = was;
+  it.each(["ai_credit_low_cents", "health_vendor_timeout_ms", "health_email_enabled"])(
+    "a setting that can't be read (%s) fails loudly: no vendor call, one fixed email with the stage settings",
+    async (key) => {
+      const was = SETTINGS[key];
+      delete SETTINGS[key];
+      try {
+        const aiCredits = vi.fn(async () => 5000);
+        const d = deps({ aiCredits });
+        expect(await runHealthCheck(d)).toEqual({ result: "failed", problems: 1 });
+        expect(aiCredits).not.toHaveBeenCalled();
+        expect(d.sent).toHaveLength(1);
+        expect(d.sent[0].text).toContain("The health check couldn't run");
+        expect(d.sent[0].text).toContain("Stopped at: settings");
+        expect(events().find((e) => e.event === "health.checked")).toMatchObject({ result: "failed", stage: "settings", sent: true, alert: true });
+      } finally {
+        SETTINGS[key] = was;
+      }
+    },
+  );
+
+  it("a snapshot that errors sends one fixed email with the stage and no error text, and logs the stage", async () => {
+    const d = deps({ db: upDb(true) });
+    expect(await runHealthCheck(d)).toEqual({ result: "failed", problems: 1 });
+
+    expect(d.sent).toHaveLength(1);
+    const { subject, text, html } = d.sent[0];
+    expect(subject).toContain("1 thing needs you");
+    expect(text).toContain("The health check couldn't run");
+    expect(text).toContain("Stopped at: snapshot");
+    expect(html).toContain("#the-health-check-couldnt-run");
+    for (const leak of ["updated_at", "jordan@example.com", "42703"]) {
+      expect(text).not.toContain(leak);
+      expect(html).not.toContain(leak);
     }
+    const checked = events().find((e) => e.event === "health.checked");
+    expect(checked).toMatchObject({ result: "failed", problems: 1, stage: "snapshot", sent: true, alert: true });
+    expect(JSON.stringify(events())).not.toContain("jordan@example.com");
+  });
+
+  it("a failed check whose email is refused still logs the stage, with sent false", async () => {
+    const d = deps({ db: upDb(true), send: async () => ({ ok: false, error: "Resend responded 403" }) });
+    expect(await runHealthCheck(d)).toEqual({ result: "failed", problems: 1 });
+    expect(events().find((e) => e.event === "health.checked")).toMatchObject({ result: "failed", stage: "snapshot", sent: false });
+    expect(events().find((e) => e.event === "health.send_failed")).toMatchObject({ alert: true });
   });
 
   it("no vendor function means no call: the balance is null and nothing is flagged for it", async () => {

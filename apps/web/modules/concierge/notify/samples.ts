@@ -1,5 +1,5 @@
 import { buildHealthEmail } from "../health/email";
-import type { HealthReport, Problem } from "../health/report";
+import { checkFailedReport, type HealthReport, type Problem } from "../health/report";
 import { type NotificationKind, type RenderedEmail, SAMPLE_DATA, TEMPLATES } from "./templates";
 
 export type SampleEmail = { name: string; email: RenderedEmail };
@@ -56,7 +56,7 @@ export function sampleEmails(link: string): SampleEmail[] {
   return list;
 }
 
-// The owner's health emails: every problem kind once, and the Monday all-clear. Their
+// The owner's health emails: every problem kind once, the Monday all-clear, and a check that couldn't run. Their
 // runbook links lose their section anchor so they point at `link` like every other sample's buttons.
 function healthSamples(link: string): SampleEmail[] {
   const id = (n: string) => `00000000-0000-0000-0000-${n.padStart(12, "0")}`;
@@ -84,6 +84,7 @@ function healthSamples(link: string): SampleEmail[] {
   return [
     render("health-problems", { problems, weekly, isWeekly: true }),
     render("health-weekly-all-clear", { problems: [], weekly, isWeekly: true }),
+    render("health-check-failed", checkFailedReport("snapshot")),
   ];
 }
 

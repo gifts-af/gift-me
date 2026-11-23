@@ -456,8 +456,9 @@ async function runStep(claimed: ClaimedRound, deps: EngineDeps, s: ScheduleSetti
     case "skip": {
       const ids = { round_id: round.id, user_id: round.userId };
       // Tell the buyer about a skip only if we asked or told them something (ruling 13, ALL-27 AC-9).
-      // A rejection renames what was sent (heads_up@1), and that still counts (ALL-29 AC-13).
-      if (!toldBefore(sent)) {
+      // A rejection renames what was sent (heads_up@1), and that still counts (ALL-29 AC-13). A
+      // round left waiting on our AI credit (T87) is told too: the miss is ours, not the buyer's.
+      if (!toldBefore(sent) && !ctx.waitingOnCredit) {
         logEvent("round_skipped_silently", { ...ids, status: round.status });
         return finishStep(round, ctx, sent, { status: "skipped" }, deps, s);
       }

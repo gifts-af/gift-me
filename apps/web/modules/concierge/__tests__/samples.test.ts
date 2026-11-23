@@ -44,6 +44,7 @@ describe("sampleEmails", () => {
       "no_ideas-again",
       "health-problems",
       "health-weekly-all-clear",
+      "health-check-failed",
     ]);
   });
 

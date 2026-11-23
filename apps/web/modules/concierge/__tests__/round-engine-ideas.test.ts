@@ -1,7 +1,7 @@
 import type { StepKey } from "@gifts-af/core";
 import { describe, expect, it, vi } from "vitest";
 import type { IdeaOutcome } from "../ideas/run";
-import { runTick, type EngineZinc } from "../rounds/engine";
+import { runRoundJob, runTick, type EngineZinc } from "../rounds/engine";
 import { USER, PERSON, OCCASION, NAME, EMAIL, at, harness, events, named, captureLog } from "./round-engine-fakes";
 
 vi.mock("server-only", () => ({}));
@@ -422,6 +422,40 @@ describe("the idea pass (ALL-27)", () => {
         expect(h.store.writes).toContain(`release:${r.id}`);
       }
       expect(h.notifyStore.notifications).toEqual([]);
+    });
+
+    it("with fan-out on the stop holds per job, not per tick: each due round's job starts its own run and logs its own alert", async () => {
+      // The daily guard (idea_round_runs_per_day, in start_idea_run) bounds these runs; here each
+      // job is a separate call, so nothing carries one job's no_credit to the next.
+      const h = two();
+      h.generateIdeas.mockResolvedValue({ status: "no_credit" });
+      await runTick(h.deps(at("2027-02-11")));
+      expect(h.generateIdeas).toHaveBeenCalledTimes(1);
+      const alertsBefore = named("ideas.no_credit").length;
+
+      h.store.settings.set("round_fanout_enabled", 1);
+      for (const r of h.store.rounds) {
+        expect(await runRoundJob({ kind: "round", roundId: r.id }, h.deps(at("2027-02-12")))).toBe("advanced");
+      }
+
+      expect(h.generateIdeas).toHaveBeenCalledTimes(3);
+      expect(named("ideas.no_credit")).toHaveLength(alertsBefore + 2);
+      for (const r of h.store.rounds) expect(r).toMatchObject({ status: "generating", lockedUntil: null });
+      expect(h.notifyStore.notifications).toEqual([]);
+    });
+
+    it("a round still waiting on credit at its deadline is skipped with the skipped email, not silently", async () => {
+      const h = harness();
+      h.generateIdeas.mockResolvedValue({ status: "no_credit" });
+      // What the real store reads once the round's latest run ended no_credit (no-credit-db.test.ts).
+      h.store.ideaState.set("round-1", { waitingOnCredit: true });
+      const silentBefore = named("round_skipped_silently").length;
+
+      await h.runDays("2027-02-11", "2027-03-11");
+
+      expect(h.store.rounds[0].status).toBe("skipped");
+      expect(h.sent()).toEqual(["skipped@2027-03-11"]);
+      expect(named("round_skipped_silently")).toHaveLength(silentBefore);
     });
 
     it("the next tick runs it again", async () => {

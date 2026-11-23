@@ -145,4 +145,20 @@ describe.skipIf(!stack)("a no_credit run doesn't count (real local database)", (
     expect(ctx).toMatchObject({ ideaRunsLeft: false, ranSinceNoIdeas: false });
     expect(next).toMatchObject({ do: "wait" });
   });
+
+  it("a round whose latest run ended no_credit reads waitingOnCredit, so its deadline skip is emailed", async () => {
+    const { ctx } = await plan(await maxedRound({ newerFact: true, toldNoIdeas: false }));
+    expect(ctx.waitingOnCredit).toBe(true);
+  });
+
+  it("a counted run after the no_credit one clears waitingOnCredit", async () => {
+    const r = await maxedRound({ newerFact: true, toldNoIdeas: false });
+    await pg.query(
+      `insert into concierge.idea_runs (user_id, person_id, round_id, started_at, finished_at, outcome)
+       values ($1, $2, $3, now() - interval '10 minutes', now() - interval '10 minutes', 'none')`,
+      [r.userId, r.personId, r.roundId],
+    );
+    const { ctx } = await plan(r);
+    expect(ctx.waitingOnCredit).toBe(false);
+  });
 });

@@ -17,6 +17,7 @@ export const RUNBOOK_ANCHORS: Record<ProblemKind, string> = {
   credit_low: "ai-credit",
   zinc_low: "zinc-app-balance-low",
   deadline_close: "waiting-on-the-buyer",
+  check_failed: "the-health-check-couldnt-run",
 };
 
 const TITLES: Record<ProblemKind, string> = {
@@ -32,6 +33,7 @@ const TITLES: Record<ProblemKind, string> = {
   credit_low: "AI credit is low",
   zinc_low: "The app's Zinc balance is low",
   deadline_close: "Waiting on the buyer, deadline close",
+  check_failed: "The health check couldn't run",
 };
 
 const dollars = (n: unknown) => `$${(Number(n) / 100).toFixed(2)}`;
@@ -68,6 +70,8 @@ function describe(p: Problem): string {
       return `${dollars(d.balanceCents)} left, warning below ${dollars(d.lowCents)}`;
     case "deadline_close":
       return `${ids}, waiting on ${d.reason}, ship by ${d.shipByDeadline}`;
+    case "check_failed":
+      return `Stopped at: ${d.stage}`;
     default:
       return ids;
   }
@@ -93,7 +97,7 @@ export function buildHealthEmail(r: HealthReport, runbookBase: string): Outgoing
     link: { label: "What to do", url: `${runbookBase}#${RUNBOOK_ANCHORS[p.kind]}` },
   }));
   const paragraphs: string[] = [];
-  if (r.problems.length === 0) paragraphs.push("All clear: nothing needs you.");
+  if (r.problems.length === 0) paragraphs.push("Nothing needs you.");
   if (r.isWeekly && r.weekly) paragraphs.push(`This week: ${weeklyLine(r.weekly)}.`);
 
   const heading = r.problems.length === 0 ? "All clear" : `${plural(r.problems.length, "thing needs", "things need")} you`;

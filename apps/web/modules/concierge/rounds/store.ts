@@ -130,6 +130,12 @@ export type RoundContext = {
   ideaRunsLeft: boolean;
   /** A run started after the `no_ideas` email went (round-plan, ranSinceNoIdeas). */
   ranSinceNoIdeas: boolean;
+  /**
+   * The round's latest idea run ended `no_credit`: it waited on our AI credit, not on the buyer,
+   * so a skip at its deadline is emailed even if nothing else was (customers always informed).
+   * False when not read.
+   */
+  waitingOnCredit: boolean;
   /** The round's user has paid features (round_idea_state); true when not read. */
   paid: boolean;
   /** idea_engine_enabled is 1; true when not read. */
@@ -301,8 +307,8 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
   async function readIdeaState(
     roundId: string,
     personId: string,
-  ): Promise<Pick<RoundContext, "hasFacts" | "hasListGifts" | "ideaRunsLeft" | "ranSinceNoIdeas" | "paid" | "ideaEngineOn">> {
-    const [state, told, lastRun, engineOn, listGifts] = await Promise.all([
+  ): Promise<Pick<RoundContext, "hasFacts" | "hasListGifts" | "ideaRunsLeft" | "ranSinceNoIdeas" | "waitingOnCredit" | "paid" | "ideaEngineOn">> {
+    const [state, told, lastRun, latest, engineOn, listGifts] = await Promise.all([
       concierge.rpc("round_idea_state", { p_round_id: roundId }),
       concierge.from("round_sends").select("created_at").eq("round_id", roundId).eq("step", "no_ideas").maybeSingle(),
       // A no_credit run bought nothing, so it isn't the run after a no_ideas email (T68).
@@ -313,12 +319,14 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
         .or("outcome.is.null,outcome.neq.no_credit")
         .order("started_at", { ascending: false })
         .limit(1),
+      concierge.from("idea_runs").select("outcome").eq("round_id", roundId).order("started_at", { ascending: false }).limit(1),
       setting("idea_engine_enabled"),
       listGiftCandidates(db, personId, roundId),
     ]);
     if (state.error) fail("Reading the round's idea state failed", state.error);
     if (told.error) fail("Reading the round's no_ideas email failed", told.error);
     if (lastRun.error) fail("Reading the round's idea runs failed", lastRun.error);
+    if (latest.error) fail("Reading the round's latest idea run failed", latest.error);
     const row = state.data[0];
     if (!row) throw new Error("The round's idea state is missing");
     const started = lastRun.data[0]?.started_at;
@@ -327,6 +335,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
       hasListGifts: listGifts.length > 0,
       ideaRunsLeft: row.runs_left,
       ranSinceNoIdeas: told.data !== null && started !== undefined && Date.parse(started) > Date.parse(told.data.created_at),
+      waitingOnCredit: latest.data[0]?.outcome === "no_credit",
       paid: row.paid,
       ideaEngineOn: engineOn === 1,
     };
@@ -522,7 +531,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
       const a: AddressColumns = shared ?? p;
       const ideaState = round.status === "scheduled" || round.status === "needs_address" || round.status === "generating"
         ? await readIdeaState(roundId, round.person_id)
-        : { hasFacts: true, hasListGifts: false, ideaRunsLeft: true, ranSinceNoIdeas: false, paid: true, ideaEngineOn: true };
+        : { hasFacts: true, hasListGifts: false, ideaRunsLeft: true, ranSinceNoIdeas: false, waitingOnCredit: false, paid: true, ideaEngineOn: true };
       const draftOf = (x: AddressColumns) => ({
         firstName: x.recipient_first_name,
         lastName: x.recipient_last_name,
