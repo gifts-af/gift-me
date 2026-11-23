@@ -148,7 +148,7 @@ describe.skipIf(!stack)("runHealthCheck (real local database)", () => {
     const lists = [s.stuckRounds, s.unconfirmed, s.placingStale, s.heldZinc, s.deadlineClose, s.ideasWaiting];
     const w = s.weekly;
     const open = lists.reduce((n, l) => n + l.length, 0) + w.waitingAddress + w.waitingFunds + w.waitingSetup + w.waitingApproval;
-    expect(open, "the shared local database has open rounds or orders left from elsewhere: run pnpm db:reset").toBe(0);
+    expect(open, "the shared local database has open rounds or orders left from elsewhere: run pnpm db:clean").toBe(0);
   }
 
   beforeAll(async () => {

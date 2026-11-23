@@ -9,7 +9,9 @@ import { LOCAL_DB, localStack } from "../../../test/local-db";
 
 const dbUp = (await localStack({ api: false })) !== null;
 
-const NOW = "2031-06-16T12:00:00Z";
+// A random far-off day, so no leftover or other run of this test shares the day's count.
+const DAY = `${3000 + Math.floor(Math.random() * 5000)}-06-16`;
+const NOW = `${DAY}T12:00:00Z`;
 
 describe.skipIf(!dbUp)("the daily limit on round idea runs (ten connections, local Supabase)", () => {
   let admin: Client;
@@ -60,8 +62,8 @@ describe.skipIf(!dbUp)("the daily limit on round idea runs (ten connections, loc
     for (let i = 0; i < 4; i++) {
       const r = await roundFor();
       await admin.query(
-        "insert into concierge.idea_runs (user_id, person_id, round_id, started_at) values ($1, $2, $3, '2031-06-16T08:00:00Z')",
-        [r.userId, r.personId, r.roundId],
+        "insert into concierge.idea_runs (user_id, person_id, round_id, started_at) values ($1, $2, $3, $4)",
+        [r.userId, r.personId, r.roundId, `${DAY}T08:00:00Z`],
       );
     }
     const racers = await Promise.all(Array.from({ length: 10 }, () => roundFor()));
@@ -91,8 +93,8 @@ describe.skipIf(!dbUp)("the daily limit on round idea runs (ten connections, loc
       const { rows: count } = await admin.query(
         `select count(*)::int as n from concierge.idea_runs
           where round_id is not null and user_id = any($1::uuid[])
-            and started_at >= '2031-06-16T00:00:00Z' and started_at < '2031-06-17T00:00:00Z'`,
-        [users],
+            and started_at >= $2::timestamptz and started_at < $2::timestamptz + interval '1 day'`,
+        [users, `${DAY}T00:00:00Z`],
       );
       expect(count[0].n).toBe(5);
     } finally {

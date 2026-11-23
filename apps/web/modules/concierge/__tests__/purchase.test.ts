@@ -6,7 +6,7 @@ import { createClient } from "@supabase/supabase-js";
 import { Client } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@gifts-af/core";
-import { LOCAL_DB, localStack } from "../../../test/local-db";
+import { LOCAL_DB, localStack, ownStaleOrders } from "../../../test/local-db";
 import { approveAndBuy } from "../purchase/approve";
 import { placeAddressHeld, placeHeldForUser, placeRound, sweepStalePlacing } from "../purchase/place";
 import type { PurchaseDeps } from "../purchase/store";
@@ -47,7 +47,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     pg.query("update concierge.app_settings set value = $1 where key = 'zinc_ordering_enabled'", [on ? "1" : "0"]);
 
   const deps = (over: Partial<PurchaseDeps> = {}): PurchaseDeps => ({
-    db: createClient<Database>(supabase!.url, supabase!.serviceRoleKey, { auth: { persistSession: false } }),
+    db: ownStaleOrders(createClient<Database>(supabase!.url, supabase!.serviceRoleKey, { auth: { persistSession: false } }), users),
     http: { base: "https://zinc.test", timeoutMs: 1000, fetch: zinc.fetch },
     env: "test",
     webhookBaseUrl: "https://giftsaf.test",

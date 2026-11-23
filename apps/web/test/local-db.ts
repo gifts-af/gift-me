@@ -50,3 +50,35 @@ export async function localStack(opts: { api: boolean }): Promise<{ supabase: Lo
   if (process.env.CI) throw new Error(`Local-db tests need ${missing} running (pnpm supabase start), and CI must start it.`);
   return null;
 }
+
+/**
+ * The real client, except that stale_placing_orders (what sweepStalePlacing settles) lists only
+ * these users' orders. The sweep is global, so without this a test would settle or mark
+ * unconfirmed the orders of leftovers and of other runs on the shared database. The query itself
+ * still runs for real. `userIds` is read at each call, so users added later count.
+ */
+export function ownStaleOrders<T extends object>(db: T, userIds: readonly string[]): T {
+  return new Proxy(db, {
+    get(target, prop, receiver) {
+      const value = Reflect.get(target, prop, receiver);
+      if (prop !== "schema" || typeof value !== "function") return value;
+      return (name: string) => {
+        const schema = value.call(target, name);
+        return new Proxy(schema, {
+          get(s, p, r) {
+            const rpc = Reflect.get(s, p, r);
+            if (p !== "rpc" || typeof rpc !== "function") return rpc;
+            return (fn: string, ...rest: unknown[]) => {
+              const call = rpc.call(s, fn, ...rest);
+              if (fn !== "stale_placing_orders") return call;
+              return Promise.resolve(call).then((res: { data: { user_id: string }[] | null }) => ({
+                ...res,
+                data: res.data?.filter((o) => userIds.includes(o.user_id)) ?? null,
+              }));
+            };
+          },
+        });
+      };
+    },
+  });
+}

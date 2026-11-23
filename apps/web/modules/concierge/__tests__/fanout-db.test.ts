@@ -223,9 +223,11 @@ describe.skipIf(!stack)("fan-out jobs (real local database, fake Zinc; ALL-125)"
   }, 30_000);
 
   it("runs a tick's 20 rounds at once: held placed, reminders sent, 5 idea runs and 5 released (AC-15)", async () => {
-    // Runs dated in 2031, a UTC day no other test uses, so the daily count is this test's own.
-    const now = new Date("2031-07-01T12:00:00Z");
-    const day = { from: "2031-07-01T00:00:00Z", to: "2031-07-02T00:00:00Z" };
+    // Runs dated in a random far-off year, so the daily count is this test's own: no leftover or
+    // other run of this test shares the day.
+    const y = 3000 + Math.floor(Math.random() * 5000);
+    const now = new Date(`${y}-07-01T12:00:00Z`);
+    const day = { from: `${y}-07-01T00:00:00Z`, to: `${y}-07-02T00:00:00Z` };
     const roundRuns = async () =>
       (
         await pg.query("select round_id from concierge.idea_runs where round_id is not null and started_at >= $1 and started_at < $2", [
@@ -237,16 +239,16 @@ describe.skipIf(!stack)("fan-out jobs (real local database, fake Zinc; ALL-125)"
     await pg.query("update concierge.app_settings set value = '5' where key = 'idea_round_runs_per_day'");
 
     const held: string[] = [];
-    for (let i = 0; i < 4; i++) held.push(await heldRound(await newUser(), "2031-08-01"));
+    for (let i = 0; i < 4; i++) held.push(await heldRound(await newUser(), `${y}-08-01`));
     const buyer = await newUser();
     const reminders: string[] = [];
     for (let i = 0; i < 6; i++) {
-      const r = await newRound(buyer, { status: "awaiting_approval", deadline: "2031-08-01", nextAt: "2031-06-30T00:00:00Z", headsUpOn: "2031-06-25" });
+      const r = await newRound(buyer, { status: "awaiting_approval", deadline: `${y}-08-01`, nextAt: `${y}-06-30T00:00:00Z`, headsUpOn: `${y}-06-25` });
       reminders.push(r.roundId);
     }
     const ideas: string[] = [];
     for (let i = 0; i < 10; i++) {
-      const r = await newRound(buyer, { status: "scheduled", deadline: "2031-08-01", nextAt: "2031-06-30T00:00:00Z", idea: false, fact: true });
+      const r = await newRound(buyer, { status: "scheduled", deadline: `${y}-08-01`, nextAt: `${y}-06-30T00:00:00Z`, idea: false, fact: true });
       ideas.push(r.roundId);
     }
     const ours = new Set([...held, ...reminders, ...ideas]);
@@ -284,6 +286,5 @@ describe.skipIf(!stack)("fan-out jobs (real local database, fake Zinc; ALL-125)"
       expect(row.locked_until).toBeNull();
       expect(new Date(row.next_action_at).getTime()).toBeLessThanOrEqual(now.getTime());
     }
-    await pg.query("update concierge.app_settings set value = $1 where key = 'idea_round_runs_per_day'", [before.get("idea_round_runs_per_day")]);
   }, 60_000);
 });
