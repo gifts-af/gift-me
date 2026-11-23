@@ -254,12 +254,12 @@ The five failure modes no task would otherwise test, each pinned by a test in th
   - **Shipped:** `p_shipped` moves `placed` to `shipped`.
   - **Returns:** the order's status after the call, or `null` if it isn't theirs.
   - **Allowed on** `placed` and `shipped` only. On any other status it changes nothing and returns that status.
-- **`concierge.mark_delivered(p_user_id uuid, p_order_id uuid, p_by text) returns concierge.round_status`:**
+- **`concierge.mark_delivered(p_user_id uuid, p_order_id uuid, p_by text) returns table(round_status concierge.round_status, applied boolean)`** (`applied` is false for a no-op, so callers can log `tracking.event_ignored`):
   - **With `p_by = 'buyer'`:** allowed only on `shipped`.
   - **With `p_by = 'zinc'`:** allowed on `placed` or `shipped`.
   - **What it does:** sets `delivered`, `delivered_at = now()` and `delivered_by`, then `reconcile_round`.
   - **Otherwise:** a no-op that returns the round's status.
-- **`concierge.store_cancel_order(p_user_id uuid, p_order_id uuid, p_today date) returns concierge.round_status`:**
+- **`concierge.store_cancel_order(p_user_id uuid, p_order_id uuid, p_today date) returns table(round_status concierge.round_status, applied boolean)`:**
   - **When it acts:** on `placed` or `shipped`. On `placing` or `unconfirmed` (a lost `order.placed`), it first sets `placed` and `placed_at`. It refuses (no-op) on anything else.
   - **What it does:** `fail_order_row(order, 'store_cancelled')`.
   - **Too late:** if `p_today >= ship_by_deadline` or the round's `closed_at` is set, it also sets `resolved = true` and **`failed_after_close = false`**. `fail_order_row` sets that flag on closed rounds, and leaving it would send the "we couldn't buy it, you haven't been charged" email for a gift that was bought. It then calls `reconcile_round(round, 'deadline')` when no given order remains on the round, which leads to `skipped`. Otherwise it calls `reconcile_round(round)`.
