@@ -26,7 +26,7 @@ grant select, insert, update on concierge.tick_heartbeats to service_role;
 
 -- ─── settings ────────────────────────────────────────────────────────────────
 insert into concierge.app_settings (key, value, description) values
-  ('health_email_enabled', '1', 'Switch for the owner''s daily health email: 1 sends it, 0 is off.'),
+  ('health_email_enabled', '1', 'Switch for the owner''s daily health email: 1 sends it, 0 is off. The "database can''t be reached" email still goes when 0, because the setting can''t be read then.'),
   ('health_all_clear_weekday', '1', 'The weekday the health email is sent even when all is well, as Date.getUTCDay() numbers it (0 is Sunday, 1 is Monday). Other days it is sent only when something needs attention.'),
   ('ai_credit_low_cents', '500', 'The health email warns when the AI Gateway credit is below this many cents, before ideas pause for lack of credit.'),
   ('zinc_app_balance_low_cents', '500', 'The health email warns when the Zinc app balance is below this many cents.'),
@@ -64,6 +64,8 @@ as $$
   on conflict (day) do update
     set finished_at = excluded.finished_at,
         result = excluded.result,
+        -- Jobs may already have added round failures today, so the tick adds to them; fan-out
+        -- failures come only from the tick itself, so its count replaces the row's.
         rounds_failed = concierge.tick_heartbeats.rounds_failed + excluded.rounds_failed,
         fanout_failed = excluded.fanout_failed;
 $$;

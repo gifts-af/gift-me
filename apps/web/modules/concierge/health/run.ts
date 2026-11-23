@@ -135,8 +135,9 @@ export async function runHealthCheck(deps: HealthDeps): Promise<{ result: Health
     const s = await settings(db);
     const [snapshot, aiCreditCents, zincAppBalanceCents] = await Promise.all([
       at("snapshot", readSnapshot(db, now)),
-      at("vendors", balance("ai_gateway", deps.aiCredits, s.vendorTimeoutMs)),
-      at("vendors", balance("zinc", deps.zincBalance, s.vendorTimeoutMs)),
+      balance("ai_gateway", deps.aiCredits, s.vendorTimeoutMs),
+      // balance() never rejects: a failed vendor call is a null balance, not a failed check.
+      balance("zinc", deps.zincBalance, s.vendorTimeoutMs),
     ]);
     stage = "snapshot";
     // A vendor with no function isn't set up here; a null balance alone can also mean its call failed.

@@ -33,7 +33,7 @@ export type ProblemKind =
   | "check_failed";
 
 /** Where a health check that couldn't run stopped: a fixed token, never the error's text (E6). */
-export type HealthStage = "settings" | "snapshot" | "vendors" | "wiring";
+export type HealthStage = "settings" | "snapshot" | "wiring";
 
 export type Problem = {
   kind: ProblemKind;
