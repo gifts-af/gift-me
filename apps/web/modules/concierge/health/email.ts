@@ -3,19 +3,19 @@ import { type EmailRow, renderEmail } from "@/lib/email-layout";
 import type { OutgoingEmail } from "@/lib/resend";
 import type { HealthReport, Problem, ProblemKind } from "./report";
 
-/** Each kind's heading under design/operations.md > Health email. */
+/** Each kind's own heading under design/operations.md > Health email, never an existing section. */
 export const RUNBOOK_ANCHORS: Record<ProblemKind, string> = {
   db_down: "the-database-cant-be-reached",
   tick_missed: "the-tick-didnt-finish",
   no_credit: "ai-credit",
   tick_failed: "the-tick-reported-failures",
   stuck_round: "stuck-rounds",
-  unconfirmed: "unconfirmed-orders",
-  placing: "orders-stuck-placing",
-  held_zinc: "zinc-wallet-ordering",
-  ideas_not_configured: "gift-idea-engine",
+  unconfirmed: "order-unconfirmed",
+  placing: "order-stuck-placing",
+  held_zinc: "held-for-a-zinc-problem",
+  ideas_not_configured: "ideas-cant-run-here",
   credit_low: "ai-credit",
-  zinc_low: "zinc-wallet-ordering",
+  zinc_low: "zinc-app-balance-low",
   deadline_close: "waiting-on-the-buyer",
 };
 
@@ -35,7 +35,10 @@ const TITLES: Record<ProblemKind, string> = {
 };
 
 const dollars = (n: unknown) => `$${(Number(n) / 100).toFixed(2)}`;
-const utc = (iso: string) => `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
+const utc = (iso: string) => {
+  const t = new Date(iso).toISOString();
+  return `${t.slice(0, 10)} ${t.slice(11, 16)} UTC`;
+};
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 function describe(p: Problem): string {
@@ -77,7 +80,7 @@ function weeklyLine(w: NonNullable<HealthReport["weekly"]>): string {
     `${w.waitingSetup} waiting on setup`,
     `${w.waitingApproval} waiting on approval`,
     `${w.noIdeas} ended with no ideas`,
-    `${w.roundsFailed} round steps failed`,
+    plural(w.roundsFailed, "round step failed", "round steps failed"),
     plural(w.failedCaptures, "failed capture", "failed captures"),
   ].join(", ");
 }
