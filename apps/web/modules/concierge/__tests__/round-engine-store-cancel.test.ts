@@ -106,10 +106,28 @@ describe.skipIf(!stack)("store cancellations (real local database, fake Zinc)", 
     for (const id of r.orderIds) await held.pg.query("select concierge.store_cancel_order($1, $2, current_date + 1)", [u.userId, id]);
     const before = inbox(u).length;
     await advance(r.roundId, 1);
-    expect(inbox(u).slice(before)).toEqual(["Sorry, 2 of Mary's Christmas gifts couldn't be bought@1"]);
+    expect(inbox(u).slice(before)).toEqual(["Sorry, the store cancelled 2 of Mary's Christmas gifts@1"]);
     const text = lastText(u);
+    expect(text).toContain("The store cancelled 2 of the gifts we ordered for Mary's Christmas");
+    expect(text).toContain("The money for them is back in your Zinc wallet.");
     expect(text).toContain("- Stoneware mug set (The store cancelled it, and the money is back in your Zinc wallet. Choose another gift.)");
     expect(text).toContain("- Linen apron (The store cancelled it, and the money is back in your Zinc wallet. Choose another gift.)");
+    expect(text).not.toMatch(/haven't been charged|couldn't be bought/);
+  });
+
+  it("a store cancel and an out-of-stock gift before one look: one summary that never says the cancelled one wasn't charged", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await boughtRound(u, { totals: [4200, 3000], placed: 2 });
+    await held.pg.query("select concierge.store_cancel_order($1, $2, current_date + 1)", [u.userId, r.orderIds[0]]);
+    await held.pg.query("update concierge.orders set status = 'failed', failure_type = 'out_of_stock', failed_at = now() where id = $1", [r.orderIds[1]]);
+    await held.pg.query("select concierge.reconcile_round($1)", [r.roundId]);
+    const before = inbox(u).length;
+    await advance(r.roundId, 1);
+    expect(inbox(u).slice(before)).toEqual(["Sorry, 2 of Mary's Christmas gifts need another choice@1"]);
+    const text = lastText(u);
+    expect(text).toContain("the store cancelled 1 and 1 didn't go through.");
+    expect(text).toContain("The money for the cancelled gift is back in your Zinc wallet, and you haven't been charged for the other.");
+    expect(text).not.toMatch(/couldn't be bought|haven't been charged for either/);
   });
 
   it("after the replacement the cancelled order no longer counts toward the budget (AC-8)", async () => {
@@ -232,5 +250,97 @@ describe.skipIf(!stack)("store cancellations (real local database, fake Zinc)", 
     expect(due.rowCount).toBe(0);
     await advance(r.roundId, 31);
     expect(inbox(u)).toHaveLength(2);
+  });
+
+  // ─── The deadline: every path that covers a store cancel uses its own wording, once ───
+
+  /** Emails naming the cancelled mug that also say nothing was charged: there must be none. */
+  const noChargeClaim = (u: User) => mail.filter((m) => m.to === u.email && /Stoneware mug set/.test(m.text) && /haven't been charged/.test(m.text));
+
+  it("a cancel on the ship-by day before the deadline look: the store wording once, no 'No gift was chosen'", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await boughtRound(u, { totals: [4200, 3000], placed: 2 });
+    // The apron failed and was told: it keeps the round open past the cancel below.
+    await held.pg.query("update concierge.orders set status = 'failed', failure_type = 'out_of_stock', failed_at = now() where id = $1", [r.orderIds[1]]);
+    await held.pg.query("select concierge.reconcile_round($1)", [r.roundId]);
+    await advance(r.roundId, 1);
+    const before = inbox(u).length;
+    // The round is still open (the told apron), so the webhook's own engine call may close it;
+    // the deadline look follows either way.
+    await storeCancels(u, r.zincIds[0], 30);
+    expect(await orderRow(r.orderIds[0])).toMatchObject({ status: "failed", resolved: true });
+    await advance(r.roundId, 30);
+    expect(inbox(u).slice(before)).toEqual(["Sorry, the store cancelled Mary's gift@30"]);
+    expect(lastText(u)).toContain("Walmart cancelled the Stoneware mug set");
+    expect(await roundRow(r.roundId)).toMatchObject({ status: "skipped" });
+    expect(await sends(r.roundId)).toContain(`cancel_late:${r.orderIds[0]}`);
+    const due = await held.pg.query("select 1 from concierge.tracking_candidates(current_date + 30) where order_id = $1", [r.orderIds[0]]);
+    expect(due.rowCount).toBe(0);
+    expect(noChargeClaim(u)).toEqual([]);
+  });
+
+  it("an untold store cancel at the deadline gets the store wording, not 'we couldn't buy it'; no total means no amount", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await boughtRound(u);
+    await held.pg.query("update concierge.orders set total_cents = null where id = $1", [r.orderIds[0]]);
+    // The cancel's own email is refused, so it's still untold on the ship-by day.
+    held.refuse = true;
+    await storeCancels(u, r.zincIds[0], 1);
+    held.refuse = false;
+    expect(await sends(r.roundId)).not.toContain(`fail:${r.orderIds[0]}`);
+    const before = inbox(u).length;
+    await advance(r.roundId, 30);
+    expect(inbox(u).slice(before)).toEqual(["Sorry, the store cancelled Mary's gift@30"]);
+    const text = lastText(u);
+    expect(text).toContain("The money is back in your Zinc wallet.");
+    expect(text).not.toMatch(/\$\d/);
+    expect(await sends(r.roundId)).toEqual(expect.arrayContaining([`cancel_late:${r.orderIds[0]}`, `fail:${r.orderIds[0]}`]));
+    expect(noChargeClaim(u)).toEqual([]);
+    await advance(r.roundId, 31);
+    expect(inbox(u).slice(before)).toHaveLength(1);
+  });
+
+  it("with ordering paused at the deadline, a told store cancel gets the store wording, not 'missed on us'", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await boughtRound(u);
+    await storeCancels(u, r.zincIds[0], 1);
+    await held.pg.query("update concierge.app_settings set value = '0' where key = 'zinc_ordering_enabled'");
+    const before = inbox(u).length;
+    await advance(r.roundId, 30);
+    expect(inbox(u).slice(before)).toEqual(["Sorry, the store cancelled Mary's gift@30"]);
+    expect(await sends(r.roundId)).toContain(`cancel_late:${r.orderIds[0]}`);
+    expect(await sends(r.roundId)).not.toContain("missed_on_us");
+    expect(noChargeClaim(u)).toEqual([]);
+  });
+
+  it("a held gift plus a told store cancel, nothing placed: the store wording for one, the held email for the other", async () => {
+    const u = await newUser({ autoTopUp: null });
+    await webhookFor(u);
+    const r = await newRound(u, { totals: [4200, 3000] });
+    await held.pg.query("update concierge.gift_ideas set retailer = 'walmart' where round_id = $1", [r.roundId]);
+    held.zinc.plan.set(`https://shop.test/p/${r.ideaIds[0]}`, ["timeout"]);
+    held.zinc.plan.set(`https://shop.test/p/${r.ideaIds[1]}`, ["402"]);
+    await approve(u, r);
+    const [mug] = (
+      await held.pg.query("select o.id from concierge.orders o join concierge.gift_ideas i on i.id = o.idea_id where o.round_id = $1 order by i.rank", [r.roundId])
+    ).rows.map((x) => x.id as string);
+    const zincId = randomUUID();
+    await held.pg.query("update concierge.orders set status = 'placing', hold_reason = null where id = $1", [mug]);
+    await held.pg.query("select concierge.settle_order($1, $2, 'placed', 'failed', $3::jsonb)", [
+      u.userId,
+      mug,
+      JSON.stringify({ provider_order_id: zincId, total_cents: 4218 }),
+    ]);
+    await storeCancels(u, zincId, 1);
+    expect(await orderRow(mug)).toMatchObject({ status: "failed", failure_type: "store_cancelled" });
+    const before = inbox(u).length;
+    await advance(r.roundId, 30);
+    const got = inbox(u).slice(before);
+    expect(got).toContain("Sorry, the store cancelled Mary's gift@30");
+    expect(got).toContain("Sorry, we couldn't buy all of Mary's gifts in time@30");
+    expect(got.filter((x) => x.startsWith("No gift"))).toEqual([]);
+    expect(await sends(r.roundId)).toContain(`cancel_late:${mug}`);
+    expect(await roundRow(r.roundId)).toMatchObject({ status: "skipped" });
+    expect(noChargeClaim(u)).toEqual([]);
   });
 });

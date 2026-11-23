@@ -709,3 +709,24 @@ describe("store_cancelled_late (the store cancelled, too late to ship another)",
     expect(mail.text).toContain("It's too late for us to ship other gifts in time.");
   });
 });
+
+describe("failed_several with store-cancelled gifts (bought, then refunded)", () => {
+  const s = () => SAMPLE_DATA.failed_several;
+  const row = (title: string, refunded = false) => ({ title, detail: "d", action: "a", url: "https://example.com/f", ...(refunded ? { refunded: true } : {}) });
+
+  it("all cancelled by the store: says so and the money is back, never 'not charged' or 'couldn't be bought'", () => {
+    const mail = TEMPLATES.failed_several({ ...s().data, tried: 2, failed: [row("Mug", true), row("Apron", true)] }, s().links);
+    expect(mail.subject).toBe("Sorry, the store cancelled 2 of Mom's birthday gifts");
+    expect(mail.text).toContain("We're sorry. The store cancelled 2 of the gifts we ordered for Mom's birthday on Saturday, March 14. The money for them is back in your Zinc wallet.");
+    expect(mail.text).not.toMatch(/haven't been charged|couldn't be bought/);
+  });
+
+  it("mixed: the not-charged sentence covers only the others", () => {
+    const mail = TEMPLATES.failed_several({ ...s().data, tried: 3, failed: [row("Mug", true), row("Apron")] }, s().links);
+    expect(mail.subject).toBe("Sorry, 2 of Mom's birthday gifts need another choice");
+    expect(mail.text).toContain(
+      "We're sorry. Of the gifts we tried for Mom's birthday on Saturday, March 14, the store cancelled 1 and 1 didn't go through. The money for the cancelled gift is back in your Zinc wallet, and you haven't been charged for the other.",
+    );
+    expect(mail.text).not.toMatch(/couldn't be bought/);
+  });
+});

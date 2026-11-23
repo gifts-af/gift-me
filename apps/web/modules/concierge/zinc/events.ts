@@ -202,7 +202,7 @@ async function storeCancelled(userId: string, event: ZincEvent, deps: Deps): Pro
     await tell(order.round_id);
   } catch (e) {
     // The tick tells them instead; Zinc mustn't retry a cancel that's done.
-    logEvent("order.hold_notice_deferred", { user_id: userId, round_id: order.round_id, ...errorFields(e) });
+    logEvent("tracking.store_cancel_tell_deferred", { user_id: userId, round_id: order.round_id, ...errorFields(e) });
   }
 }
 

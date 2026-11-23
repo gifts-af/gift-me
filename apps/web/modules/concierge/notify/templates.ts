@@ -66,7 +66,8 @@ type OneGift = Occasion & { giftTitle: string };
 type Failure = OneGift & { orderByText: string };
 /** A failed gift in a summary (ALL-116): what happened, and the link text for what to do now. */
 // `url` is that gift's own fix page (ALL-29).
-export type FailedGift = { title: string; detail: string; action?: string; url: string };
+/** `refunded`: the store cancelled it after it was bought, and the money is back in the Zinc wallet (ALL-33). */
+export type FailedGift = { title: string; detail: string; action?: string; url: string; refunded?: boolean };
 /** A gift the store cancelled after it was bought (ALL-33). */
 export type CancelledGift = { title: string; store?: string; amountText?: string };
 
@@ -652,24 +653,38 @@ export const TEMPLATES: {
     };
   },
 
-  failed_several: (d, links) => ({
-    subject: `Sorry, ${d.failed.length} of ${d.personName}'s ${d.occasion} gifts couldn't be bought`,
-    ...renderEmail({
-      heading: `Sorry, ${d.failed.length} of ${d.personName}'s ${d.occasion} gifts couldn't be bought`,
-      paragraphs: [
-        `We're sorry. We tried to order ${d.tried} gifts for ${d.personName}'s ${d.occasion} on ${d.dateText}, and ` +
-          (d.failed.length >= d.tried
-            ? `${d.tried === 2 ? "neither" : "none"} of them went through.`
-            : `${d.failed.length} of them didn't go through.`) +
-          ` You haven't been charged for ${d.failed.length === 2 ? "either" : "them"}.`,
-        ...onItsWayLine(d.onItsWay, "The good news: "),
-      ],
-      rows: d.failed.map((f) => ({ title: f.title, detail: f.detail })),
-      button: { label: `Open ${d.personName}'s page`, url: links.open },
-      link: d.failed.filter((f) => f.action).map((f) => ({ label: f.action as string, url: f.url })),
-      footer: `What happens next: there's still time to put this right. Nothing else is bought until you choose. Choose by ${d.orderByText} so it arrives in time. If you don't, we'll close this round then and let you know.`,
-    }),
-  }),
+  failed_several: (d, links) => {
+    // A store-cancelled gift was bought and refunded: never "couldn't be bought" or "not charged" (ALL-33).
+    const n = d.failed.length;
+    const refunded = d.failed.filter((f) => f.refunded).length;
+    const others = n - refunded;
+    const title =
+      refunded === 0
+        ? `Sorry, ${n} of ${d.personName}'s ${d.occasion} gifts couldn't be bought`
+        : refunded === n
+          ? `Sorry, the store cancelled ${n} of ${d.personName}'s ${d.occasion} gifts`
+          : `Sorry, ${n} of ${d.personName}'s ${d.occasion} gifts need another choice`;
+    const lead =
+      refunded === 0
+        ? `We're sorry. We tried to order ${d.tried} gifts for ${d.personName}'s ${d.occasion} on ${d.dateText}, and ` +
+          (n >= d.tried ? `${d.tried === 2 ? "neither" : "none"} of them went through.` : `${n} of them didn't go through.`) +
+          ` You haven't been charged for ${n === 2 ? "either" : "them"}.`
+        : refunded === n
+          ? `We're sorry. The store cancelled ${n} of the gifts we ordered for ${d.personName}'s ${d.occasion} on ${d.dateText}. The money for them is back in your Zinc wallet.`
+          : `We're sorry. Of the gifts we tried for ${d.personName}'s ${d.occasion} on ${d.dateText}, the store cancelled ${refunded} and ${others} didn't go through. ` +
+            `The money for the cancelled ${refunded === 1 ? "gift" : "gifts"} is back in your Zinc wallet, and you haven't been charged for the ${others === 1 ? "other" : "others"}.`;
+    return {
+      subject: title,
+      ...renderEmail({
+        heading: title,
+        paragraphs: [lead, ...onItsWayLine(d.onItsWay, "The good news: ")],
+        rows: d.failed.map((f) => ({ title: f.title, detail: f.detail })),
+        button: { label: `Open ${d.personName}'s page`, url: links.open },
+        link: d.failed.filter((f) => f.action).map((f) => ({ label: f.action as string, url: f.url })),
+        footer: `What happens next: there's still time to put this right. Nothing else is bought until you choose. Choose by ${d.orderByText} so it arrives in time. If you don't, we'll close this round then and let you know.`,
+      }),
+    };
+  },
 
   check_your_address: (_d, links) => ({
     subject: "Please check your saved address",
