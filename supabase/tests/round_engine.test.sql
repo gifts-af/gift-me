@@ -51,9 +51,10 @@ select throws_ok($q$select * from concierge.round_candidates(current_date)$q$, '
 
 -- Claims
 select tests.act_as_server();
-select is((select count(*)::int from concierge.claim_due_rounds('2027-02-01T00:00:00Z')), 1, 'a due round is claimed');
-select is((select count(*)::int from concierge.claim_due_rounds('2027-02-01T00:00:00Z')), 0, 'a leased round is not claimed again');
-select is((select attempts from concierge.claim_due_rounds('2027-02-01T00:11:00Z')), 2, 'after the lease lapses it is claimed again, attempts 2');
+-- Only r1 is counted: the shared local database can hold other due rounds.
+select is((select count(*)::int from concierge.claim_due_rounds('2027-02-01T00:00:00Z') where id = :'r1'), 1, 'a due round is claimed');
+select is((select count(*)::int from concierge.claim_due_rounds('2027-02-01T00:00:00Z') where id = :'r1'), 0, 'a leased round is not claimed again');
+select is((select attempts from concierge.claim_due_rounds('2027-02-01T00:11:00Z') where id = :'r1'), 2, 'after the lease lapses it is claimed again, attempts 2');
 select is(concierge.claim_round(:'r1', '2027-02-01T00:11:30Z'), null, 'claim_round is null while the lease is live');
 
 -- finish_round

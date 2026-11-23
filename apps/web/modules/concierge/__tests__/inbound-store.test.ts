@@ -16,7 +16,7 @@ describe.skipIf(!dbUp)("createSupabaseInboundStore", () => {
   let pg: Client;
   const users: string[] = [];
   const tag = randomUUID().slice(0, 8);
-  const dadEmail = `dad-${tag}@gmail.com`;
+  const dadEmail = `dad-${tag}@example.test`;
   let userA: string;
   let userB: string;
   let personA: string;
@@ -63,7 +63,7 @@ describe.skipIf(!dbUp)("createSupabaseInboundStore", () => {
     pg = new Client({ connectionString: LOCAL_DB });
     await pg.connect();
     userA = await newUser(dadEmail);
-    userB = await newUser(`xdad-${tag}@gmail.com`);
+    userB = await newUser(`xdad-${tag}@example.test`);
     personA = await newPerson(userA, "Dad");
     personB = await newPerson(userB, "Dad");
   });
@@ -74,10 +74,10 @@ describe.skipIf(!dbUp)("createSupabaseInboundStore", () => {
 
   it("finds the account by its email ignoring case, and nothing else", async () => {
     const s = store();
-    expect(await s.userByEmail(`Dad-${tag}@Gmail.com`)).toBe(userA);
-    expect(await s.userByEmail(`dad-${tag}@gmail.co`)).toBeNull();
-    expect(await s.userByEmail(`ad-${tag}@gmail.com`)).toBeNull();
-    expect(await s.userByEmail("%@gmail.com")).toBeNull();
+    expect(await s.userByEmail(`Dad-${tag}@Example.test`)).toBe(userA);
+    expect(await s.userByEmail(`dad-${tag}@example.tes`)).toBeNull();
+    expect(await s.userByEmail(`ad-${tag}@example.test`)).toBeNull();
+    expect(await s.userByEmail("%@example.test")).toBeNull();
   });
 
   it("counts recorded events for today, per user", async () => {

@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { Client } from "pg";
 import { addDays, type CalendarDate, type Database } from "@gifts-af/core";
 import { afterAll, beforeAll, beforeEach } from "vitest";
-import { LOCAL_DB } from "../../../test/local-db";
+import { LOCAL_DB, ownStaleOrders } from "../../../test/local-db";
 import type { LocalSupabase } from "../../../e2e/local-supabase";
 import type { Channel } from "../notify/channels";
 import { createSupabaseNotifyStore } from "../notify/store";
@@ -75,7 +75,7 @@ export function heldRounds(local: LocalSupabase | null) {
   function wiring(now: Date, o: { zinc?: boolean; engineClock?: () => number } = {}): { engine: EngineDeps; purchase: PurchaseDeps } {
     clockDay = now.toISOString().slice(0, 10);
     const clock = () => 0;
-    const db = client();
+    const db = ownStaleOrders(client(), users);
     const purchase: PurchaseDeps = {
       db,
       http: { base: "https://zinc.test", timeoutMs: 1000, fetch: zinc.fetch },

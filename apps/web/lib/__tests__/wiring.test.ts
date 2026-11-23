@@ -20,14 +20,17 @@ describe.skipIf(!supabase)("Zinc and engine wiring (real local database and engi
   let wiring: typeof import("@/lib/wiring");
   const users: string[] = [];
   const envBefore = { ...process.env };
-  const SHARED = ["round_engine_enabled", "idea_engine_enabled"];
+  // The switches these tests read, set here rather than trusted from the shared database, and put
+  // back after. Buying on: with it off, a funds hold is silenced and its notice never goes.
+  const SHARED: Record<string, string> = { zinc_ordering_enabled: "1", round_engine_enabled: "0", idea_engine_enabled: "0" };
   const settingsBefore = new Map<string, string>();
 
   beforeAll(async () => {
     pg = new Client({ connectionString: LOCAL_DB });
     await pg.connect();
-    for (const key of SHARED) {
+    for (const [key, value] of Object.entries(SHARED)) {
       settingsBefore.set(key, (await pg.query("select value from concierge.app_settings where key = $1", [key])).rows[0].value);
+      await pg.query("update concierge.app_settings set value = $2 where key = $1", [key, value]);
     }
     // What the app reads from its environment, pointed at the local stack. Set before the
     // import, because the admin client reads its key when its module loads.

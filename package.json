@@ -13,11 +13,12 @@
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "test:changed": "pnpm -r test:changed",
-    "db:test": "supabase test db",
+    "db:clean": "node scripts/db-clean.mjs",
+    "db:test": "node scripts/db-clean.mjs supabase test db",
     "db:start:tests": "supabase start -x studio,imgproxy,mailpit,edge-runtime,logflare,vector,supavisor,realtime,storage-api,postgres-meta",
-    "test:db": "pnpm --filter @gifts-af/web test:db",
+    "test:db": "node scripts/db-clean.mjs pnpm --filter @gifts-af/web test:db",
     "check:bundle": "pnpm --filter @gifts-af/web check:bundle",
-    "e2e": "pnpm --filter @gifts-af/web e2e",
+    "e2e": "node scripts/db-clean.mjs pnpm --filter @gifts-af/web e2e",
     "e2e:browsers": "pnpm --filter @gifts-af/web exec playwright install --with-deps chromium webkit",
     "e2e:browsers:deps": "pnpm --filter @gifts-af/web exec playwright install-deps chromium webkit",
     "db:push:dev": "node scripts/db-push.mjs bcemtqvdbrrgiipzggyw",
@@ -27,11 +28,12 @@
     "db:map": "pnpm --filter @gifts-af/web db:map",
     "db:map:check": "pnpm --filter @gifts-af/web db:map:check",
     "ai:eval": "pnpm --filter @gifts-af/web ai:eval",
-    "gallery": "pnpm --filter @gifts-af/web gallery",
+    "gallery": "node scripts/db-clean.mjs pnpm --filter @gifts-af/web gallery",
     "live-check": "pnpm --filter @gifts-af/web live-check",
     "extension:package": "pnpm --filter @gifts-af/extension package"
   },
   "devDependencies": {
+    "pg": "^8.23.1",
     "prettier": "^3.9.10",
     "supabase": "^2.122.0"
   }
