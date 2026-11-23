@@ -24,6 +24,20 @@ type Item = { c: TrackingCandidate; step: StepKey; news: "late" | "cancelled" | 
 
 const ORDER: Item["news"][] = ["late", "cancelled", "on_time"];
 
+const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+/**
+ * Bad news first (late, then cancelled, then on time), then by occasion date, person, gift and
+ * order id. tracking_candidates has no order of its own, so without the tie-breaks two late gifts
+ * could swap places from one run to the next.
+ */
+const byNews = (a: Item, b: Item) =>
+  ORDER.indexOf(a.news) - ORDER.indexOf(b.news) ||
+  cmp(a.c.occasionDate, b.c.occasionDate) ||
+  cmp(a.c.personName, b.c.personName) ||
+  cmp(a.c.title, b.c.title) ||
+  cmp(a.c.orderId, b.c.orderId);
+
 const roundPath = (roundId: string) => `/rounds/${roundId}`;
 
 export async function runTrackingNews(deps: TrackingNewsDeps): Promise<{ sent: number }> {
@@ -91,7 +105,7 @@ async function tellUser(userId: string, list: Item[], deps: TrackingNewsDeps): P
       if (await deps.store.recordSend(it.c.roundId, userId, it.step)) claimed.push(it);
     }
     if (claimed.length === 0) return false;
-    claimed.sort((a, b) => ORDER.indexOf(a.news) - ORDER.indexOf(b.news));
+    claimed.sort(byNews);
     result = await send(userId, claimed, deps);
   } catch (err) {
     logEvent("tracking.news_failed", { user_id: userId, ...errorFields(err), alert: true });
