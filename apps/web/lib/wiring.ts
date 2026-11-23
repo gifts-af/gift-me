@@ -22,6 +22,7 @@ import {
   placeHeldForUser,
   placeRound,
   runIdeas,
+  runTrackingNews,
   sweepStalePlacing,
   type EngineDeps,
   type GenerateIdeas,
@@ -156,6 +157,9 @@ export async function buyingWiring(
     zinc: null,
     clearUnfiledNotes: () => clearUnfiledNotes(db),
     pruneActionLinks: () => pruneExpiredActionLinks(db),
+    // The engine's day: the tick's UTC day.
+    trackingNews: () =>
+      runTrackingNews({ store: engine.store, notify: engine.notify, today: now.toISOString().slice(0, 10), setting: (key) => settingInt(db, key) }),
   };
   const wiring = await zincWiring(db, env);
   if (!wiring) {

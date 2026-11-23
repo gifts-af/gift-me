@@ -4,7 +4,8 @@ import { SAMPLE_DATA, TEMPLATES, type NotificationKind } from "../notify/templat
 const kinds = Object.keys(SAMPLE_DATA) as NotificationKind[];
 
 // store_cancelled_late: nothing more can ship in time, so there is nothing to tap (ALL-33 mock-up).
-const NO_BUTTON: NotificationKind[] = ["notes_tip", "who_is_this", "notes_not_read", "notes_cant_cancel", "store_cancelled_late"];
+// gift_on_time and tracking_news: plain links only; nothing needs one main action.
+const NO_BUTTON: NotificationKind[] = ["notes_tip", "who_is_this", "notes_not_read", "notes_cant_cancel", "store_cancelled_late", "gift_on_time", "tracking_news"];
 
 /** The Zinc wallet address some emails carry as data rather than a one-time link. */
 function walletUrl(kind: NotificationKind): string[] {
@@ -728,5 +729,87 @@ describe("failed_several with store-cancelled gifts (bought, then refunded)", ()
       "We're sorry. Of the gifts we tried for Mom's birthday on Saturday, March 14, the store cancelled 1 and 1 didn't go through. The money for the cancelled gift is back in your Zinc wallet, and you haven't been charged for the other.",
     );
     expect(mail.text).not.toMatch(/couldn't be bought/);
+  });
+});
+
+describe("gift_late (one gift may arrive after the occasion)", () => {
+  const s = () => SAMPLE_DATA.gift_late;
+
+  it("says sorry, the dates, that it can't be cancelled, the options and the one button", () => {
+    const mail = TEMPLATES.gift_late(s().data, s().links);
+    expect(mail.subject).toBe("Mom's gift may arrive after their birthday");
+    expect(mail.html).toContain("gift may arrive after their birthday");
+    expect(mail.text).toContain(
+      "We're sorry. The Cozy throw blanket for Mom's birthday on Saturday, March 14 is now expected Monday, March 16, two days late.",
+    );
+    expect(mail.text).toContain("It's already on its way, so it can't be cancelled.");
+    expect(mail.text).toContain("- Keep it (Nothing to do. It arrives Monday, March 16.)");
+    expect(mail.text).toContain("- Get something locally for the day (Then return the Cozy throw blanket once it arrives, if you like.)");
+    expect(mail.text).toContain("It already arrived: https://example.com/rounds/r1");
+    expect(mail.text).toContain("What happens next: we keep watching it. If it's back on time, we'll let you know.");
+  });
+
+  it("one day late, and a holiday keeps its name", () => {
+    const mail = TEMPLATES.gift_late({ ...s().data, occasion: "Christmas", daysLate: 1 }, s().links);
+    expect(mail.subject).toBe("Mom's gift may arrive after Christmas");
+    expect(mail.text).toContain("one day late.");
+  });
+
+  it("no button when the gift hasn't shipped", () => {
+    const mail = TEMPLATES.gift_late(s().data, {});
+    expect(mail.text).not.toContain("It already arrived");
+    expect(mail.html.match(/background:#0f766e/g) ?? []).toHaveLength(0);
+  });
+});
+
+describe("gift_on_time (a late gift is back on time)", () => {
+  it("good news, the new date, nothing to do, a link to the gift", () => {
+    const s = SAMPLE_DATA.gift_on_time;
+    const mail = TEMPLATES.gift_on_time(s.data, s.links);
+    expect(mail.subject).toBe("Good news: Mom's gift is back on time");
+    expect(mail.text).toContain("The Cozy throw blanket is now expected Friday, March 13, in time for Mom's birthday on Saturday, March 14.");
+    expect(mail.text).toContain("There's nothing you need to do.");
+    expect(mail.text).toContain(`See Mom's gift: ${s.links.open}`);
+  });
+});
+
+describe("tracking_news (one daily summary of a buyer's gift news)", () => {
+  const s = () => SAMPLE_DATA.tracking_news;
+
+  it("bad news first with an apology, a row each, the arrived link on shipped late gifts, what you can do", () => {
+    const mail = TEMPLATES.tracking_news(s().data, s().links);
+    expect(mail.subject).toBe("Updates on 3 of your gifts");
+    expect(mail.text).toContain("We're sorry, two of your gifts have bad news. One has good news.");
+    const late = mail.text.indexOf("- Cozy throw blanket may arrive late");
+    const cancelled = mail.text.indexOf("- The store cancelled the Reading lamp");
+    const onTime = mail.text.indexOf("- Good news: the Tea sampler is back on time");
+    expect(late).toBeGreaterThan(-1);
+    expect(cancelled).toBeGreaterThan(late);
+    expect(onTime).toBeGreaterThan(cancelled);
+    expect(mail.text).toContain(
+      "(For Mom's birthday on Saturday, March 14. Now expected Monday, March 16, two days late. It's on its way and can't be cancelled.)",
+    );
+    expect(mail.text).toContain("It already arrived: https://example.com/rounds/r1");
+    expect(mail.text).toContain("(For Mom's birthday on Saturday, March 14. The $34.50 is back in your Zinc wallet. It's too late to ship another in time.)");
+    expect(mail.text).toContain("(For Dad's birthday on Friday, March 20. Now expected Wednesday, March 18.)");
+    expect(mail.text).toContain(
+      "What you can do for a late or cancelled gift: keep a late one (nothing to do), or get something locally for the day and return the late one once it arrives. Nothing more is bought for these occasions.",
+    );
+    expect(mail.html.match(/background:#0f766e/g) ?? []).toHaveLength(0);
+  });
+
+  it("only good news: no apology and nothing to do", () => {
+    const items = s().data.items.filter((i) => i.kind === "on_time");
+    const mail = TEMPLATES.tracking_news({ items: [...items, { ...items[0], title: "Mug" }] }, {});
+    expect(mail.subject).toBe("Updates on 2 of your gifts");
+    expect(mail.text).toContain("Good news: two of your gifts are back on time. There's nothing you need to do.");
+    expect(mail.text).not.toMatch(/sorry|What you can do/);
+  });
+
+  it("a placed late gift has no arrived link, and money not known is never guessed", () => {
+    const items = s().data.items.map((i) => (i.kind === "late" ? { ...i, url: undefined } : i.kind === "cancelled" ? { ...i, amountText: undefined } : i));
+    const mail = TEMPLATES.tracking_news({ items }, {});
+    expect(mail.text).not.toContain("It already arrived");
+    expect(mail.text).toContain("The money is back in your Zinc wallet.");
   });
 });

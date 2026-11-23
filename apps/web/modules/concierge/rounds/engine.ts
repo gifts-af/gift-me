@@ -64,6 +64,8 @@ export type EngineDeps = {
   clearUnfiledNotes?: () => Promise<{ cleared: number; imagesRemoved: number }>;
   /** Deletes emailed buttons long past expiry and returns how many, bound by the caller (E3). */
   pruneActionLinks?: () => Promise<number>;
+  /** The daily tracking news (ALL-33): late, back-on-time and late store-cancel news, one email per buyer. */
+  trackingNews?: () => Promise<{ sent: number }>;
   /** Queues due rounds for their own function calls (ALL-125); the tick runs them itself without it. */
   sendJobs?: SendJobs;
   /** A test clock: queued messages carry the tick's `now`. */
@@ -124,6 +126,18 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
       logEvent("housekeeping.action_links_pruned", { deleted });
     } catch (err) {
       logEvent("housekeeping.action_links_prune_failed", { ...errorFields(err) });
+    }
+  }
+
+  // The tracking news is told only from here (owner, 2026-11-23), on its own so it can't fail the
+  // tick. It runs whatever round_engine_enabled says: store cancels are always told, and the late
+  // check has its own switch (late_check_enabled).
+  if (deps.trackingNews) {
+    try {
+      const { sent } = await deps.trackingNews();
+      logEvent("tracking.news_run", { sent });
+    } catch (err) {
+      logEvent("tracking.news_run_failed", { ...errorFields(err), alert: true });
     }
   }
 

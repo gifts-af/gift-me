@@ -298,4 +298,7 @@ export class FakeRoundStore implements RoundStore {
   async roundsMissingOrderedEmail() {
     return [];
   }
+  async trackingCandidates() {
+    return [];
+  }
 }

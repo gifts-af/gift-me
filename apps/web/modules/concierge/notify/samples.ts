@@ -88,13 +88,17 @@ function healthSamples(link: string): SampleEmail[] {
   ];
 }
 
-/** The Zinc wallet address and each failed gift's fix page, which some emails carry as data, point at `link` too. */
+/** The Zinc wallet address, each failed gift's fix page and each news row's link, which some emails carry as data, point at `link` too. */
 function withWallet(data: unknown, link: string): unknown {
   if (!data || typeof data !== "object") return data;
   let out = data;
   if ("walletUrl" in out) out = { ...out, walletUrl: link };
   if ("failed" in out && Array.isArray(out.failed)) {
     out = { ...out, failed: out.failed.map((f: object) => ("url" in f ? { ...f, url: link } : f)) };
+  }
+  // The daily news summary's "It already arrived" links (ALL-33).
+  if ("items" in out && Array.isArray(out.items)) {
+    out = { ...out, items: out.items.map((i: object) => ("url" in i ? { ...i, url: link } : i)) };
   }
   return out;
 }

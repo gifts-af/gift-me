@@ -94,6 +94,34 @@ export type RoundOrder = {
   store: string | null;
 };
 
+/**
+ * A gift the daily tracking news looks at (tracking_candidates): placed or shipped with its
+ * occasion today or later, or a store cancel resolved at once and not yet told. Read with the
+ * service role; never logged.
+ */
+export type TrackingCandidate = {
+  userId: string;
+  roundId: string;
+  orderId: string;
+  personName: string;
+  occasionKind: OccasionKind;
+  occasionDate: CalendarDate;
+  title: string;
+  status: string;
+  estDeliveryDate: CalendarDate | null;
+  placedAt: string | null;
+  handlingDaysMax: number | null;
+  deliveryDaysMax: number | null;
+  /** What Zinc charged; null when it didn't say. */
+  totalCents: number | null;
+  failureType: string | null;
+  resolved: boolean;
+  /** The retailer's name, as stored ("walmart"), read only for store cancels; null otherwise or when unknown. */
+  store: string | null;
+  /** The round's keys for this order (`late:<id>`, `ontime:<id>`, ...). */
+  sentSteps: Set<StepKey>;
+};
+
 /** What the round's emails say. Read with the service role; never logged. */
 export type RoundContext = {
   userId: string;
@@ -232,6 +260,8 @@ export interface RoundStore {
    * `late_fail:<id>` email isn't recorded.
    */
   roundsMissingOrderedEmail(): Promise<string[]>;
+  /** The gifts the daily tracking news looks at on `today` (ALL-33). */
+  trackingCandidates(today: CalendarDate): Promise<TrackingCandidate[]>;
 }
 
 const SCHEDULE_KEYS: Record<keyof ScheduleSettings, string> = {
@@ -678,6 +708,38 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
       const told = new Set(sends.map((s) => s.step));
       const late = await lateFailures();
       return [...new Set([...orders.filter((o) => !told.has(`ordered:${o.id}`)).map((o) => o.round_id), ...late])];
+    },
+
+    async trackingCandidates(today) {
+      const { data, error } = await concierge.rpc("tracking_candidates", { p_today: today });
+      if (error) fail("Loading the tracking candidates failed", error);
+      // The store's name is said only in a store-cancelled email.
+      const cancelled = data.filter((r) => r.status === "failed").map((r) => r.order_id);
+      const stores = new Map<string, string | null>();
+      if (cancelled.length) {
+        const { data: rows, error: storeError } = await concierge.from("orders").select("id, gift_ideas(retailer)").in("id", cancelled);
+        if (storeError) fail("Loading the cancelled gifts' stores failed", storeError);
+        for (const o of rows) stores.set(o.id, (o.gift_ideas as { retailer: string | null } | null)?.retailer ?? null);
+      }
+      return data.map((r) => ({
+        userId: r.user_id,
+        roundId: r.round_id,
+        orderId: r.order_id,
+        personName: r.person_name,
+        occasionKind: r.occasion_kind as OccasionKind,
+        occasionDate: r.occasion_date,
+        title: r.title,
+        status: r.status,
+        estDeliveryDate: r.est_delivery_date ?? null,
+        placedAt: r.placed_at ?? null,
+        handlingDaysMax: r.handling_days_max ?? null,
+        deliveryDaysMax: r.delivery_days_max ?? null,
+        totalCents: r.total_cents ?? null,
+        failureType: r.failure_type ?? null,
+        resolved: r.resolved,
+        store: stores.get(r.order_id) ?? null,
+        sentSteps: new Set((r.sent_steps ?? []) as StepKey[]),
+      }));
     },
 
     async canBuy(userId) {
