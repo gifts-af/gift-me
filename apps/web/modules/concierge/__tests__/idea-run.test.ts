@@ -530,6 +530,17 @@ describe("runIdeas: out of AI credit", () => {
     expect(store.finished).toEqual([{ outcome: "saved", cost: expect.any(Number) }]);
   });
 
+  it("a list pass that spent Zinc lookups and kept nothing, then a 402, still ends no_credit", async () => {
+    // The trade-off: an uncounted run can spend Zinc cents; idea_round_runs_per_day still counts it.
+    world([2000], { zinc, gateway });
+    gateway.outOfCredit = "brainstorm";
+    store.in = inputs({ round: ROUND, listGifts: listWorld(1, zinc, 9000) });
+    expect(await runIdeas(roundReq(), deps())).toEqual({ status: "no_credit" });
+    expect(zinc.count("offers")).toBe(1);
+    expect(store.finished).toEqual([{ outcome: "no_credit", cost: 1 }]);
+    expect(event("ideas.run")).toMatchObject({ outcome: "no_credit", cost_cents: 1 });
+  });
+
   it("ideas.run logs outcome no_credit, ids only", async () => {
     world([2000, 2000], { zinc, gateway });
     gateway.outOfCredit = "brainstorm";

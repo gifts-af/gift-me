@@ -122,7 +122,8 @@ export async function runIdeas(req: IdeaRequest, deps: IdeaDeps): Promise<IdeaOu
     if (e instanceof AiError && e.costCents) paidAi(t, e.costCents);
     const f = errorFields(e);
     t.error = { name: String(f.name), kind: typeof f.kind === "string" ? f.kind : null };
-    // Out of credit before any AI reply was paid for: the run bought nothing, so it doesn't count (T68).
+    // Out of credit before any AI reply was paid for: no AI was bought, so the run doesn't count (T68).
+    // It may still have spent Zinc lookup cents in the list pass; idea_round_runs_per_day counts it, which bounds that.
     const noCredit = e instanceof AiError && e.kind === "no_credit" && !t.aiPaid;
     outcome = { status: req.signal.aborted ? "deadline" : noCredit ? "no_credit" : "failed" };
     if (t.runId !== null) await deps.store.finish(t.runId, outcome.status as RunEnd, cents(t.spent));

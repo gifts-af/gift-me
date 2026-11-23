@@ -17,7 +17,7 @@ const AI_ERROR_MESSAGES = {
 
 /**
  * The message is always a fixed phrase: never request or response text (T42, S5). `no_credit`:
- * the Gateway's credit ran out, so nothing was bought.
+ * the Gateway's credit ran out, so the AI call was refused and cost nothing.
  */
 export class AiError extends Error {
   /** What a reply we received and priced cost before it failed, so the caller still counts it. A number, never text. */

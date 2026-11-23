@@ -134,7 +134,7 @@ describe.skipIf(!stack)("a no_credit run doesn't count (real local database)", (
     expect(next).toEqual({ do: "generate" });
   });
 
-  it("with no_ideas already sent: ranSinceNoIdeas stays false and no no_ideas_again", async () => {
+  it("with no_ideas already sent: ranSinceNoIdeas stays false and the round still generates", async () => {
     const { ctx, next } = await plan(await maxedRound({ newerFact: true, toldNoIdeas: true }));
     expect(ctx).toMatchObject({ ideaRunsLeft: true, ranSinceNoIdeas: false });
     expect(next).toEqual({ do: "generate" });
