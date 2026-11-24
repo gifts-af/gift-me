@@ -35,7 +35,8 @@ export async function tellDelivered(roundId: string, deps: { store: RoundStore; 
           personName: ctx.personName,
           occasion: occasionWord(ctx.occasionKind),
           dateText: shortDate(ctx.occasionDate),
-          gifts: delivered.map((o) => ({ title: o.title, deliveredText: shortDate((o.deliveredAt ?? new Date().toISOString()).slice(0, 10)) })),
+          // mark_delivered always sets delivered_at; a row without one says "Delivered", never a guessed date.
+          gifts: delivered.map((o) => ({ title: o.title, ...(o.deliveredAt ? { deliveredText: shortDate(o.deliveredAt.slice(0, 10)) } : {}) })),
         },
         links: { open: { path: `/rounds/${roundId}` } },
       },

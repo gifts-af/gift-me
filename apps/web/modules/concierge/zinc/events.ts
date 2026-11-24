@@ -186,6 +186,9 @@ async function storeCancelled(userId: string, event: ZincEvent, deps: Deps): Pro
     p_user_id: userId,
     p_order_id: order.id,
     p_today: deps.now.toISOString().slice(0, 10),
+    // What actually came back, for the emails; never our own total or cap. The generated types
+    // mark every argument required; SQL reads null as "Zinc didn't say".
+    p_refund_cents: event.refundCents as number,
   });
   if (error) throw new Error(`Cancelling the order failed (${error.code}).`);
   const result = data?.[0];

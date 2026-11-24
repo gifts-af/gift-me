@@ -128,7 +128,8 @@ function occasion(c: TrackingCandidate) {
   return { personName: c.personName, occasion: occasionWord(c.occasionKind), dateText: shortDate(c.occasionDate) };
 }
 
-const amountText = (c: TrackingCandidate) => (c.totalCents !== null && c.totalCents > 0 ? { amountText: money(c.totalCents) } : {});
+// Zinc's own refund amount, never what we were charged: when Zinc didn't say, no amount is said.
+const amountText = (c: TrackingCandidate) => (c.refundCents !== null && c.refundCents > 0 ? { amountText: money(c.refundCents) } : {});
 
 function send(userId: string, items: Item[], deps: TrackingNewsDeps): Promise<NotifyResult> {
   const rounds = new Set(items.map((i) => i.c.roundId));

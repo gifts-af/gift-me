@@ -327,7 +327,10 @@ export async function tellOrdered(roundId: string, deps: EngineDeps): Promise<vo
   const fresh: RoundOrder[] = [];
   let result: NotifyResult;
   try {
-    for (const o of ctx.orders.filter((x) => x.status === "failed" && x.failedAfterClose && !sent.has(`late_fail:${x.id}`))) {
+    // Never a store cancel: it was bought and refunded, so "you haven't been charged" would be
+    // untrue. The daily news tells it once the close has resolved it (owner, 2026-11-23).
+    const late = ctx.orders.filter((x) => x.status === "failed" && x.failedAfterClose && !STORE_CANCELLED(x));
+    for (const o of late.filter((x) => !sent.has(`late_fail:${x.id}`))) {
       if (await deps.store.recordSend(roundId, ctx.userId, `late_fail:${o.id}`)) fresh.push(o);
     }
     if (fresh.length === 0) return;
@@ -398,14 +401,14 @@ function lateDetail(o: RoundOrder, personName: string): string {
 }
 
 /**
- * A store-cancelled gift for its emails: the store's name and the refund (what Zinc charged),
- * each only when known. Never the order's cap, which can overstate the refund.
+ * A store-cancelled gift for its emails: the store's name and Zinc's own refund amount, each only
+ * when known (owner, 2026-11-23). Never what we were charged or the order's cap.
  */
 function cancelledGift(o: RoundOrder): CancelledGift {
   return {
     title: o.title,
     ...(o.store ? { store: o.store.charAt(0).toUpperCase() + o.store.slice(1) } : {}),
-    ...(o.totalCents !== null && o.totalCents > 0 ? { amountText: money(o.totalCents) } : {}),
+    ...(o.refundCents !== null && o.refundCents > 0 ? { amountText: money(o.refundCents) } : {}),
   };
 }
 
@@ -619,15 +622,23 @@ async function tellClosing(
 ): Promise<"sent" | "none" | "refused"> {
   const { store } = deps;
   const ids = { round_id: round.id, user_id: round.userId };
-  const claimed = await store.claimFailureNotices(round.id);
+  let claimed = await store.claimFailureNotices(round.id);
   if (claimed.length === 0) return "none";
   let heldToo = false;
   let failed: RoundOrder[] = [];
   let result: NotifyResult;
   try {
+    const ctx = await store.roundContext(round.id);
+    // A store cancel that landed after this run looked is never told as "we couldn't buy it":
+    // its key goes back, and the close and the store-cancelled email (or the daily news) tell it.
+    const cancels = claimed.filter((id) => ctx.orders.some((o) => o.id === id && STORE_CANCELLED(o)));
+    if (cancels.length > 0) {
+      await store.releaseFailureNotices(round.id, cancels);
+      claimed = claimed.filter((id) => !cancels.includes(id));
+      if (claimed.length === 0) return "none";
+    }
     // The held gifts are named here only if the cancelled email hasn't gone.
     heldToo = held.length > 0 && (await store.recordSend(round.id, round.userId, "held_cancelled"));
-    const ctx = await store.roundContext(round.id);
     failed = claimed.map((id) => ctx.orders.find((o) => o.id === id)).filter((o): o is RoundOrder => o !== undefined);
     const rows = [
       ...failed.map((o) => ({ title: o.title, detail: lateDetail(o, ctx.personName) })),

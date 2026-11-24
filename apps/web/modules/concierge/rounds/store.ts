@@ -90,6 +90,8 @@ export type RoundOrder = {
   feeCents: number;
   /** What Zinc charged, once placed; null before then or when Zinc didn't say. */
   totalCents: number | null;
+  /** What Zinc refunded when the store cancelled; null otherwise or when Zinc didn't say. */
+  refundCents: number | null;
   /** The retailer's name, as stored ("walmart"); null when unknown. */
   store: string | null;
   /** When it was delivered (ISO); null before then. */
@@ -114,8 +116,8 @@ export type TrackingCandidate = {
   placedAt: string | null;
   handlingDaysMax: number | null;
   deliveryDaysMax: number | null;
-  /** What Zinc charged; null when it didn't say. */
-  totalCents: number | null;
+  /** What Zinc refunded for a store cancel; null when it didn't say (or for any other gift). */
+  refundCents: number | null;
   failureType: string | null;
   resolved: boolean;
   /** The retailer's name, as stored ("walmart"), read only for store cancels; null otherwise or when unknown. */
@@ -535,7 +537,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
           .order("rank"),
         concierge
           .from("orders")
-          .select("id, idea_id, status, hold_reason, failure_type, resolved, failed_at, failed_after_close, max_price_cents, fee_cents, total_cents, ship_city, delivered_at, created_at, gift_ideas(title, retailer)")
+          .select("id, idea_id, status, hold_reason, failure_type, resolved, failed_at, failed_after_close, max_price_cents, fee_cents, total_cents, refund_cents, ship_city, delivered_at, created_at, gift_ideas(title, retailer)")
           .eq("round_id", roundId)
           .order("created_at")
           .order("id"),
@@ -616,6 +618,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
           maxPriceCents: o.max_price_cents,
           feeCents: o.fee_cents,
           totalCents: o.total_cents,
+          refundCents: o.refund_cents,
           deliveredAt: o.delivered_at,
         })),
         personRemoved: p.deleted_at !== null,
@@ -745,7 +748,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
         placedAt: r.placed_at ?? null,
         handlingDaysMax: r.handling_days_max ?? null,
         deliveryDaysMax: r.delivery_days_max ?? null,
-        totalCents: r.total_cents ?? null,
+        refundCents: r.refund_cents ?? null,
         failureType: r.failure_type ?? null,
         resolved: r.resolved,
         store: stores.get(r.order_id) ?? null,

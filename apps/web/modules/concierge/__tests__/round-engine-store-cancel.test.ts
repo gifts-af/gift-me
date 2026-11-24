@@ -1,8 +1,11 @@
 import { createHmac, randomUUID } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { localStack } from "../../../test/local-db";
+import { addDays } from "@gifts-af/core";
+import { localStack, ownStaleOrders } from "../../../test/local-db";
 import { replaceFailedOrder } from "../purchase/replace";
 import { advanceRound, type EngineDeps } from "../rounds/engine";
+import { createSupabaseRoundStore } from "../rounds/store";
+import { runTrackingNews } from "../tracking/news";
 import { retryOrderedEmails, tellOrdered } from "../rounds/money-path";
 import { handleZincWebhook } from "../zinc/events";
 import { heldRounds, type User } from "./round-engine-held";
@@ -61,13 +64,16 @@ describe.skipIf(!stack)("store cancellations (real local database, fake Zinc)", 
     return { ...r, orderIds, zincIds };
   }
 
-  /** Zinc's order.cancelled for `zincId`, arriving on day `n`, wired as the app's route does. */
-  async function storeCancels(u: User, zincId: string, n: number, o: { engine?: EngineDeps } = {}) {
+  /**
+   * Zinc's order.cancelled for `zincId`, arriving on day `n`, wired as the app's route does.
+   * `data` is the event's data: by default a refund of the whole $42.18.
+   */
+  async function storeCancels(u: User, zincId: string, n: number, o: { engine?: EngineDeps; data?: Record<string, unknown> } = {}) {
     const now = dayAt(n);
     const { engine: eng, purchase } = wiring(now);
     const e = o.engine ?? eng;
     const hook = hooks.get(u.userId)!;
-    const body = JSON.stringify({ event: "order.cancelled", order_id: zincId, timestamp: now.toISOString(), data: { refund_amount: 4218 } });
+    const body = JSON.stringify({ event: "order.cancelled", order_id: zincId, timestamp: now.toISOString(), data: o.data ?? { refund_amount: 4218 } });
     const sig = createHmac("sha256", hook.secret).update(body).digest("hex");
     return handleZincWebhook(hook.webhookId, body, sig, {
       ...purchase,
@@ -103,7 +109,7 @@ describe.skipIf(!stack)("store cancellations (real local database, fake Zinc)", 
   it("two store cancels before one look: one summary, each row with the store wording", async () => {
     const u = await newUser({ autoTopUp: null });
     const r = await boughtRound(u, { totals: [4200, 3000], placed: 2 });
-    for (const id of r.orderIds) await held.pg.query("select concierge.store_cancel_order($1, $2, current_date + 1)", [u.userId, id]);
+    for (const id of r.orderIds) await held.pg.query("select concierge.store_cancel_order($1, $2, current_date + 1, null)", [u.userId, id]);
     const before = inbox(u).length;
     await advance(r.roundId, 1);
     expect(inbox(u).slice(before)).toEqual(["Sorry, the store cancelled 2 of Mary's Christmas gifts@1"]);
@@ -118,7 +124,7 @@ describe.skipIf(!stack)("store cancellations (real local database, fake Zinc)", 
   it("a store cancel and an out-of-stock gift before one look: one summary that never says the cancelled one wasn't charged", async () => {
     const u = await newUser({ autoTopUp: null });
     const r = await boughtRound(u, { totals: [4200, 3000], placed: 2 });
-    await held.pg.query("select concierge.store_cancel_order($1, $2, current_date + 1)", [u.userId, r.orderIds[0]]);
+    await held.pg.query("select concierge.store_cancel_order($1, $2, current_date + 1, null)", [u.userId, r.orderIds[0]]);
     await held.pg.query("update concierge.orders set status = 'failed', failure_type = 'out_of_stock', failed_at = now() where id = $1", [r.orderIds[1]]);
     await held.pg.query("select concierge.reconcile_round($1)", [r.roundId]);
     const before = inbox(u).length;
@@ -279,13 +285,13 @@ describe.skipIf(!stack)("store cancellations (real local database, fake Zinc)", 
     expect(noChargeClaim(u)).toEqual([]);
   });
 
-  it("an untold store cancel at the deadline gets the store wording, not 'we couldn't buy it'; no total means no amount", async () => {
+  it("an untold store cancel at the deadline gets the store wording, not 'we couldn't buy it'; no refund_amount means no amount", async () => {
     const u = await newUser({ autoTopUp: null });
     const r = await boughtRound(u);
-    await held.pg.query("update concierge.orders set total_cents = null where id = $1", [r.orderIds[0]]);
     // The cancel's own email is refused, so it's still untold on the ship-by day.
     held.refuse = true;
-    await storeCancels(u, r.zincIds[0], 1);
+    // Zinc didn't say what came back: the order's own total ($42.18) is never said instead.
+    await storeCancels(u, r.zincIds[0], 1, { data: {} });
     held.refuse = false;
     expect(await sends(r.roundId)).not.toContain(`fail:${r.orderIds[0]}`);
     const before = inbox(u).length;
@@ -342,5 +348,112 @@ describe.skipIf(!stack)("store cancellations (real local database, fake Zinc)", 
     expect(await sends(r.roundId)).toContain(`cancel_late:${mug}`);
     expect(await roundRow(r.roundId)).toMatchObject({ status: "skipped" });
     expect(noChargeClaim(u)).toEqual([]);
+  });
+
+  it("the emails state Zinc's refund_amount, not what we were charged (owner, 2026-11-23)", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await boughtRound(u);
+    const before = inbox(u).length;
+    await storeCancels(u, r.zincIds[0], 1, { data: { refund_amount: 4050 } });
+    expect(inbox(u).slice(before)).toEqual(["Sorry, there's a problem with Mary's gift@1"]);
+    expect(lastText(u)).toContain("Walmart cancelled the Stoneware mug set, and the $40.50 is back in your Zinc wallet.");
+    expect(lastText(u)).not.toContain("$42.18");
+    // And at the deadline, when it was never replaced.
+    await advance(r.roundId, 30);
+    expect(lastText(u)).toContain("The $40.50 is back in your Zinc wallet.");
+    expect(lastText(u)).not.toContain("$42.18");
+  });
+
+  // ─── A close that isn't the deadline never tells a store cancel as "not charged" ───
+
+  /** The daily news run on day `n` for `u`'s orders only, wired as the tick does it. */
+  function news(u: User, n: number) {
+    const { engine: eng } = wiring(dayAt(n));
+    return runTrackingNews({
+      store: createSupabaseRoundStore(ownStaleOrders(held.client(), [u.userId])),
+      notify: eng.notify,
+      today: addDays(held.today, n),
+      setting: async (key) => Number((await held.pg.query("select value from concierge.app_settings where key = $1", [key])).rows[0].value),
+    });
+  }
+
+  /** A bought round whose store cancel's own email was refused, so it's still untold. */
+  async function untoldCancel(u: User) {
+    const r = await boughtRound(u);
+    await retryOrderedEmails(engine(dayAt(0)));
+    held.refuse = true;
+    await storeCancels(u, r.zincIds[0], 1);
+    held.refuse = false;
+    expect(await sends(r.roundId)).not.toContain(`fail:${r.orderIds[0]}`);
+    return r;
+  }
+
+  async function removePerson(roundId: string) {
+    const person = (await held.pg.query("select person_id from concierge.gift_rounds where id = $1", [roundId])).rows[0].person_id;
+    await held.pg.query("update public.people set deleted_at = now() where id = $1", [person]);
+    await held.pg.query("select concierge.skip_open_rounds($1, null)", [person]);
+  }
+
+  it.each([
+    ["the cancel link", (roundId: string) => held.pg.query("select concierge.cancel_held($1, 'cancel')", [roundId])],
+    ["the person removed", removePerson],
+  ])("an untold store cancel, then %s closes the round: the store wording once from the news run, never 'not charged'", async (_, close) => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await untoldCancel(u);
+    const before = inbox(u).length;
+    await close(r.roundId);
+    expect(await orderRow(r.orderIds[0])).toMatchObject({ status: "failed", resolved: true, failed_after_close: false });
+    // The tick's late-email retry finds nothing to say.
+    await retryOrderedEmails(engine(dayAt(1)));
+    expect(inbox(u).slice(before)).toEqual([]);
+    expect(await sends(r.roundId)).not.toContain(`late_fail:${r.orderIds[0]}`);
+    expect(await news(u, 1)).toEqual({ sent: 1 });
+    expect(inbox(u).slice(before)).toEqual(["Sorry, the store cancelled Mary's gift@1"]);
+    expect(lastText(u)).toContain("Walmart cancelled the Stoneware mug set");
+    expect(lastText(u)).toContain("The $42.18 is back in your Zinc wallet.");
+    expect(await sends(r.roundId)).toContain(`cancel_late:${r.orderIds[0]}`);
+    expect(await news(u, 2)).toEqual({ sent: 0 });
+    expect(noChargeClaim(u)).toEqual([]);
+  });
+
+  it("a store cancel somehow handed to the late email is still never told as 'not charged'", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await untoldCancel(u);
+    await held.pg.query("select concierge.cancel_held($1, 'cancel')", [r.roundId]);
+    // As older code, or a path we haven't thought of, might leave it.
+    await held.pg.query("update concierge.orders set failed_after_close = true where id = $1", [r.orderIds[0]]);
+    const before = inbox(u).length;
+    await tellOrdered(r.roundId, engine(dayAt(1)));
+    expect(inbox(u).slice(before)).toEqual([]);
+    expect(noChargeClaim(u)).toEqual([]);
+  });
+
+  it("a store cancel landing while the deadline claims its failure email: the late email names only the other gift", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await boughtRound(u, { totals: [4200, 3000], placed: 2 });
+    await retryOrderedEmails(engine(dayAt(0)));
+    // The apron fails on the ship-by day: untold when the deadline look starts.
+    await held.pg.query("update concierge.orders set status = 'failed', failure_type = 'out_of_stock', failed_at = now() where id = $1", [r.orderIds[1]]);
+    await held.pg.query("select concierge.reconcile_round($1)", [r.roundId]);
+    const before = inbox(u).length;
+    const { engine: eng } = wiring(dayAt(30));
+    const store = eng.store;
+    const racing: EngineDeps = {
+      ...eng,
+      store: {
+        ...store,
+        // The store's cancel was dated the day before ship-by, so it lands untold, just before the claim.
+        claimFailureNotices: async (id) => {
+          await held.pg.query("select concierge.store_cancel_order($1, $2, current_date + 29, 4218)", [u.userId, r.orderIds[0]]);
+          return store.claimFailureNotices(id);
+        },
+      },
+    };
+    await advanceRound(r.roundId, racing);
+    expect(noChargeClaim(u)).toEqual([]);
+    expect(inbox(u).slice(before)).toContain("Sorry, the store cancelled Mary's gift@30");
+    const late = mail.filter((m) => m.to === u.email && m.text.includes("Linen apron"));
+    expect(late.at(-1)!.text).not.toContain("Stoneware mug set");
+    expect(await sends(r.roundId)).toContain(`cancel_late:${r.orderIds[0]}`);
   });
 });

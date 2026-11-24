@@ -29,7 +29,7 @@ function late(n: number, o: Partial<TrackingCandidate>): TrackingCandidate {
     placedAt: null,
     handlingDaysMax: null,
     deliveryDaysMax: null,
-    totalCents: 3450,
+    refundCents: 3450,
     failureType: null,
     resolved: false,
     store: null,

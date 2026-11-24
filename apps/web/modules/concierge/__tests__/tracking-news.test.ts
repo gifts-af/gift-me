@@ -189,9 +189,9 @@ describe.skipIf(!stack)("the daily news summary (real local database)", () => {
   // ─── Switches and cancels ───
 
   /** A store cancel on or after the round's ship-by day: resolved at once, told only by the news run (AC-9). */
-  async function lateCancel(u: User) {
+  async function lateCancel(u: User, refundCents: number | null = 3450) {
     const r = await placedRound(u);
-    await held.pg.query("select concierge.store_cancel_order($1, $2, current_date + 30)", [u.userId, r.orderId]);
+    await held.pg.query("select concierge.store_cancel_order($1, $2, current_date + 30, $3)", [u.userId, r.orderId, refundCents]);
     return r;
   }
 
@@ -236,6 +236,15 @@ describe.skipIf(!stack)("the daily news summary (real local database)", () => {
     expect(await sends(r.roundId)).toContain(`cancel_late:${r.orderId}`);
     expect(await news(u, 32)).toEqual({ sent: 0 });
     expect(inbox(u).slice(before)).toHaveLength(1);
+  });
+
+  it("a cancel Zinc gave no refund amount for says the money is back, never the order's total", async () => {
+    const u = await newUser({ autoTopUp: null });
+    await lateCancel(u, null);
+    expect(await news(u, 31)).toEqual({ sent: 1 });
+    const text = lastText(u);
+    expect(text).toContain("The money is back in your Zinc wallet.");
+    expect(text).not.toMatch(/\$\d/);
   });
 
   /** "Sat, Mar 14" for day `n`, as the emails write dates. */

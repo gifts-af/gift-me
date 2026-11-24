@@ -157,13 +157,13 @@ describe.skipIf(!stack)("It arrived (real local database)", () => {
     const u = await buyer();
     const r = await placedRound(u, 2);
     // The ship-by date is 30 days out: a cancel on day 31 is resolved at once, and the round keeps its other gift.
-    await held.pg.query("select * from concierge.store_cancel_order($1, $2, current_date + 31)", [u.userId, r.orderIds[0]]);
+    await held.pg.query("select * from concierge.store_cancel_order($1, $2, current_date + 31, 3300)", [u.userId, r.orderIds[0]]);
     expect(await orderRow(r.orderIds[0])).toMatchObject({ status: "failed", failure_type: "store_cancelled", resolved: true });
 
     const view = await roundView(r.roundId, await signedIn(u), new Date());
     expect(view?.failedOrders).toEqual([]);
     expect(view?.storeCancelled).toEqual([
-      expect.objectContaining({ id: r.orderIds[0], title: "Stoneware mug set", status: "failed", failureType: "store_cancelled", totalCents: 3450 }),
+      expect.objectContaining({ id: r.orderIds[0], title: "Stoneware mug set", status: "failed", failureType: "store_cancelled", totalCents: 3450, refundCents: 3300 }),
     ]);
     expect(view?.liveOrders).toEqual([
       expect.objectContaining({

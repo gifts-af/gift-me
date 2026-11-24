@@ -2,7 +2,7 @@
 -- round, the news candidates and the tracking-number prune (ALL-33).
 begin;
 \ir _helpers.psql
-select plan(34);
+select plan(40);
 
 select tests.create_user('tracking@example.com') as u \gset
 select tests.create_user('tracking-other@example.com') as u2 \gset
@@ -97,7 +97,7 @@ select ok(:'mdd' = 'delivered' and not :'mdda'::boolean,
   'a repeated delivered is a no-op: applied is false');
 
 select ok((select round_status is null and not applied from concierge.mark_delivered(:'u2', :'o3', 'zinc'))
-      and (select round_status is null and not applied from concierge.store_cancel_order(:'u2', :'o1', current_date)),
+      and (select round_status is null and not applied from concierge.store_cancel_order(:'u2', :'o1', current_date, null)),
   'mark_delivered and store_cancel_order on another user''s order return (null, false)');
 
 select tests.ot_round(:'u', :'p', :'o', 2033, 20, array['shipped', 'shipped']) as r4 \gset
@@ -110,31 +110,35 @@ select ok(:'md4' = 'ordered' and :'md4a'::boolean
 -- ─── store_cancel_order ─────────────────────────────────────────────────────
 select tests.ot_round(:'u', :'p', :'o', 2034, 20, array['placed']) as r5 \gset
 select tests.ot_order(:'r5', 1) as o5 \gset
-select round_status as sc5, applied as sc5a from concierge.store_cancel_order(:'u', :'o5', current_date) \gset
+select round_status as sc5, applied as sc5a from concierge.store_cancel_order(:'u', :'o5', current_date, 4218) \gset
 select ok(:'sc5' = 'needs_attention' and :'sc5a'::boolean
       and (select status = 'failed' and failure_type = 'store_cancelled' and not resolved and failed_at is not null
              from concierge.orders where id = :'o5'),
   'store_cancel_order before ship-by → needs_attention, unresolved');
+select is((select refund_cents from concierge.orders where id = :'o5'), 4218,
+  'store_cancel_order stores Zinc''s refund amount');
 
 -- Ship-by is today.
 select tests.ot_round(:'u', :'p', :'o', 2035, 0, array['placed', 'shipped']) as r6 \gset
 select tests.ot_order(:'r6', 1) as o6 \gset
-select round_status as sc6, applied as sc6a from concierge.store_cancel_order(:'u', :'o6', current_date) \gset
+select round_status as sc6, applied as sc6a from concierge.store_cancel_order(:'u', :'o6', current_date, null) \gset
 select ok(:'sc6' = 'ordered' and :'sc6a'::boolean
       and (select status = 'failed' and failure_type = 'store_cancelled' and resolved and not failed_after_close
              from concierge.orders where id = :'o6'),
   'store_cancel_order after ship-by with another given order → ordered, resolved');
+select ok((select refund_cents is null from concierge.orders where id = :'o6'),
+  'store_cancel_order with no refund amount leaves refund_cents null');
 
 select tests.ot_round(:'u', :'p', :'o', 2036, 0, array['shipped']) as r7 \gset
 select tests.ot_order(:'r7', 1) as o7 \gset
-select round_status as sc7, applied as sc7a from concierge.store_cancel_order(:'u', :'o7', current_date) \gset
+select round_status as sc7, applied as sc7a from concierge.store_cancel_order(:'u', :'o7', current_date, null) \gset
 select ok(:'sc7' = 'skipped' and :'sc7a'::boolean
       and (select resolved and not failed_after_close from concierge.orders where id = :'o7')
       and (select status = 'skipped' and closed_at is not null from concierge.gift_rounds where id = :'r7'),
   'store_cancel_order after ship-by, only gift → skipped, resolved, closed_at set');
 
 select tests.ot_round(:'u', :'p', :'o', 2037, 20, array['delivered', 'placed']) as r8 \gset
-select round_status as sc8, applied as sc8a from concierge.store_cancel_order(:'u', tests.ot_order(:'r8', 1), current_date) \gset
+select round_status as sc8, applied as sc8a from concierge.store_cancel_order(:'u', tests.ot_order(:'r8', 1), current_date, null) \gset
 select ok(:'sc8' = 'ordered' and not :'sc8a'::boolean
       and (select status = 'delivered' and failure_type is null from concierge.orders where id = tests.ot_order(:'r8', 1)),
   'store_cancel_order on a delivered order changes nothing');
@@ -182,14 +186,14 @@ select is((select packages from concierge.orders where id = tests.ot_order(:'r14
 -- ─── more store_cancel_order and reconcile ──────────────────────────────────
 select tests.ot_round(:'u', :'p', :'o', 2039, 20, array['placed', 'placed']) as r10 \gset
 update concierge.gift_rounds set closed_at = now() where id = :'r10';
-select round_status as sc10, applied as sc10a from concierge.store_cancel_order(:'u', tests.ot_order(:'r10', 1), current_date) \gset
+select round_status as sc10, applied as sc10a from concierge.store_cancel_order(:'u', tests.ot_order(:'r10', 1), current_date, null) \gset
 select ok(:'sc10' = 'ordered' and :'sc10a'::boolean
       and (select resolved and not failed_after_close from concierge.orders where id = tests.ot_order(:'r10', 1)),
   'store_cancel_order on a closed ordered round leaves failed_after_close false');
 
 select tests.ot_round(:'u', :'p', :'o', 2040, 20, array['placing']) as r11 \gset
 select tests.ot_order(:'r11', 1) as o11 \gset
-select * from concierge.store_cancel_order(:'u', :'o11', current_date);
+select * from concierge.store_cancel_order(:'u', :'o11', current_date, null);
 select ok((select status = 'failed' and failure_type = 'store_cancelled' and placed_at is not null
              from concierge.orders where id = :'o11'),
   'store_cancel_order on placing settles placed first');
@@ -199,10 +203,31 @@ select is(concierge.reconcile_round(:'r12')::text, 'ordered', 'a round with only
 
 -- The usual way to delivered after a late cancel: one gift arrived, the other was cancelled after ship-by.
 select tests.ot_round(:'u', :'p', :'o', 2044, 0, array['delivered', 'shipped']) as r15 \gset
-select round_status as sc15, applied as sc15a from concierge.store_cancel_order(:'u', tests.ot_order(:'r15', 2), current_date) \gset
+select round_status as sc15, applied as sc15a from concierge.store_cancel_order(:'u', tests.ot_order(:'r15', 2), current_date, null) \gset
 select ok(:'sc15' = 'delivered' and :'sc15a'::boolean
       and (select status = 'delivered' and next_action_at is null from concierge.gift_rounds where id = :'r15'),
   'one delivered order plus one resolved store_cancelled order moves the round to delivered');
+
+-- A store cancel never told (its email was refused), then the buyer's cancel link closes the
+-- round: it goes to the daily news with the store wording, never to the "not charged" late email.
+select tests.ot_round(:'u', :'p', :'o', 2046, 20, array['placed']) as r17 \gset
+select tests.ot_order(:'r17', 1) as o17 \gset
+select * from concierge.store_cancel_order(:'u', :'o17', current_date, null);
+select concierge.cancel_held(:'r17', 'cancel');
+select ok((select resolved and not failed_after_close from concierge.orders where id = :'o17')
+      and exists (select 1 from concierge.tracking_candidates(current_date) c where c.order_id = :'o17'),
+  'a close never hands an untold store cancel to the late email; the news run has it');
+
+-- The same through a refused failure email given back after the round closed.
+select tests.ot_round(:'u', :'p', :'o', 2047, 20, array['placed']) as r18 \gset
+select tests.ot_order(:'r18', 1) as o18 \gset
+select * from concierge.store_cancel_order(:'u', :'o18', current_date, null);
+select * from concierge.claim_failure_notices(:'r18');
+select concierge.cancel_held(:'r18', 'cancel');
+select concierge.release_failure_notices(:'r18', array[:'o18']::uuid[]);
+select ok((select resolved and not failed_after_close from concierge.orders where id = :'o18')
+      and exists (select 1 from concierge.tracking_candidates(current_date) c where c.order_id = :'o18'),
+  'release_failure_notices on a closed round never hands a store cancel to the late email');
 
 -- ─── delivered rounds and news candidates ───────────────────────────────────
 select exists (select 1 from concierge.delivered_rounds_untold() d where d.round_id = :'r3' and d.user_id = :'u') as listed \gset
@@ -222,6 +247,8 @@ select ok((select resolved and not failed_after_close from concierge.orders wher
 select tests.act_as(:'u');
 select is((select delivered_by from concierge.orders where id = :'o3' and placed_at is null and delivered_at is not null), 'zinc',
   'authenticated can read placed_at, delivered_at, delivered_by on its own orders');
+select is((select refund_cents from concierge.orders where id = :'o5'), 4218,
+  'authenticated can read refund_cents on its own orders');
 select tests.act_as_server();
 
 -- ─── pruning ────────────────────────────────────────────────────────────────
@@ -241,6 +268,17 @@ select ok(:'pruned'::integer = 2
 select ok((select packages = '[]'::jsonb from concierge.orders where id = tests.ot_order(:'r13', 3))
       and (select packages <> '[]'::jsonb from concierge.orders where id = tests.ot_order(:'r13', 4)),
   'prune clears a failed order''s packages by failed_at');
+
+-- Never marked delivered: placed or shipped gifts are cleared once the occasion is
+-- tracking_prune_days past (here 33 days), not before (23 days).
+select tests.ot_round(:'u', :'p', :'o', 2048, -40, array['placed', 'shipped']) as r19 \gset
+select tests.ot_round(:'u', :'p', :'o', 2049, -30, array['shipped']) as r20 \gset
+update concierge.orders set packages = '[{"tracking_number":"P"}]' where round_id in (:'r19', :'r20');
+select concierge.prune_tracking_numbers() as pruned19 \gset
+select ok(:'pruned19'::integer = 2
+      and (select bool_and(packages = '[]'::jsonb) from concierge.orders where round_id = :'r19')
+      and (select packages <> '[]'::jsonb from concierge.orders where round_id = :'r20'),
+  'prune clears placed and shipped orders tracking_prune_days after the occasion');
 
 update concierge.app_settings set value = '0' where key = 'tracking_prune_days';
 update concierge.orders set delivered_at = now() - interval '60 days' where id = tests.ot_order(:'r13', 2);
@@ -282,7 +320,7 @@ select ok(not bool_or(has_function_privilege(r, f, 'execute')) and bool_and(has_
        unnest(array[
          'concierge.record_tracking(uuid, uuid, boolean, jsonb, date, timestamptz)',
          'concierge.mark_delivered(uuid, uuid, text)',
-         'concierge.store_cancel_order(uuid, uuid, date)',
+         'concierge.store_cancel_order(uuid, uuid, date, integer)',
          'concierge.delivered_rounds_untold()',
          'concierge.tracking_candidates(date)',
          'concierge.prune_tracking_numbers()'

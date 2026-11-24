@@ -173,7 +173,8 @@ function Dot({ tone }: { tone: "moving" | "done" }) {
 /** Where a bought gift is: the status line, an amber chip when it may be late, and the refund for a store cancel. */
 function GiftStatus({ order, occasionDate, fixHref }: { order: RoundPageOrder; occasionDate: string; fixHref: string | null }) {
   if (order.status === "failed") {
-    const amount = order.totalCents !== null && order.totalCents > 0 ? `${money(order.totalCents)} back in Zinc` : "the money is back in Zinc";
+    // Zinc's own refund amount; without one, no amount (never what we were charged).
+    const amount = order.refundCents !== null && order.refundCents > 0 ? `${money(order.refundCents)} back in Zinc` : "the money is back in Zinc";
     return (
       <>
         <span className={CHIP}>{`The store cancelled it · ${amount}`}</span>
@@ -522,8 +523,11 @@ export function RoundScreen({
   const ordered = new Set(view.liveOrders.map((o) => o.ideaId));
   const canBuy = view.closedText === null && round.status === "awaiting_approval";
 
-  // List gifts first (decisions 36, 37), each group in rank order; rejected ideas are gone.
-  const shown = view.ideas.filter((i) => i.status !== "rejected").sort((a, b) => a.rank - b.rank);
+  const bought = [...view.liveOrders, ...view.storeCancelled];
+  // List gifts first (decisions 36, 37), each group in rank order; rejected ideas are gone, and so
+  // are the gifts already under "Your gifts", so nothing is listed twice (owner, 2026-11-23).
+  const inGifts = new Set(bought.map((o) => o.ideaId));
+  const shown = view.ideas.filter((i) => i.status !== "rejected" && !inGifts.has(i.id)).sort((a, b) => a.rank - b.rank);
   const listIdeas = shown.filter((i) => i.source === "list");
   const aiIdeas = shown.filter((i) => i.source !== "list");
   const order = [...listIdeas, ...aiIdeas];
@@ -603,7 +607,6 @@ export function RoundScreen({
   );
 
   const ideaOf = new Map(view.ideas.map((i) => [i.id, i]));
-  const bought = [...view.liveOrders, ...view.storeCancelled];
   // A store cancel still to fix offers "Choose another gift" on its own row, so it isn't listed twice.
   const toFix = view.failedOrders.filter((o) => o.failureType !== "store_cancelled");
   const fixable = new Set(view.closedText === null ? view.failedOrders.map((o) => o.id) : []);

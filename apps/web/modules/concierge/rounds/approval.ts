@@ -263,6 +263,8 @@ export type RoundPageOrder = {
   status: string;
   failureType: string | null;
   totalCents: number | null;
+  /** What Zinc refunded when the store cancelled; null otherwise or when Zinc didn't say. */
+  refundCents: number | null;
   maxPriceCents: number;
   feeCents: number;
   estDeliveryDate: CalendarDate | null;
@@ -376,7 +378,7 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
     db
       .from("orders")
       .select(
-        "id, idea_id, status, failure_type, resolved, total_cents, max_price_cents, fee_cents, est_delivery_date, placed_at, delivered_at, packages, created_at",
+        "id, idea_id, status, failure_type, resolved, total_cents, refund_cents, max_price_cents, fee_cents, est_delivery_date, placed_at, delivered_at, packages, created_at",
       )
       .eq("round_id", roundId)
       .order("created_at")
@@ -430,6 +432,7 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
       status: o.status,
       failureType: o.failure_type,
       totalCents: o.total_cents,
+      refundCents: o.refund_cents,
       maxPriceCents: o.max_price_cents,
       feeCents: o.fee_cents,
       estDeliveryDate: o.est_delivery_date,

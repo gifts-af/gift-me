@@ -18,7 +18,11 @@ const eventData = z
     status: z.string(),
     // Checked package by package by packagesFromZinc, which keeps only whitelisted fields.
     tracking_numbers: z.unknown(),
-    estimated_delivery: z.string().nullable(),
+    // Every event shares this schema, so a field only some events use must never reject one:
+    // a strict shape here would drop an order.placed or order.cancelled we can't get back (E4).
+    // calendarDay checks the estimate where it's used; refundCents checks the refund below.
+    estimated_delivery: z.unknown(),
+    refund_amount: z.unknown(),
   })
   .partial();
 
@@ -43,8 +47,10 @@ export type ZincEvent = {
   status?: string;
   /** order.tracking_received, order.shipped: Zinc's packages, unchecked. */
   trackingNumbers?: unknown;
-  /** order.estimated_delivery_updated: the new estimate. */
-  estimatedDelivery?: string;
+  /** order.estimated_delivery_updated: the new estimate, unchecked. */
+  estimatedDelivery?: unknown;
+  /** order.cancelled: what Zinc refunded, in cents; null when it's missing or not a whole, non-negative number. */
+  refundCents: number | null;
   raw: unknown;
 };
 
@@ -61,6 +67,11 @@ export function parseEvent(json: unknown): ZincEvent {
     status: e.data?.status,
     trackingNumbers: e.data?.tracking_numbers,
     estimatedDelivery: e.data?.estimated_delivery ?? undefined,
+    refundCents: refundCents(e.data?.refund_amount),
     raw: json,
   };
+}
+
+function refundCents(v: unknown): number | null {
+  return typeof v === "number" && Number.isSafeInteger(v) && v >= 0 ? v : null;
 }

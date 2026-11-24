@@ -775,6 +775,7 @@ export type Database = {
           placed_at: string | null;
           provider: string;
           provider_order_id: string | null;
+          refund_cents: number | null;
           resolved: boolean;
           round_id: string;
           ship_city: string;
@@ -814,6 +815,7 @@ export type Database = {
           placed_at?: string | null;
           provider?: string;
           provider_order_id?: string | null;
+          refund_cents?: number | null;
           resolved?: boolean;
           round_id: string;
           ship_city: string;
@@ -852,6 +854,7 @@ export type Database = {
           placed_at?: string | null;
           provider?: string;
           provider_order_id?: string | null;
+          refund_cents?: number | null;
           resolved?: boolean;
           round_id?: string;
           ship_city?: string;
@@ -1253,6 +1256,7 @@ export type Database = {
           placed_at: string | null;
           provider: string;
           provider_order_id: string | null;
+          refund_cents: number | null;
           resolved: boolean;
           round_id: string;
           ship_city: string;
@@ -1305,6 +1309,7 @@ export type Database = {
           placed_at: string | null;
           provider: string;
           provider_order_id: string | null;
+          refund_cents: number | null;
           resolved: boolean;
           round_id: string;
           ship_city: string;
@@ -1647,6 +1652,7 @@ export type Database = {
           placed_at: string | null;
           provider: string;
           provider_order_id: string | null;
+          refund_cents: number | null;
           resolved: boolean;
           round_id: string;
           ship_city: string;
@@ -1712,6 +1718,7 @@ export type Database = {
           placed_at: string | null;
           provider: string;
           provider_order_id: string | null;
+          refund_cents: number | null;
           resolved: boolean;
           round_id: string;
           ship_city: string;
@@ -1815,6 +1822,7 @@ export type Database = {
           placed_at: string | null;
           provider: string;
           provider_order_id: string | null;
+          refund_cents: number | null;
           resolved: boolean;
           round_id: string;
           ship_city: string;
@@ -1948,6 +1956,7 @@ export type Database = {
           placed_at: string | null;
           provider: string;
           provider_order_id: string | null;
+          refund_cents: number | null;
           resolved: boolean;
           round_id: string;
           ship_city: string;
@@ -1983,7 +1992,12 @@ export type Database = {
       };
       start_tick: { Args: { p_at: string; p_day: string }; Returns: undefined };
       store_cancel_order: {
-        Args: { p_order_id: string; p_today: string; p_user_id: string };
+        Args: {
+          p_order_id: string;
+          p_refund_cents: number;
+          p_today: string;
+          p_user_id: string;
+        };
         Returns: {
           applied: boolean;
           round_status: Database["concierge"]["Enums"]["round_status"];
@@ -2001,12 +2015,12 @@ export type Database = {
           order_id: string;
           person_name: string;
           placed_at: string;
+          refund_cents: number;
           resolved: boolean;
           round_id: string;
           sent_steps: string[];
           status: string;
           title: string;
-          total_cents: number;
           user_id: string;
         }[];
       };

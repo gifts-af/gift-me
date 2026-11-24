@@ -70,6 +70,7 @@ function order(o: Partial<RoundPageOrder> = {}): RoundPageOrder {
     status: "shipped",
     failureType: null,
     totalCents: 4218,
+    refundCents: null,
     maxPriceCents: 4600,
     feeCents: 100,
     estDeliveryDate: null,
@@ -455,20 +456,44 @@ describe("RoundScreen: your gifts", () => {
   });
 
   it("store cancelled before the ship-by date shows the refund chip and Choose another gift, not a second fix row", () => {
-    const { i, o } = ordered({ status: "failed", failureType: "store_cancelled" });
+    // Zinc refunded $40.50 of the $42.18 charged: the chip says what came back.
+    const { i, o } = ordered({ status: "failed", failureType: "store_cancelled", refundCents: 4050 });
     setup(view({ ideas: [i], failedOrders: [o], storeCancelled: [o] }, { status: "needs_attention" }));
     const item = gifts().getByRole("listitem");
-    expect(within(item).getByText("The store cancelled it · $42.18 back in Zinc")).toHaveClass("bg-warning-soft", "text-warning");
+    expect(within(item).getByText("The store cancelled it · $40.50 back in Zinc")).toHaveClass("bg-warning-soft", "text-warning");
     expect(within(item).getByRole("link", { name: "Choose another gift" })).toHaveAttribute("href", `/rounds/r1/fix/${o.id}`);
     expect(screen.queryByRole("heading", { name: "Needs a fix" })).toBeNull();
   });
 
   it("store cancelled after the ship-by date shows the refund chip and no link", () => {
-    const { i, o } = ordered({ status: "failed", failureType: "store_cancelled" });
+    const { i, o } = ordered({ status: "failed", failureType: "store_cancelled", refundCents: 4218 });
     setup(view({ ideas: [i], storeCancelled: [o], closedText: "This occasion has passed" }, { status: "skipped" }));
     const item = gifts().getByRole("listitem");
     expect(item).toHaveTextContent("The store cancelled it · $42.18 back in Zinc");
     expect(within(item).queryByRole("link")).toBeNull();
+  });
+
+  it("store cancelled with no refund amount from Zinc says the money is back, never the order's total", () => {
+    const { i, o } = ordered({ status: "failed", failureType: "store_cancelled", refundCents: null });
+    setup(view({ ideas: [i], storeCancelled: [o], closedText: "This occasion has passed" }, { status: "skipped" }));
+    const item = gifts().getByRole("listitem");
+    expect(item).toHaveTextContent("The store cancelled it · the money is back in Zinc");
+    expect(within(item).getByText(/The store cancelled it/)).not.toHaveTextContent("$");
+  });
+
+  it("the Ideas list drops the gifts under Your gifts and keeps the rest (owner, 2026-11-23)", () => {
+    // A store cancel before ship-by keeps the round open, so the ideas are still shown.
+    const { i, o } = ordered({ status: "failed", failureType: "store_cancelled" });
+    const shipped = idea({ title: "Orchid", status: "selected" });
+    const rest = idea({ title: "Cocotte" });
+    const live = order({ ideaId: shipped.id, title: "Orchid" });
+    setup(view({ ideas: [i, shipped, rest], liveOrders: [live], failedOrders: [o], storeCancelled: [o] }, { status: "needs_attention" }));
+    expect(gifts().getAllByRole("listitem")).toHaveLength(2);
+    const ideas = within(screen.getByRole("region", { name: "Ideas" }));
+    expect(ideas.getAllByRole("listitem")).toHaveLength(1);
+    expect(ideas.getByText("Cocotte")).toBeInTheDocument();
+    expect(ideas.queryByText("Cozy throw")).toBeNull();
+    expect(ideas.queryByText("Orchid")).toBeNull();
   });
 
   it("It arrived sends the order and, refused, says so", async () => {

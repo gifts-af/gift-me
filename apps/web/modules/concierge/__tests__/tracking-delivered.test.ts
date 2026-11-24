@@ -73,6 +73,19 @@ describe.skipIf(!stack)("the delivered email (real local database)", () => {
     expect(inbox(u).slice(before)).toHaveLength(1);
   });
 
+  it("a delivered gift with no delivered date says Delivered, never today's date (E3)", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await placedRound(u, 2);
+    await deliver(u, r.orderIds[0]);
+    await deliver(u, r.orderIds[1]);
+    // mark_delivered always sets it and the migration backfills it; this is the row that slipped through.
+    await held.pg.query("update concierge.orders set delivered_at = null where id = $1", [r.orderIds[1]]);
+    expect(await tellDelivered(r.roundId, deps())).toBe("sent");
+    const text = lastText(u);
+    expect(text.match(/Delivered \w+, \w+ \d+/g)).toHaveLength(1);
+    expect(text).toMatch(/Linen apron\W+Delivered\b(?! \w+, )/);
+  });
+
   it("refused delivered email is retried by the next tick", async () => {
     const u = await newUser({ autoTopUp: null });
     const r = await placedRound(u);

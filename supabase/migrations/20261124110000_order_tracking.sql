@@ -12,16 +12,20 @@
 --   move: ordered → delivered once every given order is delivered.
 -- - A store cancel on or after the ship-by date, or on a closed round, is
 --   resolved at once and told by the daily news run (cancel_late:<id>), never
---   by the "we couldn't buy it" email, because the gift was bought (T89).
+--   by the "we couldn't buy it" email, because the gift was bought (T89). No
+--   close hands a store cancel to that email either, whichever way it closes.
+-- - A store cancel keeps Zinc's own refund amount (refund_cents), so the
+--   emails say what actually came back, or no amount when Zinc didn't say.
 -- - Only whitelisted package fields are stored, whatever the caller sends, and
---   tracking numbers are cleared tracking_prune_days after delivery (T42).
+--   tracking numbers are cleared tracking_prune_days after delivery, or after
+--   the occasion for a gift never marked delivered (T42).
 
 -- ─── settings (T23, E7) ─────────────────────────────────────────────────────
 insert into concierge.app_settings (key, value, description) values
   ('order_tracking_enabled', '1', 'Zinc tracking, shipped, estimate and delivered events, and the buyer''s "It arrived" button. 0 logs and ignores them; store cancellations are always handled.'),
   ('zinc_tracking_fetch_enabled', '1', 'Fetch the order from Zinc (Get Order) on a tracking event to read its delivery estimate. 0 saves only what the event carries.'),
   ('late_check_enabled', '1', 'The daily late and back-on-time check and its emails. 0 turns them off; late store cancellations are still told.'),
-  ('tracking_prune_days', '30', 'Days after an order is delivered (or failed) before the daily run clears its tracking numbers. 0 or below turns the prune off; a missing value stops the prune with an error.')
+  ('tracking_prune_days', '30', 'Days after an order is delivered (or failed, or its occasion passed without a delivery) before the daily run clears its tracking numbers. 0 or below turns the prune off; a missing value stops the prune with an error.')
 on conflict (key) do nothing;
 
 -- ─── columns ────────────────────────────────────────────────────────────────
@@ -32,7 +36,9 @@ alter table concierge.orders
   -- Who said it arrived: Zinc's delivered event or the buyer's tap.
   add column delivered_by text check (delivered_by in ('zinc', 'buyer')),
   -- The newest Zinc event applied, so an older one can't bring back a stale estimate.
-  add column tracking_event_at timestamptz;
+  add column tracking_event_at timestamptz,
+  -- What Zinc refunded when the store cancelled (its refund_amount); null when it didn't say.
+  add column refund_cents integer check (refund_cents >= 0);
 
 update concierge.orders set placed_at = updated_at
  where status in ('placed', 'shipped', 'delivered') and placed_at is null;
@@ -41,7 +47,7 @@ update concierge.orders set delivered_at = updated_at
  where status = 'delivered' and delivered_at is null;
 
 -- Order columns are granted one by one (T56).
-grant select (placed_at, delivered_at, delivered_by) on concierge.orders to authenticated;
+grant select (placed_at, delivered_at, delivered_by, refund_cents) on concierge.orders to authenticated;
 
 -- ─── code columns ───────────────────────────────────────────────────────────
 alter table concierge.orders drop constraint orders_failure_type_check;
@@ -121,6 +127,32 @@ begin
 end;
 $$;
 
+-- ─── release_failure_notices: never a store cancel to the late email ────────
+-- Copied from 20261114100000_every_failure_told.sql; only the New line differs.
+create or replace function concierge.release_failure_notices(p_round_id uuid, p_order_ids uuid[])
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_closed boolean;
+begin
+  select closed_at is not null into v_closed from concierge.gift_rounds where id = p_round_id for update;
+  if not found then
+    return;
+  end if;
+  delete from concierge.round_sends
+   where round_id = p_round_id and step in (select 'fail:' || x from unnest(p_order_ids) x);
+  if v_closed then
+    -- New: a store cancel stays with the daily news, which tells it with the store wording.
+    update concierge.orders set failed_after_close = true
+     where round_id = p_round_id and id = any(p_order_ids) and status = 'failed'
+       and failure_type is distinct from 'store_cancelled';
+  end if;
+end;
+$$;
+
 -- ─── reconcile_round: ordered → delivered ───────────────────────────────────
 create or replace function concierge.reconcile_round(p_round_id uuid, p_context text default null)
 returns concierge.round_status
@@ -162,8 +194,11 @@ begin
   if v_ctx is not null then
     -- Any close (the deadline, the cancel link, skip_open_rounds) hands the
     -- failures the buyer hasn't heard about to the late email, before they're resolved.
+    -- New: never a store cancel. The gift was bought and refunded, so "you haven't
+    -- been charged" would be untrue; once resolved, the daily news tells it.
     update concierge.orders set failed_after_close = true
-     where id in (select x from concierge.untold_failures(p_round_id) x);
+     where id in (select x from concierge.untold_failures(p_round_id) x)
+       and failure_type is distinct from 'store_cancelled';
     update concierge.orders
        set status = 'cancelled',
            failure_type = case v_ctx when 'deadline' then 'held_expired' when 'cancel' then 'cancelled' else 'round_closed' end
@@ -390,9 +425,11 @@ $$;
 -- time: it's resolved at once and told by the daily news, not as "we couldn't
 -- buy it" (failed_after_close stays false), and the round is skipped only if
 -- no given order is left.
+-- p_refund_cents is Zinc's refund_amount from the event, kept for the emails;
+-- null (or anything below 0) when Zinc didn't say.
 -- Returns the round's status and whether the cancel applied, so the caller can
 -- log a no-op; (null, false) when the order isn't this user's.
-create function concierge.store_cancel_order(p_user_id uuid, p_order_id uuid, p_today date)
+create function concierge.store_cancel_order(p_user_id uuid, p_order_id uuid, p_today date, p_refund_cents integer)
 returns table (round_status concierge.round_status, applied boolean)
 language plpgsql
 security definer
@@ -422,6 +459,8 @@ begin
   end if;
 
   perform concierge.fail_order_row(v_order, 'store_cancelled');
+  update concierge.orders set refund_cents = case when p_refund_cents >= 0 then p_refund_cents end
+   where id = p_order_id;
 
   if p_today >= r.ship_by_deadline or r.closed_at is not null then
     update concierge.orders set resolved = true, failed_after_close = false where id = p_order_id;
@@ -459,14 +498,14 @@ $$;
 create function concierge.tracking_candidates(p_today date)
 returns table (user_id uuid, round_id uuid, order_id uuid, person_name text, occasion_kind text, occasion_date date,
                title text, status text, est_delivery_date date, placed_at timestamptz, handling_days_max integer,
-               delivery_days_max integer, total_cents integer, failure_type text, resolved boolean, sent_steps text[])
+               delivery_days_max integer, refund_cents integer, failure_type text, resolved boolean, sent_steps text[])
 language sql
 stable
 security definer
 set search_path = ''
 as $$
   select o.user_id, o.round_id, o.id, p.name, oc.kind, g.occasion_date, i.title, o.status, o.est_delivery_date,
-         o.placed_at, i.handling_days_max, i.delivery_days_max, o.total_cents, o.failure_type, o.resolved,
+         o.placed_at, i.handling_days_max, i.delivery_days_max, o.refund_cents, o.failure_type, o.resolved,
          coalesce((select array_agg(s.step order by s.step) from concierge.round_sends s
                     where s.round_id = o.round_id and s.step like '%:' || o.id), '{}')
     from concierge.orders o
@@ -482,7 +521,9 @@ $$;
 
 -- ─── prune_tracking_numbers ─────────────────────────────────────────────────
 -- Clears the packages (tracking numbers) of orders delivered, or failed, more
--- than tracking_prune_days ago. Returns how many orders it cleared; 0 when the
+-- than tracking_prune_days ago, and of placed or shipped ones whose occasion is
+-- that far past: Zinc's delivered event can be late or never come, and the
+-- buyer may never tap "It arrived". Returns how many orders it cleared; 0 when the
 -- setting is 0 or below (E7). No fallback value (T23): a missing setting fails
 -- loudly instead of quietly stopping a privacy clean-up.
 create function concierge.prune_tracking_numbers()
@@ -502,11 +543,14 @@ begin
     return 0;
   end if;
 
-  update concierge.orders
+  update concierge.orders o
      set packages = '[]'::jsonb
-   where packages <> '[]'::jsonb
-     and ((status = 'delivered' and delivered_at < now() - make_interval(days => v_days))
-          or (status = 'failed' and failed_at < now() - make_interval(days => v_days)));
+    from concierge.gift_rounds g
+   where g.id = o.round_id
+     and o.packages <> '[]'::jsonb
+     and ((o.status = 'delivered' and o.delivered_at < now() - make_interval(days => v_days))
+          or (o.status = 'failed' and o.failed_at < now() - make_interval(days => v_days))
+          or (o.status in ('placed', 'shipped') and g.occasion_date < current_date - v_days));
   get diagnostics v_cleared = row_count;
   return v_cleared;
 end;
@@ -515,13 +559,13 @@ $$;
 -- ─── grants: the server only ────────────────────────────────────────────────
 revoke all on function concierge.record_tracking(uuid, uuid, boolean, jsonb, date, timestamptz) from public, anon, authenticated;
 revoke all on function concierge.mark_delivered(uuid, uuid, text) from public, anon, authenticated;
-revoke all on function concierge.store_cancel_order(uuid, uuid, date) from public, anon, authenticated;
+revoke all on function concierge.store_cancel_order(uuid, uuid, date, integer) from public, anon, authenticated;
 revoke all on function concierge.delivered_rounds_untold() from public, anon, authenticated;
 revoke all on function concierge.tracking_candidates(date) from public, anon, authenticated;
 revoke all on function concierge.prune_tracking_numbers() from public, anon, authenticated;
 grant execute on function concierge.record_tracking(uuid, uuid, boolean, jsonb, date, timestamptz) to service_role;
 grant execute on function concierge.mark_delivered(uuid, uuid, text) to service_role;
-grant execute on function concierge.store_cancel_order(uuid, uuid, date) to service_role;
+grant execute on function concierge.store_cancel_order(uuid, uuid, date, integer) to service_role;
 grant execute on function concierge.delivered_rounds_untold() to service_role;
 grant execute on function concierge.tracking_candidates(date) to service_role;
 grant execute on function concierge.prune_tracking_numbers() to service_role;

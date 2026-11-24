@@ -43,6 +43,7 @@ function order(o: Partial<RoundPageOrder> = {}): RoundPageOrder {
     status: "failed",
     failureType: "price_up",
     totalCents: null,
+    refundCents: null,
     maxPriceCents: 5300,
     feeCents: 100,
     estDeliveryDate: null,

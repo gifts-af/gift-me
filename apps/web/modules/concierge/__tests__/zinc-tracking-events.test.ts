@@ -480,6 +480,59 @@ describe.skipIf(!dbUp)("Zinc tracking events (real local database, fake Zinc)", 
     expect(advanceRound).toHaveBeenCalledWith(roundId);
   });
 
+  it("cancel keeps Zinc's refund_amount on the order, for the emails (owner, 2026-11-23)", async () => {
+    const a = await newAccount();
+    const zincId = randomUUID();
+    const { orderId } = await newOrder(a, zincId);
+    await send(a, cancelled(zincId));
+    expect((await pg.query("select refund_cents from concierge.orders where id = $1", [orderId])).rows[0].refund_cents).toBe(4500);
+  });
+
+  it.each([
+    ["missing", {}],
+    ["a string", { refund_amount: "45.00" }],
+    ["fractional", { refund_amount: 12.5 }],
+    ["negative", { refund_amount: -1 }],
+  ])("a refund_amount that's %s is not kept, and the cancel still applies", async (_, data) => {
+    const a = await newAccount();
+    const zincId = randomUUID();
+    const { orderId } = await newOrder(a, zincId);
+    expect(await send(a, event("order.cancelled", zincId, data))).toEqual({ status: 200 });
+    const row = (await pg.query("select status, refund_cents from concierge.orders where id = $1", [orderId])).rows[0];
+    expect(row).toEqual({ status: "failed", refund_cents: null });
+  });
+
+  it.each([
+    ["a number", 20301205],
+    ["an object", { date: "2030-12-05", previous: "2030-12-03" }],
+  ])("an estimated_delivery that's %s never drops a money event (E4)", async (_, estimated_delivery) => {
+    const a = await newAccount();
+    const placedId = randomUUID();
+    const placed = await newOrder(a, placedId, "placing");
+    expect(await send(a, event("order.placed", placedId, { estimated_delivery }))).toEqual({ status: 200 });
+    expect((await failureRow(placed.orderId)).status).toBe("placed");
+
+    const cancelId = randomUUID();
+    const toCancel = await newOrder(a, cancelId);
+    expect(await send(a, event("order.cancelled", cancelId, { refund_amount: 4500, estimated_delivery }))).toEqual({ status: 200 });
+    expect(await failureRow(toCancel.orderId)).toMatchObject({ status: "failed", failure_type: "store_cancelled" });
+  });
+
+  it("an estimate update whose estimated_delivery isn't a date is logged and changes nothing", async () => {
+    const a = await newAccount();
+    const zincId = randomUUID();
+    const { orderId } = await newOrder(a, zincId);
+    const before = await orderRow(orderId);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      expect(await send(a, event("order.estimated_delivery_updated", zincId, { estimated_delivery: 20301205 }))).toEqual({ status: 200 });
+      expect(logLines(log, "tracking.bad_estimate")).toEqual([expect.objectContaining({ user_id: a.userId, order_id: orderId })]);
+    } finally {
+      log.mockRestore();
+    }
+    expect(await orderRow(orderId)).toEqual(before);
+  });
+
   it("cancel leaving every other gift delivered sends the delivered email", async () => {
     const a = await newAccount();
     const zincId = randomUUID();

@@ -157,8 +157,8 @@ export type TemplateData = {
   gift_on_time: OneGift & { expectedText: string };
   /** ALL-33: two or more gifts' news, across the buyer's people and occasions, in the order told. */
   tracking_news: { items: NewsItem[] };
-  /** ALL-33: every gift of the round arrived; `deliveredText` is each gift's delivered date, formatted. */
-  delivered: Occasion & { gifts: { title: string; deliveredText: string }[] };
+  /** ALL-33: every gift of the round arrived; `deliveredText` is each gift's delivered date, formatted, left out when unknown. */
+  delivered: Occasion & { gifts: { title: string; deliveredText?: string }[] };
   check_your_address: Record<string, never>;
   notes_tip: { personName: string };
   /** `subject`: the note's subject line, empty when it had none; `choices`: one link each, in order. */
@@ -768,7 +768,7 @@ export const TEMPLATES: {
       ...renderEmail({
         heading: title,
         paragraphs: [`Everything you chose for ${d.personName}'s ${d.occasion} on ${d.dateText} has arrived.`],
-        rows: d.gifts.map((g) => ({ title: g.title, detail: `Delivered ${g.deliveredText}` })),
+        rows: d.gifts.map((g) => ({ title: g.title, detail: g.deliveredText ? `Delivered ${g.deliveredText}` : "Delivered" })),
         link: { label: `See ${d.personName}'s gift`, url: links.open },
         footer: "What happens next: after the occasion we'll ask how they liked it.",
       }),
