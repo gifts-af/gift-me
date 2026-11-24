@@ -7,7 +7,7 @@ import { PageTitle } from "@/components/app-shell/page-frame";
 import { appSettingInt } from "@/lib/app-settings";
 import { createClient } from "@/lib/supabase/server";
 import { todayForRequest } from "@/lib/today";
-import { getPerson, countSavedGifts, getProfile, onDemandIdeas, type Db, type PersonDetail } from "@/modules/concierge";
+import { getPerson, countSavedGifts, getProfile, hasPastGifts, onDemandIdeas, type Db, type PersonDetail } from "@/modules/concierge";
 import { SettingsRow } from "@/components/settings-row";
 import {
   deleteFactAction,
@@ -60,11 +60,12 @@ export async function PersonView({ id, photoFailed }: { id: string; photoFailed:
   if (!userId) redirect("/");
   const person = await getPerson(id, await todayForRequest());
   if (!person) notFound();
-  const [profile, savedGifts, ideas, cardSetting] = await Promise.all([
+  const [profile, savedGifts, ideas, cardSetting, pastGifts] = await Promise.all([
     getProfile(supabase as unknown as Db, person.id, person.keepsList),
     countSavedGifts(person.id),
     onDemandIdeas(supabase as unknown as Db, person.id),
     appSettingInt("list_link_card_enabled"),
+    hasPastGifts(person.id, supabase as unknown as Db, new Date()),
   ]);
   // With the card on, an unlinked person gets the prompt at the top instead of the Their list row.
   const askForList = cardSetting === 1 && !person.keepsList;
@@ -133,6 +134,7 @@ export async function PersonView({ id, photoFailed }: { id: string; photoFailed:
           label="Saved gifts"
           value={savedGifts > 0 ? String(savedGifts) : "None"}
         />
+        {pastGifts && <SettingsRow href={`${base}/gifts`} label="Past gifts" value="" />}
         {!askForList && (
           <SettingsRow href={`${base}/list`} label="Their list" value={person.keepsList ? "Linked" : "Not linked"} />
         )}

@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import { createFreshUser } from "./fresh-user";
 import { localSupabase } from "./local-supabase";
+import { readyBuyer, seedPastGifts } from "./rounds";
 import { signIn } from "./sign-in";
 import { TEST_USER } from "./test-user";
 
@@ -436,4 +437,56 @@ test("linking a list that already shares an address moves a waiting round on at 
   const sent = await notificationsFor(round.id);
   expect(sent.filter((n) => n.kind === "needs_address")).toHaveLength(1);
   expect(sent.filter((n) => n.kind === "heads_up")).toHaveLength(1);
+});
+
+// How a gift went over, from the tick's email to a closed round. It lives here because the tick is
+// global: its reaction step closes and asks about every delivered round, whatever the clock says, so
+// it must not run beside this file's far-future ticks (the close date would close this round early).
+// The email is only logged here, so the link is built from the ids the tick's email carries.
+test("the tick asks about a delivered gift once, the Loved it link and Save close the round and teach the profile", async ({
+  page,
+  baseURL,
+}) => {
+  const base = baseURL ?? "http://localhost:3100";
+  const buyer = await readyBuyer(await createFreshUser());
+  const { personId, roundId, unanswered } = await seedPastGifts(buyer.id, "Reaction Rhea");
+  await setEngine(false);
+  const status = async () => (await roundsFor(personId)).find((r) => r.id === roundId)?.status;
+  const prompts = async () => (await notificationsFor(roundId)).filter((n) => n.kind === "reaction_prompt");
+
+  // The round became delivered today, so it's asked the day after: a tick before that sends nothing.
+  await tick(base, dayFromNow(0));
+  expect(await prompts()).toHaveLength(0);
+
+  // A day after the asked-on date (tomorrow), the email goes, once.
+  await tick(base, dayFromNow(2));
+  const sent = await prompts();
+  expect(sent).toHaveLength(1);
+  expect(sent[0].sent_at).not.toBeNull();
+  await tick(base, dayFromNow(2));
+  await tick(base, dayFromNow(3));
+  expect(await prompts()).toHaveLength(1);
+
+  // Its "Loved it" link opens the page with that answer chosen; nothing is saved until Save.
+  await signIn(page, buyer.creds);
+  await page.goto(`/rounds/${roundId}/reaction?gift=${unanswered.orderId}&r=loved`);
+  const card = page.getByRole("listitem", { name: unanswered.title });
+  await expect(card.getByRole("radio", { name: "Loved it" })).toBeChecked();
+  expect(await status()).toBe("delivered");
+  await card.getByRole("button", { name: /^Save/ }).click();
+  await expect(card.getByText("Saved. Thanks for telling us.")).toBeVisible();
+
+  // The round is complete, the person's profile has the fact, and Past gifts shows the answer.
+  expect(await status()).toBe("complete");
+  const facts = await fetch(
+    `${supabase.url}/rest/v1/profile_facts?select=category,value,source&person_id=eq.${personId}&source=eq.reaction`,
+    { headers: concierge },
+  );
+  expect(await facts.json()).toEqual([{ category: "loved", value: unanswered.title, source: "reaction" }]);
+  await page.goto(`/people/${personId}/gifts`);
+  await expect(page.getByRole("listitem").filter({ hasText: unanswered.title })).toContainText("Loved it");
+
+  // A complete round is never asked again.
+  await tick(base, dayFromNow(2));
+  expect(await prompts()).toHaveLength(1);
 });

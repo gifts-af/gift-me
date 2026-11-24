@@ -248,6 +248,8 @@ update concierge.app_settings set value = '0' where key = 'zinc_ordering_enabled
 | `round_job` with `reason: "bad_signature"` | The job route got a message whose signature doesn't check. It ran nothing and acknowledged the message. | **Round fan-out** below, "Bad signature". |
 | `ideas.daily_limit_reached` | A round's idea run was refused because today's `idea_round_runs_per_day` is used up. Nothing failed; the round waits for tomorrow's tick. | **Round fan-out** below, "Daily limit reached". |
 | `ideas.no_credit` | An idea run found the AI Gateway credit gone (a 402) before any AI reply was paid for. The run isn't counted and the buyer isn't emailed: the round waits. With fan-out off the tick starts no further idea run; with fan-out on each due round's job starts its own run, so expect one of these (or `ideas.daily_limit_reached`) per due round, up to `idea_round_runs_per_day` runs a day. The event carries `round_id` and `user_id`. The next 14:00 UTC health email says the same. | **AI credit** under **Health email** below: top up by hand, since auto top-up is off. |
+| `reactions.run_failed` | The daily step that closes answered rounds and asks how gifts went over threw: a setting or the database, or the close itself (the asking still ran first). Nothing was lost; the next tick tries again. | **Gift reactions** below, "Reactions aren't going out". |
+| `reactions.ask_failed` | One round's "how did it go?" email failed at `phase` `claim`, `read`, `send` or `forget`. The key is given back, so the next tick asks again until the round's close date. | **Gift reactions** below, "Reactions aren't going out". |
 | `tick.heartbeat_failed` | Writing the tick's heartbeat row (or a job adding its failure to it) failed. The tick or job itself is unaffected. | Nothing if it's one-off. If it repeats, check the database; the health email's "tick didn't finish" line can then be wrong for that day. |
 | `health.send_failed` | Resend refused the owner's health email. The route answers 500. | Check Resend (status, key, a bounced inbox). The next day's check sends again; read `concierge.health_snapshot` by hand meanwhile. |
 | `cost.record_failed` | A cost wasn't recorded (the client, the timeout setting or the write failed). The user's action went through. | **Cost tracking** below. |
@@ -718,6 +720,49 @@ on conflict (month, vendor) do update set cents = excluded.cents;
 | `health.costs_failed` | The Monday costs read failed or ran past `health_vendor_timeout_ms`. The email went out with "Costs couldn't be read"; its problems are unaffected. | Run `select concierge.cost_per_gift(now());` in the SQL editor to see the error. A missing or bad setting is the usual cause. |
 
 `health_vendor_timeout_ms` also bounds the costs read. It runs after the vendor balance calls, so with both near the limit the route needs about twice that time; keep it well under half of the route's 60 s.
+
+## Gift reactions (ALL-34)
+
+**What it does:** The day after a delivered round's occasion (or after its last gift arrived, if later), the daily tick emails the buyer one message per day listing each gift that has no answer, with four links each: Loved it, Liked it, Meh, Returned it. A link opens `/rounds/{id}/reaction` with that answer chosen; Save keeps it. When every gift has an answer, or `reaction_close_days` after the asked-on date, the round becomes `complete`. Answers become profile facts. Design: [technical design §6.6](technical-design.md), decision T91.
+
+**Settings** (`concierge.app_settings`)
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `reactions_enabled` | 1 | Off switch. At 0 nothing is asked or closed, saving is refused ("Not available right now"), and the links to answer are hidden. Past gifts still shows. Any of these four settings missing raises an error, even when this is 0: the daily step alerts (`reactions.run_failed`) if one of the first three is gone, and saving fails without this one or the note limit |
+| `reaction_prompt_after_days` | 1 | Days after the latest of the occasion date, the last gift arriving and the round becoming delivered |
+| `reaction_close_days` | 7 | Days after that when a delivered round closes, answered or not |
+| `reaction_note_max_chars` | 500 | Longest note, in characters |
+
+**Turn it off:** set `reactions_enabled` to 0 with SQL on that environment's database, no deploy needed.
+
+**Turning it back on:** set it to 1. The next tick closes every delivered round already past its close date, without asking, and closes any whose gifts were all answered. Rounds still inside their window are asked as normal, so a short switch-off loses nothing, and a long one leaves the old rounds closed unasked.
+
+**Events** (ids only, E6)
+
+| Event | Means |
+|---|---|
+| `reactions.run` | The daily step finished (`closed` rounds closed, `asked` rounds asked about) |
+| `reaction.saved` | An answer was saved (`complete`: the round closed with it) |
+| `reaction.refused` | An answer was turned away, with a `reason` (`off`, `too_early`, `not_delivered`, `sensitive`, `note_too_long`, `not_found`) |
+| `reaction.save_failed` | Saving threw. The buyer saw "try again" |
+| `reaction.switch_unread` | A page couldn't read `reactions_enabled`, so it hid the links to answer. It refuses nothing: a save reads the switch itself |
+| `reaction.history_check_failed` | The "Past gifts" row couldn't check for history, so it was left out |
+
+### Reactions aren't going out
+
+For `reactions.run_failed` or `reactions.ask_failed`:
+
+1. Look at the event's error fields (`name`, `code`) in the Vercel logs. For `ask_failed`, `phase` says where it failed and `round_id` which round. Check Resend (status, key, a bounced address) for a refused email.
+2. Nothing is lost: each key is given back, and the next tick asks again until the round's close date. After that the round closes unasked, so look within `reaction_close_days`.
+3. For `run_failed`, check the database and that the four settings above exist in `app_settings`. To stop the noise while you fix it, set `reactions_enabled` to 0 and read **Turning it back on**.
+4. If `ask_failed` has `phase` `forget`, the key couldn't be given back, so that round won't be asked again. To ask it, delete its row (`delete from concierge.round_sends where round_id = '<round_id>' and step = 'reaction_prompt';`), then wait for the next tick.
+
+### A round never closes
+
+A round that stays `ordered` or `needs_attention` is not asked and not closed: the gift's delivered event was lost and the buyer never tapped "It arrived" (known gap, ALL-162). Check the order in Zinc's dashboard. If it never confirmed, follow **Unconfirmed orders**; if it shipped, the buyer can tap "It arrived" on the round screen, and the round is then asked about as normal.
+
+Two things look like bugs and aren't: an answer is refused before the occasion date, and an unanswered round closes silently on its close date.
 
 ## Production test account
 

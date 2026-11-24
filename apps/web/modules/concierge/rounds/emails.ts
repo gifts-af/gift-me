@@ -32,10 +32,10 @@ export function occasionWord(kind: OccasionKind): string {
 type TrackingStep = "delivered" | `${"late" | "ontime" | "cancel_late"}:${string}`;
 type PlainStep = Exclude<
   StepKey,
-  `hold:${string}` | `fail:${string}` | `ordered:${string}` | `late_fail:${string}` | "shared_address" | RenamedStepKey | TrackingStep
+  `hold:${string}` | `fail:${string}` | `ordered:${string}` | `late_fail:${string}` | "shared_address" | RenamedStepKey | TrackingStep | "reaction_prompt"
 >;
 /** Which email a step key sends; the numbered keys group by kind. Failures are told by tellFailures. */
-type EmailStep = PlainStep | "hold" | "hold_short" | "hold_deadline" | "fail" | "ordered" | "tracking";
+type EmailStep = PlainStep | "hold" | "hold_short" | "hold_deadline" | "fail" | "ordered" | "tracking" | "reaction";
 
 function emailStep(step: StepKey): EmailStep {
   if (step.startsWith("hold:")) {
@@ -45,6 +45,7 @@ function emailStep(step: StepKey): EmailStep {
   if (step.startsWith("fail:")) return "fail";
   if (step.startsWith("ordered:") || step.startsWith("late_fail:")) return "ordered";
   if (step === "delivered" || /^(late|ontime|cancel_late):/.test(step)) return "tracking";
+  if (step === "reaction_prompt") return "reaction";
   return step as PlainStep;
 }
 
@@ -176,6 +177,9 @@ export async function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundCo
     case "tracking":
       // A bought gift's news (late, on time, store cancelled, delivered) claims its own key; never a round step.
       throw new Error("Tracking news is sent by its own step");
+    case "reaction":
+      // Sent by runReactions, which claims its key; never a round step.
+      throw new Error("The reaction email is sent by runReactions");
     default: {
       const unknown: never = kind;
       throw new Error(`No email for step ${String(unknown)}`);

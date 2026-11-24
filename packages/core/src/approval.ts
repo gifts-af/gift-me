@@ -19,7 +19,7 @@ const factKey = (f: RejectionFact) => `${f.category}\u0000${f.value.trim().repla
 const chars = (s: string) => Array.from(s).length;
 
 /** The first n characters as the database counts them, never splitting an emoji in two. */
-function cut(s: string, n: number): string {
+export function cut(s: string, n: number): string {
   const all = Array.from(s);
   return all.length > n ? all.slice(0, n).join("") : s;
 }

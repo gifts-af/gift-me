@@ -16,6 +16,7 @@ describe("sampleEmails", () => {
       "final_notice",
       "needs_attention",
       "reaction_prompt",
+      "reaction_prompt-several",
       "needs_address",
       "skipped",
       "skipped-held",

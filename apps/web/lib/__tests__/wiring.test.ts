@@ -80,6 +80,7 @@ describe.skipIf(!supabase)("Zinc and engine wiring (real local database and engi
   it("gives the engine the real buying side, with the fee and margin from app_settings", async () => {
     const { engine, purchase } = await wiring.buyingWiring(new Date("2030-01-01T00:00:00Z"), { ...base, EMAIL_OUTBOX: "log" });
     expect(engine.zinc?.walletUrl).toBe("https://app.zinc.test/wallet");
+    expect(engine.reactions).toBeTypeOf("function");
     expect(purchase).toMatchObject({
       env: "live",
       settings: { feeCents: await setting("zinc_order_fee_cents"), marginPct: await setting("order_price_margin_pct") },
@@ -91,6 +92,7 @@ describe.skipIf(!supabase)("Zinc and engine wiring (real local database and engi
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     const { engine, purchase } = await wiring.buyingWiring(new Date(), { EMAIL_OUTBOX: "log" }, { user_id: "user-1" });
     expect(engine.zinc).toBeNull();
+    expect(engine.reactions).toBeTypeOf("function");
     expect(purchase).toBeNull();
     expect(events(log).filter((e) => e.event === "zinc.wiring_missing")).toEqual([
       expect.objectContaining({ event: "zinc.wiring_missing", user_id: "user-1" }),

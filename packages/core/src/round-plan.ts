@@ -42,6 +42,8 @@ export type StepKey =
   // Once per order (ALL-33): told it may be late, back on time, or that the store cancelled it
   // too late to ship another.
   | `${"late" | "ontime" | "cancel_late"}:${string}`
+  // Once per round, after the occasion: how did the gifts go over?
+  | "reaction_prompt"
   | RenamedStepKey;
 
 /**

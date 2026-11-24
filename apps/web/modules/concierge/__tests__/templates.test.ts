@@ -5,7 +5,7 @@ const kinds = Object.keys(SAMPLE_DATA) as NotificationKind[];
 
 // store_cancelled_late: nothing more can ship in time, so there is nothing to tap (ALL-33 mock-up).
 // gift_on_time and tracking_news: plain links only; nothing needs one main action.
-const NO_BUTTON: NotificationKind[] = ["notes_tip", "who_is_this", "notes_not_read", "notes_cant_cancel", "store_cancelled_late", "gift_on_time", "tracking_news", "delivered"];
+const NO_BUTTON: NotificationKind[] = ["notes_tip", "who_is_this", "notes_not_read", "notes_cant_cancel", "store_cancelled_late", "gift_on_time", "tracking_news", "delivered", "reaction_prompt"];
 
 /** The Zinc wallet address some emails carry as data rather than a one-time link. */
 function walletUrl(kind: NotificationKind): string[] {
@@ -785,6 +785,43 @@ describe("delivered (every gift of the occasion arrived)", () => {
     expect(mail.text).toContain(`See Mom's gift: ${s.links.open}`);
     expect(mail.text).toContain("What happens next: after the occasion we'll ask how they liked it.");
     expect(mail.text).not.toMatch(/(she|her)/);
+  });
+});
+
+describe("reaction_prompt (how the gifts went over)", () => {
+  const s = SAMPLE_DATA.reaction_prompt;
+  it("lists each gift with its own four links, in html and text", () => {
+    const mail = TEMPLATES.reaction_prompt(s.data, s.links);
+    expect(mail.subject).toBe("How did Mom like the gifts?");
+    expect(mail.html.match(/<a[\s>]/g)).toHaveLength(8);
+    for (const label of ["Loved it", "Liked it", "Meh", "Returned it"]) expect(mail.html.split(`>${label}</a>`)).toHaveLength(3);
+    const at = (u: string) => mail.text.indexOf(u);
+    expect(at(`Returned it: ${s.links.returned0}`)).toBeGreaterThan(at("Cozy throw blanket"));
+    expect(at(`Returned it: ${s.links.returned0}`)).toBeLessThan(at("Reading lamp"));
+    expect(at(`Loved it: ${s.links.loved1}`)).toBeGreaterThan(at("Reading lamp"));
+    expect(mail.text).toContain("You can skip any gift. Nothing is saved until you tap Save.");
+  });
+  it("says whose occasion each gift was for only when there are several, and what answering is for", () => {
+    const [mom] = s.data.rounds;
+    const dad = { personName: "Dad", occasion: "anniversary", dateText: "Monday, March 16", gifts: [{ title: "Tea" }] };
+    const one = TEMPLATES.reaction_prompt(s.data, s.links);
+    expect(one.text).toContain("- Cozy throw blanket\n");
+    expect(one.text).not.toMatch(/better/);
+    expect(one.text).toContain("It helps us choose next time.");
+    const links = { ...s.links, loved2: "https://x.test/l", liked2: "https://x.test/k", meh2: "https://x.test/m", returned2: "https://x.test/r" };
+    const several = TEMPLATES.reaction_prompt({ rounds: [mom, dad] }, links);
+    expect(several.subject).toBe("How did your gifts go over?");
+    expect(several.html).toContain(">How did your gifts go over?</h1>");
+    expect(several.text).toContain("- Reading lamp (Mom's birthday, Saturday, March 14)");
+    expect(several.text).toContain("- Tea (Dad's anniversary, Monday, March 16)\n  Loved it: https://x.test/l");
+  });
+  it("one gift: says the gift, escapes its title, and needs every link", () => {
+    const data = { rounds: [{ ...s.data.rounds[0], gifts: [{ title: '<b>&"' }] }] };
+    const mail = TEMPLATES.reaction_prompt(data, s.links);
+    expect(mail.subject).toBe("How did Mom like the gift?");
+    expect(mail.html).toContain("&lt;b&gt;&amp;&quot;");
+    expect(mail.html).not.toContain("<b>");
+    expect(() => TEMPLATES.reaction_prompt(data, {})).toThrow("No link for answer loved0");
   });
 });
 

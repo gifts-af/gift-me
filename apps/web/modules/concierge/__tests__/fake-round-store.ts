@@ -3,6 +3,7 @@ import type {
   Candidate,
   ClaimedRound,
   NewRoundRow,
+  ReactionAsk,
   RoundContext,
   RoundFinish,
   RoundStore,
@@ -303,5 +304,19 @@ export class FakeRoundStore implements RoundStore {
   }
   async deliveredRoundsUntold() {
     return [];
+  }
+  /** What reactions_due finds, less the rounds already asked; what closes is SQL's. */
+  reactionDue: { roundId: string; userId: string }[] = [];
+  reactionAsks = new Map<string, ReactionAsk>();
+  async closeReactedRounds(today: CalendarDate): Promise<number> {
+    void today;
+    return 0;
+  }
+  async reactionsDue(today: CalendarDate) {
+    void today;
+    return this.reactionDue.filter((r) => !this.sends.get(r.roundId)?.has("reaction_prompt"));
+  }
+  async reactionGifts(roundId: string): Promise<ReactionAsk | null> {
+    return this.reactionAsks.get(roundId) ?? null;
   }
 }

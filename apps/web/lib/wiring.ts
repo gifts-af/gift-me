@@ -24,6 +24,7 @@ import {
   placeHeldForUser,
   placeRound,
   runIdeas,
+  runReactions,
   runTrackingNews,
   tellDelivered,
   sweepStalePlacing,
@@ -165,6 +166,7 @@ export async function buyingWiring(
     // The engine's day: the tick's UTC day.
     trackingNews: () =>
       runTrackingNews({ store: engine.store, notify: engine.notify, today: now.toISOString().slice(0, 10), setting: (key) => settingInt(db, key) }),
+    reactions: () => runReactions({ store: engine.store, notify: engine.notify, now }),
   };
   const wiring = await zincWiring(db, env);
   if (!wiring) {

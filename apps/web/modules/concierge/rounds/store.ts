@@ -184,6 +184,15 @@ export type RoundContext = {
   closedEarly: boolean;
 };
 
+/** What the reaction email says. Read with the service role; never logged. */
+export type ReactionAsk = {
+  personName: string;
+  occasionKind: OccasionKind;
+  occasionDate: CalendarDate;
+  /** In the order they were bought, like the answer page. */
+  gifts: { orderId: string; title: string }[];
+};
+
 export type RoundFinish = {
   status: RoundStatus;
   nextActionAt: Date | null;
@@ -268,6 +277,14 @@ export interface RoundStore {
   trackingCandidates(today: CalendarDate): Promise<TrackingCandidate[]>;
   /** Delivered rounds whose `delivered` email isn't recorded (ALL-33): the tick tells them again. */
   deliveredRoundsUntold(): Promise<{ roundId: string; userId: string }[]>;
+
+  // ─── How the gifts went over. Switched off, the first two find nothing. ───
+  /** close_reacted_rounds: how many rounds it made complete. */
+  closeReactedRounds(today: CalendarDate): Promise<number>;
+  /** reactions_due: the rounds to ask about today, once each. */
+  reactionsDue(today: CalendarDate): Promise<{ roundId: string; userId: string }[]>;
+  /** The round's delivered gifts without an answer; null when it's no longer delivered, or the person was removed. */
+  reactionGifts(roundId: string): Promise<ReactionAsk | null>;
 }
 
 const SCHEDULE_KEYS: Record<keyof ScheduleSettings, string> = {
@@ -722,6 +739,40 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
       const { data, error } = await concierge.rpc("delivered_rounds_untold");
       if (error) fail("Loading the delivered rounds failed", error);
       return (data ?? []).map((r) => ({ roundId: r.round_id, userId: r.user_id }));
+    },
+
+    async closeReactedRounds(today) {
+      const { data, error } = await concierge.rpc("close_reacted_rounds", { p_today: today });
+      if (error) fail("Closing the answered rounds failed", error);
+      return data;
+    },
+
+    async reactionsDue(today) {
+      const { data, error } = await concierge.rpc("reactions_due", { p_today: today });
+      if (error) fail("Loading the rounds to ask about failed", error);
+      return data.map((r) => ({ roundId: r.round_id, userId: r.user_id }));
+    },
+
+    async reactionGifts(roundId) {
+      const { data: round, error } = await concierge
+        .from("gift_rounds")
+        .select("person_id, occasion_date, status, occasions!inner(kind), orders(id, status, created_at, gift_ideas!inner(title), reactions(id))")
+        .eq("id", roundId)
+        .eq("orders.status", "delivered")
+        .order("created_at", { referencedTable: "orders" })
+        .order("id", { referencedTable: "orders" })
+        .single();
+      if (error) fail("Loading the gifts to ask about failed", error);
+      if (round.status !== "delivered") return null;
+      const person = await db.from("people").select("name, deleted_at").eq("id", round.person_id).single();
+      if (person.error) fail("Loading the round's person failed", person.error);
+      if (person.data.deleted_at !== null) return null;
+      return {
+        personName: person.data.name,
+        occasionKind: round.occasions.kind as OccasionKind,
+        occasionDate: round.occasion_date,
+        gifts: round.orders.filter((o) => o.reactions.length === 0).map((o) => ({ orderId: o.id, title: o.gift_ideas.title })),
+      };
     },
 
     async trackingCandidates(today) {

@@ -10,20 +10,21 @@
 
 ### Who it's for and what they can do
 
-1. **Buyer, email:** one email per occasion lists each gift that arrived, each with four links: Loved it, Liked it, Meh, Returned it. Tapping one opens the page with that answer chosen; Save keeps it. Two taps. Opening a link never saves (email scanners).
+1. **Buyer, email:** one email lists each gift that arrived, each with four links: Loved it, Liked it, Meh, Returned it. Tapping one opens the page with that answer chosen; Save keeps it. Two taps. Opening a link never saves (email scanners).
 2. **Buyer, page:** `/rounds/{id}/reaction` shows every delivered gift with the four choices and an optional note. They can answer some, skip others, and change an answer later.
 3. **Buyer, history:** `/people/{id}/gifts`, from a "Past gifts" row on the person's page, lists past rounds, newest first.
 4. **System:** answers become facts the idea engine reads; the round moves to `complete`.
 
 ### When the email goes and when the round closes
 
-- **Asked-on date:** the later of the occasion date and the last delivery date, plus `reaction_prompt_after_days` (1). UTC days, by the daily tick, once per round (`round_sends` step `reaction_prompt`). A late gift is asked about after it arrives **[Claude's call]**.
+- **Asked-on date:** the latest of the occasion date, the last delivery date and the day the round became delivered, plus `reaction_prompt_after_days` (1). UTC days, by the daily tick, once per round (`round_sends` step `reaction_prompt`). The day it became delivered counts because the store can cancel the last gift well after the others arrived. A late gift is asked about after it arrives **[Claude's call]**.
 - **Asked when** `asked_on <= today < asked_on + reaction_close_days` (7), the round is `delivered`, the person isn't removed, and a delivered gift has no answer. The email lists the **unanswered** gifts only. A removed occasion is still asked about: the gift was given.
 - **Closes to `complete`** when every delivered gift has an answer, or on `asked_on + reaction_close_days`. An unanswered round closes silently. The tick also closes a `delivered` round whose gifts were all answered earlier (while another gift was still on its way). Answers are still taken after that.
 - **Not before the occasion:** answering is refused, and the round screen's link hidden, until the occasion date. A gift can arrive weeks before it's given.
 - **Only `delivered` rounds.** A round still `ordered` isn't asked. Zinc's delivered event can be lost, and "It arrived" takes shipped gifts only, so such a round is never asked and never closes. Known gap, with its own follow-up ticket **[Claude's call]**.
 - **Old rounds at launch,** already past their close date, close without an email.
-- **A refused email** gives its key back (best effort) and is tried at the next tick, until the close date.
+- **One email per buyer per run.** A buyer with several rounds due gets one email listing all their gifts, each with its person, occasion and date. Each round still has its own key.
+- **A refused email** gives back the key of every round it listed (best effort) and is tried at the next tick, until the close date.
 - **Delivered email:** once a round is `complete`, a refused delivered email isn't retried. The buyer has said how it went, so they know it arrived.
 - **Switch:** `reactions_enabled` (1). At 0 nothing is asked or closed and saving is refused ("Not available right now"); history still shows. Turning it back on after a long gap closes the waiting rounds unasked.
 
@@ -37,7 +38,8 @@
 | Returned it | with a note, `avoid`: "Returned title: note"; without one, none (wrong size or broken isn't dislike) **[Claude's call]** |
 
 - **List gifts never become facts.** A gift from someone's list keeps that person's words out of facts and out of the AI (T42). The answer and note are still saved.
-- **Facts are written only when the rating is new or changes.** A note edit or a repeat save touches no fact, so it can't bring back one the buyer turned off, deleted or edited. When the rating changes, the old fact is removed only if it's still exactly as we wrote it (the reaction stores its category and value) and active. A fact that already exists is left as it is. Saving a fact for a removed person is skipped.
+- **A changed note updates the fact, unless the buyer touched it.** Same rating, another note: if the reaction's fact is still exactly as we wrote it and active, its text is replaced, or it's removed when the new answer teaches nothing (a Returned note cleared) or the person already has the new text. A reaction with no fact recorded adds one. A fact the buyer edited, turned off or deleted is left alone and stays recorded, so no note edit brings it back. One that was already off when the answer came is recorded too, for the same reason. A repeat save (same rating and note) touches no fact.
+- **Facts when the rating is new or changes.** When the rating changes, the old fact is removed only if it's still exactly as we wrote it (the reaction stores its category and value) and active. A changed rating is a new answer, so its fact is written even if an earlier one was deleted. A fact that already exists is left as it is. Known gap: two gifts with the same title share one fact, owned by the first answered, so changing that answer removes it even if the other gift is still loved. A note edited on that other gift adds its own fact. Saving a fact for a removed person is skipped; a note edit removes the old one.
 - **Sensitive text is refused,** with the same message as other typed profile text (C-8, decision 51), and nothing is saved. A title whose fact trips the filter saves the answer with no fact.
 - Facts have source `reaction`, `confirmed` true, and the fact length limit (the existing cut helper).
 - "Don't suggest it again" is already covered: given products are excluded (`excluded_offers`).
@@ -46,17 +48,17 @@
 
 | # | Given | When | Then |
 |---|---|---|---|
-| AC-1 | A `delivered` round whose asked-on date is today or earlier, not past its close date | The tick runs | One email listing every delivered gift with four links each; the key is recorded; a second tick sends nothing |
+| AC-1 | A `delivered` round whose asked-on date is today or earlier, not past its close date | The tick runs | One email per buyer listing every unanswered delivered gift of all their due rounds, with four links each; each round's key is recorded; a second tick sends nothing |
 | AC-2 | Asked-on date in the future, or the round is `ordered` / `needs_attention` / `skipped` | The tick runs | No email |
 | AC-3 | The gift arrived after the occasion | The tick runs | It's asked the day after it arrived |
 | AC-4 | The buyer taps "Loved it" in the email, signed in | The page opens, they press Save | Saved in two taps. The GET alone saved nothing |
 | AC-5 | Signed out, or someone else's account | They open the link | Sign in and return to it; another account sees "This gift belongs to another account" (T80); nothing about the round |
 | AC-6 | A round with two gifts | One is answered | Saved for that gift only; the round stays `delivered`. Answering the second makes it `complete` |
 | AC-7 | An unanswered round past its close date | The tick runs | `complete`, no email |
-| AC-8 | A rating is changed | Saved | One reaction row per gift, updated; the old fact is gone if it's still as we wrote it, the new one is in. An edited, turned-off or deleted fact stays as the buyer left it |
+| AC-8 | A rating is changed | Saved | One reaction row per gift, updated; the old fact is gone if it's still as we wrote it, the new one is in. An edited, turned-off or deleted fact stays as the buyer left it. With the same rating and another note, the untouched fact takes the new text (or goes, when there's none), and a first note adds its fact |
 | AC-9 | A note with a sensitive trait | Saved | Refused with the usual message; nothing is written |
 | AC-10 | Someone else's order, an order not delivered, before the occasion date, a bad rating, a note over the limit | Save is called | Refused; nothing is written |
-| AC-11 | Rounds `delivered`, `complete`, `skipped`, or with a given gift and an occasion date before today | The history opens | Each is listed, newest first: occasion and date (a removed occasion reads "Occasion"), gifts, cost (the order's total, or "Cost not known yet"), delivery outcome, reaction and note. A skipped round with nothing bought says no gift was bought; one whose gift the store cancelled says cancelled and refunded, with the amount only if Zinc sent it |
+| AC-11 | Rounds `delivered` or `complete` (any date), or with an occasion date before today and either `skipped` or with a given gift | The history opens | Each is listed, newest first: occasion and date (a removed occasion reads "Occasion"), gifts, cost (the order's total, or "Cost not known yet"), delivery outcome, reaction and note. A skipped round with nothing bought says no gift was bought; one whose gift the store cancelled says cancelled and refunded, with the amount only if Zinc sent it |
 | AC-12 | A person with no past rounds | Their page opens | No "Past gifts" row |
 | AC-13 | `reactions_enabled` = 0 | Tick, page, save | No email, no close; saving refused |
 | AC-14 | The email fails or the read throws | The tick runs | The key is given back, an alert event is logged (ids only), and the rest of the tick runs |

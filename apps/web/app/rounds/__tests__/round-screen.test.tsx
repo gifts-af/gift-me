@@ -88,13 +88,17 @@ type ArrivedAction = (roundId: string, orderId: string) => Promise<{ ok: boolean
 
 function setup(
   v: RoundPageView,
-  { outlook = true, arrived = vi.fn<ArrivedAction>(async () => ({ ok: true })) }: { outlook?: boolean | null; arrived?: ArrivedAction | null } = {},
+  {
+    outlook = true,
+    arrived = vi.fn<ArrivedAction>(async () => ({ ok: true })),
+    reactionsOpen = false,
+  }: { outlook?: boolean | null; arrived?: ArrivedAction | null; reactionsOpen?: boolean } = {},
 ) {
   const rejectAction = vi.fn(async (...a: [string, FormData]): Promise<RejectResult> => (void a, { ok: true, more: true }));
   const setBudgetAction = vi.fn(async (...a: [string, FormData]): Promise<BudgetResult> => (void a, { ok: true }));
   const outlookAction = vi.fn(async (...a: [string, { code: string; ownedIdeaId: string | null; text: string | null }]) => (void a, outlook));
   render(
-    <RoundScreen view={v} rejectAction={rejectAction} setBudgetAction={setBudgetAction} outlookAction={outlookAction} arrivedAction={arrived} />,
+    <RoundScreen view={v} rejectAction={rejectAction} setBudgetAction={setBudgetAction} outlookAction={outlookAction} arrivedAction={arrived} reactionsOpen={reactionsOpen} />,
   );
   return { rejectAction, setBudgetAction, outlookAction, arrived };
 }
@@ -111,6 +115,7 @@ describe("RoundScreen: picking", () => {
         setBudgetAction={ok}
         outlookAction={async () => true}
         arrivedAction={ok}
+        reactionsOpen={false}
       />
     );
     const container = document.body.appendChild(document.createElement("div"));
@@ -246,6 +251,7 @@ describe("RoundScreen: picks after the round changes", () => {
       setBudgetAction: vi.fn(async (...a: [string, FormData]): Promise<BudgetResult> => (void a, { ok: true })),
       outlookAction: vi.fn(async (...a: [string, { code: string; ownedIdeaId: string | null; text: string | null }]) => (void a, true)),
       arrivedAction: null,
+      reactionsOpen: false,
     };
   }
 
@@ -474,6 +480,19 @@ describe("RoundScreen: your gifts", () => {
     expect(item).toHaveTextContent("Delivered Thu, Dec 10");
     expect(item).not.toHaveTextContent("late");
     expect(within(item).queryByRole("button")).toBeNull();
+  });
+
+  it("a delivered gift asks how it went, once it can be answered", () => {
+    const { i, o } = ordered({ status: "delivered" });
+    const shipped = order({ status: "shipped" });
+    setup(view({ ideas: [i], liveOrders: [o, shipped] }, { status: "ordered" }), { reactionsOpen: true });
+    expect(gifts().getAllByRole("link", { name: `How did it go? ${o.title}` }).map((a) => a.getAttribute("href"))).toEqual([`/rounds/r1/reaction?gift=${o.id}`]);
+  });
+
+  it("no How did it go? before then", () => {
+    const { i, o } = ordered({ status: "delivered" });
+    setup(view({ ideas: [i], liveOrders: [o] }, { status: "delivered" }));
+    expect(gifts().queryByRole("link", { name: /How did it go/ })).toBeNull();
   });
 
   it("store cancelled before the ship-by date shows the refund chip and Choose another gift, not a second fix row", () => {

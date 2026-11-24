@@ -20,6 +20,7 @@ import { useHydrated } from "@/lib/use-hydrated";
 import { cn } from "@/lib/utils";
 import type { BuyYourself, RoundPageIdea, RoundPageOrder, RoundPageView } from "@/modules/concierge";
 import { money } from "@/app/people/[id]/money";
+import { deliveredText, storeCancelledText } from "../gift-status";
 import { OverBudgetSheet } from "../over-budget-sheet";
 
 // The round screen (ALL-29, design/plans/ALL-29-approval.md AC-5–AC-7, AC-9, AC-12, AC-13a,
@@ -176,11 +177,9 @@ function Dot({ tone }: { tone: "moving" | "done" }) {
 /** Where a bought gift is: the status line, an amber chip when it may be late, and the refund for a store cancel. */
 function GiftStatus({ order, occasionDate, fixHref }: { order: RoundPageOrder; occasionDate: string; fixHref: string | null }) {
   if (order.status === "failed") {
-    // Zinc's own refund amount; without one, no amount (never what we were charged).
-    const amount = order.refundCents !== null && order.refundCents > 0 ? `${money(order.refundCents)} back in Zinc` : "the money is back in Zinc";
     return (
       <>
-        <span className={CHIP}>{`The store cancelled it · ${amount}`}</span>
+        <span className={CHIP}>{storeCancelledText(order.refundCents)}</span>
         {fixHref && (
           <Link href={fixHref} className={cn(LINE_LINK, "self-start text-[13px]")}>
             Choose another gift
@@ -193,7 +192,7 @@ function GiftStatus({ order, occasionDate, fixHref }: { order: RoundPageOrder; o
     return (
       <span className="flex items-center gap-1.5 text-[13px] font-semibold">
         <Dot tone="done" />
-        {order.deliveredAt ? `Delivered ${shortDate(order.deliveredAt.slice(0, 10))}` : "Delivered"}
+        {deliveredText(order.deliveredAt)}
       </span>
     );
   }
@@ -274,6 +273,7 @@ function GiftRow({
   roundId,
   occasionDate,
   fixHref,
+  reactionHref,
   arrivedAction,
 }: {
   order: RoundPageOrder;
@@ -281,6 +281,7 @@ function GiftRow({
   roundId: string;
   occasionDate: string;
   fixHref: string | null;
+  reactionHref: string | null;
   arrivedAction: ArrivedAction | null;
 }) {
   const meta = [money(order.totalCents ?? idea?.totalCents ?? order.maxPriceCents), storeLabel(idea?.retailer ?? null)].filter(Boolean).join(" · ");
@@ -292,6 +293,11 @@ function GiftRow({
         <span className="text-[13px] text-muted-foreground">{meta}</span>
         <GiftStatus order={order} occasionDate={occasionDate} fixHref={fixHref} />
         {order.status === "shipped" && arrivedAction && <ArrivedButton roundId={roundId} orderId={order.id} action={arrivedAction} />}
+        {reactionHref && (
+          <Link href={reactionHref} aria-label={`How did it go? ${order.title}`} className={cn(LINE_LINK, "self-start text-[13px]")}>
+            How did it go?
+          </Link>
+        )}
       </span>
     </li>
   );
@@ -508,6 +514,7 @@ export function RoundScreen({
   setBudgetAction,
   outlookAction,
   arrivedAction,
+  reactionsOpen,
 }: {
   view: RoundPageView;
   /** `rejectAction` */
@@ -518,6 +525,8 @@ export function RoundScreen({
   outlookAction: (roundId: string, input: OutlookInput) => Promise<boolean | null>;
   /** `markArrived`; null while order tracking is switched off, which hides "It arrived". */
   arrivedAction: ArrivedAction | null;
+  /** Whether a delivered gift asks how it went: the switch is on and the occasion has come. */
+  reactionsOpen: boolean;
 }) {
   const { round } = view;
   const budget = round.budgetCents;
@@ -655,6 +664,7 @@ export function RoundScreen({
                 roundId={round.id}
                 occasionDate={round.occasionDate}
                 fixHref={fixable.has(o.id) ? `/rounds/${round.id}/fix/${o.id}` : null}
+                reactionHref={reactionsOpen && o.status === "delivered" ? `/rounds/${round.id}/reaction?gift=${o.id}` : null}
                 arrivedAction={arrivedAction}
               />
             ))}

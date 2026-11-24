@@ -36,8 +36,10 @@ export type EmailLink = { label: string; url: string; before?: string };
 /**
  * One row of a list. `reason` is a line in italics under the detail; `link` is an anchor under
  * that (ALL-29: "Buy this"), teal and 44px tall like the other plain links, never a button.
+ * `links` are equal choices under that: outlined, 44px tall, two to a row on a phone and four on a
+ * wide screen, also never a button.
  */
-export type EmailRow = { title: string; detail?: string; reason?: string; link?: { label: string; url: string } };
+export type EmailRow = { title: string; detail?: string; reason?: string; link?: { label: string; url: string }; links?: Omit<EmailLink, "before">[] };
 
 export type EmailParts = {
   heading: string;
@@ -62,6 +64,10 @@ export function renderEmail(parts: EmailParts): { html: string; text: string } {
     `<p style="margin:0 0 16px;font-size:${size}px;line-height:1.5;color:${color};text-wrap:pretty">${escapeHtml(s)}</p>`;
   const links = parts.link === undefined ? [] : Array.isArray(parts.link) ? parts.link : [parts.link];
 
+  // 46% plus the gap fits two on the narrowest phone. The padding and border make 44px.
+  const choice = (l: Omit<EmailLink, "before">) =>
+    `<a href="${escapeHtml(l.url)}" style="display:inline-block;vertical-align:top;box-sizing:border-box;width:46%;max-width:128px;margin:0 8px 8px 0;padding:11px 4px;border:1px solid ${TEAL};border-radius:8px;color:${TEAL};text-align:center;text-decoration:none;font-weight:600;font-size:15px;line-height:20px">${escapeHtml(l.label)}</a>`;
+
   const rows = (parts.rows ?? [])
     .map(
       (r) =>
@@ -76,6 +82,7 @@ export function renderEmail(parts: EmailParts): { html: string; text: string } {
         (r.link
           ? `<a href="${escapeHtml(r.link.url)}" style="display:inline-block;color:${TEAL};font-weight:600;font-size:15px;line-height:20px;padding:12px 0">${escapeHtml(r.link.label)}</a>`
           : "") +
+        (r.links ? `<div style="padding-top:8px">${r.links.map(choice).join("")}</div>` : "") +
         `</div>`,
     )
     .join("");
@@ -122,6 +129,7 @@ export function renderEmail(parts: EmailParts): { html: string; text: string } {
       lines.push(r.detail ? `- ${r.title} (${r.detail})` : `- ${r.title}`);
       if (r.reason) lines.push(`  ${r.reason}`);
       if (r.link) lines.push(`  ${r.link.label}: ${r.link.url}`);
+      for (const l of r.links ?? []) lines.push(`  ${l.label}: ${l.url}`);
     }
     lines.push("");
   }
