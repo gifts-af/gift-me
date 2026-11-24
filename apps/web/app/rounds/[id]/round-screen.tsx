@@ -6,10 +6,12 @@ import {
   daysBetween,
   expectedArrival,
   FACT_VALUE_MAX,
+  ideaBlock,
   isLate,
   overBudgetLimitCents,
   picksBar,
   trackingLink,
+  type IdeaBlock,
   type RejectionCode,
 } from "@gifts-af/core";
 import { IdeaPhoto } from "@/components/idea-photo";
@@ -64,16 +66,21 @@ export function listPriceNote(idea: Pick<RoundPageIdea, "source" | "livePrice">)
   return idea.source === "list" && !idea.livePrice ? "Price from their list" : null;
 }
 
+const BLOCKED: Record<IdeaBlock, string> = {
+  not_shared: "No longer shared",
+  claimed: "Someone else is getting this",
+  own_order: "Already on one of your orders",
+};
+
 /** Why an idea can't be ticked, in words for the card; null when it can. */
 function blockedBecause(idea: RoundPageIdea, ordered: Set<string>, toFix: Set<string>): string | null {
   if (ordered.has(idea.id)) return "Ordered";
-  if (idea.noLongerShared) return "No longer shared";
-  if (idea.claimed) return "Someone else is getting this";
+  const block = ideaBlock(idea);
+  if (block !== null && block !== "own_order") return BLOCKED[block];
   // Its order failed: the buyer's claim on it stays until it's fixed, but it isn't on an order.
   if (toFix.has(idea.id)) return "Needs a fix";
   // On one of this buyer's live orders, in this round or another (approve_round: already_bought).
-  if (idea.claimedByMe) return "Already on one of your orders";
-  return null;
+  return block === null ? null : BLOCKED[block];
 }
 
 function IdeaCard({
