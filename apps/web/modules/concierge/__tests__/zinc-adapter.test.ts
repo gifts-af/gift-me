@@ -305,13 +305,30 @@ describe("signature", () => {
 
   it("reads error_type from data on order.failed", () => {
     const e = parseEvent({ event: "order.failed", order_id: "zo_1", data: { error_type: "product_not_found", error: "x" } });
-    expect(e).toMatchObject({ event: "order.failed", orderId: "zo_1", errorType: "product_not_found", error: "x" });
+    expect(e).toMatchObject({ event: "order.failed", orderId: "zo_1", errorType: "product_not_found" });
   });
 
-  it("reads wallet event fields from data", () => {
+  it("reads a wallet event, which has no order id", () => {
     const e = parseEvent({ event: "wallet.auto_topup.succeeded", data: { amount_cents: 10000, status: "succeeded" } });
-    expect(e).toMatchObject({ event: "wallet.auto_topup.succeeded", amountCents: 10000, status: "succeeded" });
+    expect(e).toMatchObject({ event: "wallet.auto_topup.succeeded" });
     expect(e.orderId).toBeUndefined();
+  });
+
+  it.each(["error_type", "error", "status", "amount_cents"])("an unexpected type in data.%s doesn't reject the event", (field) => {
+    const e = parseEvent({ event: "order.failed", order_id: "zo_1", data: { [field]: { odd: true } } });
+    expect(e).toMatchObject({ event: "order.failed", orderId: "zo_1" });
+  });
+
+  it.each(["error_type", "error", "status", "amount_cents"])("a null data.%s doesn't reject the event", (field) => {
+    const e = parseEvent({ event: "order.failed", order_id: "zo_1", data: { [field]: null } });
+    expect(e).toMatchObject({ event: "order.failed", orderId: "zo_1" });
+  });
+
+  it.each([
+    ["order_id", { order_id: 12 }],
+    ["timestamp", { timestamp: 1769000000 }],
+  ])("still rejects a %s that isn't text: it decides which order, or which wallet event is newer", (_field, bad) => {
+    expect(() => parseEvent({ event: "wallet.auto_topup.succeeded", ...bad })).toThrow();
   });
 
   it("parses events and rejects junk", () => {

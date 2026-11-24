@@ -9,13 +9,11 @@ export function verifySignature(rawBody: string, header: string | null | undefin
   return got.length === want.length && timingSafeEqual(got, want);
 }
 
-// order_id is top level; error_type, the wallet fields and tracking live in `data`.
+// order_id is top level; error_type, tracking and refunds live in `data`.
 const eventData = z
   .object({
-    error_type: z.string(),
-    error: z.string(),
-    amount_cents: z.number(),
-    status: z.string(),
+    // Checked where a failure is settled.
+    error_type: z.unknown(),
     // Checked package by package by packagesFromZinc, which keeps only whitelisted fields.
     tracking_numbers: z.unknown(),
     // Every event shares this schema, so a field only some events use must never reject one:
@@ -38,13 +36,8 @@ export type ZincEvent = {
   orderId?: string;
   /** When Zinc says the event happened (ISO 8601, sometimes without a Z; it is UTC). */
   timestamp?: string;
-  /** order.failed */
-  errorType?: string;
-  /** order.failed, wallet.auto_topup.failed */
-  error?: string;
-  /** wallet.auto_topup.* */
-  amountCents?: number;
-  status?: string;
+  /** order.failed: Zinc's reason, unchecked. */
+  errorType?: unknown;
   /** order.tracking_received, order.shipped: Zinc's packages, unchecked. */
   trackingNumbers?: unknown;
   /** order.estimated_delivery_updated: the new estimate, unchecked. */
@@ -61,10 +54,7 @@ export function parseEvent(json: unknown): ZincEvent {
     event: e.event,
     orderId: e.order_id,
     timestamp: e.timestamp,
-    errorType: e.data?.error_type,
-    error: e.data?.error,
-    amountCents: e.data?.amount_cents,
-    status: e.data?.status,
+    errorType: e.data?.error_type ?? undefined,
     trackingNumbers: e.data?.tracking_numbers,
     estimatedDelivery: e.data?.estimated_delivery ?? undefined,
     refundCents: refundCents(e.data?.refund_amount),
