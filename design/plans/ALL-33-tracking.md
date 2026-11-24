@@ -139,6 +139,9 @@ There's no tracking link in the payload. We build one from the carrier's public 
 | Store cancelled before ship-by | Same as a failed gift: email + fix page (owner OK'd) | One failure path (T81) |
 | One email per gift, or combined? | Combined: late, back-on-time and after-ship-by cancel news go in one daily summary per buyer; a one-item summary uses that item's own email (owner, 2026-11-23) | Matches the owner's ALL-116 rule (one summary, not a burst). Nothing can be bought for these, so a day's wait costs nothing |
 | Store cancel before ship-by that's never replaced: the deadline email | The store-cancelled wording, not "No gift was chosen" (owner, 2026-11-23, from the plan review) | It says what really happened |
+| Refund amount in store-cancel emails | Zinc's own `refund_amount` from the cancel event, stored on the order (owner, 2026-11-23, final review) | It's what actually came back, so no claim about fees |
+| Two emails to one buyer on one day (held gift + late cancel; summary + deadline cancel) | Accepted for the MVP (owner, 2026-11-23) | Both rare, each email truthful |
+| Ideas list on a bought round | Drops the gifts already under "Your gifts" (owner, 2026-11-23) | No duplicate list; the rest stays as history |
 | How it's built | Subagent-driven: a fresh implementer and reviewer per task, then a whole-branch review (owner, 2026-11-23) | It touches money-path status and `reconcile_round` |
 | Mock-ups | Signed off 2026-11-23: [ALL-33 mock-ups](https://claude.ai/artifact/64XUHT7xfzaibNtWtWpSXx) | — |
 | Approach | A: extend the webhook and daily run; no daily polling (owner, 2026-11-23) | Polling returns the same stale data at a cost. Add B only if needed |
