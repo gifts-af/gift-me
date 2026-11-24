@@ -171,7 +171,7 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
 
     expect(await reject(u, r, { code: "has_it", ownedIdeaId: r.ideaIds[1], expectMore: false })).toMatchObject({ ok: true, more: false });
     expect(await ideaStatuses(r.roundId)).toEqual(["proposed", "proposed"]);
-    expect(await rejections(r.roundId)).toEqual([{ idea_id: null, reason_code: "has_it", reason_text: null }]);
+    expect(await rejections(r.roundId)).toEqual([{ idea_id: r.ideaIds[1], reason_code: "has_it", reason_text: null }]);
     expect(await facts(r.personId)).toEqual([{ category: "owns", value: "Reel", source: "rejection" }]);
     expect(await roundRow(r.roundId)).toMatchObject({ status: "awaiting_approval", locked_until: null });
   });

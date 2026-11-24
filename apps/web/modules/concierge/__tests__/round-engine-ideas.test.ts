@@ -195,7 +195,7 @@ describe("the idea pass (ALL-27)", () => {
     expect(summary).toEqual({ enabled: false, created: 0, advanced: 0, failed: 1 });
   });
 
-  it("a run that saves none stays generating", async () => {
+  it("a run that saves none, with a newer fact, stays generating and runs again", async () => {
     const h = harness();
     h.generateIdeas.mockResolvedValue({ status: "none" });
 
@@ -203,7 +203,7 @@ describe("the idea pass (ALL-27)", () => {
 
     expect(h.store.rounds[0]).toMatchObject({ status: "generating", nextActionAt: at("2027-02-11"), lockedUntil: null });
     expect(h.sent()).toEqual([]);
-    // Runs are left, so the next tick runs again.
+    // A run is left (the fake's round_idea_state), so the next tick runs again.
     await h.tick("2027-02-12");
     expect(h.generateIdeas).toHaveBeenCalledTimes(2);
   });
@@ -214,6 +214,28 @@ describe("the idea pass (ALL-27)", () => {
     await h.tick("2027-02-11");
     expect(h.store.rounds[0]).toMatchObject({ status: "generating", nextActionAt: at("2027-02-11"), lockedUntil: null });
     expect(h.sent()).toEqual([]);
+  });
+
+  it("AC-10: a no-ideas email due on an ordinary step the day before ship-by is the too-late one; earlier it asks", async () => {
+    for (const [day, subject] of [
+      ["2027-03-10", "Sorry, no gift can arrive in time for Zelda Quartermain"],
+      ["2027-03-09", "Sorry, we couldn't get gift ideas for Zelda Quartermain yet"],
+    ] as const) {
+      const h = harness({ candidateFrom: day });
+      h.store.ideaState.set("round-1", { hasFacts: false });
+      await h.tick(day);
+      expect(h.emails.map((e) => e.subject)).toEqual([subject]);
+      expect(h.notifyStore.links).toHaveLength(day === "2027-03-10" ? 0 : 1);
+    }
+  });
+
+  it("AC-10: a refused too-late email isn't recorded as sent", async () => {
+    const h = harness({ candidateFrom: "2027-03-10" });
+    h.generateIdeas.mockResolvedValue({ status: "none" });
+    h.refuseOn.add("2027-03-10");
+    const summary = await h.tick("2027-03-10");
+    expect(summary.failed).toBe(1);
+    expect(h.store.sends.get("round-1") ?? new Set()).not.toContain("no_ideas_late");
   });
 
   it("saved with count 0 sends no heads-up", async () => {

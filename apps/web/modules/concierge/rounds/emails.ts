@@ -93,7 +93,7 @@ export async function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundCo
         {
           ...base,
           kind: "heads_up",
-          data: { ...occasion, ...asks, mode: "reminder", ideas, allFromList: ctx.ideas.every((i) => i.fromList), late: round.late, ...(extra.funding ? { funding: extra.funding } : {}) },
+          data: { ...occasion, ...asks, mode: "reminder", ideas, allFromList: ctx.ideas.every((i) => i.fromList), late: round.late, ...(ctx.restored ? { restored: ctx.restored } : {}), ...(extra.funding ? { funding: extra.funding } : {}) },
           links: { ...approval, ...questionsLink },
         },
         notifyDeps,
@@ -154,6 +154,9 @@ export async function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundCo
         },
         notifyDeps,
       );
+    case "no_ideas_late":
+      // Nothing they tell us now can help, so nothing is asked.
+      return notify({ ...base, kind: "no_ideas", data: { personName: ctx.personName, again: false, tooLate: true }, links: {} }, notifyDeps);
     case "hold_trouble":
       return notify(
         { ...base, kind: "hold_trouble", data: { ...gifts, feeText: await feeText() }, links: { open: link, cancel: cancelLink } },

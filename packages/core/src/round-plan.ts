@@ -37,6 +37,9 @@ export type StepKey =
   // The round couldn't get gift ideas (ALL-27 AC-9): once, and once more after the extra run.
   | "no_ideas"
   | "no_ideas_again"
+  // In place of either on the last tick before ship-by: no gift can arrive in time. Nothing more is
+  // tried or sent for the round after it, the close's email included.
+  | "no_ideas_late"
   // Once per round, when every gift arrived (ALL-33).
   | "delivered"
   // Once per change of an order's timing, the second as late:2:<id> and so on; and once that the
@@ -226,19 +229,27 @@ function holdAction(r: RoundView, today: CalendarDate, s: ScheduleSettings): Nex
 
 /**
  * A round that can't run (no facts or list gifts, or no runs left) tells the buyer once (`no_ideas`), and once
- * more if the extra run a new fact allowed also found nothing (`no_ideas_again`). Then it waits
+ * more if the extra run a new fact allowed also found nothing (`no_ideas_again`). On the last tick
+ * before ship-by either is `no_ideas_late` instead. Then it waits
  * for its deadline, unless a new fact brings it back sooner (the fact trigger). null: it can run.
  */
-function noIdeasAction(r: RoundView): NextAction | null {
+function noIdeasAction(r: RoundView, today: CalendarDate): NextAction | null {
+  if (r.sent.has("no_ideas_late")) return { do: "wait", until: r.shipByDeadline };
   // Like a run refused not_paid: no email, and the deadline closes it silently.
   if (!r.paid) return { do: "wait", until: r.shipByDeadline };
   // The engine is off: nothing is sorry about ideas we never looked for.
   if (!r.ideaEngineOn) return null;
   if (r.hasInputs && r.ideaRunsLeft) return null;
-  if (!r.sent.has("no_ideas")) return { do: "send", send: "no_ideas" };
-  if (!r.ideaRunsLeft && r.ranSinceNoIdeas && !r.sent.has("no_ideas_again")) return { do: "send", send: "no_ideas_again" };
+  const late = isLastTick(today, r.shipByDeadline);
+  if (!r.sent.has("no_ideas")) return { do: "send", send: late ? "no_ideas_late" : "no_ideas" };
+  if (!r.ideaRunsLeft && r.ranSinceNoIdeas && !r.sent.has("no_ideas_again")) {
+    return { do: "send", send: late ? "no_ideas_late" : "no_ideas_again" };
+  }
   return { do: "wait", until: r.shipByDeadline };
 }
+
+/** No daily tick (T49) is left before the ship-by day: nothing started later can be bought in time. */
+export const isLastTick = (today: CalendarDate, shipByDeadline: CalendarDate) => compareDates(addDays(today, 1), shipByDeadline) >= 0;
 
 const TOLD = /^(heads_up|address_request|no_ideas)(@\d+)?$/;
 
@@ -265,7 +276,7 @@ export function nextAction(r: RoundView, today: CalendarDate, s: ScheduleSetting
   // Before the address: a round that can't get ideas doesn't ask for one (ALL-27 AC-13), and an
   // unpaid round asks nothing at all.
   if (["scheduled", "needs_address", "generating"].includes(r.status)) {
-    const noIdeas = noIdeasAction(r);
+    const noIdeas = noIdeasAction(r, today);
     if (noIdeas) return noIdeas;
   }
   switch (r.status) {

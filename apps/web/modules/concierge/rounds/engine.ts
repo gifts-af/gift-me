@@ -6,7 +6,8 @@ import { planJobs, type JobMessage, type SendJobs } from "./fanout";
 import type { ClaimedRound, RoundStore } from "./store";
 import { retryDeliveredEmails } from "../tracking/delivered";
 import { runHeld, retryOrderedEmails, tellOwnerOfRejection, tellOwnersOfRejections } from "./money-path";
-import { dayOf, endedByMove, LeaseLost, releaseQuietly, view, sendHeadsUp, ideaPass, moveToGenerating, sendStep, trySend, finishStep } from "./steps";
+import { LeaseLost } from "./lease-lost";
+import { dayOf, endedByMove, releaseQuietly, view, sendHeadsUp, ideaPass, isNoIdeas, moveToGenerating, restoreIdeas, sendStep, trySend, finishStep } from "./steps";
 
 // The round engine (ALL-28, design §5.1). The daily tick creates rounds that
 // are due, then claims each due round with a lease and runs its next step:
@@ -503,10 +504,16 @@ async function runStep(claimed: ClaimedRound, deps: EngineDeps, s: ScheduleSetti
     case "wait":
       return finishStep(round, ctx, sent, { status: round.status }, deps, s);
     case "send":
+      // A run that ended without reaching this (the process died) still brings the ideas back.
+      if (isNoIdeas(action.send) && round.status === "generating" && (await restoreIdeas(round, deps))) {
+        return sendHeadsUp(round, deps, s);
+      }
       await sendStep(round, ctx, action.send, sent, deps);
       return finishStep(round, ctx, sent, { status: round.status }, deps, s, action.send);
     case "skip": {
       const ids = { round_id: round.id, user_id: round.userId };
+      // Told the day before that no gift can arrive in time and that we'd skip: nothing more to say.
+      if (sent.has("no_ideas_late")) return finishStep(round, ctx, sent, { status: "skipped" }, deps, s);
       // Tell the buyer about a skip only if we asked or told them something (ruling 13, ALL-27 AC-9).
       // A rejection renames what was sent (heads_up@1), and that still counts (ALL-29 AC-13). A
       // round left waiting on our AI credit (T87) is told too: the miss is ours, not the buyer's.

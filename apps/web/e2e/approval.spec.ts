@@ -256,6 +256,36 @@ test("None of these with no search left keeps the ideas buyable and sends no ema
   await expect(page.getByRole("checkbox", { name: "Fly-tying kit" })).toBeEnabled();
 });
 
+// The ideas came back and the process died before their email: the next tick sends it, with no run.
+test("ideas that came back after None of these get their own heads-up, and the page says why they're here", async ({ page }) => {
+  test.slow();
+  const b = await buyer();
+  const person = await personFor(b.id, "Nora");
+  const { roundId, ideaIds } = await seedRound(b.id, person, {
+    status: "generating",
+    ideas: [
+      { title: "Fly-tying kit", totalCents: 3000 },
+      { title: "Wading socks", totalCents: 2000 },
+    ],
+  });
+  await rest("rejections", { method: "POST", body: ideaIds.map((id) => ({ user_id: b.id, round_id: roundId, idea_id: id, reason_code: "not_style" })) });
+  const at = new Date(Date.now() - 60_000).toISOString();
+  await rest("idea_runs", { method: "POST", body: { user_id: b.id, person_id: person.personId, round_id: roundId, started_at: at, finished_at: at, outcome: "none" } });
+  await setSetting("idea_engine_enabled", 1);
+  await setSetting("round_engine_enabled", 1);
+
+  await tick(page);
+  expect((await roundOf(roundId)).status).toBe("awaiting_approval");
+  expect((await notificationsOf(roundId)).map((n) => n.kind)).toEqual(["heads_up"]);
+  expect(await rest(`idea_runs?select=outcome&round_id=eq.${roundId}`)).toEqual([{ outcome: "none" }]);
+
+  await signIn(page, b.creds);
+  await page.goto(`/rounds/${roundId}`);
+  await expect(page.getByText("We didn't find anything new. These are still here if you want one.")).toBeVisible();
+  await page.getByRole("checkbox", { name: "Fly-tying kit" }).check();
+  await expect(page.getByRole("link", { name: "Buy 1 gift" })).toBeVisible();
+});
+
 // ─── list gifts ─────────────────────────────────────────────────────────────
 
 // AC-27, AC-28, AC-29, AC-30, AC-30a, AC-17. Folds in "after the list owner stops sharing".

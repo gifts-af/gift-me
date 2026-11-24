@@ -19,6 +19,7 @@ import {
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
 import { errorFields, logEvent } from "@/lib/log";
+import type { Restored } from "@/lib/restored-ideas";
 import { storeName } from "@gifts-af/core/store-page/link";
 import { hasPaidFeatures } from "../paid-features";
 import { isId } from "../profile/rules";
@@ -27,7 +28,7 @@ import { claimRoundNow, concierge, fail, withLease } from "../purchase/store";
 import type { DbDeps } from "../zinc/types";
 import type { HoldGate } from "./hold-gate";
 import { aboutOrders, beforeIdeas, heldAddress, holdState, roundOutcome, waitingOn, type Closed, type HoldState } from "./outcome";
-import { createSupabaseRoundStore } from "./store";
+import { createSupabaseRoundStore, readRestored } from "./store";
 
 type UserDb = SupabaseClient<Database>;
 
@@ -176,7 +177,7 @@ export async function rejectRoundIdeas(input: RejectInput, deps: DbDeps): Promis
       logEvent("round.saved_unreadable", { round_id: roundId, user_id: userId, ...errorFields(err) });
       return false;
     });
-    const { error } = await concierge(deps).rpc("reject_round_ideas", {
+    const call = {
       p_round_id: roundId,
       p_user_id: userId,
       p_lock: lock,
@@ -185,7 +186,11 @@ export async function rejectRoundIdeas(input: RejectInput, deps: DbDeps): Promis
       p_facts: facts,
       p_expect_more: input.expectMore,
       p_list_gifts: await listGiftsLeft(deps, roundId, round.person_id),
-    });
+    };
+    const reject = (args: typeof call & { p_owned_idea_id?: string }) => concierge(deps).rpc("reject_round_ideas", args);
+    let { error } = await reject(input.ownedIdeaId === null ? call : { ...call, p_owned_idea_id: input.ownedIdeaId });
+    // A database without that argument yet (PostgREST's "no such function"): the call it knows.
+    if (error?.code === "PGRST202" && input.ownedIdeaId !== null) ({ error } = await reject(call));
     if (error) {
       const why = refusal(error, "reject_round_ideas");
       if (why === "changed") return { ok: false, error: "changed" };
@@ -368,6 +373,8 @@ export type RoundPageView = {
   waiting: "looking" | "told" | "address" | null;
   /** Why an open round's held gifts wait, and which of them it's about; null with none. */
   hold: (HoldState & { orderIds: string[] }) | null;
+  /** The ideas on offer came back after "None of these", and how that search ended; null otherwise. */
+  restored: Restored | null;
   nextBestIdeaId: string | null;
   buyYourself: BuyYourself[];
 };
@@ -518,6 +525,16 @@ const CLOSED_TEXT: Record<Exclude<Closed, "ordered">, string> = {
   stopped: "This gift round was stopped",
 };
 
+/** RoundPageView.restored. Only words on the page, so a failed read is logged and says nothing, as waitingOn. */
+async function restoredIdeas(userDb: UserDb, r: { id: string; user_id: string }, ideaIds: string[]): Promise<Restored | null> {
+  try {
+    return await readRestored(userDb, r.id, ideaIds);
+  } catch (err) {
+    logEvent("round_restored_unreadable", { round_id: r.id, user_id: r.user_id, ...errorFields(err) });
+    return null;
+  }
+}
+
 /**
  * The round screen's read, with the signed-in user's client: null when RLS hides the round
  * (it's someone else's, or gone). `now` is for "today" (UTC, like the tick). `gate` reads what placing
@@ -628,6 +645,11 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date, gate
     hold = { ...state, orderIds: aboutOrders(state, orders) };
   }
 
+  const restored =
+    closedText === null && r.status === "awaiting_approval"
+      ? await restoredIdeas(userDb, r, ideas.filter((i) => i.status === "proposed").map((i) => i.id))
+      : null;
+
   const buyable = ideas.filter((i) => !i.claimed && !i.noLongerShared && !liveOrders.some((o) => o.ideaId === i.id));
   const nextBestIdeaId =
     closedText === null
@@ -679,6 +701,7 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date, gate
     closedText,
     waiting,
     hold,
+    restored,
     nextBestIdeaId,
     buyYourself,
   };

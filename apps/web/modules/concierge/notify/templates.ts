@@ -1,6 +1,7 @@
 import { RATING_LABELS, RATINGS, type Rating } from "@gifts-af/core";
 import { APP_NAME } from "@/lib/brand";
 import { renderEmail } from "@/lib/email-layout";
+import { RESTORED_LINE, type Restored } from "@/lib/restored-ideas";
 
 export type NotificationKind =
   | "test"
@@ -98,8 +99,11 @@ export type NewsItem = Occasion & { title: string } & (
 export type TemplateData = {
   test: Record<string, never>;
   heads_up:
-    /** `allFromList`: every gift is from their own list, so the subject may say so. */
-    | (Occasion & Asks & { mode: "reminder"; ideas: IdeaRow[]; allFromList?: boolean; late?: boolean; funding?: Funding })
+    /**
+     * `allFromList`: every gift is from their own list, so the subject may say so.
+     * `restored`: the ideas they said no to, back because a new search brought nothing.
+     */
+    | (Occasion & Asks & { mode: "reminder"; ideas: IdeaRow[]; allFromList?: boolean; late?: boolean; restored?: Restored; funding?: Funding })
     | (Occasion & Asks & {
         mode: "auto_buy";
         ideas: IdeaRow[];
@@ -178,8 +182,8 @@ export type TemplateData = {
   who_is_this: { subject: string; choices: { name: string }[] };
   notes_not_read: Record<string, never>;
   notes_cant_cancel: Record<string, never>;
-  /** `again`: the extra run a new fact allowed found nothing too. */
-  no_ideas: { personName: string; again: boolean };
+  /** `again`: the extra run a new fact allowed found nothing too. `tooLate`: no tick is left before the ship-by day. */
+  no_ideas: { personName: string; again: boolean; tooLate?: boolean };
 };
 
 export type TemplateLinks = {
@@ -221,7 +225,8 @@ export type TemplateLinks = {
   who_is_this: { [choice: `choice${number}`]: string; someoneElse: string };
   notes_not_read: Record<string, never>;
   notes_cant_cancel: Record<string, never>;
-  no_ideas: { questions: string };
+  // No link when it's too late: nothing they add now can help.
+  no_ideas: { questions?: string };
 };
 
 /** A gift's answer link. Missing, it would render href="undefined": refuse rather than send that. */
@@ -460,10 +465,13 @@ export const TEMPLATES: {
     const n = d.ideas.length;
     const what = d.allFromList ? `${n === 1 ? "gift" : "gifts"} from their list` : n === 1 ? "gift idea" : "gift ideas";
     return {
-      subject: `${d.personName}'s ${d.occasion}: ${n} ${what}`,
+      subject: d.restored
+        ? `${d.personName}'s ${d.occasion}: your earlier ideas are still here`
+        : `${d.personName}'s ${d.occasion}: ${n} ${what}`,
       ...renderEmail({
         heading: `${d.personName}'s ${d.occasion} is coming up`,
         paragraphs: [
+          ...(d.restored ? [RESTORED_LINE[d.restored]] : []),
           `${d.personName}'s ${d.occasion} is ${d.dateText}. These gifts can still arrive in time.`,
           ...late,
         ],
@@ -958,20 +966,38 @@ export const TEMPLATES: {
   }),
 
   // True whether nothing fit, a service was down, or we know too little (ALL-27 AC-9), in the ALL-116 tone.
-  no_ideas: (d, links) => ({
-    subject: `Sorry, we couldn't get gift ideas for ${d.personName} yet`,
-    ...renderEmail({
-      heading: `Sorry, we couldn't get gift ideas for ${d.personName} yet`,
-      paragraphs: d.again
-        ? [`We're sorry. We tried again and still couldn't find a good fit for ${d.personName}. You haven't been charged.`]
-        : [`We're sorry. We don't have gift ideas for ${d.personName} yet. You haven't been charged.`],
-      button: { label: `Tell us more about ${d.personName}`, url: links.questions },
-      footer: d.again
-        ? // No retry is promised: the one extra run may already be spent.
-          `What happens next: we'll skip this occasion. Telling us more about ${d.personName} helps us next time.`
-        : `What happens next: telling us more about ${d.personName} helps. We'll try once more after you add something. Otherwise, we'll let you know before the date passes.`,
-    }),
-  }),
+  no_ideas: (d, links) => {
+    if (d.tooLate) {
+      const heading = `Sorry, no gift can arrive in time for ${d.personName}`;
+      return {
+        subject: heading,
+        ...renderEmail({
+          heading,
+          paragraphs: [
+            `We're sorry. We don't have a gift idea for ${d.personName}, and nothing ordered now can arrive in time. You haven't been charged.`,
+            "You could still get something nearby: flowers or a gift from a local shop, or a card.",
+          ],
+          footer: "What happens next: we'll skip this occasion. There's nothing you need to do.",
+        }),
+      };
+    }
+    // Missing, the button would render href="undefined": refuse rather than send that.
+    if (!links.questions) throw new Error("no_ideas: no link for the questions");
+    return {
+      subject: `Sorry, we couldn't get gift ideas for ${d.personName} yet`,
+      ...renderEmail({
+        heading: `Sorry, we couldn't get gift ideas for ${d.personName} yet`,
+        paragraphs: d.again
+          ? [`We're sorry. We tried again and still couldn't find a good fit for ${d.personName}. You haven't been charged.`]
+          : [`We're sorry. We don't have gift ideas for ${d.personName} yet. You haven't been charged.`],
+        button: { label: `Tell us more about ${d.personName}`, url: links.questions },
+        footer: d.again
+          ? // Neither a retry nor a skip is promised: a newer fact may still earn a run, or the runs may be spent.
+            "Unless you tell us something new and we find a gift, we'll skip this occasion."
+          : `What happens next: telling us more about ${d.personName} helps. We'll try once more after you add something. Otherwise, we'll let you know before the date passes.`,
+      }),
+    };
+  },
 };
 
 const IDEAS: IdeaRow[] = [

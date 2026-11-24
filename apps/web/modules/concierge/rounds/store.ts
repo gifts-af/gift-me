@@ -12,10 +12,12 @@ import type {
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isShippableAddress } from "@gifts-af/core";
 import { logEvent } from "@/lib/log";
+import { restoredFrom, type Restored } from "@/lib/restored-ideas";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hasPaidFeatures } from "../paid-features";
 import { listGiftCandidates } from "../ideas/store";
 import { getOpenQuestions } from "../profile/profile";
+import { LeaseLost } from "./lease-lost";
 
 // Everything the round engine needs from the database (ALL-28). The interface
 // keeps engine.ts testable with an in-memory store; the Supabase version below
@@ -159,6 +161,11 @@ export type RoundContext = {
     fromList: boolean;
   }[];
   /**
+   * The ideas came back after "None of these" (restore_rejected_ideas), and how the search ended;
+   * null when they're new. Only read while generating, for the heads-up's words.
+   */
+  restored: Restored | null;
+  /**
    * The idea checks (ALL-27, round_idea_state): the person has an active fact, and the round may
    * start another run. Only read before ideas are found (scheduled, needs_address, generating);
    * true otherwise, so a failed read can't hold up the money path.
@@ -243,6 +250,13 @@ export interface RoundStore {
   claimNow(roundId: string, now: Date): Promise<ClaimedRound | null>;
   /** Writes the result and releases the lease; false if the lease was lost. */
   finish(roundId: string, lock: Date, next: RoundFinish): Promise<boolean>;
+  /**
+   * restore_rejected_ideas: puts the round's latest rejected set back on offer, when the last
+   * search brought nothing and no other can run. How many, and how that search ended (idea_runs.outcome);
+   * 0 and null when nothing came back. The function is only called while restore_rejected_ideas_enabled
+   * is 1 and the round has rejected ideas. Throws LeaseLost when the lease is lost.
+   */
+  restoreRejected(roundId: string, lock: Date, now: Date): Promise<{ count: number; outcome: string | null }>;
   /** Whether this lease still holds the round. */
   holdsLease(roundId: string, lock: Date): Promise<boolean>;
   /** The round ended because its occasion's date changed (skipped, with no year). */
@@ -361,6 +375,31 @@ function fail(what: string, error: { message: string }): never {
   throw new Error(`${what}: ${error.message}`);
 }
 
+
+/**
+ * Whether these ideas on offer came back after "None of these", and how the search that brought
+ * them back ended. An idea on offer with a rejection of its own can only have come back, except one
+ * noted as already theirs (`owned`), which stays on offer and never comes back once rejected. It
+ * would break if anything else put a rejected idea back on offer, or wrote a rejection that isn't
+ * `owned` for an idea that stays on offer.
+ */
+export async function readRestored(db: SupabaseClient<Database>, roundId: string, ideaIds: string[]): Promise<Restored | null> {
+  if (ideaIds.length === 0) return null;
+  const concierge = db.schema("concierge");
+  const rejected = await concierge.from("rejections").select("id").eq("round_id", roundId).eq("owned", false).in("idea_id", ideaIds).limit(1);
+  if (rejected.error) fail("Reading the round's rejections failed", rejected.error);
+  if (rejected.data.length === 0) return null;
+  const last = await concierge
+    .from("idea_runs")
+    .select("outcome")
+    .eq("round_id", roundId)
+    .or("outcome.is.null,outcome.neq.no_credit")
+    .order("started_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(1);
+  if (last.error) fail("Reading the round's last idea run failed", last.error);
+  return restoredFrom(last.data[0]?.outcome);
+}
 
 /** The service-role client; tests pass one for the local database (E3). */
 export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAdminClient()): RoundStore {
@@ -509,6 +548,22 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
       return data === true;
     },
 
+    async restoreRejected(roundId, lock, now) {
+      const rejected = await concierge.from("gift_ideas").select("id").eq("round_id", roundId).eq("status", "rejected").limit(1);
+      if (rejected.error) fail("Reading the round's rejected ideas failed", rejected.error);
+      if (rejected.data.length === 0 || (await setting("restore_rejected_ideas_enabled")) !== 1) return { count: 0, outcome: null };
+      const { data, error } = await concierge.rpc("restore_rejected_ideas", {
+        p_round_id: roundId,
+        p_lock: lock.toISOString(),
+        p_now: now.toISOString(),
+      });
+      if (error?.code === "P0001" && error.message.endsWith("lease not held")) throw new LeaseLost();
+      if (error) fail("Bringing the rejected ideas back failed", error);
+      const row = data[0];
+      if (!row) throw new Error("Bringing the rejected ideas back returned nothing.");
+      return { count: row.restored, outcome: row.outcome };
+    },
+
     async holdsLease(roundId, lock) {
       const { data, error } = await concierge.from("gift_rounds").select("id").eq("id", roundId).eq("locked_until", lock.toISOString());
       if (error) fail("Checking the round's lease failed", error);
@@ -628,6 +683,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
         zip: x.zip,
         country: x.country,
       });
+      const restored = round.status === "generating" ? await readRestored(db, roundId, ideas.data.map((i) => i.id)) : null;
       return {
         userId: round.user_id,
         personId: round.person_id,
@@ -649,6 +705,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
           store: i.retailer,
           fromList: i.source === "list",
         })),
+        restored,
         ...ideaState,
         orders: orders.data.map((o) => ({
           id: o.id,

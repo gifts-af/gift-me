@@ -7,7 +7,8 @@ import { endedAddressReason, type CancelledGift, type FailedGift, type OtherGift
 import type { ClaimedRound, RoundContext, RoundOrder } from "./store";
 import { fixPath, money, occasionWord, roundPath, LIVE_HELD } from "./emails";
 import type { EngineDeps } from "./engine";
-import { dayOf, LeaseLost, view, type Extra, sendStep, trySend } from "./steps";
+import { LeaseLost } from "./lease-lost";
+import { dayOf, view, type Extra, sendStep, trySend } from "./steps";
 
 // The money path (design §5.1): rounds with a held or failed gift. Tells the buyer and the
 // list owner, retries placing, and closes the round at its deadline. See engine.ts for how a
