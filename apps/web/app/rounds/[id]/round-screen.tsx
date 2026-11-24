@@ -16,6 +16,7 @@ import { IdeaPhoto } from "@/components/idea-photo";
 import { OCCASION_NAMES, shortDate } from "@/lib/occasion-format";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useHydrated } from "@/lib/use-hydrated";
 import { cn } from "@/lib/utils";
 import type { BuyYourself, RoundPageIdea, RoundPageOrder, RoundPageView } from "@/modules/concierge";
 import { money } from "@/app/people/[id]/money";
@@ -90,6 +91,8 @@ function IdeaCard({
   checked: boolean;
   onToggle: () => void;
 }) {
+  // A tick before the page has loaded shows, but the pick is never counted.
+  const hydrated = useHydrated();
   const store = storeLabel(idea.retailer);
   const meta = [money(idea.totalCents), listPriceNote(idea), store, idea.arriveBy ? `by ${shortDate(idea.arriveBy)}` : null]
     .filter(Boolean)
@@ -130,7 +133,7 @@ function IdeaCard({
           type="checkbox"
           aria-label={idea.title}
           checked={checked}
-          disabled={!pickable}
+          disabled={!pickable || !hydrated}
           onChange={onToggle}
           className="mt-1 size-5 flex-none accent-primary"
         />

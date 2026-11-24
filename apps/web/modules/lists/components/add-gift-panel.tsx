@@ -8,6 +8,7 @@ import type { ReadPage } from "@/modules/lists/lib/gift-link";
 import type { Gift } from "@/modules/lists/lib/lists";
 import LookupStatus, { type Lookup, type LookupProduct } from "./lookup-status";
 import { buttonClass, inputClass, labelClass } from "./ui";
+import { useHydrated } from "@/lib/use-hydrated";
 
 // The editable fields, held as typed: the price stays a string until submit.
 type Draft = { name: string; price: string; imageUrl: string };
@@ -129,6 +130,7 @@ function isAmazonSource(source: LookupProduct["source"] | null): boolean {
  * link is used.
  */
 export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }: AddGiftPanelProps) {
+  const hydrated = useHydrated();
   const [url, setUrl] = useState("");
   // Every field is seeded with '' and never undefined, so React never has to
   // switch an input from uncontrolled to controlled when autofill lands.
@@ -284,6 +286,7 @@ export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }: Add
               id="product-url"
               ref={urlRef}
               type="text"
+              disabled={!hydrated}
               inputMode="url"
               autoComplete="off"
               placeholder="amazon.com, walmart.com, target.com…"

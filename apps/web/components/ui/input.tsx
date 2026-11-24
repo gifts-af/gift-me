@@ -1,9 +1,16 @@
+"use client";
+
 import * as React from "react";
 
+import { useHydrated } from "@/lib/use-hydrated";
 import { cn } from "@/lib/utils";
 
 const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
   ({ className, type, ...props }, ref) => {
+    // Text typed before the page has loaded never reaches state, and the next keystroke wipes it.
+    // An input that keeps its own value (sign-in) loses nothing, so it stays on.
+    const hydrated = useHydrated();
+    const early = !hydrated && props.value !== undefined;
     return (
       <input
         type={type}
@@ -13,6 +20,7 @@ const Input = React.forwardRef<HTMLInputElement, React.ComponentProps<"input">>(
         )}
         ref={ref}
         {...props}
+        disabled={props.disabled || early}
       />
     );
   },
