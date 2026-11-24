@@ -347,3 +347,60 @@ describe("runTick: pruning expired action links", () => {
     expect(named("housekeeping.action_links_pruned")).toEqual([expect.objectContaining({ deleted: 0 })]);
   });
 });
+
+describe("runTick: the daily tracking news (ALL-33)", () => {
+  it("runs the news, with the engine on or off, and logs how many emails went out", async () => {
+    for (const on of [1, 0]) {
+      const h = harness();
+      h.store.settings.set("round_engine_enabled", on);
+      const news = vi.fn(async () => ({ sent: 2 }));
+      await runTick({ ...h.deps(at("2027-01-01")), trackingNews: news });
+      expect(news).toHaveBeenCalledTimes(1);
+    }
+    expect(named("tracking.news_run")).toEqual([expect.objectContaining({ sent: 2 }), expect.objectContaining({ sent: 2 })]);
+  });
+
+  it("a failed news run is logged as an alert and the rest of the tick still runs", async () => {
+    const h = harness();
+    const news = vi.fn(async () => Promise.reject(new Error("db down for someone@example.com")));
+    h.store.candidateRows = [
+      { userId: USER, personId: PERSON, occasionId: OCCASION, rule: { kind: "birthday", month: 3, day: 20 }, budgetCents: 5000 },
+    ];
+    const summary = await runTick({ ...h.deps(at("2027-02-11")), trackingNews: news });
+    expect(summary).toMatchObject({ enabled: true, created: 1, failed: 0 });
+    const failed = named("tracking.news_run_failed");
+    expect(failed).toEqual([expect.objectContaining({ alert: true })]);
+    expect(JSON.stringify(failed)).not.toContain("someone@example.com");
+  });
+});
+
+describe("runTick: pruning old tracking numbers", () => {
+  it("prune step runs and logs, with the engine on or off", async () => {
+    for (const on of [1, 0]) {
+      const h = harness();
+      h.store.settings.set("round_engine_enabled", on);
+      const prune = vi.fn(async () => 4);
+      await runTick({ ...h.deps(at("2027-01-01")), pruneTrackingNumbers: prune });
+      expect(prune).toHaveBeenCalledTimes(1);
+    }
+    expect(named("housekeeping.tracking_pruned")).toEqual([
+      expect.objectContaining({ cleared: 4 }),
+      expect.objectContaining({ cleared: 4 }),
+    ]);
+  });
+
+  it("logs a failed prune without personal data and still runs the rest of the tick", async () => {
+    const h = harness();
+    const prune = vi.fn(async () => {
+      throw new Error("db down for someone@example.com");
+    });
+    const actionPrune = vi.fn(async () => 0);
+    await expect(
+      runTick({ ...h.deps(at("2027-01-01")), pruneTrackingNumbers: prune, pruneActionLinks: actionPrune }),
+    ).resolves.toMatchObject({ enabled: true });
+    expect(actionPrune).toHaveBeenCalledTimes(1);
+    const failed = named("housekeeping.tracking_prune_failed");
+    expect(failed).toHaveLength(1);
+    expect(JSON.stringify(failed)).not.toContain("someone@example.com");
+  });
+});

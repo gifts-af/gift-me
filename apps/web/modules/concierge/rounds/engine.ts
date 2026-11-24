@@ -4,6 +4,7 @@ import type { IdeaOutcome } from "../ideas/run";
 import type { NotifyDeps } from "../notify/notify";
 import { planJobs, type JobMessage, type SendJobs } from "./fanout";
 import type { ClaimedRound, RoundStore } from "./store";
+import { retryDeliveredEmails } from "../tracking/delivered";
 import { runHeld, retryOrderedEmails, tellOwnerOfRejection, tellOwnersOfRejections } from "./money-path";
 import { dayOf, releaseQuietly, view, sendHeadsUp, ideaPass, moveToGenerating, sendStep, trySend, finishStep } from "./steps";
 
@@ -64,6 +65,10 @@ export type EngineDeps = {
   clearUnfiledNotes?: () => Promise<{ cleared: number; imagesRemoved: number }>;
   /** Deletes emailed buttons long past expiry and returns how many, bound by the caller (E3). */
   pruneActionLinks?: () => Promise<number>;
+  /** Blanks tracking numbers on old orders and returns how many, bound by the caller (E3). */
+  pruneTrackingNumbers?: () => Promise<number>;
+  /** The daily tracking news (ALL-33): late, back-on-time and late store-cancel news, one email per buyer. */
+  trackingNews?: () => Promise<{ sent: number }>;
   /** Queues due rounds for their own function calls (ALL-125); the tick runs them itself without it. */
   sendJobs?: SendJobs;
   /** A test clock: queued messages carry the tick's `now`. */
@@ -104,6 +109,13 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
   } catch (err) {
     logEvent("order.ordered_retry_failed", { ...errorFields(err) });
   }
+  // Delivered emails the service refused before go out now (ALL-33), on their own so a failure
+  // can't stop the tick.
+  try {
+    await retryDeliveredEmails(deps);
+  } catch (err) {
+    logEvent("tracking.delivered_retry_failed", { ...errorFields(err), alert: true });
+  }
 
   // Emailed notes nobody filed are cleared, and old dedupe rows pruned. Housekeeping, so it runs
   // whatever round_engine_enabled says, and its failure never stops the tick.
@@ -124,6 +136,29 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
       logEvent("housekeeping.action_links_pruned", { deleted });
     } catch (err) {
       logEvent("housekeeping.action_links_prune_failed", { ...errorFields(err) });
+    }
+  }
+
+  // Tracking numbers on old orders are blanked, so we don't keep them longer than they help
+  // (T42). Its own step: tracking_prune_days at 0 turns it off, and a failure can't stop the tick.
+  if (deps.pruneTrackingNumbers) {
+    try {
+      const cleared = await deps.pruneTrackingNumbers();
+      logEvent("housekeeping.tracking_pruned", { cleared });
+    } catch (err) {
+      logEvent("housekeeping.tracking_prune_failed", { ...errorFields(err) });
+    }
+  }
+
+  // The tracking news is told only from here (owner, 2026-11-23), on its own so it can't fail the
+  // tick. It runs whatever round_engine_enabled says: store cancels are always told, and the late
+  // check has its own switch (late_check_enabled).
+  if (deps.trackingNews) {
+    try {
+      const { sent } = await deps.trackingNews();
+      logEvent("tracking.news_run", { sent });
+    } catch (err) {
+      logEvent("tracking.news_run_failed", { ...errorFields(err), alert: true });
     }
   }
 

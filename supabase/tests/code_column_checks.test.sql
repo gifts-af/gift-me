@@ -1,7 +1,7 @@
 -- Code columns accept the values the app writes and refuse anything else.
 begin;
 \ir _helpers.psql
-select plan(29);
+select plan(40);
 
 select tests.create_user('codes@example.com') as u \gset
 insert into public.people (user_id, name, relationship) values (:'u', 'P', 'friend') returning id as p \gset
@@ -21,6 +21,8 @@ insert into lists.lists (owner_id) values (:'u') returning id as list \gset
 
 select lives_ok(format($$insert into concierge.notifications (user_id, kind) values (%L, 'heads_up')$$, :'u'),
   'a known notification kind is saved');
+select lives_ok(format($$insert into concierge.notifications (user_id, kind) values (%L, %L)$$, :'u', k), 'notification kind ' || k || ' is saved')
+  from unnest(array['tracking_news', 'gift_late', 'gift_on_time', 'store_cancelled_late', 'delivered']) k;
 select throws_ok(format($$insert into concierge.notifications (user_id, kind) values (%L, 'heads-up')$$, :'u'),
   '23514', null, 'an unknown notification kind is refused');
 
@@ -36,10 +38,11 @@ select throws_ok(format($$insert into concierge.action_links (user_id, action, t
 select lives_ok(format($$insert into concierge.round_sends (round_id, user_id, step) values (%L, %L, %L)$$, :'r', :'u', s), 'step ' || s || ' is saved')
   from unnest(array[
     'heads_up', 'reminder_1@2', 'hold:1:notice', 'hold:2:short:2030-01-05', 'fail:1:notice',
-    'fail:' || :'ord', 'ordered:' || :'ord', 'late_fail:' || :'ord'
+    'fail:' || :'ord', 'ordered:' || :'ord', 'late_fail:' || :'ord',
+    'late:' || :'ord', 'ontime:' || :'ord', 'cancel_late:' || :'ord', 'delivered'
   ]) s;
 select throws_ok(format($$insert into concierge.round_sends (round_id, user_id, step) values (%L, %L, %L)$$, :'r', :'u', s), '23514', null, 'step ' || s || ' is refused')
-  from unnest(array['reminder_3', 'fail:abc', 'hold:x:notice']) s;
+  from unnest(array['reminder_3', 'fail:abc', 'hold:x:notice', 'late:abc']) s;
 
 -- ─── rejections.reason_code ─────────────────────────────────────────────────
 
@@ -78,6 +81,7 @@ select throws_ok(format($$update concierge.inbound_messages set image_type = 'ap
 -- ─── orders.failure_type ────────────────────────────────────────────────────
 
 select lives_ok(format($$update concierge.orders set failure_type = 'address_rejected' where id = %L$$, :'ord'), 'a known failure type is saved');
+select lives_ok(format($$update concierge.orders set failure_type = 'store_cancelled' where id = %L$$, :'ord'), 'store_cancelled is a known failure type');
 select throws_ok(format($$update concierge.orders set failure_type = 'max_price_exceeded' where id = %L$$, :'ord'),
   '23514', null, 'a raw Zinc error code is refused');
 

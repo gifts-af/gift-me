@@ -88,6 +88,42 @@ export type RoundOrder = {
   failedAfterClose: boolean;
   maxPriceCents: number;
   feeCents: number;
+  /** What Zinc charged, once placed; null before then or when Zinc didn't say. */
+  totalCents: number | null;
+  /** What Zinc refunded when the store cancelled; null otherwise or when Zinc didn't say. */
+  refundCents: number | null;
+  /** The retailer's name, as stored ("walmart"); null when unknown. */
+  store: string | null;
+  /** When it was delivered (ISO); null before then. */
+  deliveredAt: string | null;
+};
+
+/**
+ * A gift the daily tracking news looks at (tracking_candidates): placed or shipped with its
+ * occasion today or later, or a store cancel resolved at once and not yet told. Read with the
+ * service role; never logged.
+ */
+export type TrackingCandidate = {
+  userId: string;
+  roundId: string;
+  orderId: string;
+  personName: string;
+  occasionKind: OccasionKind;
+  occasionDate: CalendarDate;
+  title: string;
+  status: string;
+  estDeliveryDate: CalendarDate | null;
+  placedAt: string | null;
+  handlingDaysMax: number | null;
+  deliveryDaysMax: number | null;
+  /** What Zinc refunded for a store cancel; null when it didn't say (or for any other gift). */
+  refundCents: number | null;
+  failureType: string | null;
+  resolved: boolean;
+  /** The retailer's name, as stored ("walmart"), read only for store cancels; null otherwise or when unknown. */
+  store: string | null;
+  /** The round's keys for this order (`late:<id>`, `ontime:<id>`, ...). */
+  sentSteps: Set<StepKey>;
 };
 
 /** What the round's emails say. Read with the service role; never logged. */
@@ -228,6 +264,10 @@ export interface RoundStore {
    * `late_fail:<id>` email isn't recorded.
    */
   roundsMissingOrderedEmail(): Promise<string[]>;
+  /** The gifts the daily tracking news looks at on `today` (ALL-33). */
+  trackingCandidates(today: CalendarDate): Promise<TrackingCandidate[]>;
+  /** Delivered rounds whose `delivered` email isn't recorded (ALL-33): the tick tells them again. */
+  deliveredRoundsUntold(): Promise<{ roundId: string; userId: string }[]>;
 }
 
 const SCHEDULE_KEYS: Record<keyof ScheduleSettings, string> = {
@@ -497,7 +537,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
           .order("rank"),
         concierge
           .from("orders")
-          .select("id, idea_id, status, hold_reason, failure_type, resolved, failed_at, failed_after_close, max_price_cents, fee_cents, ship_city, created_at, gift_ideas(title)")
+          .select("id, idea_id, status, hold_reason, failure_type, resolved, failed_at, failed_after_close, max_price_cents, fee_cents, total_cents, refund_cents, ship_city, delivered_at, created_at, gift_ideas(title, retailer)")
           .eq("round_id", roundId)
           .order("created_at")
           .order("id"),
@@ -567,6 +607,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
           id: o.id,
           ideaId: o.idea_id,
           title: (o.gift_ideas as { title: string } | null)?.title ?? "gift",
+          store: (o.gift_ideas as { retailer: string | null } | null)?.retailer ?? null,
           shipCity: o.ship_city,
           status: o.status,
           holdReason: o.hold_reason,
@@ -576,6 +617,9 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
           failedAfterClose: o.failed_after_close,
           maxPriceCents: o.max_price_cents,
           feeCents: o.fee_cents,
+          totalCents: o.total_cents,
+          refundCents: o.refund_cents,
+          deliveredAt: o.delivered_at,
         })),
         personRemoved: p.deleted_at !== null,
         // Closed on a day before its ship-by day: not by the deadline.
@@ -672,6 +716,44 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
       const told = new Set(sends.map((s) => s.step));
       const late = await lateFailures();
       return [...new Set([...orders.filter((o) => !told.has(`ordered:${o.id}`)).map((o) => o.round_id), ...late])];
+    },
+
+    async deliveredRoundsUntold() {
+      const { data, error } = await concierge.rpc("delivered_rounds_untold");
+      if (error) fail("Loading the delivered rounds failed", error);
+      return (data ?? []).map((r) => ({ roundId: r.round_id, userId: r.user_id }));
+    },
+
+    async trackingCandidates(today) {
+      const { data, error } = await concierge.rpc("tracking_candidates", { p_today: today });
+      if (error) fail("Loading the tracking candidates failed", error);
+      // The store's name is said only in a store-cancelled email.
+      const cancelled = data.filter((r) => r.status === "failed").map((r) => r.order_id);
+      const stores = new Map<string, string | null>();
+      if (cancelled.length) {
+        const { data: rows, error: storeError } = await concierge.from("orders").select("id, gift_ideas(retailer)").in("id", cancelled);
+        if (storeError) fail("Loading the cancelled gifts' stores failed", storeError);
+        for (const o of rows) stores.set(o.id, (o.gift_ideas as { retailer: string | null } | null)?.retailer ?? null);
+      }
+      return data.map((r) => ({
+        userId: r.user_id,
+        roundId: r.round_id,
+        orderId: r.order_id,
+        personName: r.person_name,
+        occasionKind: r.occasion_kind as OccasionKind,
+        occasionDate: r.occasion_date,
+        title: r.title,
+        status: r.status,
+        estDeliveryDate: r.est_delivery_date ?? null,
+        placedAt: r.placed_at ?? null,
+        handlingDaysMax: r.handling_days_max ?? null,
+        deliveryDaysMax: r.delivery_days_max ?? null,
+        refundCents: r.refund_cents ?? null,
+        failureType: r.failure_type ?? null,
+        resolved: r.resolved,
+        store: stores.get(r.order_id) ?? null,
+        sentSteps: new Set((r.sent_steps ?? []) as StepKey[]),
+      }));
     },
 
     async canBuy(userId) {

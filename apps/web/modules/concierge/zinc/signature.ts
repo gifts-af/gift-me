@@ -9,13 +9,20 @@ export function verifySignature(rawBody: string, header: string | null | undefin
   return got.length === want.length && timingSafeEqual(got, want);
 }
 
-// order_id is top level; error_type and the wallet fields live in `data`.
+// order_id is top level; error_type, the wallet fields and tracking live in `data`.
 const eventData = z
   .object({
     error_type: z.string(),
     error: z.string(),
     amount_cents: z.number(),
     status: z.string(),
+    // Checked package by package by packagesFromZinc, which keeps only whitelisted fields.
+    tracking_numbers: z.unknown(),
+    // Every event shares this schema, so a field only some events use must never reject one:
+    // a strict shape here would drop an order.placed or order.cancelled we can't get back (E4).
+    // calendarDay checks the estimate where it's used; refundCents checks the refund below.
+    estimated_delivery: z.unknown(),
+    refund_amount: z.unknown(),
   })
   .partial();
 
@@ -38,6 +45,12 @@ export type ZincEvent = {
   /** wallet.auto_topup.* */
   amountCents?: number;
   status?: string;
+  /** order.tracking_received, order.shipped: Zinc's packages, unchecked. */
+  trackingNumbers?: unknown;
+  /** order.estimated_delivery_updated: the new estimate, unchecked. */
+  estimatedDelivery?: unknown;
+  /** order.cancelled: what Zinc refunded, in cents; null when it's missing or not a whole, non-negative number. */
+  refundCents: number | null;
   raw: unknown;
 };
 
@@ -52,6 +65,13 @@ export function parseEvent(json: unknown): ZincEvent {
     error: e.data?.error,
     amountCents: e.data?.amount_cents,
     status: e.data?.status,
+    trackingNumbers: e.data?.tracking_numbers,
+    estimatedDelivery: e.data?.estimated_delivery ?? undefined,
+    refundCents: refundCents(e.data?.refund_amount),
     raw: json,
   };
+}
+
+function refundCents(v: unknown): number | null {
+  return typeof v === "number" && Number.isSafeInteger(v) && v >= 0 ? v : null;
 }

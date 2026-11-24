@@ -97,7 +97,12 @@ export { planJobs } from "./rounds/fanout";
 export type { JobMessage, QueuedJob, SendJobs } from "./rounds/fanout";
 export { createSupabaseRoundStore } from "./rounds/store";
 export type { Candidate, ClaimedRound, NewRoundRow, RoundContext, RoundFinish, RoundOrder, RoundStore } from "./rounds/store";
-export { clearUnfiledNotes, pruneExpiredActionLinks } from "./inbound/cleanup";
+export { clearUnfiledNotes, pruneExpiredActionLinks, pruneTrackingNumbers } from "./inbound/cleanup";
+// The daily tracking news (ALL-33), run by the tick.
+export { runTrackingNews } from "./tracking/news";
+// The delivered email (ALL-33), told by the Zinc webhook and retried by the tick.
+export { tellDelivered } from "./tracking/delivered";
+export { markGiftArrived, type ArrivedDeps } from "./tracking/arrived";
 export type { InboundCleanup } from "./inbound/cleanup";
 
 // Paying for gifts from the user's own Zinc wallet (ALL-32): connect, phone, disconnect, Settings status.

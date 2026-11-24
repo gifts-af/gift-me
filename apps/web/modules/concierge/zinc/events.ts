@@ -7,9 +7,10 @@ import { z } from "zod";
 import { errorFields, logEvent } from "@/lib/log";
 import { call, ZincError } from "./client";
 import { parseEvent, verifySignature, type ZincEvent } from "./signature";
+import { handleTrackingEvent, TRACKING_EVENTS, type TrackingDeps } from "./tracking-events";
 import type { PlaceHeld, ZincDeps } from "./types";
 
-type Deps = ZincDeps & {
+type Deps = TrackingDeps & {
   placeHeld: PlaceHeld;
   /**
    * The round engine's advanceRound, bound with justPlaced so it only tells the buyer and never
@@ -59,6 +60,11 @@ export async function handleZincWebhook(
   try {
     if (event.event === "order.placed" || event.event === "order.failed") {
       await settle(userId, event, deps);
+    } else if (event.event === "order.cancelled") {
+      // Never behind order_tracking_enabled: money came back, so the buyer is always told.
+      await storeCancelled(userId, event, deps);
+    } else if (TRACKING_EVENTS.has(event.event)) {
+      await handleTrackingEvent(userId, event, deps);
     } else if (event.event === "wallet.auto_topup.succeeded") {
       if (await setAutoTopup(userId, true, event, deps)) await deps.placeHeld(userId);
     } else if (event.event === "wallet.auto_topup.disabled") {
@@ -76,7 +82,7 @@ export async function handleZincWebhook(
 }
 
 /** Zinc's timestamps are UTC and may lack the Z. Null when absent or unreadable. */
-function eventTime(timestamp: string | undefined): string | null {
+export function eventTime(timestamp: string | undefined): string | null {
   if (!timestamp) return null;
   const t = new Date(/(Z|[+-]\d\d:?\d\d)$/i.test(timestamp) ? timestamp : `${timestamp}Z`);
   return Number.isNaN(t.getTime()) ? null : t.toISOString();
@@ -106,7 +112,7 @@ async function setAutoTopup(userId: string, on: boolean, event: ZincEvent, deps:
 }
 
 /** Our order id for a Zinc order id: the row that holds it, else the reference we sent Zinc in metadata. */
-async function findOurOrder(userId: string, zincOrderId: string, deps: Deps): Promise<string | null> {
+export async function findOurOrder(userId: string, zincOrderId: string, deps: ZincDeps): Promise<string | null> {
   const concierge = deps.db.schema("concierge");
   const { data, error } = await concierge
     .from("orders")
@@ -119,12 +125,10 @@ async function findOurOrder(userId: string, zincOrderId: string, deps: Deps): Pr
 
   // The webhook carries only Zinc's order id. Our row may not have it yet (a crash between
   // sending and saving), so ask Zinc for the order and read back our own reference.
-  const keys = await concierge.rpc("zinc_secrets", { p_user_id: userId });
-  if (keys.error) throw new Error("Reading the Zinc key failed.");
-  const key = keyRow.safeParse(keys.data?.[0]);
-  if (!key.success || !key.data.api_key) return null;
+  const key = await userZincKey(userId, deps);
+  if (!key) return null;
   try {
-    const order = await call(deps.http, "GET", `/orders/${encodeURIComponent(zincOrderId)}`, zincOrder, { key: key.data.api_key });
+    const order = await call(deps.http, "GET", `/orders/${encodeURIComponent(zincOrderId)}`, zincOrder, { key });
     const ref = uuid.safeParse(order.metadata?.order_id);
     return ref.success ? ref.data : null;
   } catch (error) {
@@ -134,11 +138,75 @@ async function findOurOrder(userId: string, zincOrderId: string, deps: Deps): Pr
   }
 }
 
+/** The user's own Zinc API key, or null when they have none. Throws when it can't be read. */
+export async function userZincKey(userId: string, deps: Pick<ZincDeps, "db">): Promise<string | null> {
+  const keys = await deps.db.schema("concierge").rpc("zinc_secrets", { p_user_id: userId });
+  if (keys.error) throw new Error("Reading the Zinc key failed.");
+  const key = keyRow.safeParse(keys.data?.[0]);
+  return key.success && key.data.api_key ? key.data.api_key : null;
+}
+
 // Zinc's error_type to the failure types our SQL understands; anything else is a plain failure.
 export function failureType(errorType: string | undefined): string {
   if (errorType === "max_price_exceeded") return "price_up";
   if (errorType === "out_of_stock" || errorType === "invalid_shipping_address") return errorType;
   return "failed";
+}
+
+/**
+ * The store cancelled after placing, and Zinc refunded the wallet (store_cancel_order). Before
+ * the ship-by date the buyer is told now through the failure path, with the fix page; on or
+ * after it nothing is sent here, and the daily news tells it. A cancel that leaves every other
+ * gift delivered sends the delivered email. Today is the UTC day of `now`, as in the engine.
+ */
+async function storeCancelled(userId: string, event: ZincEvent, deps: Deps): Promise<void> {
+  if (!event.orderId) {
+    logEvent("zinc.webhook_unmatched", { user_id: userId, reason: "no_order_id" });
+    return;
+  }
+  const ourId = await findOurOrder(userId, event.orderId, deps);
+  if (!ourId) {
+    logEvent("zinc.webhook_unmatched", { user_id: userId, provider_order_id: event.orderId, alert: true });
+    return;
+  }
+  const concierge = deps.db.schema("concierge");
+  const found = await concierge.rpc("order_by_reference", { p_user_id: userId, p_order_id: ourId });
+  if (found.error) throw new Error("Looking up the order failed.");
+  const order = found.data?.[0];
+  const ids = { user_id: userId, order_id: order?.id ?? null, zinc_event: event.event };
+  if (!order) {
+    logEvent("tracking.event_ignored", { ...ids, status: null });
+    return;
+  }
+  if (order.provider_order_id && order.provider_order_id !== event.orderId) {
+    logEvent("zinc.webhook_provider_id_mismatch", { user_id: userId, order_id: order.id });
+    return;
+  }
+  const { data, error } = await concierge.rpc("store_cancel_order", {
+    p_user_id: userId,
+    p_order_id: order.id,
+    p_today: deps.now.toISOString().slice(0, 10),
+    // What actually came back, for the emails; never our own total or cap. The generated types
+    // mark every argument required; SQL reads null as "Zinc didn't say".
+    p_refund_cents: event.refundCents as number,
+  });
+  if (error) throw new Error(`Cancelling the order failed (${error.code}).`);
+  const result = data?.[0];
+  if (!result?.applied) {
+    const now = await concierge.rpc("order_by_reference", { p_user_id: userId, p_order_id: order.id });
+    logEvent("tracking.event_ignored", { ...ids, status: now.data?.[0]?.status ?? order.status });
+    return;
+  }
+  logEvent("tracking.store_cancelled", { user_id: userId, order_id: order.id, round_id: order.round_id, round_status: result.round_status });
+  const tell =
+    result.round_status === "needs_attention" ? deps.advanceRound : result.round_status === "delivered" ? deps.tellDelivered : undefined;
+  if (!tell) return;
+  try {
+    await tell(order.round_id);
+  } catch (e) {
+    // The tick tells them instead; Zinc mustn't retry a cancel that's done.
+    logEvent("tracking.store_cancel_tell_deferred", { user_id: userId, round_id: order.round_id, ...errorFields(e) });
+  }
 }
 
 async function settle(userId: string, event: ZincEvent, deps: Deps): Promise<void> {

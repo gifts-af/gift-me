@@ -24,6 +24,14 @@ export type NotificationKind =
   | "failed_late"
   // ALL-116: two or more of a round's gifts failed, told together.
   | "failed_several"
+  // ALL-33: the store cancelled a bought gift, and it's too late to ship another in time.
+  | "store_cancelled_late"
+  // ALL-33: the daily tracking news. One gift late or back on time, or one summary of a buyer's news.
+  | "gift_late"
+  | "gift_on_time"
+  | "tracking_news"
+  // ALL-33: every gift of an occasion has arrived.
+  | "delivered"
   // ALL-112: to a list owner, whose shared address a store couldn't use. Says nothing of a gift.
   | "check_your_address"
   // ALL-31: emailed notes. The tip, the "Who is this about?" question, and two one-off replies.
@@ -64,7 +72,20 @@ type OneGift = Occasion & { giftTitle: string };
 type Failure = OneGift & { orderByText: string };
 /** A failed gift in a summary (ALL-116): what happened, and the link text for what to do now. */
 // `url` is that gift's own fix page (ALL-29).
-export type FailedGift = { title: string; detail: string; action?: string; url: string };
+/** `refunded`: the store cancelled it after it was bought, and the money is back in the Zinc wallet (ALL-33). */
+export type FailedGift = { title: string; detail: string; action?: string; url: string; refunded?: boolean };
+/** A gift the store cancelled after it was bought (ALL-33). */
+export type CancelledGift = { title: string; store?: string; amountText?: string };
+
+/**
+ * One gift's news in the daily summary (ALL-33). `expectedText`: when it's now expected;
+ * `url`: the round screen, only for a shipped late gift ("It already arrived").
+ */
+export type NewsItem = Occasion & { title: string } & (
+    | { kind: "late"; expectedText: string; daysLate: number; url?: string }
+    | { kind: "cancelled"; amountText?: string }
+    | { kind: "on_time"; expectedText: string }
+  );
 
 export type TemplateData = {
   test: Record<string, never>;
@@ -125,6 +146,19 @@ export type TemplateData = {
   };
   /** ALL-116: `tried`, how many gifts were ordered in the round. */
   failed_several: Occasion & { tried: number; failed: FailedGift[]; onItsWay?: string[]; orderByText: string };
+  /**
+   * ALL-33: gifts the store cancelled after they were bought, too late to ship another. `store`
+   * and `amountText` (the refund) are left out when unknown, never guessed.
+   */
+  store_cancelled_late: Occasion & { gifts: CancelledGift[] };
+  /** ALL-33: one gift now expected after the occasion; `daysLate`, how many days after. */
+  gift_late: OneGift & { expectedText: string; daysLate: number };
+  /** ALL-33: a gift told late is expected on or before the occasion again. */
+  gift_on_time: OneGift & { expectedText: string };
+  /** ALL-33: two or more gifts' news, across the buyer's people and occasions, in the order told. */
+  tracking_news: { items: NewsItem[] };
+  /** ALL-33: every gift of the round arrived; `deliveredText` is each gift's delivered date, formatted, left out when unknown. */
+  delivered: Occasion & { gifts: { title: string; deliveredText?: string }[] };
   check_your_address: Record<string, never>;
   notes_tip: { personName: string };
   /** `subject`: the note's subject line, empty when it had none; `choices`: one link each, in order. */
@@ -159,6 +193,14 @@ export type TemplateLinks = {
   failed_late: { open: string };
   // `open` is the person's page; each failed gift carries its own fix page in `FailedGift.url`.
   failed_several: { open: string };
+  // Nothing more can ship in time, so there's nothing to tap.
+  store_cancelled_late: Record<string, never>;
+  // `arrived` opens the round screen, only for a shipped gift (a placed one can't be marked arrived).
+  gift_late: { arrived?: string };
+  gift_on_time: { open: string };
+  // Each shipped late gift carries its own round screen link in `NewsItem.url`.
+  tracking_news: Record<string, never>;
+  delivered: { open: string };
   check_your_address: { open: string };
   notes_tip: Record<string, never>;
   // `choice{i}` files the note to `choices[i]`; `someoneElse` is the plain people page.
@@ -229,6 +271,49 @@ const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 function giftList(titles: string[]): string {
   const named = titles.map((t) => `the ${t}`);
   return named.length <= 1 ? (named[0] ?? "the gift") : `${named.slice(0, -1).join(", ")} and ${named[named.length - 1]}`;
+}
+
+/** "one", "two" ... "nine", then digits: how the late emails count days and gifts. */
+function countWord(n: number): string {
+  return ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine"][n] ?? String(n);
+}
+
+/** "their birthday", "Christmas": a holiday is named, a birthday or anniversary is theirs. */
+const theirDay = (occasion: string) => (/^[a-z]/.test(occasion) ? `their ${occasion}` : occasion);
+
+const daysLateText = (n: number) => `${countWord(n)} ${n === 1 ? "day" : "days"} late`;
+
+function newsRow(i: NewsItem): { title: string; detail: string; link?: { label: string; url: string } } {
+  const forDay = `For ${i.personName}'s ${i.occasion} on ${i.dateText}.`;
+  switch (i.kind) {
+    case "late":
+      return {
+        title: `${i.title} may arrive late`,
+        detail: `${forDay} Now expected ${i.expectedText}, ${daysLateText(i.daysLate)}. It's on its way and can't be cancelled.`,
+        ...(i.url ? { link: { label: "It already arrived", url: i.url } } : {}),
+      };
+    case "cancelled":
+      return {
+        title: `The store cancelled the ${i.title}`,
+        detail: `${forDay} The ${i.amountText ?? "money"} is back in your Zinc wallet. It's too late to ship another in time.`,
+      };
+    case "on_time":
+      return { title: `Good news: the ${i.title} is back on time`, detail: `${forDay} Now expected ${i.expectedText}.` };
+  }
+}
+
+/** What the buyer can do, for the kinds of bad news in the summary. */
+function newsFooter(late: boolean, cancelled: boolean): string | undefined {
+  if (late && cancelled) {
+    return "What you can do for a late or cancelled gift: keep a late one (nothing to do), or get something locally for the day and return the late one once it arrives. Nothing more is bought for these occasions.";
+  }
+  if (late) {
+    return "What you can do for a late gift: keep it (nothing to do), or get something locally for the day and return the late one once it arrives. We keep watching them, and we'll let you know if one is back on time.";
+  }
+  if (cancelled) {
+    return "What you can do for a cancelled gift: get something locally for the day, or order something yourself from any store and send it a little late. Nothing more is bought for these occasions.";
+  }
+  return undefined;
 }
 
 const itOrThem = (titles: string[]) => (titles.length > 1 ? "them" : "it");
@@ -605,24 +690,144 @@ export const TEMPLATES: {
     };
   },
 
-  failed_several: (d, links) => ({
-    subject: `Sorry, ${d.failed.length} of ${d.personName}'s ${d.occasion} gifts couldn't be bought`,
-    ...renderEmail({
-      heading: `Sorry, ${d.failed.length} of ${d.personName}'s ${d.occasion} gifts couldn't be bought`,
-      paragraphs: [
-        `We're sorry. We tried to order ${d.tried} gifts for ${d.personName}'s ${d.occasion} on ${d.dateText}, and ` +
-          (d.failed.length >= d.tried
-            ? `${d.tried === 2 ? "neither" : "none"} of them went through.`
-            : `${d.failed.length} of them didn't go through.`) +
-          ` You haven't been charged for ${d.failed.length === 2 ? "either" : "them"}.`,
-        ...onItsWayLine(d.onItsWay, "The good news: "),
-      ],
-      rows: d.failed.map((f) => ({ title: f.title, detail: f.detail })),
-      button: { label: `Open ${d.personName}'s page`, url: links.open },
-      link: d.failed.filter((f) => f.action).map((f) => ({ label: f.action as string, url: f.url })),
-      footer: `What happens next: there's still time to put this right. Nothing else is bought until you choose. Choose by ${d.orderByText} so it arrives in time. If you don't, we'll close this round then and let you know.`,
-    }),
-  }),
+  store_cancelled_late: (d) => {
+    const refund = (g: CancelledGift) => `The ${g.amountText ?? "money"} is back in your Zinc wallet.`;
+    if (d.gifts.length === 1) {
+      const [g] = d.gifts;
+      return {
+        subject: `Sorry, the store cancelled ${d.personName}'s gift`,
+        ...renderEmail({
+          heading: `Sorry, the store cancelled ${d.personName}'s gift`,
+          paragraphs: [
+            `We're sorry. ${g.store ?? "The store"} cancelled the ${g.title} for ${d.personName}'s ${d.occasion} on ${d.dateText}.`,
+            refund(g),
+            "It's too late for us to ship another gift in time.",
+          ],
+          rows: [
+            { title: "Get something locally for the day", detail: "A card, flowers or something from a shop nearby." },
+            { title: "Or send something a little late", detail: "Order it yourself from any store." },
+          ],
+          footer: `What happens next: nothing more is bought for this ${d.occasion}, and we'll start on ${d.personName}'s next occasion as usual.`,
+        }),
+      };
+    }
+    const what = `${d.gifts.length} of ${d.personName}'s gifts`;
+    return {
+      subject: `Sorry, the store cancelled ${what}`,
+      ...renderEmail({
+        heading: `Sorry, the store cancelled ${what}`,
+        paragraphs: [
+          `We're sorry. The store cancelled these gifts for ${d.personName}'s ${d.occasion} on ${d.dateText}.`,
+          "It's too late for us to ship other gifts in time. You can get something locally for the day, or order something yourself from any store and send it a little late.",
+        ],
+        rows: d.gifts.map((g) => ({ title: g.title, detail: `${g.store ?? "The store"} cancelled it. ${refund(g)}` })),
+        footer: `What happens next: nothing more is bought for this ${d.occasion}, and we'll start on ${d.personName}'s next occasion as usual.`,
+      }),
+    };
+  },
+
+  gift_late: (d, links) => {
+    const title = `${d.personName}'s gift may arrive after ${theirDay(d.occasion)}`;
+    return {
+      subject: title,
+      ...renderEmail({
+        heading: title,
+        paragraphs: [
+          `We're sorry. The ${d.giftTitle} for ${d.personName}'s ${d.occasion} on ${d.dateText} is now expected ${d.expectedText}, ${daysLateText(d.daysLate)}.`,
+          "It's already on its way, so it can't be cancelled.",
+        ],
+        rows: [
+          { title: "Keep it", detail: `Nothing to do. It arrives ${d.expectedText}.` },
+          { title: "Get something locally for the day", detail: `Then return the ${d.giftTitle} once it arrives, if you like.` },
+        ],
+        ...(links.arrived ? { button: { label: "It already arrived", url: links.arrived } } : {}),
+        footer: "What happens next: we keep watching it. If it's back on time, we'll let you know.",
+      }),
+    };
+  },
+
+  gift_on_time: (d, links) => {
+    const title = `Good news: ${d.personName}'s gift is back on time`;
+    return {
+      subject: title,
+      ...renderEmail({
+        heading: title,
+        paragraphs: [
+          `The ${d.giftTitle} is now expected ${d.expectedText}, in time for ${d.personName}'s ${d.occasion} on ${d.dateText}.`,
+          "There's nothing you need to do.",
+        ],
+        link: { label: `See ${d.personName}'s gift`, url: links.open },
+      }),
+    };
+  },
+
+  delivered: (d, links) => {
+    const title = `${d.personName}'s gift was delivered`;
+    return {
+      subject: title,
+      ...renderEmail({
+        heading: title,
+        paragraphs: [`Everything you chose for ${d.personName}'s ${d.occasion} on ${d.dateText} has arrived.`],
+        rows: d.gifts.map((g) => ({ title: g.title, detail: g.deliveredText ? `Delivered ${g.deliveredText}` : "Delivered" })),
+        link: { label: `See ${d.personName}'s gift`, url: links.open },
+        footer: "What happens next: after the occasion we'll ask how they liked it.",
+      }),
+    };
+  },
+
+  // Bad news first, with an apology (owner, 2026-11-23); the caller orders the items.
+  tracking_news: (d) => {
+    const bad = d.items.filter((i) => i.kind !== "on_time").length;
+    const good = d.items.length - bad;
+    const has = (n: number) => (n === 1 ? "has" : "have");
+    const lead =
+      bad === 0
+        ? `Good news: ${countWord(good)} of your gifts ${good === 1 ? "is" : "are"} back on time. There's nothing you need to do.`
+        : `We're sorry, ${countWord(bad)} of your gifts ${has(bad)} bad news.` +
+          (good > 0 ? ` ${capitalize(countWord(good))} ${has(good)} good news.` : "");
+    const title = `Updates on ${d.items.length} of your gifts`;
+    const footer = newsFooter(
+      d.items.some((i) => i.kind === "late"),
+      d.items.some((i) => i.kind === "cancelled"),
+    );
+    return {
+      subject: title,
+      ...renderEmail({ heading: title, paragraphs: [lead], rows: d.items.map(newsRow), ...(footer ? { footer } : {}) }),
+    };
+  },
+
+  failed_several: (d, links) => {
+    // A store-cancelled gift was bought and refunded: never "couldn't be bought" or "not charged" (ALL-33).
+    const n = d.failed.length;
+    const refunded = d.failed.filter((f) => f.refunded).length;
+    const others = n - refunded;
+    const title =
+      refunded === 0
+        ? `Sorry, ${n} of ${d.personName}'s ${d.occasion} gifts couldn't be bought`
+        : refunded === n
+          ? `Sorry, the store cancelled ${n} of ${d.personName}'s ${d.occasion} gifts`
+          : `Sorry, ${n} of ${d.personName}'s ${d.occasion} gifts need another choice`;
+    const lead =
+      refunded === 0
+        ? `We're sorry. We tried to order ${d.tried} gifts for ${d.personName}'s ${d.occasion} on ${d.dateText}, and ` +
+          (n >= d.tried ? `${d.tried === 2 ? "neither" : "none"} of them went through.` : `${n} of them didn't go through.`) +
+          ` You haven't been charged for ${n === 2 ? "either" : "them"}.`
+        : refunded === n
+          ? `We're sorry. The store cancelled ${n} of the gifts we ordered for ${d.personName}'s ${d.occasion} on ${d.dateText}. The money for them is back in your Zinc wallet.`
+          : `We're sorry. Of the gifts we tried for ${d.personName}'s ${d.occasion} on ${d.dateText}, the store cancelled ${refunded} and ${others} didn't go through. ` +
+            `The money for the cancelled ${refunded === 1 ? "gift" : "gifts"} is back in your Zinc wallet, and you haven't been charged for the ${others === 1 ? "other" : "others"}.`;
+    return {
+      subject: title,
+      ...renderEmail({
+        heading: title,
+        paragraphs: [lead, ...onItsWayLine(d.onItsWay, "The good news: ")],
+        rows: d.failed.map((f) => ({ title: f.title, detail: f.detail })),
+        button: { label: `Open ${d.personName}'s page`, url: links.open },
+        link: d.failed.filter((f) => f.action).map((f) => ({ label: f.action as string, url: f.url })),
+        footer: `What happens next: there's still time to put this right. Nothing else is bought until you choose. Choose by ${d.orderByText} so it arrives in time. If you don't, we'll close this round then and let you know.`,
+      }),
+    };
+  },
 
   check_your_address: (_d, links) => ({
     subject: "Please check your saved address",
@@ -801,6 +1006,32 @@ export const SAMPLE_DATA: {
       orderByText: "Thursday, March 5",
     },
     links: { open: "https://example.com/a/open-token" },
+  },
+  store_cancelled_late: {
+    data: { ...OCC, gifts: [{ title: "Le Creuset mug set", store: "Walmart", amountText: "$42.18" }] },
+    links: {},
+  },
+  tracking_news: {
+    data: {
+      items: [
+        { kind: "late", ...OCC, title: "Cozy throw blanket", expectedText: "Monday, March 16", daysLate: 2, url: "https://example.com/rounds/r1" },
+        { kind: "cancelled", ...OCC, title: "Reading lamp", amountText: "$34.50" },
+        { kind: "on_time", personName: "Dad", occasion: "birthday", dateText: "Friday, March 20", title: "Tea sampler", expectedText: "Wednesday, March 18" },
+      ],
+    },
+    links: {},
+  },
+  delivered: {
+    data: { ...OCC, gifts: [{ title: "Cozy throw blanket", deliveredText: "Friday, March 13" }, { title: "Reading lamp", deliveredText: "Saturday, March 14" }] },
+    links: { open: "https://example.com/rounds/r1" },
+  },
+  gift_late: {
+    data: { ...OCC, giftTitle: "Cozy throw blanket", expectedText: "Monday, March 16", daysLate: 2 },
+    links: { arrived: "https://example.com/rounds/r1" },
+  },
+  gift_on_time: {
+    data: { ...OCC, giftTitle: "Cozy throw blanket", expectedText: "Friday, March 13" },
+    links: { open: "https://example.com/rounds/r1" },
   },
   check_your_address: { data: {}, links: { open: "https://example.com/a/open-token" } },
   notes_tip: { data: { personName: "Dad" }, links: {} },

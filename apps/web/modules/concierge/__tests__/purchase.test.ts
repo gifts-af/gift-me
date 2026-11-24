@@ -18,6 +18,11 @@ const stack = await localStack({ api: true });
 const dbUp = stack !== null;
 const supabase = stack?.supabase ?? null;
 
+// These tests send only order.placed and order.failed, which read no tracking setting.
+const noTrackingSetting = async (key: string): Promise<number> => {
+  throw new Error(`Unexpected setting ${key}.`);
+};
+
 describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc)", () => {
   let pg: Client;
   const users: string[] = [];
@@ -575,7 +580,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     const [first] = await orders(r.roundId);
     const body = JSON.stringify({ event: "order.failed", order_id: first.provider_order_id, data: { error_type: "invalid_shipping_address" } });
     const sig = createHmac("sha256", u.secret).update(body).digest("hex");
-    expect(await handleZincWebhook(u.webhookId, body, sig, { ...deps(), placeHeld: async () => {} })).toEqual({ status: 200 });
+    expect(await handleZincWebhook(u.webhookId, body, sig, { ...deps(), placeHeld: async () => {}, setting: noTrackingSetting })).toEqual({ status: 200 });
     expect(await round(r.roundId)).toMatchObject({ status: "needs_attention", attention_reason: "address" });
 
     await pg.query("update public.people set address_line1 = '9 Elm St' where id = $1", [r.personId]);
@@ -828,7 +833,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     const body = JSON.stringify({ event: "order.failed", order_id: first.provider_order_id, data: { error_type: "invalid_shipping_address" } });
     const sig = createHmac("sha256", u.secret).update(body).digest("hex");
 
-    expect(await handleZincWebhook(u.webhookId, body, sig, { ...deps(), placeHeld: async () => {} })).toEqual({ status: 200 });
+    expect(await handleZincWebhook(u.webhookId, body, sig, { ...deps(), placeHeld: async () => {}, setting: noTrackingSetting })).toEqual({ status: 200 });
 
     const all = await orders(r.roundId);
     expect(all).toHaveLength(1);

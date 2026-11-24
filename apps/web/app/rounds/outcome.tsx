@@ -47,6 +47,7 @@ const FAILED: Record<string, Words> = {
   price_up: { title: "Price went up", body: "We didn't buy it. We've emailed you what you can do." },
   out_of_stock: { title: "It's out of stock", body: "We didn't buy it. We've emailed you what you can do." },
   too_late: { title: "It can't arrive in time", body: "We didn't buy it. We've emailed you what you can do." },
+  store_cancelled: { title: "The store cancelled it", body: "The money is back in your Zinc wallet. We've emailed you what you can do." },
 };
 const FAILED_OTHER: Words = { title: "The store couldn't take the order", body: "We didn't buy it. We've emailed you what you can do." };
 

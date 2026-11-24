@@ -2,13 +2,22 @@
 
 import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { FACT_VALUE_MAX, overBudgetLimitCents, picksBar, type RejectionCode } from "@gifts-af/core";
+import {
+  daysBetween,
+  expectedArrival,
+  FACT_VALUE_MAX,
+  isLate,
+  overBudgetLimitCents,
+  picksBar,
+  trackingLink,
+  type RejectionCode,
+} from "@gifts-af/core";
 import { IdeaPhoto } from "@/components/idea-photo";
 import { OCCASION_NAMES, shortDate } from "@/lib/occasion-format";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import type { BuyYourself, RoundPageIdea, RoundPageView } from "@/modules/concierge";
+import type { BuyYourself, RoundPageIdea, RoundPageOrder, RoundPageView } from "@/modules/concierge";
 import { money } from "@/app/people/[id]/money";
 import { OverBudgetSheet } from "../over-budget-sheet";
 
@@ -16,12 +25,14 @@ import { OverBudgetSheet } from "../over-budget-sheet";
 // AC-17, AC-18, AC-29, AC-30): list gifts first, then the AI's ideas; tick one or more and go on
 // to the confirm page; an over-budget pick only on purpose; "Your budget" when the round has
 // none; and "None of these" with a reason. Nothing here buys: "Buy n gifts" is a link to the
-// confirm page, whose button does (AC-4a).
+// confirm page, whose button does (AC-4a). Bought gifts show where they are under "Your gifts",
+// with "It arrived" on a shipped one (design/plans/ALL-33-tracking.md).
 
 export type RejectResult =
   | { ok: true; more: boolean }
   | { ok: false; error: "not_found" | "busy" | "not_open" | "changed" | "too_long" | "session" | "bad_form" };
 export type BudgetResult = { ok: true } | { ok: false; error: string };
+export type ArrivedAction = (roundId: string, orderId: string) => Promise<{ ok: boolean }>;
 type OutlookInput = { code: RejectionCode; ownedIdeaId: string | null; text: string | null };
 
 const CHIPS: { code: RejectionCode; label: string }[] = [
@@ -147,6 +158,138 @@ function BuyYourselfRow({ item }: { item: BuyYourself }) {
           </a>
         </Button>
       )}
+    </li>
+  );
+}
+
+const CHIP = "self-start rounded-md bg-warning-soft px-1.5 py-0.5 text-xs font-semibold text-warning";
+// Links in a status line keep a full tap target (phone-layout.ts).
+const LINE_LINK = "inline-flex min-h-11 items-center font-semibold text-primary";
+
+function Dot({ tone }: { tone: "moving" | "done" }) {
+  return <span aria-hidden className={cn("inline-block size-2 flex-none rounded-full", tone === "done" ? "bg-success" : "bg-primary")} />;
+}
+
+/** Where a bought gift is: the status line, an amber chip when it may be late, and the refund for a store cancel. */
+function GiftStatus({ order, occasionDate, fixHref }: { order: RoundPageOrder; occasionDate: string; fixHref: string | null }) {
+  if (order.status === "failed") {
+    // Zinc's own refund amount; without one, no amount (never what we were charged).
+    const amount = order.refundCents !== null && order.refundCents > 0 ? `${money(order.refundCents)} back in Zinc` : "the money is back in Zinc";
+    return (
+      <>
+        <span className={CHIP}>{`The store cancelled it · ${amount}`}</span>
+        {fixHref && (
+          <Link href={fixHref} className={cn(LINE_LINK, "self-start text-[13px]")}>
+            Choose another gift
+          </Link>
+        )}
+      </>
+    );
+  }
+  if (order.status === "delivered") {
+    return (
+      <span className="flex items-center gap-1.5 text-[13px] font-semibold">
+        <Dot tone="done" />
+        {order.deliveredAt ? `Delivered ${shortDate(order.deliveredAt.slice(0, 10))}` : "Delivered"}
+      </span>
+    );
+  }
+  if (order.status !== "shipped" && order.status !== "placed") {
+    return <span className="text-[13px] font-semibold">Ordering</span>;
+  }
+
+  const expected = expectedArrival(order);
+  const late = expected !== null && isLate(expected.date, occasionDate);
+  const chip = late && (
+    <span className={CHIP}>{`May arrive ${shortDate(expected.date)} · ${plural(daysBetween(occasionDate, expected.date), "day")} late`}</span>
+  );
+  if (order.status === "placed") {
+    // Without a shipment, the store's own range says when it usually comes.
+    const range = expectedArrival({ ...order, estDeliveryDate: null });
+    return (
+      <>
+        {chip}
+        <span className="text-[13px] font-semibold">{!late && range ? `Ordered · usually arrives by ${shortDate(range.date)}` : "Ordered"}</span>
+      </>
+    );
+  }
+  const link = order.packages.map(trackingLink).find((l) => l !== null) ?? null;
+  return (
+    <>
+      {chip}
+      <span className="flex flex-wrap items-center gap-x-1.5 text-[13px] font-semibold">
+        <Dot tone="moving" />
+        <span>{!late && expected ? `Shipped · due ${shortDate(expected.date)}` : "Shipped"}</span>
+        {link && (
+          <>
+            <span aria-hidden>{" · "}</span>
+            <a href={link} target="_blank" rel="noopener noreferrer" className={LINE_LINK}>
+              Track it ↗
+            </a>
+          </>
+        )}
+      </span>
+    </>
+  );
+}
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
+
+function ArrivedButton({ roundId, orderId, action }: { roundId: string; orderId: string; action: ArrivedAction }) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  function tap() {
+    setError(null);
+    startTransition(async () => {
+      let ok = false;
+      try {
+        ok = (await action(roundId, orderId)).ok;
+      } catch {
+        ok = false;
+      }
+      // On success the page reloads with the gift delivered.
+      if (!ok) setError("That didn't go through. Reload and try again.");
+    });
+  }
+  return (
+    <>
+      <Button type="button" variant="outline" size="sm" className="mt-1 self-start" disabled={pending} onClick={tap}>
+        It arrived
+      </Button>
+      {error && (
+        <p role="alert" className="text-[13px] text-destructive">
+          {error}
+        </p>
+      )}
+    </>
+  );
+}
+
+function GiftRow({
+  order,
+  idea,
+  roundId,
+  occasionDate,
+  fixHref,
+  arrivedAction,
+}: {
+  order: RoundPageOrder;
+  idea: RoundPageIdea | undefined;
+  roundId: string;
+  occasionDate: string;
+  fixHref: string | null;
+  arrivedAction: ArrivedAction | null;
+}) {
+  const meta = [money(order.totalCents ?? idea?.totalCents ?? order.maxPriceCents), storeLabel(idea?.retailer ?? null)].filter(Boolean).join(" · ");
+  return (
+    <li className="flex items-start gap-3 rounded-xl border border-border p-3">
+      <IdeaPhoto url={idea?.imageUrl ?? null} title={order.title} />
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <span className="text-[15px] font-semibold [overflow-wrap:anywhere]">{order.title}</span>
+        <span className="text-[13px] text-muted-foreground">{meta}</span>
+        <GiftStatus order={order} occasionDate={occasionDate} fixHref={fixHref} />
+        {order.status === "shipped" && arrivedAction && <ArrivedButton roundId={roundId} orderId={order.id} action={arrivedAction} />}
+      </span>
     </li>
   );
 }
@@ -361,6 +504,7 @@ export function RoundScreen({
   rejectAction,
   setBudgetAction,
   outlookAction,
+  arrivedAction,
 }: {
   view: RoundPageView;
   /** `rejectAction` */
@@ -369,6 +513,8 @@ export function RoundScreen({
   setBudgetAction: (roundId: string, form: FormData) => Promise<BudgetResult>;
   /** `outlookAction`: whether this reason still brings new ideas; null when it couldn't be read. */
   outlookAction: (roundId: string, input: OutlookInput) => Promise<boolean | null>;
+  /** `markArrived`; null while order tracking is switched off, which hides "It arrived". */
+  arrivedAction: ArrivedAction | null;
 }) {
   const { round } = view;
   const budget = round.budgetCents;
@@ -377,8 +523,11 @@ export function RoundScreen({
   const ordered = new Set(view.liveOrders.map((o) => o.ideaId));
   const canBuy = view.closedText === null && round.status === "awaiting_approval";
 
-  // List gifts first (decisions 36, 37), each group in rank order; rejected ideas are gone.
-  const shown = view.ideas.filter((i) => i.status !== "rejected").sort((a, b) => a.rank - b.rank);
+  const bought = [...view.liveOrders, ...view.storeCancelled];
+  // List gifts first (decisions 36, 37), each group in rank order; rejected ideas are gone, and so
+  // are the gifts already under "Your gifts", so nothing is listed twice (owner, 2026-11-23).
+  const inGifts = new Set(bought.map((o) => o.ideaId));
+  const shown = view.ideas.filter((i) => i.status !== "rejected" && !inGifts.has(i.id)).sort((a, b) => a.rank - b.rank);
   const listIdeas = shown.filter((i) => i.source === "list");
   const aiIdeas = shown.filter((i) => i.source !== "list");
   const order = [...listIdeas, ...aiIdeas];
@@ -457,6 +606,11 @@ export function RoundScreen({
     />
   );
 
+  const ideaOf = new Map(view.ideas.map((i) => [i.id, i]));
+  // A store cancel still to fix offers "Choose another gift" on its own row, so it isn't listed twice.
+  const toFix = view.failedOrders.filter((o) => o.failureType !== "store_cancelled");
+  const fixable = new Set(view.closedText === null ? view.failedOrders.map((o) => o.id) : []);
+
   const occasion = round.occasionKind ? OCCASION_NAMES[round.occasionKind as keyof typeof OCCASION_NAMES] : undefined;
   const subline = [
     occasion ? `${occasion} ${shortDate(round.occasionDate)}` : shortDate(round.occasionDate),
@@ -484,13 +638,34 @@ export function RoundScreen({
         <p className="text-[15px] text-muted-foreground">Looking for new ideas. They&apos;ll come by email.</p>
       )}
 
-      {view.failedOrders.length > 0 && (
+      {bought.length > 0 && (
+        <section className="flex flex-col gap-2" aria-labelledby="round-gifts">
+          <h2 id="round-gifts" className="text-[17px] font-bold">
+            Your gifts
+          </h2>
+          <ul className="flex flex-col gap-2">
+            {bought.map((o) => (
+              <GiftRow
+                key={o.id}
+                order={o}
+                idea={ideaOf.get(o.ideaId)}
+                roundId={round.id}
+                occasionDate={round.occasionDate}
+                fixHref={fixable.has(o.id) ? `/rounds/${round.id}/fix/${o.id}` : null}
+                arrivedAction={arrivedAction}
+              />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {toFix.length > 0 && (
         <section className="flex flex-col gap-2" aria-labelledby="round-problems">
           <h2 id="round-problems" className="text-[17px] font-bold">
             Needs a fix
           </h2>
           <ul className="flex flex-col gap-2">
-            {view.failedOrders.map((o) => (
+            {toFix.map((o) => (
               <li key={o.id} className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
                 <span className="text-[15px] font-semibold [overflow-wrap:anywhere]">{o.title}</span>
                 <Button asChild variant="outline" size="sm" className="flex-none">

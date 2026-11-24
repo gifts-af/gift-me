@@ -52,3 +52,14 @@ export async function pruneExpiredActionLinks(db: SupabaseClient<Database>): Pro
   if (error) throw new Error(`Pruning expired action links failed: ${error.message}`);
   return data;
 }
+
+/**
+ * Blanks tracking numbers on orders long past delivery and returns how many orders were cleared.
+ * The SQL function reads tracking_prune_days and does nothing at 0 (the off switch); it raises when
+ * the setting is missing, so a lost setting shows up in the log instead of keeping numbers forever.
+ */
+export async function pruneTrackingNumbers(db: SupabaseClient<Database>): Promise<number> {
+  const { data, error } = await db.schema("concierge").rpc("prune_tracking_numbers");
+  if (error) throw new Error(`Pruning tracking numbers failed: ${error.message}`);
+  return data;
+}

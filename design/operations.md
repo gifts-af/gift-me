@@ -229,9 +229,15 @@ update concierge.app_settings set value = '0' where key = 'zinc_ordering_enabled
 | `order.sweep_skipped` | The sweep that looks up stuck "placing" orders couldn't run: `no_key` (the user's key is missing) or `env_mismatch` (`ZINC_ENV` differs from the environment the key was made in). | Fix `ZINC_ENV` for the environment, or ask the user to reconnect Zinc in Settings. The orders stay "placing" until then. |
 | `order.sweep_failed` | Looking up a stuck "placing" order at Zinc failed (Zinc down, an answer we couldn't read, or our database). `kind` and `code` say which. | Nothing if it clears on the next tick (the sweep runs every tick and never resends). If it repeats for the same `order_id`, check Zinc's status and the buyer's key; if Zinc can't find the order, follow **Unconfirmed orders**. |
 | `order.unconfirmed` | The sweep looked up an order stuck "placing" and Zinc has no record of it, so we don't know if it was bought. The buyer has been told "we're confirming your gift". | Open the buyer's Zinc dashboard, find the order by our `order_id` in its metadata (the `order_id` in the event), and settle it with `concierge.settle_order` as placed or failed (**Unconfirmed orders** above). The buyer is emailed on the next tick. |
-| `zinc.webhook_unmatched` | Zinc sent an order event (placed or failed) we can't tie to any order of ours, and Zinc says it has no such order for that buyer's key (or the order carries no reference). The buyer's order may be stuck "placing" or "unconfirmed". | Check the order in the buyer's Zinc dashboard, then settle ours with `concierge.settle_order` as placed or failed (**Unconfirmed orders** above). |
+| `zinc.webhook_unmatched` | Zinc sent an order event we can't tie to any order of ours, and Zinc says it has no such order for that buyer's key (or the order carries no reference). `zinc_event` isn't logged, so find the event in the buyer's Zinc dashboard by `provider_order_id`. What it means depends on the event: **placed or failed**, the buyer's order may be stuck "placing" or "unconfirmed"; **cancelled**, the store cancelled a gift and Zinc refunded the buyer, who hasn't been told; **a tracking event** (tracking, shipped, estimate, delivered), only where a gift is was missed. | **Placed or failed:** settle ours with `concierge.settle_order` as placed or failed (**Unconfirmed orders** above). **Cancelled:** find our order (the buyer's rounds, by gift and date), then run `select * from concierge.store_cancel_order('<user_id>', '<order_id>', current_date, <refund in cents, or null>);`. Before the ship-by date the next look emails the buyer with the fix link; on or after it the next daily news run tells them. **A tracking event:** usually nothing. If it was a delivered event and the round's other gifts have arrived, run `select * from concierge.mark_delivered('<user_id>', '<order_id>', 'zinc');` and the tick sends the delivered email. |
+| `tracking.news_failed` | The daily tracking summary (late, back-on-time or store-cancelled news) for one buyer couldn't be sent: the email was refused, or claiming or sending it threw. The keys are given back, so nothing is lost. (A failed gift lookup is `tracking.news_run_failed` instead.) | **Order tracking** below, "News isn't going out". |
+| `tracking.news_release_failed` | The summary failed and then giving the claimed keys back failed too, so those gifts won't be told on the next run. | **Order tracking** below, "News isn't going out", step 4. |
+| `tracking.news_run_failed` | The whole daily news step threw before it could look at buyers (a setting or the database). No news went out that day. | **Order tracking** below, "News isn't going out". |
+| `tracking.delivered_email_failed` | The "your gifts arrived" email was refused or couldn't be built, from a Zinc `delivered` event, the buyer's "It arrived" tap, or the daily retry. | **Order tracking** below, "Delivered email isn't going out". |
+| `tracking.delivered_retry_failed` | The tick's retry of unsent delivered emails threw before it could try any. | **Order tracking** below, "Delivered email isn't going out". |
 | `round_skip_email_failed` | A held gift's round closed at its deadline and the "skipped" email that followed was refused. It is sent once, best effort: the round is already closed, so nothing retries it. Since ALL-116 it goes only when no gift failed: a failure found at closing gets the "we couldn't buy it" email instead. | Check Resend. Then tell the buyer by hand that the gift wasn't bought and nothing was charged for it (`round_id` and `user_id` are in the event). |
 | `round_deadline_email_held_open` | The same, and the deadline has already passed, so the round stays open to keep retrying. | Fix the email problem (Resend status, key). It closes itself once the email goes. |
+| `round_store_cancelled_email_failed` | At a round's deadline, the email saying the store cancelled a gift (and the money is back) was refused or threw. The keys are given back and the round stays open, so the next look tries again; a refusal while the round was already closing leaves it to the daily news run instead. | Check Resend (status, key, a bounced address). Nothing else if it clears on the next look. If the deadline has passed and it repeats, it also raises `round_deadline_email_held_open`: follow that row. |
 | `round_failure_email_failed` | The email telling the buyer that a gift (or several) couldn't be bought was refused (ALL-116). Nothing is lost: the failures go back to untold, the round's other work (placing a held gift) still runs, and the next look sends it. If the round closes first, the "we couldn't buy it" email tells them instead. | Nothing if it clears on the next look. If it repeats for the same `round_id`, check Resend (status, key, a bounced address). |
 | `order.ordered_email_failed` | The "your gift is ordered" email failed. | Check Resend. It is retried on the next tick. |
 | `order.failed_late_email_failed` | The "we couldn't buy it" email failed. It tells every failure the buyer hasn't heard about once a round has closed, in one email: a gift still placing at the deadline that failed, an unconfirmed one settled as failed, or a failure untold when the round closed (the deadline, the cancel link, the person removed or the occasion turned off). | Check Resend. It is retried on the next tick until it goes. |
@@ -256,6 +262,51 @@ Code and migration ship together. If the code is rolled back with Vercel's insta
 ### Rolling back ALL-120 (base budget)
 
 Vercel's instant rollback brings back the old budget section, which can't show or clear a base budget, while `round_candidates` keeps using it. After the rollback, run `delete from concierge.budgets where occasion_kind = 'any';` on the database. This deletes base budgets people typed, for good, which is fine before launch. Occasion budgets are untouched (T73).
+
+## Order tracking (ALL-33)
+
+**What it does:** Zinc's tracking webhooks fill in where each bought gift is. The daily tick sends one summary email per buyer for late, back-on-time and store-cancelled-after-ship-by news. The buyer can tap "It arrived" on a shipped gift. Design: [technical design §6.6](technical-design.md), decision T89.
+
+**Settings** (`concierge.app_settings`)
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `order_tracking_enabled` | 1 | Off switch for tracking, shipped, estimate and delivered events and the "It arrived" button. Events are logged and ignored. Store cancels are always handled |
+| `zinc_tracking_fetch_enabled` | 1 | Off stops the one `GET /orders/{id}` per tracking event (it fetches the carrier estimate). Packages are still saved; the late check then uses the store's own range |
+| `late_check_enabled` | 1 | Off switch for the late check and its emails. Store cancels are still told |
+| `tracking_prune_days` | 30 | Days after an order is delivered (or failed, or its occasion passed without a delivery) before the daily tick clears its tracking numbers; 0 turns the clear-out off. A missing row fails the step loudly (`housekeeping.tracking_prune_failed`) |
+
+**Turn it off:** set the row to 0 with SQL on that environment's database, no deploy needed.
+
+**Events** (ids only, E6)
+
+| Event | Means |
+|---|---|
+| `tracking.event_ignored` | A tracking event was dropped: switched off, an old event, or an order that can't take it |
+| `tracking.news_run` | The daily news step finished (`sent` = emails sent) |
+| `housekeeping.tracking_pruned` | The daily clear-out finished (`cleared` = orders whose tracking numbers were cleared) |
+
+### News isn't going out
+
+For `tracking.news_failed`, `tracking.news_release_failed` or `tracking.news_run_failed`:
+
+1. Look at the event's error fields (`name`, `code`) in the Vercel logs. Check Resend (status, key, a bounced address) for a refused email.
+2. Nothing is lost for `news_failed`: the keys are given back and the next daily run tries again. Late news stops mattering after the occasion date, so look the same day.
+3. For `news_run_failed`, check the database and that `late_check_enabled` and `order_tracking_enabled` exist in `app_settings`. To stop the noise while you fix it, set `late_check_enabled` to 0 (store cancels are still told).
+4. For `news_release_failed`, the keys couldn't be given back, so those gifts stay marked as told although the email never went out. Don't delete every `late:`, `ontime:` or `cancel_late:` row for the buyer: that would also resend news they already got. Delete only the rows made in the failed run, using the event's `user_id` and the time it was logged (`created_at` is when the keys were claimed, a moment before the event):
+
+   ```sql
+   select round_id, step, created_at from concierge.round_sends
+   where user_id = '<user_id from the event>'
+     and (step like 'late:%' or step like 'ontime:%' or step like 'cancel_late:%')
+     and created_at between '<event time minus 5 minutes>' and '<event time>';
+   ```
+
+   Check the list looks right, then delete exactly those `(round_id, step)` rows. The next daily run sends them. If the occasion date has passed there is nothing to resend.
+
+### Delivered email isn't going out
+
+For `tracking.delivered_email_failed` or `tracking.delivered_retry_failed`: the round is already `delivered`, and the tick retries the email every day until it goes. Check Resend, then the event's error fields. If it keeps failing for one `round_id`, tell the buyer yourself; nothing else depends on it.
 
 ## Round fan-out (ALL-125)
 

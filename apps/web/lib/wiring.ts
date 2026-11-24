@@ -10,6 +10,7 @@ import {
   advanceRound,
   clearUnfiledNotes,
   pruneExpiredActionLinks,
+  pruneTrackingNumbers,
   createSupabaseIdeaStore,
   createSupabaseNotifyStore,
   createSupabaseRoundStore,
@@ -22,6 +23,8 @@ import {
   placeHeldForUser,
   placeRound,
   runIdeas,
+  runTrackingNews,
+  tellDelivered,
   sweepStalePlacing,
   type EngineDeps,
   type GenerateIdeas,
@@ -156,6 +159,10 @@ export async function buyingWiring(
     zinc: null,
     clearUnfiledNotes: () => clearUnfiledNotes(db),
     pruneActionLinks: () => pruneExpiredActionLinks(db),
+    pruneTrackingNumbers: () => pruneTrackingNumbers(db),
+    // The engine's day: the tick's UTC day.
+    trackingNews: () =>
+      runTrackingNews({ store: engine.store, notify: engine.notify, today: now.toISOString().slice(0, 10), setting: (key) => settingInt(db, key) }),
   };
   const wiring = await zincWiring(db, env);
   if (!wiring) {
@@ -190,8 +197,13 @@ export async function buyingWiring(
  * needs them through advanceRound with justPlaced, so the engine only emails and never places
  * inside Zinc's request; an order Zinc placed through tellOrdered.
  */
-export function webhookTellers(): { advanceRound: (roundId: string) => Promise<unknown>; orderPlaced: (roundId: string) => Promise<unknown> } {
+export function webhookTellers(): {
+  advanceRound: (roundId: string) => Promise<unknown>;
+  orderPlaced: (roundId: string) => Promise<unknown>;
+  tellDelivered: (roundId: string) => Promise<unknown>;
+} {
   return {
+    tellDelivered: async (roundId) => tellDelivered(roundId, (await buyingWiring(new Date())).engine),
     advanceRound: async (roundId) => advanceRound(roundId, (await buyingWiring(new Date())).engine, { justPlaced: true }),
     orderPlaced: async (roundId) => tellOrdered(roundId, (await buyingWiring(new Date())).engine),
   };

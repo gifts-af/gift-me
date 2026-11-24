@@ -6,9 +6,10 @@ import { FACT_VALUE_MAX, type Database } from "@gifts-af/core";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { buyingWiring, lookupWiring, roundDbDeps } from "@/lib/wiring";
+import { buyingWiring, lookupWiring, roundDbDeps, settingInt } from "@/lib/wiring";
 import {
   approveAndBuy,
+  markGiftArrived,
   MAX_BUDGET_CENTS,
   parseBudget,
   quoteFailedOrder,
@@ -17,6 +18,7 @@ import {
   replaceFailedOrder,
   roundAccess,
   setRoundBudget,
+  tellDelivered,
   type ShipTo,
 } from "@/modules/concierge";
 import type { BudgetResult, RejectResult } from "./[id]/round-screen";
@@ -231,6 +233,33 @@ export async function replaceAction(roundId: string, orderId: string, form: Form
       overBudgetConfirmed: overOf(form),
     },
     { ...purchase, lookup },
+  );
+  if (result.ok) revalidatePath(`/rounds/${id.data}`);
+  return result;
+}
+
+// ─── tracking ────────────────────────────────────────────────────────────────
+
+/**
+ * "It arrived" on a shipped gift. The module refuses it while
+ * order_tracking_enabled is off, and checks the order is the user's and this round's; the
+ * delivered email goes once the round's last gift has arrived.
+ */
+export async function markArrived(roundId: string, orderId: string): Promise<{ ok: boolean }> {
+  const id = RoundId.safeParse(roundId);
+  const order = RoundId.safeParse(orderId);
+  if (!id.success || !order.success) return { ok: false };
+  const user = await signedIn();
+  if (!user) return { ok: false };
+  const db = createAdminClient();
+  const result = await markGiftArrived(
+    { userId: user.userId, roundId: id.data, orderId: order.data },
+    {
+      db,
+      now: new Date(),
+      setting: (key) => settingInt(db, key),
+      tellDelivered: async (rid) => tellDelivered(rid, (await buyingWiring(new Date(), process.env, { user_id: user.userId })).engine),
+    },
   );
   if (result.ok) revalidatePath(`/rounds/${id.data}`);
   return result;

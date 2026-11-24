@@ -1,7 +1,7 @@
 import { createAdminClient } from "@/lib/supabase/admin";
 import { errorFields, logEvent } from "@/lib/log";
 import { handleZincWebhook, readWebhookBody } from "@/modules/concierge";
-import { placeHeld, webhookTellers, zincWiring } from "@/lib/wiring";
+import { placeHeld, settingInt, webhookTellers, zincWiring } from "@/lib/wiring";
 
 // An auto top-up places the user's held gifts here, which can run for a while: one zinc_place_budget_ms (45 s by default) for the
 // run, plus a request already in flight with its retries. 300 s is the most Vercel's Fluid
@@ -28,6 +28,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     const { status } = await handleZincWebhook(id, rawBody, request.headers.get("x-webhook-signature"), {
       ...wiring.deps,
       placeHeld,
+      setting: (key) => settingInt(db, key),
       ...webhookTellers(),
     });
     return new Response(null, { status });
