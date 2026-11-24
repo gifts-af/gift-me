@@ -1,9 +1,11 @@
 -- Reactions: what a save writes, when the email is due and when a round closes.
--- Dates are in 2091, every row rolls back, and nothing here depends on, or
--- counts, rows other sessions left in the shared local database.
+-- Dates are in 2091, every row rolls back, and no assertion depends
+-- on rows other sessions have in the shared local database: each looks at this
+-- file's own rounds. A round's delivered_at is now(), well before the dates here,
+-- except where a test is about it.
 begin;
 \ir _helpers.psql
-select plan(108);
+select plan(124);
 
 -- ─── Settings, as shipped ────────────────────────────────────────────────────
 select is(concierge.setting_int('reactions_enabled'), 1, 'reactions_enabled ships on');
@@ -250,7 +252,7 @@ select is((select fact_category from concierge.reactions where order_id = :'og')
 select tests.reset_role();
 select tests.rx_round(:'p') as d1 \gset
 select tests.rx_order(:'d1') as do1 \gset
--- Arrived after the occasion, late in the UTC day.
+-- Arrived after the occasion, on a UTC day that is still the day before in New York.
 select tests.rx_round(:'p') as d2 \gset
 select tests.rx_order(:'d2');
 select tests.rx_order(:'d2', 'delivered', '2091-12-28T01:30:00Z') as do2 \gset
@@ -301,20 +303,55 @@ select is(tests.rx_status(:'d1'), 'delivered', 'AC-13 ... the round stays delive
 update concierge.app_settings set value = '1' where key = 'reactions_enabled';
 select tests.rx_round(:'p') as d7 \gset
 select tests.rx_order(:'d7', 'delivered', '2091-12-29T10:00:00Z') as do7 \gset
-select count(*) as before from concierge.gift_rounds where status = 'delivered' \gset
 select tests.act_as_server();
 select concierge.close_reacted_rounds('2092-01-02') as closed \gset
 select tests.reset_role();
-select is(:'closed'::int, (:'before'::int - (select count(*)::int from concierge.gift_rounds where status = 'delivered')), 'it returns how many it closed');
+select cmp_ok(:'closed'::int, '>=', 4, 'it returns how many it closed: at least this file''s four');
 select results_eq(format('select status::text, next_action_at, closed_at from concierge.gift_rounds where id = %L', :'d1'),
   $$values ('complete', null::timestamptz, null::timestamptz)$$, 'AC-7 an unanswered round closes on its close date');
 select is(tests.rx_status(:'d2'), 'complete', 'AC-18 a round answered earlier closes before its close date');
 select is(tests.rx_status(:'d7'), 'delivered', 'an unanswered round before its close date stays');
 select is(tests.rx_status(:'dg'), 'complete', 'a removed person''s round closes too');
 select is(array[tests.rx_status(:'d3'), tests.rx_status(:'d4'), tests.rx_status(:'d5')], array['ordered', 'needs_attention', 'skipped'], 'only delivered rounds close');
+update concierge.gift_rounds set next_action_at = '2091-01-01T00:00:00Z' where id = :'d1';
 select tests.act_as_server();
-select is(concierge.close_reacted_rounds('2092-01-02'), 0, 'a second run the same day closes nothing');
+select concierge.close_reacted_rounds('2092-01-02');
+select is((select next_action_at from concierge.gift_rounds where id = :'d1'), '2091-01-01T00:00:00Z'::timestamptz, 'a second run leaves a closed round alone');
 select is(tests.rx_save(:'a', :'do1', 'loved', null, 'loved', 'Late answer'), 'complete', 'answers are taken after the close');
+
+-- ─── A round that becomes delivered late (AC-18) ─────────────────────────────
+-- One gift arrived before the occasion; 16 days after it the store cancels the other.
+select tests.reset_role();
+select (now() at time zone 'utc')::date as today \gset
+select tests.rx_round(:'p', 'ordered') as l1 \gset
+update concierge.gift_rounds set occasion_date = :'today'::date - 16, ship_by_deadline = :'today'::date - 26 where id = :'l1';
+select tests.rx_order(:'l1', 'delivered', now() - interval '21 days') as lo1 \gset
+select tests.rx_order(:'l1', 'shipped') as lo2 \gset
+select is((select delivered_at from concierge.gift_rounds where id = :'l1'), null, 'a round not delivered has no delivered_at');
+select tests.act_as_server();
+select is((select round_status::text from concierge.store_cancel_order(:'a', :'lo2', :'today', null)), 'delivered', 'AC-18 the store cancel delivers the round');
+select tests.reset_role();
+select is((select delivered_at from concierge.gift_rounds where id = :'l1'), now(), '... and records when');
+select is(tests.rx_due(:'l1', :'today'), false, '... it isn''t asked that day');
+select concierge.close_reacted_rounds(:'today');
+select is(tests.rx_status(:'l1'), 'delivered', '... nor closed unasked');
+select is(tests.rx_due(:'l1', :'today'::date + 1), true, '... it''s asked the day after');
+select is(tests.rx_due(:'l1', :'today'::date + 7), true, '... until seven days later');
+select is(tests.rx_due(:'l1', :'today'::date + 8), false, '... when it''s due to close');
+-- Later writes to a delivered round keep the day.
+update concierge.gift_rounds set delivered_at = '2091-12-30T01:30:00Z' where id = :'l1';
+update concierge.gift_rounds set status = 'delivered', next_action_at = now() where id = :'l1';
+select is((select delivered_at from concierge.gift_rounds where id = :'l1'), '2091-12-30T01:30:00Z'::timestamptz, 'setting delivered again keeps the first time');
+set local timezone = 'America/New_York';
+select is(concierge.reaction_asked_on(:'l1'), '2091-12-31'::date, 'its day is the UTC one, whatever the session''s zone');
+set local timezone = 'UTC';
+update concierge.gift_rounds set delivered_at = null where id = :'l1';
+select is(concierge.reaction_asked_on(:'l1'), :'today'::date - 15, 'a round from before the column is asked by its other dates');
+select is((select delivered_at from concierge.gift_rounds where id = :'d7'), now(), 'a round written as delivered gets the time too');
+select is(has_column_privilege('authenticated', 'concierge.gift_rounds', 'delivered_at', 'insert')
+  or has_column_privilege('authenticated', 'concierge.gift_rounds', 'delivered_at', 'update')
+  or has_column_privilege('anon', 'concierge.gift_rounds', 'delivered_at', 'insert')
+  or has_column_privilege('anon', 'concierge.gift_rounds', 'delivered_at', 'update'), false, 'users can''t write delivered_at');
 
 -- ─── A missing setting is an error ───────────────────────────────────────────
 select tests.reset_role();
@@ -338,6 +375,13 @@ select is(tests.rx_without('reaction_close_days', $q$select concierge.close_reac
 select is(tests.rx_without('reaction_prompt_after_days', $q$select concierge.close_reacted_rounds('2091-12-26')$q$), 'close_reacted_rounds: missing setting reaction_prompt_after_days', 'close needs the prompt days');
 
 -- ─── The table's own rules ───────────────────────────────────────────────────
+select throws_ok(format($q$update concierge.reactions set fact_category = 'loved', fact_value = null where order_id = %L$q$, :'do1'),
+  '23514', null, 'a fact category needs its value');
+select throws_ok(format($q$update concierge.reactions set fact_category = null, fact_value = 'x' where order_id = %L$q$, :'do1'),
+  '23514', null, 'a fact value needs its category');
+update concierge.reactions set source = 'email' where order_id = :'do1';
+select tests.rx_save(:'a', :'do1', 'loved', 'again');
+select is((select source from concierge.reactions where order_id = :'do1'), 'web', 'a same-rating save records where it came from');
 select throws_ok(format($q$insert into concierge.reactions (user_id, round_id, order_id, rating, source) values (%L, %L, %L, 'liked', 'web')$q$, :'a', :'d7', :'os'),
   '23503', null, 'a reaction can''t pair one round with another''s order');
 select throws_ok(format($q$insert into concierge.reactions (user_id, round_id, order_id, rating, source) values (%L, %L, %L, 'liked', 'web')$q$, :'a', :'d1', :'do1'),

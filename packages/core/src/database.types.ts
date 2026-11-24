@@ -434,6 +434,7 @@ export type Database = {
           budget_cents: number | null;
           closed_at: string | null;
           created_at: string;
+          delivered_at: string | null;
           emailed_balance_cents: number | null;
           heads_up_on: string | null;
           hold_count: number;
@@ -460,6 +461,7 @@ export type Database = {
           budget_cents?: number | null;
           closed_at?: string | null;
           created_at?: string;
+          delivered_at?: string | null;
           emailed_balance_cents?: number | null;
           heads_up_on?: string | null;
           hold_count?: number;
@@ -485,6 +487,7 @@ export type Database = {
           budget_cents?: number | null;
           closed_at?: string | null;
           created_at?: string;
+          delivered_at?: string | null;
           emailed_balance_cents?: number | null;
           heads_up_on?: string | null;
           hold_count?: number;
@@ -1431,6 +1434,7 @@ export type Database = {
           budget_cents: number | null;
           closed_at: string | null;
           created_at: string;
+          delivered_at: string | null;
           emailed_balance_cents: number | null;
           heads_up_on: string | null;
           hold_count: number;
@@ -1465,6 +1469,7 @@ export type Database = {
           budget_cents: number | null;
           closed_at: string | null;
           created_at: string;
+          delivered_at: string | null;
           emailed_balance_cents: number | null;
           heads_up_on: string | null;
           hold_count: number;
@@ -1507,6 +1512,7 @@ export type Database = {
           budget_cents: number | null;
           closed_at: string | null;
           created_at: string;
+          delivered_at: string | null;
           emailed_balance_cents: number | null;
           heads_up_on: string | null;
           hold_count: number;
@@ -1541,6 +1547,7 @@ export type Database = {
           budget_cents: number | null;
           closed_at: string | null;
           created_at: string;
+          delivered_at: string | null;
           emailed_balance_cents: number | null;
           heads_up_on: string | null;
           hold_count: number;
@@ -1665,6 +1672,7 @@ export type Database = {
           budget_cents: number | null;
           closed_at: string | null;
           created_at: string;
+          delivered_at: string | null;
           emailed_balance_cents: number | null;
           heads_up_on: string | null;
           hold_count: number;

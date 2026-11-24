@@ -17,7 +17,7 @@
 
 ### When the email goes and when the round closes
 
-- **Asked-on date:** the later of the occasion date and the last delivery date, plus `reaction_prompt_after_days` (1). UTC days, by the daily tick, once per round (`round_sends` step `reaction_prompt`). A late gift is asked about after it arrives **[Claude's call]**.
+- **Asked-on date:** the latest of the occasion date, the last delivery date and the day the round became delivered, plus `reaction_prompt_after_days` (1). UTC days, by the daily tick, once per round (`round_sends` step `reaction_prompt`). The day it became delivered counts because the store can cancel the last gift well after the others arrived. A late gift is asked about after it arrives **[Claude's call]**.
 - **Asked when** `asked_on <= today < asked_on + reaction_close_days` (7), the round is `delivered`, the person isn't removed, and a delivered gift has no answer. The email lists the **unanswered** gifts only. A removed occasion is still asked about: the gift was given.
 - **Closes to `complete`** when every delivered gift has an answer, or on `asked_on + reaction_close_days`. An unanswered round closes silently. The tick also closes a `delivered` round whose gifts were all answered earlier (while another gift was still on its way). Answers are still taken after that.
 - **Not before the occasion:** answering is refused, and the round screen's link hidden, until the occasion date. A gift can arrive weeks before it's given.
@@ -37,7 +37,7 @@
 | Returned it | with a note, `avoid`: "Returned title: note"; without one, none (wrong size or broken isn't dislike) **[Claude's call]** |
 
 - **List gifts never become facts.** A gift from someone's list keeps that person's words out of facts and out of the AI (T42). The answer and note are still saved.
-- **Facts are written only when the rating is new or changes.** A note edit or a repeat save touches no fact, so it can't bring back one the buyer turned off, deleted or edited. When the rating changes, the old fact is removed only if it's still exactly as we wrote it (the reaction stores its category and value) and active. A fact that already exists is left as it is. Saving a fact for a removed person is skipped.
+- **Facts are written only when the rating is new or changes.** A note edit or a repeat save touches no fact, so it can't bring back one the buyer turned off, deleted or edited. When the rating changes, the old fact is removed only if it's still exactly as we wrote it (the reaction stores its category and value) and active. A changed rating is a new answer, so its fact is written even if an earlier one was deleted. A fact that already exists is left as it is. Known gap: two gifts with the same title share one fact, owned by the first answered, so changing that answer removes it even if the other gift is still loved. Saving a fact for a removed person is skipped.
 - **Sensitive text is refused,** with the same message as other typed profile text (C-8, decision 51), and nothing is saved. A title whose fact trips the filter saves the answer with no fact.
 - Facts have source `reaction`, `confirmed` true, and the fact length limit (the existing cut helper).
 - "Don't suggest it again" is already covered: given products are excluded (`excluded_offers`).

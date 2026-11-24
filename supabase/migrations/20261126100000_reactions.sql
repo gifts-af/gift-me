@@ -1,6 +1,6 @@
 -- Reactions: how each delivered gift went over, the facts that teaches, when
 -- the buyer is asked, and the round's last move, delivered → complete.
--- Expand-only (E7): three columns, two keys, settings and new functions.
+-- Expand-only (E7): four columns, two keys, a trigger, settings and new functions.
 --
 -- - One reaction per order, and it carries the order's own round and user.
 -- - save_reaction and close_reacted_rounds are the only writers of `complete`
@@ -13,7 +13,7 @@
 -- ─── settings (T23, E7) ─────────────────────────────────────────────────────
 insert into concierge.app_settings (key, value, description) values
   ('reactions_enabled', '1', 'Asking how gifts went over, saving the answers and closing rounds. 0 asks nothing, closes nothing and refuses answers; gift history still shows. Turning it back on after a long gap closes the waiting rounds without asking.'),
-  ('reaction_prompt_after_days', '1', 'How many days after the occasion, or after the last gift arrived if that is later, the buyer is asked how it went.'),
+  ('reaction_prompt_after_days', '1', 'How many days after the latest of the occasion, the last gift arriving and the round becoming delivered the buyer is asked how it went.'),
   ('reaction_close_days', '7', 'How many days after that a delivered round closes, answered or not.'),
   ('reaction_note_max_chars', '500', 'The longest note a buyer can leave with an answer, in characters.')
 on conflict (key) do nothing;
@@ -28,8 +28,33 @@ alter table concierge.reactions
   -- tell whether the buyer has touched it since. Null when it wrote none.
   add column fact_category text,
   add column fact_value text,
+  add constraint reactions_fact_both_or_neither check ((fact_category is null) = (fact_value is null)),
   -- A reaction can't pair one round with another's order.
   add foreign key (order_id, round_id, user_id) references concierge.orders (id, round_id, user_id) on delete cascade;
+
+-- ─── gift_rounds.delivered_at ───────────────────────────────────────────────
+-- When the round became delivered. That can be later than its last delivery: the
+-- store can cancel a gift after the others arrived. Null on rounds delivered
+-- before this column. A trigger sets it, whoever writes the status, and
+-- gift_rounds is granted column by column, so users can't read or write it.
+alter table concierge.gift_rounds add column delivered_at timestamptz;
+
+create function concierge.set_round_delivered_at()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if new.status = 'delivered' and (tg_op = 'INSERT' or old.status <> 'delivered') then
+    new.delivered_at := now();
+  end if;
+  return new;
+end;
+$$;
+revoke all on function concierge.set_round_delivered_at() from public, anon, authenticated;
+
+create trigger set_delivered_at before insert or update of status on concierge.gift_rounds
+  for each row execute function concierge.set_round_delivered_at();
 
 -- ─── round_sends: the reaction_prompt step ──────────────────────────────────
 -- Copied from 20261124110000_order_tracking.sql; only reaction_prompt is new.
@@ -46,8 +71,9 @@ alter table concierge.round_sends
   );
 
 -- ─── what the functions below share ─────────────────────────────────────────
--- The day the buyer is asked: reaction_prompt_after_days after the occasion, or
--- after the UTC day the last gift arrived if that is later. Null without the setting.
+-- The day the buyer is asked: reaction_prompt_after_days after the latest of the
+-- occasion, the UTC day the last gift arrived and the UTC day the round became
+-- delivered. Null without the setting.
 create function concierge.reaction_asked_on(p_round_id uuid)
 returns date
 language sql
@@ -56,6 +82,7 @@ security definer
 set search_path = ''
 as $$
   select greatest(g.occasion_date,
+                  (g.delivered_at at time zone 'utc')::date,
                   (select max((o.delivered_at at time zone 'utc')::date)
                      from concierge.orders o
                     where o.round_id = g.id and o.status = 'delivered'))
@@ -88,7 +115,8 @@ $$;
 -- only if it's still exactly as this reaction wrote it. A fact the person
 -- already has is left as it is, and isn't this reaction's to remove later.
 --
--- A refused save raises P0001 'save_reaction: ...' and writes nothing.
+-- The checks here raise P0001 'save_reaction: ...'. A fact over the length limit
+-- is refused by profile_facts' own check (23514). Either way nothing is written.
 create function concierge.save_reaction(p_user_id uuid, p_order_id uuid, p_rating text, p_note text,
                                         p_fact_category text, p_fact_value text, p_today date)
 returns text
@@ -139,7 +167,7 @@ begin
   -- The round's lock makes a double tap run one after the other.
   select * into v_old from concierge.reactions x where x.order_id = p_order_id;
   if v_old.rating = p_rating then
-    update concierge.reactions set note = v_note where id = v_old.id;
+    update concierge.reactions set note = v_note, source = 'web' where id = v_old.id;
   else
     if v_old.id is null then
       insert into concierge.reactions (user_id, round_id, order_id, rating, note, source)

@@ -9,7 +9,8 @@ import { LOCAL_DB, localStack } from "../../../test/local-db";
 
 const dbUp = (await localStack({ api: false })) !== null;
 
-// Long past, so a close on TODAY never reaches a round other work left unanswered.
+// Long past, so a close on TODAY closes nobody else's unanswered round. It can still close one whose
+// gifts are all answered, as the next tick would.
 const OCCASION = "2001-01-01";
 const TODAY = "2001-03-01";
 
@@ -41,7 +42,6 @@ describe.skipIf(!dbUp)("reaction races (two connections, local Supabase)", () =>
     await admin.end();
   });
 
-  // After each test, so a round one test leaves delivered isn't closed by the next.
   afterEach(() => admin.query("delete from auth.users where id = $1", [userId]));
 
   // A delivered round holding two delivered gifts.
@@ -68,6 +68,8 @@ describe.skipIf(!dbUp)("reaction races (two connections, local Supabase)", () =>
       [userId, personId, occasion.rows[0].id, OCCASION],
     );
     roundId = round.rows[0].id;
+    // Becoming delivered stamps now(); these rounds belong in the past.
+    await admin.query("update concierge.gift_rounds set delivered_at = '2001-01-01T12:00:00Z' where id = $1", [roundId]);
     orders = [];
     for (const title of ["Mug", "Vase"]) {
       const idea = await admin.query(
@@ -178,11 +180,7 @@ describe.skipIf(!dbUp)("reaction races (two connections, local Supabase)", () =>
     const status = await secondWaits(
       async () => {
         await close(one);
-        // This one is committed, so it must have closed this file's round and no other.
-        const { rows } = await one.query(
-          "select id from concierge.gift_rounds where status = 'complete' and updated_at = now()",
-        );
-        expect(rows).toEqual([{ id: roundId }]);
+        expect((await round(one)).status).toBe("complete");
       },
       () => save(two, orders[0]),
     );
