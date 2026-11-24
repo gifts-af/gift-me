@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { RATING_LABELS, type CalendarDate } from "@gifts-af/core";
+import { deliveredText, storeCancelledText } from "@/app/rounds/gift-status";
 import { OCCASION_NAMES, shortDate } from "@/lib/occasion-format";
 import type { PastGift, PastRound } from "@/modules/concierge";
 import { money } from "../money";
@@ -10,7 +11,7 @@ const fullDate = (date: CalendarDate) => `${shortDate(date)}, ${date.slice(0, 4)
 function outcomeText(gift: PastGift): string {
   switch (gift.outcome) {
     case "delivered":
-      return gift.deliveredAt ? `Delivered ${shortDate(gift.deliveredAt.slice(0, 10))}` : "Delivered";
+      return deliveredText(gift.deliveredAt);
     // A delivery can go unreported, so an old order isn't called "on its way".
     case "on_its_way":
       return "Ordered, not marked as delivered";
@@ -19,7 +20,7 @@ function outcomeText(gift: PastGift): string {
     case "not_bought":
       return "Not bought";
     case "store_cancelled":
-      return `The store cancelled it · ${gift.refundCents !== null ? `${money(gift.refundCents)} back in Zinc` : "the money is back in Zinc"}`;
+      return storeCancelledText(gift.refundCents);
   }
 }
 

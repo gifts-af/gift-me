@@ -30,6 +30,14 @@ export type ReactionFormProps = {
 export function ReactionForm({ gifts, noteMaxChars, opened, personName, personId, saveAction }: ReactionFormProps) {
   const [answered, setAnswered] = useState(() => new Set(gifts.filter((g) => g.rating !== null).map((g) => g.orderId)));
   const allAnswered = gifts.every((g) => answered.has(g.orderId));
+  // After a save, a reload mustn't choose the link's answer again over the saved one. Next puts its
+  // own address back when the saved page arrives, so this runs after every render. Keeping Next's
+  // state object makes its router leave the page alone, so what's typed on other cards stays.
+  const dropQuery = useRef(false);
+  useEffect(() => {
+    if (dropQuery.current && window.location.search) window.history.replaceState(window.history.state, "", window.location.pathname);
+  });
+
   return (
     <>
       <ul className="flex flex-col gap-3">
@@ -41,7 +49,10 @@ export function ReactionForm({ gifts, noteMaxChars, opened, personName, personId
             opened={opened?.orderId === g.orderId}
             chosen={opened?.orderId === g.orderId ? opened.rating : null}
             saveAction={saveAction}
-            onSaved={() => setAnswered((a) => new Set(a).add(g.orderId))}
+            onSaved={() => {
+              dropQuery.current = true;
+              setAnswered((a) => new Set(a).add(g.orderId));
+            }}
           />
         ))}
       </ul>
@@ -80,7 +91,7 @@ function GiftCard({
   const [note, setNote] = useState(gift.note ?? "");
   const [justSaved, setJustSaved] = useState(false);
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; noteAtFault: boolean } | null>(null);
   // Set at once, so a second tap before the next render can't save twice.
   const busy = useRef(false);
   const hydrated = useHydrated();
@@ -96,10 +107,11 @@ function GiftCard({
   }, [opened]);
 
   const changed = rating !== saved.rating || note !== saved.note;
+  const ready = changed && rating !== null && !pending;
 
   async function save(event: React.FormEvent) {
     event.preventDefault();
-    if (busy.current || rating === null) return;
+    if (busy.current || rating === null || !changed) return;
     busy.current = true;
     setPending(true);
     setError(null);
@@ -116,7 +128,7 @@ function GiftCard({
     busy.current = false;
     setPending(false);
     if (!result.ok) {
-      setError(result.error);
+      setError({ message: result.error, noteAtFault: result.reason === "sensitive" || result.reason === "note_too_long" });
       return;
     }
     // What was sent, which may no longer be what's on the screen.
@@ -129,12 +141,14 @@ function GiftCard({
     <li ref={card} aria-labelledby={`${id}-title`} className="scroll-my-4 rounded-xl border border-border p-3">
       <form onSubmit={(e) => void save(e)} className="flex flex-col gap-3">
         <div className="flex items-center gap-3">
-          <IdeaPhoto url={gift.imageUrl} title={gift.title} />
+          <span aria-hidden className="flex-none">
+            <IdeaPhoto url={gift.imageUrl} title="" />
+          </span>
           <h2 id={`${id}-title`} className="min-w-0 text-[15px] font-semibold [overflow-wrap:anywhere]">
             {gift.title}
           </h2>
         </div>
-        <fieldset aria-labelledby={`${id}-title`} className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <fieldset aria-label={`How did ${gift.title} go?`} className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {RATINGS.map((r) => (
             <label
               key={r}
@@ -162,26 +176,36 @@ function GiftCard({
             value={note}
             disabled={!hydrated}
             onChange={(e) => setNote(e.target.value)}
-            aria-invalid={error ? true : undefined}
-            aria-describedby={error ? `${id}-error` : undefined}
+            aria-invalid={error?.noteAtFault ? true : undefined}
+            aria-describedby={error?.noteAtFault ? `${id}-error` : undefined}
             className="w-full rounded-xl border border-input bg-background px-3 py-2 text-base text-foreground outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-45 aria-invalid:border-destructive"
           />
         </label>
         {error && (
           <p id={`${id}-error`} role="alert" className="text-[13px] text-destructive">
-            {error}
+            {error.message}
           </p>
         )}
-        <p role="status" className="text-[13px] empty:hidden">
-          {changed && rating !== null && !pending ? (
+        <p role="status" className="min-h-5 text-[13px]">
+          {changed && rating === null ? (
+            <span className="text-muted-foreground">Choose an answer to save.</span>
+          ) : ready ? (
             <span className="text-muted-foreground">Not saved yet.</span>
           ) : !changed && justSaved ? (
-            <span className="font-semibold text-success">Saved. Thanks, we&apos;ll use this for next time.</span>
+            <span className="font-semibold text-success">Saved. Thanks for telling us.</span>
           ) : !changed && rating !== null ? (
             <span className="text-muted-foreground">Saved. You can change it.</span>
           ) : null}
         </p>
-        <Button type="submit" size="sm" disabled={rating === null || !changed || pending} aria-busy={pending}>
+        {/* aria-disabled, not disabled, which would drop focus as the save starts. */}
+        <Button
+          type="submit"
+          size="sm"
+          variant={ready ? "default" : "outline"}
+          aria-label={`Save: ${gift.title}`}
+          aria-disabled={!ready}
+          aria-busy={pending}
+        >
           Save
         </Button>
       </form>

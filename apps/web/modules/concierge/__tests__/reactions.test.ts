@@ -126,11 +126,20 @@ describe("hasPastGifts", () => {
     expect(log).toHaveBeenCalledTimes(2);
   });
 
+  it("needs the reactions switch to exist, whatever its value: without it the history can't be read (AC-19)", async () => {
+    const some: Reply = { data: [{ id: ID }], error: null };
+    for (const value of [1, 0]) expect(await hasPastGifts(ID, fake(some, [{ data: value, error: null }]).db, NOW)).toBe(true);
+    expect(await hasPastGifts(ID, fake(some, [{ data: null, error: null }]).db, NOW)).toBe(false);
+    expect(log).not.toHaveBeenCalled();
+    expect(await hasPastGifts(ID, fake(some, [refused("down", "XX000")]).db, NOW)).toBe(false);
+  });
+
   it("never reads the reactions table (AC-19)", async () => {
-    const f = fake({ data: [], error: null });
+    const f = fake({ data: [], error: null }, [{ data: 1, error: null }]);
     expect(await hasPastGifts(ID, f.db, NOW)).toBe(false);
     expect(JSON.stringify(f.asked)).toContain("gift_rounds");
-    expect(JSON.stringify(f.asked)).not.toContain("reaction");
+    expect(f.asked).not.toContain("reactions");
+    expect(JSON.stringify(f.asked)).not.toContain("reactions(");
   });
 });
 

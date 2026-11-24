@@ -259,14 +259,15 @@ export async function giftHistory(personId: string, userDb: Db, now: Date): Prom
 
 /**
  * Whether giftHistory has anything, for the person page. It reads only columns older than
- * reactions, and any failure is a no, so it can't break that page.
+ * reactions, and any failure is a no, so it can't break that page. giftHistory needs the reactions
+ * migration, so a database without its switch (whatever the value) is a no too.
  */
 export async function hasPastGifts(personId: string, userDb: Db, now: Date): Promise<boolean> {
   if (!isId(personId)) return false;
   try {
     const db = userDb.schema("concierge");
     const today = dayOf(now);
-    const [over, given] = await Promise.all([
+    const [over, given, enabled] = await Promise.all([
       db.from("gift_rounds").select("id").eq("person_id", personId).or(`status.in.(${OVER.join()}),and(status.eq.skipped,occasion_date.lt.${today})`).limit(1),
       db
         .from("orders")
@@ -275,9 +276,12 @@ export async function hasPastGifts(personId: string, userDb: Db, now: Date): Pro
         .lt("gift_rounds.occasion_date", today)
         .or(GIVEN)
         .limit(1),
+      db.rpc("setting_int", { p_key: "reactions_enabled" }),
     ]);
     if (over.error) fail("Looking for past rounds failed", over.error);
     if (given.error) fail("Looking for given gifts failed", given.error);
+    if (enabled.error) fail("Reading setting reactions_enabled failed", enabled.error);
+    if (typeof enabled.data !== "number") return false;
     return over.data.length > 0 || given.data.length > 0;
   } catch (error) {
     logEvent("reaction.history_check_failed", { person_id: personId, ...errorFields(error) });

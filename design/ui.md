@@ -197,6 +197,7 @@ My list saves as you go too, with no Save button and no "Unsaved changes" bar. W
 | Occasions | Each occasion with its switch, date and order-by date, as rows | Switches save when flipped |
 | Gifts: Budget | The base and occasion amounts (ALL-120) | Budget |
 | Gifts: Saved gifts | How many, or "None" | Saved gifts |
+| Gifts: Past gifts | Only when there are some; no value | Past gifts |
 | Gifts: Their list | "Linked" or "Not linked" | Their list |
 | Gifts: Shipping address | The street, "Something's missing", a shared list's city, or "Not added" | Shipping address |
 | Gifts: Gift ideas | How many ideas the last on-demand run saved, or "None" (ALL-27) | Gift ideas |
@@ -319,6 +320,15 @@ The Ideas list below drops the gifts shown under "Your gifts", so nothing is lis
 | Your gifts arrived | The last gift of an occasion arrives | One short email naming every gift |
 
 A store cancel before the ship-by date uses the existing failed-gift email and fix page.
+
+## How a gift went (ALL-34)
+
+| Screen | Where | What it shows |
+|---|---|---|
+| How did they like it? | `/rounds/<id>/reaction`, from the email's answers, the round screen's "How did it go?" and Past gifts | One card per delivered gift: photo, title, four answers (two to a row on a phone, four on a computer), an optional note and its own Save. An email's answer opens chosen but says "Not saved yet." After saving: "Saved. Thanks for telling us.", and it can be changed. Once every gift has an answer, a link back to the person |
+| Past gifts | `/people/<id>/gifts`, from the person's Past gifts row | Past rounds, newest first: occasion and full date, then each gift's cost ("Cost not known yet"), what happened to it, the answer and note, and "How did it go?" or "Change". A skipped round says "No gift was bought." |
+
+**Save is teal only on a card with an answer and something unsaved.** On every other card it's an outline button, so teal marks what's still to save.
 
 ## Moving the list app to the new look (in ALL-20)
 

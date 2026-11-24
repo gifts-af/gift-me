@@ -486,13 +486,13 @@ describe("RoundScreen: your gifts", () => {
     const { i, o } = ordered({ status: "delivered" });
     const shipped = order({ status: "shipped" });
     setup(view({ ideas: [i], liveOrders: [o, shipped] }, { status: "ordered" }), { reactionsOpen: true });
-    expect(gifts().getAllByRole("link", { name: "How did it go?" }).map((a) => a.getAttribute("href"))).toEqual([`/rounds/r1/reaction?gift=${o.id}`]);
+    expect(gifts().getAllByRole("link", { name: `How did it go? ${o.title}` }).map((a) => a.getAttribute("href"))).toEqual([`/rounds/r1/reaction?gift=${o.id}`]);
   });
 
   it("no How did it go? before then", () => {
     const { i, o } = ordered({ status: "delivered" });
     setup(view({ ideas: [i], liveOrders: [o] }, { status: "delivered" }));
-    expect(gifts().queryByRole("link", { name: "How did it go?" })).toBeNull();
+    expect(gifts().queryByRole("link", { name: /How did it go/ })).toBeNull();
   });
 
   it("store cancelled before the ship-by date shows the refund chip and Choose another gift, not a second fix row", () => {

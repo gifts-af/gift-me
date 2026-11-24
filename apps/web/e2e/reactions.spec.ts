@@ -19,16 +19,27 @@ test("an email's answer opens chosen, saves only on Save, and shows in past gift
   await expect(card.getByText("Not saved yet.")).toBeVisible();
   expect(await reactionsOf(unanswered.orderId)).toEqual([]);
 
+  const other = page.getByRole("listitem", { name: "Cozy throw blanket" });
+  await other.getByRole("textbox").fill("Half typed");
   await card.getByRole("textbox", { name: /Note/ }).fill("Uses it daily");
-  await card.getByRole("button", { name: "Save" }).click();
-  await expect(card.getByText("Saved. Thanks, we'll use this for next time.")).toBeVisible();
+  await card.getByRole("button", { name: /^Save/ }).click();
+  await expect(card.getByText("Saved. Thanks for telling us.")).toBeVisible();
   expect(await reactionsOf(unanswered.orderId)).toEqual([{ rating: "loved", note: "Uses it daily" }]);
+  await expect(page).toHaveURL(`/rounds/${roundId}/reaction`);
+  // The other gift's typing lives through this save and the next, though the address changed.
+  await expect(other.getByRole("textbox")).toHaveValue("Half typed");
+  await card.getByRole("radio", { name: "Liked it" }).check({ force: true });
+  await card.getByRole("button", { name: /^Save/ }).click();
+  await expect(card.getByText("Saved. Thanks for telling us.")).toBeVisible();
+  await expect.poll(() => reactionsOf(unanswered.orderId)).toEqual([{ rating: "liked", note: "Uses it daily" }]);
+  await expect(page).toHaveURL(`/rounds/${roundId}/reaction`);
+  await expect(other.getByRole("textbox")).toHaveValue("Half typed");
 
   await page.getByRole("link", { name: "Back to Nora" }).click();
   await page.getByRole("link", { name: "Past gifts" }).click();
   await expect(page).toHaveURL(`/people/${personId}/gifts`);
   const item = page.getByRole("listitem").filter({ hasText: unanswered.title });
-  await expect(item).toContainText("Loved it");
+  await expect(item).toContainText("Liked it");
   await expect(item).toContainText("Uses it daily");
 });
 
@@ -49,7 +60,7 @@ test("the reaction page fits the screen, with answers two to a row on a phone", 
   const card = page.getByRole("listitem", { name: unanswered.title });
   const problems = await problemsInBothSchemes(page, async () => {
     await page.goto(`/rounds/${roundId}/reaction?gift=${unanswered.orderId}&r=loved`);
-    await expect(card.getByRole("button", { name: "Save" })).toBeEnabled();
+    await expect(card.getByRole("button", { name: /^Save/ })).toBeEnabled();
   });
   expect(problems).toEqual([]);
   // The link's gift is in view, though it isn't the first.
