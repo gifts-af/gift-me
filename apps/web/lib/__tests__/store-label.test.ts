@@ -7,7 +7,7 @@ describe("storeLabel", () => {
     ["Amazon", "Amazon"],
     ["walmart", "Walmart"],
     ["etsy.com", "Etsy"],
-    // More than a name and an ending: the domain says more than a guess would.
+    // Anything but a plain .com keeps its domain.
     ["shop.example.com", "shop.example.com"],
     ["example.co.uk", "example.co.uk"],
     ["example.org", "example.org"],

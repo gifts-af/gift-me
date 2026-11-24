@@ -64,12 +64,12 @@ describe("Outcome with several gifts", () => {
     expect(row("Fly reel").getByText("The address isn't shared any more")).toBeInTheDocument();
   });
 
-  it("a gift already shipped or delivered isn't told it will be emailed about shipping", () => {
+  it("a gift already shipped or delivered isn't pointed to delivery updates", () => {
     show([gift("Mug", "ordered", "delivered"), gift("Vase", "ordered", "shipped"), gift("Tote", "failed", "out_of_stock")], "failed", "out_of_stock");
     expect(screen.getByText("2 of 3 gifts ordered")).toBeInTheDocument();
     expect(row("Mug").getByText("Delivered")).toBeInTheDocument();
     expect(row("Vase").getByText("Shipped")).toBeInTheDocument();
-    expect(screen.queryByText(/when it ships/)).toBeNull();
+    expect(screen.queryByText(/delivery updates/)).toBeNull();
   });
 
   it("a store cancel gets the neutral heading too: it was ordered once", () => {

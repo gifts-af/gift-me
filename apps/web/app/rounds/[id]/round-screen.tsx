@@ -23,6 +23,7 @@ import type { BuyYourself, RoundPageIdea, RoundPageOrder, RoundPageView } from "
 import { money } from "@/app/people/[id]/money";
 import { deliveredText, storeCancelledText } from "../gift-status";
 import { OverBudgetSheet } from "../over-budget-sheet";
+import { personAddressHref } from "../ship-to";
 
 // The round screen (ALL-29, design/plans/ALL-29-approval.md AC-5–AC-7, AC-9, AC-12, AC-13a,
 // AC-17, AC-18, AC-29, AC-30): list gifts first, then the AI's ideas; tick one or more and go on
@@ -143,7 +144,7 @@ function IdeaCard({
 }
 
 function BuyYourselfRow({ item }: { item: BuyYourself }) {
-  const meta = [item.priceCents !== null ? money(item.priceCents) : null, item.storeName].filter(Boolean).join(" · ");
+  const meta = [item.priceCents !== null ? money(item.priceCents) : null, storeLabel(item.storeName)].filter(Boolean).join(" · ");
   const note = item.claimed ? "Someone else is getting this" : item.claimedByMe ? "Already on one of your orders" : null;
   return (
     <li className={cn("flex items-start gap-3 rounded-xl border border-border p-3", note && "opacity-50")}>
@@ -645,19 +646,17 @@ export function RoundScreen({
           {done}
         </p>
       )}
-      {!done && view.closedText === null && round.status === "generating" && (
-        <p className="text-[15px] text-muted-foreground">
-          {view.toldNoIdeas ? "We haven't found ideas that fit yet. We emailed you about it." : "Looking for new ideas. They'll come by email."}
-        </p>
+      {!done && view.waiting === "looking" && (
+        <p className="text-[15px] text-muted-foreground">Looking for new ideas. They&apos;ll come by email.</p>
       )}
-      {view.closedText === null && round.status === "scheduled" && (
-        <p className="text-[15px] text-muted-foreground">We&apos;ll look for ideas closer to the day.</p>
+      {!done && view.waiting === "told" && (
+        <p className="text-[15px] text-muted-foreground">We haven&apos;t found ideas that fit yet. We emailed you about it.</p>
       )}
-      {view.closedText === null && round.status === "needs_address" && (
+      {view.waiting === "address" && (
         <>
           <p className="text-[15px] text-muted-foreground">{`We need ${round.personName ? `${round.personName}'s` : "their"} address before we can look for gifts.`}</p>
           <Button asChild variant="outline">
-            <Link href={`/people/${round.personId}/address`}>Add address</Link>
+            <Link href={personAddressHref(round.personId, `/rounds/${round.id}`)}>Add address</Link>
           </Button>
         </>
       )}

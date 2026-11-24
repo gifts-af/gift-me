@@ -38,7 +38,7 @@ function late(n: number, o: Partial<TrackingCandidate>): TrackingCandidate {
   };
 }
 
-async function summaryRows(candidates: TrackingCandidate[]): Promise<string[]> {
+async function newsText(candidates: TrackingCandidate[]): Promise<string> {
   const notifyStore = new FakeStore();
   notifyStore.recipients.set(USER, { email: "buyer@example.com", timezone: null });
   const texts: string[] = [];
@@ -55,8 +55,18 @@ async function summaryRows(candidates: TrackingCandidate[]): Promise<string[]> {
     today: TODAY,
     setting: async () => 1,
   });
-  return texts[0].split("\n").filter((l) => l.startsWith("- ")).map((l) => l.replace(/ \(.*$/, ""));
+  return texts[0];
 }
+
+async function summaryRows(candidates: TrackingCandidate[]): Promise<string[]> {
+  return (await newsText(candidates)).split("\n").filter((l) => l.startsWith("- ")).map((l) => l.replace(/ \(.*$/, ""));
+}
+
+it("one cancelled gift names its store as people read it", async () => {
+  const cancelled = { status: "failed", failureType: "store_cancelled", resolved: true, title: "Lamp" } as const;
+  expect(await newsText([late(1, { ...cancelled, store: "etsy.com" })])).toContain("Etsy cancelled the Lamp");
+  expect(await newsText([late(2, { ...cancelled, store: "amazon" })])).toContain("Amazon cancelled the Lamp");
+});
 
 describe("the daily summary's row order", () => {
   const cancel = late(4, { status: "failed", failureType: "store_cancelled", resolved: true, title: "Lamp" });

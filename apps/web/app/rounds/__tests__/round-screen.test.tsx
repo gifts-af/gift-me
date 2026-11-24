@@ -56,7 +56,7 @@ function view(o: Partial<RoundPageView> = {}, round: Partial<RoundPageView["roun
     failedOrders: [],
     storeCancelled: [],
     closedText: null,
-    toldNoIdeas: false,
+    waiting: null,
     nextBestIdeaId: null,
     buyYourself: [],
     ...o,
@@ -433,31 +433,26 @@ describe("RoundScreen: dates and what's happening", () => {
     expect(screen.getByText(/Choose by Tue, Dec 8/)).toBeInTheDocument();
   });
 
-  it("generating says it's looking, until the no-ideas email went", () => {
-    setup(view({}, { status: "generating" }));
+  it("looking says so", () => {
+    setup(view({ waiting: "looking" }, { status: "scheduled" }));
     expect(screen.getByText("Looking for new ideas. They'll come by email.")).toBeInTheDocument();
   });
 
   it("after the no-ideas email it says so, and not that it's looking", () => {
-    setup(view({ toldNoIdeas: true }, { status: "generating" }));
+    setup(view({ waiting: "told" }, { status: "scheduled" }));
     expect(screen.getByText("We haven't found ideas that fit yet. We emailed you about it.")).toBeInTheDocument();
     expect(screen.queryByText(/Looking for new ideas/)).toBeNull();
   });
 
-  it("scheduled says when we'll look", () => {
-    setup(view({}, { status: "scheduled" }));
-    expect(screen.getByText("We'll look for ideas closer to the day.")).toBeInTheDocument();
-  });
-
-  it("needs_address asks for the address, with a link to add it", () => {
-    setup(view({}, { status: "needs_address" }));
+  it("with no address it asks, opens the form and comes back here", () => {
+    setup(view({ waiting: "address" }, { status: "needs_address" }));
     expect(screen.getByText("We need Mom's address before we can look for gifts.")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Add address" })).toHaveAttribute("href", "/people/p1/address");
+    expect(screen.getByRole("link", { name: "Add address" })).toHaveAttribute("href", `/people/p1/address?open=1&next=${encodeURIComponent("/rounds/r1")}`);
   });
 
-  it("a closed round shows only why it's closed", () => {
-    setup(view({ closedText: "This gift round was stopped", toldNoIdeas: true }, { status: "needs_address" }));
-    expect(screen.queryByText(/haven't found ideas|We need Mom's address|closer to the day/)).toBeNull();
+  it("says nothing when nothing is being looked for", () => {
+    setup(view({ waiting: null }, { status: "generating" }));
+    expect(screen.queryByText(/Looking for new ideas|haven't found ideas|address before/)).toBeNull();
   });
 });
 

@@ -88,7 +88,7 @@ export function outcomeWords(result: BuyResult): Words {
 const EMAILED = / We've emailed you [^.]+\.$/;
 
 function giftWords(g: GiftOutcome, gifts: GiftOutcome[], roundReason: string | null): Words {
-  // Already on its way before this buy, so "when it ships" would be behind the times.
+  // Already on its way before this buy: its title says it all.
   if (g.status === "ordered" && g.reason) return { title: g.reason === "delivered" ? "Delivered" : "Shipped", body: null };
   const words = outcomeWords({ ok: true, status: g.status, reason: g.reason });
   const about = g.reason === roundReason;
