@@ -661,6 +661,14 @@ describe("no_ideas (ALL-27 AC-9)", () => {
   });
 });
 
+describe("no_ideas with every run spent", () => {
+  it.each([false, true])("promises no run and no change of mind (again: %s)", (again) => {
+    const mail = TEMPLATES.no_ideas({ personName: "Mom", again, spent: true }, { questions: "https://x.test/a/q" });
+    expect(mail.text).toContain("What happens next: we'll skip this occasion. Telling us more about Mom helps us next time.");
+    expect(mail.text).not.toMatch(/try once more|unless you/i);
+  });
+});
+
 describe("AC-10: no_ideas when it's too late", () => {
   const mail = TEMPLATES.no_ideas({ personName: "Mom", again: false, tooLate: true }, {});
 

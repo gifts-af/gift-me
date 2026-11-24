@@ -58,6 +58,7 @@ export function sampleEmails(link: string): SampleEmail[] {
     }
     if (kind === "no_ideas") {
       add("no_ideas-again", kind, { ...SAMPLE_DATA.no_ideas.data, again: true }, links);
+      add("no_ideas-spent", kind, { ...SAMPLE_DATA.no_ideas.data, spent: true }, links);
       add("no_ideas-too_late", kind, { ...SAMPLE_DATA.no_ideas.data, tooLate: true }, {});
     }
     if (kind === "hold_funds") {

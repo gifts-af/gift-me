@@ -149,7 +149,7 @@ export async function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundCo
         {
           ...base,
           kind: "no_ideas",
-          data: { personName: ctx.personName, again: kind === "no_ideas_again" },
+          data: { personName: ctx.personName, again: kind === "no_ideas_again", ...(ctx.ideaRunsSpent ? { spent: true } : {}) },
           links: { questions: { ...link, action: "answer_questions" } },
         },
         notifyDeps,

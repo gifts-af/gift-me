@@ -447,15 +447,91 @@ describe.skipIf(!stack)("a search that finds nothing (real local database)", () 
     expect(mail).toEqual([]);
   });
 
-  it("AC-10: a refused too-late email goes out when the round is next looked at that day", async () => {
-    const r = await lastDay();
+  /** A round that was never emailed and never had an idea, the day before its ship-by day, with runs to spare. */
+  async function neverTold(): Promise<Round> {
+    const r = await newRound({ deadlineIn: 1 });
+    await pg.query("delete from concierge.gift_ideas where round_id = $1", [r.roundId]);
+    await pg.query("delete from concierge.idea_runs where round_id = $1", [r.roundId]);
+    await pg.query("delete from concierge.round_sends where round_id = $1", [r.roundId]);
+    await pg.query("update concierge.gift_rounds set status = 'generating', next_action_at = now() - interval '1 minute' where id = $1", [r.roundId]);
+    await set("idea_round_runs_max", 5);
+    return r;
+  }
+
+  it.each(["none", "failed"] as const)("AC-10: a refused too-late email after %s: no second run that day, and the close sends the one email", async (outcome) => {
+    const r = await neverTold();
     refuse = true;
-    await engine(r, "none").tick();
-    expect(await steps(r)).toEqual(["heads_up@1"]);
+    const first = engine(r, outcome);
+    await first.tick();
+    expect(await status(r)).toBe("generating");
     refuse = false;
-    await pg.query("update concierge.gift_rounds set locked_until = now() - interval '1 second' where id = $1", [r.roundId]);
+    // A duplicate tick, even after a new fact, or once the lease is over.
+    await pg.query("insert into concierge.profile_facts (user_id, person_id, category, value, source) values ($1, $2, 'interest', 'Pottery', 'question')", [r.userId, r.personId]);
+    await pg.query("update concierge.gift_rounds set next_action_at = now() - interval '1 minute', locked_until = null where id = $1", [r.roundId]);
+    const again = engine(r, outcome);
+    await again.tick();
+    expect(again.generateIdeas).not.toHaveBeenCalled();
+    expect(await runs(r)).toBe(1);
+    expect(mail).toEqual([]);
+    await engine(r, outcome, { now: closeDay() }).tick();
+    expect(await status(r)).toBe("skipped");
+    expect(mail).toHaveLength(1);
+    expect(await steps(r)).toContain("skipped");
+  });
+
+  it("AC-10: a round that ran and was never told anything is told at its close, not skipped in silence", async () => {
+    const r = await neverTold();
+    await runRow(r, "failed", "1 day");
+    await pg.query("update concierge.gift_rounds set ship_by_deadline = current_date where id = $1", [r.roundId]);
     await engine(r, "none").tick();
-    expect(mail.map((m) => m.subject)).toEqual(["Sorry, no gift can arrive in time for Mom"]);
+    expect(await status(r)).toBe("skipped");
+    expect(mail).toHaveLength(1);
+    expect(named("round_skipped_silently")).toEqual([]);
+  });
+
+  it("a round that never ran, or whose buyer isn't paid, still ends in silence", async () => {
+    for (const paid of [true, false]) {
+      const r = await neverTold();
+      if (!paid) {
+        await runRow(r, "failed", "1 day");
+        await pg.query("update concierge.accounts set paid_features = false where user_id = $1", [r.userId]);
+      }
+      await pg.query("update concierge.gift_rounds set ship_by_deadline = current_date where id = $1", [r.roundId]);
+      await engine(r, "none").tick();
+      expect(await status(r)).toBe("skipped");
+    }
+    expect(mail).toEqual([]);
+  });
+
+  it("AC-10: a death between recording the too-late email and sending it: the close says it instead", async () => {
+    const r = await neverTold();
+    await engine(r, "none", {
+      wrap: (store) => ({
+        ...store,
+        recordSend: async (...a) => {
+          await store.recordSend(...a);
+          throw new Error("died");
+        },
+      }),
+    }).tick();
+    expect(await steps(r)).toEqual(["no_ideas_late"]);
+    expect(mail).toEqual([]);
+    await pg.query("update concierge.gift_rounds set locked_until = null where id = $1", [r.roundId]);
+    await engine(r, "none", { now: closeDay() }).tick();
+    expect(await status(r)).toBe("skipped");
+    expect(mail).toHaveLength(1);
+  });
+
+  it("AC-10: an earlier no-ideas email doesn't stand in for a too-late one that never went", async () => {
+    const r = await neverTold();
+    await pg.query(
+      "insert into concierge.notifications (user_id, round_id, kind, channel, sent_at, created_at) values ($1, $2, 'no_ideas', 'email', now() - interval '5 days', now() - interval '5 days')",
+      [r.userId, r.roundId],
+    );
+    await pg.query("insert into concierge.round_sends (round_id, user_id, step) values ($1, $2, 'no_ideas_late')", [r.roundId, r.userId]);
+    await engine(r, "none", { now: closeDay() }).tick();
+    expect(await status(r)).toBe("skipped");
+    expect(mail).toHaveLength(1);
   });
 
   const closeDay = () => new Date(Date.now() + 24 * 60 * 60 * 1000);
@@ -627,6 +703,115 @@ describe.skipIf(!stack)("a search that finds nothing (real local database)", () 
     for (const name of ["round_failed", "round.ideas_restore_failed", "round.ideas_restored"]) expect(named(name)).toEqual([]);
     await engine(r, "none").tick();
     expect(await ideas(r)).toEqual(["rejected", "rejected"]);
+  });
+
+  // ─── a round already told, and waiting ────────────────────────────────────
+
+  /** Told there were no ideas, with the rejected ones never brought back, and not due until its deadline. */
+  async function toldAndWaiting(o: { days?: number } = {}): Promise<Round> {
+    const r = await newRound(o);
+    await reject(r);
+    await set("restore_rejected_ideas_enabled", 0);
+    await engine(r, "none").tick();
+    await engine(r, "none").tick();
+    await set("restore_rejected_ideas_enabled", 1);
+    expect(await steps(r)).toEqual(["heads_up@1", "no_ideas"]);
+    mail = [];
+    return r;
+  }
+  const wake = (r: Round) => pg.query("update concierge.gift_rounds set next_action_at = now() - interval '1 minute', locked_until = null where id = $1", [r.roundId]);
+
+  it("AC-1: a round told before this shipped gets its ideas back once it's woken, with one email", async () => {
+    const r = await toldAndWaiting();
+    await wake(r);
+    const e = engine(r, "none");
+    await e.tick();
+    expect(e.generateIdeas).not.toHaveBeenCalled();
+    expect(await ideas(r)).toEqual(["proposed", "proposed"]);
+    expect(await status(r)).toBe("awaiting_approval");
+    expect(mail.map((m) => m.subject)).toEqual(["Mom's birthday: your earlier ideas are still here"]);
+    await wake(r);
+    await engine(r, "none").tick();
+    expect(mail).toHaveLength(1);
+    expect(named("round.ideas_restored")).toHaveLength(1);
+  });
+
+  it("AC-2: told before, then killed in its last run: the ideas come back", async () => {
+    const r = await toldAndWaiting();
+    await runsEarlier(r);
+    await pg.query("insert into concierge.idea_runs (user_id, person_id, round_id, started_at) values ($1, $2, $3, now() - interval '30 seconds')", [r.userId, r.personId, r.roundId]);
+    // Told again too, so the plan only waits.
+    await pg.query("insert into concierge.round_sends (round_id, user_id, step) values ($1, $2, 'no_ideas_again')", [r.roundId, r.userId]);
+    await set("idea_run_lease_ms", 1000);
+    await wake(r);
+    await engine(r, "none").tick();
+    expect(await ideas(r)).toEqual(["proposed", "proposed"]);
+    expect(mail[0].text).toContain(NOT_FINISHED);
+  });
+
+  it("a round waiting to its deadline isn't looked at on other days, and a look that brings nothing back sends nothing", async () => {
+    const r = await toldAndWaiting({ days: 60 });
+    const w = watched();
+    for (let i = 0; i < 3; i++) await engine(r, "none", { fetcher: w.fetcher }).tick();
+    expect(w.count("restore_rejected_ideas")).toBe(0);
+    expect(w.count("round_idea_state")).toBe(0);
+    for (let i = 1; i <= 3; i++) {
+      await wake(r);
+      await engine(r, "none", { fetcher: w.fetcher }).tick();
+      expect(w.count("restore_rejected_ideas")).toBe(i);
+      // Back to its deadline each time, not due again.
+      const due = await pg.query("select next_action_at = (ship_by_deadline::timestamp at time zone 'utc') as at_deadline from concierge.gift_rounds where id = $1", [r.roundId]);
+      expect(due.rows[0].at_deadline).toBe(true);
+    }
+    expect(mail).toEqual([]);
+    expect(await ideas(r)).toEqual(["rejected", "rejected"]);
+  });
+
+  it("a round told it's too late gets nothing back after that", async () => {
+    const r = await lastDay();
+    await engine(r, "none").tick();
+    mail = [];
+    await pg.query("update concierge.gift_ideas set delivery_days_max = 1 where round_id = $1", [r.roundId]);
+    await wake(r);
+    await engine(r, "none").tick();
+    expect(await ideas(r)).toEqual(["rejected", "rejected"]);
+    expect(mail).toEqual([]);
+  });
+
+  // ─── no promise of a run that can't happen ────────────────────────────────
+
+  it("rejected twice with every run spent, the no-ideas email doesn't promise another try", async () => {
+    const r = await newRound({ days: 60 });
+    await reject(r);
+    await pg.query(
+      `insert into concierge.gift_ideas (user_id, round_id, person_id, title, price_cents, est_total_cents, handling_days_max, delivery_days_min, delivery_days_max, rank)
+       values ($1, $2, $3, 'Scarf', 3000, 3500, 1, 2, 60, 3)`,
+      [r.userId, r.roundId, r.personId],
+    );
+    await runRow(r, "saved", "30 seconds");
+    await pg.query("update concierge.gift_rounds set status = 'awaiting_approval' where id = $1", [r.roundId]);
+    await reject(r, { code: "not_style", text: "Nothing woollen" });
+    await runsEarlier(r);
+    await engine(r, "none", { now: new Date(Date.now() + 1000) }).tick();
+    expect(await runs(r)).toBe(3);
+    await engine(r, "none", { now: new Date(Date.now() + 2000) }).tick();
+    expect(mail.map((m) => m.subject)).toEqual(["Sorry, we couldn't get gift ideas for Mom yet"]);
+    expect(mail[0].text).not.toMatch(/try once more|unless you tell us/i);
+    expect(mail[0].text).toContain("we'll skip this occasion");
+  });
+
+  it("the second email, after the extra run, doesn't promise one either", async () => {
+    await set("idea_round_runs_max", 1);
+    const r = await newRound();
+    await pg.query("delete from concierge.gift_ideas where round_id = $1", [r.roundId]);
+    await pg.query("delete from concierge.idea_runs where round_id = $1", [r.roundId]);
+    await pg.query("insert into concierge.round_sends (round_id, user_id, step, created_at) values ($1, $2, 'no_ideas', now() - interval '1 hour')", [r.roundId, r.userId]);
+    await runRow(r, "none", "2 hours");
+    await runRow(r, "none", "1 minute");
+    await pg.query("update concierge.gift_rounds set status = 'generating', next_action_at = now() - interval '1 minute' where id = $1", [r.roundId]);
+    await engine(r, "none").tick();
+    expect(mail[0].text).toContain("We tried again");
+    expect(mail[0].text).not.toMatch(/try once more|unless you tell us/i);
   });
 
   // ─── a database, or a round, the restore isn't for ────────────────────────

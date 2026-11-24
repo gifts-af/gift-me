@@ -318,7 +318,11 @@ async function attempt(req: IdeaRequest, deps: IdeaDeps, t: Tally): Promise<Idea
     kept.map((k, i) => ({ ...k.idea, imageUrl: photos[i], rank: i + 1 })),
   );
   // The round ended during the run (its date changed, or the occasion was switched off). What it spent still counts.
-  if (count < 0) return end("none");
+  // Nothing failed, so a lookup lost to a vendor error doesn't make it a failed run.
+  if (count < 0) {
+    await store.finish(runId, "none", cents(t.spent));
+    return { status: "none" };
+  }
   await store.finish(runId, "saved", cents(t.spent));
   return { status: "saved", count };
 }

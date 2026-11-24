@@ -229,13 +229,18 @@ describe("the idea pass (ALL-27)", () => {
     }
   });
 
-  it("AC-10: a refused too-late email isn't recorded as sent", async () => {
+  it("AC-10: a refused too-late email still ends the round's tries that day", async () => {
     const h = harness({ candidateFrom: "2027-03-10" });
     h.generateIdeas.mockResolvedValue({ status: "none" });
     h.refuseOn.add("2027-03-10");
     const summary = await h.tick("2027-03-10");
-    expect(summary.failed).toBe(1);
-    expect(h.store.sends.get("round-1") ?? new Set()).not.toContain("no_ideas_late");
+    expect(summary.failed).toBe(0);
+    expect(named("round_too_late_email_failed")).toEqual([expect.objectContaining({ round_id: "round-1" })]);
+    expect(h.store.rounds[0].nextActionAt).toEqual(at("2027-03-11", "00:00:00"));
+    h.refuseOn.clear();
+    await h.tick("2027-03-10", "13:00:00");
+    expect(h.generateIdeas).toHaveBeenCalledTimes(1);
+    expect(h.sent()).toEqual([]);
   });
 
   it("saved with count 0 sends no heads-up", async () => {

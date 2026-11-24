@@ -7,7 +7,7 @@ import type { ClaimedRound, RoundStore } from "./store";
 import { retryDeliveredEmails } from "../tracking/delivered";
 import { runHeld, retryOrderedEmails, tellOwnerOfRejection, tellOwnersOfRejections } from "./money-path";
 import { LeaseLost } from "./lease-lost";
-import { dayOf, endedByMove, releaseQuietly, view, sendHeadsUp, ideaPass, isNoIdeas, moveToGenerating, restoreIdeas, sendStep, trySend, finishStep } from "./steps";
+import { dayOf, endedByMove, releaseQuietly, view, sendHeadsUp, ideaPass, isNoIdeas, moveToGenerating, restoreIdeas, sendStep, sendTooLate, trySend, finishStep } from "./steps";
 
 // The round engine (ALL-28, design §5.1). The daily tick creates rounds that
 // are due, then claims each due round with a lease and runs its next step:
@@ -502,22 +502,33 @@ async function runStep(claimed: ClaimedRound, deps: EngineDeps, s: ScheduleSetti
 
   switch (action.do) {
     case "wait":
+      // Told there were no ideas, with a run killed since or the ideas never brought back: they still
+      // can be. Waiting, the round isn't due again before its deadline, so this isn't a daily look.
+      if (round.status === "generating" && ctx.paid && ctx.ideas.length === 0 && !sent.has("no_ideas_late") && (await restoreIdeas(round, deps))) {
+        return sendHeadsUp(round, deps, s);
+      }
       return finishStep(round, ctx, sent, { status: round.status }, deps, s);
     case "send":
       // A run that ended without reaching this (the process died) still brings the ideas back.
       if (isNoIdeas(action.send) && round.status === "generating" && (await restoreIdeas(round, deps))) {
         return sendHeadsUp(round, deps, s);
       }
-      await sendStep(round, ctx, action.send, sent, deps);
+      if (action.send === "no_ideas_late") await sendTooLate(round, ctx, sent, deps);
+      else await sendStep(round, ctx, action.send, sent, deps);
       return finishStep(round, ctx, sent, { status: round.status }, deps, s, action.send);
     case "skip": {
       const ids = { round_id: round.id, user_id: round.userId };
       // Told the day before that no gift can arrive in time and that we'd skip: nothing more to say.
-      if (sent.has("no_ideas_late")) return finishStep(round, ctx, sent, { status: "skipped" }, deps, s);
+      // A key without its email (refused, or the process died) or a check that fails doesn't count.
+      const toldLate = sent.has("no_ideas_late");
+      if (toldLate && (await store.lateEmailSent(round.id).catch(() => false))) {
+        return finishStep(round, ctx, sent, { status: "skipped" }, deps, s);
+      }
       // Tell the buyer about a skip only if we asked or told them something (ruling 13, ALL-27 AC-9).
       // A rejection renames what was sent (heads_up@1), and that still counts (ALL-29 AC-13). A
       // round left waiting on our AI credit (T87) is told too: the miss is ours, not the buyer's.
-      if (!toldBefore(sent) && !ctx.waitingOnCredit) {
+      // So is one we searched for, so a search that came to nothing is never silent.
+      if (!toldBefore(sent) && !toldLate && !ctx.waitingOnCredit && !(ctx.paid && ctx.ranIdeas)) {
         logEvent("round_skipped_silently", { ...ids, status: round.status });
         return finishStep(round, ctx, sent, { status: "skipped" }, deps, s);
       }

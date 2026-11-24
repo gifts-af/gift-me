@@ -218,6 +218,11 @@ export class FakeRoundStore implements RoundStore {
     return this.moved.has(roundId);
   }
 
+  /** The fake records a send only with its email, so the key stands for both. */
+  async lateEmailSent(roundId: string) {
+    return this.sends.get(roundId)?.has("no_ideas_late") ?? false;
+  }
+
   async sentSteps(roundId: string) {
     return new Set(this.sends.get(roundId));
   }
@@ -275,6 +280,8 @@ export class FakeRoundStore implements RoundStore {
       hasListGifts: false,
       restored: null,
       ideaRunsLeft: true,
+      ideaRunsSpent: false,
+      ranIdeas: false,
       ranSinceNoIdeas: false,
       waitingOnCredit: false,
       paid: true,

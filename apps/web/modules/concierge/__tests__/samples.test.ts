@@ -51,6 +51,7 @@ describe("sampleEmails", () => {
       "notes_cant_cancel",
       "no_ideas",
       "no_ideas-again",
+      "no_ideas-spent",
       "no_ideas-too_late",
       "health-problems",
       "health-weekly-all-clear",

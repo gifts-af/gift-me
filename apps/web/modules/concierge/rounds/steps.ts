@@ -208,6 +208,17 @@ export async function ideaPass(
   return { advanced, failed };
 }
 
+/**
+ * The too-late email, once. A refusal keeps the record, so no duplicate tick or job can run or tell
+ * again before the ship-by day; the close then emails the buyer instead (lateEmailSent).
+ */
+export async function sendTooLate(round: ClaimedRound, ctx: RoundContext, sent: Set<StepKey>, deps: EngineDeps): Promise<void> {
+  if (await trySend(round, ctx, "no_ideas_late", sent, deps)) return;
+  logEvent("round_too_late_email_failed", { round_id: round.id, user_id: round.userId });
+  await deps.store.recordSend(round.id, round.userId, "no_ideas_late");
+  sent.add("no_ideas_late");
+}
+
 /** What a round does after its idea run (S1); `round` is generating, with its lease. */
 async function afterIdeaRun(round: ClaimedRound, outcome: IdeaOutcome, deps: EngineDeps, s: ScheduleSettings): Promise<void> {
   const { store } = deps;
@@ -265,7 +276,7 @@ async function afterIdeaRun(round: ClaimedRound, outcome: IdeaOutcome, deps: Eng
     // The round isn't due again before the ship-by day, so a duplicate tick or job can't run or tell twice.
     const action = nextAction({ ...view(round, ctx, sent), ideaRunsLeft: false }, dayOf(deps.now), s);
     if (action.do === "send" && isNoIdeas(action.send)) {
-      await sendStep(round, ctx, action.send, sent, deps);
+      await sendTooLate(round, ctx, sent, deps);
       return atDeadline();
     }
     if (action.do === "wait") return atDeadline();

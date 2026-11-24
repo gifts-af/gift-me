@@ -462,6 +462,14 @@ describe("runIdeas: vendor trouble", () => {
     }
   });
 
+  it("a round that ended during the run ends none, not failed, whatever its lookups did", async () => {
+    world([2000, 2000], { zinc, gateway });
+    zinc.search.set("thing 2", 503);
+    vi.spyOn(store, "save").mockResolvedValue(-1);
+    expect(await runIdeas(req({ roundId: "round-1" }), deps())).toEqual({ status: "none" });
+    expect(store.finished).toEqual([{ outcome: "none", cost: expect.any(Number) }]);
+  });
+
   it("AC-14: a lookup that errored doesn't fail a run that kept something", async () => {
     store.in = inputs({ facts: [], round: ROUND, listGifts: listWorld(2, zinc) });
     zinc.offers.set(asinOf(1), 503);

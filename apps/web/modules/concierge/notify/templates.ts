@@ -182,8 +182,8 @@ export type TemplateData = {
   who_is_this: { subject: string; choices: { name: string }[] };
   notes_not_read: Record<string, never>;
   notes_cant_cancel: Record<string, never>;
-  /** `again`: the extra run a new fact allowed found nothing too. `tooLate`: no tick is left before the ship-by day. */
-  no_ideas: { personName: string; again: boolean; tooLate?: boolean };
+  /** `again`: the extra run a new fact allowed found nothing too. `tooLate`: no tick is left before the ship-by day. `spent`: no run is left, whatever they add. */
+  no_ideas: { personName: string; again: boolean; tooLate?: boolean; spent?: boolean };
 };
 
 export type TemplateLinks = {
@@ -991,7 +991,9 @@ export const TEMPLATES: {
           ? [`We're sorry. We tried again and still couldn't find a good fit for ${d.personName}. You haven't been charged.`]
           : [`We're sorry. We don't have gift ideas for ${d.personName} yet. You haven't been charged.`],
         button: { label: `Tell us more about ${d.personName}`, url: links.questions },
-        footer: d.again
+        footer: d.spent
+          ? `What happens next: we'll skip this occasion. Telling us more about ${d.personName} helps us next time.`
+          : d.again
           ? // Neither a retry nor a skip is promised: a newer fact may still earn a run, or the runs may be spent.
             "Unless you tell us something new and we find a gift, we'll skip this occasion."
           : `What happens next: telling us more about ${d.personName} helps. We'll try once more after you add something. Otherwise, we'll let you know before the date passes.`,
