@@ -476,6 +476,23 @@ describe("heads_up's subject says where the gifts came from", () => {
   ])("%i, all from the list: %s", (n, list, want) => expect(subject(n, list)).toBe(want));
 });
 
+// ALL-167: these open the gift's own page; the skipped emails with nothing on the way stay on the person's.
+describe("the button to the gift", () => {
+  const link = { open: "https://example.com/rounds/r1" };
+  it.each([
+    ["ordered", TEMPLATES.ordered(SAMPLE_DATA.ordered.data, link)],
+    ["several failures", TEMPLATES.failed_several(SAMPLE_DATA.failed_several.data, link)],
+    ["a cancelled gift next to one on its way", TEMPLATES.skipped({ ...SAMPLE_DATA.skipped.data, held: true, partial: { cancelled: ["Apron"], onItsWay: ["Mug"] } }, link)],
+  ])("%s: See Mom's gift", (_what, mail) => {
+    expect(mail.text).toContain("See Mom's gift: https://example.com/rounds/r1");
+    expect(mail.text).not.toContain("Open Mom's page");
+  });
+
+  it.each([false, true])("skipped (held: %s) opens their page", (held) => {
+    expect(TEMPLATES.skipped({ ...SAMPLE_DATA.skipped.data, held }, link).text).toContain("Open Mom's page");
+  });
+});
+
 describe("ordered (PRD A-8, owner)", () => {
   it("says it's ordered and where it's going, city only, with one button", () => {
     const mail = render("ordered");
@@ -485,7 +502,7 @@ describe("ordered (PRD A-8, owner)", () => {
     );
     // There is no shipped email, so none is promised.
     expect(mail.text).not.toContain("ships");
-    expect(mail.text).toContain("Open Mom's page:");
+    expect(mail.text).toContain("See Mom's gift:");
     expect(mail.html.match(/<a[\s>]/g)).toHaveLength(1);
   });
 

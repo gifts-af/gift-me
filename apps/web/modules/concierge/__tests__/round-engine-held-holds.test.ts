@@ -183,6 +183,7 @@ describe.skipIf(!stack)("held rounds: holds and the deadline (real local databas
     expect(inbox(u).slice(before)).toEqual(["Sorry, we couldn't buy all of Mary's gifts in time@31"]);
     const last = mail.filter((m) => m.to === u.email).at(-1)!;
     expect(last.text).toContain("We couldn't buy the Linen apron for Mary's Christmas in time, so we cancelled it. You haven't been charged for it.");
+    expect(last.text).toMatch(new RegExp(`^See Mary's gift: ${BASE}/rounds/${r.roundId}$`, "m"));
     // The placing one isn't confirmed yet: its own emails say what happens to it.
     expect(last.text).not.toContain("on its way");
     expect(last.text).not.toContain("No gift");
@@ -337,6 +338,7 @@ describe.skipIf(!stack)("held rounds: holds and the deadline (real local databas
     for (const t of texts) {
       expect(t).toContain("It's on its way to Dayton.");
       expect(t).not.toContain("12 Oak St");
+      expect(t).toMatch(new RegExp(`^See Mary's gift: ${BASE}/rounds/${r.roundId}$`, "m"));
     }
     expect((await sends(r.roundId)).filter((s: string) => s.startsWith("ordered:"))).toHaveLength(2);
   });
@@ -448,6 +450,7 @@ describe.skipIf(!stack)("held rounds: holds and the deadline (real local databas
     await retryOrderedEmails(engine(dayAt(2)));
     await retryOrderedEmails(engine(dayAt(3)));
     expect(inbox(u).filter((m) => m.startsWith("Mary's gift is ordered"))).toEqual(["Mary's gift is ordered@2"]);
+    expect(mail.filter((m) => m.to === u.email).at(-1)!.text).toMatch(new RegExp(`^See Mary's gift: ${BASE}/rounds/${r.roundId}$`, "m"));
   });
 
   it("emails a failed order at once, keyed by the order (fail:<id>, ALL-116), and only once", async () => {

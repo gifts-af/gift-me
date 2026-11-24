@@ -9,7 +9,7 @@ import type { Extra } from "./steps";
 // The round engine's emails: turns a step and the round's context into a notify() call.
 
 // Pages of the round screen (ALL-29); the emails link to them with plain links, no token.
-const roundPath = (roundId: string) => `/rounds/${roundId}`;
+export const roundPath = (roundId: string) => `/rounds/${roundId}`;
 const buyPath = (roundId: string, ideaId: string) => `${roundPath(roundId)}/buy?ideas=${ideaId}`;
 export const fixPath = (roundId: string, orderId: string) => `${roundPath(roundId)}/fix/${orderId}`;
 
@@ -67,7 +67,7 @@ export async function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundCo
     ...(i.reason ? { reason: i.reason } : {}),
   }));
   // The approval emails link each idea's "Buy this" and the one button to the round screen with
-  // plain links (ALL-29); the other emails open the person's page with one-time links that last
+  // plain links; the skipped email with a gift on its way opens it too. The other emails open the person's page with one-time links that last
   // until the end of the deadline day.
   const approval = {
     choose: { path: roundPath(round.id) },
@@ -127,7 +127,8 @@ export async function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundCo
             ...(round.status === "needs_attention" ? { held: true } : {}),
             ...(extra.partial ? { partial: extra.partial } : {}),
           },
-          links: { open: link },
+          // With other gifts on their way the round's page has them; with none it only repeats the email.
+          links: { open: extra.partial ? { path: roundPath(round.id) } : link },
         },
         notifyDeps,
       );

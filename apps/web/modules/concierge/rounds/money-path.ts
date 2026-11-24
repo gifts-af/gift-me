@@ -5,7 +5,7 @@ import { errorFields, logEvent } from "@/lib/log";
 import { notify, type NotifyResult } from "../notify/notify";
 import { endedAddressReason, type CancelledGift, type FailedGift, type OtherGifts } from "../notify/templates";
 import type { ClaimedRound, RoundContext, RoundOrder } from "./store";
-import { fixPath, money, occasionWord, LIVE_HELD } from "./emails";
+import { fixPath, money, occasionWord, roundPath, LIVE_HELD } from "./emails";
 import type { EngineDeps } from "./engine";
 import { dayOf, LeaseLost, view, type Extra, sendStep, trySend } from "./steps";
 
@@ -315,7 +315,7 @@ export async function tellOrdered(roundId: string, deps: EngineDeps): Promise<vo
         roundId,
         kind: "ordered",
         data: { ...occasion, giftTitle: o.title, ...(o.shipCity ? { cityText: o.shipCity } : {}) },
-        links: { open },
+        links: { open: { path: roundPath(roundId) } },
       },
       deps.notify,
     );
@@ -560,7 +560,6 @@ async function sendOpenFailures(
 ): Promise<NotifyResult> {
   const base = { userId: round.userId, roundId: round.id };
   const occasion = { personName: ctx.personName, occasion: occasionWord(ctx.occasionKind), dateText: shortDate(ctx.occasionDate) };
-  const open = { open: { action: "open_person" as const, expiresAt: new Date(`${round.shipByDeadline}T23:59:00Z`) } };
   // A single failure's button opens that gift's own fix page (ALL-29 AC-16); the page itself signs the buyer in.
   const fix = (o: RoundOrder) => ({ open: { path: fixPath(round.id, o.id) } });
   const orderByText = chooseBy(round.shipByDeadline);
@@ -592,7 +591,7 @@ async function sendOpenFailures(
           ...also,
           orderByText,
         },
-        links: open,
+        links: { open: { path: roundPath(round.id) } },
       },
       deps.notify,
     );
