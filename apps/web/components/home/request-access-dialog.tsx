@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { RequestAccessForm } from "@/app/request-access/request-access-form";
-import { buttonVariants, type ButtonProps } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -14,7 +14,6 @@ import {
 } from "@/components/ui/dialog";
 import type { RequestKind } from "@/lib/access-request";
 import { APP_NAME } from "@/lib/brand";
-import { cn } from "@/lib/utils";
 
 const COPY: Record<RequestKind, { button: string; title: string; description: string }> = {
   access: {
@@ -39,8 +38,8 @@ export function RequestAccessButton({
   children,
   kind = "access",
 }: {
-  /** Looks like this kind of Button; without it, className alone styles it (a text link). */
-  variant?: ButtonProps["variant"];
+  /** Which Button it is; without it, className alone styles it (a text link). */
+  variant?: "default" | "secondary";
   className?: string;
   children?: React.ReactNode;
   kind?: RequestKind;
@@ -48,6 +47,7 @@ export function RequestAccessButton({
   const { open, onOpenChange, closeSoon } = useSelfClosingDialog();
   const [shown, setShown] = useState<RequestKind>(kind);
   const copy = COPY[shown];
+  const label = children ?? COPY[kind].button;
 
   return (
     <Dialog
@@ -57,7 +57,15 @@ export function RequestAccessButton({
         onOpenChange(next);
       }}
     >
-      <DialogTrigger className={cn(variant && buttonVariants({ variant }), className)}>{children ?? COPY[kind].button}</DialogTrigger>
+      {variant ? (
+        <DialogTrigger asChild>
+          <Button type="button" variant={variant} className={className}>
+            {label}
+          </Button>
+        </DialogTrigger>
+      ) : (
+        <DialogTrigger className={className}>{label}</DialogTrigger>
+      )}
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{copy.title}</DialogTitle>

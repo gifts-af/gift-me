@@ -3,7 +3,7 @@
 import { useActionState, useEffect, useState } from "react";
 import { submitFeedback } from "@/app/feedback/actions";
 import { useHumanCheck } from "@/components/human-check";
-import { Button, buttonVariants } from "@/components/ui/button";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -13,7 +13,6 @@ import {
   DialogTrigger,
   useSelfClosingDialog,
 } from "@/components/ui/dialog";
-import { cn } from "@/lib/utils";
 
 const input =
   "min-h-11 w-full rounded-md border border-input bg-background px-3 py-2.5 text-base font-normal aria-[invalid=true]:border-destructive";
@@ -24,7 +23,11 @@ export function FeedbackButton({ className }: { className?: string }) {
   const { open, onOpenChange, closeSoon } = useSelfClosingDialog();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger className={cn(buttonVariants({ variant: "secondary" }), className)}>Send feedback</DialogTrigger>
+      <DialogTrigger asChild>
+        <Button type="button" variant="secondary" className={className}>
+          Send feedback
+        </Button>
+      </DialogTrigger>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Tell us the sad story</DialogTitle>
