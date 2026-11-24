@@ -65,6 +65,8 @@ export type EngineDeps = {
   clearUnfiledNotes?: () => Promise<{ cleared: number; imagesRemoved: number }>;
   /** Deletes emailed buttons long past expiry and returns how many, bound by the caller (E3). */
   pruneActionLinks?: () => Promise<number>;
+  /** Blanks tracking numbers on old orders and returns how many, bound by the caller (E3). */
+  pruneTrackingNumbers?: () => Promise<number>;
   /** The daily tracking news (ALL-33): late, back-on-time and late store-cancel news, one email per buyer. */
   trackingNews?: () => Promise<{ sent: number }>;
   /** Queues due rounds for their own function calls (ALL-125); the tick runs them itself without it. */
@@ -134,6 +136,17 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
       logEvent("housekeeping.action_links_pruned", { deleted });
     } catch (err) {
       logEvent("housekeeping.action_links_prune_failed", { ...errorFields(err) });
+    }
+  }
+
+  // Tracking numbers on old orders are blanked, so we don't keep them longer than they help
+  // (T42). Its own step: tracking_prune_days at 0 turns it off, and a failure can't stop the tick.
+  if (deps.pruneTrackingNumbers) {
+    try {
+      const cleared = await deps.pruneTrackingNumbers();
+      logEvent("housekeeping.tracking_pruned", { cleared });
+    } catch (err) {
+      logEvent("housekeeping.tracking_prune_failed", { ...errorFields(err) });
     }
   }
 

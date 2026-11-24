@@ -293,6 +293,28 @@ Each screen ticket links to the screens it builds. To open one screen directly, 
 | ALL-30 purchase and shipping | `ship-to`, `needs-attention` |
 | ALL-33 failure and replacement | `needs-attention` |
 
+## Order tracking (ALL-33)
+
+**Mock-ups:** [tracking screens and emails](https://claude.ai/artifact/64XUHT7xfzaibNtWtWpSXx). What's built is on the [screens and emails page](https://claude.ai/artifact/9mrDvFAgoqxvxmzirJFCz6).
+
+**Round screen, "Your gifts":** each bought gift has one status line.
+- **Ordered:** "Ordered · usually arrives by <date>" (the store's own range), or just "Ordered".
+- **Shipped:** "Shipped · due <date>" with a "Track it" link to the carrier's page (none for Amazon), and an **It arrived** button.
+- **May be late:** a chip above the line, "May arrive <date> · n days late".
+- **Delivered:** "Delivered". Switching `order_tracking_enabled` off hides the button.
+
+**Five emails** (tone as in Tone in emails: apologise first, then explain every real option):
+
+| Email | When | Says |
+|---|---|---|
+| Gift may be late | Daily run, one late gift | Sorry, the date, it can't be cancelled, your options (keep it, buy locally and return this one), and **It already arrived** |
+| Back on time | Daily run, a gift told late is on time again | Good news, nothing to do |
+| Store cancelled, too late | Daily run, a store cancel on or after the ship-by date | Sorry, the wallet is refunded, too late to ship another in time, what you can do |
+| Updates on n of your gifts | Daily run, more than one item for a buyer | The same news as one list, bad news first |
+| Your gifts arrived | The last gift of an occasion arrives | One short email naming every gift |
+
+A store cancel before the ship-by date uses the existing failed-gift email and fix page.
+
 ## Moving the list app to the new look (in ALL-20)
 
 The prototype's colours and stylesheet go; **none of its behaviour does.** When ALL-20 restyles it, all of the following must keep working, and the existing tests (`modules/lists/components/__tests__/`) must still pass:

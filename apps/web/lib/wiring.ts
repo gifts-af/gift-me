@@ -10,6 +10,7 @@ import {
   advanceRound,
   clearUnfiledNotes,
   pruneExpiredActionLinks,
+  pruneTrackingNumbers,
   createSupabaseIdeaStore,
   createSupabaseNotifyStore,
   createSupabaseRoundStore,
@@ -158,6 +159,7 @@ export async function buyingWiring(
     zinc: null,
     clearUnfiledNotes: () => clearUnfiledNotes(db),
     pruneActionLinks: () => pruneExpiredActionLinks(db),
+    pruneTrackingNumbers: () => pruneTrackingNumbers(db),
     // The engine's day: the tick's UTC day.
     trackingNews: () =>
       runTrackingNews({ store: engine.store, notify: engine.notify, today: now.toISOString().slice(0, 10), setting: (key) => settingInt(db, key) }),

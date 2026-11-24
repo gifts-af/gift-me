@@ -373,3 +373,34 @@ describe("runTick: the daily tracking news (ALL-33)", () => {
     expect(JSON.stringify(failed)).not.toContain("someone@example.com");
   });
 });
+
+describe("runTick: pruning old tracking numbers", () => {
+  it("prune step runs and logs, with the engine on or off", async () => {
+    for (const on of [1, 0]) {
+      const h = harness();
+      h.store.settings.set("round_engine_enabled", on);
+      const prune = vi.fn(async () => 4);
+      await runTick({ ...h.deps(at("2027-01-01")), pruneTrackingNumbers: prune });
+      expect(prune).toHaveBeenCalledTimes(1);
+    }
+    expect(named("housekeeping.tracking_pruned")).toEqual([
+      expect.objectContaining({ cleared: 4 }),
+      expect.objectContaining({ cleared: 4 }),
+    ]);
+  });
+
+  it("logs a failed prune without personal data and still runs the rest of the tick", async () => {
+    const h = harness();
+    const prune = vi.fn(async () => {
+      throw new Error("db down for someone@example.com");
+    });
+    const actionPrune = vi.fn(async () => 0);
+    await expect(
+      runTick({ ...h.deps(at("2027-01-01")), pruneTrackingNumbers: prune, pruneActionLinks: actionPrune }),
+    ).resolves.toMatchObject({ enabled: true });
+    expect(actionPrune).toHaveBeenCalledTimes(1);
+    const failed = named("housekeeping.tracking_prune_failed");
+    expect(failed).toHaveLength(1);
+    expect(JSON.stringify(failed)).not.toContain("someone@example.com");
+  });
+});
