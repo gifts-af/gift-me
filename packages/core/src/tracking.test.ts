@@ -183,7 +183,7 @@ describe("isLate", () => {
 });
 
 describe("trackingNews", () => {
-  const base = { expected: "2026-12-26", occasionDate: "2026-12-25", today: "2026-12-20", sentLate: false, sentOnTime: false };
+  const base = { expected: "2026-12-26", occasionDate: "2026-12-25", today: "2026-12-20", toldLate: 0, toldOnTime: 0 };
   it("says late when the gift is late", () => {
     expect(trackingNews(base)).toBe("late");
   });
@@ -193,14 +193,21 @@ describe("trackingNews", () => {
   it("no news after the occasion", () => {
     expect(trackingNews({ ...base, today: "2026-12-26" })).toBeNull();
   });
-  it("on_time only after late was sent", () => {
+  it("on_time only after late was told", () => {
     const fine = { ...base, expected: "2026-12-24" };
     expect(trackingNews(fine)).toBeNull();
-    expect(trackingNews({ ...fine, sentLate: true })).toBe("on_time");
-    expect(trackingNews({ ...fine, sentLate: true, sentOnTime: true })).toBeNull();
+    expect(trackingNews({ ...fine, toldLate: 1 })).toBe("on_time");
+    expect(trackingNews({ ...fine, toldLate: 1, toldOnTime: 1 })).toBeNull();
   });
-  it("does not repeat late, and says nothing without an expected date", () => {
-    expect(trackingNews({ ...base, sentLate: true })).toBeNull();
+  it("every change is told: late, on time, late again, on time again", () => {
+    const fine = { ...base, expected: "2026-12-24" };
+    expect(trackingNews({ ...base, toldLate: 1, toldOnTime: 1 })).toBe("late");
+    expect(trackingNews({ ...fine, toldLate: 2, toldOnTime: 1 })).toBe("on_time");
+    expect(trackingNews({ ...base, toldLate: 2, toldOnTime: 2 })).toBe("late");
+  });
+  it("does not repeat what was last told, and says nothing without an expected date", () => {
+    expect(trackingNews({ ...base, toldLate: 1 })).toBeNull();
+    expect(trackingNews({ ...base, toldLate: 2, toldOnTime: 1 })).toBeNull();
     expect(trackingNews({ ...base, expected: null })).toBeNull();
   });
 });

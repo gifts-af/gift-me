@@ -105,7 +105,7 @@ describe.skipIf(!stack)("the daily news summary (real local database)", () => {
     expect(await news(u, 2)).toEqual({ sent: 0 });
   });
 
-  it("back on time after late is told once (AC-6)", async () => {
+  it("each change is told once: back on time, late again, back on time again (AC-6)", async () => {
     const u = await newUser({ autoTopUp: null });
     const r = await placedRound(u);
     await estimate(u, r.orderId, 42);
@@ -117,10 +117,18 @@ describe.skipIf(!stack)("the daily news summary (real local database)", () => {
     expect(lastText(u)).toContain(`is now expected ${expectedText(39)}, in time for Mary's Christmas`);
     expect(await sends(r.roundId)).toContain(`ontime:${r.orderId}`);
     expect(await news(u, 3)).toEqual({ sent: 0 });
-    // Late again after the good news: never told twice.
+    // Late again after the good news: told again, once, under its own key (T89 as revised 2026-11-24).
     await estimate(u, r.orderId, 43);
-    expect(await news(u, 4)).toEqual({ sent: 0 });
-    expect(inbox(u).slice(before)).toHaveLength(1);
+    expect(await news(u, 4)).toEqual({ sent: 1 });
+    expect(await sends(r.roundId)).toContain(`late:2:${r.orderId}`);
+    expect(await news(u, 5)).toEqual({ sent: 0 });
+    await estimate(u, r.orderId, 39);
+    expect(await news(u, 6)).toEqual({ sent: 1 });
+    expect(inbox(u).slice(before)).toEqual([
+      "Good news: Mary's gift is back on time@2",
+      "Mary's gift may arrive after Christmas@4",
+      "Good news: Mary's gift is back on time@6",
+    ]);
   });
 
   it("nothing after the occasion (AC-7)", async () => {

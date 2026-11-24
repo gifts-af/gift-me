@@ -9,8 +9,8 @@ import type { RoundStore, TrackingCandidate } from "../rounds/store";
 
 // The daily tracking news (ALL-33): one email per buyer per day with every gift that's newly late,
 // back on time, or cancelled by the store too late to ship another. Bad news first. One item is
-// told with that item's own email. Each item is claimed once in round_sends (`late:`, `ontime:`,
-// `cancel_late:<order id>`), the same keys the deadline close-out claims for store cancels, so
+// told with that item's own email. Every change of a gift's timing is told. Each item is claimed once
+// in round_sends (`late:`, `ontime:`, `late:2:`, ... and `cancel_late:<order id>`), the same keys the deadline close-out claims for store cancels, so
 // whichever runs first tells it and the other skips it.
 
 export type TrackingNewsDeps = {
@@ -52,6 +52,18 @@ export async function runTrackingNews(deps: TrackingNewsDeps): Promise<{ sent: n
   return { sent };
 }
 
+/** The key for the nth time: `late:<id>`, then `late:2:<id>`, ... */
+const nthKey = (c: TrackingCandidate, kind: "late" | "ontime", n: number): StepKey => (n === 1 ? `${kind}:${c.orderId}` : `${kind}:${n}:${c.orderId}`);
+
+/** How many times this order's kind was told: its keys count up with no gaps. */
+function told(c: TrackingCandidate, kind: "late" | "ontime"): number {
+  let n = 0;
+  while (c.sentSteps.has(nthKey(c, kind, n + 1))) n++;
+  return n;
+}
+
+const nextKey = (c: TrackingCandidate, kind: "late" | "ontime"): StepKey => nthKey(c, kind, told(c, kind) + 1);
+
 /**
  * What each candidate has to tell. A store cancel is always told (money came back); the late
  * check has its own switch, read only when there's a placed or shipped gift to check, so a
@@ -84,11 +96,11 @@ async function newsItems(deps: TrackingNewsDeps): Promise<Item[]> {
       expected: expected.date,
       occasionDate: c.occasionDate,
       today: deps.today,
-      sentLate: c.sentSteps.has(`late:${c.orderId}`),
-      sentOnTime: c.sentSteps.has(`ontime:${c.orderId}`),
+      toldLate: told(c, "late"),
+      toldOnTime: told(c, "ontime"),
     });
-    if (news === "late") items.push({ c, step: `late:${c.orderId}`, news: "late", expected: expected.date });
-    if (news === "on_time") items.push({ c, step: `ontime:${c.orderId}`, news: "on_time", expected: expected.date });
+    if (news === "late") items.push({ c, step: nextKey(c, "late"), news: "late", expected: expected.date });
+    if (news === "on_time") items.push({ c, step: nextKey(c, "ontime"), news: "on_time", expected: expected.date });
   }
   return items;
 }

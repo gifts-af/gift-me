@@ -53,7 +53,7 @@ There's no tracking link in the payload. We build one from the carrier's public 
 
 **Told once:**
 - **Late:** each order is told late once (`late:<order id>`).
-- **Back on time:** if the estimate later moves back on or before the occasion, the order is told good news once (`ontime:<order id>`).
+- **Back on time:** if the estimate later moves back on or before the occasion, the order is told good news (`ontime:<order id>`). Late again after that is told again (`late:2:<order id>`, and so on; owner, 2026-11-24).
 - **Not after the day:** nothing is told once the occasion date has passed.
 - **Same as failures:** keys are claimed in `round_sends` the same way the failure notices are.
 
