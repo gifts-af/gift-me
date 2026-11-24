@@ -258,6 +258,43 @@ describe.skipIf(!stack)("store cancellations (real local database, fake Zinc)", 
     expect(inbox(u)).toHaveLength(2);
   });
 
+  it("at the deadline, a store cancel next to a held gift: nothing is coming, so the email opens their page", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await boughtRound(u, { totals: [4200, 3000], placed: 1 });
+    await held.pg.query(
+      `insert into concierge.orders (user_id, round_id, idea_id, funding_mode, max_price_cents, fee_cents, status, hold_reason, ship_to, ship_city, ship_state)
+       values ($1, $2, $3, 'zinc_wallet', 3500, 100, 'held', 'funds', 'recipient', 'Dayton', 'OH')`,
+      [u.userId, r.roundId, r.ideaIds[1]],
+    );
+    await held.pg.query("select concierge.store_cancel_order($1, $2, current_date + 1, null)", [u.userId, r.orderIds[0]]);
+    await held.pg.query("select concierge.reconcile_round($1)", [r.roundId]);
+    await advance(r.roundId, 30);
+    const partial = mail.filter((m) => m.to === u.email).at(-1)!;
+    expect(partial.text).toContain("so we cancelled it");
+    expect(partial.text).toContain("Open Mary's page:");
+    expect(partial.text).not.toContain("See Mary's gift");
+  });
+
+  it.each([
+    ["alone", 1, "Open Mary's page:"],
+    ["next to one on its way", 2, "See Mary's gift:"],
+  ])("at the deadline, a held gift and a refunded one %s: the refunded one is never said to be coming", async (_what, placed, button) => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await boughtRound(u, { totals: [4200, 3000, 2000], placed });
+    await held.pg.query(
+      `insert into concierge.orders (user_id, round_id, idea_id, funding_mode, max_price_cents, fee_cents, status, hold_reason, ship_to, ship_city, ship_state)
+       values ($1, $2, $3, 'zinc_wallet', 3500, 100, 'held', 'funds', 'recipient', 'Dayton', 'OH')`,
+      [u.userId, r.roundId, r.ideaIds[2]],
+    );
+    await held.pg.query("update concierge.orders set status = 'refunded' where id = $1", [r.orderIds[0]]);
+    await held.pg.query("select concierge.reconcile_round($1)", [r.roundId]);
+    await advance(r.roundId, 30);
+    const partial = mail.filter((m) => m.to === u.email).at(-1)!;
+    expect(partial.text).toContain("so we cancelled it");
+    expect(partial.text).not.toContain("Stoneware mug set");
+    expect(partial.text).toContain(button);
+  });
+
   // ─── The deadline: every path that covers a store cancel uses its own wording, once ───
 
   /** Emails naming the cancelled mug that also say nothing was charged: there must be none. */

@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { AppNav } from "@/components/app-shell/app-nav";
 import { BackLink, PageFrame } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
+import { PersonGifts } from "./person-gifts";
 import { PersonView } from "./person-view";
 
 // For the Server Actions on this page: "Read them now" (readCapturesAction) reads unread
@@ -44,5 +45,15 @@ async function Loaded({
   const [{ id }, { photo, address }] = await Promise.all([params, searchParams]);
   // "Add an address" emails already sent link here (ALL-81): the form is on its own screen now.
   if (address === "open") redirect(`/people/${encodeURIComponent(id)}/address?open=1`);
-  return <PersonView id={id} photoFailed={photo === "failed"} />;
+  return (
+    <PersonView
+      id={id}
+      photoFailed={photo === "failed"}
+      gifts={
+        <Suspense fallback={null}>
+          <PersonGifts personId={id} />
+        </Suspense>
+      }
+    />
+  );
 }

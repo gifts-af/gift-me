@@ -3,13 +3,15 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
+  arrivalState,
   daysBetween,
   expectedArrival,
   FACT_VALUE_MAX,
-  isLate,
+  ideaBlock,
   overBudgetLimitCents,
   picksBar,
   trackingLink,
+  type IdeaBlock,
   type RejectionCode,
 } from "@gifts-af/core";
 import { IdeaPhoto } from "@/components/idea-photo";
@@ -64,16 +66,21 @@ export function listPriceNote(idea: Pick<RoundPageIdea, "source" | "livePrice">)
   return idea.source === "list" && !idea.livePrice ? "Price from their list" : null;
 }
 
+const BLOCKED: Record<IdeaBlock, string> = {
+  not_shared: "No longer shared",
+  claimed: "Someone else is getting this",
+  own_order: "Already on one of your orders",
+};
+
 /** Why an idea can't be ticked, in words for the card; null when it can. */
 function blockedBecause(idea: RoundPageIdea, ordered: Set<string>, toFix: Set<string>): string | null {
   if (ordered.has(idea.id)) return "Ordered";
-  if (idea.noLongerShared) return "No longer shared";
-  if (idea.claimed) return "Someone else is getting this";
+  const block = ideaBlock(idea);
+  if (block !== null && block !== "own_order") return BLOCKED[block];
   // Its order failed: the buyer's claim on it stays until it's fixed, but it isn't on an order.
   if (toFix.has(idea.id)) return "Needs a fix";
   // On one of this buyer's live orders, in this round or another (approve_round: already_bought).
-  if (idea.claimedByMe) return "Already on one of your orders";
-  return null;
+  return block === null ? null : BLOCKED[block];
 }
 
 function IdeaCard({
@@ -169,12 +176,57 @@ const CHIP = "self-start rounded-md bg-warning-soft px-1.5 py-0.5 text-xs font-s
 // Links in a status line keep a full tap target (phone-layout.ts).
 const LINE_LINK = "inline-flex min-h-11 items-center font-semibold text-primary";
 
+/** What the buyer does about a hold; the other holds are ours, or have nothing here to do. */
+const HOLD_ACTS: Partial<Record<NonNullable<RoundPageView["hold"]>["kind"], string>> = {
+  address: "Add address",
+  change_address: "Change address",
+  check_address: "Open the address",
+  setup: "Finish setup",
+  funds: "Top up your Zinc balance",
+};
+
 function Dot({ tone }: { tone: "moving" | "done" }) {
   return <span aria-hidden className={cn("inline-block size-2 flex-none rounded-full", tone === "done" ? "bg-success" : "bg-primary")} />;
 }
 
 /** Where a bought gift is: the status line, an amber chip when it may be late, and the refund for a store cancel. */
-function GiftStatus({ order, occasionDate, fixHref }: { order: RoundPageOrder; occasionDate: string; fixHref: string | null }) {
+function GiftStatus({
+  order,
+  occasionDate,
+  today,
+  hold,
+  holdHref,
+  fixHref,
+}: {
+  order: RoundPageOrder;
+  occasionDate: string;
+  today: string;
+  hold: RoundPageView["hold"];
+  holdHref: string | null;
+  fixHref: string | null;
+}) {
+  // Held with the round past choosing: it's cancelled at the next daily look.
+  if (order.status === "held" && hold === null) return <span className="text-[13px] font-semibold">Not ordered</span>;
+  if (order.status === "held" && hold !== null) {
+    // Another gift's hold: this one waits for it.
+    if (!hold.orderIds.includes(order.id)) return <span className="text-[13px] font-semibold">Waiting to order</span>;
+    const act = HOLD_ACTS[hold.kind];
+    return (
+      <>
+        <span className={hold.kind === "waiting" ? "text-[13px] font-semibold" : CHIP}>{hold.text}</span>
+        {hold.kind === "cancel_only" && (
+          <span className="text-[13px] text-muted-foreground">
+            The store couldn&apos;t use the address it was going to. Our email about this gift has a link to cancel it.
+          </span>
+        )}
+        {act && holdHref && (
+          <Button asChild variant="outline" size="sm" className="mt-1 self-start">
+            <Link href={holdHref}>{act}</Link>
+          </Button>
+        )}
+      </>
+    );
+  }
   if (order.status === "failed") {
     return (
       <>
@@ -200,8 +252,9 @@ function GiftStatus({ order, occasionDate, fixHref }: { order: RoundPageOrder; o
   }
 
   const expected = expectedArrival(order);
-  const late = expected !== null && isLate(expected.date, occasionDate);
-  const chip = late && (
+  const arrival = expected === null ? null : arrivalState(expected.date, occasionDate, today);
+  const late = arrival === "late";
+  const chip = expected !== null && late && (
     <span className={CHIP}>{`May arrive ${shortDate(expected.date)} · ${plural(daysBetween(occasionDate, expected.date), "day")} late`}</span>
   );
   if (order.status === "placed") {
@@ -210,7 +263,7 @@ function GiftStatus({ order, occasionDate, fixHref }: { order: RoundPageOrder; o
     return (
       <>
         {chip}
-        <span className="text-[13px] font-semibold">{!late && range ? `Ordered · usually arrives by ${shortDate(range.date)}` : "Ordered"}</span>
+        <span className="text-[13px] font-semibold">{!late && range && arrivalState(range.date, occasionDate, today) !== "past" ? `Ordered · usually arrives by ${shortDate(range.date)}` : "Ordered"}</span>
       </>
     );
   }
@@ -220,7 +273,7 @@ function GiftStatus({ order, occasionDate, fixHref }: { order: RoundPageOrder; o
       {chip}
       <span className="flex flex-wrap items-center gap-x-1.5 text-[13px] font-semibold">
         <Dot tone="moving" />
-        <span>{!late && expected ? `Shipped · due ${shortDate(expected.date)}` : "Shipped"}</span>
+        <span>{!late && expected ? `Shipped · ${arrival === "past" ? "was due" : "due"} ${shortDate(expected.date)}` : "Shipped"}</span>
         {link && (
           <>
             <span aria-hidden>{" · "}</span>
@@ -271,6 +324,9 @@ function GiftRow({
   idea,
   roundId,
   occasionDate,
+  today,
+  hold,
+  holdHref,
   fixHref,
   reactionHref,
   arrivedAction,
@@ -279,6 +335,9 @@ function GiftRow({
   idea: RoundPageIdea | undefined;
   roundId: string;
   occasionDate: string;
+  today: string;
+  hold: RoundPageView["hold"];
+  holdHref: string | null;
   fixHref: string | null;
   reactionHref: string | null;
   arrivedAction: ArrivedAction | null;
@@ -290,7 +349,7 @@ function GiftRow({
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
         <span className="text-[15px] font-semibold [overflow-wrap:anywhere]">{order.title}</span>
         <span className="text-[13px] text-muted-foreground">{meta}</span>
-        <GiftStatus order={order} occasionDate={occasionDate} fixHref={fixHref} />
+        <GiftStatus order={order} occasionDate={occasionDate} today={today} hold={hold} holdHref={holdHref} fixHref={fixHref} />
         {order.status === "shipped" && arrivedAction && <ArrivedButton roundId={roundId} orderId={order.id} action={arrivedAction} />}
         {reactionHref && (
           <Link href={reactionHref} aria-label={`How did it go? ${order.title}`} className={cn(LINE_LINK, "self-start text-[13px]")}>
@@ -552,6 +611,7 @@ export function RoundScreen({
   outlookAction,
   arrivedAction,
   reactionsOpen,
+  walletUrl = "/settings/paying",
 }: {
   view: RoundPageView;
   /** `rejectAction` */
@@ -564,6 +624,8 @@ export function RoundScreen({
   arrivedAction: ArrivedAction | null;
   /** Whether a delivered gift asks how it went: the switch is on and the occasion has come. */
   reactionsOpen: boolean;
+  /** Where the Zinc balance is topped up: Zinc's own page, or Paying for gifts. */
+  walletUrl?: string;
 }) {
   const { round } = view;
   const budget = round.budgetCents;
@@ -661,6 +723,16 @@ export function RoundScreen({
   const toFix = view.failedOrders.filter((o) => o.failureType !== "store_cancelled");
   const fixable = new Set(view.closedText === null ? view.failedOrders.map((o) => o.id) : []);
 
+  const kind = view.hold?.kind;
+  const holdHref =
+    kind === "address" || kind === "change_address" || kind === "check_address"
+      ? personAddressHref(round.personId, `/rounds/${round.id}`)
+      : kind === "funds"
+        ? walletUrl
+        : kind === "setup"
+          ? "/settings/paying"
+          : null;
+
   const occasion = round.occasionKind ? OCCASION_NAMES[round.occasionKind as keyof typeof OCCASION_NAMES] : undefined;
   const subline = [
     occasion ? `${occasion} ${shortDate(round.occasionDate)}` : shortDate(round.occasionDate),
@@ -712,6 +784,9 @@ export function RoundScreen({
                 idea={ideaOf.get(o.ideaId)}
                 roundId={round.id}
                 occasionDate={round.occasionDate}
+                today={round.today}
+                hold={view.hold}
+                holdHref={holdHref}
                 fixHref={fixable.has(o.id) ? `/rounds/${round.id}/fix/${o.id}` : null}
                 reactionHref={reactionsOpen && o.status === "delivered" ? `/rounds/${round.id}/reaction?gift=${o.id}` : null}
                 arrivedAction={arrivedAction}

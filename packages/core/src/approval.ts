@@ -107,3 +107,12 @@ export function picksBar(
   const totalCents = totals.reduce((a, b) => a + b, 0);
   return { count: totals.length, totalCents, fit: classifyTotal(totalCents, budgetCents, overBudgetPct) };
 }
+
+/** Why an offered idea can't be bought, whatever the round has ordered; null when it can. */
+export type IdeaBlock = "not_shared" | "claimed" | "own_order";
+
+export function ideaBlock(i: { noLongerShared: boolean; claimed: boolean; claimedByMe: boolean }): IdeaBlock | null {
+  if (i.noLongerShared) return "not_shared";
+  if (i.claimed) return "claimed";
+  return i.claimedByMe ? "own_order" : null;
+}

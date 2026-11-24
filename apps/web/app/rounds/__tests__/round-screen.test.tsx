@@ -48,6 +48,7 @@ function view(o: Partial<RoundPageView> = {}, round: Partial<RoundPageView["roun
       budgetCents: 5000,
       status: "awaiting_approval",
       attentionReason: null,
+      today: "2026-12-01",
       ...round,
     },
     overBudgetPct: 20,
@@ -57,6 +58,7 @@ function view(o: Partial<RoundPageView> = {}, round: Partial<RoundPageView["roun
     storeCancelled: [],
     closedText: null,
     waiting: null,
+    hold: null,
     nextBestIdeaId: null,
     buyYourself: [],
     ...o,
@@ -751,5 +753,86 @@ describe("IdeaPhoto", () => {
     const icon = screen.getByRole("img", { name: "Orchid" });
     expect(icon.tagName).not.toBe("IMG");
     expect(icon.querySelector("svg")).not.toBeNull();
+  });
+});
+
+// ALL-167: a held gift says why, in Home's words, and how to move it on.
+describe("a held gift", () => {
+  const held = (kind: string, text: string, about: "both" | "first" = "both") => {
+    const orders = [order({ status: "held", placedAt: null, title: "Mug" }), order({ status: "held", placedAt: null, title: "Vase" })];
+    const orderIds = (about === "both" ? orders : orders.slice(0, 1)).map((o) => o.id);
+    return render(
+      <RoundScreen
+        view={view({ liveOrders: orders, hold: kind === "" ? null : ({ kind, text, orderIds } as RoundPageView["hold"]) }, { status: "needs_attention" })}
+        rejectAction={vi.fn()}
+        setBudgetAction={vi.fn()}
+        outlookAction={vi.fn()}
+        arrivedAction={null}
+        reactionsOpen={false}
+        walletUrl="https://zinc.test/wallet"
+      />,
+    );
+  };
+  const address = `/people/p1/address?open=1&next=${encodeURIComponent("/rounds/r1")}`;
+
+  it.each([
+    ["address", "Needs an address", "Add address", address],
+    ["check_address", "Check the address", "Open the address", address],
+    ["change_address", "Needs an address", "Change address", address],
+    ["setup", "Waiting on payment setup", "Finish setup", "/settings/paying"],
+    ["funds", "Waiting on your Zinc balance", "Top up your Zinc balance", "https://zinc.test/wallet"],
+  ])("%s", (kind, text, label, href) => {
+    held(kind, text);
+    const gifts = screen.getByRole("region", { name: "Your gifts" });
+    expect(gifts).toHaveTextContent(text);
+    expect(gifts).not.toHaveTextContent("Ordering");
+    for (const link of within(gifts).getAllByRole("link")) {
+      expect(link).toHaveTextContent(label);
+      expect(link).toHaveAttribute("href", href);
+    }
+    // Never the same words twice on one row.
+    expect(label).not.toBe(text);
+  });
+
+  it.each([
+    ["waiting", "Waiting to order"],
+    ["cancel_only", "Needs an address"],
+    ["", "Not ordered"],
+  ])("%s has nothing to do here", (kind, text) => {
+    held(kind, text);
+    const gifts = screen.getByRole("region", { name: "Your gifts" });
+    expect(gifts).toHaveTextContent(text);
+    expect(within(gifts).queryByRole("link")).toBeNull();
+  });
+
+  it("says where to cancel one whose address can't be changed here, on that gift's row only", () => {
+    held("cancel_only", "Needs an address", "first");
+    const row = (title: string) => screen.getByText(title).closest("li")!;
+    expect(row("Mug")).toHaveTextContent(/Needs an address.*has a link to cancel it/);
+    expect(row("Vase")).toHaveTextContent("Waiting to order");
+    expect(row("Vase")).not.toHaveTextContent(/address|cancel/);
+  });
+
+  it("offers the address only on the rows it's about", () => {
+    held("change_address", "Needs an address", "first");
+    expect(screen.getAllByRole("link", { name: "Change address" })).toHaveLength(1);
+    expect(screen.getByText("Vase").closest("li")).toHaveTextContent("Waiting to order");
+  });
+
+  it("says a day that has passed was due", () => {
+    const shown = (o: Partial<RoundPageOrder>) =>
+      render(
+        <RoundScreen
+          view={view({ liveOrders: [order(o)] }, { status: "ordered", today: "2026-12-20" })}
+          rejectAction={vi.fn()}
+          setBudgetAction={vi.fn()}
+          outlookAction={vi.fn()}
+          arrivedAction={null}
+          reactionsOpen={false}
+        />,
+      ).container;
+    expect(shown({ estDeliveryDate: "2026-12-14" })).toHaveTextContent("Shipped · was due Mon, Dec 14");
+    expect(shown({ estDeliveryDate: "2026-12-19" })).not.toHaveTextContent("May arrive");
+    expect(shown({ status: "placed" })).not.toHaveTextContent("usually arrives");
   });
 });

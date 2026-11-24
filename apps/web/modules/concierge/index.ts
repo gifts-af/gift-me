@@ -166,3 +166,6 @@ export type { Cost, CostKind, RecordCost } from "./costs/record";
 export { runReactions } from "./reactions/ask";
 export { giftHistory, hasPastGifts, reactionView, saveReaction } from "./reactions/reactions";
 export type { PastGift, PastGiftOutcome, PastRound, ReactionRefusal, ReactionSaveResult, ReactionView } from "./reactions/reactions";
+// Every gift round in progress, with its one status line, for Home and a person's page.
+export { readHoldGate, type HoldGate } from "./rounds/hold-gate";
+export { giftsInProgress, type GiftInProgress } from "./rounds/in-progress";

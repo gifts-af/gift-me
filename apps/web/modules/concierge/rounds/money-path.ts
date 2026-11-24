@@ -5,7 +5,7 @@ import { errorFields, logEvent } from "@/lib/log";
 import { notify, type NotifyResult } from "../notify/notify";
 import { endedAddressReason, type CancelledGift, type FailedGift, type OtherGifts } from "../notify/templates";
 import type { ClaimedRound, RoundContext, RoundOrder } from "./store";
-import { fixPath, money, occasionWord, LIVE_HELD } from "./emails";
+import { fixPath, money, occasionWord, roundPath, LIVE_HELD } from "./emails";
 import type { EngineDeps } from "./engine";
 import { dayOf, LeaseLost, view, type Extra, sendStep, trySend } from "./steps";
 
@@ -116,6 +116,9 @@ async function closeAtDeadline(
   const held = ctx.orders.filter(LIVE_HELD);
   const placed = ctx.orders.filter((o) => ["placed", "shipped", "delivered", "refunded"].includes(o.status));
   const pending = ctx.orders.some((o) => o.status === "placing" || o.status === "unconfirmed");
+  // A refunded gift was placed, but it isn't coming.
+  const onItsWay = placed.filter((o) => o.status !== "refunded").map((o) => o.title);
+  const coming = pending || onItsWay.length > 0;
   // Our own switch kept it back: ordering is off now, whatever reason the hold was stored with
   // (gate_held_orders never replaces funds with paused), or the hold says paused.
   const skipStep: StepKey = round.attentionReason === "paused" || orderingPaused ? "missed_on_us" : "skipped";
@@ -162,12 +165,12 @@ async function closeAtDeadline(
   if (emailed) {
     // Told above.
   } else if (held.length > 0 && (placed.length > 0 || pending)) {
-    const partial = { cancelled: held.map((o) => o.title), onItsWay: placed.map((o) => o.title) };
+    const partial = { cancelled: held.map((o) => o.title), onItsWay, coming };
     await before("held_cancelled", { partial });
     emailed = true;
   } else if (anyCancel && held.length > 0 && placed.length === 0 && !pending) {
     // The store's cancel was told on its own; this names only the held gifts we cancel now.
-    await before("held_cancelled", { partial: { cancelled: held.map((o) => o.title), onItsWay: [] } });
+    await before("held_cancelled", { partial: { cancelled: held.map((o) => o.title), onItsWay: [], coming } });
     emailed = true;
   } else if (anyCancel && placed.length === 0 && !pending) {
     // The store-cancelled email said it all: "No gift was chosen" or "missed on us" would be untrue.
@@ -315,7 +318,7 @@ export async function tellOrdered(roundId: string, deps: EngineDeps): Promise<vo
         roundId,
         kind: "ordered",
         data: { ...occasion, giftTitle: o.title, ...(o.shipCity ? { cityText: o.shipCity } : {}) },
-        links: { open },
+        links: { open: { path: roundPath(roundId) } },
       },
       deps.notify,
     );
@@ -560,7 +563,6 @@ async function sendOpenFailures(
 ): Promise<NotifyResult> {
   const base = { userId: round.userId, roundId: round.id };
   const occasion = { personName: ctx.personName, occasion: occasionWord(ctx.occasionKind), dateText: shortDate(ctx.occasionDate) };
-  const open = { open: { action: "open_person" as const, expiresAt: new Date(`${round.shipByDeadline}T23:59:00Z`) } };
   // A single failure's button opens that gift's own fix page (ALL-29 AC-16); the page itself signs the buyer in.
   const fix = (o: RoundOrder) => ({ open: { path: fixPath(round.id, o.id) } });
   const orderByText = chooseBy(round.shipByDeadline);
@@ -592,7 +594,7 @@ async function sendOpenFailures(
           ...also,
           orderByText,
         },
-        links: open,
+        links: { open: { path: roundPath(round.id) } },
       },
       deps.notify,
     );

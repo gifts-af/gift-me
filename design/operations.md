@@ -267,6 +267,21 @@ Code and migration ship together. If the code is rolled back with Vercel's insta
 
 Vercel's instant rollback brings back the old budget section, which can't show or clear a base budget, while `round_candidates` keeps using it. After the rollback, run `delete from concierge.budgets where occasion_kind = 'any';` on the database. This deletes base budgets people typed, for good, which is fine before launch. Occasion budgets are untouched (T73).
 
+## Gifts in progress (ALL-167)
+
+**What it does:** Home and a person's page list every gift round that can still change or has a gift on its way ([ui.md](ui.md) > Gifts in progress). Read-only.
+
+| Setting (`concierge.app_settings`) | Default | Meaning |
+|---|---|---|
+| `gift_progress_days` | 14 | Days a bought gift stays listed: after it was delivered, or after the later of the occasion and its due day when it was never marked delivered. With no row, the list isn't shown (`gifts_in_progress_failed`); the rest of both pages works, so deleting the row turns the list off |
+
+| Event (ids only, E6) | Means |
+|---|---|
+| `gifts_in_progress_failed` | The list couldn't be read (or the setting is missing), so it wasn't shown |
+| `gift_progress_read_failed` | One person's list or shared address (`what`), the paid check or what placing checks (`hold_gate`) couldn't be read; their lines say less, the rest are unchanged |
+| `gift_progress_round_failed` | One round's line couldn't be worked out, so that row was left out |
+| `round_hold_failed` | The round page couldn't read a held gift's address or what placing checks, so it says "Waiting to order" |
+
 ## Order tracking (ALL-33)
 
 **What it does:** Zinc's tracking webhooks fill in where each bought gift is. The daily tick sends one summary email per buyer for late, back-on-time and store-cancelled-after-ship-by news. The buyer can tap "It arrived" on a shipped gift. Design: [technical design §6.6](technical-design.md), decision T89.

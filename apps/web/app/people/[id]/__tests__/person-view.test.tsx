@@ -80,6 +80,17 @@ describe("PersonView", () => {
     expect(screen.queryByRole("button", { name: /photo/i })).toBeNull();
   });
 
+  // ALL-167
+  it("puts their gifts in progress under the list prompt and above what we know", async () => {
+    getPerson.mockResolvedValue(dad);
+    render(await PersonView({ id: "p1", photoFailed: false, gifts: <p>Their gifts</p> }));
+    const gifts = screen.getByText("Their gifts");
+    const prompt = screen.getByRole("heading", { name: "Does Dad have a GiftsAF list?" });
+    const know = screen.getByRole("heading", { name: "What we know" });
+    expect(prompt.compareDocumentPosition(gifts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(gifts.compareDocumentPosition(know) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   // ALL-123: an unlinked person's page asks for the list link at the top, in place of the row.
   describe("the list prompt", () => {
     it("shows first, with the copy, the paste box and the notice, and no Their list row", async () => {

@@ -25,6 +25,8 @@ import { isId } from "../profile/rules";
 import { listGiftCandidates } from "../ideas/store";
 import { claimRoundNow, concierge, fail, withLease } from "../purchase/store";
 import type { DbDeps } from "../zinc/types";
+import type { HoldGate } from "./hold-gate";
+import { aboutOrders, beforeIdeas, heldAddress, holdState, roundOutcome, waitingOn, type Closed, type HoldState } from "./outcome";
 import { createSupabaseRoundStore } from "./store";
 
 type UserDb = SupabaseClient<Database>;
@@ -342,6 +344,8 @@ export type RoundPageView = {
     budgetCents: number | null;
     status: string;
     attentionReason: string | null;
+    /** UTC, like the tick. */
+    today: CalendarDate;
   };
   overBudgetPct: number | null;
   ideas: RoundPageIdea[];
@@ -362,6 +366,8 @@ export type RoundPageView = {
    * paid features, when nothing is looked for.
    */
   waiting: "looking" | "told" | "address" | null;
+  /** Why an open round's held gifts wait, and which of them it's about; null with none. */
+  hold: (HoldState & { orderIds: string[] }) | null;
   nextBestIdeaId: string | null;
   buyYourself: BuyYourself[];
 };
@@ -383,7 +389,7 @@ const ListShape = z.object({
 type ListItem = z.infer<typeof ListShape>["items"][number];
 
 /** The person's linked list as the buyer sees it now, or null when it's no longer shared. */
-async function personList(userDb: UserDb, personId: string): Promise<ListItem[] | null> {
+export async function personList(userDb: UserDb, personId: string): Promise<ListItem[] | null> {
   const { data, error } = await userDb.schema("lists").rpc("person_list", { p_person_id: personId });
   if (error) {
     // The person was deleted: nothing of theirs is shared any more.
@@ -394,49 +400,73 @@ async function personList(userDb: UserDb, personId: string): Promise<ListItem[] 
   return ListShape.parse(data).items;
 }
 
+/** Whether the buyer can still get a list gift, going by the list as they see it now. */
+export const listState = (itemId: string | null, item: ListItem | undefined) => ({
+  claimed: item !== undefined && item.claimed && !item.claimed_by_me,
+  claimedByMe: item !== undefined && item.claimed_by_me,
+  // Off the list the buyer sees now, as lists.item_shared counts it.
+  noLongerShared: itemId !== null && item === undefined,
+});
+
+/**
+ * Whether the list a person is linked to shares an address with the buyer. Only its city and state are
+ * readable here (D38), so a shared address the engine would refuse as incomplete still counts.
+ */
+export async function sharesAddress(userDb: UserDb, personId: string): Promise<boolean> {
+  const { data, error } = await userDb.rpc("shared_city_for_person", { p_person_id: personId });
+  // The person was deleted: there is no one to ship to (as personList).
+  if (error && error.code !== "P0002") fail("Reading the shared city failed", error);
+  return error === null && data !== null;
+}
+
+type AddressRow = Pick<
+  Database["public"]["Tables"]["people"]["Row"],
+  "recipient_first_name" | "recipient_last_name" | "address_line1" | "address_line2" | "city" | "state" | "zip" | "country"
+>;
+
+/** Whether a person's own saved address could be shipped to. */
+export const ownAddressShips = (p: AddressRow) =>
+  isShippableAddress({
+    firstName: p.recipient_first_name,
+    lastName: p.recipient_last_name,
+    line1: p.address_line1,
+    line2: p.address_line2,
+    city: p.city,
+    state: p.state,
+    zip: p.zip,
+    country: p.country,
+  });
+
+/** Whether the address saved on the person could be shipped to. */
+async function ownAddress(userDb: UserDb, personId: string): Promise<boolean> {
+  const { data, error } = await userDb
+    .from("people")
+    .select("recipient_first_name, recipient_last_name, address_line1, address_line2, city, state, zip, country")
+    .eq("id", personId)
+    .maybeSingle();
+  if (error) fail("Reading the person's address failed", error);
+  return data !== null && ownAddressShips(data);
+}
+
 /** Whether a gift could ship to the person: a usable address of their own, or one shared through their list. */
 async function hasAddress(userDb: UserDb, personId: string): Promise<boolean> {
-  const [person, shared] = await Promise.all([
-    userDb
-      .from("people")
-      .select("recipient_first_name, recipient_last_name, address_line1, address_line2, city, state, zip, country")
-      .eq("id", personId)
-      .maybeSingle(),
-    userDb.rpc("shared_city_for_person", { p_person_id: personId }),
-  ]);
-  if (person.error) fail("Reading the person's address failed", person.error);
-  // The person was deleted: there is no one to ship to (as personList).
-  if (shared.error && shared.error.code !== "P0002") fail("Reading the shared city failed", shared.error);
-  if (shared.error === null && shared.data !== null) return true;
-  const p = person.data;
-  return (
-    p !== null &&
-    isShippableAddress({
-      firstName: p.recipient_first_name,
-      lastName: p.recipient_last_name,
-      line1: p.address_line1,
-      line2: p.address_line2,
-      city: p.city,
-      state: p.state,
-      zip: p.zip,
-      country: p.country,
-    })
-  );
+  const [own, shared] = await Promise.all([ownAddress(userDb, personId), sharesAddress(userDb, personId)]);
+  return own || shared;
 }
 
 /**
  * What a round with no ideas yet is waiting on (RoundPageView.waiting). Only words on the page, so a
  * failed read is logged and says nothing: the buy and fix pages read the same view.
  */
-async function waitingOn(
+async function readWaiting(
   userDb: UserDb,
   r: { id: string; user_id: string; person_id: string; status: string },
   ideasFoundAt: string[],
 ): Promise<RoundPageView["waiting"]> {
   try {
     if (!(await hasPaidFeatures(userDb, r.user_id))) return null;
-    // The round itself only moves at the next daily tick, so its status can lag a saved address.
     const addressed = r.status === "generating" || (await hasAddress(userDb, r.person_id));
+    // Before the next read, so its failure never hides "Add address".
     if (r.status === "needs_address" && !addressed) return "address";
     const told = await userDb
       .schema("concierge")
@@ -451,27 +481,49 @@ async function waitingOn(
       .limit(1)
       .maybeSingle();
     if (told.error) fail("Reading the round's no-ideas email failed", told.error);
-    const toldAt = told.data?.sent_at ?? null;
-    if (toldAt !== null && ideasFoundAt.every((at) => Date.parse(at) < Date.parse(toldAt))) return "told";
-    return addressed ? "looking" : "address";
+    return waitingOn({ status: r.status, paid: true, hasAddress: addressed, toldAt: told.data?.sent_at ?? null, ideasFoundAt });
   } catch (err) {
     logEvent("round_waiting_failed", { round_id: r.id, user_id: r.user_id, ...errorFields(err) });
     return null;
   }
 }
 
-const ORDERED_STATUSES = new Set(["ordered", "delivered", "complete"]);
-// Not given, as concierge.order_is_given counts it (failed ones are split out below).
-const NOT_LIVE = new Set(["cancelled", "failed", "refunded"]);
-const BOUGHT = new Set(["placed", "shipped", "delivered"]);
-const IN_FLIGHT = new Set(["placing", "unconfirmed"]);
-const NO_IDEAS_YET = new Set(["scheduled", "needs_address", "generating"]);
+/** Why the round's held gifts wait, by what's so now; a failed read is logged and asks nothing of the buyer. */
+async function readHold(
+  userDb: UserDb,
+  r: { id: string; user_id: string; person_id: string; attention_reason: string | null },
+  orders: Parameters<typeof heldAddress>[0],
+  readGate: (() => Promise<HoldGate>) | undefined,
+): Promise<HoldState> {
+  const reason = r.attention_reason;
+  try {
+    const [gate, own, shared] = await Promise.all([
+      readGate ? readGate() : null,
+      reason === "address" && ownAddress(userDb, r.person_id),
+      reason === "address" && sharesAddress(userDb, r.person_id),
+    ]);
+    return holdState(reason, gate, { own, shared, ...heldAddress(orders) });
+  } catch (err) {
+    logEvent("round_hold_failed", { round_id: r.id, user_id: r.user_id, ...errorFields(err) });
+    return holdState(reason, null, null);
+  }
+}
+
+const CLOSED_TEXT: Record<Exclude<Closed, "ordered">, string> = {
+  moved: "The date changed, so this round ended.",
+  confirming: "We're still confirming your order.",
+  passed: "This occasion has passed",
+  none_coming: "No gift is on its way",
+  too_late: "It's too late to send a gift in time",
+  stopped: "This gift round was stopped",
+};
 
 /**
  * The round screen's read, with the signed-in user's client: null when RLS hides the round
- * (it's someone else's, or gone). `now` is for "today" (UTC, like the tick).
+ * (it's someone else's, or gone). `now` is for "today" (UTC, like the tick). `gate` reads what placing
+ * checks, only when a gift is held; without it a hold asks nothing of the buyer.
  */
-export async function roundView(roundId: string, userDb: UserDb, now: Date): Promise<RoundPageView | null> {
+export async function roundView(roundId: string, userDb: UserDb, now: Date, gate?: () => Promise<HoldGate>): Promise<RoundPageView | null> {
   if (!isId(roundId)) return null;
   const db = userDb.schema("concierge");
   const round = await db
@@ -494,7 +546,7 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
     db
       .from("orders")
       .select(
-        "id, idea_id, status, failure_type, resolved, total_cents, refund_cents, max_price_cents, fee_cents, est_delivery_date, placed_at, delivered_at, packages, created_at",
+        "id, idea_id, status, failure_type, resolved, ship_to, total_cents, refund_cents, max_price_cents, fee_cents, est_delivery_date, placed_at, delivered_at, packages, created_at",
       )
       .eq("round_id", roundId)
       .order("created_at")
@@ -529,17 +581,13 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
       rank: i.rank,
       status: i.status,
       arriveBy: i.arrive_by,
-      claimed: item !== undefined && item.claimed && !item.claimed_by_me,
-      claimedByMe: item !== undefined && item.claimed_by_me,
-      // Off the list the buyer sees now, as lists.item_shared counts it.
-      noLongerShared: i.list_item_id !== null && item === undefined,
+      ...listState(i.list_item_id, item),
       livePrice: i.retailer_product_id !== null,
     };
   });
 
   const ideaOf = new Map(ideasRes.data.map((i) => [i.id, i]));
-  const resolved = new Set(ordersRes.data.filter((o) => o.resolved).map((o) => o.id));
-  const all: RoundPageOrder[] = ordersRes.data.map((o) => {
+  const all = ordersRes.data.map((o): RoundPageOrder & { resolved: boolean } => {
     const idea = ideaOf.get(o.idea_id);
     return {
       id: o.id,
@@ -547,6 +595,7 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
       title: idea?.title ?? "",
       status: o.status,
       failureType: o.failure_type,
+      resolved: o.resolved,
       totalCents: o.total_cents,
       refundCents: o.refund_cents,
       maxPriceCents: o.max_price_cents,
@@ -560,32 +609,24 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
       deliveryDaysMax: idea?.delivery_days_max ?? null,
     };
   });
-  const liveOrders = all.filter((o) => !NOT_LIVE.has(o.status));
-  // A failure already dealt with (replaced, or its round closed) is nothing to fix.
-  const failedOrders = all.filter((o) => o.status === "failed" && !resolved.has(o.id));
-  const storeCancelled = all.filter((o) => o.status === "failed" && o.failureType === "store_cancelled");
-
   const today = now.toISOString().slice(0, 10);
-  // From the ship-by day on, as approve_round refuses it.
-  const pastDeadline = today >= r.ship_by_deadline;
-  const ended = r.closed_at !== null || r.status === "skipped" || ORDERED_STATUSES.has(r.status);
-  // An ordered round's orders stay placing until the store confirms them (reconcile_round never leaves
-  // an unconfirmed one there). A round can also end with only some of its gifts bought.
-  const bought = ORDERED_STATUSES.has(r.status) ? liveOrders : liveOrders.filter((o) => BOUGHT.has(o.status));
-  let closedText: string | null = null;
-  if (ended || pastDeadline) {
-    // Only a date change leaves a round without a year, and never one with a gift on its way.
-    if (r.occasion_year === null) closedText = "The date changed, so this round ended.";
-    else if (bought.length > 0) closedText = `Already ordered: ${bought.map((o) => o.title).join(", ")}`;
-    // Zinc may still turn out to have bought it, so nothing here may say no gift is coming.
-    else if (liveOrders.some((o) => IN_FLIGHT.has(o.status))) closedText = "We're still confirming your order.";
-    else if (today > r.occasion_date) closedText = "This occasion has passed";
-    else if (storeCancelled.length > 0 || (ended && all.some((o) => o.status === "cancelled" || o.status === "refunded"))) closedText = "No gift is on its way";
-    else if (pastDeadline) closedText = "It's too late to send a gift in time";
-    else closedText = "This gift round was stopped";
-  }
+  const outcome = roundOutcome(
+    { status: r.status, closedAt: r.closed_at, shipBy: r.ship_by_deadline, occasionDate: r.occasion_date, occasionYear: r.occasion_year },
+    all,
+    today,
+  );
+  const { live: liveOrders, failed: failedOrders, storeCancelled, closed } = outcome;
+  const closedText =
+    closed === null ? null : closed === "ordered" ? `Already ordered: ${outcome.bought.map((o) => o.title).join(", ")}` : CLOSED_TEXT[closed];
 
-  const waiting = closedText === null && NO_IDEAS_YET.has(r.status) ? await waitingOn(userDb, r, ideasRes.data.map((i) => i.created_at)) : null;
+  const waiting = closed === null && beforeIdeas(r.status) ? await readWaiting(userDb, r, ideasRes.data.map((i) => i.created_at)) : null;
+
+  let hold: RoundPageView["hold"] = null;
+  if (closed === null && liveOrders.some((o) => o.status === "held")) {
+    const orders = ordersRes.data.map((o) => ({ id: o.id, status: o.status, failureType: o.failure_type, ideaId: o.idea_id, shipTo: o.ship_to }));
+    const state = await readHold(userDb, r, orders, gate);
+    hold = { ...state, orderIds: aboutOrders(state, orders) };
+  }
 
   const buyable = ideas.filter((i) => !i.claimed && !i.noLongerShared && !liveOrders.some((o) => o.ideaId === i.id));
   const nextBestIdeaId =
@@ -628,6 +669,7 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
       budgetCents: r.budget_cents,
       status: r.status,
       attentionReason: r.attention_reason,
+      today,
     },
     overBudgetPct: account.data?.over_budget_pct ?? null,
     ideas,
@@ -636,6 +678,7 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
     storeCancelled,
     closedText,
     waiting,
+    hold,
     nextBestIdeaId,
     buyYourself,
   };

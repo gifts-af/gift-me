@@ -116,6 +116,15 @@ export function isLate(expected: string, occasionDate: string): boolean {
   return compareDates(expected, occasionDate) > 0;
 }
 
+/**
+ * How an expected day reads today: late (after the occasion, and still to come), due, or past. Once
+ * it has passed without news, "may arrive" or "due" would be a guess.
+ */
+export function arrivalState(expected: string, occasionDate: string, today: string): "late" | "due" | "past" {
+  if (compareDates(expected, today) < 0) return "past";
+  return isLate(expected, occasionDate) ? "late" : "due";
+}
+
 export function trackingNews(o: {
   expected: string | null;
   occasionDate: string;

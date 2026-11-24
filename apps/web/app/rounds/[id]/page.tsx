@@ -9,7 +9,8 @@ import { TopBar } from "@/components/app-shell/top-bar";
 import { APP_NAME } from "@/lib/brand";
 import { createClient } from "@/lib/supabase/server";
 import { roundAccess, roundView } from "@/modules/concierge";
-import { roundDbDeps, settingInt } from "@/lib/wiring";
+import { roundDbDeps, settingInt, zincWiring } from "@/lib/wiring";
+import { holdGateFor } from "@/lib/hold-gate";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { markArrived, rejectAction, rejectionOutlookAction, setBudgetAction } from "../actions";
 import { OtherAccount } from "../access";
@@ -52,11 +53,14 @@ async function Loaded({ params }: { params: Promise<{ id: string }> }) {
   if (access === "other") return <OtherAccount />;
 
   // Everything shown is read as the user, so RLS applies (T26).
-  const view = await roundView(id, supabase as unknown as SupabaseClient<Database>, new Date());
+  const view = await roundView(id, supabase as unknown as SupabaseClient<Database>, new Date(), holdGateFor(supabase, userId));
   if (!view) notFound();
   const name = view.round.personName;
   // "It arrived" shows only while order tracking is on (E7); markArrived checks again.
   const tracking = (await settingInt(createAdminClient(), "order_tracking_enabled")) === 1;
+
+  // The same page the emails send a short balance to; Paying for gifts where Zinc is off or unreadable.
+  const zinc = view.hold?.kind === "funds" ? await zincWiring(createAdminClient()).catch(() => null) : null;
 
   return (
     <>
@@ -64,6 +68,7 @@ async function Loaded({ params }: { params: Promise<{ id: string }> }) {
       <PageTitle>{name ? `Gift for ${name}` : "Gift"}</PageTitle>
       <RoundScreen
         view={view}
+        walletUrl={zinc?.walletUrl}
         rejectAction={rejectAction}
         setBudgetAction={setBudgetAction}
         outlookAction={rejectionOutlookAction}

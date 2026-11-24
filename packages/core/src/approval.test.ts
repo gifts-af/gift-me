@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FACT_VALUE_MAX, nextBestIdea, picksBar, rejectionFacts } from "./approval";
+import { FACT_VALUE_MAX, ideaBlock, nextBestIdea, picksBar, rejectionFacts } from "./approval";
 import type { ScheduleSettings } from "./schedule";
 
 const s: ScheduleSettings = {
@@ -124,5 +124,16 @@ describe("picksBar", () => {
     expect(picksBar([3000, 3000], 5000, 20)).toEqual({ count: 2, totalCents: 6000, fit: "over" });
     expect(picksBar([3000, 3000], 7000, 20)).toEqual({ count: 2, totalCents: 6000, fit: "within" });
     expect(picksBar([3000, 3000, 3000], 5000, 20)).toEqual({ count: 3, totalCents: 9000, fit: "dropped" });
+  });
+});
+
+describe("ideaBlock", () => {
+  it.each([
+    [{}, null],
+    [{ claimedByMe: true }, "own_order"],
+    [{ claimed: true, claimedByMe: true }, "claimed"],
+    [{ noLongerShared: true, claimed: true }, "not_shared"],
+  ])("%o is %s", (over, block) => {
+    expect(ideaBlock({ noLongerShared: false, claimed: false, claimedByMe: false, ...over })).toBe(block);
   });
 });

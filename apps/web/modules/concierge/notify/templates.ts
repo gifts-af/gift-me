@@ -116,10 +116,11 @@ export type TemplateData = {
   reaction_prompt: { rounds: (Occasion & { gifts: { title: string }[] })[] };
   needs_address: Occasion & { reminder?: boolean };
   /**
-   * `held`: the buyer chose a gift, but it couldn't be bought before the deadline. `partial`:
+   * `held`: the buyer chose a gift, but it couldn't be bought before the deadline. `partial`
+   * (`coming`: another gift is, or may be, on its way):
    * some of the chosen gifts were cancelled at the deadline while others are on their way.
    */
-  skipped: Occasion & { held?: boolean; partial?: { cancelled: string[]; onItsWay: string[] } };
+  skipped: Occasion & { held?: boolean; partial?: { cancelled: string[]; onItsWay: string[]; coming: boolean } };
   hold_funds: Gifts & {
     neededText: string;
     /** The balance and shortfall, when the balance is known. */
@@ -566,7 +567,7 @@ export const TEMPLATES: {
               `We're sorry. We couldn't buy ${giftList(d.partial.cancelled)} for ${d.personName}'s ${d.occasion} in time, so we cancelled ${itOrThem(d.partial.cancelled)}. You haven't been charged for ${itOrThem(d.partial.cancelled)}.`,
               ...onItsWayLine(d.partial.onItsWay, "The good news: "),
             ],
-            button: { label: `Open ${d.personName}'s page`, url: links.open },
+            button: { label: d.partial.coming ? `See ${d.personName}'s gift` : `Open ${d.personName}'s page`, url: links.open },
             footer: `What happens next: you can still pick something up yourself in ${d.partial.cancelled.length > 1 ? "their" : "its"} place.`,
           }),
         }
@@ -720,7 +721,7 @@ export const TEMPLATES: {
         `We ordered the ${d.giftTitle} for ${d.personName}'s ${d.occasion} on ${d.dateText}.` +
           (d.cityText ? ` It's on its way to ${d.cityText}.` : " It's on its way."),
       ],
-      button: { label: `Open ${d.personName}'s page`, url: links.open },
+      button: { label: `See ${d.personName}'s gift`, url: links.open },
     }),
   }),
 
@@ -886,7 +887,7 @@ export const TEMPLATES: {
         heading: title,
         paragraphs: [lead, ...alsoOrderedLines(d)],
         rows: d.failed.map((f) => ({ title: f.title, detail: f.detail })),
-        button: { label: `Open ${d.personName}'s page`, url: links.open },
+        button: { label: `See ${d.personName}'s gift`, url: links.open },
         link: d.failed.filter((f) => f.action).map((f) => ({ label: f.action as string, url: f.url })),
         footer: `What happens next: there's still time to put this right. ${d.working?.length ? elseBought(d) : "Nothing else is bought until you choose."} Choose by ${d.orderByText} so it arrives in time. If you don't, we'll close this round then and let you know.`,
       }),
@@ -1043,7 +1044,7 @@ export const SAMPLE_DATA: {
   out_of_stock: { data: FAILURE, links: { open: "https://example.com/a/open-token" } },
   too_late: { data: FAILURE, links: { open: "https://example.com/a/open-token" } },
   missed_on_us: { data: GIFT, links: { open: "https://example.com/a/open-token" } },
-  ordered: { data: { ...ONE_GIFT, cityText: "Dayton" }, links: { open: "https://example.com/a/open-token" } },
+  ordered: { data: { ...ONE_GIFT, cityText: "Dayton" }, links: { open: "https://example.com/rounds/r1" } },
   failed_late: {
     data: { ...OCC, failed: [{ title: "Le Creuset mug set", detail: "The store ran out." }] },
     links: { open: "https://example.com/a/open-token" },
@@ -1069,7 +1070,7 @@ export const SAMPLE_DATA: {
       onItsWay: ["Cast-iron herb planter"],
       orderByText: "Thursday, March 5",
     },
-    links: { open: "https://example.com/a/open-token" },
+    links: { open: "https://example.com/rounds/r1" },
   },
   store_cancelled_late: {
     data: { ...OCC, gifts: [{ title: "Le Creuset mug set", store: "Walmart", amountText: "$42.18" }] },

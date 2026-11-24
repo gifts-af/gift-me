@@ -54,7 +54,16 @@ function RowGroup({ title, children }: { title?: string; children: React.ReactNo
  * list of rows. Each row shows its value and opens its own screen, where it
  * changes. An unknown, deleted or someone else's id is a 404.
  */
-export async function PersonView({ id, photoFailed }: { id: string; photoFailed: boolean }) {
+export async function PersonView({
+  id,
+  photoFailed,
+  gifts,
+}: {
+  id: string;
+  photoFailed: boolean;
+  /** Their gifts in progress, which load on their own. */
+  gifts?: React.ReactNode;
+}) {
   const supabase = await createClient();
   const userId = (await supabase.auth.getClaims()).data?.claims?.sub;
   if (!userId) redirect("/");
@@ -95,6 +104,8 @@ export async function PersonView({ id, photoFailed }: { id: string; photoFailed:
       {askForList && (
         <ListLink variant="prompt" name={person.name} personId={person.id} keepsList={false} linkAction={linkUnlinkedListAction} />
       )}
+
+      {gifts}
 
       {photoFailed && (
         <p role="status" className="text-[13px] text-muted-foreground">

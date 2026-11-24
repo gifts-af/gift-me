@@ -53,6 +53,8 @@ describe.skipIf(!stack)("held rounds: failures and due rounds (real local databa
     expect(text).toContain("- Stoneware mug set (The price went up more than you allowed for. Approve the new price, or choose another gift.)");
     expect(text).toContain("- Linen apron (The store ran out. Choose another gift.)");
     expect(text).toContain("Review the new price for the Stoneware mug set:");
+    // The button opens the round, with a plain link.
+    expect(text).toMatch(new RegExp(`^See Mary's gift: ${BASE}/rounds/${r.roundId}$`, "m"));
     // Each gift links to its own fix page (ALL-29 AC-16).
     expect(text).toContain(`Review the new price for the Stoneware mug set: ${BASE}/rounds/${r.roundId}/fix/${r.orderIds[0]}`);
     expect(text).toContain(`Choose another gift instead of the Linen apron: ${BASE}/rounds/${r.roundId}/fix/${r.orderIds[1]}`);
