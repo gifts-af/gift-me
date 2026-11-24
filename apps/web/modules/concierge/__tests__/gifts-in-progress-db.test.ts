@@ -211,6 +211,77 @@ describe.skipIf(stack === null)("giftsInProgress (real local database)", () => {
     expect((await u.rows()).map((g) => g.roundId).sort()).toEqual(still.sort());
   });
 
+  describe("a birthday that moves (T92)", () => {
+    const year = 2030;
+    async function birthday(u: User, p: string) {
+      const o = await pg.query(
+        "insert into concierge.occasions (user_id, person_id, kind, month, day) values ($1, $2, 'birthday', 3, 14) returning id",
+        [u.id, p],
+      );
+      return o.rows[0].id as string;
+    }
+    /** As the app saves it: the user's own write, so the real trigger runs. */
+    const move = async (u: User, occasionId: string) => {
+      const { error } = await u.db.schema("concierge").from("occasions").update({ day: 20 }).eq("id", occasionId);
+      if (error) throw error;
+    };
+    async function birthdayRound(u: User, p: string, occasionId: string, shipBy: number, orders: Order[] = [], o: { status?: string; reason?: string } = {}) {
+      const r = await pg.query(
+        `insert into concierge.gift_rounds (user_id, person_id, occasion_id, occasion_year, occasion_date, ship_by_deadline, status, attention_reason)
+         values ($1, $2, $3, $4, $5, $6, $7::concierge.round_status, $8) returning id`,
+        [u.id, p, occasionId, year, day(shipBy + 9), day(shipBy), o.status ?? "awaiting_approval", o.reason ?? null],
+      );
+      const roundId = r.rows[0].id as string;
+      const idea = await pg.query(
+        `insert into concierge.gift_ideas (user_id, round_id, person_id, title, product_url, price_cents, est_total_cents, rank, source)
+         values ($1, $2, $3, 'Gift', 'https://shop.test/p', 4000, 4000, 1, 'generated') returning id`,
+        [u.id, roundId, p],
+      );
+      for (const x of orders)
+        await pg.query(
+          `insert into concierge.orders (user_id, round_id, idea_id, funding_mode, max_price_cents, fee_cents, status, failure_type, est_delivery_date, placed_at, ship_to, ship_city, ship_state)
+           values ($1, $2, $3, 'zinc_wallet', 5000, 100, $4, $5, $6, $7, 'recipient', 'Dayton', 'OH')`,
+          [u.id, roundId, idea.rows[0].id, x.status, x.failure ?? null, x.est === undefined ? null : day(x.est), x.status === "shipped" ? NOW : null],
+        );
+      return roundId;
+    }
+
+    it.each([
+      ["no gift chosen", [], {}],
+      ["only a failed one", [{ status: "failed", failure: "out_of_stock" }], { status: "needs_attention", reason: "out_of_stock" }],
+    ] as [string, Order[], { status?: string; reason?: string }][])("with %s, the old round leaves and the new one appears", async (_what, orders, o) => {
+      const u = await newUser();
+      const p = await person(u);
+      const occasionId = await birthday(u, p);
+      const old = await birthdayRound(u, p, occasionId, 20, orders, o);
+      expect((await u.rows()).map((g) => g.roundId)).toEqual([old]);
+
+      await move(u, occasionId);
+      expect(await u.rows()).toEqual([]);
+      expect(await u.rows(p)).toEqual([]);
+      expect((await roundView(old, u.db, NOW))?.closedText).toBe("The date changed, so this round ended.");
+
+      // The tick's round for the real date, in the place the old one held.
+      const real = await birthdayRound(u, p, occasionId, 26);
+      for (const rows of [await u.rows(), await u.rows(p)]) {
+        expect(rows).toEqual([
+          expect.objectContaining({ roundId: real, occasionKind: "birthday", date: day(26), line: expect.objectContaining({ text: `1 idea ready · Choose by ${chooseBy(day(26))}` }) }),
+        ]);
+      }
+    });
+
+    it("with a gift on its way, the gift keeps its row and its own date", async () => {
+      const u = await newUser();
+      const p = await person(u);
+      const occasionId = await birthday(u, p);
+      const roundId = await birthdayRound(u, p, occasionId, 2, [{ status: "shipped", est: 5 }], { status: "ordered" });
+      await move(u, occasionId);
+      expect(await u.rows()).toEqual([
+        expect.objectContaining({ roundId, date: day(11), line: expect.objectContaining({ text: `Shipped · due ${shortDate(day(5))}` }) }),
+      ]);
+    });
+  });
+
   describe("a gift held for an address", () => {
     const heldRound = (u: User, p: string, orders: Order[] = [{ status: "held" }]) =>
       round(u, p, { status: "needs_attention", reason: "address", ideas: [{}], orders });

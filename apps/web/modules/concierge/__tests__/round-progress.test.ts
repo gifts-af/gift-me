@@ -273,6 +273,20 @@ it("an attention round with nothing it can name still shows", () => {
   expect(line(HELD(null), [order("refunded")])).toEqual({ text: "Needs a look", tone: "warn", needsBuyer: true });
 });
 
+describe("a round a date change ended (T92)", () => {
+  const ended = round({ status: "skipped", closedAt: "2026-12-09T00:00:00Z", occasionYear: null });
+  it.each([
+    ["no orders", []],
+    ["a failed gift, dealt with at the close", [order("failed", { resolved: true })]],
+    ["a gift the store cancelled", [order("failed", { failureType: "store_cancelled", resolved: true })]],
+  ])("with %s leaves, and the page says why on any day", (_what, orders) => {
+    for (const today of [TODAY, "2026-12-16", "2026-12-26"]) {
+      expect(line(ended, orders, { readyIdeas: 3, today })).toBeNull();
+      expect(roundOutcome(ended, orders, today).closed).toBe("moved");
+    }
+  });
+});
+
 describe("the round page's rules", () => {
   it.each([
     [ORDERED, [order("placing")], "ordered"],

@@ -213,7 +213,7 @@ My list saves as you go too, with no Save button and no "Unsaved changes" bar. W
 | Shipped · due Mon, Dec 14 | Everything on its way has shipped ("was due" once that day has passed) | Muted |
 | Delivered | Everything has arrived, until the round is complete | Muted |
 
-A line is never false. With several gifts, the one that most needs the buyer wins (one exception: a held gift next to one being confirmed says "Confirming your order", since which hold it is can't be read then), and Shipped or Delivered is never said while another is unfinished. "Choose by" is the day before ship-by, and a round nobody can buy from any more leaves the list. A bought gift leaves `gift_progress_days` (14) after it was delivered or, when nothing says it was, after the later of the occasion and its due day. The rules are the round screen's own (`modules/concierge/rounds/outcome.ts`). One person whose list or address can't be read never hides the rest.
+A line is never false. With several gifts, the one that most needs the buyer wins (one exception: a held gift next to one being confirmed says "Confirming your order", since which hold it is can't be read then), and Shipped or Delivered is never said while another is unfinished. "Choose by" is the day before ship-by, and a round nobody can buy from any more, or that a date change ended (T92), leaves the list; a gift already set keeps its row and its own date. A bought gift leaves `gift_progress_days` (14) after it was delivered or, when nothing says it was, after the later of the occasion and its due day. The rules are the round screen's own (`modules/concierge/rounds/outcome.ts`). One person whose list or address can't be read never hides the rest.
 
 ## A person's page (ALL-127)
 
