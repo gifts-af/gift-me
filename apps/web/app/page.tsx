@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { AppNav } from "@/components/app-shell/app-nav";
 import { PageFrame, PageTitle } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
+import { GiftsSection } from "@/components/home/gifts-section";
 import { HomeScreenTip } from "@/components/home/home-screen-tip";
 import { PeopleSection } from "@/components/home/people-section";
 import { YouCard } from "@/components/home/you-card";
@@ -20,6 +21,10 @@ export default function Home() {
       <PageFrame wide>
         <Suspense fallback={null}>
           <HomeScreenTip />
+        </Suspense>
+        {/* On its own, so slow or failing gifts never hold up the people. */}
+        <Suspense fallback={null}>
+          <GiftsSection />
         </Suspense>
         <section aria-labelledby="people-heading" className="flex flex-col gap-3">
           <PageTitle id="people-heading">People</PageTitle>
