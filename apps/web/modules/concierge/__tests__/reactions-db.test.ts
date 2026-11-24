@@ -52,7 +52,7 @@ describe.skipIf(!stack)("reactions (real local database)", () => {
 
   const one = async (sql: string, args: unknown[]) => (await pg.query(sql, args)).rows[0];
 
-  type Gift = { title: string; source?: string; status?: string; total?: number | null; failure?: string; resolved?: boolean; refund?: number };
+  type Gift = { title: string; source?: string; status?: string; total?: number | null; failure?: string; resolved?: boolean; refund?: number; again?: boolean };
   type RoundSpec = { status?: string; date?: string; gifts?: Gift[]; kind?: string };
   const newPerson = async (u: User): Promise<string> =>
     (await one("insert into public.people (user_id, name, relationship) values ($1, 'Mary', 'friend') returning id", [u.id])).id;
@@ -69,8 +69,10 @@ describe.skipIf(!stack)("reactions (real local database)", () => {
       [u.id, personId, occasion.id, Number(date.slice(0, 4)), date, o.status ?? "delivered"],
     );
     const orderIds: string[] = [];
+    let idea: { id: string } | null = null;
     for (const [i, g] of (o.gifts ?? [{ title: "Fly rod" }]).entries()) {
-      const idea = await one(
+      // `again` is another order of the gift before it.
+      if (!g.again || !idea) idea = await one(
         `insert into concierge.gift_ideas (user_id, round_id, person_id, title, price_cents, est_total_cents, rank, source, list_item_id)
          values ($1, $2, $3, $4, 4000, 4500, $5, $6, $7) returning id`,
         [u.id, round.id, personId, g.title, i + 1, g.source ?? "generated", g.source === "list" ? randomUUID() : null],
@@ -84,7 +86,7 @@ describe.skipIf(!stack)("reactions (real local database)", () => {
         [
           u.id,
           round.id,
-          idea.id,
+          idea!.id,
           status,
           status === "delivered" ? "2026-02-19T12:00:00Z" : null,
           g.failure ?? null,
@@ -183,6 +185,13 @@ describe.skipIf(!stack)("reactions (real local database)", () => {
       expect(await save(r.orderIds[0], "loved", "good for her diabetes")).toEqual({ ok: false, reason: "sensitive", error: SENSITIVE_REFUSAL });
       expect(await reactions(r.roundId)).toEqual([]);
       expect(await facts(r.personId)).toEqual([]);
+    });
+
+    it("counts a line break as one character, however the browser sent it", async () => {
+      const r = await fresh();
+      // 500 characters with one, 501 as a form posts it.
+      expect(await save(r.orderIds[0], "liked", "a\r\n" + "x".repeat(498))).toMatchObject({ ok: true });
+      expect((await reactions(r.roundId))[0].note).toBe("a\n" + "x".repeat(498));
     });
 
     it("refuses an order not delivered, before the occasion, a bad rating and a long note (AC-10)", async () => {
@@ -336,6 +345,31 @@ describe.skipIf(!stack)("reactions (real local database)", () => {
       expect((await giftHistory(r.personId, buyer.db, NOW))[0].gifts).toEqual([expect.objectContaining({ outcome, totalCents: null })]);
     });
 
+    it("a gift bought again after it failed is listed once; after a store cancel, both show", async () => {
+      const failed = await fresh({
+        gifts: [
+          { title: "Mug", status: "failed", failure: "price_up", resolved: true },
+          { title: "Mug", again: true },
+        ],
+      });
+      expect((await giftHistory(failed.personId, buyer.db, NOW))[0].gifts).toEqual([
+        expect.objectContaining({ orderId: failed.orderIds[1], title: "Mug", outcome: "delivered" }),
+      ]);
+
+      const cancelled = await fresh({
+        gifts: [
+          { title: "Mug", status: "failed", failure: "store_cancelled", resolved: true, refund: 3300 },
+          { title: "Mug", again: true },
+        ],
+      });
+      await save(cancelled.orderIds[1], "loved");
+      expect((await giftHistory(cancelled.personId, buyer.db, NOW))[0].gifts).toEqual([
+        expect.objectContaining({ orderId: cancelled.orderIds[0], outcome: "store_cancelled", refundCents: 3300, rating: null }),
+        expect.objectContaining({ orderId: cancelled.orderIds[1], outcome: "delivered", refundCents: null, rating: "loved" }),
+      ]);
+      expect((await reactionView(cancelled.roundId, buyer.db, NOW))?.gifts.map((g) => g.orderId)).toEqual([cancelled.orderIds[1]]);
+    });
+
     it("keeps a round whose occasion was removed", async () => {
       const r = await fresh();
       await pg.query("update concierge.occasions set deleted_at = now() where id = $1", [r.occasionId]);
@@ -348,7 +382,13 @@ describe.skipIf(!stack)("reactions (real local database)", () => {
     it.each<[RoundSpec, boolean]>([
       [{ status: "delivered" }, true],
       [{ status: "complete" }, true],
+      [{ status: "delivered", date: "2026-03-02" }, true],
+      [{ status: "complete", date: "2026-03-02" }, true],
       [{ status: "skipped", gifts: [] }, true],
+      [{ status: "skipped", date: "2026-02-28", gifts: [] }, true],
+      [{ status: "skipped", date: "2026-03-01", gifts: [] }, false],
+      [{ status: "skipped", date: "2026-03-02", gifts: [] }, false],
+      [{ status: "skipped", date: "2026-03-02", gifts: [{ title: "A", status: "failed", failure: "store_cancelled", resolved: true }] }, false],
       [{ status: "ordered", gifts: [{ title: "A", status: "placed" }] }, true],
       [{ status: "needs_attention", gifts: [{ title: "A", status: "failed", failure: "price_up" }] }, true],
       [{ status: "ordered", date: "2026-03-01", gifts: [{ title: "A", status: "placed" }] }, false],

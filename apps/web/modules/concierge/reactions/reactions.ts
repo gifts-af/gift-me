@@ -49,7 +49,8 @@ export async function saveReaction(
   deps: DbDeps,
 ): Promise<ReactionSaveResult> {
   const { userId, orderId, rating } = input;
-  const note = input.note?.trim() || null;
+  // Forms post a line break as two characters; the limit counts it as one.
+  const note = input.note?.replaceAll("\r\n", "\n").trim() || null;
   // A malformed id is the form's own text, so it isn't logged (E6).
   const ids: Record<string, string> = isId(orderId) ? { user_id: userId, order_id: orderId } : { user_id: userId };
   const refuse = (reason: Exclude<ReactionRefusal, "failed">): ReactionSaveResult => {
@@ -179,8 +180,8 @@ export async function reactionView(roundId: string, userDb: Db, now: Date): Prom
 
 // ─── history ─────────────────────────────────────────────────────────────────
 
-/** Listed whatever their date; any other round is listed once its date has passed, if a gift was given. */
-const OVER: RoundStatus[] = ["delivered", "complete", "skipped"];
+/** Listed whatever their date; any other round once its date has passed, if it was skipped or a gift was given. */
+const OVER: RoundStatus[] = ["delivered", "complete"];
 
 /** As concierge.order_is_given counts it. */
 const isGiven = (o: { status: string; resolved: boolean }) =>
@@ -235,7 +236,7 @@ export async function giftHistory(personId: string, userDb: Db, now: Date): Prom
 
   const today = dayOf(now);
   return data
-    .filter((r) => OVER.includes(r.status) || (r.occasion_date < today && r.orders.some(isGiven)))
+    .filter((r) => OVER.includes(r.status) || (r.occasion_date < today && (r.status === "skipped" || r.orders.some(isGiven))))
     .map((r) => ({
       roundId: r.id,
       occasionKind: r.occasions?.kind ?? null,
@@ -264,13 +265,14 @@ export async function hasPastGifts(personId: string, userDb: Db, now: Date): Pro
   if (!isId(personId)) return false;
   try {
     const db = userDb.schema("concierge");
+    const today = dayOf(now);
     const [over, given] = await Promise.all([
-      db.from("gift_rounds").select("id").eq("person_id", personId).in("status", OVER).limit(1),
+      db.from("gift_rounds").select("id").eq("person_id", personId).or(`status.in.(${OVER.join()}),and(status.eq.skipped,occasion_date.lt.${today})`).limit(1),
       db
         .from("orders")
         .select("id, gift_rounds!inner(id)")
         .eq("gift_rounds.person_id", personId)
-        .lt("gift_rounds.occasion_date", dayOf(now))
+        .lt("gift_rounds.occasion_date", today)
         .or(GIVEN)
         .limit(1),
     ]);
