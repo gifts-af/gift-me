@@ -306,7 +306,7 @@ For `tracking.news_failed`, `tracking.news_release_failed` or `tracking.news_run
      and created_at between '<event time minus 5 minutes>' and '<event time>';
    ```
 
-   Check the list looks right, then delete exactly those `(round_id, step)` rows. The next daily run sends them. If the occasion date has passed there is nothing to resend.
+   Check the list looks right, then delete exactly those `(round_id, step)` rows. The next daily run sends them; the newest key an order still has decides what it was last told, so a missing older one does no harm. If the occasion date has passed there is nothing to resend.
 
 ### Delivered email isn't going out
 

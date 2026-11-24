@@ -134,6 +134,15 @@ describe("a gift whose date keeps changing", () => {
     }
   });
 
+  it.each([
+    ["late:2 given back after ontime:2", "2030-12-28", [`late:${ID}`, `ontime:${ID}`, `ontime:2:${ID}`], [`late:3:${ID}`]],
+    ["the first late deleted", "2030-12-28", [`ontime:${ID}`], [`late:2:${ID}`]],
+    ["the first on-time missing", "2030-12-20", [`late:${ID}`, `late:2:${ID}`], [`ontime:2:${ID}`]],
+    ["more than nine", "2030-12-28", [`late:10:${ID}`, `ontime:10:${ID}`], [`late:11:${ID}`]],
+  ])("a gap in the keys never mutes a gift: %s", async (_what, est, told, want) => {
+    expect(await claimed(est, told)).toEqual(want);
+  });
+
   it("another gift's keys don't count", async () => {
     const other = "00000000-0000-0000-0000-000000000999";
     expect(await claimed("2030-12-28", [`late:${other}`, `ontime:${other}`])).toEqual([`late:${ID}`]);

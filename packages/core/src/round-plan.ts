@@ -39,8 +39,8 @@ export type StepKey =
   | "no_ideas_again"
   // Once per round, when every gift arrived (ALL-33).
   | "delivered"
-  // Once per order (ALL-33): told it may be late, back on time, or that the store cancelled it
-  // too late to ship another.
+  // Once per change of an order's timing, the second as late:2:<id> and so on; and once that the
+  // store cancelled it too late to ship another.
   | `${"late" | "ontime" | "cancel_late"}:${string}`
   // Once per round, after the occasion: how did the gifts go over?
   | "reaction_prompt"

@@ -126,7 +126,7 @@ describe.skipIf(!stack)("the daily news summary (real local database)", () => {
     expect(await news(u, 6)).toEqual({ sent: 1 });
     expect(inbox(u).slice(before)).toEqual([
       "Good news: Mary's gift is back on time@2",
-      "Mary's gift may arrive after Christmas@4",
+      "Mary's gift may be late again@4",
       "Good news: Mary's gift is back on time@6",
     ]);
   });

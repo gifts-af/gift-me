@@ -120,15 +120,15 @@ export function trackingNews(o: {
   expected: string | null;
   occasionDate: string;
   today: string;
-  /** How many times each was told. They take turns, so equal counts mean "on time" is what the buyer last knew. */
-  toldLate: number;
-  toldOnTime: number;
+  /** The newest number told of each (0 = never). They take turns, so the larger one is what the buyer last knew. */
+  lastLate: number;
+  lastOnTime: number;
 }): "late" | "on_time" | null {
   if (compareDates(o.today, o.occasionDate) > 0) return null;
   if (!o.expected) return null;
   const late = isLate(o.expected, o.occasionDate);
-  if (late && o.toldLate === o.toldOnTime) return "late";
-  if (!late && o.toldLate > o.toldOnTime) return "on_time";
+  if (late && o.lastLate <= o.lastOnTime) return "late";
+  if (!late && o.lastLate > o.lastOnTime) return "on_time";
   return null;
 }
 
