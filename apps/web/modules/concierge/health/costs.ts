@@ -54,7 +54,7 @@ export function costLines(c: CostPerGift): EmailRow[] {
 
   const months = c.bills.map((b) => `${month(b.month)}: ${b.vendors.join(", ")}`).join(". ");
   const over = c.billGifts > 0 ? ` over ${plural(c.billGifts, "gift", "gifts")}` : ", no gifts in those months";
-  const bills = c.bills.length > 0 ? `${dollars(c.billCents)} of bills${over}. ${months}` : "No bills entered yet";
+  const bills = c.bills.length > 0 ? `${dollars(c.billCents)} of bills${over}. ${months}` : "No full month of bills yet";
 
   let fixed: EmailRow = { title: "Fixed part of the fee", detail: "Can't be worked out yet" };
   if (ai !== null && lookups !== null) {

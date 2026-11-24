@@ -222,7 +222,7 @@ A run killed by the platform before its `finally` records nothing. The tick's ow
 - [ ] Tests:
   - With gifts: counting start, gifts, AI suggestions ("2 of 41 AI records estimated"), lookups, running the service with its months and each month's vendors, and the fixed part **with and without running the service**.
   - No gifts: totals and "No completed gifts yet", no `NaN` or `Infinity`.
-  - No bills: "No bills entered yet", and only the fixed part without running the service.
+  - No bills: "No full month of bills yet", and only the fixed part without running the service.
   - Bills but no gifts in those months: the bill total, "no gifts in those months", and the same fixed part.
   - "QA account (not counted above): $0.42", also when it's $0.00.
   - "Costs couldn't be read", with `health.costs_failed` logged, while the problems above it are exactly the same.

@@ -60,13 +60,13 @@ describe("costLines", () => {
   it("no gifts and no bills", () => {
     const rows = said({ gifts: 0, billGifts: 0, bills: [], billCents: 0, aiCents: 0, lookupCents: 0, aiRecords: 0, aiEstimated: 0, excludedCents: 0 });
     expect(rows[1]).toEqual(["AI suggestions", "$0.00 in total, 0 of 0 AI records estimated"]);
-    expect(rows[3]).toEqual(["Running the service", "No bills entered yet"]);
+    expect(rows[3]).toEqual(["Running the service", "No full month of bills yet"]);
     expect(JSON.stringify(rows)).not.toMatch(/NaN|Infinity/);
   });
 
   it("no bills: says so, and only the fixed part without running the service", () => {
     const rows = said({ bills: [], billCents: 0, billGifts: 0 });
-    expect(rows[3]).toEqual(["Running the service", "No bills entered yet"]);
+    expect(rows[3]).toEqual(["Running the service", "No full month of bills yet"]);
     expect(rows[4]).toEqual(["Fixed part of the fee: $1.52", "Without running the service. Includes Zinc's $1.00 order fee. The card fee is added per gift."]);
   });
 
