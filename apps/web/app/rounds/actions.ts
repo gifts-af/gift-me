@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { FACT_VALUE_MAX, type Database } from "@gifts-af/core";
+import { FACT_VALUE_MAX, RATINGS, type Database } from "@gifts-af/core";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -18,8 +18,10 @@ import {
   rejectRoundIdeas,
   replaceFailedOrder,
   roundAccess,
+  saveReaction,
   setRoundBudget,
   tellDelivered,
+  type ReactionRefusal,
   type ShipTo,
 } from "@/modules/concierge";
 import type { BudgetResult, RejectResult } from "./[id]/round-screen";
@@ -267,4 +269,32 @@ export async function markArrived(roundId: string, orderId: string): Promise<{ o
   );
   if (result.ok) revalidatePath(`/rounds/${id.data}`);
   return result;
+}
+
+// ─── how it went ─────────────────────────────────────────────────────────────
+
+export type SaveReactionResult = { ok: true; complete: boolean } | { ok: false; reason: ReactionRefusal | "bad_form" | "session"; error: string };
+
+const ReactionForm = z.object({
+  rating: z.enum(RATINGS),
+  // An input bound, not the limit: the database checks reaction_note_max_chars (T23).
+  note: z.string().max(2000),
+});
+
+/** One gift's answer and optional note. The module checks the order is the user's and has arrived. */
+export async function saveReactionAction(orderId: string, form: FormData): Promise<SaveReactionResult> {
+  const order = RoundId.safeParse(orderId);
+  const parsed = ReactionForm.safeParse({ rating: field(form, "rating"), note: field(form, "note") ?? "" });
+  if (!order.success || !parsed.success) return { ok: false, reason: "bad_form", error: "That didn't go through. Check your answer and try again." };
+  const user = await signedIn();
+  if (!user) return { ok: false, reason: "session", error: "Your session ended. Sign in again." };
+
+  const result = await saveReaction(
+    { userId: user.userId, orderId: order.data, rating: parsed.data.rating, note: parsed.data.note || null },
+    roundDbDeps(new Date()),
+  );
+  if (!result.ok) return result;
+  const { roundId, personId } = result;
+  for (const path of [`/rounds/${roundId}`, `/rounds/${roundId}/reaction`, `/people/${personId}`, `/people/${personId}/gifts`]) revalidatePath(path);
+  return { ok: true, complete: result.complete };
 }
