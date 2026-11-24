@@ -2,6 +2,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const createStore = vi.fn();
 const processCapture = vi.fn();
+const { recorder, costRecorder, createAdminClient } = vi.hoisted(() => ({
+  recorder: async () => {},
+  costRecorder: vi.fn(),
+  createAdminClient: vi.fn(),
+}));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient }));
 vi.mock("@/modules/concierge", async () => {
   const actual = await vi.importActual<typeof import("@/modules/concierge/capture/capture")>(
     "@/modules/concierge/capture/capture",
@@ -10,6 +16,7 @@ vi.mock("@/modules/concierge", async () => {
     parseCaptureForm: actual.parseCaptureForm,
     saveCapture: actual.saveCapture,
     createSupabaseCaptureStore: (token: string) => createStore(token),
+    costRecorder,
     processCapture: (...args: unknown[]) => processCapture(...args),
   };
 });
@@ -47,6 +54,7 @@ beforeEach(() => {
   vi.stubEnv("NEXT_PUBLIC_EXTENSION_ID", ID);
   createStore.mockReset();
   processCapture.mockReset();
+  costRecorder.mockReset().mockReturnValue(recorder);
 });
 
 describe("OPTIONS", () => {
@@ -104,7 +112,9 @@ describe("POST", () => {
     const res = await POST(post({ origin: ORIGIN, authorization: "Bearer t" }));
     expect(res.status).toBe(201);
     expect(await res.json()).toEqual({ id: "c1", extraction });
-    expect(processCapture).toHaveBeenCalledWith(store, expect.any(Function), "c1");
+    expect(processCapture).toHaveBeenCalledWith(store, expect.any(Function), recorder, "c1");
+    // Costs are written with the service role, never the user's own token.
+    expect(costRecorder).toHaveBeenCalledWith(createAdminClient);
     expect(res.headers.get("access-control-allow-origin")).toBe(ORIGIN);
   });
 

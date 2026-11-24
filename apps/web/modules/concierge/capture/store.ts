@@ -40,7 +40,7 @@ export interface CaptureStore {
   deleteCapture(id: string): Promise<void>;
 
   // Extraction (ALL-25).
-  extractionSettings(): Promise<{ enabled: boolean; minConfidencePct: number; timeoutMs: number }>;
+  extractionSettings(): Promise<{ enabled: boolean; minConfidencePct: number; timeoutMs: number; readEstimateCents: number }>;
   /** The signed-in user this store acts for. */
   userId: string;
   /** Whether this user may spend money on reading (ALL-94). */

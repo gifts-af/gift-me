@@ -1,4 +1,4 @@
-// The cost recorder never throws and never holds up the caller (ALL-144 AC-7). Fake and
+// The cost recorder never throws and never holds up the caller. Fake and
 // real-builder clients here; the real database is in cost-record-db.test.ts.
 import { createClient } from "@supabase/supabase-js";
 import { beforeEach, describe, expect, it, vi } from "vitest";

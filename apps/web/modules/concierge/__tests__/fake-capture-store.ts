@@ -25,7 +25,7 @@ export class FakeCaptureStore implements CaptureStore {
   failDelete = false;
   private n = 0;
   // Extraction (ALL-25).
-  extraction = { enabled: true, minConfidencePct: 60, timeoutMs: 40000 };
+  extraction = { enabled: true, minConfidencePct: 60, timeoutMs: 40000, readEstimateCents: 2 };
   paidFeatures = true;
   failPaidCheck = false;
   captures = new Map<string, StoredCapture>();

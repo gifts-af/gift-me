@@ -5,6 +5,7 @@ import type { Extract } from "@/lib/ai/extract";
 import { errorFields, logEvent } from "@/lib/log";
 import { processCapture } from "../capture/extract";
 import type { CaptureStore } from "../capture/store";
+import type { RecordCost } from "../costs/record";
 import { looksLikeCancel } from "../inbound/parse";
 import { sendInboundReply } from "../inbound/reply";
 import type { InboundStore } from "../inbound/store";
@@ -62,7 +63,7 @@ export function cancelDone(o: CancelOutcome): { title: string; body: string } {
 
 /**
  * What file_note needs beyond the database (ALL-31): the capture store for the link's user (on
- * the service-role client), the model that reads it, and for the "can't cancel" email the
+ * the service-role client), the model that reads it, the recorder of what that cost, and for the "can't cancel" email the
  * inbound daily cap (its count and inbound_max_per_user_per_day, read only when sending) and
  * notify. The confirm route passes a builder, called only when a file_note link runs; a caller
  * without one can't run file_note.
@@ -70,6 +71,7 @@ export function cancelDone(o: CancelOutcome): { title: string; body: string } {
 export type NoteDeps = {
   captureStore(userId: string): CaptureStore;
   extract: Extract;
+  recordCost: RecordCost;
   inbound: Pick<InboundStore, "countToday" | "recordEvent" | "settings">;
   notify: NotifyDeps;
 };
@@ -302,7 +304,7 @@ export const ACTIONS: Record<ActionName, Action> = {
       }
 
       try {
-        await processCapture(captures, notes.extract, captureId);
+        await processCapture(captures, notes.extract, notes.recordCost, captureId);
       } catch (err) {
         // The capture stays filed and unread; "Try again" on the person's page reads it.
         logEvent("inbound.read_failed", { ...filedIds, ...errorFields(err) });

@@ -1,4 +1,4 @@
-// The cost recorder on the real local database (E5, ALL-144): a recorded cost lands in
+// The cost recorder on the real local database (E5): a recorded cost lands in
 // cost_events through the service-role client, and a flagged account's is marked left out.
 // Rows are tied to a test user's idea run; the test deletes them, and db:clean removes any a
 // crashed run leaves. Skipped when the local stack isn't running.

@@ -7,6 +7,7 @@ import { createExtractor } from "@/lib/ai/extract";
 import { AI_MODELS } from "@/lib/ai/models";
 import { appSettingInt } from "@/lib/app-settings";
 import { errorFields, logEvent } from "@/lib/log";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { todayForRequest } from "@/lib/today";
 import { scheduleNotesTip } from "./notes-tip";
@@ -16,6 +17,7 @@ import {
   addPerson,
   answerQuestions,
   confirmFact,
+  costRecorder,
   deleteFact,
   getPerson,
   runIdeas,
@@ -303,7 +305,11 @@ export async function skipQuestionAction(_previous: SaveResult | null, formData:
 
 export async function readCapturesAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
   const personId = text(formData, "personId");
-  const result = await readUnreadCaptures(createExtractor(AI_MODELS.extraction), personId);
+  const result = await readUnreadCaptures(
+    createExtractor(AI_MODELS.extraction),
+    costRecorder(createAdminClient),
+    personId,
+  );
   // Some may have been read even when another failed, so refresh either way.
   revalidatePath(`/people/${personId}`);
   return result;

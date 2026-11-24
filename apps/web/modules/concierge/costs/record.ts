@@ -1,5 +1,5 @@
-// Records what a costed call cost (ALL-144). Never throws and never holds up the caller:
-// a cost is bookkeeping, and the user's action must succeed without it (AC-7). Money caps
+// Records what a costed call cost. Never throws and never holds up the caller:
+// a cost is bookkeeping, and the user's action must succeed without it. Money caps
 // work from their own counters, not from these rows.
 import "server-only";
 import { logEvent } from "@/lib/log";

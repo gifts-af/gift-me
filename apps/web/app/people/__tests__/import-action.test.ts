@@ -8,6 +8,7 @@ const revalidatePath = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/wiring", () => ({ placeHeld: async () => {} }));
 vi.mock("@/lib/app-settings", () => ({ appSettingInt: async () => 20 }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({}) }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 const scheduleNotesTip = vi.hoisted(() => vi.fn());
 vi.mock("../notes-tip", () => ({ scheduleNotesTip }));
 vi.mock("next/cache", () => ({ revalidatePath }));

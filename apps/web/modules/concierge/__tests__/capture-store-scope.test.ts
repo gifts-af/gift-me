@@ -81,6 +81,11 @@ describe.skipIf(!dbUp)("captureStoreFor with the service-role client", () => {
     expect(await store.knownFacts(personA)).toEqual([{ category: "interest", value: "fly tying" }]);
   });
 
+  it("reads the estimated cost of a read from its setting (ALL-144 AC-3)", async () => {
+    const { rows } = await pg.query("select concierge.setting_int('capture_read_estimate_cents') as cents");
+    expect(await storeForA().extractionSettings()).toMatchObject({ readEstimateCents: rows[0].cents });
+  });
+
   it("can't find another user's person", async () => {
     expect(await storeForA().personExists(personB)).toBe(false);
   });

@@ -144,13 +144,15 @@ describe.skipIf(!dbUp)("createSupabaseNotifyStore: file_note links (ALL-31)", ()
       { hash: hashActionToken(tokens.bob), userId: userA, roundId: null, action: "file_note", expiresAt: later(), personId: bob, inboundMessageId: messageId },
     ]);
     vi.spyOn(console, "log").mockImplementation(() => {});
-    const extract = vi.fn<Extract>(async () => []);
+    const extract = vi.fn<Extract>(async () => ({ facts: [], costCents: 0.3 }));
     const deps = {
       store,
       now: new Date(),
       notes: () => ({
         captureStore: (userId: string) => captureStoreFor(db, userId),
         extract,
+        // A capture's cost row points at nothing, so db:clean couldn't tell it was a test's.
+        recordCost: async () => {},
         inbound: createSupabaseInboundStore(db),
         notify: { store, channels: [], baseUrl: "https://giftsaf.test", now: new Date() },
       }),

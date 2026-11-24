@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Extract } from "@/lib/ai/extract";
+import type { Cost } from "../costs/record";
 import type { NewCaptureRow } from "../capture/store";
 import { handleInbound, type InboundDeps } from "../inbound/handle";
 import type { Channel } from "../notify/channels";
@@ -61,6 +62,7 @@ let messageIds: Map<string, string>;
 let fetched: string[];
 let extract: ReturnType<typeof vi.fn<Extract>>;
 let logs: Record<string, unknown>[];
+let costs: Cost[];
 
 function fakeFetch(url: string | URL | Request): Promise<Response> {
   const u = String(url);
@@ -99,6 +101,9 @@ function deps(): InboundDeps {
     store,
     captureStore: () => captures,
     extract,
+    recordCost: async (cost) => {
+      costs.push(cost);
+    },
     resend: { apiKey: "re_test", fetch: fakeFetch as typeof fetch },
     notify: { store: notifyStore, channels: [channel], baseUrl: "https://giftsaf.test", now: NOW },
   };
@@ -128,8 +133,9 @@ beforeEach(() => {
   emails = new Map();
   messageIds = new Map();
   fetched = [];
-  extract = vi.fn<Extract>(async () => []);
+  extract = vi.fn<Extract>(async () => ({ facts: [], costCents: 0.3 }));
   logs = [];
+  costs = [];
   vi.spyOn(console, "log").mockImplementation((line: string) => {
     logs.push(JSON.parse(line));
   });
@@ -199,6 +205,7 @@ describe("handleInbound: filing", () => {
     expect(await receive("e1", email({ subject: "Idea", text: "Dad wants a new fly rod" }))).toBe("filed");
     expect(captures.rows).toMatchObject([{ personId: DAD, url: null, title: "Idea", text: "Dad wants a new fly rod" }]);
     expect(extract).toHaveBeenCalledOnce();
+    expect(costs).toEqual([{ userId: USER, kind: "ai_capture", cents: 0.3, estimated: false }]);
     expect(events("inbound.filed")).toMatchObject([{ person_id: DAD, matched_by: "name" }]);
     expect(store.events).toEqual([USER]);
     expect(sent).toEqual([]);

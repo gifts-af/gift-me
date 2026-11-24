@@ -1023,7 +1023,7 @@ describe("runIdeas: photos and the price ceiling", () => {
   });
 });
 
-// ─── what each run cost (ALL-144) ─────────
+// ─── what each run cost ─────────
 
 describe("runIdeas: recorded costs (ALL-144 AC-1, AC-2)", () => {
   const ai = () => costs.find((c) => c.kind === "ai_ideas");

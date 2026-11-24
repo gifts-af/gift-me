@@ -3,6 +3,7 @@
 // covered against the database in notify-store.test.ts.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Extract } from "@/lib/ai/extract";
+import type { Cost } from "../costs/record";
 import type { NoteDeps } from "../notify/actions";
 import type { Channel } from "../notify/channels";
 import { confirmActionLink, readActionLink, type LinkDeps } from "../notify/links";
@@ -22,6 +23,7 @@ let store: FakeStore;
 let captures: FakeCaptureStore;
 let inbound: FakeInboundStore;
 let extract: ReturnType<typeof vi.fn<Extract>>;
+let costs: Cost[];
 let sent: { subject: string; to: string }[];
 let logs: Record<string, unknown>[];
 let deps: LinkDeps;
@@ -63,7 +65,8 @@ beforeEach(() => {
       screenshotType: "image/jpeg",
     });
   };
-  extract = vi.fn<Extract>(async () => [{ category: "wants", value: "a new fly rod", confidence: 0.9 }]);
+  extract = vi.fn<Extract>(async () => ({ facts: [{ category: "wants", value: "a new fly rod", confidence: 0.9 }], costCents: 0.3 }));
+  costs = [];
   sent = [];
   const channel: Channel = {
     name: "email",
@@ -76,6 +79,9 @@ beforeEach(() => {
   const notes: NoteDeps = {
     captureStore: () => captures,
     extract,
+    recordCost: async (cost) => {
+      costs.push(cost);
+    },
     inbound,
     notify: { store, channels: [channel], baseUrl: "https://giftsaf.test", now: NOW },
   };
@@ -164,6 +170,12 @@ describe("file_note (ALL-31 AC-4)", () => {
     // The note is still waiting: another button files it.
     expect(await confirmActionLink("tok-person-bob", USER, deps)).toMatchObject({ done: { title: "Filed" } });
     expect(store.filed).toEqual([`cap-1:${BOB}`]);
+  });
+
+  it("records what reading the note cost (ALL-144 AC-3)", async () => {
+    await buttons("wants a new fly rod");
+    await confirmActionLink("tok-person-dad", USER, deps);
+    expect(costs).toEqual([{ userId: captures.userId, kind: "ai_capture", cents: 0.3, estimated: false }]);
   });
 
   it("a failed read still leaves the note filed", async () => {

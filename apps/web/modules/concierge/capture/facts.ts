@@ -2,12 +2,17 @@ import "server-only";
 import type { Extract } from "@/lib/ai/extract";
 import { createClient } from "@/lib/supabase/server";
 import type { SaveResult } from "../settings";
+import type { RecordCost } from "../costs/record";
 import { processCapture } from "./extract";
 import { createCookieCaptureStore } from "./supabase-store";
 import { errorFields, logEvent } from "@/lib/log";
 
 /** Reads the person's pending and failed captures, one at a time. */
-export async function readUnreadCaptures(extract: Extract, personId: string): Promise<SaveResult> {
+export async function readUnreadCaptures(
+  extract: Extract,
+  recordCost: RecordCost,
+  personId: string,
+): Promise<SaveResult> {
   const store = await createCookieCaptureStore();
   if (!store) return { ok: false, error: "Your session ended. Sign in again." };
   const { data, error } = await (await createClient())
@@ -23,7 +28,7 @@ export async function readUnreadCaptures(extract: Extract, personId: string): Pr
   }
   let failed = 0;
   for (const { id } of data) {
-    const result = await processCapture(store, extract, id);
+    const result = await processCapture(store, extract, recordCost, id);
     if (result.status !== "extracted") failed++;
   }
   return failed === 0 ? { ok: true } : { ok: false, error: "Couldn't read them. Try again." };
