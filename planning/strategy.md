@@ -101,7 +101,8 @@ How the concierge's intelligence works (matches design §3.1):
 
 ## 6. Money model (D34, D58)
 - **Free:** managing and sharing gift lists.
-- **A transparent fee per gift (D58, owner 2026-11-22):** each gift bought through GiftsAF shows a flat "GiftsAF fee" as its own line at checkout. The fee's name links to a breakdown with an amount for each part, our average cost per gift, read from cost tracking (ALL-144). At launch it covers our costs only and says so ("launch pricing"); a margin is added as adoption grows. This replaces the premium subscription idea for the concierge. The amount is still to set (ALL-76).
+- **A transparent fee per gift (D58, D59):** each gift bought through GiftsAF shows one "GiftsAF fee" line at checkout. The fee is a fixed part (Zinc's $1 plus our average AI, lookup and running costs per completed gift, from cost tracking, ALL-144) plus the actual card fee (2.9% + 30¢), so it's at cost on every gift. Its name links to a breakdown of each part. At launch it covers our costs only and says so ("launch pricing"); a margin is added as adoption grows. This replaces the premium subscription idea for the concierge. The fixed part is still to set (ALL-76).
+- **Paying by card, no balance (D59, owner 2026-11-24):** the buyer saves a card in GiftsAF once. Each gift is one charge from GiftsAF through Zinc Connect (our Stripe account): the gift, the fee, nothing parked in advance. Store cancels refund everything; returns go through us and keep the fee. This ships before friends join (ALL-98).
 - **Per run (option):** concierge runs people schedule for their own list could carry a small fee that covers our AI cost, instead of or alongside limits (idea 7).
 - **Affiliate links (option):** commission on purchases made through GiftsAF, never used to rank or pick gifts (PRD G-5; idea 10, ALL-84).
 
@@ -113,13 +114,13 @@ How the concierge's intelligence works (matches design §3.1):
 | Gift ideas in a round | Once per round, when the round needs ideas (about 1–2 weeks before the order-by date). A round that finds good gifts never runs again | About 40¢: 20–25¢ of AI, mostly web searches, plus about 16¢ of Zinc lookups at 1¢ each |
 | A round that finds nothing | Tries again the next day, at most 2 runs, plus 1 more if the buyer adds facts, then stops and emails the buyer | At most about $1.20 in a round's life |
 | "Suggest ideas" on a person's page | Each tap | About 40¢ |
-| Buying a gift | Each order | Zinc's $1 order fee, from the buyer's own Zinc wallet (T56), not from us |
+| Buying a gift | Each order | Zinc's $1 order fee and the card fee (2.9% + 30¢), both inside the GiftsAF fee (D59). Under stage 1 wallets they came from the buyer's own Zinc wallet (T56) |
 
 Rough yearly cost per buyer: about 40¢ per occasion, so 5 people with one birthday each is about $2, plus captures and taps.
 
 Still to set before we take money: the fee amount (ALL-76). Because rounds that find nothing still cost us, the at-cost fee is cost per completed purchase, not per order. Until then, anything that costs us money (AI calls, Zinc lookups, rounds) is only for test and admin users (decision 53), so pricing also gates opening the concierge beyond us, friends included (owner, 2026-11-06). Taking money also means moving off free hosting plans and making the repo private (ALL-75).
 
-Billing stays out of MVP scope.
+Charging by card (ALL-98, with the fee from ALL-146) is part of the MVP, before friends join (D59).
 
 ## 7. What we measure
 One number per handoff: scans per item; scans that become a paid gift; scanners who create an account; accounts that start a list; lists shared and guests who join; list users who try the concierge; concierge users who pay; loved ones' profiles filled in per customer; recurring gifts that run with one-tap approval or less. Targets are set after Phase 1.
