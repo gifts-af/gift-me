@@ -309,10 +309,14 @@ select tests.hs_order(:'r_orders', 'placing', null, '2030-03-01', '2030-03-12 12
 insert into concierge.idea_runs (user_id, person_id, round_id, started_at, finished_at, outcome)
 select user_id, person_id, id, t, t, o
   from concierge.gift_rounds,
-       (values ('2030-03-12 12:00Z'::timestamptz, 'no_credit'), ('2030-03-11 13:00Z', 'no_credit'),
+       (values ('2030-03-12 12:00Z'::timestamptz, 'no_credit'), ('2030-03-11 12:00Z', 'no_credit'),
                ('2030-03-12 15:00Z', 'no_credit'), ('2030-03-12 13:00Z', 'saved'),
-               ('2030-03-12 12:30Z', 'failed'), ('2030-03-11 13:30Z', 'failed'), ('2030-03-12 15:30Z', 'failed')) v (t, o)
+               ('2030-03-12 12:30Z', 'failed'), ('2030-03-11 13:30Z', 'failed'), ('2030-03-11 12:30Z', 'failed'),
+               ('2030-03-12 15:30Z', 'failed'), ('2030-03-11 13:15Z', 'no_credit')) v (t, o)
  where id = :'r_stuck';
+-- Started before the window, finished inside it.
+insert into concierge.idea_runs (user_id, person_id, round_id, started_at, finished_at, outcome)
+select user_id, person_id, id, '2030-03-11 12:50Z', '2030-03-11 13:10Z', 'failed' from concierge.gift_rounds where id = :'r_stuck';
 
 -- Captures: one failed this week, one failed earlier, one failed after p_now, one extracted this week.
 insert into concierge.captures (user_id, person_id, page_title, status, updated_at)
@@ -406,15 +410,15 @@ select is(
   array[1, 0, 0, 1],
   'ideas_waiting lists a generating round with no ideas within hold_final_days, not one with proposed ideas or one further out; rejected ideas don''t count');
 
-select is((:'snap'::jsonb ->> 'no_credit_runs')::int, 1, 'no_credit_runs counts the last day only');
-select is((:'snap'::jsonb ->> 'failed_runs')::int, 1, 'failed_runs counts failed runs of the last day only');
+select is((:'snap'::jsonb ->> 'no_credit_runs')::int, 2, 'no_credit_runs counts the last 25 hours only');
+select is((:'snap'::jsonb ->> 'failed_runs')::int, 3, 'failed_runs counts runs that finished in the last 25 hours, as a check can start an hour later than the day before');
 select is((:'snap'::jsonb #>> '{weekly,rounds_failed}')::int, 3, 'weekly rounds_failed sums the last 7 days of heartbeat rows');
 select is((:'snap'::jsonb #>> '{weekly,no_ideas}')::int, 1, 'no_ideas counts a round skipped this week after a no_ideas send, not one from 8 days ago');
 select is((:'snap'::jsonb #>> '{weekly,failed_captures}')::int, 1, 'failed_captures counts the last 7 days only');
 select is(
   array[(:'snap'::jsonb ->> 'no_credit_runs')::int, (:'snap'::jsonb #>> '{weekly,no_ideas}')::int,
         (:'snap'::jsonb #>> '{weekly,failed_captures}')::int],
-  array[1, 1, 1],
+  array[2, 1, 1],
   'a run, skipped round or capture after p_now isn''t counted');
 
 select is(

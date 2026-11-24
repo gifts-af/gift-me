@@ -1,5 +1,7 @@
--- The health snapshot also counts idea runs that failed in the last day (ALL-35), so ideas can't
--- fail with no word to the owner. Same signature and grants; everything else is unchanged.
+-- The health snapshot also counts idea runs that ended failed, so a tick whose ideas all failed
+-- is no longer a quiet day (T87). Both run counts now go by when the run finished, over 25 hours:
+-- Vercel may start the daily check an hour later than the day before, and a shorter window would
+-- miss what ended in between. Same signature and grants; everything else is unchanged.
 create or replace function concierge.health_snapshot(p_now timestamptz)
 returns jsonb
 language plpgsql
@@ -31,12 +33,12 @@ begin
 
     'no_credit_runs', (
       select count(*) from concierge.idea_runs
-       where outcome = 'no_credit' and started_at >= p_now - interval '1 day' and started_at <= p_now),
+       where outcome = 'no_credit' and finished_at >= p_now - interval '25 hours' and finished_at <= p_now),
 
-    -- New (ALL-35): the heartbeat doesn't count a failed idea run, so it's counted here.
+    -- The heartbeat doesn't count a failed idea run, so it's counted here.
     'failed_runs', (
       select count(*) from concierge.idea_runs
-       where outcome = 'failed' and started_at >= p_now - interval '1 day' and started_at <= p_now),
+       where outcome = 'failed' and finished_at >= p_now - interval '25 hours' and finished_at <= p_now),
 
     -- >= here while the engine's round_stuck uses >: the engine counts the
     -- claim it is making, and this reads the stored attempts between ticks, so

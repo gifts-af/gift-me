@@ -162,9 +162,10 @@ describe("runHealthCheck", () => {
     const d = deps({ aiCredits, zincBalance });
     const out = await runHealthCheck(d);
 
-    // Each vendor call gets health_vendor_timeout_ms, so a hung one can't outlast the route.
-    expect(aiCredits).toHaveBeenCalledWith(10000);
-    expect(zincBalance).toHaveBeenCalledWith(10000);
+    // The two tries share health_vendor_timeout_ms, so a hung vendor can't outlast the route.
+    expect(aiCredits).toHaveBeenNthCalledWith(1, 5000);
+    expect(aiCredits).toHaveBeenNthCalledWith(2, 5000);
+    expect(zincBalance).toHaveBeenCalledWith(5000);
 
     expect(out).toEqual({ result: "sent", problems: 2 });
     const vendorEvents = events().filter((e) => e.event === "health.vendor_check_failed");

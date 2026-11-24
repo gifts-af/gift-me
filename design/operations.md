@@ -433,7 +433,7 @@ Once a day Vercel Cron calls `GET /api/health` at 14:00 UTC, two hours after the
 | `health_all_clear_weekday` | 1 | The day the email always goes, in `Date.getUTCDay()` numbers (0 is Sunday) |
 | `ai_credit_low_cents` | 500 | Warn when the AI Gateway credit drops below this |
 | `zinc_app_balance_low_cents` | 500 | Warn when the app's Zinc balance drops below this |
-| `health_vendor_timeout_ms` | 10000 | How long each vendor balance call may take. Both run together and each is tried twice, so keep twice this, plus the weekly costs read, well under the route's 60 s |
+| `health_vendor_timeout_ms` | 10000 | How long each vendor balance check may take, its two tries together. Both vendors run together, so keep it well under the route's 60 s |
 
 It also reads `round_max_attempts`, `placing_stale_minutes`, `hold_final_days`, `idea_engine_enabled`, `capture_extraction_enabled` and `amazon_paste_lookup_enabled`. The AI credit is only checked while ideas or capture extraction are on, and the app's Zinc balance only while ideas or Amazon paste lookups are on, so switching those off doesn't bring a daily warning. A setting it can't read fails the check (`health.checked {result: "failed", stage: "settings", alert: true}`) and sends "The health check couldn't run"; there's no fallback value.
 
@@ -496,14 +496,14 @@ An order is `held` with `hold_reason` `retry` (Zinc failed in a way worth trying
 At least one idea run ended `failed` in the last day; the line has the count. The tick itself still reports ok. A failed run counts toward `idea_round_runs_max`, so fix it before the next tick or the round may end with no ideas.
 
 1. If **A vendor check failed** is in the same email, start there.
-2. Find the runs: `select id, round_id, started_at, stage from concierge.idea_runs where outcome = 'failed' order by started_at desc;`.
-3. Read `ideas.run` in the function logs (Hobby keeps them about an hour) for `error`, `error_kind` and `error_status`. A 401 or 403 is the key; a 404 is a wrong address or model; no status means there was no reply.
+2. Find the runs: `select id, round_id, started_at, stage from concierge.idea_runs where outcome = 'failed' and finished_at > now() - interval '25 hours' order by finished_at desc;`.
+3. Read `ideas.run` in the function logs (Hobby keeps them about an hour) for `error`, `error_kind` and `error_status`. A 401 or 403 is the key; a 404 is a wrong address or model; a 5xx is the vendor's trouble. A status of 0 or none means no reply, or a reply we couldn't use: `error_kind` says which (`malformed` was an unreadable reply; `unavailable` with no status can also be a model with no price).
 
 ### A vendor check failed
 
 The AI Gateway credit or the app's Zinc balance couldn't be read in two tries. Shown only while something uses that vendor. Ideas probably can't run either.
 
-1. Read `health.vendor_check_failed` for the `status`. A 401 or 403 is the key.
+1. Read `health.vendor_check_failed` for the `status`. A 401 or 403 is the key; a 5xx is the vendor's trouble; 0 or none means no reply, or one we couldn't read.
 2. **AI Gateway:** in the key list (`vercel ai-gateway api-keys list`), a production key whose last-active time equals its creation time has never worked. Create a new key, store it as the production `AI_GATEWAY_API_KEY` (Secret) and redeploy.
 3. **Zinc:** check `ZINC_API_KEY` and `ZINC_API_BASE` on production, and Zinc's status.
 4. Confirm with `vercel crons run /api/health`. `vercel env run` on a laptop may use a different key, so it proves nothing about production's.

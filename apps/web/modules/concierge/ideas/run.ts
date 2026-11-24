@@ -99,7 +99,7 @@ type Tally = {
 };
 
 type Found = { c: IdeaCandidate; hit: ZincHit; offer: ZincOffer; totalCents: number; fit: "within" | "over"; arriveBy: CalendarDate | null };
-type Resolved = { found: Found } | { drop: DropReason; kind?: ZincErrorKind } | { stopped: true };
+type Resolved = { found: Found } | { drop: DropReason; error?: ZincError } | { stopped: true };
 
 /** Whole cents, rounded up, after dropping float noise below a thousandth of a cent. */
 const cents = (x: number) => Math.ceil(Math.round(x * 1000) / 1000);
@@ -523,7 +523,7 @@ async function brainstormPass(
       if (!v.keep) return { drop: v.reason };
       return { found: { c, hit, offer, totalCents: v.totalCents, fit: v.fit, arriveBy: v.arriveBy } };
     } catch (e) {
-      if (e instanceof ZincError) return { drop: "vendor_error", kind: e.kind };
+      if (e instanceof ZincError) return { drop: "vendor_error", error: e };
       p.halt();
       throw e;
     }
@@ -533,7 +533,7 @@ async function brainstormPass(
   const failure = settled.find((r) => r.status === "rejected");
   if (failure) throw failure.reason;
   const found: Found[] = [];
-  const drops: { drop: DropReason; kind?: ZincErrorKind }[] = [];
+  const drops: { drop: DropReason; error?: ZincError }[] = [];
   // A product already kept from the list isn't offered twice.
   const products = new Set<string>(listed.map((k) => k.amazonId).filter((id) => id !== null));
   for (const one of settled) {
@@ -548,7 +548,7 @@ async function brainstormPass(
       found.push(r.found);
     } else if ("drop" in r) {
       drops.push(r);
-      dropped(r.drop, r.kind);
+      dropped(r.drop, r.error?.kind);
     }
   }
   t.resolved = found.length;
@@ -558,9 +558,10 @@ async function brainstormPass(
   if (req.signal.aborted) return { end: "deadline" };
   if (p.capped()) return { end: "cost_cap" };
   if (found.length === 0 && drops.length > 0 && drops.every((d) => d.drop === "vendor_error")) {
-    if (drops.some((d) => d.kind === "unauthorized")) {
+    if (drops.some((d) => d.error?.kind === "unauthorized")) {
       logEvent("ideas.zinc_unauthorized", { ...ids(req, runId), alert: true });
     }
+    t.error = errorNote(drops[0].error);
     return { end: "failed" };
   }
   if (found.length === 0) return { end: "none" };

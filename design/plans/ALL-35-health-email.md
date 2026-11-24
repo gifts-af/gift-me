@@ -34,6 +34,8 @@ Each check reads the database or a vendor directly. None of them reads Vercel lo
 | Orders held for a Zinc problem | `orders.status = 'held'` | `hold_reason` in (`retry`, `not_allowed`) | Zinc wallet ordering |
 | Ideas can't run here | `idea_engine_enabled` or `capture_extraction_enabled` = 1 and the AI Gateway (or, for ideas, Zinc) env vars missing | always | Gift idea engine |
 | Out of AI credit | `idea_runs` with `outcome = 'no_credit'` started in the last day, or AI Gateway `/v1/credits` balance at or below 0 while ideas or capture extraction are on (plan review, final review). While it's flagged, open rounds still waiting on ideas within `hold_final_days` of `ship_by_deadline` are listed under it (owner, plan review) | any | AI credit |
+| Gift ideas failed (2026-11-24) | `idea_runs` with `outcome = 'failed'` finished in the last 25 hours | any | Gift ideas failed |
+| A vendor check failed (2026-11-24) | AI Gateway `/v1/credits` or Zinc `/wallet/me`, while something uses it | two tries fail | A vendor check failed |
 | AI credit low | AI Gateway `/v1/credits` balance, while ideas or capture extraction are on | below `ai_credit_low_cents` (500) | AI credit |
 | App's Zinc balance low | Zinc `/wallet/me` with the app key (T17), while ideas or Amazon paste lookups are on | below `zinc_app_balance_low_cents` (500) | Zinc wallet ordering |
 | The check couldn't run | a setting, the snapshot, a vendor call or the route's wiring threw | always; the line names the stage (`settings`, `snapshot`, `vendors`, `wiring`), never the error (final review) | The health check couldn't run |
@@ -70,6 +72,7 @@ Every line carries ids only (round, order, user) and a link to its runbook secti
 
 ### Out of scope
 
+- Vendor trouble that ends a run some other way (2026-11-24): an AI failure when a list gift still qualified (`saved`), a list pass where every Zinc lookup failed (`none`), a run cut off at its deadline (`deadline`), or a killed function (no outcome). A wrong key still shows as a vendor check that failed.
 - Persisting log-only alerts (bad queue signatures, unmatched Zinc webhooks, email-send failures) to the database. Those still need Vercel logs; operations.md says so. A log drain needs Vercel Pro (ALL-135).
 - A dashboard page. Vercel's AI Gateway dashboard covers spend.
 - Buyers' own Zinc balances. The buyer is already emailed about a funds hold (ALL-32).

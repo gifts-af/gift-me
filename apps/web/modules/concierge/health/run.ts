@@ -74,12 +74,13 @@ type Balance = { cents: number | null; failed: boolean };
 
 /**
  * A vendor balance; null cents when it isn't checked here or the call failed (logged, never thrown).
- * Tried twice: one dropped call isn't a problem, two in a row are. Both tries, then the costs, fit the route's 60 s.
+ * Tried twice, sharing timeoutMs: one dropped call isn't a problem, two in a row are.
  */
 async function balance(vendor: string, read: ((timeoutMs: number) => Promise<number>) | null, timeoutMs: number): Promise<Balance> {
   if (!read) return { cents: null, failed: false };
+  const each = Math.floor(timeoutMs / 2);
   try {
-    return { cents: await read(timeoutMs).catch(() => read(timeoutMs)), failed: false };
+    return { cents: await read(each).catch(() => read(each)), failed: false };
   } catch (e) {
     logEvent("health.vendor_check_failed", { vendor, ...errorFields(e) });
     return { cents: null, failed: true };
