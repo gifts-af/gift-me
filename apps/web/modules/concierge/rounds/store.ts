@@ -124,6 +124,8 @@ export type TrackingCandidate = {
   resolved: boolean;
   /** The retailer's name, as stored ("walmart"), read only for store cancels; null otherwise or when unknown. */
   store: string | null;
+  /** The round ended because the occasion's date changed; read only for store cancels. */
+  dateChanged: boolean;
   /** The round's keys for this order (`late:<id>`, `ontime:<id>`, ...). */
   sentSteps: Set<StepKey>;
 };
@@ -186,6 +188,8 @@ export type RoundContext = {
   personRemoved: boolean;
   /** The round closed before its ship-by day (the cancel link, the occasion off, the person removed). */
   closedEarly: boolean;
+  /** The round ended because the occasion's date changed. */
+  dateChanged: boolean;
 };
 
 /** What the reaction email says. Read with the service role; never logged. */
@@ -559,7 +563,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
     async roundContext(roundId) {
       const { data: round, error } = await concierge
         .from("gift_rounds")
-        .select("user_id, person_id, occasion_id, occasion_date, ship_by_deadline, status, attention_reason, closed_at")
+        .select("user_id, person_id, occasion_id, occasion_year, occasion_date, ship_by_deadline, status, attention_reason, closed_at")
         .eq("id", roundId)
         .single();
       if (error) fail("Loading the round failed", error);
@@ -667,6 +671,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
         })),
         personRemoved: p.deleted_at !== null,
         // Closed on a day before its ship-by day: not by the deadline.
+        dateChanged: round.occasion_year === null,
         closedEarly: round.closed_at !== null && round.closed_at.slice(0, 10) < round.ship_by_deadline,
       };
     },
@@ -808,10 +813,14 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
       // The store's name is said only in a store-cancelled email.
       const cancelled = data.filter((r) => r.status === "failed").map((r) => r.order_id);
       const stores = new Map<string, string | null>();
+      const moved = new Set<string>();
       if (cancelled.length) {
-        const { data: rows, error: storeError } = await concierge.from("orders").select("id, gift_ideas(retailer)").in("id", cancelled);
+        const { data: rows, error: storeError } = await concierge.from("orders").select("id, gift_ideas(retailer), gift_rounds(occasion_year)").in("id", cancelled);
         if (storeError) fail("Loading the cancelled gifts' stores failed", storeError);
-        for (const o of rows) stores.set(o.id, (o.gift_ideas as { retailer: string | null } | null)?.retailer ?? null);
+        for (const o of rows) {
+          stores.set(o.id, (o.gift_ideas as { retailer: string | null } | null)?.retailer ?? null);
+          if ((o.gift_rounds as { occasion_year: number | null } | null)?.occasion_year === null) moved.add(o.id);
+        }
       }
       return data.map((r) => ({
         userId: r.user_id,
@@ -830,6 +839,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
         failureType: r.failure_type ?? null,
         resolved: r.resolved,
         store: stores.get(r.order_id) ?? null,
+        dateChanged: moved.has(r.order_id),
         sentSteps: new Set((r.sent_steps ?? []) as StepKey[]),
       }));
     },

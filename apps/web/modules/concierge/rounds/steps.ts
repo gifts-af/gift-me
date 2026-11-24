@@ -32,7 +32,8 @@ export async function endedByMove(err: unknown, round: ClaimedRound, deps: Engin
   if (!(err instanceof LeaseLost)) return false;
   try {
     if (!(await deps.store.endedByMove(round.id))) return false;
-  } catch {
+  } catch (check) {
+    logEvent("round_move_check_failed", { round_id: round.id, user_id: round.userId, ...errorFields(check) });
     return false;
   }
   logEvent("round_ended_by_move", { round_id: round.id, user_id: round.userId });

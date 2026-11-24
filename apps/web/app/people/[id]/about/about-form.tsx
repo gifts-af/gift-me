@@ -355,11 +355,10 @@ function DatedField({
       </div>
       <ErrorLine error={date.error ?? year.error} />
       <Status saved={date.status === "saved" || year.status === "saved"} />
-      {note && (
-        <p role="status" className="text-[13px] text-foreground">
-          {note}
-        </p>
-      )}
+      {/* Always mounted, so a screen reader announces the text when it comes. */}
+      <p aria-live="polite" className="text-[13px] text-foreground">
+        {note}
+      </p>
       {kind === "birthday" && (
         <p className="text-[13px] text-muted-foreground">
           We&apos;ll suggest gifts before it. The year is just for age-right ideas.

@@ -11,7 +11,7 @@ captureLog();
 
 type H = ReturnType<typeof harness>;
 /** Moves the date just before the engine's next call to `method`. */
-function moveBefore(h: H, method: "holdsLease" | "finish" | "release" | "sentSteps") {
+function moveBefore(h: H, method: "holdsLease" | "finish" | "release" | "claim") {
   const real = h.store[method].bind(h.store) as (...args: unknown[]) => Promise<unknown>;
   vi.spyOn(h.store, method).mockImplementationOnce((async (...args: unknown[]) => {
     h.store.endByMove(h.store.rounds[0].id);
@@ -68,13 +68,25 @@ describe("a round ended by a date change, mid-step", () => {
     expect(h.generateIdeas).not.toHaveBeenCalled();
   });
 
+  it("AC-9: a move between saving generating and taking the lease back buys nothing", async () => {
+    const h = harness();
+    moveBefore(h, "claim");
+    expect((await h.tick("2027-02-11")).failed).toBe(0);
+    expect(h.generateIdeas).not.toHaveBeenCalled();
+    expect(h.emails).toEqual([]);
+    expect(named("round_failed")).toEqual([]);
+  });
+
   it("AC-9: a run the database refused as closed ends quietly", async () => {
     const h = harness();
     h.generateIdeas.mockImplementationOnce(async (round) => {
       h.store.endByMove(round.id);
       return { status: "refused", reason: "closed" };
     });
+    const context = vi.spyOn(h.store, "roundContext");
     quiet(h, await h.tick("2027-02-11"));
+    // Once, to plan the step: nothing is planned again after the refusal.
+    expect(context).toHaveBeenCalledTimes(1);
     expect(h.emails).toEqual([]);
   });
 

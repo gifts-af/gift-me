@@ -347,6 +347,7 @@ export async function tellOrdered(roundId: string, deps: EngineDeps): Promise<vo
           failed: fresh.map((o) => ({ title: o.title, detail: lateDetail(o, ctx.personName) })),
           ...(onItsWay.length > 0 ? { onItsWay } : {}),
           ...(ctx.closedEarly ? { closedEarly: true } : {}),
+          ...(ctx.dateChanged ? { dateChanged: true } : {}),
           ...(ctx.personRemoved ? { personRemoved: true } : {}),
         },
         links: { open },

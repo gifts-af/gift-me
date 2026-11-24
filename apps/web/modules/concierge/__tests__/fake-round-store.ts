@@ -277,6 +277,7 @@ export class FakeRoundStore implements RoundStore {
       orders: [],
       personRemoved: false,
       closedEarly: false,
+      dateChanged: false,
     };
   }
 

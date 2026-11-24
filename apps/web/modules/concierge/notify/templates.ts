@@ -91,7 +91,7 @@ export type CancelledGift = { title: string; store?: string; amountText?: string
  */
 export type NewsItem = Occasion & { title: string } & (
     | { kind: "late"; expectedText: string; daysLate: number; again?: boolean; url?: string }
-    | { kind: "cancelled"; amountText?: string }
+    | { kind: "cancelled"; amountText?: string; dateChanged?: boolean }
     | { kind: "on_time"; expectedText: string }
   );
 
@@ -151,6 +151,8 @@ export type TemplateData = {
     onItsWay?: string[];
     /** Closed before its ship-by day (the cancel link, the occasion off, the person removed). */
     closedEarly?: boolean;
+    /** Closed because the buyer changed the occasion's date. */
+    dateChanged?: boolean;
     /** The person was removed, so the button opens GiftsAF, not their page. */
     personRemoved?: boolean;
   };
@@ -160,7 +162,7 @@ export type TemplateData = {
    * ALL-33: gifts the store cancelled after they were bought, too late to ship another. `store`
    * and `amountText` (the refund) are left out when unknown, never guessed.
    */
-  store_cancelled_late: Occasion & { gifts: CancelledGift[] };
+  store_cancelled_late: Occasion & { gifts: CancelledGift[]; dateChanged?: boolean };
   /** ALL-33: one gift now expected after the occasion; `daysLate`, how many days after. */
   gift_late: OneGift & { expectedText: string; daysLate: number; again?: boolean };
   /** ALL-33: a gift told late is expected on or before the occasion again. */
@@ -313,7 +315,7 @@ function newsRow(i: NewsItem): { title: string; detail: string; link?: { label: 
     case "cancelled":
       return {
         title: `The store cancelled the ${i.title}`,
-        detail: `${forDay} The ${i.amountText ?? "money"} is back in your Zinc wallet. It's too late to ship another in time.`,
+        detail: `${forDay} The ${i.amountText ?? "money"} is back in your Zinc wallet. ${i.dateChanged ? "The date changed, so that round ended." : "It's too late to ship another in time."}`,
       };
     case "on_time":
       return { title: `Good news: the ${i.title} is back on time`, detail: `${forDay} Now expected ${i.expectedText}.` };
@@ -321,6 +323,9 @@ function newsRow(i: NewsItem): { title: string; detail: string; link?: { label: 
 }
 
 /** What the buyer can do, for the kinds of bad news in the summary. */
+const DATE_CHANGED =
+  "What happens next: the date changed, so this round ended and nothing more is bought for it. If there's time before the new date, we'll send new ideas.";
+
 function newsFooter(late: boolean, cancelled: boolean): string | undefined {
   if (late && cancelled) {
     return "What you can do for a late or cancelled gift: keep a late one (nothing to do), or get something locally for the day and return the late one once it arrives. Nothing more is bought for these occasions.";
@@ -736,7 +741,9 @@ export const TEMPLATES: {
         ],
         rows: several ? d.failed.map((f) => ({ title: f.title, ...(f.detail ? { detail: f.detail } : {}) })) : undefined,
         button: { label: d.personRemoved ? `Open ${APP_NAME}` : `Open ${d.personName}'s page`, url: links.open },
-        footer: d.closedEarly
+        footer: d.dateChanged
+          ? DATE_CHANGED
+          : d.closedEarly
           ? "What happens next: this occasion's gifts were stopped early, so we won't buy anything more for it. You can still pick something up yourself."
           : "What happens next: it's too late for us to send another gift in time, but you can still pick something up yourself. This round is now closed.",
       }),
@@ -754,13 +761,15 @@ export const TEMPLATES: {
           paragraphs: [
             `We're sorry. ${g.store ?? "The store"} cancelled the ${g.title} for ${d.personName}'s ${d.occasion} on ${d.dateText}.`,
             refund(g),
-            "It's too late for us to ship another gift in time.",
+            ...(d.dateChanged ? [] : ["It's too late for us to ship another gift in time."]),
           ],
-          rows: [
-            { title: "Get something locally for the day", detail: "A card, flowers or something from a shop nearby." },
-            { title: "Or send something a little late", detail: "Order it yourself from any store." },
-          ],
-          footer: `What happens next: nothing more is bought for this ${d.occasion}, and we'll start on ${d.personName}'s next occasion as usual.`,
+          rows: d.dateChanged
+            ? undefined
+            : [
+                { title: "Get something locally for the day", detail: "A card, flowers or something from a shop nearby." },
+                { title: "Or send something a little late", detail: "Order it yourself from any store." },
+              ],
+          footer: d.dateChanged ? DATE_CHANGED : `What happens next: nothing more is bought for this ${d.occasion}, and we'll start on ${d.personName}'s next occasion as usual.`,
         }),
       };
     }
@@ -771,10 +780,12 @@ export const TEMPLATES: {
         heading: `Sorry, the store cancelled ${what}`,
         paragraphs: [
           `We're sorry. The store cancelled these gifts for ${d.personName}'s ${d.occasion} on ${d.dateText}.`,
-          "It's too late for us to ship other gifts in time. You can get something locally for the day, or order something yourself from any store and send it a little late.",
+          ...(d.dateChanged
+            ? []
+            : ["It's too late for us to ship other gifts in time. You can get something locally for the day, or order something yourself from any store and send it a little late."]),
         ],
         rows: d.gifts.map((g) => ({ title: g.title, detail: `${g.store ?? "The store"} cancelled it. ${refund(g)}` })),
-        footer: `What happens next: nothing more is bought for this ${d.occasion}, and we'll start on ${d.personName}'s next occasion as usual.`,
+        footer: d.dateChanged ? DATE_CHANGED : `What happens next: nothing more is bought for this ${d.occasion}, and we'll start on ${d.personName}'s next occasion as usual.`,
       }),
     };
   },
@@ -841,7 +852,7 @@ export const TEMPLATES: {
     const title = `Updates on ${d.items.length} of your gifts`;
     const footer = newsFooter(
       d.items.some((i) => i.kind === "late"),
-      d.items.some((i) => i.kind === "cancelled"),
+      d.items.some((i) => i.kind === "cancelled" && !i.dateChanged),
     );
     return {
       subject: title,

@@ -56,7 +56,7 @@ describe("AboutForm", () => {
     it("shows the note, and drops it on the next edit", async () => {
       setup({}, actions({ setDate: vi.fn(async () => ({ ok: true as const, note: NOTE })) }));
       await pickDay("20");
-      expect(within(birthday()).getByText(NOTE)).toHaveAttribute("role", "status");
+      expect(within(birthday()).getByText(NOTE)).toHaveAttribute("aria-live", "polite");
       expect(within(anniversary()).queryByText(NOTE)).toBeNull();
       fireEvent.change(within(birthday()).getByRole("spinbutton", { name: "Birthday day" }), { target: { value: "21" } });
       expect(screen.queryByText(NOTE)).toBeNull();

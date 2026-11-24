@@ -33,6 +33,7 @@ function late(n: number, o: Partial<TrackingCandidate>): TrackingCandidate {
     failureType: null,
     resolved: false,
     store: null,
+    dateChanged: false,
     sentSteps: new Set<StepKey>(),
     ...o,
   };
