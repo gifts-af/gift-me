@@ -6,11 +6,13 @@
 import {
   FACT_VALUE_MAX,
   nextBestIdea,
+  packagesFromZinc,
   rejectionFacts,
   type CalendarDate,
   type Database,
   type RejectionCode,
   type RejectionFact,
+  type TrackedPackage,
 } from "@gifts-af/core";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
@@ -264,6 +266,13 @@ export type RoundPageOrder = {
   maxPriceCents: number;
   feeCents: number;
   estDeliveryDate: CalendarDate | null;
+  /** When Zinc placed it, for the store's own range when there's no carrier estimate. */
+  placedAt: string | null;
+  deliveredAt: string | null;
+  packages: TrackedPackage[];
+  /** The idea's store range, in days. */
+  handlingDaysMax: number | null;
+  deliveryDaysMax: number | null;
 };
 
 /** A list gift that isn't among the ideas, for "Buy it yourself" (AC-29). */
@@ -293,10 +302,15 @@ export type RoundPageView = {
   };
   overBudgetPct: number | null;
   ideas: RoundPageIdea[];
-  /** Orders that aren't cancelled or failed. */
+  /** Orders that aren't cancelled or failed, delivered ones included. */
   liveOrders: RoundPageOrder[];
   /** Failed orders still to fix: not yet replaced, and their round still open. */
   failedOrders: RoundPageOrder[];
+  /**
+   * Gifts the store cancelled, resolved or not, so one cancelled on or after the ship-by date
+   * (resolved at once, so not in failedOrders) still shows with its refund.
+   */
+  storeCancelled: RoundPageOrder[];
   /** What happened, for a round that's no longer open (AC-18); null while it is. */
   closedText: string | null;
   nextBestIdeaId: string | null;
@@ -361,7 +375,9 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
       .order("rank"),
     db
       .from("orders")
-      .select("id, idea_id, status, failure_type, resolved, total_cents, max_price_cents, fee_cents, est_delivery_date, created_at")
+      .select(
+        "id, idea_id, status, failure_type, resolved, total_cents, max_price_cents, fee_cents, est_delivery_date, placed_at, delivered_at, packages, created_at",
+      )
       .eq("round_id", roundId)
       .order("created_at")
       .order("id"),
@@ -403,22 +419,32 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
     };
   });
 
-  const titleOf = new Map(ideas.map((i) => [i.id, i.title]));
+  const ideaOf = new Map(ideasRes.data.map((i) => [i.id, i]));
+  const resolved = new Set(ordersRes.data.filter((o) => o.resolved).map((o) => o.id));
+  const all: RoundPageOrder[] = ordersRes.data.map((o) => {
+    const idea = ideaOf.get(o.idea_id);
+    return {
+      id: o.id,
+      ideaId: o.idea_id,
+      title: idea?.title ?? "",
+      status: o.status,
+      failureType: o.failure_type,
+      totalCents: o.total_cents,
+      maxPriceCents: o.max_price_cents,
+      feeCents: o.fee_cents,
+      estDeliveryDate: o.est_delivery_date,
+      placedAt: o.placed_at,
+      deliveredAt: o.delivered_at,
+      // Stored whitelisted (T42); read through the same whitelist.
+      packages: packagesFromZinc(o.packages),
+      handlingDaysMax: idea?.handling_days_max ?? null,
+      deliveryDaysMax: idea?.delivery_days_max ?? null,
+    };
+  });
+  const liveOrders = all.filter((o) => !NOT_LIVE.has(o.status));
   // A failure already dealt with (replaced, or its round closed) is nothing to fix.
-  const current = ordersRes.data.filter((o) => !(o.status === "failed" && o.resolved));
-  const orders: RoundPageOrder[] = current.map((o) => ({
-    id: o.id,
-    ideaId: o.idea_id,
-    title: titleOf.get(o.idea_id) ?? "",
-    status: o.status,
-    failureType: o.failure_type,
-    totalCents: o.total_cents,
-    maxPriceCents: o.max_price_cents,
-    feeCents: o.fee_cents,
-    estDeliveryDate: o.est_delivery_date,
-  }));
-  const liveOrders = orders.filter((o) => !NOT_LIVE.has(o.status));
-  const failedOrders = orders.filter((o) => o.status === "failed");
+  const failedOrders = all.filter((o) => o.status === "failed" && !resolved.has(o.id));
+  const storeCancelled = all.filter((o) => o.status === "failed" && o.failureType === "store_cancelled");
 
   const today = now.toISOString().slice(0, 10);
   // From the ship-by day on, as approve_round refuses it.
@@ -474,6 +500,7 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
     ideas,
     liveOrders,
     failedOrders,
+    storeCancelled,
     closedText,
     nextBestIdeaId,
     buyYourself,

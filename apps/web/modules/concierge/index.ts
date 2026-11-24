@@ -102,6 +102,7 @@ export { clearUnfiledNotes, pruneExpiredActionLinks } from "./inbound/cleanup";
 export { runTrackingNews } from "./tracking/news";
 // The delivered email (ALL-33), told by the Zinc webhook and retried by the tick.
 export { tellDelivered } from "./tracking/delivered";
+export { markGiftArrived, type ArrivedDeps } from "./tracking/arrived";
 export type { InboundCleanup } from "./inbound/cleanup";
 
 // Paying for gifts from the user's own Zinc wallet (ALL-32): connect, phone, disconnect, Settings status.

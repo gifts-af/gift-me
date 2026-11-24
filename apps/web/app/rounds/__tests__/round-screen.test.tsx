@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { RoundPageIdea, RoundPageView } from "@/modules/concierge";
+import type { RoundPageIdea, RoundPageOrder, RoundPageView } from "@/modules/concierge";
 import { IdeaPhoto } from "@/components/idea-photo";
 import { RoundScreen, type BudgetResult, type RejectResult } from "../[id]/round-screen";
 
@@ -53,6 +53,7 @@ function view(o: Partial<RoundPageView> = {}, round: Partial<RoundPageView["roun
     ideas: [],
     liveOrders: [],
     failedOrders: [],
+    storeCancelled: [],
     closedText: null,
     nextBestIdeaId: null,
     buyYourself: [],
@@ -60,12 +61,40 @@ function view(o: Partial<RoundPageView> = {}, round: Partial<RoundPageView["roun
   };
 }
 
-function setup(v: RoundPageView, { outlook = true }: { outlook?: boolean | null } = {}) {
+function order(o: Partial<RoundPageOrder> = {}): RoundPageOrder {
+  n += 1;
+  return {
+    id: `o${n}`,
+    ideaId: `i${n}`,
+    title: `Gift ${n}`,
+    status: "shipped",
+    failureType: null,
+    totalCents: 4218,
+    maxPriceCents: 4600,
+    feeCents: 100,
+    estDeliveryDate: null,
+    placedAt: "2026-12-01T10:00:00Z",
+    deliveredAt: null,
+    packages: [],
+    handlingDaysMax: 2,
+    deliveryDaysMax: 5,
+    ...o,
+  };
+}
+
+type ArrivedAction = (roundId: string, orderId: string) => Promise<{ ok: boolean }>;
+
+function setup(
+  v: RoundPageView,
+  { outlook = true, arrived = vi.fn<ArrivedAction>(async () => ({ ok: true })) }: { outlook?: boolean | null; arrived?: ArrivedAction | null } = {},
+) {
   const rejectAction = vi.fn(async (...a: [string, FormData]): Promise<RejectResult> => (void a, { ok: true, more: true }));
   const setBudgetAction = vi.fn(async (...a: [string, FormData]): Promise<BudgetResult> => (void a, { ok: true }));
   const outlookAction = vi.fn(async (...a: [string, { code: string; ownedIdeaId: string | null; text: string | null }]) => (void a, outlook));
-  render(<RoundScreen view={v} rejectAction={rejectAction} setBudgetAction={setBudgetAction} outlookAction={outlookAction} />);
-  return { rejectAction, setBudgetAction, outlookAction };
+  render(
+    <RoundScreen view={v} rejectAction={rejectAction} setBudgetAction={setBudgetAction} outlookAction={outlookAction} arrivedAction={arrived} />,
+  );
+  return { rejectAction, setBudgetAction, outlookAction, arrived };
 }
 
 const pick = (title: string) => userEvent.click(screen.getByRole("checkbox", { name: title }));
@@ -194,6 +223,7 @@ describe("RoundScreen: picks after the round changes", () => {
       rejectAction: vi.fn(async (...a: [string, FormData]): Promise<RejectResult> => (void a, { ok: true, more: true })),
       setBudgetAction: vi.fn(async (...a: [string, FormData]): Promise<BudgetResult> => (void a, { ok: true })),
       outlookAction: vi.fn(async (...a: [string, { code: string; ownedIdeaId: string | null; text: string | null }]) => (void a, true)),
+      arrivedAction: null,
     };
   }
 
@@ -347,19 +377,7 @@ describe("RoundScreen: None of these", () => {
         {
           ideas: [idea({ title: "Orchid", status: "selected" })],
           closedText: "Already ordered: Orchid",
-          liveOrders: [
-            {
-              id: "o1",
-              ideaId: "i1",
-              title: "Orchid",
-              status: "ordered",
-              failureType: null,
-              totalCents: 3000,
-              maxPriceCents: 3300,
-              feeCents: 100,
-              estDeliveryDate: null,
-            },
-          ],
+          liveOrders: [order({ ideaId: "i1", title: "Orchid", status: "placed", totalCents: 3000 })],
         },
         { status: "ordered" },
       ),
@@ -367,6 +385,111 @@ describe("RoundScreen: None of these", () => {
     expect(screen.getByText("Already ordered: Orchid")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "None of these" })).toBeNull();
     expect(screen.queryByRole("checkbox")).toBeNull();
+  });
+});
+
+describe("RoundScreen: your gifts", () => {
+  // The occasion is Fri, Dec 18 (view()); the gift's photo and store come from its idea.
+  const gifts = () => within(screen.getByRole("region", { name: "Your gifts" }));
+  const ordered = (o: Partial<RoundPageOrder>) => {
+    const i = idea({ title: "Cozy throw", retailer: "walmart", status: "selected" });
+    return { i, o: order({ ideaId: i.id, title: "Cozy throw", ...o }) };
+  };
+
+  it("shipped shows Shipped · due <date> · Track it, opening the carrier page in a new tab, and It arrived", () => {
+    const { i, o } = ordered({
+      estDeliveryDate: "2026-12-14",
+      packages: [{ carrier: "UPS", trackingNumber: "1Z 999", status: null, estimatedDeliveryDate: "2026-12-14", trackingUrl: null }],
+    });
+    setup(view({ ideas: [i], liveOrders: [o] }, { status: "ordered" }));
+    const item = gifts().getByRole("listitem");
+    expect(item).toHaveTextContent("Cozy throw");
+    expect(item).toHaveTextContent("$42.18 · Walmart");
+    expect(item).toHaveTextContent("Shipped · due Mon, Dec 14 · Track it ↗");
+    const link = within(item).getByRole("link", { name: /Track it/ });
+    expect(link).toHaveAttribute("href", "https://www.ups.com/track?tracknum=1Z%20999");
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    expect(within(item).getByRole("button", { name: "It arrived" })).toBeInTheDocument();
+  });
+
+  it("shipped with no public tracking page (Amazon) has no Track it link", () => {
+    const { i, o } = ordered({
+      estDeliveryDate: "2026-12-14",
+      packages: [{ carrier: "Amazon", trackingNumber: "TBA123", status: null, estimatedDeliveryDate: "2026-12-14", trackingUrl: null }],
+    });
+    setup(view({ ideas: [i], liveOrders: [o] }, { status: "ordered" }));
+    const item = gifts().getByRole("listitem");
+    expect(item).toHaveTextContent("Shipped · due Mon, Dec 14");
+    expect(within(item).queryByRole("link")).toBeNull();
+  });
+
+  it("late shows an amber May arrive <date> · <n> days late chip", () => {
+    const { i, o } = ordered({ estDeliveryDate: "2026-12-20" });
+    setup(view({ ideas: [i], liveOrders: [o] }, { status: "ordered" }));
+    const chip = gifts().getByText("May arrive Sun, Dec 20 · 2 days late");
+    expect(chip).toHaveClass("bg-warning-soft", "text-warning");
+    expect(gifts().getByRole("button", { name: "It arrived" })).toBeInTheDocument();
+  });
+
+  it("placed shows Ordered · usually arrives by the end of the store's range", () => {
+    // Placed Tue, Dec 1, plus 2 handling and 5 delivery days.
+    const { i, o } = ordered({ status: "placed" });
+    setup(view({ ideas: [i], liveOrders: [o] }, { status: "ordered" }));
+    expect(gifts().getByRole("listitem")).toHaveTextContent("Ordered · usually arrives by Tue, Dec 8");
+  });
+
+  it("no It arrived on a placed gift", () => {
+    const { i, o } = ordered({ status: "placed", estDeliveryDate: "2026-12-10" });
+    setup(view({ ideas: [i], liveOrders: [o] }, { status: "ordered" }));
+    expect(gifts().queryByRole("button", { name: "It arrived" })).toBeNull();
+  });
+
+  it("delivered shows Delivered <date>", () => {
+    const { i, o } = ordered({ status: "delivered", deliveredAt: "2026-12-10T15:00:00Z", estDeliveryDate: "2026-12-20" });
+    setup(view({ ideas: [i], liveOrders: [o] }, { status: "delivered" }));
+    const item = gifts().getByRole("listitem");
+    expect(item).toHaveTextContent("Delivered Thu, Dec 10");
+    expect(item).not.toHaveTextContent("late");
+    expect(within(item).queryByRole("button")).toBeNull();
+  });
+
+  it("store cancelled before the ship-by date shows the refund chip and Choose another gift, not a second fix row", () => {
+    const { i, o } = ordered({ status: "failed", failureType: "store_cancelled" });
+    setup(view({ ideas: [i], failedOrders: [o], storeCancelled: [o] }, { status: "needs_attention" }));
+    const item = gifts().getByRole("listitem");
+    expect(within(item).getByText("The store cancelled it · $42.18 back in Zinc")).toHaveClass("bg-warning-soft", "text-warning");
+    expect(within(item).getByRole("link", { name: "Choose another gift" })).toHaveAttribute("href", `/rounds/r1/fix/${o.id}`);
+    expect(screen.queryByRole("heading", { name: "Needs a fix" })).toBeNull();
+  });
+
+  it("store cancelled after the ship-by date shows the refund chip and no link", () => {
+    const { i, o } = ordered({ status: "failed", failureType: "store_cancelled" });
+    setup(view({ ideas: [i], storeCancelled: [o], closedText: "This occasion has passed" }, { status: "skipped" }));
+    const item = gifts().getByRole("listitem");
+    expect(item).toHaveTextContent("The store cancelled it · $42.18 back in Zinc");
+    expect(within(item).queryByRole("link")).toBeNull();
+  });
+
+  it("It arrived sends the order and, refused, says so", async () => {
+    const { i, o } = ordered({});
+    const arrived = vi.fn<ArrivedAction>(async () => ({ ok: false }));
+    setup(view({ ideas: [i], liveOrders: [o] }, { status: "ordered" }), { arrived });
+    await userEvent.click(gifts().getByRole("button", { name: "It arrived" }));
+    await waitFor(() => expect(arrived).toHaveBeenCalledWith("r1", o.id));
+    expect(await screen.findByRole("alert")).toHaveTextContent("That didn't go through. Reload and try again.");
+  });
+
+  it("with tracking switched off there's no It arrived", () => {
+    const { i, o } = ordered({});
+    setup(view({ ideas: [i], liveOrders: [o] }, { status: "ordered" }), { arrived: null });
+    expect(gifts().getByRole("listitem")).toHaveTextContent("Shipped");
+    expect(gifts().queryByRole("button", { name: "It arrived" })).toBeNull();
+  });
+
+  it("no Your gifts list before anything is bought", () => {
+    setup(view({ ideas: [idea()] }));
+    expect(screen.queryByRole("region", { name: "Your gifts" })).toBeNull();
   });
 });
 

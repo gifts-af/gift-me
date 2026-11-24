@@ -46,6 +46,11 @@ function order(o: Partial<RoundPageOrder> = {}): RoundPageOrder {
     maxPriceCents: 5300,
     feeCents: 100,
     estDeliveryDate: null,
+    placedAt: null,
+    deliveredAt: null,
+    packages: [],
+    handlingDaysMax: null,
+    deliveryDaysMax: null,
     ...o,
   };
 }

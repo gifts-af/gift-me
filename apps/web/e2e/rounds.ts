@@ -239,3 +239,30 @@ export async function linkList(buyer: Credentials, personId: string, token: stri
 export async function ordersOf(roundId: string): Promise<{ id: string; idea_id: string; status: string; failure_type: string | null; resolved: boolean }[]> {
   return rest(`orders?select=id,idea_id,status,failure_type,resolved&round_id=eq.${roundId}&order=created_at`);
 }
+
+/**
+ * One idea's bought order in any state Zinc's events leave it in: `fields` are the order's
+ * own columns (status, placed_at, est_delivery_date, packages, delivered_at, failure_type, …). The
+ * idea is marked selected; the round's status is the caller's to set.
+ */
+export async function seedOrder(buyerId: string, roundId: string, ideaId: string, fields: Record<string, unknown>): Promise<string> {
+  await rest(`gift_ideas?id=eq.${ideaId}`, { method: "PATCH", body: { status: "selected" } });
+  const [order] = await rest<{ id: string }[]>("orders", {
+    method: "POST",
+    body: {
+      user_id: buyerId,
+      round_id: roundId,
+      idea_id: ideaId,
+      funding_mode: "zinc_wallet",
+      max_price_cents: 4600,
+      fee_cents: 100,
+      ship_to: "recipient",
+      ship_city: "Dayton",
+      ship_state: "OH",
+      provider_order_id: randomUUID(),
+      total_cents: 4218,
+      ...fields,
+    },
+  });
+  return order.id;
+}

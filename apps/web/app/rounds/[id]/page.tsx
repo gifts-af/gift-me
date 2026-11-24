@@ -9,8 +9,9 @@ import { TopBar } from "@/components/app-shell/top-bar";
 import { APP_NAME } from "@/lib/brand";
 import { createClient } from "@/lib/supabase/server";
 import { roundAccess, roundView } from "@/modules/concierge";
-import { roundDbDeps } from "@/lib/wiring";
-import { outlookAction, rejectAction, setBudgetAction } from "../actions";
+import { roundDbDeps, settingInt } from "@/lib/wiring";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { markArrived, outlookAction, rejectAction, setBudgetAction } from "../actions";
 import { OtherAccount } from "../access";
 import { RoundScreen } from "./round-screen";
 
@@ -53,12 +54,20 @@ async function Loaded({ params }: { params: Promise<{ id: string }> }) {
   const view = await roundView(id, supabase as unknown as SupabaseClient<Database>, new Date());
   if (!view) notFound();
   const name = view.round.personName;
+  // "It arrived" shows only while order tracking is on (E7); markArrived checks again.
+  const tracking = (await settingInt(createAdminClient(), "order_tracking_enabled")) === 1;
 
   return (
     <>
       {name && <BackLink href={`/people/${view.round.personId}`} label={name} />}
       <PageTitle>{name ? `Gift for ${name}` : "Gift"}</PageTitle>
-      <RoundScreen view={view} rejectAction={rejectAction} setBudgetAction={setBudgetAction} outlookAction={outlookAction} />
+      <RoundScreen
+        view={view}
+        rejectAction={rejectAction}
+        setBudgetAction={setBudgetAction}
+        outlookAction={outlookAction}
+        arrivedAction={tracking ? markArrived : null}
+      />
     </>
   );
 }
