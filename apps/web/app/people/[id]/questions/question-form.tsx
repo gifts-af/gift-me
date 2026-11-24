@@ -6,9 +6,12 @@ import { useGoBack } from "@/components/app-shell/back-history";
 import type { GuidedQuestion } from "@gifts-af/core";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { useHydrated } from "@/lib/use-hydrated";
 
 // Guided questions on the phone (ALL-26, C-4). The text lives in state, not the
 // form: React clears a form after its action, and a refused answer must stay put.
+// The boxes are off until the page can take input: text typed before that never
+// reaches state, and the next keystroke anywhere would wipe it.
 
 type Result = { ok: true } | { ok: false; error: string; key?: string };
 type Action = (previous: null, formData: FormData) => Promise<Result>;
@@ -31,6 +34,7 @@ export function QuestionForm({
   const [text, setText] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ message: string; key?: string } | null>(null);
+  const hydrated = useHydrated();
   const router = useRouter();
   // Back to where you were on their page, if you came from it (ALL-131).
   const goBack = useGoBack(`/people/${personId}`);
@@ -83,11 +87,12 @@ export function QuestionForm({
             <textarea
               id={id}
               rows={2}
+              disabled={!hydrated}
               value={text[q.key] ?? ""}
               onChange={(e) => setText((t) => ({ ...t, [q.key]: e.target.value }))}
               aria-describedby={`${id}-hint`}
               aria-invalid={error?.key === q.key ? true : undefined}
-              className="w-full rounded-xl border border-input bg-background px-3 py-2 text-base outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring aria-invalid:border-destructive"
+              className="w-full rounded-xl border border-input bg-background px-3 py-2 text-base outline-none focus-visible:border-ring focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-45 aria-invalid:border-destructive"
             />
             <div className="flex items-center justify-between gap-2">
               <p id={`${id}-hint`} className="min-w-0 text-[13px] text-muted-foreground">
