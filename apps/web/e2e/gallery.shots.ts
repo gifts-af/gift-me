@@ -52,11 +52,12 @@ const SIGNED_OUT: [name: string, url: string][] = [
 
 // Filled in by beforeAll: a fresh account with one person (with a saved gift) and a one-gift list,
 // plus a round awaiting approval and another with a gift to fix (ALL-29).
-type Seeded = { user: Credentials; personId: string; shareToken: string; round: { id: string; ideaIds: string[] }; fix: { roundId: string; orderId: string }; past: PastGiftsSeed };
+type Seeded = { user: Credentials; personId: string; dadId: string; shareToken: string; round: { id: string; ideaIds: string[] }; fix: { roundId: string; orderId: string }; past: PastGiftsSeed };
 const SIGNED_IN: [name: string, url: (s: Seeded) => string][] = [
   ["home", () => "/"],
   ["my-list", () => "/lists"],
   ["person", (s) => `/people/${s.personId}`],
+  ["person-gift-in-progress", (s) => `/people/${s.dadId}`],
   ["person-questions", (s) => `/people/${s.personId}/questions`],
   ["person-budget", (s) => `/people/${s.personId}/budget`],
   ["person-about", (s) => `/people/${s.personId}/about`],
@@ -178,7 +179,7 @@ async function addOnDemandIdeas(user: Credentials, personId: string): Promise<vo
 // A round awaiting approval for Dad (one idea over his budget), and one for Grandpa whose first
 // pick's price went up, written as the engine and Zinc would leave them (ALL-29). The buyer can buy,
 // so the confirm page shows the fake Zinc's balance.
-async function addRounds(user: Credentials): Promise<Pick<Seeded, "round" | "fix" | "past">> {
+async function addRounds(user: Credentials): Promise<Pick<Seeded, "dadId" | "round" | "fix" | "past">> {
   const { id } = await readyBuyer(user);
   const ideas = [
     { title: "Rotary fly-tying vise", totalCents: 3150, productId: "B0GALLERY3", reason: "He asked for a new vise, and this one turns as he ties." },
@@ -190,7 +191,7 @@ async function addRounds(user: Credentials): Promise<Pick<Seeded, "round" | "fix
   const grandpa = await personFor(id, "Grandpa");
   const fixRound = await seedRound(id, grandpa, { budgetCents: 7500, ideas });
   const orderId = await seedFailedOrder(id, fixRound.roundId, fixRound.ideaIds[0], "price_up");
-  return { round: { id: round.roundId, ideaIds: round.ideaIds }, fix: { roundId: fixRound.roundId, orderId }, past: await seedPastGifts(id, "Nora") };
+  return { dadId: dad.personId, round: { id: round.roundId, ideaIds: round.ideaIds }, fix: { roundId: fixRound.roundId, orderId }, past: await seedPastGifts(id, "Nora") };
 }
 
 async function shareToken(user: Credentials): Promise<string> {
