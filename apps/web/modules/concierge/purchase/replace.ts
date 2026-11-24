@@ -3,17 +3,18 @@
 // The replacement goes through replace_failed_order under the round lease, with the cap
 // worked out like approveAndBuy's, then it's placed and the buyer told the same way.
 //
-// A re-quote looks the idea up by its saved retailer and product id on the app's own
-// lookup key (T17): Amazon and Walmart through their offers, preferring the idea's own
-// offer; other stores through the product's details. An idea priced from a list (no
-// product id) can't be re-quoted. Events carry ids, cents and reason codes only (E6);
+// A re-quote looks the idea up on the app's own lookup key (T17), an AI idea by its saved
+// retailer and product id and a list gift by its link, as the idea run priced it: Amazon and
+// Walmart through their offers, preferring the idea's own offer; other stores through the
+// product's details. A gift priced from its list (no product id) can't be re-quoted. Events carry ids, cents and reason codes only (E6);
 // a Zinc failure logs only its kind, never its message (a Shopify path holds the handle).
 import { committedSpendCents, estimatedTotalCents, isShippableAddress, pickOffer, type ZincOffer } from "@gifts-af/core";
+import { isAmazonHost } from "@gifts-af/core/store-page/link";
 import { logEvent } from "@/lib/log";
 import type { Cost, RecordCost } from "../costs/record";
 import { hasPaidFeatures } from "../paid-features";
 import { ZincError, type ZincHttp } from "../zinc/client";
-import { listGiftRoute, productDetails, productOffers, type ZincStep } from "../zinc/products";
+import { listGiftRoute, productDetails, productOffers, type ListGiftRoute, type ZincStep } from "../zinc/products";
 import type { DbDeps } from "../zinc/types";
 import { capsFor, destinationFor, refusalOf, saveDestination, tellCustomer, type ApproveError, type ApproveResult, type Destination, type ShipTo } from "./approve";
 import { asCommitted, placeRound } from "./place";
@@ -113,7 +114,7 @@ async function requote(deps: QuoteDeps, idea: IdeaRow, feeCents: number, ids: Re
   let outcome = "priced";
   try {
     offer = await lookUp(deps.lookup, idea, step);
-    if (!offer) outcome = idea.retailer_product_id === null ? "no_live_price" : "unavailable";
+    if (!offer) outcome = calls === 0 ? "no_live_price" : "unavailable";
   } catch (e) {
     if (!(e instanceof ZincError)) throw e;
     outcome = `zinc_${e.kind}`;
@@ -148,26 +149,39 @@ async function requote(deps: QuoteDeps, idea: IdeaRow, feeCents: number, ids: Re
   return newCents;
 }
 
+/**
+ * Where an idea's price is looked up today, or null when it can't be (so nothing is called or
+ * charged). An AI idea stores Zinc's own retailer name. A list gift stores the store's display
+ * name, so it's routed by its link, as the idea run priced it. A route that names another
+ * product than the one priced is refused.
+ */
+function routeOf(idea: IdeaRow): Exclude<ListGiftRoute, { kind: "check" }> | null {
+  const { retailer, retailer_product_id: productId, product_url: url } = idea;
+  if (!productId) return null;
+  if (idea.source !== "list") {
+    return retailer === "amazon" || retailer === "walmart" ? { kind: "offers", retailer, productId } : null;
+  }
+  if (!url) return null;
+  // Amazon's id is the list item's ASIN, which the run had in hand and saved as the product id.
+  const route = listGiftRoute(url, URL.canParse(url) && isAmazonHost(new URL(url).hostname) ? productId : null);
+  return route.kind !== "check" && route.productId === productId ? route : null;
+}
+
 /** The idea's product at its store today (R1); null when it's gone or has no live price. */
 async function lookUp(lookup: QuoteDeps["lookup"], idea: IdeaRow, step: ZincStep): Promise<ZincOffer | null> {
-  const productId = idea.retailer_product_id;
-  const retailer = idea.retailer;
-  if (!productId || !retailer) return null;
+  const route = routeOf(idea);
+  if (!route) return null;
+  const { productId } = route;
   const signal = new AbortController().signal;
-  if (retailer === "amazon" || retailer === "walmart") {
-    const offers = await step(() => productOffers(lookup.http, lookup.key, retailer, productId, signal));
+  if (route.kind === "offers") {
+    const offers = await step(() => productOffers(lookup.http, lookup.key, route.retailer, productId, signal));
     if (offers === "stop") return null;
     const own = idea.offer_id === null ? undefined : offers.find((o) => o.offerId === idea.offer_id);
     // The idea's own seller when it still sells it new; otherwise the best offer, as the run picks.
     return (own && pickOffer([own])) ?? pickOffer(offers);
   }
-  // Zinc names a Shopify store by its domain; a "shopify" retailer takes the product link's host.
-  let zincRetailer = retailer;
-  if (retailer === "shopify") {
-    const route = idea.product_url ? listGiftRoute(idea.product_url, null) : null;
-    if (route?.kind !== "details" || route.retailer !== "shopify") return null;
-    zincRetailer = route.shop;
-  }
+  // Zinc names a Shopify store by its domain.
+  const zincRetailer = route.retailer === "shopify" ? route.shop : route.retailer;
   const d = await step(() => productDetails(lookup.http, lookup.key, zincRetailer, productId, signal));
   if (d === "stop" || d === null) return null;
   if (!(d.productId === productId || d.handle === productId) || d.priceCents === null || d.available === false) return null;

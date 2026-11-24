@@ -6,6 +6,7 @@ import { createClient } from "@supabase/supabase-js";
 import { Client } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@gifts-af/core";
+import { storeName } from "@gifts-af/core/store-page/link";
 import { LOCAL_DB, localStack } from "../../../test/local-db";
 import type { RecordCost } from "../costs/record";
 import { approveAndBuy } from "../purchase/approve";
@@ -354,6 +355,96 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
     zinc.calls = [];
     expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps())).toBe("unavailable");
     expect(zinc.calls).toEqual([]);
+  });
+
+  // ─── a price rise on a list gift ──────────────────────────────────────────
+
+  /** Makes the round's idea a list gift as the idea run saves one: the store's display name, the list's link, and Zinc's id. */
+  async function asListGift(userId: string, r: Round, g: { url: string; productId: string | null; offerId?: string }): Promise<void> {
+    const owner = await newUser();
+    const list = await pg.query("insert into lists.lists (owner_id, title) values ($1, 'Birthday') returning id, share_token", [owner]);
+    const item = await pg.query(
+      "insert into lists.list_items (list_id, position, name, price_cents, product_url) values ($1, 0, 'Gift', 4000, $2) returning id",
+      [list.rows[0].id, g.url],
+    );
+    await pg.query("insert into lists.person_links (person_id, buyer_id, list_id, share_token) values ($1, $2, $3, $4)", [
+      r.personId,
+      userId,
+      list.rows[0].id,
+      list.rows[0].share_token,
+    ]);
+    await pg.query(
+      `update concierge.gift_ideas set source = 'list', list_item_id = $2, product_url = $3, retailer = $4,
+              retailer_product_id = $5, offer_id = $6 where id = $1`,
+      [r.ideaIds[0], item.rows[0].id, g.url, storeName(g.url), g.productId, g.offerId ?? null],
+    );
+  }
+
+  /** A list gift whose order failed with a price rise. */
+  async function failedListGift(g: { url: string; productId: string | null; offerId?: string }) {
+    const userId = await newUser();
+    const r = await newRound(userId);
+    await asListGift(userId, r, g);
+    zinc.plan.set(g.url, [{ status: 400, code: "max_price_exceeded" }, "ok"]);
+    expect(await approveAndBuy({ userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps())).toMatchObject({ reason: "price_up" });
+    const [failed] = (await orders(r.roundId)).map((o) => o.id as string);
+    zinc.calls = [];
+    return { userId, r, failed };
+  }
+
+  const LIST_GIFTS = [
+    { store: "Amazon", url: "https://www.amazon.com/dp/B0LISTGIFT?th=1", productId: "B0LISTGIFT", offerId: "off_B0LISTGIFT", catalog: "amazon:B0LISTGIFT", path: "/products/B0LISTGIFT/offers" },
+    { store: "Amazon, another host and seller", url: "https://smile.amazon.com/gp/product/B0LISTGIF2", productId: "B0LISTGIF2", offerId: "off_gone", catalog: "amazon:B0LISTGIF2", path: "/products/B0LISTGIF2/offers" },
+    { store: "Walmart", url: "https://www.walmart.com/ip/Kettle/123456789", productId: "123456789", catalog: "walmart:123456789", path: "/products/123456789/offers" },
+    { store: "Etsy", url: "https://www.etsy.com/listing/6525410/mug", productId: "6525410", catalog: "etsy:6525410", path: "/products/6525410" },
+    { store: "a Shopify store", url: "https://www.yetch.store/products/blue-mug", productId: "blue-mug", catalog: "yetch.store:blue-mug", path: "/products/blue-mug" },
+  ];
+
+  it.each(LIST_GIFTS)("a list gift from $store is checked and bought at today's price, one recorded lookup each", async (g) => {
+    const { userId, r, failed } = await failedListGift(g);
+    zinc.catalog.set(g.catalog, { priceCents: 5000 });
+    zinc.products.set(g.url, { priceCents: 5000 });
+    const cost = { userId, kind: "lookup_price_check", cents: lookupCents, estimated: true, orderId: failed };
+
+    expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps())).toEqual({ oldCents: 4200, newCents: totalAt(5000) });
+    expect(zinc.calls).toEqual([`GET ${g.path}`]);
+    expect(recordCost.mock.calls).toEqual([[cost]]);
+
+    expect(
+      await replaceFailedOrder({ userId, roundId: r.roundId, failedOrderId: failed, ideaId: r.ideaIds[0], shownTotalCents: totalAt(5000) }, deps()),
+    ).toEqual({ ok: true, status: "ordered", reason: null });
+    expect(offerCalls()).toEqual([`GET ${g.path}`, `GET ${g.path}`]);
+    expect(recordCost.mock.calls).toEqual([[cost], [cost]]);
+    expect(zinc.posts.at(-1)).toMatchObject({ url: g.url });
+    // The stored display name is left as it was.
+    const idea = await pg.query("select retailer from concierge.gift_ideas where id = $1", [r.ideaIds[0]]);
+    expect(idea.rows[0].retailer).toBe(storeName(g.url));
+  });
+
+  it.each([
+    { why: "a store Zinc only checks", url: "https://www.rei.com/product/123/mug", productId: null },
+    { why: "a store Zinc only checks, with an id saved", url: "https://www.rei.com/product/123/mug", productId: "123" },
+    { why: "a link that names another product than the one priced", url: "https://www.walmart.com/ip/Kettle/123456789", productId: "987654321" },
+    { why: "a routable store that was priced from the list", url: "https://www.etsy.com/listing/6525410/mug", productId: null },
+  ])("a list gift that can't be re-checked ($why) makes no lookup and records no cost", async (g) => {
+    const { userId, r, failed } = await failedListGift(g);
+    expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps())).toBe("unavailable");
+    expect(
+      await replaceFailedOrder({ userId, roundId: r.roundId, failedOrderId: failed, ideaId: r.ideaIds[0], shownTotalCents: 9000 }, deps()),
+    ).toEqual({ ok: false, error: "unavailable" });
+    expect(zinc.calls).toEqual([]);
+    expect(recordCost).not.toHaveBeenCalled();
+  });
+
+  it("an AI idea is still looked up by its saved store and id, whatever its link", async () => {
+    const userId = await newUser();
+    const r = await newRound(userId);
+    const [failed] = await boughtAndFailed(userId, r, { 0: "max_price_exceeded" });
+    await pg.query("update concierge.gift_ideas set product_url = 'https://www.walmart.com/ip/1' where id = $1", [r.ideaIds[0]]);
+    zinc.catalog.set(`amazon:${r.productIds[0]}`, { priceCents: 5000 });
+    zinc.calls = [];
+    expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps())).toEqual({ oldCents: 4200, newCents: totalAt(5000) });
+    expect(zinc.calls).toEqual([`GET /products/${r.productIds[0]}/offers`]);
   });
 
   // ─── budget (AC-15, AC-6, AC-7) ───────────────────────────────────────────
