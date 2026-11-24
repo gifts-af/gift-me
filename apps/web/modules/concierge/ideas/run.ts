@@ -329,12 +329,16 @@ async function listPass(gifts: ListGift[], p: PassDeps & { stopped: () => boolea
 
   const quoteOne = async (g: ListGift, entered: () => void): Promise<Kept | null> => {
     const route = listGiftRoute(g.url, g.asin);
-    const routeName = route.kind === "check" ? "check" : route.retailer;
+    const routeName = route.kind === "check" ? "check" : route.kind === "refused" ? "amazon" : route.retailer;
     const note = (outcome: string, kind?: ZincErrorKind) =>
       logEvent("ideas.list_gift", { run_id: runId, route: routeName, outcome, ...(kind ? { kind } : {}) });
     const retailer = storeName(g.url);
     if (retailer === null) {
       note("unsupported");
+      return null;
+    }
+    if (route.kind === "refused") {
+      note(route.reason);
       return null;
     }
     const step: ZincStep = async <T>(call: () => Promise<T>): Promise<T | "stop"> => {

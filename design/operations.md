@@ -352,11 +352,11 @@ Spec and plan: [design/plans/ALL-29-approval.md](plans/ALL-29-approval.md). Deci
 |---|---|
 | `order.approved` | A buyer approved and orders were placed (`orders` count) |
 | `order.replaced` | A failed gift was replaced through `replace_failed_order` (new order id, idea id, cap in cents) |
-| `order.requote` | A price re-check on the fix page or at buy time: outcome and lookups made |
+| `order.requote` | A price re-check on the fix page or at buy time: outcome and lookups made (`link_mismatch` and `other_marketplace` as below, with no lookup) |
 | `round.ideas_rejected` | "None of these" with a new search to come: reason code, ideas rejected |
 | `round.rejection_noted` | "None of these" with no search left: only the reason was saved, the ideas stay buyable |
 | `round.budget_set` | A budget typed on an open round with none (cents) |
-| `ideas.list_gift` | One list gift looked up in an idea run: store route and outcome (qualified, unsupported, over budget, stopped, ...) |
+| `ideas.list_gift` | One list gift looked up in an idea run: store route and outcome (qualified, unsupported, over budget, stopped, `link_mismatch` for an Amazon link whose ASIN is unreadable or isn't the saved one, `other_marketplace` for an Amazon link outside amazon.com, ...) |
 
 None of these is an alert. Rejected-then-regenerated rounds show up as `ideas.run_started` on the next tick.
 

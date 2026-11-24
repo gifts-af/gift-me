@@ -6,6 +6,9 @@
 export type Behavior = "ok" | "402" | "timeout" | { status: number; code: string };
 type Post = { ref: string; idem: string; maxPrice: number; url: string; city: string; key: string };
 
+/** A lookup's answer. `offers` replaces the one default offer; `productId` and `handle` are what a details reply names. */
+type FakeLookup = { priceCents: number; offers?: { offerId: string; priceCents: number }[]; productId?: string; handle?: string };
+
 export class FakeZinc {
   balance = 100_000;
   /** Zinc's orders, by our reference (metadata.order_id). */
@@ -15,7 +18,7 @@ export class FakeZinc {
   /** Prices by product URL: the check passes for these, and an order capped below its price fails. */
   products = new Map<string, { priceCents: number }>();
   /** Lookup answers by "retailer:productId", for the offers and product-details routes. */
-  catalog = new Map<string, { priceCents: number }>();
+  catalog = new Map<string, FakeLookup>();
   posts: Post[] = [];
   calls: string[] = [];
   /** When set, POSTs wait on it (to hold a lease open). */
@@ -54,21 +57,19 @@ export class FakeZinc {
       if (lookup[2]) {
         return json(200, {
           status: "completed",
-          offers: [
-            {
-              offer_id: `off_${id}`,
-              price: p.priceCents,
-              available: true,
-              condition: "New",
-              buy_box_winner: true,
-              seller: { name: "Fake seller", first_party: false },
-              handling_days: { min: 0, max: 1 },
-              shipping_options: [{ price: 0, delivery_days: { min: 2, max: 4 } }],
-            },
-          ],
+          offers: (p.offers ?? [{ offerId: `off_${id}`, priceCents: p.priceCents }]).map((o, i) => ({
+            offer_id: o.offerId,
+            price: o.priceCents,
+            available: true,
+            condition: "New",
+            buy_box_winner: i === 0,
+            seller: { name: "Fake seller", first_party: false },
+            handling_days: { min: 0, max: 1 },
+            shipping_options: [{ price: 0, delivery_days: { min: 2, max: 4 } }],
+          })),
         });
       }
-      return json(200, { status: "completed", product_id: id, title: `Product ${id}`, price: p.priceCents, available: true });
+      return json(200, { status: "completed", product_id: p.productId ?? id, handle: p.handle, title: `Product ${id}`, price: p.priceCents, available: true });
     }
     if (method === "POST" && u.pathname === "/orders") {
       const body = JSON.parse(String(init?.body));

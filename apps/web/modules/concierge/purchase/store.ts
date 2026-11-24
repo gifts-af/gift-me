@@ -214,7 +214,13 @@ export type IdeaRow = {
   rank: number;
   /** Only a `proposed` idea is on offer; a rejected or selected one was replaced (AC-12b). */
   status: string;
-  /** Where a re-quote looks it up (R1): Zinc's retailer and product id, and the offer it was priced from. */
+  /** "generated" (an AI idea) or "list" (the person's own list). */
+  source: string;
+  /**
+   * Where a re-quote looks it up (R1): the product id and the offer it was priced from.
+   * `retailer` is Zinc's name for an AI idea, but a list gift's is the store's display name
+   * ("Amazon", "etsy.com"): never send that one to Zinc.
+   */
   retailer: string | null;
   retailer_product_id: string | null;
   offer_id: string | null;
@@ -224,7 +230,7 @@ export async function readIdeas(deps: DbDeps, ids: string[]): Promise<Map<string
   if (ids.length === 0) return new Map();
   const { data, error } = await concierge(deps)
     .from("gift_ideas")
-    .select("id, round_id, product_url, est_total_cents, handling_days_max, delivery_days_max, over_budget, rank, status, retailer, retailer_product_id, offer_id")
+    .select("id, round_id, product_url, est_total_cents, handling_days_max, delivery_days_max, over_budget, rank, status, source, retailer, retailer_product_id, offer_id")
     .in("id", ids);
   if (error) fail("Loading the ideas failed", error);
   return new Map((data ?? []).map((i) => [i.id, i as IdeaRow]));

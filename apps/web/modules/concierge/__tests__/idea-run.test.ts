@@ -728,12 +728,14 @@ describe("runIdeas: privacy and safety", () => {
 
 const ROUND = { occasion: "birthday" as const, occasionDate: "2026-12-20", shipByDeadline: "2026-12-10", budgetCents: 5000, maxTotalCents: null };
 
-/** List gift i: an Amazon link (ASIN Li) priced at the list's $20, unless overridden. */
+/** List gift i's ASIN. */
+const asinOf = (i: number) => `B0L${String(i).padStart(7, "0")}`;
+/** List gift i: an Amazon link priced at the list's $20, unless overridden. */
 const gift = (i: number, o: Partial<ListGift> = {}): ListGift => ({
   itemId: `item-${i}`,
   name: `List gift ${i}`,
-  url: `https://www.amazon.com/dp/L${i}`,
-  asin: `L${i}`,
+  url: `https://www.amazon.com/dp/${asinOf(i)}`,
+  asin: asinOf(i),
   listPriceCents: 2000,
   ...o,
 });
@@ -742,8 +744,8 @@ const gift = (i: number, o: Partial<ListGift> = {}): ListGift => ({
 function listWorld(n: number, z: FakeZinc, price = 2000): ListGift[] {
   return Array.from({ length: n }, (_, k) => {
     const i = k + 1;
-    z.offers.set(`L${i}`, [rawOffer({ offer_id: `loff-${i}`, price })]);
-    z.details.set(`L${i}`, { status: "completed", product_id: `L${i}`, main_image: `https://img.test/L${i}.jpg` });
+    z.offers.set(asinOf(i), [rawOffer({ offer_id: `loff-${i}`, price })]);
+    z.details.set(asinOf(i), { status: "completed", product_id: asinOf(i), main_image: `https://img.test/${asinOf(i)}.jpg` });
     return gift(i);
   });
 }
@@ -767,8 +769,8 @@ describe("runIdeas: list gifts first", () => {
     expect(store.saved[0]).toEqual({
       title: "List gift 1",
       retailer: "Amazon",
-      productUrl: "https://www.amazon.com/dp/L1",
-      retailerProductId: "L1",
+      productUrl: `https://www.amazon.com/dp/${asinOf(1)}`,
+      retailerProductId: asinOf(1),
       offerId: "loff-1",
       sellerName: "Amazon",
       firstParty: true,
@@ -783,7 +785,7 @@ describe("runIdeas: list gifts first", () => {
       reason: "On their list",
       overBudget: false,
       rank: 1,
-      imageUrl: "https://img.test/L1.jpg",
+      imageUrl: `https://img.test/${asinOf(1)}.jpg`,
       source: "list",
       listItemId: "item-1",
     });
@@ -815,6 +817,42 @@ describe("runIdeas: list gifts first", () => {
     expect(store.saved[2]).toMatchObject({ listItemId: null, imageUrl: "https://img.test/P1.jpg" });
   });
 
+  it.each([
+    { why: "names another product than its saved ASIN", url: "https://www.amazon.com/dp/B0OTHERONE", outcome: "link_mismatch" },
+    { why: "is another marketplace's", url: `https://www.amazon.co.uk/dp/${asinOf(1)}`, outcome: "other_marketplace" },
+    { why: "has no ASIN to compare with its saved one", url: "https://www.amazon.com/hz/wishlist/item", outcome: "link_mismatch" },
+    { why: "has a Shopify-like path", url: "https://www.amazon.com/products/blue-mug", outcome: "link_mismatch" },
+  ])("an Amazon list gift whose link $why is refused with no lookup, and the next gift is still offered", async (g) => {
+    const [bad, good] = listWorld(2, zinc);
+    store.in = inputs({ facts: [], round: ROUND, listGifts: [{ ...bad, url: g.url }, good] });
+    expect(await runIdeas(roundReq(), deps())).toEqual({ status: "saved", count: 1 });
+    expect(store.saved.map((i) => i.listItemId)).toEqual(["item-2"]);
+    // One offers lookup and one photo, both for the good gift.
+    expect(zinc.calls.map((c) => c.target)).toEqual([asinOf(2), asinOf(2)]);
+    expect(store.finished).toEqual([{ outcome: "saved", cost: 2 }]);
+    const refused = events().filter((e) => e.event === "ideas.list_gift" && e.outcome !== "kept");
+    expect(refused).toEqual([{ event: "ideas.list_gift", at: expect.any(String), run_id: "run-1", route: "amazon", outcome: g.outcome }]);
+  });
+
+  it("an Amazon list gift with no saved ASIN, as the extension saves it, is offered at its list price through the store check", async () => {
+    const [g] = listWorld(1, zinc);
+    zinc.orderable.add(g.url);
+    // The link's ASIN is excluded and has a live offer and photo: none of it is used.
+    store.in = inputs({ facts: [], round: ROUND, excluded: [asinOf(1)], listGifts: [{ ...g, asin: null, listPriceCents: 1500 }] });
+    expect(await runIdeas(roundReq(), deps())).toEqual({ status: "saved", count: 1 });
+    expect(store.saved[0]).toMatchObject({ retailer: "Amazon", retailerProductId: null, offerId: null, priceCents: 1500, deliveryDaysMax: 7, imageUrl: null });
+    expect(zinc.calls).toHaveLength(1);
+    expect(store.finished).toEqual([{ outcome: "saved", cost: 1 }]);
+  });
+
+  it("an ASIN saved with another store's link is ignored: the gift is priced by its link", async () => {
+    zinc.details.set("123", { status: "completed", product_id: "123", price: 2000 });
+    store.in = inputs({ facts: [], round: ROUND, listGifts: [gift(1, { url: "https://www.etsy.com/listing/123/mug" })] });
+    expect(await runIdeas(roundReq(), deps())).toEqual({ status: "saved", count: 1 });
+    expect(zinc.calls.map((c) => c.target)).toEqual(["123"]);
+    expect(store.saved[0]).toMatchObject({ retailer: "etsy.com", retailerProductId: "123" });
+  });
+
   it("a person with no facts and one list gift gets that one idea", async () => {
     store.in = inputs({ facts: [], round: ROUND, listGifts: listWorld(1, zinc) });
     expect(await runIdeas(roundReq(), deps())).toEqual({ status: "saved", count: 1 });
@@ -825,15 +863,15 @@ describe("runIdeas: list gifts first", () => {
   it("a 200-item list makes at most idea_list_lookups_max lookups and saves what qualified", async () => {
     const gifts = listWorld(200, zinc, 9000);
     // Only gifts 4 and 9 are within the allowance.
-    zinc.offers.set("L4", [rawOffer({ price: 2000 })]);
-    zinc.offers.set("L9", [rawOffer({ price: 2000 })]);
+    zinc.offers.set(asinOf(4), [rawOffer({ price: 2000 })]);
+    zinc.offers.set(asinOf(9), [rawOffer({ price: 2000 })]);
     store.in = inputs({ facts: [], round: ROUND, listGifts: gifts });
 
     expect(await runIdeas(roundReq(), deps())).toEqual({ status: "saved", count: 2 });
 
     expect(zinc.count("offers")).toBe(10);
     expect(zinc.calls.filter((c) => c.kind === "offers").map((c) => c.target)).toEqual(
-      Array.from({ length: 10 }, (_, k) => `L${k + 1}`),
+      Array.from({ length: 10 }, (_, k) => asinOf(k + 1)),
     );
     expect(store.saved.map((i) => i.listItemId)).toEqual(["item-4", "item-9"]);
   });
@@ -880,7 +918,7 @@ describe("runIdeas: list gifts first", () => {
 
   it("list gift titles never reach the brainstorm prompt", async () => {
     world([2000], { zinc, gateway });
-    zinc.offers.set("L1", [rawOffer({ price: 2000 })]);
+    zinc.offers.set(asinOf(1), [rawOffer({ price: 2000 })]);
     store.in = inputs({ round: ROUND, listGifts: [gift(1, { name: "Grandma's secret lamp" })] });
     await runIdeas(roundReq(), deps());
     expect(gateway.bodies.length).toBeGreaterThan(0);
@@ -888,8 +926,8 @@ describe("runIdeas: list gifts first", () => {
   });
 
   it("a list gift that can't arrive in time, or is past the allowance, isn't saved", async () => {
-    zinc.offers.set("L1", [rawOffer({ handling_days: { max: 9 } })]);
-    zinc.offers.set("L2", [rawOffer({ price: 9000 })]);
+    zinc.offers.set(asinOf(1), [rawOffer({ handling_days: { max: 9 } })]);
+    zinc.offers.set(asinOf(2), [rawOffer({ price: 9000 })]);
     // A store Zinc can only check: the list's price, arriving in planning_delivery_days (7).
     const checked = gift(3, { url: "https://shop.example/blue-vase", asin: null, listPriceCents: 1500 });
     zinc.orderable.add(checked.url);
@@ -966,17 +1004,17 @@ describe("runIdeas: list gifts first", () => {
   });
 
   it("a list gift already given or rejected as a product isn't offered", async () => {
-    store.in = inputs({ facts: [], round: ROUND, listGifts: listWorld(2, zinc), excluded: ["L1"] });
+    store.in = inputs({ facts: [], round: ROUND, listGifts: listWorld(2, zinc), excluded: [asinOf(1)] });
     expect(await runIdeas(roundReq(), deps())).toEqual({ status: "saved", count: 1 });
     expect(store.saved.map((i) => i.listItemId)).toEqual(["item-2"]);
   });
 
   it("an AI idea for a product already kept from the list is dropped as a duplicate", async () => {
     world([2000, 2000], { zinc, gateway });
-    zinc.search.set("thing 1", [{ product_id: "L1", title: "Acme thing 1", price: 2000, image: "https://img.test/x.jpg" }]);
+    zinc.search.set("thing 1", [{ product_id: asinOf(1), title: "Acme thing 1", price: 2000, image: "https://img.test/x.jpg" }]);
     store.in = inputs({ round: ROUND, listGifts: listWorld(1, zinc) });
     await runIdeas(roundReq(), deps());
-    expect(store.saved.map((i) => i.retailerProductId)).toEqual(["L1", "P2"]);
+    expect(store.saved.map((i) => i.retailerProductId)).toEqual([asinOf(1), "P2"]);
   });
 });
 
