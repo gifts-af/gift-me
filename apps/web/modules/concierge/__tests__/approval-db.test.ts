@@ -476,6 +476,58 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
     expect(await waiting(u, r.roundId)).toBe("looking");
   });
 
+  it("after the no-ideas email, a missing address is still what it waits on", async () => {
+    const u = await newUser();
+    const r = await newRound(u, { status: "needs_address", ideas: [] });
+    await tellNoIdeas(u, r, new Date(Date.now() - 60_000).toISOString(), null);
+    expect(await waiting(u, r.roundId)).toBe("address");
+  });
+
+  it("an incomplete address still asks", async () => {
+    const u = await newUser();
+    const r = await newRound(u, { status: "needs_address", ideas: [] });
+    await pg.query("update public.people set city = 'Dayton' where id = $1", [r.personId]);
+    expect(await waiting(u, r.roundId)).toBe("address");
+  });
+
+  it("only an emailed no-ideas counts", async () => {
+    const u = await newUser();
+    const r = await newRound(u, { status: "generating", ideas: [] });
+    await pg.query("insert into concierge.notifications (user_id, round_id, person_id, kind, channel, sent_at) values ($1, $2, $3, 'no_ideas', 'push', now())", [
+      u.id,
+      r.roundId,
+      r.personId,
+    ]);
+    expect(await waiting(u, r.roundId)).toBe("looking");
+  });
+
+  it("a failed read of what it's waiting on is logged and never breaks the page", async () => {
+    const u = await newUser();
+    const r = await newRound(u, { status: "generating", ideas: [] });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const db = await signedIn(u);
+      const schema = db.schema.bind(db);
+      vi.spyOn(db, "schema").mockImplementation(((name: "concierge") => {
+        const s = schema(name);
+        const from = s.from.bind(s);
+        s.from = ((table: string) => {
+          if (table === "notifications") throw new Error("read failed for jordan@example.com");
+          return from(table as "gift_rounds");
+        }) as typeof s.from;
+        return s;
+      }) as unknown as typeof db.schema);
+      const view = await roundView(r.roundId, db, new Date());
+      expect(view?.round.id).toBe(r.roundId);
+      expect(view?.waiting).toBeNull();
+      const lines = log.mock.calls.map((c) => String(c[0]));
+      expect(lines.some((l) => l.includes("round_waiting_failed"))).toBe(true);
+      expect(lines.join()).not.toContain("jordan@example.com");
+    } finally {
+      log.mockRestore();
+    }
+  });
+
   it("a list owner's shared address counts", async () => {
     const u = await newUser();
     const owner = await newUser();
@@ -527,6 +579,24 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
     await pg.query("update concierge.orders set status = 'unconfirmed' where round_id = $1", [r.roundId]);
     await pg.query(`update concierge.gift_rounds set status = 'needs_attention', attention_reason = 'unconfirmed', ${set} where id = $1`, [r.roundId]);
     expect((await roundView(r.roundId, await signedIn(u), new Date()))?.closedText).toBe("We're still confirming your order.");
+  });
+
+  it("an ordered round whose only order is still placing says it's confirming, not ordered", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    await placedOrder(u, r, 0);
+    await pg.query("update concierge.orders set status = 'placing' where round_id = $1", [r.roundId]);
+    await pg.query("update concierge.gift_rounds set status = 'ordered' where id = $1", [r.roundId]);
+    expect((await roundView(r.roundId, await signedIn(u), new Date()))?.closedText).toBe("We're still confirming your order.");
+  });
+
+  it("a gift the store cancelled in a round the tick hasn't closed yet leaves no gift on its way", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    await placedOrder(u, r, 0);
+    await pg.query("update concierge.orders set status = 'failed', failure_type = 'store_cancelled' where round_id = $1", [r.roundId]);
+    await pg.query("update concierge.gift_rounds set status = 'needs_attention', attention_reason = 'failed', ship_by_deadline = current_date where id = $1", [r.roundId]);
+    expect((await roundView(r.roundId, await signedIn(u), new Date()))?.closedText).toBe("No gift is on its way");
   });
 
   it("a gift the store cancelled leaves no gift on its way, before or after ship-by", async () => {

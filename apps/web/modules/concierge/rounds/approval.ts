@@ -17,7 +17,8 @@ import {
 } from "@gifts-af/core";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
-import { logEvent } from "@/lib/log";
+import { unstable_rethrow } from "next/navigation";
+import { errorFields, logEvent } from "@/lib/log";
 import { storeName } from "@gifts-af/core/store-page/link";
 import { hasPaidFeatures } from "../paid-features";
 import { isId } from "../profile/rules";
@@ -385,6 +386,43 @@ async function hasAddress(userDb: UserDb, personId: string): Promise<boolean> {
   );
 }
 
+/**
+ * What a round with no ideas yet is waiting on (RoundPageView.waiting). Only words on the page, so a
+ * failed read is logged and says nothing: the buy and fix pages read the same view.
+ */
+async function waitingOn(
+  userDb: UserDb,
+  r: { id: string; user_id: string; person_id: string; status: string },
+  ideasFoundAt: string[],
+): Promise<RoundPageView["waiting"]> {
+  try {
+    if (!(await hasPaidFeatures(userDb, r.user_id))) return null;
+    // The round itself only moves at the next daily tick, so its status can lag a saved address.
+    const addressed = r.status === "generating" || (await hasAddress(userDb, r.person_id));
+    if (r.status === "needs_address" && !addressed) return "address";
+    const told = await userDb
+      .schema("concierge")
+      .from("notifications")
+      .select("sent_at")
+      .eq("round_id", r.id)
+      .eq("kind", "no_ideas")
+      .eq("channel", "email")
+      .not("sent_at", "is", null)
+      .is("error", null)
+      .order("sent_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (told.error) fail("Reading the round's no-ideas email failed", told.error);
+    const toldAt = told.data?.sent_at ?? null;
+    if (toldAt !== null && ideasFoundAt.every((at) => Date.parse(at) < Date.parse(toldAt))) return "told";
+    return addressed ? "looking" : "address";
+  } catch (err) {
+    unstable_rethrow(err);
+    logEvent("round_waiting_failed", { round_id: r.id, user_id: r.user_id, ...errorFields(err) });
+    return null;
+  }
+}
+
 const ORDERED_STATUSES = new Set(["ordered", "delivered", "complete"]);
 // Not given, as concierge.order_is_given counts it (failed ones are split out below).
 const NOT_LIVE = new Set(["cancelled", "failed", "refunded"]);
@@ -408,7 +446,7 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
   const r = round.data;
   if (!r) return null;
 
-  const [ideasRes, ordersRes, toldRes, account, person, occasion, list, schedule] = await Promise.all([
+  const [ideasRes, ordersRes, account, person, occasion, list, schedule] = await Promise.all([
     db
       .from("gift_ideas")
       .select(
@@ -424,16 +462,6 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
       .eq("round_id", roundId)
       .order("created_at")
       .order("id"),
-    db
-      .from("notifications")
-      .select("sent_at")
-      .eq("round_id", roundId)
-      .eq("kind", "no_ideas")
-      .not("sent_at", "is", null)
-      .is("error", null)
-      .order("sent_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
     db.from("accounts").select("over_budget_pct").eq("user_id", r.user_id).maybeSingle(),
     userDb.from("people").select("name").eq("id", r.person_id).maybeSingle(),
     db.from("occasions").select("kind").eq("id", r.occasion_id).maybeSingle(),
@@ -442,7 +470,6 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
   ]);
   if (ideasRes.error) fail("Loading the round's ideas failed", ideasRes.error);
   if (ordersRes.error) fail("Loading the round's orders failed", ordersRes.error);
-  if (toldRes.error) fail("Reading the round's no-ideas email failed", toldRes.error);
   if (account.error) fail("Reading the account failed", account.error);
   if (person.error) fail("Loading the round's person failed", person.error);
   if (occasion.error) fail("Loading the round's occasion failed", occasion.error);
@@ -506,25 +533,19 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
   const pastDeadline = today >= r.ship_by_deadline;
   const ended = r.closed_at !== null || r.status === "skipped" || ORDERED_STATUSES.has(r.status);
   // A round can also end with some of its gifts bought: those still count as ordered.
-  const bought = ORDERED_STATUSES.has(r.status) ? liveOrders : liveOrders.filter((o) => BOUGHT.has(o.status));
+  const bought = liveOrders.filter((o) => BOUGHT.has(o.status));
   let closedText: string | null = null;
   if (ended || pastDeadline) {
     if (bought.length > 0) closedText = `Already ordered: ${bought.map((o) => o.title).join(", ")}`;
     // Zinc may still turn out to have bought it, so nothing here may say no gift is coming.
     else if (liveOrders.some((o) => IN_FLIGHT.has(o.status))) closedText = "We're still confirming your order.";
     else if (today > r.occasion_date) closedText = "This occasion has passed";
-    else if (ended && (storeCancelled.length > 0 || all.some((o) => o.status === "cancelled" || o.status === "refunded"))) closedText = "No gift is on its way";
+    else if (storeCancelled.length > 0 || (ended && all.some((o) => o.status === "cancelled" || o.status === "refunded"))) closedText = "No gift is on its way";
     else if (pastDeadline) closedText = "It's too late to send a gift in time";
     else closedText = "This gift round was stopped";
   }
 
-  let waiting: RoundPageView["waiting"] = null;
-  if (closedText === null && NO_IDEAS_YET.has(r.status) && (await hasPaidFeatures(userDb, r.user_id))) {
-    const toldAt = toldRes.data?.sent_at ?? null;
-    if (toldAt !== null && ideasRes.data.every((i) => Date.parse(i.created_at) < Date.parse(toldAt))) waiting = "told";
-    // The round itself only moves at the next daily tick, so its status can lag a saved address.
-    else waiting = r.status === "generating" || (await hasAddress(userDb, r.person_id)) ? "looking" : "address";
-  }
+  const waiting = closedText === null && NO_IDEAS_YET.has(r.status) ? await waitingOn(userDb, r, ideasRes.data.map((i) => i.created_at)) : null;
 
   const buyable = ideas.filter((i) => !i.claimed && !i.noLongerShared && !liveOrders.some((o) => o.ideaId === i.id));
   const nextBestIdeaId =
