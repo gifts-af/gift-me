@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 
 const getPerson = vi.hoisted(() => vi.fn());
 const cardEnabled = vi.hoisted(() => ({ value: 1 }));
@@ -9,9 +9,7 @@ const getProfile = vi.hoisted(() =>
 const countSavedGifts = vi.hoisted(() => vi.fn(async (...args: unknown[]) => (void args, 0)));
 const onDemandIdeas = vi.hoisted(() => vi.fn(async (...args: unknown[]) => (void args, [] as unknown[])));
 const hasPastGifts = vi.hoisted(() => vi.fn(async (...args: unknown[]) => (void args, false)));
-const giftsInProgress = vi.hoisted(() => vi.fn(async (...args: unknown[]) => (void args, [] as unknown[])));
-vi.mock("server-only", () => ({}));
-vi.mock("@/modules/concierge", () => ({ giftsInProgress, hasPastGifts, getPerson, getProfile, countSavedGifts, onDemandIdeas }));
+vi.mock("@/modules/concierge", () => ({ hasPastGifts, getPerson, getProfile, countSavedGifts, onDemandIdeas }));
 vi.mock("@/lib/app-settings", () => ({ appSettingInt: async () => cardEnabled.value }));
 vi.mock("@/lib/today", () => ({ todayForRequest: async () => "2026-11-01" }));
 vi.mock("@/lib/supabase/server", () => ({
@@ -33,7 +31,6 @@ const notFound = vi.hoisted(() =>
 vi.mock("next/navigation", () => ({
   notFound,
   redirect: vi.fn(),
-  unstable_rethrow: () => {},
   useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
 }));
 
@@ -84,33 +81,14 @@ describe("PersonView", () => {
   });
 
   // ALL-167
-  it("lists their gifts in progress under the list prompt, and only then", async () => {
+  it("puts their gifts in progress under the list prompt and above what we know", async () => {
     getPerson.mockResolvedValue(dad);
-    const { unmount } = await show();
-    expect(screen.queryByRole("region", { name: "Gifts in progress" })).toBeNull();
-    unmount();
-
-    const line = { text: "Looking for ideas", tone: "muted", needsBuyer: false };
-    giftsInProgress.mockResolvedValueOnce([{ roundId: "r1", personId: "p1", personName: "Dad", occasionKind: "birthday", date: "2027-04-01", line }]);
-    await show();
-    const region = screen.getByRole("region", { name: "Gifts in progress" });
-    const link = within(region).getByRole("link", { name: "Birthday gift Looking for ideas" });
-    expect(link).toHaveAttribute("href", "/rounds/r1");
-    expect(giftsInProgress.mock.calls.at(-1)?.[2]).toBe("p1");
+    render(await PersonView({ id: "p1", photoFailed: false, gifts: <p>Their gifts</p> }));
+    const gifts = screen.getByText("Their gifts");
     const prompt = screen.getByRole("heading", { name: "Does Dad have a GiftsAF list?" });
     const know = screen.getByRole("heading", { name: "What we know" });
-    expect(prompt.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(link.compareDocumentPosition(know) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-  });
-
-  it("still shows the page when their gifts can't be read", async () => {
-    const log = vi.spyOn(console, "log").mockImplementation(() => {});
-    getPerson.mockResolvedValue(dad);
-    giftsInProgress.mockRejectedValueOnce(new Error("boom"));
-    await show();
-    expect(screen.getByRole("heading", { level: 1, name: "Dad" })).toBeInTheDocument();
-    expect(JSON.parse(String(log.mock.calls[0][0]))).toMatchObject({ event: "gifts_in_progress_failed", user_id: "u1", person_id: "p1" });
-    log.mockRestore();
+    expect(prompt.compareDocumentPosition(gifts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(gifts.compareDocumentPosition(know) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   // ALL-123: an unlinked person's page asks for the list link at the top, in place of the row.

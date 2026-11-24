@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { roundOutcome, waitingOn } from "../rounds/outcome";
+import { holdState, roundOutcome, waitingOn } from "../rounds/outcome";
 import { byNeed, progressLine, type ProgressOrder, type ProgressRound } from "../rounds/progress";
 
 // Christmas (Fri, Dec 25 2026), ship by Dec 16, looked at on Dec 10 unless a test says otherwise.
@@ -21,11 +21,15 @@ const order = (status: string, over: Partial<ProgressOrder> = {}): ProgressOrder
   placedAt: "2026-12-08T12:00:00Z",
   handlingDaysMax: null,
   deliveryDaysMax: null,
+  deliveredAt: null,
   ...over,
 });
-type Extra = { waiting?: "looking" | "told" | "address" | null; readyIdeas?: number; today?: string };
+type Extra = Partial<Parameters<typeof progressLine>[2]>;
 const line = (r: ProgressRound, orders: ProgressOrder[] = [], o: Extra = {}) =>
-  progressLine(r, orders, { waiting: o.waiting ?? null, readyIdeas: o.readyIdeas ?? 0, today: o.today ?? TODAY });
+  progressLine(r, orders, { waiting: null, readyIdeas: 0, hold: holdOf(r, orders), today: TODAY, leaveAfterDays: 14, ...o });
+/** With nothing known about the address: what a hold for one says then. */
+const holdOf = (r: ProgressRound, orders: ProgressOrder[]) =>
+  orders.some((o) => o.status === "held") ? holdState(r.attentionReason, { shared: false, own: false, rejected: false, toPerson: true }) : null;
 const text = (...a: Parameters<typeof line>) => line(...a)?.text ?? null;
 
 const HELD = (attentionReason: string | null) => round({ status: "needs_attention", attentionReason });
@@ -102,6 +106,72 @@ describe("a held gift", () => {
   });
 });
 
+describe("what a hold waits on", () => {
+  const none = { shared: false, own: false, rejected: false, toPerson: true };
+  it.each([
+    ["funds", none, "funds", "Waiting on your Zinc balance", true],
+    ["setup", none, "setup", "Waiting on payment setup", true],
+    ["address", none, "address", "Needs an address", true],
+    // The daily look places a hold for an address someone now shares.
+    ["address", { ...none, shared: true }, "waiting", "Waiting to order", false],
+    ["address", { ...none, shared: true, rejected: true }, "waiting", "Waiting to order", false],
+    // Their own address is placed only by saving it, so one that's here still needs the buyer.
+    ["address", { ...none, own: true }, "check_address", "Check the address", true],
+    // The store couldn't use it, however well formed it is.
+    ["address", { ...none, own: true, rejected: true }, "address", "Needs an address", true],
+    // Going to the buyer or somewhere else: a person's address can't help it.
+    ["address", { ...none, own: true, shared: true, toPerson: false }, "cancel_only", "Needs an address", true],
+    ["address", null, "waiting", "Waiting to order", false],
+    ["paused", none, "waiting", "Waiting to order", false],
+    ["unconfirmed", none, "waiting", "Waiting to order", false],
+    [null, none, "waiting", "Waiting to order", false],
+  ] as const)("%s, %o: %s", (reason, address, kind, says, needsBuyer) => {
+    const hold = holdState(reason, address);
+    expect(hold).toEqual({ kind, text: says });
+    expect(line(HELD(reason), [order("held")], { hold })).toMatchObject({ text: says, needsBuyer });
+  });
+
+  it("next to one being confirmed, Confirming your order wins: which hold it is can't be read", () => {
+    for (const orders of [[order("held"), order("unconfirmed")], [order("unconfirmed"), order("held")]]) {
+      expect(text(HELD("unconfirmed"), orders)).toBe("Confirming your order");
+    }
+  });
+});
+
+describe("a read that failed", () => {
+  it("says only what's still true", () => {
+    expect(text(round(), [], { readyIdeas: "some" })).toBe("Ideas ready · Choose by Tue, Dec 15");
+    expect(text(round(), [], { readyIdeas: "unknown" })).toBe("Choose by Tue, Dec 15");
+    expect(line(round({ status: "needs_address" }), [], { waiting: "unknown" })).toEqual({ text: "No ideas yet", tone: "muted", needsBuyer: false });
+  });
+});
+
+describe("rows leave", () => {
+  const on = (today: string, orders: ProgressOrder[], status = "ordered") => text(round({ status }), orders, { today, leaveAfterDays: 14 });
+  // The occasion is Dec 25.
+  it.each([
+    ["occasion, no due day", [order("placed")], "2027-01-07", "2027-01-08"],
+    ["occasion after the due day", [order("shipped", { estDeliveryDate: "2026-12-14" })], "2027-01-07", "2027-01-08"],
+    ["due day after the occasion", [order("shipped", { estDeliveryDate: "2026-12-27" })], "2027-01-09", "2027-01-10"],
+    ["one delivered, one not", [order("delivered", { deliveredAt: "2026-12-30T01:00:00Z" }), order("shipped")], "2027-01-12", "2027-01-13"],
+  ])("%s", (_what, orders, last, gone) => {
+    expect(on(last, orders)).not.toBeNull();
+    expect(on(gone, orders)).toBeNull();
+  });
+
+  it("a delivered round, that long after it was delivered", () => {
+    const delivered = [order("delivered", { deliveredAt: "2026-12-10T23:00:00Z" }), order("delivered", { deliveredAt: "2026-12-12T01:00:00Z" })];
+    expect(on("2026-12-25", delivered, "delivered")).toBe("Delivered");
+    expect(on("2026-12-26", delivered, "delivered")).toBeNull();
+    // No day recorded: counted from the occasion.
+    expect(on("2027-01-07", [order("delivered")], "delivered")).toBe("Delivered");
+  });
+
+  it.each(["placing", "unconfirmed"])("never one still %s", (status) => {
+    expect(on("2027-06-01", [order(status), order("placed")])).toBe("Confirming your order");
+  });
+});
+
 describe("a failed gift", () => {
   it.each(["price_up", "out_of_stock", "too_late", "failed"])("%s needs a fix, with the day to choose by", (reason) => {
     expect(line(HELD(reason), [order("failed", { failureType: reason })])).toEqual({
@@ -160,6 +230,10 @@ describe("a gift on its way", () => {
 
   it("is delivered until the round is complete", () => {
     for (const status of ["complete", "skipped"]) expect(line(round({ status }), [order("delivered")])).toBeNull();
+  });
+
+  it("a finished round with a shipped and a cancelled gift shows the shipped one", () => {
+    expect(text(round({ status: "skipped" }), [order("cancelled"), order("shipped", { estDeliveryDate: "2026-12-14" })])).toBe("Shipped · due Mon, Dec 14");
   });
 
   it.each(["cancelled", "refunded"])("a %s gift isn't on its way", (status) => {

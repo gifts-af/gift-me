@@ -5,6 +5,7 @@ const giftsInProgress = vi.hoisted(() => vi.fn());
 const sub = vi.hoisted(() => ({ value: "u1" as string | undefined }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/modules/concierge", () => ({ giftsInProgress }));
+vi.mock("@/lib/app-settings", () => ({ appSettingInt: async () => 14 }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ auth: { getClaims: async () => ({ data: { claims: { sub: sub.value } } }) } }),
 }));

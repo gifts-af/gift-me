@@ -198,20 +198,22 @@ My list saves as you go too, with no Save button and no "Unsaved changes" bar. W
 |---|---|---|
 | Looking for ideas | No ideas yet, and we're looking | Muted |
 | No ideas found yet | The no-ideas email went, and none since | `--warning` |
-| Needs an address | No address to find gifts for, or a gift held for one | `--warning` |
-| 3 ideas ready · Choose by Tue, Dec 15 | Ideas the buyer can still pick | `--primary` |
+| Needs an address | No address to find gifts for, or a gift held for one (missing, or the store couldn't use it) | `--warning` |
+| Check the address | A gift held for an address, and the person has one now: saving it places the gift | `--warning` |
+| No ideas yet | None yet, and why couldn't be read just now | Muted |
+| 3 ideas ready · Choose by Tue, Dec 15 | Ideas the buyer can still pick. "Ideas ready", or only "Choose by", when their list couldn't be read | `--primary` |
 | No ideas left | Waiting for a choice, but every idea is taken or no longer shared | `--warning` |
 | Waiting on your Zinc balance / payment setup | A gift held for money, or for Zinc or a phone number to be set up | `--warning` |
 | Needs a fix · Choose by Tue, Dec 15 | An order failed or the store cancelled it, with time left | `--warning` |
 | Needs a look | The round needs the buyer and none of the above fits | `--warning` |
-| Waiting to order | Held for a reason on our side | Muted |
+| Waiting to order | Held for a reason on our side, or for an address that is shared now and placed at the next daily look | Muted |
 | Confirming your order | Sent to Zinc, not confirmed by the store | Muted |
 | Ordered | Bought; not all shipped | Muted |
 | May arrive late · due Sun, Dec 27 | Expected after the occasion, and that day hasn't passed | `--warning` |
 | Shipped · due Mon, Dec 14 | Everything on its way has shipped ("was due" once that day has passed) | Muted |
 | Delivered | Everything has arrived, until the round is complete | Muted |
 
-A line is never false. With several gifts, the one that most needs the buyer wins, and Shipped or Delivered is never said while another is unfinished. "Choose by" is the day before ship-by, and a round nobody can buy from any more leaves the list. The rules are the round screen's own (`modules/concierge/rounds/outcome.ts`).
+A line is never false. With several gifts, the one that most needs the buyer wins (one exception: a held gift next to one being confirmed says "Confirming your order", since which hold it is can't be read then), and Shipped or Delivered is never said while another is unfinished. "Choose by" is the day before ship-by, and a round nobody can buy from any more leaves the list. A bought gift leaves `gift_progress_days` (14) after it was delivered or, when nothing says it was, after the later of the occasion and its due day. The rules are the round screen's own (`modules/concierge/rounds/outcome.ts`). One person whose list or address can't be read never hides the rest.
 
 ## A person's page (ALL-127)
 
@@ -330,8 +332,9 @@ Each screen ticket links to the screens it builds. To open one screen directly, 
 **Mock-ups:** [tracking screens and emails](https://claude.ai/artifact/64XUHT7xfzaibNtWtWpSXx). What's built is on the [screens and emails page](https://claude.ai/artifact/9mrDvFAgoqxvxmzirJFCz6).
 
 **Round screen, "Your gifts":** each bought gift has one status line.
+- **Held:** the same words as in Gifts in progress, with the way to act: **Add address** or **Check the address**, **Finish setup** (Paying for gifts) or **Top up your Zinc balance**. "Waiting to order" needs nothing. One refused for an address that isn't the person's can only be cancelled, from its email, and says so.
 - **Ordered:** "Ordered · usually arrives by <date>" (the store's own range), or just "Ordered".
-- **Shipped:** "Shipped · due <date>" with a "Track it" link to the carrier's page (none for Amazon), and an **It arrived** button.
+- **Shipped:** "Shipped · due <date>" ("was due" once it has passed, and no late chip) with a "Track it" link to the carrier's page (none for Amazon), and an **It arrived** button.
 - **May be late:** a chip above the line, "May arrive <date> · n days late".
 - **Delivered:** "Delivered". Switching `order_tracking_enabled` off hides the button.
 - **Store cancelled:** an amber chip, "The store cancelled it · $<Zinc's refund amount> back in Zinc", or "the money is back in Zinc" when Zinc didn't say how much.

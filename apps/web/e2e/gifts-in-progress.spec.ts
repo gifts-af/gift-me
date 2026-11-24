@@ -58,6 +58,18 @@ test("Home lists the gifts in progress, and each opens its round; the person's p
   await expect(page).toHaveURL(new RegExp(`/rounds/${choosing.roundId}$`));
 });
 
+test("a gift's plain link, signed out, signs in and comes back to it", async ({ page }) => {
+  const b = await readyBuyer(await createFreshUser());
+  const { roundId } = await seedRound(b.id, await personFor(b.id, "Jenn"), { ideas: IDEAS });
+  const link = `/rounds/${roundId}`;
+  await page.goto(link);
+  await expect(page).toHaveURL((url) => url.pathname === "/auth/login" && url.searchParams.get("next") === link);
+  // The form sends you on to `next` (smoke.spec.ts); here the session is set directly (T62).
+  await signIn(page, b.creds);
+  await page.goto(new URL(page.url()).searchParams.get("next")!);
+  await expect(page.getByRole("heading", { level: 1, name: "Gift for Jenn" })).toBeVisible();
+});
+
 test("the gifts in progress fit Home and the person's page in light and dark", { tag: "@layout" }, async ({ page }) => {
   const b = await readyBuyer(await createFreshUser());
   const { jenn } = await seedAll(b);

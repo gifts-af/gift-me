@@ -12,6 +12,7 @@ const redirect = vi.hoisted(() =>
 );
 vi.mock("next/navigation", () => ({ redirect, notFound: vi.fn(), useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
 vi.mock("../person-view", () => ({ PersonView: () => null }));
+vi.mock("../person-gifts", () => ({ PersonGifts: () => null }));
 vi.mock("../../actions", () => ({}));
 vi.mock("@/modules/concierge", () => ({}));
 vi.mock("@/modules/lists", () => ({}));

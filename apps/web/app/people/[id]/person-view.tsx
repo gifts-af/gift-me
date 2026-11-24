@@ -8,8 +8,6 @@ import { appSettingInt } from "@/lib/app-settings";
 import { createClient } from "@/lib/supabase/server";
 import { todayForRequest } from "@/lib/today";
 import { getPerson, countSavedGifts, getProfile, hasPastGifts, onDemandIdeas, type Db, type PersonDetail } from "@/modules/concierge";
-import { GiftsInProgress } from "@/components/gifts-in-progress";
-import { loadGiftsInProgress } from "@/lib/gifts-in-progress";
 import { SettingsRow } from "@/components/settings-row";
 import {
   deleteFactAction,
@@ -56,19 +54,27 @@ function RowGroup({ title, children }: { title?: string; children: React.ReactNo
  * list of rows. Each row shows its value and opens its own screen, where it
  * changes. An unknown, deleted or someone else's id is a 404.
  */
-export async function PersonView({ id, photoFailed }: { id: string; photoFailed: boolean }) {
+export async function PersonView({
+  id,
+  photoFailed,
+  gifts,
+}: {
+  id: string;
+  photoFailed: boolean;
+  /** Their gifts in progress, which load on their own. */
+  gifts?: React.ReactNode;
+}) {
   const supabase = await createClient();
   const userId = (await supabase.auth.getClaims()).data?.claims?.sub;
   if (!userId) redirect("/");
   const person = await getPerson(id, await todayForRequest());
   if (!person) notFound();
-  const [profile, savedGifts, ideas, cardSetting, pastGifts, inProgress] = await Promise.all([
+  const [profile, savedGifts, ideas, cardSetting, pastGifts] = await Promise.all([
     getProfile(supabase as unknown as Db, person.id, person.keepsList),
     countSavedGifts(person.id),
     onDemandIdeas(supabase as unknown as Db, person.id),
     appSettingInt("list_link_card_enabled"),
     hasPastGifts(person.id, supabase as unknown as Db, new Date()),
-    loadGiftsInProgress(person.id),
   ]);
   // With the card on, an unlinked person gets the prompt at the top instead of the Their list row.
   const askForList = cardSetting === 1 && !person.keepsList;
@@ -99,11 +105,7 @@ export async function PersonView({ id, photoFailed }: { id: string; photoFailed:
         <ListLink variant="prompt" name={person.name} personId={person.id} keepsList={false} linkAction={linkUnlinkedListAction} />
       )}
 
-      {inProgress.length > 0 && (
-        <section aria-label="Gifts in progress">
-          <GiftsInProgress gifts={inProgress} withPerson={false} />
-        </section>
-      )}
+      {gifts}
 
       {photoFailed && (
         <p role="status" className="text-[13px] text-muted-foreground">

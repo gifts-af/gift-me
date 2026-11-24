@@ -10,6 +10,7 @@ import { LOCAL_DB, localStack } from "../../../test/local-db";
 
 vi.mock("server-only", () => ({}));
 const { giftsInProgress } = await import("../rounds/in-progress");
+const { roundView } = await import("../rounds/approval");
 
 const stack = await localStack({ api: true });
 
@@ -40,7 +41,7 @@ describe.skipIf(stack === null)("giftsInProgress (real local database)", () => {
     const db = createClient<Database>(s!.url, s!.publishableKey, { auth: { persistSession: false, autoRefreshToken: false } });
     const r = await db.auth.signInWithPassword({ email, password });
     if (r.error) throw r.error;
-    return { id: data.user.id, db, rows: (personId?: string) => giftsInProgress(db, NOW, personId) };
+    return { id: data.user.id, db, rows: (personId?: string) => giftsInProgress(db, { now: NOW, leaveAfterDays: 14, personId }) };
   }
   type User = Awaited<ReturnType<typeof newUser>>;
 
@@ -53,7 +54,7 @@ describe.skipIf(stack === null)("giftsInProgress (real local database)", () => {
     return row.rows[0].id as string;
   }
 
-  type Order = { status: string; est?: number; resolved?: boolean; failure?: string };
+  type Order = { status: string; est?: number; resolved?: boolean; failure?: string; idea?: number; shipTo?: string; delivered?: number };
   type Idea = { listItem?: string; status?: string };
   async function round(
     u: User,
@@ -86,11 +87,12 @@ describe.skipIf(stack === null)("giftsInProgress (real local database)", () => {
     }
     for (const [i, x] of orders.entries()) {
       await pg.query(
-        `insert into concierge.orders (user_id, round_id, idea_id, funding_mode, max_price_cents, fee_cents, status, failure_type, resolved, est_delivery_date, placed_at, ship_to, ship_city, ship_state, hold_reason)
-         values ($1, $2, $3, 'zinc_wallet', 5000, 100, $4, $5, $6, $7, $8, 'recipient', 'Dayton', 'OH', $9)`,
+        `insert into concierge.orders (user_id, round_id, idea_id, funding_mode, max_price_cents, fee_cents, status, failure_type, resolved, est_delivery_date, placed_at, ship_to, ship_city, ship_state, hold_reason, delivered_at)
+         values ($1, $2, $3, 'zinc_wallet', 5000, 100, $4, $5, $6, $7, $8, $10, 'Dayton', 'OH', $9, $11)`,
         [
-          u.id, roundId, ideaIds[i], x.status, x.failure ?? null, x.resolved ?? false, x.est === undefined ? null : day(x.est),
+          u.id, roundId, ideaIds[x.idea ?? i], x.status, x.failure ?? null, x.resolved ?? false, x.est === undefined ? null : day(x.est),
           ["placed", "shipped", "delivered"].includes(x.status) ? NOW : null, x.status === "held" ? (o.reason ?? "funds") : null,
+          x.shipTo ?? "recipient", x.delivered === undefined ? null : day(x.delivered),
         ],
       );
     }
@@ -189,6 +191,159 @@ describe.skipIf(stack === null)("giftsInProgress (real local database)", () => {
     await pg.query("update public.people set deleted_at = now() where id = $1", [a]);
     await pg.query("update concierge.occasions set deleted_at = now() where person_id = $1", [b]);
     expect((await u.rows()).map((g) => [g.personName, g.occasionKind, g.line.text])).toEqual([["Bob", null, "Ordered"]]);
+  });
+
+  it("a gift leaves gift_progress_days after it arrived, or should have", async () => {
+    const u = await newUser();
+    const p = await person(u);
+    const bought = (n: number, shipBy: number, orders: Order[], status = "ordered") => round(u, p, { status, shipBy, orders, year: 2030 + n });
+    // The occasion is nine days after ship-by.
+    await bought(0, -23, [{ status: "shipped", est: -20 }]);
+    await bought(1, -40, [{ status: "shipped", est: -14 }]);
+    await bought(2, -40, [{ status: "delivered", delivered: -14 }], "delivered");
+    expect(await u.rows()).toEqual([]);
+    const still = [
+      await bought(3, -22, [{ status: "shipped", est: -20 }]),
+      await bought(4, -40, [{ status: "shipped", est: -13 }]),
+      await bought(5, -40, [{ status: "delivered", delivered: -13 }], "delivered"),
+      await bought(6, -90, [{ status: "placing" }]),
+    ];
+    expect((await u.rows()).map((g) => g.roundId).sort()).toEqual(still.sort());
+  });
+
+  describe("a gift held for an address", () => {
+    const heldRound = (u: User, p: string, orders: Order[] = [{ status: "held" }]) =>
+      round(u, p, { status: "needs_attention", reason: "address", ideas: [{}], orders });
+
+    it("goes by the address there is now", async () => {
+      const u = await newUser();
+      const p = await person(u);
+      await heldRound(u, p);
+      expect(await said(u)).toEqual(["Needs an address"]);
+      await pg.query(
+        "update public.people set recipient_first_name = 'Mary', recipient_last_name = 'Allen', address_line1 = '12 Oak St', city = 'Dayton', state = 'OH', zip = '45402' where id = $1",
+        [p],
+      );
+      expect(await said(u)).toEqual(["Check the address"]);
+    });
+
+    it("is ours once an address is shared", async () => {
+      const [u, owner] = [await newUser(), await newUser()];
+      const p = await sharedPerson(u, owner, true);
+      await heldRound(u, p);
+      expect(await said(u)).toEqual(["Waiting to order"]);
+    });
+
+    it("still needs one the store couldn't use, and can't be helped by theirs when it goes elsewhere", async () => {
+      const u = await newUser();
+      for (const shipTo of ["recipient", "buyer"]) {
+        const p = await person(u, "Mary", { address: true });
+        const roundId = await heldRound(u, p, [
+          { status: "failed", failure: "invalid_shipping_address", resolved: true, idea: 0, shipTo },
+          { status: "held", idea: 0, shipTo },
+        ]);
+        expect(await said(u, p)).toEqual(["Needs an address"]);
+        const view = await roundView(roundId, u.db, NOW);
+        expect(view?.hold?.kind).toBe(shipTo === "recipient" ? "address" : "cancel_only");
+      }
+    });
+
+    it("the round page says the same, and still opens when the address can't be read", async () => {
+      const u = await newUser();
+      const p = await person(u, "Mary", { address: true });
+      const roundId = await heldRound(u, p);
+      expect((await roundView(roundId, u.db, NOW))?.hold).toEqual({ kind: "check_address", text: "Check the address" });
+      const log = vi.spyOn(console, "log").mockImplementation(() => {});
+      failRpc(u, "shared_city_for_person");
+      expect((await roundView(roundId, u.db, NOW))?.hold).toEqual({ kind: "waiting", text: "Waiting to order" });
+      expect(log.mock.calls.map((c) => String(c[0])).join()).toContain("round_hold_failed");
+      log.mockRestore();
+    });
+  });
+
+  /** A person linked to the owner's list, which shares the owner's address or not. */
+  async function sharedPerson(u: User, owner: User, shares: boolean, name = "Mary") {
+    const p = await person(u, name, { linkedTo: owner.id });
+    const list = await pg.query("insert into lists.lists (owner_id, title) values ($1, 'List') returning id, share_token", [owner.id]);
+    await pg.query("insert into lists.person_links (person_id, buyer_id, list_id, share_token) values ($1, $2, $3, $4)", [
+      p, u.id, list.rows[0].id, list.rows[0].share_token,
+    ]);
+    if (shares)
+      await pg.query(
+        `insert into public.account_addresses (user_id, recipient_first_name, recipient_last_name, address_line1, city, state, zip, share_for_gifts)
+         values ($1, 'Mary', 'Allen', '9 Elm St', 'Dayton', 'OH', '45402', true)`,
+        [owner.id],
+      );
+    const item = await pg.query("insert into lists.list_items (list_id, position, name, price_cents) values ($1, 0, 'Vase', 3000) returning id", [list.rows[0].id]);
+    lastItem = item.rows[0].id as string;
+    return p;
+  }
+  let lastItem = "";
+
+  /** Makes one database function fail for this person (or everyone). */
+  function failRpc(u: User, name: string, personId?: string) {
+    const broken = <T extends { rpc: (...a: never[]) => unknown }>(c: T) => {
+      const real = c.rpc.bind(c) as (...a: unknown[]) => unknown;
+      c.rpc = ((fn: string, args: { p_person_id?: string }) => {
+        if (fn === name && (personId === undefined || args.p_person_id === personId))
+          return Promise.resolve({ data: null, error: { code: "XX000", message: "down for jordan@example.com" } });
+        return real(fn, args);
+      }) as unknown as T["rpc"];
+      return c;
+    };
+    broken(u.db as never);
+    const schema = u.db.schema.bind(u.db);
+    u.db.schema = ((s: "lists") => broken(schema(s) as never)) as unknown as typeof u.db.schema;
+  }
+
+  it("one person whose list or address can't be read never hides the others, and their line stays true", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const u = await newUser();
+    const by = `Choose by ${chooseBy(day(20))}`;
+    const bad = await sharedPerson(u, await newUser(), false, "Bad");
+    await round(u, bad, { ideas: [{ listItem: lastItem }, {}] });
+    await round(u, bad, { kind: "mothers_day", ideas: [{ listItem: lastItem }] });
+    await round(u, bad, { kind: "fathers_day", status: "needs_address" });
+    const good = await sharedPerson(u, await newUser(), true, "Good");
+    await round(u, good, { ideas: [{ listItem: lastItem }] });
+    await round(u, good, { kind: "fathers_day", status: "needs_address" });
+    failRpc(u, "person_list", bad);
+    failRpc(u, "shared_city_for_person", bad);
+    const rows = await u.rows();
+    expect(rows.filter((g) => g.personName === "Good").map((g) => g.line.text).sort()).toEqual([`1 idea ready · ${by}`, "Looking for ideas"]);
+    expect(rows.filter((g) => g.personName === "Bad").map((g) => g.line.text).sort()).toEqual([by, `Ideas ready · ${by}`, "No ideas yet"].sort());
+    const lines = log.mock.calls.map((c) => String(c[0]));
+    expect(lines.filter((l) => l.includes("gift_progress_read_failed"))).toHaveLength(2);
+    expect(lines.join()).toContain(bad);
+    expect(lines.join()).not.toContain("jordan");
+    log.mockRestore();
+  });
+
+  it("reads people's addresses only for rounds that use them", async () => {
+    const u = await newUser();
+    await round(u, await person(u, "Ann", { address: true }), { ideas: [{}] });
+    const columns: string[] = [];
+    const real = u.db.from.bind(u.db);
+    u.db.from = ((table: "people") => {
+      const q = real(table);
+      const select = q.select.bind(q);
+      q.select = ((c: string, opts: object) => (columns.push(c), select(c as "id", opts))) as unknown as typeof q.select;
+      return q;
+    }) as unknown as typeof u.db.from;
+    expect(await u.rows()).toHaveLength(1);
+    expect(columns).toEqual(["id, name"]);
+  });
+
+  it("nothing is cut off past one page of rounds", async () => {
+    const u = await newUser();
+    const p = await person(u);
+    const o = await pg.query("insert into concierge.occasions (user_id, person_id, kind) values ($1, $2, 'christmas') returning id", [u.id, p]);
+    await pg.query(
+      `insert into concierge.gift_rounds (user_id, person_id, occasion_id, occasion_year, occasion_date, ship_by_deadline, status)
+       select $1, $2, $3, 2000 + n, $4, $5, 'awaiting_approval' from generate_series(1, 510) n where 2000 + n < 2999`,
+      [u.id, p, o.rows[0].id, day(29), day(20)],
+    );
+    expect(await u.rows()).toHaveLength(510);
   });
 
   describe("waiting for ideas", () => {
