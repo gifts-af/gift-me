@@ -3,6 +3,7 @@ import type { MockInstance } from "vitest";
 import type { CandidateFact, ExtractInput } from "@/lib/ai/extract";
 import { CaptureNotFound, factKey, processCapture, selectFacts } from "../capture/extract";
 import type { StoredCapture } from "../capture/store";
+import type { Cost } from "../costs/record";
 import { FakeCaptureStore } from "./fake-capture-store";
 
 const fact = (category: CandidateFact["category"], value: string, confidence = 0.9): CandidateFact => ({
@@ -53,7 +54,12 @@ describe("processCapture", () => {
   const extract = async (input: ExtractInput, options: { timeoutMs: number }) => {
     calls.push(input);
     timeouts.push(options.timeoutMs);
-    return reply();
+    return { facts: await reply(), costCents };
+  };
+  let costCents: number | null;
+  let costs: Cost[];
+  const recordCost = async (cost: Cost) => {
+    costs.push(cost);
   };
 
   function capture(over: Partial<StoredCapture> = {}): StoredCapture {
@@ -79,6 +85,8 @@ describe("processCapture", () => {
     store.screenshots.set("user-1/cap-1.jpg", new Uint8Array([1, 2, 3]));
     calls = [];
     timeouts = [];
+    costCents = 0.1966;
+    costs = [];
     reply = async () => [fact("wants", "a new rotary vise"), fact("owns", "old vise", 0.3)];
     log = vi.spyOn(console, "log").mockImplementation(() => {});
   });
@@ -89,7 +97,7 @@ describe("processCapture", () => {
 
   it("saves the kept facts and marks the capture extracted", async () => {
     capture();
-    const result = await processCapture(store, extract, "cap-1");
+    const result = await processCapture(store, extract, recordCost, "cap-1");
     expect(result.status).toBe("extracted");
     expect(result.facts.map((f) => f.value)).toEqual(["a new rotary vise"]);
     expect(store.facts).toHaveLength(1);
@@ -98,7 +106,7 @@ describe("processCapture", () => {
 
   it("sends the relationship and screenshot, not a name", async () => {
     capture();
-    await processCapture(store, extract, "cap-1");
+    await processCapture(store, extract, recordCost, "cap-1");
     expect(calls[0].relationship).toBe("father");
     expect(calls[0].screenshot).toEqual({ bytes: new Uint8Array([1, 2, 3]), type: "image/jpeg" });
     expect(Object.keys(calls[0])).not.toContain("name");
@@ -111,7 +119,7 @@ describe("processCapture", () => {
       { id: "f2", personId: "p1", captureId: "old", category: "interest", value: "golf", active: false },
       { id: "f3", personId: "p2", captureId: "other", category: "interest", value: "knitting", active: true },
     );
-    await processCapture(store, extract, "cap-1");
+    await processCapture(store, extract, recordCost, "cap-1");
     expect(calls[0].known).toEqual(["Already has: UCF pocket t-shirt (dark gray)", "Into: golf"]);
   });
 
@@ -119,7 +127,7 @@ describe("processCapture", () => {
     capture();
     store.facts.push({ id: "f1", personId: "p1", captureId: "old", category: "interest", value: "letters, write to 12 Elm St", active: true });
     reply = async () => [fact("interest", "letters, write to 12 Elm St")];
-    const result = await processCapture(store, extract, "cap-1");
+    const result = await processCapture(store, extract, recordCost, "cap-1");
     expect(calls[0].known).toEqual(["Into: letters, write to [contact removed]"]);
     // The duplicate check still uses the real value, so the same fact isn't saved twice.
     expect(result.facts).toEqual([]);
@@ -128,7 +136,7 @@ describe("processCapture", () => {
 
   it("strips contact details from the buyer's note, but not from page text, title or URL (T42, ALL-134)", async () => {
     capture({ note: "for his workshop at 12 Elm St, call 555-123-4567", text: "Visit us at 12 Elm St", title: "Shop, 555-123-4567" });
-    await processCapture(store, extract, "cap-1");
+    await processCapture(store, extract, recordCost, "cap-1");
     expect(calls[0].note).toBe("for his workshop at [contact removed], call [contact removed]");
     expect(calls[0].text).toBe("Visit us at 12 Elm St");
     expect(calls[0].title).toBe("Shop, 555-123-4567");
@@ -137,14 +145,14 @@ describe("processCapture", () => {
 
   it("strips contact details from an emailed note's text and title, which have no URL (ALL-134)", async () => {
     capture({ url: "", title: "Re: 555-123-4567", text: "write to 12 elm st", note: null });
-    await processCapture(store, extract, "cap-1");
+    await processCapture(store, extract, recordCost, "cap-1");
     expect(calls[0].text).toBe("write to [contact removed]");
     expect(calls[0].title).toBe("Re: [contact removed]");
   });
 
   it("tells the model nothing is recorded for a new person", async () => {
     capture();
-    await processCapture(store, extract, "cap-1");
+    await processCapture(store, extract, recordCost, "cap-1");
     expect(calls[0].known).toEqual([]);
   });
 
@@ -155,7 +163,7 @@ describe("processCapture", () => {
       store.captures.get("cap-1")!.status = "extracted";
       throw new Error("timed out");
     };
-    const result = await processCapture(store, extract, "cap-1");
+    const result = await processCapture(store, extract, recordCost, "cap-1");
     expect(result.status).toBe("failed");
     expect(store.captures.get("cap-1")!.status).toBe("extracted");
   });
@@ -163,14 +171,14 @@ describe("processCapture", () => {
   it("gives the model the timeout from settings", async () => {
     capture();
     store.extraction.timeoutMs = 1234;
-    await processCapture(store, extract, "cap-1");
+    await processCapture(store, extract, recordCost, "cap-1");
     expect(timeouts).toEqual([1234]);
   });
 
   it("marks a page with nothing confident as extracted with no facts", async () => {
     capture();
     reply = async () => [];
-    const result = await processCapture(store, extract, "cap-1");
+    const result = await processCapture(store, extract, recordCost, "cap-1");
     expect(result).toEqual({ status: "extracted", facts: [] });
   });
 
@@ -179,7 +187,7 @@ describe("processCapture", () => {
     reply = async () => {
       throw new Error("gateway down");
     };
-    const result = await processCapture(store, extract, "cap-1");
+    const result = await processCapture(store, extract, recordCost, "cap-1");
     expect(result).toEqual({ status: "failed", facts: [] });
     expect(store.facts).toEqual([]);
     expect(store.captures.get("cap-1")!.status).toBe("failed");
@@ -188,7 +196,7 @@ describe("processCapture", () => {
   it("without paid features, leaves the capture saved and makes no AI call (ALL-94)", async () => {
     capture();
     store.paidFeatures = false;
-    const result = await processCapture(store, extract, "cap-1");
+    const result = await processCapture(store, extract, recordCost, "cap-1");
     expect(result).toEqual({ status: "pending", facts: [] });
     expect(calls).toHaveLength(0);
     expect(store.downloads).toHaveLength(0);
@@ -200,7 +208,7 @@ describe("processCapture", () => {
   it("makes no AI call when the paid-features check itself fails (ALL-94)", async () => {
     capture();
     store.failPaidCheck = true;
-    await expect(processCapture(store, extract, "cap-1")).rejects.toThrow("check failed");
+    await expect(processCapture(store, extract, recordCost, "cap-1")).rejects.toThrow("check failed");
     expect(calls).toHaveLength(0);
     expect(store.captures.get("cap-1")!.status).toBe("pending");
   });
@@ -208,22 +216,22 @@ describe("processCapture", () => {
   it("leaves the capture pending and skips the model when extraction is off", async () => {
     capture();
     store.extraction.enabled = false;
-    const result = await processCapture(store, extract, "cap-1");
+    const result = await processCapture(store, extract, recordCost, "cap-1");
     expect(result).toEqual({ status: "pending", facts: [] });
     expect(calls).toEqual([]);
   });
 
   it("reads a failed capture again", async () => {
     capture({ status: "failed" });
-    const result = await processCapture(store, extract, "cap-1");
+    const result = await processCapture(store, extract, recordCost, "cap-1");
     expect(result.status).toBe("extracted");
     expect(calls).toHaveLength(1);
   });
 
   it("returns an extracted capture's facts without reading it again", async () => {
     capture();
-    await processCapture(store, extract, "cap-1");
-    const again = await processCapture(store, extract, "cap-1");
+    await processCapture(store, extract, recordCost, "cap-1");
+    const again = await processCapture(store, extract, recordCost, "cap-1");
     expect(calls).toHaveLength(1);
     expect(again.facts.map((f) => f.value)).toEqual(["a new rotary vise"]);
     expect(store.facts).toHaveLength(1);
@@ -232,25 +240,25 @@ describe("processCapture", () => {
   it("sends image/png for a PNG capture", async () => {
     capture({ screenshotPath: "user-1/cap-1.png", screenshotType: "image/png" });
     store.screenshots.set("user-1/cap-1.png", new Uint8Array([4, 5]));
-    await processCapture(store, extract, "cap-1");
+    await processCapture(store, extract, recordCost, "cap-1");
     expect(calls[0].screenshot).toEqual({ bytes: new Uint8Array([4, 5]), type: "image/png" });
   });
 
   it("works with text only when there's no screenshot", async () => {
     capture({ screenshotPath: null });
-    await processCapture(store, extract, "cap-1");
+    await processCapture(store, extract, recordCost, "cap-1");
     expect(store.downloads).toEqual([]);
     expect(calls[0].screenshot).toBeNull();
   });
 
   it("throws CaptureNotFound for an unknown or someone else's capture", async () => {
-    await expect(processCapture(store, extract, "nope")).rejects.toBeInstanceOf(CaptureNotFound);
+    await expect(processCapture(store, extract, recordCost, "nope")).rejects.toBeInstanceOf(CaptureNotFound);
   });
 
   it("logs one event with ids and counts only", async () => {
     capture({ text: "secret page text" });
     reply = async () => [fact("wants", "a new rotary vise"), fact("constraint", "on chemo")];
-    await processCapture(store, extract, "cap-1");
+    await processCapture(store, extract, recordCost, "cap-1");
     const lines = log.mock.calls.map((c) => JSON.parse(String(c[0])));
     const event = lines.find((l) => l.event === "capture.extracted");
     expect(event).toMatchObject({ capture_id: "cap-1", person_id: "p1", facts: 1, blocked: 1 });
@@ -263,9 +271,120 @@ describe("processCapture", () => {
     reply = async () => {
       throw new Error("gateway said: My vise gave out");
     };
-    await processCapture(store, extract, "cap-1");
+    await processCapture(store, extract, recordCost, "cap-1");
     const lines = log.mock.calls.map((c) => JSON.parse(String(c[0])));
     expect(lines.find((l) => l.event === "capture.extract_failed")).toMatchObject({ capture_id: "cap-1", person_id: "p1" });
     expect(JSON.stringify(lines)).not.toMatch(/vise/);
+  });
+
+  describe("what a read cost (ALL-144 AC-3, AC-4)", () => {
+    const refusal = () => Object.assign(new Error("refused"), { statusCode: 402 });
+    const reported = { userId: "user-1", kind: "ai_capture", cents: 0.1966, estimated: false };
+    const estimate = { userId: "user-1", kind: "ai_capture", cents: 2, estimated: true };
+
+    it("is recorded once, as the Gateway reported it", async () => {
+      capture();
+      await processCapture(store, extract, recordCost, "cap-1");
+      expect(costs).toEqual([reported]);
+    });
+
+    it("keeps a reported cost of zero", async () => {
+      capture();
+      costCents = 0;
+      await processCapture(store, extract, recordCost, "cap-1");
+      expect(costs).toEqual([{ ...reported, cents: 0 }]);
+    });
+
+    it("is the setting's estimate when the Gateway didn't say", async () => {
+      capture();
+      costCents = null;
+      store.extraction.readEstimateCents = 7;
+      await processCapture(store, extract, recordCost, "cap-1");
+      expect(costs).toEqual([{ ...estimate, cents: 7 }]);
+    });
+
+    it("is the estimate when the call failed and may have been charged", async () => {
+      capture();
+      reply = async () => {
+        throw new Error("timed out");
+      };
+      expect((await processCapture(store, extract, recordCost, "cap-1")).status).toBe("failed");
+      expect(costs).toEqual([estimate]);
+    });
+
+    it("isn't recorded when the call was refused, and the capture still fails", async () => {
+      capture();
+      reply = async () => {
+        throw refusal();
+      };
+      expect(await processCapture(store, extract, recordCost, "cap-1")).toEqual({ status: "failed", facts: [] });
+      expect(store.captures.get("cap-1")!.status).toBe("failed");
+      expect(costs).toEqual([]);
+    });
+
+    it("isn't recorded when something failed before the call", async () => {
+      capture({ screenshotPath: "user-1/missing.jpg" });
+      expect((await processCapture(store, extract, recordCost, "cap-1")).status).toBe("failed");
+      expect(calls).toEqual([]);
+      expect(costs).toEqual([]);
+    });
+
+    it("isn't recorded for a capture that isn't read", async () => {
+      capture({ status: "extracted" });
+      await processCapture(store, extract, recordCost, "cap-1");
+      capture();
+      store.extraction.enabled = false;
+      await processCapture(store, extract, recordCost, "cap-1");
+      store.extraction.enabled = true;
+      store.paidFeatures = false;
+      await processCapture(store, extract, recordCost, "cap-1");
+      expect(costs).toEqual([]);
+    });
+
+    it("is recorded once, as reported, when saving the facts fails", async () => {
+      capture();
+      store.failInsertFacts = true;
+      expect((await processCapture(store, extract, recordCost, "cap-1")).status).toBe("failed");
+      expect(costs).toEqual([reported]);
+    });
+
+    it.each([
+      ["rejects", async () => Promise.reject(new Error("down"))],
+      [
+        "throws",
+        () => {
+          throw new Error("down");
+        },
+      ],
+    ] as [string, () => Promise<void>][])("doesn't change the result or what's saved when the recorder %s", async (_label, broken) => {
+      capture();
+      const result = await processCapture(store, extract, broken, "cap-1");
+      expect(result).toEqual({ status: "extracted", facts: [expect.objectContaining({ value: "a new rotary vise" })] });
+      expect(store.facts).toHaveLength(1);
+      expect(store.captures.get("cap-1")!.status).toBe("extracted");
+    });
+
+    it("doesn't hold up saving the facts, and is finished before the read returns", async () => {
+      capture();
+      let statusWhenRecorded: string | undefined;
+      const slow = async () => {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        statusWhenRecorded = store.captures.get("cap-1")!.status;
+      };
+      await processCapture(store, extract, slow, "cap-1");
+      expect(statusWhenRecorded).toBe("extracted");
+    });
+
+    it("is still recorded when marking the capture failed throws", async () => {
+      capture();
+      reply = async () => {
+        throw new Error("timed out");
+      };
+      store.setCaptureStatus = async () => {
+        throw new Error("db down");
+      };
+      await expect(processCapture(store, extract, recordCost, "cap-1")).rejects.toThrow("db down");
+      expect(costs).toEqual([estimate]);
+    });
   });
 });

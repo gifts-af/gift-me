@@ -76,14 +76,31 @@ function healthSamples(link: string): SampleEmail[] {
     { kind: "deadline_close", ids: ref("7"), detail: { reason: "address", shipByDeadline: "2026-03-14" } },
   ];
   const weekly = { waitingAddress: 1, waitingFunds: 1, waitingSetup: 0, waitingApproval: 2, noIdeas: 0, roundsFailed: 0, failedCaptures: 1 };
+  const costs: HealthReport["costs"] = {
+    since: "2025-12-11T14:00:00.000Z",
+    windowDays: 90,
+    gifts: 12,
+    aiCents: 372,
+    lookupCents: 252,
+    aiRecords: 41,
+    aiEstimated: 2,
+    bills: [
+      { month: "2026-01-01", vendors: ["Resend", "domain"] },
+      { month: "2026-02-01", vendors: ["Resend", "domain"] },
+    ],
+    billCents: 500,
+    billGifts: 6,
+    orderFeeCents: 100,
+    excludedCents: 42,
+  };
   const render = (name: string, report: HealthReport): SampleEmail => {
     const { subject, html, text } = buildHealthEmail(report, link);
     const plain = (s: string) => s.split(`${link}#`).map((part, n) => (n === 0 ? part : part.replace(/^[a-z-]+/, ""))).join(link);
     return { name, email: { subject, html: plain(html ?? ""), text: plain(text) } };
   };
   return [
-    render("health-problems", { problems, weekly, isWeekly: true }),
-    render("health-weekly-all-clear", { problems: [], weekly, isWeekly: true }),
+    render("health-problems", { problems, weekly, isWeekly: true, costs }),
+    render("health-weekly-all-clear", { problems: [], weekly, isWeekly: true, costs }),
     render("health-check-failed", checkFailedReport("snapshot")),
   ];
 }

@@ -98,6 +98,7 @@ export function captureStoreFor(supabase: SupabaseClient<Database>, userId: stri
         enabled: (await setting("capture_extraction_enabled")) === 1,
         minConfidencePct: await setting("capture_fact_min_confidence_pct"),
         timeoutMs: await setting("capture_extract_timeout_ms"),
+        readEstimateCents: await setting("capture_read_estimate_cents"),
       };
     },
     userId,

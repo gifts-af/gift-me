@@ -7,7 +7,8 @@
                "concierge.captures", "concierge.inbound_messages", "concierge.saved_gifts"],
     "round": ["concierge.gift_rounds", "concierge.gift_ideas", "concierge.orders", "concierge.order_addresses",
               "concierge.idea_runs", "concierge.rejections", "concierge.round_sends", "concierge.notifications",
-              "concierge.action_links", "concierge.reactions", "concierge.tick_heartbeats"],
+              "concierge.action_links", "concierge.reactions", "concierge.tick_heartbeats",
+              "concierge.cost_events", "concierge.monthly_bills"],
     "strip": ["concierge.accounts", "concierge.budget_defaults", "concierge.zinc_connect_attempts", "concierge.app_settings",
               "concierge.inbound_events", "concierge.inbound_seen", "lists.amazon_lookups", "lists.photo_deletions", "admin.deletion_log"]
   },
@@ -58,6 +59,8 @@
     "concierge.action_links": "one-tap email buttons",
     "concierge.reactions": "how it went over",
     "concierge.tick_heartbeats": "one row per daily tick: did it finish",
+    "concierge.cost_events": "what each costed call cost",
+    "concierge.monthly_bills": "running the service, by month",
     "concierge.accounts": "wallet, phone, settings",
     "concierge.zinc_connect_attempts": "Zinc sign-in steps",
     "concierge.app_settings": "switches and limits",

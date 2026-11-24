@@ -9,6 +9,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   advanceRound,
   clearUnfiledNotes,
+  costRecorder,
   pruneExpiredActionLinks,
   pruneTrackingNumbers,
   createSupabaseIdeaStore,
@@ -107,6 +108,7 @@ async function ideaDeps(db: SupabaseClient<Database>, env: Env, today: CalendarD
     zincShare,
     clock: Date.now,
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    recordCost: costRecorder(() => db),
   };
 }
 

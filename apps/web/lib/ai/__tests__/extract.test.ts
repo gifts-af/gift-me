@@ -1,10 +1,13 @@
-import { describe, expect, it } from "vitest";
-import { APICallError } from "ai";
+import { describe, expect, it, vi } from "vitest";
+import { APICallError, createGateway, type JSONValue } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
 import { createExtractor, type ExtractInput } from "../extract";
+import { callRefused } from "../refused";
+
+type Json = Record<string, JSONValue>;
 
 // The model is a vendor we don't own, so it's mocked (E5).
-function modelReturning(json: unknown) {
+function modelReturning(json: unknown, gateway?: Json) {
   return new MockLanguageModelV4({
     doGenerate: async () => ({
       content: [{ type: "text", text: JSON.stringify(json) }],
@@ -14,6 +17,7 @@ function modelReturning(json: unknown) {
         outputTokens: { total: 20, text: 20, reasoning: undefined },
       },
       warnings: [],
+      providerMetadata: gateway && { gateway },
     }),
   });
 }
@@ -40,12 +44,12 @@ function sent(model: MockLanguageModelV4): string {
 describe("createExtractor", () => {
   it("returns the model's facts without the evidence", async () => {
     const model = modelReturning({ facts: [vise] });
-    const facts = await createExtractor(model)(input, opts);
+    const { facts } = await createExtractor(model)(input, opts);
     expect(facts).toEqual([{ category: "wants", value: "a new rotary fly-tying vise", confidence: 0.9 }]);
   });
 
   it("returns an empty list when the model finds nothing", async () => {
-    const facts = await createExtractor(modelReturning({ facts: [] }))(input, opts);
+    const { facts } = await createExtractor(modelReturning({ facts: [] }))(input, opts);
     expect(facts).toEqual([]);
   });
 
@@ -136,5 +140,113 @@ describe("createExtractor", () => {
     });
     await expect(createExtractor(model)(input, opts)).rejects.toThrow();
     expect(model.doGenerateCalls).toHaveLength(1);
+  });
+});
+
+describe("what a read cost (ALL-144 AC-3)", () => {
+  const costOf = async (gateway?: Json) => (await createExtractor(modelReturning({ facts: [] }, gateway))(input, opts)).costCents;
+
+  it("is the Gateway's dollars, in cents with fractions", async () => {
+    expect(await costOf({ cost: "0.001966", marketCost: "0.5" })).toBeCloseTo(0.1966, 10);
+    expect(await costOf({ cost: "0" })).toBe(0);
+  });
+
+  it("takes a cost reported as a number too, and refuses a negative one", async () => {
+    expect(await costOf({ cost: 0.001966 })).toBeCloseTo(0.1966, 10);
+    expect(await costOf({ cost: 0 })).toBe(0);
+    expect(await costOf({ cost: -0.01 })).toBeNull();
+  });
+
+  it.each([
+    ["no metadata", undefined],
+    ["no cost", { generationId: "gen_1" }],
+    ["null", { cost: null }],
+    ["blank", { cost: " " }],
+    ["empty", { cost: "" }],
+    ["negative", { cost: "-0.01" }],
+    ["not a number", { cost: "free" }],
+    ["partly a number", { cost: "0.01 USD" }],
+    ["infinite", { cost: "Infinity" }],
+    ["an object", { cost: { total: "0.01" } }],
+  ] as [string, Json | undefined][])("is null when the reported cost is %s", async (_label, gateway) => {
+    expect(await costOf(gateway)).toBeNull();
+  });
+});
+
+// The real AI SDK and its Gateway provider throw these; only the network is faked.
+describe("callRefused (ALL-144 AC-3)", () => {
+  /** What the extractor throws when the Gateway answers `reply`. */
+  async function thrown(reply: typeof fetch, timeoutMs = 5000): Promise<unknown> {
+    const model = createGateway({ apiKey: "k", baseURL: "http://gateway.test", fetch: reply })("anthropic/claude-sonnet-5");
+    let result: unknown;
+    try {
+      result = await createExtractor(model)(input, { timeoutMs });
+    } catch (err) {
+      return err;
+    }
+    throw new Error(`expected the read to fail, got ${JSON.stringify(result)}`);
+  }
+  const answer = (status: number, body: string) => thrown((async () => new Response(body, { status })) as typeof fetch);
+  const error = (type: string | null) => JSON.stringify({ error: { message: "no", type } });
+
+  it.each([
+    [400, error("invalid_request_error")],
+    [401, error("authentication_error")],
+    [402, error("insufficient_funds")],
+    [402, error("quota_for_entity_exceeded")],
+    [402, error(null)],
+    [403, error("forbidden")],
+    [404, error("model_not_found")],
+    [413, "too large, not JSON"],
+    [429, error("rate_limit_exceeded")],
+    [429, "slow down, not JSON"],
+  ])("is true for HTTP %i %s", async (status, body) => {
+    expect(callRefused(await answer(status, body))).toBe(true);
+  });
+
+  it.each([
+    [408, error("timeout")],
+    [500, error("internal_server_error")],
+    [502, "<html>bad gateway</html>"],
+    [503, error(null)],
+    [529, error("overloaded")],
+    [200, "cut off {"],
+  ])("is false for HTTP %i %s, which may have been charged", async (status, body) => {
+    expect(callRefused(await answer(status, body))).toBe(false);
+  });
+
+  it("is true for the missing sign-in, which the SDK reports without a status in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    let err: unknown;
+    try {
+      err = await answer(401, error("authentication_error"));
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    expect(err).not.toHaveProperty("statusCode");
+    expect(callRefused(err)).toBe(true);
+  });
+
+  it("is false when the network drops or time runs out", async () => {
+    const dropped = (async () => {
+      throw new TypeError("fetch failed");
+    }) as typeof fetch;
+    expect(callRefused(await thrown(dropped))).toBe(false);
+    const hanging = ((_url: unknown, init?: RequestInit) =>
+      new Promise((_resolve, reject) => init?.signal?.addEventListener("abort", () => reject(init.signal!.reason)))) as typeof fetch;
+    expect(callRefused(await thrown(hanging, 20))).toBe(false);
+  });
+
+  it("is false for a paid reply that doesn't fit the schema", async () => {
+    const err = await createExtractor(modelReturning({ facts: [{ ...vise, category: "mood" }] }))(input, opts).catch((e: unknown) => e);
+    expect(callRefused(err)).toBe(false);
+  });
+
+  it("reads a direct provider's error the same way, and anything else as not refused", () => {
+    const call = (statusCode?: number) => new APICallError({ message: "x", url: "x", requestBodyValues: {}, statusCode });
+    expect(callRefused(call(429))).toBe(true);
+    expect(callRefused(call(503))).toBe(false);
+    expect(callRefused(call())).toBe(false);
+    for (const other of [new Error("x"), "x", null, undefined, { statusCode: "402" }]) expect(callRefused(other)).toBe(false);
   });
 });

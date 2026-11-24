@@ -159,3 +159,6 @@ export { getWallet } from "./zinc/account";
 // The round screen (ALL-29): "None of these", a budget typed on an open round, and the page reads.
 export { rejectionOutlook, rejectRoundIdeas, roundAccess, roundView, setRoundBudget } from "./rounds/approval";
 export type { BuyYourself, RejectInput, RejectResult, RoundPageIdea, RoundPageOrder, RoundPageView } from "./rounds/approval";
+// Recording what costed calls cost.
+export { costRecorder } from "./costs/record";
+export type { Cost, CostKind, RecordCost } from "./costs/record";

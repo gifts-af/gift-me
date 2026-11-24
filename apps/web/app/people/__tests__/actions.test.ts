@@ -18,6 +18,7 @@ const buyingWiring = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/wiring", () => ({ placeHeld: async () => {}, placeAddressHeld: async () => {}, buyingWiring }));
 vi.mock("@/lib/app-settings", () => ({ appSettingInt: async () => 20 }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({}) }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 const renamePerson = vi.hoisted(() => vi.fn());
 const setRelationship = vi.hoisted(() => vi.fn());
 const setBirthYear = vi.hoisted(() => vi.fn());

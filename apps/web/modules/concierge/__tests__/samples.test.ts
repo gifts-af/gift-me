@@ -71,6 +71,12 @@ describe("sampleEmails", () => {
     expect(get("heads_up-auto_buy").html).not.toContain("Buy this");
   });
 
+  it("the Monday health samples show the costs, and the failed check doesn't", () => {
+    const get = (n: string) => samples.find((s) => s.name === n)!.email.text;
+    for (const n of ["health-problems", "health-weekly-all-clear"]) expect(get(n), n).toContain("Cost per completed gift");
+    expect(get("health-check-failed")).not.toContain("Cost per completed gift");
+  });
+
   it("renders the auto-buy heads-up differently from the reminder one", () => {
     const [reminder, autoBuy] = samples.filter((s) => s.name.startsWith("heads_up"));
     expect(autoBuy.email.html).not.toEqual(reminder.email.html);

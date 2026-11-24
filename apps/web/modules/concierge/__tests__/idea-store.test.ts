@@ -6,6 +6,7 @@ import { createClient } from "@supabase/supabase-js";
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { Database } from "@gifts-af/core";
+import { AI_MODELS } from "@/lib/ai/models";
 import { LOCAL_DB, localStack } from "../../../test/local-db";
 import type { SavedIdea } from "../ideas/store";
 
@@ -13,6 +14,7 @@ vi.mock("server-only", () => ({}));
 const { onDemandIdeas } = await import("../ideas/read");
 const { createSupabaseIdeaStore, listGiftCandidates } = await import("../ideas/store");
 const { runIdeas } = await import("../ideas/run");
+const { costRecorder } = await import("../costs/record");
 
 const stack = await localStack({ api: true });
 const dbUp = stack !== null;
@@ -97,6 +99,11 @@ describe.skipIf(!dbUp)("createSupabaseIdeaStore", () => {
     await pg.connect();
   });
   afterAll(async () => {
+    // Before the users: deleting them clears the costs' links to their runs.
+    await pg.query(
+      "delete from concierge.cost_events where idea_run_id in (select id from concierge.idea_runs where user_id = any($1::uuid[]))",
+      [users],
+    );
     for (const id of users) await admin!.auth.admin.deleteUser(id);
     await pg.end();
   });
@@ -454,6 +461,7 @@ describe.skipIf(!dbUp)("createSupabaseIdeaStore", () => {
           today: "2026-11-17",
           clock: Date.now,
           sleep: async () => {},
+          recordCost: costRecorder(() => admin!),
         },
       );
       const runs = await pg.query("select count(*)::int as n from concierge.idea_runs where person_id = $1", [personId]);
@@ -462,6 +470,51 @@ describe.skipIf(!dbUp)("createSupabaseIdeaStore", () => {
       log.mockRestore();
     }
   }
+
+  it("a run records its AI and lookup costs against itself, adding up to its cost_cents (ALL-144 AC-1)", async () => {
+    const before = (await pg.query("select value from concierge.app_settings where key = 'idea_engine_enabled'")).rows[0].value;
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+    const gateway = (async (url: string) =>
+      url.endsWith("/v1/models")
+        ? json({ data: [{ id: AI_MODELS.ideas, pricing: { input: "0.00001", output: "0.0001", web_search: "10" } }] })
+        : json({
+            content: [{ type: "text", text: JSON.stringify({ ideas: [{ title: "Rod", search: "fly rod", brand: null, why: "fits" }] }) }],
+            usage: { input_tokens: 1234, output_tokens: 1000 },
+          })) as unknown as typeof fetch;
+    const zinc = (async () => json({}, 503)) as unknown as typeof fetch;
+    try {
+      await pg.query("update concierge.app_settings set value = '1' where key = 'idea_engine_enabled'");
+      const buyer = await newUser("Jim");
+      const person = await newPerson(buyer.id, "Dad");
+      await addFact(buyer.id, person, "Loves fishing");
+      const outcome = await runIdeas(
+        { userId: buyer.id, personId: person, roundId: null, signal: new AbortController().signal },
+        {
+          store: store(),
+          gateway: { base: "http://127.0.0.1:9", apiKey: "gw-test", fetch: gateway },
+          zinc: { http: { base: "http://127.0.0.1:9", timeoutMs: 1000, fetch: zinc }, key: "zn-test" },
+          today: "2026-11-17",
+          clock: Date.now,
+          sleep: async () => {},
+          recordCost: costRecorder(() => admin!),
+        },
+      );
+      expect(outcome).toEqual({ status: "failed" });
+      const run = (await pg.query("select id, cost_cents::float8 as cost_cents from concierge.idea_runs where person_id = $1", [person])).rows[0];
+      const rows = (
+        await pg.query("select kind, cents::float8 as cents, estimated from concierge.cost_events where idea_run_id = $1 order by kind", [run.id])
+      ).rows as { kind: string; cents: number; estimated: boolean }[];
+      expect(rows).toEqual([
+        { kind: "ai_ideas", cents: expect.closeTo(11.234, 4), estimated: false },
+        { kind: "lookup_ideas", cents: (await store().settings()).zincLookupCents, estimated: true },
+      ]);
+      expect(Math.abs(rows[0].cents + rows[1].cents - run.cost_cents)).toBeLessThanOrEqual(1);
+    } finally {
+      log.mockRestore();
+      await pg.query("update concierge.app_settings set value = $1 where key = 'idea_engine_enabled'", [JSON.stringify(before)]);
+    }
+  });
 
   it("with idea_engine_enabled 0, or an unpaid buyer, a run calls no vendor and writes no idea_runs row", async () => {
     const before = (await pg.query("select value from concierge.app_settings where key = 'idea_engine_enabled'")).rows[0].value;

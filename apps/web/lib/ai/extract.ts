@@ -23,7 +23,9 @@ export type ExtractInput = {
 
 /** `timeoutMs` comes from the capture_extract_timeout_ms setting (T23). */
 export type ExtractOptions = { timeoutMs: number };
-export type Extract = (input: ExtractInput, options: ExtractOptions) => Promise<CandidateFact[]>;
+/** `costCents`: what the Gateway said the call cost, fractions included; null when it didn't say. */
+export type Reading = { facts: CandidateFact[]; costCents: number | null };
+export type Extract = (input: ExtractInput, options: ExtractOptions) => Promise<Reading>;
 
 const SYSTEM = `You help a gift-giving app learn what one specific person might like.
 You get what the user captured from a web page about that person: the page text, a screenshot of what was on screen, and sometimes a note from the user.
@@ -57,6 +59,18 @@ const schema = z.object({
   ),
 });
 
+// The Gateway reports a call's cost in dollars, as a string ("0.001966") or a number.
+const gatewayCost = z.object({
+  gateway: z.object({
+    cost: z.union([z.string().trim().min(1).pipe(z.coerce.number<string>().nonnegative()), z.number().nonnegative().finite()]),
+  }),
+});
+
+function reportedCents(providerMetadata: unknown): number | null {
+  const parsed = gatewayCost.safeParse(providerMetadata);
+  return parsed.success ? parsed.data.gateway.cost * 100 : null;
+}
+
 function who(relationship: string): string {
   return relationship === "other" || relationship === "" ? "someone they know" : `their ${relationship.replace(/_/g, " ")}`;
 }
@@ -75,7 +89,7 @@ export function createExtractor(model: LanguageModel): Extract {
       input.text,
     ].filter((l) => l !== null);
 
-    const { output } = await generateText({
+    const { output, providerMetadata } = await generateText({
       model,
       reasoning: "low",
       // One try within the time limit: the popup is waiting, and Try again is one tap away.
@@ -93,6 +107,9 @@ export function createExtractor(model: LanguageModel): Extract {
         },
       ],
     });
-    return output.facts.map(({ category, value, confidence }) => ({ category, value, confidence }));
+    return {
+      facts: output.facts.map(({ category, value, confidence }) => ({ category, value, confidence })),
+      costCents: reportedCents(providerMetadata),
+    };
   };
 }

@@ -12,6 +12,7 @@ vi.mock("@/lib/today", () => ({ todayForRequest: async () => "2026-11-01" }));
 vi.mock("@/lib/wiring", () => ({ placeHeld: async () => {} }));
 vi.mock("@/lib/app-settings", () => ({ appSettingInt: async () => 20 }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({ client: true }) }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 vi.mock("@/modules/concierge", async () => {
   const rules = await vi.importActual<typeof import("@/modules/concierge/profile/rules")>("@/modules/concierge/profile/rules");
   return { confirmFact, isId: rules.isId };

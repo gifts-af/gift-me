@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { AiError, gatewayCredits, sendMessages, type GatewayHttp } from "../messages";
+import { AiError, gatewayCredits, gatewayPrices, sendMessages, type GatewayHttp } from "../messages";
 
 // The Gateway's plain-HTTP calls with a fake fetch (E5: never the real vendor).
 
@@ -55,6 +55,43 @@ describe("sendMessages", () => {
       expect(e.message).not.toContain("acct-12345");
       expect(JSON.stringify(e)).not.toContain("acct-12345");
     }
+  });
+});
+
+describe("maybeSpent (ALL-144)", () => {
+  const drop = () => {
+    throw new TypeError("fetch failed");
+  };
+  const html = () => new Response("<html>", { status: 200 });
+  const usage = { input_tokens: 1, output_tokens: 1 };
+
+  it.each([
+    ["a dropped connection", drop, "unavailable"],
+    ["an unreadable body", html, "malformed"],
+    ["a reply that can't be priced", status({ content: [] }, 200), "malformed"],
+  ])("%s may have spent", async (_why, reply, kind) => {
+    const e = await thrown(sendMessages(http(reply), {}, PRICES, signal()));
+    expect(e).toMatchObject({ kind, maybeSpent: true });
+    expect(e.costCents).toBeUndefined();
+  });
+
+  it.each([400, 402, 429, 500, 503])("a refusal (%i) spent nothing", async (code) => {
+    const e = await thrown(sendMessages(http(status({}, code)), {}, PRICES, signal()));
+    expect(e.maybeSpent).toBe(false);
+  });
+
+  it("a priced reply with no text has an exact cost, so it isn't maybe", async () => {
+    const e = await thrown(sendMessages(http(status({ content: [], usage }, 200)), {}, { ...PRICES, inputCentsPerToken: 2 }, signal()));
+    expect(e).toMatchObject({ costCents: 2, maybeSpent: false });
+  });
+
+  it.each([
+    ["dropped", drop],
+    ["unreadable", html],
+    ["malformed", status({}, 200)],
+  ])("the free listings never may have spent (%s)", async (_why, reply) => {
+    expect((await thrown(gatewayPrices(http(reply), "m", signal()))).maybeSpent).toBe(false);
+    expect((await thrown(gatewayCredits(http(reply), signal()))).maybeSpent).toBe(false);
   });
 });
 

@@ -25,6 +25,9 @@ const supabaseDir = path.join(root, "supabase");
 const TEST_USERS = String.raw`@example\.(com|test)$|@example\.com\.[^@]+\.test$`;
 // Tests date their tick heartbeats in far-off years; real ticks never get near.
 const TEST_HEARTBEATS_FROM = "2100-01-01";
+// Test bill months sit in far-off years too. A cost row carries no user (T42), so a test's is
+// recognised by the idea run or order it points at belonging to a test account.
+const TEST_BILLS_FROM = "2100-01-01";
 // The lock's key. The two-number form keeps it apart from the app's own one-number advisory locks.
 const LOCK_KEY = "0, hashtext('gifts-af local test run')";
 
@@ -64,6 +67,14 @@ async function clean(db) {
   const seeded = seededSettings();
   await db.query("begin");
   try {
+    // Before the users: deleting them clears these rows' links, and with them the way to tell them apart.
+    const costs = await db.query(
+      `delete from concierge.cost_events c
+        where c.idea_run_id in (select r.id from concierge.idea_runs r join auth.users u on u.id = r.user_id where u.email ~* $1)
+           or c.order_id in (select o.id from concierge.orders o join auth.users u on u.id = o.user_id where u.email ~* $1)`,
+      [TEST_USERS],
+    );
+    await db.query("delete from concierge.monthly_bills where month >= $1", [TEST_BILLS_FROM]);
     const users = await db.query("delete from auth.users where email ~* $1", [TEST_USERS]);
     await db.query("delete from concierge.tick_heartbeats where day >= $1", [TEST_HEARTBEATS_FROM]);
     const reset = await db.query(
@@ -82,7 +93,7 @@ async function clean(db) {
     if (process.env.CI && keys.length) {
       throw new Error(`db:clean misread the seeded value of: ${keys.join(", ")}. Teach seededSettings() the migration's form.`);
     }
-    console.log(`db:clean: removed ${users.rowCount} test users; settings put back: ${keys.length ? keys.join(", ") : "none needed"}`);
+    console.log(`db:clean: removed ${users.rowCount} test users and ${costs.rowCount} of their cost records; settings put back: ${keys.length ? keys.join(", ") : "none needed"}`);
     if (unknown.rowCount) console.log(`db:clean: left alone, not in this checkout's migrations: ${unknown.rows.map((r) => r.key).join(", ")}`);
   } catch (e) {
     await db.query("rollback");

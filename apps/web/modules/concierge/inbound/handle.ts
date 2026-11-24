@@ -6,6 +6,7 @@ import { fetchAttachment, fetchReceivedEmail, type Deps as ResendDeps, type Rece
 import { IMAGE_EXTENSIONS, saveNoteCapture } from "../capture/capture";
 import { processCapture } from "../capture/extract";
 import type { CaptureStore } from "../capture/store";
+import type { RecordCost } from "../costs/record";
 import type { LinkSpec, NotifyDeps, NotifyInput } from "../notify/notify";
 import type { NotificationKind } from "../notify/templates";
 import {
@@ -40,6 +41,8 @@ export type InboundDeps = {
   /** The capture store for one user, on the service-role client (captureStoreFor). */
   captureStore: (userId: string) => CaptureStore;
   extract: Extract;
+  /** Records what reading the note cost, on the service-role client. */
+  recordCost: RecordCost;
   /** Resend's key and fetch, for the received email, its image and sent Message-IDs. */
   resend: ResendDeps;
   /** For the emails sent back; `now` is the handler's clock too. */
@@ -141,7 +144,7 @@ async function accept(ctx: Ctx, email: ReceivedEmail): Promise<InboundOutcome> {
   });
 
   try {
-    await processCapture(captures, deps.extract, saved.id);
+    await processCapture(captures, deps.extract, deps.recordCost, saved.id);
   } catch (err) {
     // The capture stays saved and unread; "Try again" on the person's page reads it.
     logEvent("inbound.read_failed", { email_id: emailId, user_id: userId, capture_id: saved.id, ...errorFields(err) });

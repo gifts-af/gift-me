@@ -5,7 +5,14 @@ const { createStore, processCapture, CaptureNotFound } = vi.hoisted(() => ({
   processCapture: vi.fn(),
   CaptureNotFound: class CaptureNotFound extends Error {},
 }));
+const { recorder, costRecorder, createAdminClient } = vi.hoisted(() => ({
+  recorder: async () => {},
+  costRecorder: vi.fn(),
+  createAdminClient: vi.fn(),
+}));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient }));
 vi.mock("@/modules/concierge", () => ({
+  costRecorder,
   CaptureNotFound,
   createSupabaseCaptureStore: (token: string) => createStore(token),
   processCapture: (...args: unknown[]) => processCapture(...args),
@@ -26,6 +33,7 @@ beforeEach(() => {
   vi.stubEnv("NEXT_PUBLIC_EXTENSION_ID", ID);
   createStore.mockReset();
   processCapture.mockReset();
+  costRecorder.mockReset().mockReturnValue(recorder);
 });
 
 describe("OPTIONS", () => {
@@ -67,7 +75,9 @@ describe("POST", () => {
     const res = await POST(post({ origin: ORIGIN, authorization: "Bearer t" }), ctx);
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ extraction });
-    expect(processCapture).toHaveBeenCalledWith(store, expect.any(Function), CAPTURE);
+    expect(processCapture).toHaveBeenCalledWith(store, expect.any(Function), recorder, CAPTURE);
+    // Costs are written with the service role, never the user's own token.
+    expect(costRecorder).toHaveBeenCalledWith(createAdminClient);
   });
 
   it("404 for an id that isn't a capture id, without reading anything", async () => {

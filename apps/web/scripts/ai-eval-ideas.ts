@@ -163,6 +163,8 @@ export async function runIdeasEval(args: string[], env: Env): Promise<number> {
     today,
     clock: Date.now,
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+    // Eval runs aren't in the database, so there's nothing to record a cost against.
+    recordCost: async () => {},
   });
 
   let failed = false;

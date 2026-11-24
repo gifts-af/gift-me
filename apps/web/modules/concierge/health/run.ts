@@ -2,6 +2,7 @@ import type { Database } from "@gifts-af/core";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { errorFields, logEvent } from "@/lib/log";
 import type { OutgoingEmail, SendResult } from "@/lib/resend";
+import { readCostPerGift } from "./costs";
 import { buildHealthEmail } from "./email";
 import { checkFailedReport, healthReport, type HealthReport, type HealthSettings, type HealthStage } from "./report";
 import { readSnapshot } from "./store";
@@ -43,7 +44,7 @@ async function setting(db: Db, key: string): Promise<number> {
   return data;
 }
 
-/** The report's settings, and how long each vendor call may take (it must fit the route's 60 s). */
+/** The report's settings, and how long each vendor call and the costs read may take (both must fit the route's 60 s). */
 async function settings(db: Db): Promise<{ report: HealthSettings; vendorTimeoutMs: number }> {
   const [allClearWeekday, aiCreditLowCents, zincAppBalanceLowCents, ideas, capture, pasteLookup, vendorTimeoutMs] = await Promise.all(
     [
@@ -77,6 +78,16 @@ async function balance(vendor: string, read: ((timeoutMs: number) => Promise<num
   } catch (e) {
     logEvent("health.vendor_check_failed", { vendor, ...errorFields(e) });
     return null;
+  }
+}
+
+/** The weekly costs. Never throws: costs that can't be read are one line in the email, not a problem. */
+async function costs(db: Db, now: Date, timeoutMs: number): Promise<HealthReport["costs"]> {
+  try {
+    return await readCostPerGift(db, now, timeoutMs);
+  } catch (e) {
+    logEvent("health.costs_failed", errorFields(e));
+    return "unreadable";
   }
 }
 
@@ -145,6 +156,9 @@ export async function runHealthCheck(deps: HealthDeps): Promise<{ result: Health
     const report = healthReport(snapshot, vendors, s.report, now);
     const problems = report.problems.length;
     if (problems === 0 && !report.isWeekly) return done("quiet", 0, false, false);
+    // Read after the report, so nothing about them can change its problems. Bounded like a vendor
+    // call, so a hung read can't stop the email; the two limits together fit the route's 60 s.
+    if (report.isWeekly) report.costs = await costs(db, now, s.vendorTimeoutMs);
     const sent = await send(deps, report);
     return done(sent ? "sent" : "send_failed", problems, sent, report.isWeekly);
   } catch (e) {

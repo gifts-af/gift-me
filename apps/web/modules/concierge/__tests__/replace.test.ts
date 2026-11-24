@@ -7,6 +7,7 @@ import { Client } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Database } from "@gifts-af/core";
 import { LOCAL_DB, localStack } from "../../../test/local-db";
+import type { RecordCost } from "../costs/record";
 import { approveAndBuy } from "../purchase/approve";
 import { quoteFailedOrder, replaceFailedOrder, type QuoteDeps } from "../purchase/replace";
 import type { PurchaseDeps } from "../purchase/store";
@@ -26,6 +27,8 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
   let killSwitchBefore: string;
   let taxPct: number;
   const advanceRound = vi.fn<(roundId: string) => Promise<unknown>>(async () => "advanced");
+  const recordCost = vi.fn<RecordCost>(async () => {});
+  let lookupCents: number;
 
   const setSwitch = (on: boolean) =>
     pg.query("update concierge.app_settings set value = $1 where key = 'zinc_ordering_enabled'", [on ? "1" : "0"]);
@@ -34,6 +37,7 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
     pg = new Client({ connectionString: LOCAL_DB });
     await pg.connect();
     killSwitchBefore = (await pg.query("select value from concierge.app_settings where key = 'zinc_ordering_enabled'")).rows[0].value;
+    lookupCents = Number((await pg.query("select value from concierge.app_settings where key = 'zinc_lookup_cents'")).rows[0].value);
     taxPct = Number((await pg.query("select value from concierge.app_settings where key = 'idea_tax_estimate_pct'")).rows[0].value);
   });
   afterAll(async () => {
@@ -45,6 +49,8 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
     await setSwitch(true);
     zinc = new FakeZinc((key) => key === APP_KEY || users.some((u) => key === `zn_test_${u}`));
     advanceRound.mockClear();
+    recordCost.mockReset();
+    recordCost.mockImplementation(async () => {});
   });
 
   const deps = (over: Partial<PurchaseDeps & QuoteDeps> = {}): PurchaseDeps & QuoteDeps => {
@@ -60,6 +66,7 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
       sleep: async () => {},
       clock: () => 0,
       lookup: { http, key: APP_KEY },
+      recordCost,
       ...over,
     };
   };
@@ -172,6 +179,90 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
     expect(offerCalls()).toHaveLength(2);
   });
 
+  it("Check today's price records one estimated price-check cost for the failed order and its buyer", async () => {
+    const userId = await newUser();
+    const r = await newRound(userId);
+    const [failed] = await boughtAndFailed(userId, r, { 0: "max_price_exceeded" });
+    zinc.catalog.set(`amazon:${r.productIds[0]}`, { priceCents: 5000 });
+    await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps());
+    expect(recordCost.mock.calls).toEqual([[{ userId, kind: "lookup_price_check", cents: lookupCents, estimated: true, orderId: failed }]]);
+  });
+
+  it("the re-check inside Buy records its own price-check cost, after the lease is let go", async () => {
+    const userId = await newUser();
+    const r = await newRound(userId);
+    const [failed] = await boughtAndFailed(userId, r, { 0: "max_price_exceeded" });
+    zinc.catalog.set(`amazon:${r.productIds[0]}`, { priceCents: 5000 });
+    zinc.products.set(urlOf(r.ideaIds[0]), { priceCents: 5000 });
+    let leaseDuringRecord: unknown = "unset";
+    recordCost.mockImplementation(async () => {
+      leaseDuringRecord = (await round(r.roundId)).locked_until;
+    });
+    const result = await replaceFailedOrder(
+      { userId, roundId: r.roundId, failedOrderId: failed, ideaId: r.ideaIds[0], shownTotalCents: totalAt(5000) },
+      deps(),
+    );
+    expect(result).toMatchObject({ ok: true });
+    expect(recordCost.mock.calls).toEqual([[{ userId, kind: "lookup_price_check", cents: lookupCents, estimated: true, orderId: failed }]]);
+    expect(leaseDuringRecord).toBeNull();
+  });
+
+  it("a plain Error from the lookup is rethrown, and the call's cost is still recorded", async () => {
+    const userId = await newUser();
+    const r = await newRound(userId);
+    const [failed] = await boughtAndFailed(userId, r, { 0: "max_price_exceeded" });
+    const broken = {
+      base: "https://zinc.test",
+      timeoutMs: 1000,
+      fetch: (async () => ({
+        get status(): number {
+          throw new Error("boom");
+        },
+      })) as unknown as typeof fetch,
+    };
+    await expect(quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps({ lookup: { http: broken, key: APP_KEY } }))).rejects.toThrow("boom");
+    expect(recordCost.mock.calls).toEqual([[{ userId, kind: "lookup_price_check", cents: lookupCents, estimated: true, orderId: failed }]]);
+  });
+
+  it("a recorder that throws synchronously can't change the quote either", async () => {
+    const userId = await newUser();
+    const r = await newRound(userId);
+    const [failed] = await boughtAndFailed(userId, r, { 0: "max_price_exceeded" });
+    zinc.catalog.set(`amazon:${r.productIds[0]}`, { priceCents: 5000 });
+    recordCost.mockImplementationOnce((() => {
+      throw new Error("sync");
+    }) as RecordCost);
+    expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps())).toEqual({ oldCents: 4200, newCents: totalAt(5000) });
+  });
+
+  it("a Zinc error after the call still records the lookup, and the answer is unchanged", async () => {
+    const userId = await newUser();
+    const r = await newRound(userId);
+    const [failed] = await boughtAndFailed(userId, r, { 0: "max_price_exceeded" });
+    const http = { base: "https://zinc.test", timeoutMs: 1000, fetch: zinc.fetch };
+    const refused = deps({ lookup: { http, key: "zn_not_known" } });
+    expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, refused)).toBe("unavailable");
+    expect(recordCost.mock.calls).toEqual([[{ userId, kind: "lookup_price_check", cents: lookupCents, estimated: true, orderId: failed }]]);
+  });
+
+  it("a price check with no live price to look up makes no call and records nothing", async () => {
+    const userId = await newUser();
+    const r = await newRound(userId);
+    const [failed] = await boughtAndFailed(userId, r, { 0: "max_price_exceeded" });
+    await pg.query("update concierge.gift_ideas set retailer_product_id = null where id = $1", [r.ideaIds[0]]);
+    expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps())).toBe("unavailable");
+    expect(recordCost).not.toHaveBeenCalled();
+  });
+
+  it("a recorder that fails can't change the quote", async () => {
+    const userId = await newUser();
+    const r = await newRound(userId);
+    const [failed] = await boughtAndFailed(userId, r, { 0: "max_price_exceeded" });
+    zinc.catalog.set(`amazon:${r.productIds[0]}`, { priceCents: 5000 });
+    recordCost.mockRejectedValueOnce(new Error("down"));
+    expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps())).toEqual({ oldCents: 4200, newCents: totalAt(5000) });
+  });
+
   it("the re-buy is refused when the price rose again since the page loaded", async () => {
     const userId = await newUser();
     const r = await newRound(userId);
@@ -183,10 +274,13 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
     expect(quote).toEqual({ oldCents: 4200, newCents: totalAt(5000) });
 
     zinc.catalog.set(`amazon:${r.productIds[0]}`, { priceCents: 5600 });
+    recordCost.mockClear();
     expect(
       await replaceFailedOrder({ userId, roundId: r.roundId, failedOrderId: failed, ideaId: r.ideaIds[0], shownTotalCents: totalAt(5000) }, deps()),
     ).toEqual({ ok: false, error: "price_changed" });
     expect(offerCalls()).toHaveLength(2);
+    // The re-check inside Buy was a paid call, so it's recorded though the Buy was refused.
+    expect(recordCost.mock.calls).toEqual([[{ userId, kind: "lookup_price_check", cents: lookupCents, estimated: true, orderId: failed }]]);
     expect(zinc.posts).toEqual([]);
     expect(await orders(r.roundId)).toEqual([expect.objectContaining({ id: failed, status: "failed", resolved: false })]);
     expect((await round(r.roundId)).locked_until).toBeNull();

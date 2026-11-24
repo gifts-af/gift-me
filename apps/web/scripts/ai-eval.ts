@@ -14,7 +14,7 @@
 // AI_GATEWAY_API_KEY, ZINC_API_BASE and ZINC_API_KEY, and refuses before any network call without them.
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { createExtractor, type CandidateFact } from "../lib/ai/extract";
+import { createExtractor, type CandidateFact, type Reading } from "../lib/ai/extract";
 import { keptForEval, matchesExpected, type Expected } from "../lib/ai/eval";
 import { AI_MODELS } from "../lib/ai/models";
 
@@ -48,11 +48,11 @@ type Row = { id: string; found: number; missing: string; forbidden: string; secs
 const rows: Row[] = [];
 let failed = false;
 
-async function check(id: string, run: () => Promise<CandidateFact[]>) {
+async function check(id: string, run: () => Promise<Reading>) {
   const started = Date.now();
   let facts: CandidateFact[];
   try {
-    facts = keptForEval(await run(), MIN_CONFIDENCE_PCT);
+    facts = keptForEval((await run()).facts, MIN_CONFIDENCE_PCT);
   } catch (err) {
     failed = true;
     rows.push({ id, found: 0, missing: `error: ${err instanceof Error ? err.message : err}`, forbidden: "", secs: "" });

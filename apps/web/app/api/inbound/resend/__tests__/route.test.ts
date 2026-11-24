@@ -19,7 +19,10 @@ vi.mock("@/lib/site-url", () => ({ siteUrl: () => "https://app.test" }));
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({ schema: () => ({ from: () => ({ upsert: (...a: unknown[]) => ({ select: () => upsert(...a) }) }) }) }),
 }));
+const recorder = async () => {};
+const costRecorder = vi.fn<(makeDb: unknown) => () => Promise<void>>(() => recorder);
 vi.mock("@/modules/concierge", () => ({
+  costRecorder: (makeDb: unknown) => costRecorder(makeDb),
   captureStoreFor: vi.fn(),
   createSupabaseInboundStore: vi.fn(),
   createSupabaseNotifyStore: vi.fn(),
@@ -27,6 +30,7 @@ vi.mock("@/modules/concierge", () => ({
   handleInbound: (...a: unknown[]) => handleInbound(...a),
 }));
 
+import { createAdminClient } from "@/lib/supabase/admin";
 import { POST } from "../route";
 
 const body = (type = "email.received") => JSON.stringify({ type, data: { email_id: "em_1" } });
@@ -86,8 +90,9 @@ describe("POST /api/inbound/resend", () => {
     await afterWork!();
     expect(handleInbound).toHaveBeenCalledWith(
       "em_1",
-      expect.objectContaining({ resend: expect.objectContaining({ apiKey: "re_key" }), notify: expect.any(Object) }),
+      expect.objectContaining({ resend: expect.objectContaining({ apiKey: "re_key" }), notify: expect.any(Object), recordCost: recorder }),
     );
+    expect(costRecorder).toHaveBeenCalledWith(createAdminClient);
   });
 
   it("200s other event types and does nothing", async () => {

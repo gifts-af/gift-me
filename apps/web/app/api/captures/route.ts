@@ -1,7 +1,9 @@
 import { createExtractor } from "@/lib/ai/extract";
 import { AI_MODELS } from "@/lib/ai/models";
 import { logEvent } from "@/lib/log";
+import { createAdminClient } from "@/lib/supabase/admin";
 import {
+  costRecorder,
   createSupabaseCaptureStore,
   parseCaptureForm,
   processCapture,
@@ -48,7 +50,12 @@ export async function POST(request: Request) {
     // The capture is saved either way; a failed read can be retried.
     let extraction: Extraction;
     try {
-      extraction = await processCapture(store, createExtractor(AI_MODELS.extraction), result.id);
+      extraction = await processCapture(
+        store,
+        createExtractor(AI_MODELS.extraction),
+        costRecorder(createAdminClient),
+        result.id,
+      );
     } catch (error) {
       // E6: ids and the error type only; the text may quote the page.
       logEvent("capture.extract_error", { capture_id: result.id, error: error instanceof Error ? error.name : "unknown" });

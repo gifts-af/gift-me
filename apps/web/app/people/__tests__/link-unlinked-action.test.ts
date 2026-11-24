@@ -10,6 +10,7 @@ vi.mock("@/lib/today", () => ({ todayForRequest: async () => "2026-11-01" }));
 vi.mock("@/lib/app-settings", () => ({ appSettingInt: async () => 1 }));
 vi.mock("@/lib/wiring", () => ({ placeAddressHeld: async () => {}, onDemandIdeaDeps: async () => null }));
 vi.mock("../notes-tip", () => ({ scheduleNotesTip: async () => {} }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ auth: { getClaims: async () => ({ data: { claims: { sub: "u1" } } }) } }),
 }));

@@ -144,7 +144,7 @@ describe.skipIf(!stack)("store cancellations (real local database, fake Zinc)", 
     await storeCancels(u, r.zincIds[0], 1);
     const result = await replaceFailedOrder(
       { userId: u.userId, roundId: r.roundId, failedOrderId: r.orderIds[0], ideaId: r.ideaIds[1] },
-      { ...wiring(dayAt(1)).purchase, lookup: null },
+      { ...wiring(dayAt(1)).purchase, lookup: null, recordCost: async () => {} },
     );
     expect(result).toMatchObject({ ok: true });
     expect(await orderRow(r.orderIds[0])).toMatchObject({ status: "failed", failure_type: "store_cancelled", resolved: true });

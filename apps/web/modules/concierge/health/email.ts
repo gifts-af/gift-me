@@ -1,6 +1,7 @@
 import { APP_NAME, inboxFor } from "@/lib/brand";
 import { type EmailRow, renderEmail } from "@/lib/email-layout";
 import type { OutgoingEmail } from "@/lib/resend";
+import { costLines } from "./costs";
 import type { HealthReport, Problem, ProblemKind } from "./report";
 
 /** Each kind's own heading under design/operations.md > Health email, never an existing section. */
@@ -89,13 +90,20 @@ function weeklyLine(w: NonNullable<HealthReport["weekly"]>): string {
   ].join(", ");
 }
 
-/** One email to the owner inbox: each problem with its runbook link, and on the weekly day the counts. */
+function costRows(costs: HealthReport["costs"]): EmailRow[] {
+  if (!costs) return [];
+  if (costs === "unreadable") return [{ title: "Cost per completed gift", detail: "Costs couldn't be read" }];
+  return costLines(costs);
+}
+
+/** One email to the owner inbox: each problem with its runbook link, and on the weekly day the counts and costs. */
 export function buildHealthEmail(r: HealthReport, runbookBase: string): OutgoingEmail {
   const rows: EmailRow[] = r.problems.map((p) => ({
     title: TITLES[p.kind],
     detail: describe(p) || undefined,
     link: { label: "What to do", url: `${runbookBase}#${RUNBOOK_ANCHORS[p.kind]}` },
   }));
+  rows.push(...costRows(r.costs));
   const paragraphs: string[] = [];
   if (r.problems.length === 0) paragraphs.push("Nothing needs you.");
   if (r.isWeekly && r.weekly) paragraphs.push(`This week: ${weeklyLine(r.weekly)}.`);

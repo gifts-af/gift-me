@@ -7,6 +7,7 @@ import { siteUrl } from "@/lib/site-url";
 import { createAdminClient } from "@/lib/supabase/admin";
 import {
   captureStoreFor,
+  costRecorder,
   createSupabaseInboundStore,
   createSupabaseNotifyStore,
   defaultChannels,
@@ -52,6 +53,7 @@ export async function POST(request: Request) {
       store: createSupabaseInboundStore(db),
       captureStore: (userId) => captureStoreFor(db, userId),
       extract: createExtractor(AI_MODELS.extraction),
+      recordCost: costRecorder(createAdminClient),
       resend: { apiKey: process.env.RESEND_API_KEY, fetch },
       notify: { store: createSupabaseNotifyStore(db), channels: defaultChannels(process.env), baseUrl: siteUrl(), now: new Date() },
     };

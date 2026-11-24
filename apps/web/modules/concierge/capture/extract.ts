@@ -1,7 +1,9 @@
 import { factLine, stripContactDetails, type FactCategory } from "@gifts-af/core";
-import type { CandidateFact, Extract } from "@/lib/ai/extract";
+import type { CandidateFact, Extract, Reading } from "@/lib/ai/extract";
+import { callRefused } from "@/lib/ai/refused";
 import { isSensitive } from "@/lib/ai/sensitive";
 import { logEvent } from "@/lib/log";
+import type { RecordCost } from "../costs/record";
 import type { CaptureStore } from "./store";
 
 // Reading a capture into profile facts (ALL-25, D47, T48). Saved facts are
@@ -47,8 +49,14 @@ export function selectFacts(
 /**
  * Reads one pending or failed capture with the model and saves what it learned.
  * An already-extracted capture returns its facts without calling the model again.
+ * Records what the model call cost, once, unless it was refused; a recorder that throws changes nothing.
  */
-export async function processCapture(store: CaptureStore, extract: Extract, captureId: string): Promise<Extraction> {
+export async function processCapture(
+  store: CaptureStore,
+  extract: Extract,
+  recordCost: RecordCost,
+  captureId: string,
+): Promise<Extraction> {
   const capture = await store.loadCapture(captureId);
   if (!capture) throw new CaptureNotFound();
   if (capture.status === "extracted") {
@@ -65,6 +73,22 @@ export async function processCapture(store: CaptureStore, extract: Extract, capt
     return { status: "pending", facts: [] };
   }
 
+  // Null cents: the call may have been charged, but nothing says how much.
+  const record = async (cents: number | null) => {
+    try {
+      await recordCost({
+        userId: store.userId,
+        kind: "ai_capture",
+        cents: cents ?? settings.readEstimateCents,
+        estimated: cents === null,
+      });
+    } catch {
+      // A cost is bookkeeping: the read goes on without it.
+    }
+  };
+  // Runs while the facts are saved, so recording doesn't hold them up.
+  let recording: Promise<void> | undefined;
+
   const started = Date.now();
   try {
     const known = await store.knownFacts(capture.personId);
@@ -75,7 +99,7 @@ export async function processCapture(store: CaptureStore, extract: Extract, capt
     // note, and an emailed note's subject and body, which has no URL) are stripped; a page's text,
     // title and URL are the store's and go as written. What's saved is unchanged.
     const emailed = !capture.url;
-    const candidates = await extract({
+    const input = {
       relationship: capture.relationship,
       url: capture.url,
       title: emailed ? stripContactDetails(capture.title) : capture.title,
@@ -84,9 +108,17 @@ export async function processCapture(store: CaptureStore, extract: Extract, capt
       screenshot,
       // Contact details stay out of what the model reads (T42, ALL-134); the duplicate check below uses the real values.
       known: known.map((f) => stripContactDetails(factLine(f.category, f.value))),
-    }, { timeoutMs: settings.timeoutMs });
+    };
+    let reading: Reading;
+    try {
+      reading = await extract(input, { timeoutMs: settings.timeoutMs });
+    } catch (err) {
+      if (!callRefused(err)) recording = record(null);
+      throw err;
+    }
+    recording = record(reading.costCents);
     const { keep, blocked } = selectFacts(
-      candidates,
+      reading.facts,
       new Set(known.map((f) => factKey(f.category, f.value))),
       settings.minConfidencePct,
     );
@@ -99,5 +131,7 @@ export async function processCapture(store: CaptureStore, extract: Extract, capt
     logEvent("capture.extract_failed", { ...ids, error: err instanceof Error ? err.name : "unknown", ms: Date.now() - started });
     await store.setCaptureStatus(capture.id, "failed");
     return { status: "failed", facts: [] };
+  } finally {
+    await recording;
   }
 }

@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   captureStoreFor,
   confirmActionLink,
+  costRecorder,
   createSupabaseInboundStore,
   createSupabaseNotifyStore,
   defaultChannels,
@@ -30,6 +31,7 @@ export async function confirmLink(token: string): Promise<ConfirmResult> {
   const notes = () => ({
     captureStore: (userId: string) => captureStoreFor(db, userId),
     extract: createExtractor(AI_MODELS.extraction),
+    recordCost: costRecorder(createAdminClient),
     inbound: createSupabaseInboundStore(db),
     notify: { store, channels: defaultChannels(process.env), baseUrl: siteUrl(), now },
   });

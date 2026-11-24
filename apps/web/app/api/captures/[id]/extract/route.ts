@@ -2,7 +2,8 @@ import { createExtractor } from "@/lib/ai/extract";
 import { z } from "zod";
 import { AI_MODELS } from "@/lib/ai/models";
 import { logEvent } from "@/lib/log";
-import { CaptureNotFound, createSupabaseCaptureStore, processCapture } from "@/modules/concierge";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { CaptureNotFound, costRecorder, createSupabaseCaptureStore, processCapture } from "@/modules/concierge";
 import { allowedOrigin, bearer, json, preflight } from "@/lib/extension-http";
 
 // Try again from the extension popup (ALL-25): reads a pending or failed
@@ -31,7 +32,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const store = await createSupabaseCaptureStore(token);
     if (!store) return json(request, allowed, { error: "Sign in again." }, 401);
-    const extraction = await processCapture(store, createExtractor(AI_MODELS.extraction), id);
+    const extraction = await processCapture(
+      store,
+      createExtractor(AI_MODELS.extraction),
+      costRecorder(createAdminClient),
+      id,
+    );
     return json(request, allowed, { extraction }, 200);
   } catch (error) {
     if (error instanceof CaptureNotFound) {

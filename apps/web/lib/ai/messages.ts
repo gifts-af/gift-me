@@ -20,10 +20,15 @@ const AI_ERROR_MESSAGES = {
  * the Gateway's credit ran out, so the AI call was refused and cost nothing.
  */
 export class AiError extends Error {
-  /** What a reply we received and priced cost before it failed, so the caller still counts it. A number, never text. */
+  /**
+   * `costCents`: what a reply we received and priced cost before it failed, so the caller still
+   * counts it. A number, never text. `maybeSpent`: the call may have been charged, but no reply
+   * says how much. Never true for a refusal, or with `costCents`.
+   */
   constructor(
     public kind: keyof typeof AI_ERROR_MESSAGES,
     public costCents?: number,
+    public maybeSpent = false,
   ) {
     super(AI_ERROR_MESSAGES[kind]);
     this.name = "AiError";
@@ -33,20 +38,21 @@ export class AiError extends Error {
 /** HTTP 402: the Gateway sends both insufficient_funds and quota_for_entity_exceeded this way. */
 const PAYMENT_REQUIRED = 402;
 
-async function call(h: GatewayHttp, path: string, init: RequestInit): Promise<unknown> {
+/** `paid`: the Gateway charges for this call, so one that fails without a readable answer may have spent. */
+async function call(h: GatewayHttp, path: string, init: RequestInit, paid: boolean): Promise<unknown> {
   let res: Response;
   try {
     res = await h.fetch(`${h.base}${path}`, init);
   } catch (error) {
     if (init.signal?.aborted) throw error;
-    throw new AiError("unavailable");
+    throw new AiError("unavailable", undefined, paid);
   }
   if (res.status === PAYMENT_REQUIRED) throw new AiError("no_credit");
   if (!res.ok) throw new AiError("unavailable");
   try {
     return await res.json();
   } catch {
-    throw new AiError("malformed");
+    throw new AiError("malformed", undefined, paid);
   }
 }
 
@@ -68,7 +74,7 @@ function price(v: unknown): number | null {
 
 /** Reads the free GET /v1/models listing: dollars per token, and dollars per 1,000 searches. */
 export async function gatewayPrices(h: GatewayHttp, model: string, signal: AbortSignal): Promise<GatewayPrices> {
-  const parsed = modelsReply.safeParse(await call(h, "/v1/models", { signal }));
+  const parsed = modelsReply.safeParse(await call(h, "/v1/models", { signal }, false));
   if (!parsed.success) throw new AiError("malformed");
   const p = parsed.data.data.find((m) => m.id === model)?.pricing;
   // A missing, empty, null or zero price must never read as free, or the cost cap is defeated.
@@ -85,7 +91,7 @@ const creditsReply = z.object({ balance: z.string(), total_used: z.string() });
 /** Reads the free GET /v1/credits: the team's AI credit left, in whole cents. */
 export async function gatewayCredits(h: GatewayHttp, signal: AbortSignal): Promise<{ balanceCents: number }> {
   const parsed = creditsReply.safeParse(
-    await call(h, "/v1/credits", { headers: { Authorization: `Bearer ${h.apiKey}` }, signal }),
+    await call(h, "/v1/credits", { headers: { Authorization: `Bearer ${h.apiKey}` }, signal }, false),
   );
   if (!parsed.success) throw new AiError("malformed");
   const dollars = parsed.data.balance.trim() === "" ? NaN : Number(parsed.data.balance);
@@ -109,14 +115,14 @@ export async function sendMessages(
   prices: GatewayPrices,
   signal: AbortSignal,
 ): Promise<{ text: string; costCents: number }> {
-  const json = await call(h, "/v1/messages", {
+  const init: RequestInit = {
     method: "POST",
     headers: { "x-api-key": h.apiKey, "anthropic-version": "2023-06-01", "Content-Type": "application/json" },
     body: JSON.stringify(body),
     signal,
-  });
-  const parsed = messagesReply.safeParse(json);
-  if (!parsed.success) throw new AiError("malformed");
+  };
+  const parsed = messagesReply.safeParse(await call(h, "/v1/messages", init, true));
+  if (!parsed.success) throw new AiError("malformed", undefined, true);
   const texts = parsed.data.content.filter((b) => b.type === "text" && b.text !== undefined);
   const text = texts.at(-1)?.text;
   const u = parsed.data.usage;

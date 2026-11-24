@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { inboxFor } from "@/lib/brand";
 import { buildHealthEmail, RUNBOOK_ANCHORS } from "../health/email";
 import { healthReport, type ProblemKind } from "../health/report";
-import { MONDAY, settings, snapshot, TUESDAY, vendors } from "./health-fixtures";
+import { costs, MONDAY, settings, snapshot, TUESDAY, vendors } from "./health-fixtures";
 
 const BASE = "https://example.test/operations.md";
 const build = (snap: ReturnType<typeof snapshot> | null, now = TUESDAY, v = vendors) =>
@@ -53,6 +53,30 @@ describe("buildHealthEmail", () => {
     expect(e.text).toContain("1 waiting on an address");
     expect(e.text).toContain("1 waiting on funds");
     expect(e.text).toContain("2 failed captures");
+  });
+
+  it("AC-9: the cost rows come after the problems, and only when there are costs", () => {
+    const report = healthReport(snapshot({ stuckRounds: [{ roundId: "r1", userId: "u1", attempts: 3 }] }), vendors, settings, MONDAY);
+    const rows = (r: typeof report) => buildHealthEmail(r, BASE).text.split("\n").filter((l) => l.startsWith("- "));
+    const without = rows(report);
+    expect(without).toHaveLength(1);
+    expect(rows({ ...report, costs: null })).toEqual(without);
+
+    const withCosts = rows({ ...report, costs: costs() });
+    expect(withCosts[0]).toEqual(without[0]);
+    expect(withCosts).toHaveLength(7);
+    expect(withCosts[1]).toBe("- Cost per completed gift (Counted since Nov 25, 2026. 12 completed gifts)");
+    expect(withCosts[6]).toBe("- QA account: $0.42 (Not counted above)");
+  });
+
+  it("AC-11: unreadable costs are one row, and nothing else changes", () => {
+    const report = healthReport(snapshot({ stuckRounds: [{ roundId: "r1", userId: "u1", attempts: 3 }] }), vendors, settings, MONDAY);
+    const line = "- Cost per completed gift (Costs couldn't be read)\n";
+    const plain = buildHealthEmail(report, BASE);
+    const broken = buildHealthEmail({ ...report, costs: "unreadable" }, BASE);
+    expect(broken.subject).toBe(plain.subject);
+    expect(broken.text).toContain(line);
+    expect(broken.text.replace(line, "")).toBe(plain.text);
   });
 
   it("the tick-failed email carries the counts", () => {
