@@ -361,13 +361,13 @@ describe.skipIf(!stack)("held rounds: failures and due rounds (real local databa
       )
     ).rows[0].id as string;
 
-    // Each run is counted the way start_idea_run counts it, and finds nothing.
+    // Each run is counted the way start_idea_run counts it, and fails (one that found nothing isn't repeated).
     const generateIdeas = vi.fn(async (round: { id: string; userId: string; personId: string }): Promise<IdeaOutcome> => {
       await held.pg.query(
-        "insert into concierge.idea_runs (user_id, person_id, round_id, finished_at, outcome) values ($1, $2, $3, now(), 'none')",
+        "insert into concierge.idea_runs (user_id, person_id, round_id, finished_at, outcome) values ($1, $2, $3, now(), 'failed')",
         [round.userId, round.personId, round.id],
       );
-      return { status: "none" };
+      return { status: "failed" };
     });
     // The real store and SQL, with the tick kept to this one round: other files' rounds stay as they are.
     const tick = async () => {

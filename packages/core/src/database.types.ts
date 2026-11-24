@@ -1106,6 +1106,7 @@ export type Database = {
           created_at: string;
           id: string;
           idea_id: string | null;
+          owned: boolean;
           reason_code: string;
           reason_text: string | null;
           round_id: string;
@@ -1117,6 +1118,7 @@ export type Database = {
           created_at?: string;
           id?: string;
           idea_id?: string | null;
+          owned?: boolean;
           reason_code: string;
           reason_text?: string | null;
           round_id: string;
@@ -1127,6 +1129,7 @@ export type Database = {
           created_at?: string;
           id?: string;
           idea_id?: string | null;
+          owned?: boolean;
           reason_code?: string;
           reason_text?: string | null;
           round_id?: string;
@@ -1888,6 +1891,7 @@ export type Database = {
           p_facts: Json;
           p_list_gifts: boolean;
           p_lock: string;
+          p_owned_idea_id?: string;
           p_reason_code: string;
           p_reason_text: string;
           p_round_id: string;
@@ -1960,6 +1964,13 @@ export type Database = {
           isOneToOne: false;
           isSetofReturn: true;
         };
+      };
+      restore_rejected_ideas: {
+        Args: { p_lock: string; p_now: string; p_round_id: string };
+        Returns: {
+          outcome: string;
+          restored: number;
+        }[];
       };
       round_candidates: {
         Args: { p_today: string };
