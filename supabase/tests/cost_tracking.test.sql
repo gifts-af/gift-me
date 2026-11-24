@@ -4,7 +4,18 @@
 -- a window, and every row here rolls back with the transaction.
 begin;
 \ir _helpers.psql
-select plan(72);
+select plan(80);
+
+-- ─── Settings, as shipped ────────────────────────────────────────────────────
+-- Checked first, before any test changes a setting. db:test runs db-clean first, which puts
+-- every setting it knows back to its migration value; cost_tracking_since (set by a select,
+-- which db-clean can't read) only has to exist, since its value is the migration's now().
+select is(concierge.setting_int('cost_tracking_enabled'), 1, 'cost_tracking_enabled ships on');
+select is(concierge.setting_int('cost_window_days'), 90, 'cost_window_days ships at 90');
+select is(concierge.setting_int('cost_record_timeout_ms'), 3000, 'cost_record_timeout_ms ships at 3000');
+select ok((select (value #>> '{}')::timestamptz is not null from concierge.app_settings where key = 'cost_tracking_since')
+  and (select description ~* 'again' from concierge.app_settings where key = 'cost_tracking_since'),
+  'cost_tracking_since exists and its description says to set it again');
 
 select tests.create_user('cost-a@example.com') as a \gset
 select tests.create_user('cost-qa@example.com') as q \gset
@@ -71,28 +82,53 @@ select lives_ok($$select * from concierge.monthly_bills$$, 'the service role can
 select lives_ok($$select concierge.cost_per_gift(now())$$, 'the service role can call cost_per_gift');
 
 -- ─── record_cost ─────────────────────────────────────────────────────────────
+select tests.reset_role();
+-- Rows this transaction wrote have created_at = now(); other sessions' rows never do.
+create function tests.ct_last() returns bigint language sql as $$
+  select id from concierge.cost_events where created_at = now() order by id desc limit 1;
+$$;
+grant execute on all functions in schema tests to service_role;
+
+select tests.act_as_server();
 select concierge.record_cost(:'a', 'ai_ideas', 12.3456, true);
-select is((select cents from concierge.cost_events order by id desc limit 1), 12.3456::numeric,
-  'record_cost keeps a fraction of a cent');
-select is((select estimated from concierge.cost_events order by id desc limit 1), true, 'record_cost keeps the estimate mark');
+select tests.ct_last() as c1 \gset
+select is((select cents from concierge.cost_events where id = :'c1'), 12.3456::numeric, 'record_cost keeps a fraction of a cent');
+select is((select estimated from concierge.cost_events where id = :'c1'), true, 'record_cost keeps the estimate mark');
 select throws_ok(format($q$select concierge.record_cost(%L, 'order_fee', 1, false)$q$, :'a'), '23514', null, 'a kind outside the list is refused');
 select throws_ok(format($q$select concierge.record_cost(%L, 'ai_ideas', -1, false)$q$, :'a'), '23514', null, 'negative cents are refused');
 
 select concierge.record_cost(:'q', 'ai_capture', 2, true);
-select is((select excluded from concierge.cost_events order by id desc limit 1), true, 'a flagged account writes a row marked excluded');
+select tests.ct_last() as c2 \gset
+select is((select excluded from concierge.cost_events where id = :'c2'), true, 'a flagged account writes a row marked excluded');
 select concierge.record_cost(:'a', 'ai_capture', 2, true);
-select is((select excluded from concierge.cost_events order by id desc limit 1), false, 'an ordinary account writes a row not excluded');
+select tests.ct_last() as c3 \gset
+select is((select excluded from concierge.cost_events where id = :'c3'), false, 'an ordinary account writes a row not excluded');
 select concierge.record_cost(:'n', 'ai_capture', 2, true);
-select is((select excluded from concierge.cost_events order by id desc limit 1), false, 'a user with no accounts row is recorded, not excluded');
+select tests.ct_last() as c4 \gset
+select is((select excluded from concierge.cost_events where id = :'c4'), false, 'a user with no accounts row is recorded, not excluded');
 select concierge.record_cost(gen_random_uuid(), 'lookup_price_check', 1, true);
-select is((select excluded from concierge.cost_events order by id desc limit 1), false, 'an unknown user id is recorded, not excluded');
+select tests.ct_last() as c5 \gset
+select is((select excluded from concierge.cost_events where id = :'c5'), false, 'an unknown user id is recorded, not excluded');
 
--- Flipping the flag later leaves old rows alone.
-select tests.ct_cost('ai_ideas', 5, false, true, '2090-02-01 00:00+00');
+-- Flipping the flag later leaves the old row alone, and new rows follow the new flag.
 select tests.reset_role();
 update concierge.accounts set costs_excluded = false where user_id = :'q';
-select is((select count(*)::int from concierge.cost_events where excluded and created_at = '2090-02-01 00:00+00'), 1, 'clearing the flag does not change an old row');
+select is((select excluded from concierge.cost_events where id = :'c2'), true, 'clearing the flag does not change an old row');
+select tests.act_as_server();
+select concierge.record_cost(:'q', 'ai_capture', 2, true);
+select tests.ct_last() as c6 \gset
+select is((select excluded from concierge.cost_events where id = :'c6'), false, 'a row written after clearing the flag is not excluded');
+select tests.reset_role();
 update concierge.accounts set costs_excluded = true where user_id = :'q';
+select is((select excluded from concierge.cost_events where id = :'c6'), false, 'setting the flag does not change an old row either');
+
+-- The service role has its table rights directly, not only through the functions.
+select tests.act_as_server();
+select lives_ok($$insert into concierge.cost_events (kind, cents, estimated, created_at) values ('ai_ideas', 1, false, '2090-02-01 00:00+00')$$, 'the service role can insert cost_events');
+select lives_ok($$insert into concierge.monthly_bills (month, vendor, cents) values ('2090-08-01', 'svc', 1)$$, 'the service role can insert monthly_bills');
+select lives_ok($$update concierge.monthly_bills set cents = 2 where month = '2090-08-01' and vendor = 'svc'$$, 'the service role can update monthly_bills');
+select lives_ok($$delete from concierge.monthly_bills where month = '2090-08-01' and vendor = 'svc'$$, 'the service role can delete monthly_bills');
+select tests.reset_role();
 delete from concierge.cost_events where created_at = '2090-02-01 00:00+00';
 
 -- ─── Users can't flag themselves ─────────────────────────────────────────────
@@ -108,20 +144,21 @@ select tests.ct_round(:'a', :'pa', :'oa') as ra \gset
 select tests.ct_order(:'a', :'ra', 'placed', '2090-01-10 00:00+00') as ord1 \gset
 select tests.act_as_server();
 select concierge.record_cost(:'a', 'ai_ideas', 3, false, :'run1', :'ord1');
+select tests.ct_last() as clink \gset
 select tests.reset_role();
-select is((select count(*)::int from concierge.cost_events where idea_run_id = :'run1' and order_id = :'ord1'), 1, 'the row links its run and order');
+select is((select count(*)::int from concierge.cost_events where id = :'clink' and idea_run_id = :'run1' and order_id = :'ord1'), 1, 'the row links its run and order');
 delete from concierge.idea_runs where id = :'run1';
-select is((select count(*)::int from concierge.cost_events where cents = 3 and idea_run_id is null and order_id = :'ord1'), 1, 'deleting an idea run keeps the cost row, link cleared');
+select is((select count(*)::int from concierge.cost_events where id = :'clink' and idea_run_id is null and order_id = :'ord1'), 1, 'deleting an idea run keeps the cost row, link cleared');
 delete from concierge.orders where id = :'ord1';
-select is((select count(*)::int from concierge.cost_events where cents = 3 and idea_run_id is null and order_id is null), 1, 'deleting an order keeps the cost row, link cleared');
+select is((select count(*)::int from concierge.cost_events where id = :'clink' and idea_run_id is null and order_id is null), 1, 'deleting an order keeps the cost row, link cleared');
 
 -- ─── Tracking off ────────────────────────────────────────────────────────────
-select count(*)::int as before_off from concierge.cost_events \gset
+select count(*)::int as before_off from concierge.cost_events where created_at = now() \gset
 update concierge.app_settings set value = '0' where key = 'cost_tracking_enabled';
 select tests.act_as_server();
 select concierge.record_cost(:'a', 'ai_ideas', 9, false);
 select tests.reset_role();
-select is((select count(*)::int from concierge.cost_events), :before_off, 'record_cost writes nothing when tracking is off');
+select is((select count(*)::int from concierge.cost_events where created_at = now()), :before_off, 'record_cost writes nothing when tracking is off');
 select tests.act_as_server();
 select is(concierge.cost_per_gift('2090-06-30 12:00+00'), null::jsonb, 'cost_per_gift returns null when tracking is off');
 select tests.reset_role();
@@ -135,13 +172,13 @@ delete from concierge.cost_events where created_at >= '2090-01-01';
 
 select tests.ct_round(:'q', :'pq', :'oq') as rq \gset
 select tests.ct_round(:'n', :'pn', :'onn') as rn \gset
--- Counted: o1, o2, o3, o5, o12.
+-- Counted (5): placed, shipped and delivered orders, one exactly at p_now, one from an account with no accounts row.
 select tests.ct_order(:'a', :'ra', 'placed',    '2090-05-10 00:00+00');
 select tests.ct_order(:'a', :'ra', 'shipped',   '2090-05-20 00:00+00');
 select tests.ct_order(:'a', :'ra', 'delivered', '2090-06-10 00:00+00');
 select tests.ct_order(:'a', :'ra', 'placed',    '2090-06-30 12:00+00');  -- exactly p_now: counted
 select tests.ct_order(:'n', :'rn', 'placed',    '2090-05-25 00:00+00');  -- no accounts row: counted
--- Not counted.
+-- Not counted: the exact window start, after p_now, before cost_tracking_since, the other statuses, a flagged account.
 select tests.ct_order(:'a', :'ra', 'placed',    '2090-04-01 12:00+00');  -- exactly the window start
 select tests.ct_order(:'a', :'ra', 'placed',    '2090-06-30 12:00:01+00');
 select tests.ct_order(:'a', :'ra', 'placed',    '2089-12-31 00:00+00');  -- before cost_tracking_since
@@ -161,6 +198,7 @@ select tests.ct_cost('ai_ideas',          50,   false, false, '2090-03-01 00:00+
 select tests.ct_cost('ai_ideas',          7,    false, false, '2090-04-01 12:00+00');  -- exactly the window start
 select tests.ct_cost('ai_capture',        999,  false, false, '2090-06-30 12:00:01+00');
 
+select tests.act_as_server();
 insert into concierge.monthly_bills (month, vendor, cents) values
   ('2090-04-01', 'vercel', 700),    -- starts before the counting start
   ('2090-05-01', 'vercel', 1000),
@@ -168,7 +206,6 @@ insert into concierge.monthly_bills (month, vendor, cents) values
   ('2090-06-01', 'vercel', 900);    -- the current month, not over yet
 -- 2090-03 has no bill at all.
 
-select tests.act_as_server();
 select concierge.cost_per_gift('2090-06-30 12:00+00') as r1 \gset
 select tests.reset_role();
 
@@ -206,15 +243,25 @@ select is((:'r2'::jsonb ->> 'billGifts')::int, 0, 'no bill months means no billG
 
 -- A bill month with no gifts: billCents > 0, billGifts = 0.
 update concierge.app_settings set value = to_jsonb('2090-01-01T00:00:00Z'::text) where key = 'cost_tracking_since';
-insert into concierge.monthly_bills (month, vendor, cents) values ('2090-02-01', 'vercel', 300);
 select tests.act_as_server();
+insert into concierge.monthly_bills (month, vendor, cents) values ('2090-02-01', 'vercel', 300);
 select concierge.cost_per_gift('2090-03-15 12:00+00') as r3 \gset
 select tests.reset_role();
 select is((:'r3'::jsonb ->> 'gifts')::int, 0, 'no gifts before the first order');
 select is((:'r3'::jsonb ->> 'billCents')::int, 300, 'a bill month with no gifts still counts in billCents');
 select is((:'r3'::jsonb ->> 'billGifts')::int, 0, 'a bill month with no gifts gives billGifts 0');
 
+-- A bill month that starts exactly at the counting start and ends exactly at p_now counts.
+update concierge.app_settings set value = to_jsonb('2090-02-01T00:00:00Z'::text) where key = 'cost_tracking_since';
+select tests.act_as_server();
+select concierge.cost_per_gift('2090-03-01 00:00+00') as r4 \gset
+select tests.reset_role();
+select is((:'r4'::jsonb ->> 'billCents')::int, 300, 'a month starting exactly at the counting start and ending exactly at p_now counts');
+select is(:'r4'::jsonb -> 'bills', '[{"month": "2090-02-01", "vendors": ["vercel"]}]'::jsonb, 'that month is listed');
+update concierge.app_settings set value = to_jsonb('2090-01-01T00:00:00Z'::text) where key = 'cost_tracking_since';
+
 -- ─── Bills: one per month and vendor ─────────────────────────────────────────
+select tests.act_as_server();
 select throws_ok($$insert into concierge.monthly_bills (month, vendor, cents) values ('2090-05-01', 'vercel', 1)$$, '23505', null, 'a second bill for the same month and vendor is refused');
 insert into concierge.monthly_bills (month, vendor, cents) values ('2090-05-01', 'vercel', 1234)
   on conflict (month, vendor) do update set cents = excluded.cents;
@@ -222,14 +269,7 @@ select is((select cents from concierge.monthly_bills where month = '2090-05-01' 
 select throws_ok($$insert into concierge.monthly_bills (month, vendor, cents) values ('2090-05-02', 'x', 1)$$, '23514', null, 'a month must be the first of the month');
 select throws_ok($$insert into concierge.monthly_bills (month, vendor, cents) values ('2090-07-01', '  ', 1)$$, '23514', null, 'a vendor cannot be blank');
 select throws_ok($$insert into concierge.monthly_bills (month, vendor, cents) values ('2090-07-01', 'x', -1)$$, '23514', null, 'a bill cannot be negative');
-
--- ─── Settings ────────────────────────────────────────────────────────────────
-select is(concierge.setting_int('cost_tracking_enabled'), 1, 'cost_tracking_enabled ships on');
-select is(concierge.setting_int('cost_record_timeout_ms'), 3000, 'cost_record_timeout_ms is 3000');
-select ok((select value from concierge.app_settings where key = 'cost_tracking_since') is not null
-  and (select description from concierge.app_settings where key = 'cost_tracking_since') ~* 'again',
-  'cost_tracking_since exists and its description says to set it again');
-select is(concierge.setting_int('cost_window_days'), 90, 'cost_window_days is 90');
+select tests.reset_role();
 
 -- ─── A missing setting raises ────────────────────────────────────────────────
 select tests.act_as_server();
