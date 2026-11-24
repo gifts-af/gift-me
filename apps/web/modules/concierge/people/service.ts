@@ -7,9 +7,12 @@ import {
   BASE_BUDGET_KIND,
   checkAddress,
   isGooglePhotoUrl,
+  daysBetween,
   nextOccasion,
   nextOccurrence,
+  occasionDateInYear,
   orderBy,
+  parseDate,
   sizedGooglePhotoUrl,
   startingOccasions,
   type CalendarDate,
@@ -20,6 +23,7 @@ import {
   type Relationship,
 } from "@gifts-af/core";
 import { errorFields, logEvent } from "@/lib/log";
+import { monthDay as monthDayText } from "@/lib/occasion-format";
 import type { SaveResult } from "../settings";
 import type { PlaceAddressHeld } from "../zinc/types";
 import {
@@ -298,11 +302,12 @@ export function setBirthYear(store: PeopleStore, id: string, year: number | null
 const NO_BIRTHDAY = "Add a birthday first.";
 
 /**
- * Sets a birthday or anniversary. An existing one is moved, keeping its id,
- * switch and any open round; one is added only when there's none. Only a real
- * date is saved.
+ * Sets a birthday or anniversary. An existing one is moved, keeping its id and
+ * switch; the database ends its open round when no gift is chosen. One is added
+ * only when there's none. Only a real date is saved. `note` says what happens to
+ * a gift that's already set, or that the new date is too close.
  */
-export function setDatedOccasion(store: PeopleStore, id: string, kind: DatedKind, date: MonthDay): Promise<SaveResult> {
+export function setDatedOccasion(store: PeopleStore, id: string, kind: DatedKind, date: MonthDay, today: CalendarDate): Promise<SaveResult> {
   if (!isRealMonthDay(date)) return Promise.resolve({ ok: false, error: BAD_DATE });
   return onOwnPerson(store, id, async () => {
     const existing = (await store.occasions([id])).find((o) => o.kind === kind);
@@ -311,8 +316,38 @@ export function setDatedOccasion(store: PeopleStore, id: string, kind: DatedKind
       return { ok: true };
     }
     if (existing.month === date.month && existing.day === date.day) return { ok: true };
-    return (await store.moveOccasion(existing.id, date.month, date.day)) ? { ok: true } : notFound();
+    if (!(await store.moveOccasion(existing.id, date.month, date.day))) return notFound();
+    const note = await movedNote(store, { ...existing, ...date }, kind, today);
+    return note ? { ok: true, note } : { ok: true };
   });
+}
+
+/** Half of the year between two of a yearly date: nearer than this, a gift was for this one. */
+const HALF_A_YEAR_DAYS = 183;
+
+/** What the buyer should know after moving a date. Read after the save, so it never blocks one. */
+async function movedNote(store: PeopleStore, o: OccasionRow, kind: DatedKind, today: CalendarDate): Promise<string | null> {
+  try {
+    const gifts = await store.giftsAround(o.id, today);
+    if (!gifts) return null;
+    const moved = { kind, month: o.month ?? 0, day: o.day ?? 0 };
+    if (gifts.setFor) {
+      const kept = gifts.setFor;
+      const { year, month, day } = parseDate(kept);
+      // The new date nearest the gift's own: Jan 5 to Dec 28 is a week earlier, not a year later.
+      const away = (d: CalendarDate) => Math.abs(daysBetween(kept, d));
+      const nearest = [year - 1, year, year + 1].map((y) => occasionDateInYear(moved, y)).reduce((a, b) => (away(b) < away(a) ? b : a));
+      const late = nearest < kept ? " It may arrive after the new date." : "";
+      return `A gift is already set for ${monthDayText({ month, day })}. It keeps that date.${late}`;
+    }
+    const next = nextOccurrence(moved, today);
+    if (!o.enabled || !gifts.paid || orderBy(next, today, await store.schedule())) return null;
+    if (gifts.given.some((d) => Math.abs(daysBetween(d, next)) < HALF_A_YEAR_DAYS)) return null;
+    return "It's too late to send a gift for this one. The next one starts as usual.";
+  } catch (e) {
+    logEvent("person.moved_date_note_failed", { person_id: o.personId, code: errorCode(e) ?? null });
+    return null;
+  }
 }
 
 /**

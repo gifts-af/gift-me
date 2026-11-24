@@ -45,6 +45,40 @@ describe("AboutForm", () => {
     expect(screen.queryByRole("button", { name: /Save/ })).toBeNull();
   });
 
+  describe("what saving a date says", () => {
+    const NOTE = "A gift is already set for Mar 14. It keeps that date.";
+    const pickDay = async (day: string) => {
+      const field = within(birthday()).getByRole("spinbutton", { name: "Birthday day" });
+      fireEvent.change(field, { target: { value: day } });
+      await act(async () => fireEvent.blur(field, { relatedTarget: nameField() }));
+    };
+
+    it("shows the note, and drops it on the next edit", async () => {
+      setup({}, actions({ setDate: vi.fn(async () => ({ ok: true as const, note: NOTE })) }));
+      await pickDay("20");
+      expect(within(birthday()).getByText(NOTE)).toHaveAttribute("role", "status");
+      expect(within(anniversary()).queryByText(NOTE)).toBeNull();
+      fireEvent.change(within(birthday()).getByRole("spinbutton", { name: "Birthday day" }), { target: { value: "21" } });
+      expect(screen.queryByText(NOTE)).toBeNull();
+    });
+
+    it("doesn't show one that arrived after the page was left", async () => {
+      let finish: (r: { ok: true; note: string }) => void = () => {};
+      const a = actions({ setDate: vi.fn(() => new Promise<{ ok: true; note: string }>((done) => (finish = done))) });
+      const page = (mode: "visible" | "hidden") => (
+        <Activity mode={mode}>
+          <AboutForm {...MOM} actions={a} />
+        </Activity>
+      );
+      const { rerender } = render(page("visible"));
+      await pickDay("20");
+      rerender(page("hidden"));
+      await act(async () => finish({ ok: true, note: NOTE }));
+      rerender(page("visible"));
+      expect(screen.queryByText(NOTE)).toBeNull();
+    });
+  });
+
   describe("name", () => {
     it("saves on leaving the field, once, and says Saved", async () => {
       const { a } = setup();

@@ -15,7 +15,7 @@ import { CARD_CLASS, MONTH_NAMES, NUMBER_CLASS } from "../../person-form";
 // own through useAutosave. No Save button. The actions are passed in, so the
 // page wires the real ones and tests fake them.
 
-type Result = { ok: true } | { ok: false; error: string };
+type Result = { ok: true; note?: string } | { ok: false; error: string };
 type MonthDay = { month: number; day: number };
 type Kind = "birthday" | "anniversary";
 
@@ -234,13 +234,28 @@ function DatedField({
   const label = kind === "birthday" ? "Birthday" : "Anniversary";
   // A date is saved: offers Remove and turns the year on.
   const [hasDate, setHasDate] = useState(saved !== null);
+  // What the last save said about the date: a gift that keeps its old one, or that it's too late.
+  const [note, setNote] = useState<string | null>(null);
+  const onPage = useRef(true);
+  useLayoutEffect(() => {
+    onPage.current = true;
+    // Next keeps visited pages, hidden: a note from before would be out of date on return.
+    return () => {
+      onPage.current = false;
+      setNote(null);
+    };
+  }, []);
   const date = useAutosave<DateText>({
     initial: dateText(saved),
     equals: sameDate,
     save: async (value) => {
       if (!isRealDate(value)) return { ok: false, error: BAD_DATE };
       const result = await actions.setDate(personId, kind, value.month, value.day);
-      if (result.ok) setHasDate(true);
+      if (result.ok) {
+        setHasDate(true);
+        // Not for a date that's been edited again since.
+        if (onPage.current && sameDate(shown.current, value)) setNote(result.note ?? null);
+      }
       return result;
     },
   });
@@ -256,6 +271,10 @@ function DatedField({
     shown.current = date.value;
   });
 
+  function editDate(next: DateText) {
+    setNote(null);
+    date.setValue(next);
+  }
   function cancelSettle() {
     if (settle.current) clearTimeout(settle.current);
     settle.current = null;
@@ -293,7 +312,7 @@ function DatedField({
             value={date.value.month}
             disabled={disabled}
             aria-invalid={date.error ? true : undefined}
-            onChange={(e) => date.setValue({ ...date.value, month: e.target.value })}
+            onChange={(e) => editDate({ ...date.value, month: e.target.value })}
           >
             <option value="">Month</option>
             {MONTH_NAMES.map((m, i) => (
@@ -313,7 +332,7 @@ function DatedField({
             value={date.value.day}
             disabled={disabled}
             aria-invalid={date.error ? true : undefined}
-            onChange={(e) => date.setValue({ ...date.value, day: e.target.value })}
+            onChange={(e) => editDate({ ...date.value, day: e.target.value })}
           />
         </div>
         {kind === "birthday" ? (
@@ -336,6 +355,11 @@ function DatedField({
       </div>
       <ErrorLine error={date.error ?? year.error} />
       <Status saved={date.status === "saved" || year.status === "saved"} />
+      {note && (
+        <p role="status" className="text-[13px] text-foreground">
+          {note}
+        </p>
+      )}
       {kind === "birthday" && (
         <p className="text-[13px] text-muted-foreground">
           We&apos;ll suggest gifts before it. The year is just for age-right ideas.
@@ -354,6 +378,7 @@ function DatedField({
             cancelSettle();
             date.reset(EMPTY_DATE);
             year.reset("");
+            setNote(null);
             setHasDate(false);
           }}
         />

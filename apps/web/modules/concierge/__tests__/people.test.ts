@@ -332,16 +332,63 @@ describe("one field at a time (ALL-127)", () => {
     const { store, mine } = setup();
     await setOccasionEnabled(store, mine, "birthday", false);
     const before = { ...occasionsOf(store, mine).find((o) => o.kind === "birthday")! };
-    expect(await setDatedOccasion(store, mine, "birthday", { month: 11, day: 30 })).toEqual({ ok: true });
+    expect(await setDatedOccasion(store, mine, "birthday", { month: 11, day: 30 }, TODAY)).toEqual({ ok: true });
     expect(occasionsOf(store, mine).filter((o) => o.kind === "birthday")).toEqual([{ ...before, month: 11, day: 30 }]);
     expect(before.enabled).toBe(false);
     expect(store.writes.at(-1)).toBe(`moveOccasion ${before.id}`);
   });
 
+  describe("what saving a moved date says", () => {
+    const NOTHING = { setFor: null, given: [] as string[], paid: true };
+    async function moved(rounds: FakePeopleStore["rounds"], to: { month: number; day: number }, today = "2026-11-24", from = { month: 12, day: 28 }, enabled = true) {
+      const store = new FakePeopleStore();
+      const id = store.seed(ME, { name: "Pat" }, [{ kind: "birthday", ...from, enabled }]);
+      store.rounds = rounds;
+      return setDatedOccasion(store, id, "birthday", to, today);
+    }
+    const SET = "A gift is already set for Dec 28. It keeps that date.";
+    const LATE = " It may arrive after the new date.";
+    const TOO_LATE = "It's too late to send a gift for this one. The next one starts as usual.";
+
+    it("a gift that's set keeps its date (AC-12)", async () => {
+      expect(await moved({ ...NOTHING, setFor: "2026-12-28" }, { month: 12, day: 30 })).toEqual({ ok: true, note: SET });
+      expect(await moved({ ...NOTHING, setFor: "2026-12-28" }, { month: 1, day: 5 })).toEqual({ ok: true, note: SET });
+    });
+    it("and may be late for an earlier date, across New Year or one that's passed (AC-12)", async () => {
+      expect(await moved({ ...NOTHING, setFor: "2026-12-28" }, { month: 12, day: 20 })).toEqual({ ok: true, note: SET + LATE });
+      expect(await moved({ ...NOTHING, setFor: "2026-12-28" }, { month: 11, day: 10 })).toEqual({ ok: true, note: SET + LATE });
+      expect(await moved({ ...NOTHING, setFor: "2027-01-05" }, { month: 12, day: 28 }, "2026-11-24", { month: 1, day: 5 })).toEqual({
+        ok: true,
+        note: "A gift is already set for Jan 5. It keeps that date." + LATE,
+      });
+    });
+    it("says when it's too late to ship, this side of New Year or the other (AC-13)", async () => {
+      expect(await moved(NOTHING, { month: 11, day: 26 })).toEqual({ ok: true, note: TOO_LATE });
+      expect(await moved(NOTHING, { month: 1, day: 2 }, "2026-12-31")).toEqual({ ok: true, note: TOO_LATE });
+      expect(await moved(NOTHING, { month: 12, day: 30 })).toEqual({ ok: true });
+    });
+    it("but not when that would be untrue (AC-13)", async () => {
+      expect(await moved({ ...NOTHING, paid: false }, { month: 11, day: 26 })).toEqual({ ok: true });
+      expect(await moved(NOTHING, { month: 11, day: 26 }, "2026-11-24", undefined, false)).toEqual({ ok: true });
+      expect(await moved({ ...NOTHING, given: ["2026-11-20"] }, { month: 11, day: 26 })).toEqual({ ok: true });
+      // Last year's gift isn't this year's.
+      expect(await moved({ ...NOTHING, given: ["2025-11-20"] }, { month: 11, day: 26 })).toEqual({ ok: true, note: TOO_LATE });
+    });
+    it("says nothing with the switch off, for the same date, or when it can't be read (AC-14)", async () => {
+      expect(await moved(null, { month: 11, day: 26 })).toEqual({ ok: true });
+      expect(await moved({ ...NOTHING, setFor: "2026-12-28" }, { month: 12, day: 28 })).toEqual({ ok: true });
+      const store = new FakePeopleStore();
+      const id = store.seed(ME, { name: "Pat" }, [{ kind: "birthday", month: 12, day: 28 }]);
+      store.failGiftsAround = true;
+      expect(await setDatedOccasion(store, id, "birthday", { month: 11, day: 26 }, "2026-11-24")).toEqual({ ok: true });
+      expect(store.writes.at(-1)).toContain("moveOccasion");
+    });
+  });
+
   it("setDatedOccasion adds the occasion only when there is none", async () => {
     const store = new FakePeopleStore();
     const id = store.seed(ME, { name: "Pat" }, [{ kind: "christmas" }]);
-    expect(await setDatedOccasion(store, id, "anniversary", { month: 2, day: 29 })).toEqual({ ok: true });
+    expect(await setDatedOccasion(store, id, "anniversary", { month: 2, day: 29 }, TODAY)).toEqual({ ok: true });
     expect(occasionsOf(store, id).filter((o) => o.kind === "anniversary")).toEqual([
       expect.objectContaining({ month: 2, day: 29, enabled: true }),
     ]);
@@ -350,14 +397,14 @@ describe("one field at a time (ALL-127)", () => {
 
   it("setDatedOccasion writes nothing when the date hasn't changed", async () => {
     const { store, mine } = setup();
-    expect(await setDatedOccasion(store, mine, "birthday", { month: 12, day: 1 })).toEqual({ ok: true });
+    expect(await setDatedOccasion(store, mine, "birthday", { month: 12, day: 1 }, TODAY)).toEqual({ ok: true });
     expect(store.writes).toEqual([]);
   });
 
   it("setDatedOccasion refuses a date that doesn't exist, with no writes", async () => {
     const { store, mine } = setup();
     for (const date of [{ month: 2, day: 31 }, { month: 13, day: 1 }, { month: 4, day: 0 }, { month: 1.5, day: 2 }]) {
-      expect(await setDatedOccasion(store, mine, "birthday", date)).toEqual({ ok: false, error: "That date doesn't exist." });
+      expect(await setDatedOccasion(store, mine, "birthday", date, TODAY)).toEqual({ ok: false, error: "That date doesn't exist." });
     }
     expect(store.writes).toEqual([]);
   });
@@ -530,7 +577,7 @@ describe("another user's person, or nobody", () => {
     ["renamePerson", (s, id) => renamePerson(s, id, "New")],
     ["setRelationship", (s, id) => setRelationship(s, id, "aunt")],
     ["setBirthYear", (s, id) => setBirthYear(s, id, 1960, 2026)],
-    ["setDatedOccasion", (s, id) => setDatedOccasion(s, id, "birthday", { month: 1, day: 1 })],
+    ["setDatedOccasion", (s, id) => setDatedOccasion(s, id, "birthday", { month: 1, day: 1 }, TODAY)],
     ["removeDatedOccasion", (s, id) => removeDatedOccasion(s, id, "birthday")],
     ["setOccasionEnabled", (s, id) => setOccasionEnabled(s, id, "christmas", false)],
     ["saveBudgets", (s, id) => saveBudgets(s, () => {}, id, { christmas: 100 })],
@@ -622,7 +669,7 @@ describe("when the database says no row changed", () => {
   it("a moved birthday that changes no row is an error", async () => {
     const { store, mine } = setup();
     store.noRows.add("moveOccasion");
-    expect(await setDatedOccasion(store, mine, "birthday", { month: 1, day: 9 })).toEqual({ ok: false, error: NOT_FOUND });
+    expect(await setDatedOccasion(store, mine, "birthday", { month: 1, day: 9 }, TODAY)).toEqual({ ok: false, error: NOT_FOUND });
   });
 });
 
