@@ -116,10 +116,11 @@ export type TemplateData = {
   reaction_prompt: { rounds: (Occasion & { gifts: { title: string }[] })[] };
   needs_address: Occasion & { reminder?: boolean };
   /**
-   * `held`: the buyer chose a gift, but it couldn't be bought before the deadline. `partial`:
+   * `held`: the buyer chose a gift, but it couldn't be bought before the deadline. `partial`
+   * (`coming`: another gift is, or may be, on its way):
    * some of the chosen gifts were cancelled at the deadline while others are on their way.
    */
-  skipped: Occasion & { held?: boolean; partial?: { cancelled: string[]; onItsWay: string[] } };
+  skipped: Occasion & { held?: boolean; partial?: { cancelled: string[]; onItsWay: string[]; coming: boolean } };
   hold_funds: Gifts & {
     neededText: string;
     /** The balance and shortfall, when the balance is known. */
@@ -566,7 +567,7 @@ export const TEMPLATES: {
               `We're sorry. We couldn't buy ${giftList(d.partial.cancelled)} for ${d.personName}'s ${d.occasion} in time, so we cancelled ${itOrThem(d.partial.cancelled)}. You haven't been charged for ${itOrThem(d.partial.cancelled)}.`,
               ...onItsWayLine(d.partial.onItsWay, "The good news: "),
             ],
-            button: { label: `See ${d.personName}'s gift`, url: links.open },
+            button: { label: d.partial.coming ? `See ${d.personName}'s gift` : `Open ${d.personName}'s page`, url: links.open },
             footer: `What happens next: you can still pick something up yourself in ${d.partial.cancelled.length > 1 ? "their" : "its"} place.`,
           }),
         }

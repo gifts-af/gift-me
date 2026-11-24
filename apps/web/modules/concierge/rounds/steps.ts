@@ -256,7 +256,7 @@ export async function moveToGenerating(round: ClaimedRound, { store, now }: Engi
 }
 
 /** What some emails add to the round's own data. */
-export type Extra = { funding?: Funding; partial?: { cancelled: string[]; onItsWay: string[] } };
+export type Extra = { funding?: Funding; partial?: { cancelled: string[]; onItsWay: string[]; coming: boolean } };
 
 /** Records the step, then sends it; fails on a clean refusal, so the next tick tries again. */
 export async function sendStep(

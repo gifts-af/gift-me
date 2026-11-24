@@ -121,7 +121,7 @@ describe.each([
     const s = SAMPLE_DATA.skipped;
     if (name === "skipped-held") return TEMPLATES.skipped({ ...s.data, held: true }, s.links);
     if (name === "skipped-partial") {
-      return TEMPLATES.skipped({ ...s.data, held: true, partial: { cancelled: ["Linen apron"], onItsWay: ["Mug"] } }, s.links);
+      return TEMPLATES.skipped({ ...s.data, held: true, partial: { cancelled: ["Linen apron"], onItsWay: ["Mug"], coming: true } }, s.links);
     }
     return render(name);
   })();
@@ -482,10 +482,16 @@ describe("the button to the gift", () => {
   it.each([
     ["ordered", TEMPLATES.ordered(SAMPLE_DATA.ordered.data, link)],
     ["several failures", TEMPLATES.failed_several(SAMPLE_DATA.failed_several.data, link)],
-    ["a cancelled gift next to one on its way", TEMPLATES.skipped({ ...SAMPLE_DATA.skipped.data, held: true, partial: { cancelled: ["Apron"], onItsWay: ["Mug"] } }, link)],
+    ["a cancelled gift next to one on its way", TEMPLATES.skipped({ ...SAMPLE_DATA.skipped.data, held: true, partial: { cancelled: ["Apron"], onItsWay: ["Mug"], coming: true } }, link)],
   ])("%s: See Mom's gift", (_what, mail) => {
     expect(mail.text).toContain("See Mom's gift: https://example.com/rounds/r1");
     expect(mail.text).not.toContain("Open Mom's page");
+  });
+
+  it("with nothing coming, a cancelled gift's email opens their page", () => {
+    const mail = TEMPLATES.skipped({ ...SAMPLE_DATA.skipped.data, held: true, partial: { cancelled: ["Apron"], onItsWay: [], coming: false } }, link);
+    expect(mail.text).toContain("Open Mom's page");
+    expect(mail.text).not.toContain("See Mom's gift");
   });
 
   it.each([false, true])("skipped (held: %s) opens their page", (held) => {
@@ -515,7 +521,7 @@ describe("ordered (PRD A-8, owner)", () => {
 describe("skipped, partly (a held gift cancelled at the deadline next to one on its way)", () => {
   it("says which was cancelled, that nothing was charged for it, and which is on its way", () => {
     const s = SAMPLE_DATA.skipped;
-    const mail = TEMPLATES.skipped({ ...s.data, held: true, partial: { cancelled: ["Linen apron"], onItsWay: ["Le Creuset mug set"] } }, s.links);
+    const mail = TEMPLATES.skipped({ ...s.data, held: true, partial: { cancelled: ["Linen apron"], onItsWay: ["Le Creuset mug set"], coming: true } }, s.links);
     expect(mail.text).toContain(
       "We're sorry. We couldn't buy the Linen apron for Mom's birthday in time, so we cancelled it. You haven't been charged for it.",
     );
@@ -526,7 +532,7 @@ describe("skipped, partly (a held gift cancelled at the deadline next to one on 
 
   it("says nothing about a gift that isn't confirmed yet", () => {
     const s = SAMPLE_DATA.skipped;
-    const mail = TEMPLATES.skipped({ ...s.data, held: true, partial: { cancelled: ["Linen apron"], onItsWay: [] } }, s.links);
+    const mail = TEMPLATES.skipped({ ...s.data, held: true, partial: { cancelled: ["Linen apron"], onItsWay: [], coming: true } }, s.links);
     expect(mail.text).toContain("Sorry, we had to cancel one of Mom's gifts");
     expect(mail.text).toContain("so we cancelled it. You haven't been charged for it.");
     expect(mail.text).not.toContain("on its way");

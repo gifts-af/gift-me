@@ -67,8 +67,8 @@ export async function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundCo
     ...(i.reason ? { reason: i.reason } : {}),
   }));
   // The approval emails link each idea's "Buy this" and the one button to the round screen with
-  // plain links; the skipped email with a gift on its way opens it too. The other emails open the person's page with one-time links that last
-  // until the end of the deadline day.
+  // plain links, as the skipped email's button does when another gift is coming. The other emails
+  // open the person's page with one-time links that last until the end of the deadline day.
   const approval = {
     choose: { path: roundPath(round.id) },
     ...Object.fromEntries(ctx.ideas.map((i, n) => [`buy${n}`, { path: buyPath(round.id, i.id) }])),
@@ -127,8 +127,8 @@ export async function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundCo
             ...(round.status === "needs_attention" ? { held: true } : {}),
             ...(extra.partial ? { partial: extra.partial } : {}),
           },
-          // With other gifts on their way the round's page has them; with none it only repeats the email.
-          links: { open: extra.partial ? { path: roundPath(round.id) } : link },
+          // With another gift coming the round's page has it; with none it only repeats the email.
+          links: { open: extra.partial?.coming ? { path: roundPath(round.id) } : link },
         },
         notifyDeps,
       );

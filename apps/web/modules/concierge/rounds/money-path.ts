@@ -116,6 +116,8 @@ async function closeAtDeadline(
   const held = ctx.orders.filter(LIVE_HELD);
   const placed = ctx.orders.filter((o) => ["placed", "shipped", "delivered", "refunded"].includes(o.status));
   const pending = ctx.orders.some((o) => o.status === "placing" || o.status === "unconfirmed");
+  // A refunded gift was placed, but it isn't coming.
+  const coming = pending || placed.some((o) => o.status !== "refunded");
   // Our own switch kept it back: ordering is off now, whatever reason the hold was stored with
   // (gate_held_orders never replaces funds with paused), or the hold says paused.
   const skipStep: StepKey = round.attentionReason === "paused" || orderingPaused ? "missed_on_us" : "skipped";
@@ -162,12 +164,12 @@ async function closeAtDeadline(
   if (emailed) {
     // Told above.
   } else if (held.length > 0 && (placed.length > 0 || pending)) {
-    const partial = { cancelled: held.map((o) => o.title), onItsWay: placed.map((o) => o.title) };
+    const partial = { cancelled: held.map((o) => o.title), onItsWay: placed.map((o) => o.title), coming };
     await before("held_cancelled", { partial });
     emailed = true;
   } else if (anyCancel && held.length > 0 && placed.length === 0 && !pending) {
     // The store's cancel was told on its own; this names only the held gifts we cancel now.
-    await before("held_cancelled", { partial: { cancelled: held.map((o) => o.title), onItsWay: [] } });
+    await before("held_cancelled", { partial: { cancelled: held.map((o) => o.title), onItsWay: [], coming } });
     emailed = true;
   } else if (anyCancel && placed.length === 0 && !pending) {
     // The store-cancelled email said it all: "No gift was chosen" or "missed on us" would be untrue.
