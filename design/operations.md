@@ -504,7 +504,7 @@ At least one idea run ended `failed` in the last day; the line has the count. Th
 The AI Gateway credit or the app's Zinc balance couldn't be read in two tries. Shown only while something uses that vendor. Ideas probably can't run either.
 
 1. Read `health.vendor_check_failed` for the `status`. A 401 or 403 is the key; a 5xx is the vendor's trouble; 0 or none means no reply, or one we couldn't read.
-2. **AI Gateway:** in the key list (`vercel ai-gateway api-keys list`), a production key whose last-active time equals its creation time has never worked. Create a new key, store it as the production `AI_GATEWAY_API_KEY` (Secret) and redeploy.
+2. **AI Gateway:** if the key is refused, or you can't tell, create a new one, check it against `/v1/credits`, store it as the production `AI_GATEWAY_API_KEY` (Secret) and redeploy.
 3. **Zinc:** check `ZINC_API_KEY` and `ZINC_API_BASE` on production, and Zinc's status.
 4. Confirm with `vercel crons run /api/health`. `vercel env run` on a laptop may use a different key, so it proves nothing about production's.
 
