@@ -345,13 +345,15 @@ function BudgetField({ roundId, action }: { roundId: string; action: (roundId: s
   );
 }
 
+const UNREAD = "That didn't go through.";
+
 /** How long typing pauses before the sheet asks again what the reason will do. */
 const TYPING_PAUSE_MS = 400;
 
 /** What the server says this reason will do, and nothing it didn't say. */
 function outlookWords(o: RejectionOutlook): string {
   if (!o.more) return `No more new ideas this time. ${o.saves ? "The reason is saved, and these" : "These"} ideas stay here to buy.`;
-  if (o.saves) return o.cheaper ? "The reason is saved, and the next ideas will cost less." : "The reason is saved, so the next ideas avoid it.";
+  if (o.saves) return o.cheaper ? "The reason is saved, and the next ideas will cost less." : "The reason is saved for next time.";
   return o.cheaper ? "The next ideas will cost less." : "We'll leave these out this time.";
 }
 
@@ -376,6 +378,8 @@ function NoneOfThese({
   // What this choice will do (AC-13a); null until the server has said, for exactly this choice and text.
   const [outlook, setOutlook] = useState<RejectionOutlook | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The last check couldn't be read, so there's something to try again.
+  const [failed, setFailed] = useState(false);
   const [sending, startSending] = useTransition();
   const asked = useRef(0);
   const typing = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -386,9 +390,11 @@ function NoneOfThese({
     asked.current++;
     clearTimeout(typing.current);
     setOutlook(null);
+    setFailed(false);
   }
 
-  async function check(input: OutlookInput) {
+  /** Asks what this choice will do; true when the server answered for it. */
+  async function check(input: OutlookInput): Promise<boolean> {
     forget();
     const seq = asked.current;
     let answer: RejectionOutlook | null;
@@ -397,9 +403,13 @@ function NoneOfThese({
     } catch {
       answer = null;
     }
-    if (seq !== asked.current) return;
-    if (answer === null) setError(TRY_AGAIN);
+    if (seq !== asked.current) return false;
+    if (answer === null) {
+      setError(UNREAD);
+      setFailed(true);
+    } else setError(null);
     setOutlook(answer);
+    return answer !== null;
   }
 
   const trimmed = () => text.trim() || null;
@@ -448,13 +458,12 @@ function NoneOfThese({
         onDone(result.more, result.saved);
       } else if (result.error === "changed") {
         // The outlook moved since the sheet showed it: nothing was saved, so show it again.
-        await check({ code, ownedIdeaId: owned, text: trimmed() });
-        setError("That changed. Check and send again.");
+        if (await check({ code, ownedIdeaId: owned, text: trimmed() })) setError("That changed. Check and send again.");
       } else setError(REJECT_ERRORS[result.error]);
     });
   }
 
-  const ready = code !== null && outlook !== null;
+  const ready = code !== null && (code !== "has_it" || owned !== null) && outlook !== null;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -471,6 +480,7 @@ function NoneOfThese({
             <button
               key={c.code}
               type="button"
+              disabled={sending}
               aria-pressed={code === c.code}
               onClick={() => chooseCode(c.code)}
               className={cn(
@@ -492,6 +502,7 @@ function NoneOfThese({
                   name="owned"
                   value={i.id}
                   checked={owned === i.id}
+                  disabled={sending}
                   onChange={() => chooseOwned(i.id)}
                   className="size-5 flex-none accent-primary"
                 />
@@ -506,6 +517,7 @@ function NoneOfThese({
             value={text}
             maxLength={FACT_VALUE_MAX}
             rows={3}
+            disabled={sending}
             onChange={(e) => type(e.target.value)}
             className="min-h-20 w-full resize-y rounded-md border border-input bg-background px-3 py-2.5 text-base"
           />
@@ -518,6 +530,11 @@ function NoneOfThese({
           <p role="alert" className="text-[13px] text-destructive">
             {error}
           </p>
+        )}
+        {failed && code && (
+          <Button type="button" variant="outline" onClick={() => void check({ code, ownedIdeaId: owned, text: trimmed() })}>
+            Try again
+          </Button>
         )}
         <Button type="button" disabled={!ready || sending} onClick={send}>
           {!outlook || outlook.more ? "Find new ideas" : outlook.saves ? "Save the reason" : "Keep these ideas"}
@@ -541,7 +558,7 @@ export function RoundScreen({
   rejectAction: (roundId: string, form: FormData) => Promise<RejectResult>;
   /** `setBudgetAction` */
   setBudgetAction: (roundId: string, form: FormData) => Promise<BudgetResult>;
-  /** `outlookAction`: what this reason will do; null when it couldn't be read. */
+  /** `rejectionOutlookAction`: what this reason will do; null when it couldn't be read. */
   outlookAction: (roundId: string, input: OutlookInput) => Promise<RejectionOutlook | null>;
   /** `markArrived`; null while order tracking is switched off, which hides "It arrived". */
   arrivedAction: ArrivedAction | null;

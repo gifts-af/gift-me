@@ -48,7 +48,7 @@ const RejectForm = z.object({
   // The profile_facts limit, after trimming; the module checks it again (too_long).
   text: z.string().trim().max(FACT_VALUE_MAX),
   expectMore: z.enum(["0", "1"]),
-});
+}).refine((f) => f.code !== "has_it" || f.owned !== null);
 
 const field = (form: FormData, key: string) => {
   const v = form.get(key);
@@ -81,7 +81,7 @@ export async function rejectAction(roundId: string, form: FormData): Promise<Rej
  * What this reason will do, for the sheet to say (AC-13a). Only reads; the round
  * must be the signed-in user's. Null when it can't say.
  */
-export async function outlookAction(
+export async function rejectionOutlookAction(
   roundId: string,
   input: { code: string; ownedIdeaId: string | null; text: string | null },
 ): Promise<RejectionOutlook | null> {

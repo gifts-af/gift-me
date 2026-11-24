@@ -70,9 +70,13 @@ export type RejectionOutlook = {
   cheaper: boolean;
 };
 
-/** Whether saving these leaves one in use: a fact the buyer removed stays removed (reject_round_ideas). */
-async function savesAny(deps: DbDeps, personId: string, facts: RejectionFact[]): Promise<boolean> {
-  if (facts.length === 0) return false;
+/**
+ * Whether saving these leaves the reason in use: the typed one when there is one (it's always the
+ * last fact), otherwise any. A fact the buyer removed stays removed (reject_round_ideas).
+ */
+async function savesReason(deps: DbDeps, personId: string, facts: RejectionFact[], text: string | null): Promise<boolean> {
+  const mine = text?.trim() ? facts.filter((f) => f.category === "avoid").slice(-1) : facts;
+  if (mine.length === 0) return false;
   const { data, error } = await concierge(deps)
     .from("profile_facts")
     .select("category, value")
@@ -81,7 +85,7 @@ async function savesAny(deps: DbDeps, personId: string, facts: RejectionFact[]):
     .in("category", ["owns", "avoid"]);
   if (error) fail("Reading the removed facts failed", error);
   const removed = new Set((data ?? []).map(rejectionFactKey));
-  return facts.some((f) => !removed.has(rejectionFactKey(f)));
+  return mine.some((f) => !removed.has(rejectionFactKey(f)));
 }
 
 /**
@@ -108,7 +112,7 @@ export async function rejectionOutlook(
   if (error) fail("Reading the rejection outlook failed", error);
   return {
     more: data === true,
-    saves: await savesAny(deps, round.data.person_id, facts),
+    saves: await savesReason(deps, round.data.person_id, facts, input.text),
     cheaper: input.code === "too_pricey" && ideas.some((i) => i.source === "generated"),
   };
 }
@@ -165,7 +169,11 @@ export async function rejectRoundIdeas(input: RejectInput, deps: DbDeps): Promis
     const ideas = await offeredIdeas(deps, roundId);
     const facts = factsFor(ideas, code, text, input.ownedIdeaId);
     if (facts === null) return { ok: false, error: "not_found" };
-    const saved = await savesAny(deps, round.person_id, facts);
+    // Only words on the page, so a failed read never blocks rejecting: it says nothing was saved.
+    const saved = await savesReason(deps, round.person_id, facts, text).catch((err: unknown) => {
+      logEvent("round.saved_unreadable", { round_id: roundId, user_id: userId, ...errorFields(err) });
+      return false;
+    });
     const { error } = await concierge(deps).rpc("reject_round_ideas", {
       p_round_id: roundId,
       p_user_id: userId,

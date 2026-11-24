@@ -413,7 +413,7 @@ describe("RoundScreen: None of these", () => {
   });
 
   describe("says only what the server says", () => {
-    const AVOID = "The reason is saved, so the next ideas avoid it.";
+    const AVOID = "The reason is saved for next time.";
     const status = () => screen.getByRole("status", { name: "What happens" });
 
     async function open(outlook: Partial<RejectionOutlook> | null) {
@@ -475,6 +475,63 @@ describe("RoundScreen: None of these", () => {
       late({ more: false, saves: true, cheaper: false });
       await new Promise((r) => setTimeout(r, 20));
       expect(status()).toHaveTextContent("We'll leave these out this time.");
+    });
+
+    it("nothing can be changed while it's being sent", async () => {
+      const p = await open({});
+      await chip("Not their style");
+      let done!: (r: RejectResult) => void;
+      p.rejectAction.mockImplementationOnce((...a) => (void a, new Promise((r) => (done = r))));
+      await userEvent.click(await screen.findByRole("button", { name: "Find new ideas" }));
+      await waitFor(() => expect(screen.getByRole("button", { name: "Too pricey" })).toBeDisabled());
+      expect(screen.getByLabelText(/Anything else/)).toBeDisabled();
+      done({ ok: true, more: true, saved: true });
+      expect(await screen.findByText("Looking again. New ideas will come by email.")).toBeInTheDocument();
+    });
+
+    it("Already has one needs to know which", async () => {
+      await open({});
+      await chip("Not their style");
+      await waitFor(() => expect(screen.getByRole("button", { name: "Find new ideas" })).toBeEnabled());
+      await chip("Already has one");
+      expect(screen.getByRole("button", { name: "Find new ideas" })).toBeDisabled();
+    });
+
+    it("a check that failed can be tried again", async () => {
+      const p = await open(null);
+      await chip("Not their style");
+      expect(await screen.findByRole("alert")).toHaveTextContent("That didn't go through.");
+      p.outlookAction.mockResolvedValueOnce({ more: true, saves: false, cheaper: false });
+      await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+      await waitFor(() => expect(status()).toHaveTextContent("We'll leave these out this time."));
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    });
+
+    it("when it changed and the new answer can't be read, it doesn't say to check and send", async () => {
+      const p = await open({});
+      await chip("Not their style");
+      p.rejectAction.mockResolvedValueOnce({ ok: false, error: "changed" });
+      await waitFor(() => expect(screen.getByRole("button", { name: "Find new ideas" })).toBeEnabled());
+      p.outlookAction.mockResolvedValueOnce(null);
+      await userEvent.click(screen.getByRole("button", { name: "Find new ideas" }));
+      expect(await screen.findByRole("alert")).toHaveTextContent("That didn't go through.");
+      expect(screen.getByRole("button", { name: "Try again" })).toBeEnabled();
+    });
+
+    it("a late answer for older text is dropped", async () => {
+      const p = await open({ saves: false });
+      await chip("Too pricey");
+      await waitFor(() => expect(status()).toHaveTextContent("We'll leave these out this time."));
+      let late!: (o: RejectionOutlook) => void;
+      p.outlookAction.mockImplementationOnce((...a) => (void a, new Promise((r) => (late = r))));
+      const box = screen.getByLabelText(/Anything else/);
+      await userEvent.type(box, "No");
+      await waitFor(() => expect(p.outlookAction).toHaveBeenLastCalledWith("r1", { code: "too_pricey", ownedIdeaId: null, text: "No" }), { timeout: 3000 });
+      await userEvent.type(box, " glass");
+      late({ more: false, saves: true, cheaper: false });
+      await waitFor(() => expect(p.outlookAction).toHaveBeenLastCalledWith("r1", { code: "too_pricey", ownedIdeaId: null, text: "No glass" }), { timeout: 3000 });
+      await waitFor(() => expect(status()).toHaveTextContent("We'll leave these out this time."));
     });
 
     it("with no search left the button keeps the ideas, and the page says what was saved", async () => {

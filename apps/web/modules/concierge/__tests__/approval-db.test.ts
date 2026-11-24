@@ -316,6 +316,27 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
     );
     expect(await outlookOf(r, "too_pricey", { text: " no plastic " })).toMatchObject({ saves: false });
     expect(await outlookOf(r, "too_pricey", { text: "no glass" })).toMatchObject({ saves: true });
+    // The typed reason is what the buyer reads "the reason" as, so the AI titles being saved isn't enough.
+    expect(await outlookOf(r, "not_style", { text: "no plastic" })).toMatchObject({ saves: false });
+    expect(await reject(u, r, { code: "not_style", text: "no plastic" })).toMatchObject({ ok: true, saved: false });
+  });
+
+  it("a failed read of what's saved never blocks rejecting", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    const d = deps();
+    const schema = d.db.schema.bind(d.db);
+    const db = Object.create(d.db) as ZincDeps["db"];
+    db.schema = ((name: "concierge") => {
+      const s = schema(name);
+      const from = s.from.bind(s);
+      s.from = ((table: string) => {
+        if (table === "profile_facts") throw new Error("read failed");
+        return from(table as "gift_rounds");
+      }) as typeof s.from;
+      return s;
+    }) as typeof db.schema;
+    expect(await rejectRoundIdeas({ userId: u.id, roundId: r.roundId, code: "not_style", text: null, ownedIdeaId: null, expectMore: true }, { ...d, db })).toEqual({ ok: true, more: true, saved: false });
   });
 
   it("rejecting says whether the reason was saved, as the outlook did", async () => {

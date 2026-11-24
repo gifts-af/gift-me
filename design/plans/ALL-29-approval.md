@@ -299,7 +299,7 @@ Can run alongside Tasks 1–4.
 
 **Produces:**
 - `productOffers` and `productDetails` take `retailer: ZincRetailer` (today hard-coded `amazon`). `productDetails` is exported for the idea run (its comment, which says only `amazonPasteDetails` may call it, is updated) and returns `deliveryDaysMax` and `shippingCents` when the reply has them (**[Verify]** against Zinc's product-details reply for Best Buy and Etsy).
-- `checkRetailer(h, key, url, signal): Promise<boolean>`: `GET /retailers/check?url=`.
+- `checkRetailer(h, key, url, signal): Promise<RejectionOutlook>`: `GET /retailers/check?url=`.
 - `listGiftRoute(url: string, asin: string | null): { kind: "offers"; retailer: "amazon" | "walmart"; productId: string } | { kind: "details"; retailer: "bestbuy" | "etsy" | "shopify"; productId: string } | { kind: "check" }`: Amazon by its ASIN; Walmart, Best Buy and Etsy by their product id in the link; Shopify through `GET /products/{id}` as `spikes/checkout.md` answer 7 says, recognised by Shopify's `/products/<handle>` link form; everything else by the store check. **[Verify]** Zinc's retailer codes, each store's product-id form, and how Zinc names a Shopify product.
 - `listGiftQuote(h, key, item: { url; asin; listPriceCents }, signal): Promise<{ kind: "offer"; offer: ZincOffer; productId; imageUrl } | { kind: "listed"; priceCents } | { kind: "unsupported" }>`: offers route → `pickOffer`; details route → an offer built from the reply; check route → `listed` at the list price when the check passes and there's a list price (the owner question), else `unsupported`. One or two calls, each charged by the caller.
 - The unit fake Zinc answers the new routes, and refuses an order whose `max_price` is below its product's price with `max_price_exceeded` (B1).
@@ -414,7 +414,7 @@ Can run alongside Tasks 1–4.
 **Files:** new `modules/concierge/rounds/approval.ts`, `__tests__/approval-db.test.ts` (local-db); export through `index.ts`.
 
 **Produces:**
-- `rejectionOutlook(input: { roundId; code; text; ownedIdeaId }, deps): Promise<boolean>`: `runs_after_rejection` with the facts that choice would save, so the sheet says "No more new ideas this time" for exactly that choice.
+- `rejectionOutlook(input: { roundId; code; text; ownedIdeaId }, deps): Promise<RejectionOutlook>`: `runs_after_rejection` with the facts that choice would save, so the sheet says "No more new ideas this time" for exactly that choice.
 - `rejectRoundIdeas(input: { userId; roundId; code: RejectionCode; text: string | null; ownedIdeaId: string | null; expectMore: boolean }, deps: ZincDeps): Promise<{ ok: true; more: boolean } | { ok: false; error: "not_found" | "busy" | "not_open" | "changed" | "too_long" }>`: lease, `rejectionFacts` from the proposed ideas' titles (the owned idea's title for `has_it`), `reject_round_ideas`. Logs `round.ideas_rejected` or `round.rejection_noted` with the code and count only. Doesn't call `advanceRound`: the next tick runs ideas.
 - `setRoundBudget(input: { userId; roundId; budgetCents: number }, userDb, deps: ZincDeps): Promise<"saved" | "busy" | "already_set" | "not_open">`: `save_budgets` as the user (the round's occasion kind), then `set_round_budget` under the lease; logs `round.budget_set`.
 - `roundAccess(roundId, viewerId, deps): Promise<"mine" | "other" | "missing">`: the only service-role read, returning nothing else (S4).
