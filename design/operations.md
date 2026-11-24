@@ -777,7 +777,7 @@ For `reactions.run_failed` or `reactions.ask_failed`:
 
 ### A round never closes
 
-A round that stays `ordered` or `needs_attention` is not asked and not closed: the gift's delivered event was lost and the buyer never tapped "It arrived" (known gap, ALL-162). Check the order in Zinc's dashboard. If it never confirmed, follow **Unconfirmed orders**; if it shipped, the buyer can tap "It arrived" on the round screen, and the round is then asked about as normal.
+A round that stays `ordered` or `needs_attention` is not asked and not closed: the gift's delivered event was lost and the buyer never tapped "It arrived" (known gap, ALL-33). Check the order in Zinc's dashboard. If it never confirmed, follow **Unconfirmed orders**; if it shipped, the buyer can tap "It arrived" on the round screen, and the round is then asked about as normal.
 
 Two things look like bugs and aren't: an answer is refused before the occasion date, and an unanswered round closes silently on its close date.
 
