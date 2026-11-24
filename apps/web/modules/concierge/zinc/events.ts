@@ -254,11 +254,16 @@ async function settle(userId: string, event: ZincEvent, deps: Deps): Promise<voi
       ...(c?.total !== undefined ? { total_cents: c.total } : {}),
     };
   }
+  const errorType = typeof event.errorType === "string" ? event.errorType : undefined;
+  if (!placed && event.errorType !== undefined && errorType === undefined) {
+    // Settled as a plain failure: the order still failed, and a retry could never fix the reason.
+    logEvent("zinc.webhook_bad_error_type", { user_id: userId, order_id: order.id });
+  }
   const { data: roundStatus, error } = await concierge.rpc("settle_order", {
     p_user_id: userId,
     p_order_id: order.id,
     p_status: placed ? "placed" : "failed",
-    p_failure_type: placed ? "failed" : failureType(event.errorType),
+    p_failure_type: placed ? "failed" : failureType(errorType),
     p_price: price,
   });
   if (error) throw new Error(`Settling the order failed (${error.code}).`);
