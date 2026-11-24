@@ -395,6 +395,7 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
   const LIST_GIFTS = [
     { store: "Amazon", url: "https://www.amazon.com/dp/B0LISTGIFT?th=1", productId: "B0LISTGIFT", offerId: "off_B0LISTGIFT", catalog: "amazon:B0LISTGIFT", path: "/products/B0LISTGIFT/offers" },
     { store: "Amazon, another host and seller", url: "https://smile.amazon.com/gp/product/B0LISTGIF2", productId: "B0LISTGIF2", offerId: "off_gone", catalog: "amazon:B0LISTGIF2", path: "/products/B0LISTGIF2/offers" },
+    { store: "Amazon, its id saved in lower case", url: "https://www.amazon.com/dp/B0LISTGIFT", productId: "b0listgift", catalog: "amazon:B0LISTGIFT", path: "/products/B0LISTGIFT/offers" },
     { store: "Walmart", url: "https://www.walmart.com/ip/Kettle/123456789", productId: "123456789", catalog: "walmart:123456789", path: "/products/123456789/offers" },
     { store: "Etsy", url: "https://www.etsy.com/listing/6525410/mug", productId: "6525410", catalog: "etsy:6525410", path: "/products/6525410" },
     { store: "a Shopify store", url: "https://www.yetch.store/products/blue-mug", productId: "blue-mug", catalog: "yetch.store:blue-mug", path: "/products/blue-mug" },
@@ -431,6 +432,7 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
 
   it.each([
     { why: "an Amazon link to another product", url: "https://www.amazon.com/dp/B0OTHERONE", productId: "B0LISTGIFT", outcome: "link_mismatch" },
+    { why: "another Amazon marketplace's link", url: "https://www.amazon.co.uk/dp/B0LISTGIFT", productId: "B0LISTGIFT", outcome: "other_marketplace" },
     { why: "an Amazon link with no ASIN", url: "https://www.amazon.com/products/B0LISTGIFT", productId: "B0LISTGIFT", outcome: "link_mismatch" },
     { why: "an ASIN saved with another store's link", url: "https://yetch.store/products/blue-mug", productId: "B0LISTGIFT", outcome: "link_mismatch" },
     { why: "a store Zinc only checks", url: "https://www.rei.com/product/123/mug", productId: null, outcome: "no_live_price" },

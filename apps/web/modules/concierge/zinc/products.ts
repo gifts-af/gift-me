@@ -197,17 +197,18 @@ export type ListGiftRoute =
   // Zinc names a Shopify store by its domain, so the shop's host rides along.
   | { kind: "details"; retailer: "shopify"; shop: string; productId: string }
   | { kind: "check" }
-  // The link and the saved ASIN don't name the same Amazon product: never priced or offered.
-  | { kind: "refused" };
+  // A saved ASIN that can't be priced as the link's product: never looked up or offered.
+  | { kind: "refused"; reason: "link_mismatch" | "other_marketplace" };
 
 /**
  * How to price a list gift. Zinc's id per store: Amazon the ASIN, Walmart the item id (the
  * number after /ip/), Etsy the listing id (/listing/<id>), Shopify the handle (/products/<handle>).
  * Anything else is checked.
  *
- * Buying goes by the link, so an Amazon price must be the link's product too: a saved ASIN that
- * isn't the link's (or a link that names none) is refused. A saved ASIN means nothing on another
- * store's link.
+ * Buying goes by the link and an ASIN is priced on amazon.com, so a saved ASIN on an Amazon link
+ * must be the one an amazon.com link names: another marketplace, another ASIN or an unreadable
+ * one is refused. A saved ASIN means nothing on another store's link, and without one an Amazon
+ * link is routed like any other.
  *
  * Best Buy goes to the check too. [Verify] Zinc's get-product docs say `retailer=bestbuy`
  * returns 400 for now, even in test mode (https://www.zinc.com/docs/v2/api-reference/products/get-product.md).
@@ -220,10 +221,11 @@ export function listGiftRoute(url: string, asin: string | null): ListGiftRoute {
   } catch {
     return { kind: "check" };
   }
-  if (isAmazonHost(u.hostname)) {
+  if (asin && isAmazonHost(u.hostname)) {
+    if (!/(^|\.)amazon\.com$/i.test(u.hostname)) return { kind: "refused", reason: "other_marketplace" };
     const linked = extractAsin(u.pathname);
-    if (asin && asin.toUpperCase() !== linked) return { kind: "refused" };
-    return linked ? { kind: "offers", retailer: "amazon", productId: asin ?? linked } : { kind: "check" };
+    if (linked === null || linked !== asin.toUpperCase()) return { kind: "refused", reason: "link_mismatch" };
+    return { kind: "offers", retailer: "amazon", productId: linked };
   }
   const host = u.hostname.replace(/^www\./i, "").toLowerCase();
   const segs = u.pathname.split("/").filter(Boolean);

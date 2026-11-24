@@ -818,9 +818,10 @@ describe("runIdeas: list gifts first", () => {
   });
 
   it.each([
-    { why: "names another product than its saved ASIN", url: "https://www.amazon.com/dp/B0OTHERONE" },
-    { why: "has no ASIN to compare with its saved one", url: "https://www.amazon.com/hz/wishlist/item" },
-    { why: "has a Shopify-like path", url: "https://www.amazon.com/products/blue-mug" },
+    { why: "names another product than its saved ASIN", url: "https://www.amazon.com/dp/B0OTHERONE", outcome: "link_mismatch" },
+    { why: "is another marketplace's", url: `https://www.amazon.co.uk/dp/${asinOf(1)}`, outcome: "other_marketplace" },
+    { why: "has no ASIN to compare with its saved one", url: "https://www.amazon.com/hz/wishlist/item", outcome: "link_mismatch" },
+    { why: "has a Shopify-like path", url: "https://www.amazon.com/products/blue-mug", outcome: "link_mismatch" },
   ])("an Amazon list gift whose link $why is refused with no lookup, and the next gift is still offered", async (g) => {
     const [bad, good] = listWorld(2, zinc);
     store.in = inputs({ facts: [], round: ROUND, listGifts: [{ ...bad, url: g.url }, good] });
@@ -829,15 +830,19 @@ describe("runIdeas: list gifts first", () => {
     // One offers lookup and one photo, both for the good gift.
     expect(zinc.calls.map((c) => c.target)).toEqual([asinOf(2), asinOf(2)]);
     expect(store.finished).toEqual([{ outcome: "saved", cost: 2 }]);
-    const refused = events().filter((e) => e.event === "ideas.list_gift" && e.outcome === "link_mismatch");
-    expect(refused).toEqual([{ event: "ideas.list_gift", at: expect.any(String), run_id: "run-1", route: "amazon", outcome: "link_mismatch" }]);
+    const refused = events().filter((e) => e.event === "ideas.list_gift" && e.outcome !== "kept");
+    expect(refused).toEqual([{ event: "ideas.list_gift", at: expect.any(String), run_id: "run-1", route: "amazon", outcome: g.outcome }]);
   });
 
-  it("an Amazon list gift with no saved ASIN, as the extension saves it, is priced by its link's", async () => {
+  it("an Amazon list gift with no saved ASIN, as the extension saves it, is offered at its list price through the store check", async () => {
     const [g] = listWorld(1, zinc);
-    store.in = inputs({ facts: [], round: ROUND, listGifts: [{ ...g, asin: null }] });
+    zinc.orderable.add(g.url);
+    // The link's ASIN is excluded and has a live offer and photo: none of it is used.
+    store.in = inputs({ facts: [], round: ROUND, excluded: [asinOf(1)], listGifts: [{ ...g, asin: null, listPriceCents: 1500 }] });
     expect(await runIdeas(roundReq(), deps())).toEqual({ status: "saved", count: 1 });
-    expect(store.saved[0]).toMatchObject({ retailerProductId: asinOf(1), offerId: "loff-1" });
+    expect(store.saved[0]).toMatchObject({ retailer: "Amazon", retailerProductId: null, offerId: null, priceCents: 1500, deliveryDaysMax: 7, imageUrl: null });
+    expect(zinc.calls).toHaveLength(1);
+    expect(store.finished).toEqual([{ outcome: "saved", cost: 1 }]);
   });
 
   it("an ASIN saved with another store's link is ignored: the gift is priced by its link", async () => {

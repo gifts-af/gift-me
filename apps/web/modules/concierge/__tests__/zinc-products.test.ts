@@ -346,11 +346,18 @@ describe("listGiftRoute (ALL-29)", () => {
     });
   });
   it.each([
-    ["a different ASIN in the link", "https://www.amazon.com/dp/B0OTHERONE", "B0TEST1234", { kind: "refused" }],
-    ["no ASIN in the link but one saved", "https://www.amazon.com/hz/wishlist/item", "B0TEST1234", { kind: "refused" }],
-    ["a case difference only", "https://www.amazon.co.uk/Mug/dp/b0test1234?th=1", "b0test1234", { kind: "offers", retailer: "amazon", productId: "b0test1234" }],
-    ["no saved ASIN", "https://www.amazon.com/Mug/dp/b0test1234", null, { kind: "offers", retailer: "amazon", productId: "B0TEST1234" }],
-    ["no ASIN at all", "https://www.amazon.com/products/mug", null, { kind: "check" }],
+    ["a different ASIN in the link", "https://www.amazon.com/dp/B0OTHERONE", "B0TEST1234", { kind: "refused", reason: "link_mismatch" }],
+    ["no ASIN in the link but one saved", "https://www.amazon.com/hz/wishlist/item", "B0TEST1234", { kind: "refused", reason: "link_mismatch" }],
+    ["a case difference only", "https://www.amazon.com/Mug/dp/b0test1234?th=1", "b0test1234", { kind: "offers", retailer: "amazon", productId: "B0TEST1234" }],
+    ["amazon.com itself", "https://amazon.com/dp/B0TEST1234", "B0TEST1234", { kind: "offers", retailer: "amazon", productId: "B0TEST1234" }],
+    ["its smile subdomain", "https://smile.amazon.com/dp/B0TEST1234", "B0TEST1234", { kind: "offers", retailer: "amazon", productId: "B0TEST1234" }],
+    ["its m subdomain", "https://m.amazon.com/dp/B0TEST1234", "B0TEST1234", { kind: "offers", retailer: "amazon", productId: "B0TEST1234" }],
+    ["another marketplace", "https://www.amazon.co.uk/dp/B0TEST1234", "B0TEST1234", { kind: "refused", reason: "other_marketplace" }],
+    ["another .com marketplace", "https://www.amazon.com.au/dp/B0TEST1234", "B0TEST1234", { kind: "refused", reason: "other_marketplace" }],
+    ["another marketplace, no saved ASIN", "https://www.amazon.de/dp/B0TEST1234", null, { kind: "check" }],
+    ["an empty saved ASIN", "https://www.amazon.com/dp/B0TEST1234", "", { kind: "check" }],
+    ["no saved ASIN", "https://www.amazon.com/Mug/dp/b0test1234", null, { kind: "check" }],
+    ["no ASIN at all", "https://www.amazon.com/hz/wishlist/item", null, { kind: "check" }],
     ["an ASIN on another store's link", "https://www.walmart.com/ip/1", "B0TEST1234", { kind: "offers", retailer: "walmart", productId: "1" }],
   ])("an Amazon link's ASIN must agree with the saved one: %s", (_why, url, asin, route) => {
     expect(listGiftRoute(url, asin)).toEqual(route);

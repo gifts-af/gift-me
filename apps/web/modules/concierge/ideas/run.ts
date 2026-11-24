@@ -338,7 +338,7 @@ async function listPass(gifts: ListGift[], p: PassDeps & { stopped: () => boolea
       return null;
     }
     if (route.kind === "refused") {
-      note("link_mismatch");
+      note(route.reason);
       return null;
     }
     const step: ZincStep = async <T>(call: () => Promise<T>): Promise<T | "stop"> => {

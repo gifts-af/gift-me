@@ -162,7 +162,7 @@ type Route = Extract<ListGiftRoute, { kind: "offers" | "details" }>;
  * name, so it's routed by its link, as the idea run priced it, and refused when the link names
  * another product than the one priced.
  */
-function routeOf(idea: IdeaRow): Route | "no_live_price" | "link_mismatch" {
+function routeOf(idea: IdeaRow): Route | "no_live_price" | "link_mismatch" | "other_marketplace" {
   const { retailer, retailer_product_id: productId, product_url: url } = idea;
   if (!productId) return "no_live_price";
   if (idea.source !== "list") {
@@ -172,8 +172,9 @@ function routeOf(idea: IdeaRow): Route | "no_live_price" | "link_mismatch" {
   // On an Amazon link the saved id is the ASIN the run priced.
   const route = listGiftRoute(url, productId);
   if (route.kind === "check") return "no_live_price";
-  if (route.kind === "refused") return "link_mismatch";
-  return route.productId === productId ? route : "link_mismatch";
+  if (route.kind === "refused") return route.reason;
+  // An Amazon route has already matched the saved ASIN, whatever its case.
+  return route.retailer === "amazon" || route.productId === productId ? route : "link_mismatch";
 }
 
 /** The idea's product at its store today (R1); null when it's gone or has no usable price. */
