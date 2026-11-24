@@ -211,6 +211,16 @@ describe("RoundScreen: picking", () => {
     expect(screen.getByText("Already on one of your orders")).toBeInTheDocument();
   });
 
+  it("a list gift that failed here needs a fix: it isn't on an order, and can't be ticked", () => {
+    const reel = idea({ title: "Fly reel", source: "list", listItemId: "li8", claimedByMe: true, status: "selected" });
+    const failed = order({ ideaId: reel.id, title: "Fly reel", status: "failed", failureType: "out_of_stock" });
+    setup(view({ ideas: [reel], failedOrders: [failed] }, { status: "needs_attention" }));
+    expect(screen.queryByText("Already on one of your orders")).toBeNull();
+    const list = within(screen.getByRole("region", { name: "On their list" }));
+    expect(list.getByText("Needs a fix")).toBeInTheDocument();
+    expect(list.queryByRole("checkbox")).toBeNull();
+  });
+
   it("a no-longer-shared one says so and can't be ticked", () => {
     setup(view({ ideas: [idea({ title: "Gone gift", source: "list", listItemId: "li4", noLongerShared: true })] }));
     expect(screen.getByRole("checkbox", { name: "Gone gift" })).toBeDisabled();

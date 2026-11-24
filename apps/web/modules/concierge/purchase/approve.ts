@@ -17,11 +17,13 @@ import {
   liveOrders,
   readRound,
   recipientAddress,
+  roundGifts,
   savePersonAddress,
   setting,
   type Account,
   type AddressSnapshot,
   type AddressSource,
+  type GiftRow,
   type PurchaseDeps,
   type RoundRow,
   withLease,
@@ -66,11 +68,20 @@ export type ApproveError =
   | "already_ordered";
 
 /**
+ * One gift of several. `reason`: what it's held for or why it failed; for an ordered one, how
+ * far it has got ("shipped", "delivered"), else null. One sent to Zinc that nothing has confirmed
+ * yet is `held` with `unconfirmed`: it may or may not have been ordered.
+ */
+export type GiftOutcome = { orderId: string; title: string; status: "ordered" | "held" | "failed"; reason: string | null };
+
+/**
  * `held`: waiting (on funds, setup, an address, our switch, or a retry); `failed`: it needs
  * the buyer (price_up, out_of_stock, too_late, failed). `reason` is the round's attention_reason.
+ * A round has one status and one reason however many gifts it has, so when they came to
+ * different things `gifts` says what happened to each.
  */
 export type ApproveResult =
-  | { ok: true; status: "ordered" | "held" | "failed"; reason: string | null }
+  | { ok: true; status: "ordered" | "held" | "failed"; reason: string | null; gifts?: GiftOutcome[] }
   | { ok: false; error: ApproveError };
 
 /**
@@ -280,5 +291,37 @@ export async function tellCustomer(deps: PurchaseDeps, roundId: string, ids: Rec
     }
   }
   const status = after?.status === "ordered" ? "ordered" : failed ? "failed" : "held";
-  return { ok: true, status, reason: status === "ordered" ? null : reason };
+  // Read last, so it's what the buyer was just told about.
+  const gifts = await giftOutcomes(deps, roundId, status, ids);
+  return { ok: true, status, reason: status === "ordered" ? null : reason, ...(gifts ? { gifts } : {}) };
+}
+
+function outcomeOfGift(o: GiftRow): GiftOutcome {
+  const gift = { orderId: o.id, title: o.title };
+  if (o.status === "failed") return { ...gift, status: "failed", reason: o.failure_type };
+  if (o.status === "held") return { ...gift, status: "held", reason: o.hold_reason };
+  // Placing without Zinc's own id: the send timed out, so nobody knows yet.
+  if (o.status === "unconfirmed" || (o.status === "placing" && o.provider_order_id === null)) {
+    return { ...gift, status: "held", reason: "unconfirmed" };
+  }
+  return { ...gift, status: "ordered", reason: o.status === "shipped" || o.status === "delivered" ? o.status : null };
+}
+
+/** What each gift came to; nothing to add for one gift, or when all were ordered. */
+async function giftOutcomes(
+  deps: PurchaseDeps,
+  roundId: string,
+  status: "ordered" | "held" | "failed",
+  ids: Record<string, string>,
+): Promise<GiftOutcome[] | undefined> {
+  try {
+    const gifts = (await roundGifts(deps, roundId)).map(outcomeOfGift);
+    return gifts.length > 1 && gifts.some((g) => g.status !== "ordered") ? gifts : undefined;
+  } catch (e) {
+    logEvent("order.gift_outcomes_failed", { ...ids, ...errorFields(e) });
+    // Without the list, one reason would speak for every gift; the page's "check before trying
+    // again" is true instead. An ordered round's own words still are.
+    if (status !== "ordered") throw e;
+    return undefined;
+  }
 }

@@ -382,6 +382,25 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
     expect(fresh).toMatchObject({ idea_id: r.ideaIds[2], status: "placing", max_price_cents: 2400, gift_message: "Love you" });
   });
 
+  it("replacing one of two failures says the other still needs a fix, and names the one ordered", async () => {
+    const userId = await newUser();
+    const r = await newRound(userId, { totals: [3000, 2000, 2500] });
+    await boughtAndFailed(userId, r, { 0: "out_of_stock", 1: "out_of_stock" }, [0, 1]);
+    const all = await orders(r.roundId);
+    const first = all.find((o) => o.idea_id === r.ideaIds[0])!.id;
+    const second = all.find((o) => o.idea_id === r.ideaIds[1])!.id;
+    const result = await replaceFailedOrder({ userId, roundId: r.roundId, failedOrderId: first, ideaId: r.ideaIds[2] }, deps());
+    const fresh = (await orders(r.roundId)).find((o) => o.idea_id === r.ideaIds[2])!.id;
+    expect(result).toMatchObject({
+      ok: true,
+      status: "failed",
+      gifts: [
+        { orderId: second, status: "failed", reason: "out_of_stock" },
+        { orderId: fresh, status: "ordered", reason: null },
+      ],
+    });
+  });
+
   it("replace past the over-budget allowance is refused", async () => {
     const { userId, r, failed } = await placedAndFailed([3000, 2000, 4000]);
     expect(

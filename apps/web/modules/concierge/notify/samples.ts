@@ -39,6 +39,7 @@ export function sampleEmails(link: string): SampleEmail[] {
       const partial = { cancelled: ["Linen apron"], onItsWay: ["Le Creuset mug set"] };
       add("skipped-partial", kind, { ...SAMPLE_DATA.skipped.data, held: true, partial }, links);
     }
+    if (kind === "out_of_stock") add("out_of_stock-partial", kind, { ...SAMPLE_DATA.out_of_stock.data, ordering: ["Linen apron"] }, links);
     if (kind === "failed_late") {
       add("failed_late-partial", kind, { ...SAMPLE_DATA.failed_late.data, onItsWay: ["Linen apron"] }, links);
       const two = [

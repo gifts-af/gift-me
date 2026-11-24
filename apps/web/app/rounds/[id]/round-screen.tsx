@@ -68,10 +68,12 @@ export function listPriceNote(idea: Pick<RoundPageIdea, "source" | "livePrice">)
 }
 
 /** Why an idea can't be ticked, in words for the card; null when it can. */
-function blockedBecause(idea: RoundPageIdea, ordered: Set<string>): string | null {
+function blockedBecause(idea: RoundPageIdea, ordered: Set<string>, toFix: Set<string>): string | null {
   if (ordered.has(idea.id)) return "Ordered";
   if (idea.noLongerShared) return "No longer shared";
   if (idea.claimed) return "Someone else is getting this";
+  // Its order failed: the buyer's claim on it stays until it's fixed, but it isn't on an order.
+  if (toFix.has(idea.id)) return "Needs a fix";
   // On one of this buyer's live orders, in this round or another (approve_round: already_bought).
   if (idea.claimedByMe) return "Already on one of your orders";
   return null;
@@ -533,6 +535,7 @@ export function RoundScreen({
   // A missing account row reads as no allowance: the server refuses anything over the budget then.
   const pct = view.overBudgetPct ?? 0;
   const ordered = new Set(view.liveOrders.map((o) => o.ideaId));
+  const failed = new Set(view.failedOrders.map((o) => o.ideaId));
   const canBuy = view.closedText === null && round.status === "awaiting_approval";
 
   const bought = [...view.liveOrders, ...view.storeCancelled];
@@ -543,7 +546,7 @@ export function RoundScreen({
   const listIdeas = shown.filter((i) => i.source === "list");
   const aiIdeas = shown.filter((i) => i.source !== "list");
   const order = [...listIdeas, ...aiIdeas];
-  const pickable = (i: RoundPageIdea) => canBuy && i.status === "proposed" && blockedBecause(i, ordered) === null;
+  const pickable = (i: RoundPageIdea) => canBuy && i.status === "proposed" && blockedBecause(i, ordered, failed) === null;
 
   const [picked, setPicked] = useState<string[]>([]);
   const [overOk, setOverOk] = useState(false);
@@ -611,7 +614,7 @@ export function RoundScreen({
       key={i.id}
       idea={i}
       budgetCents={budget}
-      note={blockedBecause(i, ordered)}
+      note={blockedBecause(i, ordered, failed)}
       pickable={canBuy ? pickable(i) : null}
       checked={live.includes(i.id)}
       onToggle={() => toggle(i.id)}

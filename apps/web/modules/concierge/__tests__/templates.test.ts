@@ -280,6 +280,29 @@ describe("failed_several (ALL-116: two or more failed while the round is open)",
   });
 });
 
+describe("a failure email names the round's other gifts that were ordered", () => {
+  type Others = { onItsWay?: string[]; ordering?: string[] };
+  const textFor = (kind: "price_up" | "out_of_stock" | "too_late", d: Others) => TEMPLATES[kind]({ ...SAMPLE_DATA[kind].data, ...d }, SAMPLE_DATA[kind].links).text;
+
+  it.each(["price_up", "out_of_stock", "too_late"] as const)("%s: a placed gift, one still being ordered, both, and none", (kind) => {
+    expect(textFor(kind, { onItsWay: ["Linen apron"] })).toContain("The good news: the Linen apron is ordered and on its way.");
+    expect(textFor(kind, { ordering: ["Linen apron"] })).toContain(
+      "The good news: we're ordering the Linen apron, and we'll email you as soon as the store confirms it.",
+    );
+    const both = textFor(kind, { onItsWay: ["Linen apron"], ordering: ["Tote", "Vase"] });
+    expect(both).toContain("The good news: the Linen apron is ordered and on its way.");
+    expect(both).toContain("We're ordering the Tote and the Vase, and we'll email you as soon as the store confirms them.");
+    expect(textFor(kind, {})).not.toContain("good news");
+  });
+
+  it("needs_attention and failed_several too", () => {
+    const a = SAMPLE_DATA.needs_attention;
+    expect(TEMPLATES.needs_attention({ ...a.data, ordering: ["Tote"] }, a.links).text).toContain("The good news: we're ordering the Tote");
+    const s = SAMPLE_DATA.failed_several;
+    expect(TEMPLATES.failed_several({ ...s.data, onItsWay: undefined, ordering: ["Tote"] }, s.links).text).toContain("The good news: we're ordering the Tote");
+  });
+});
+
 describe.each(["hold_unconfirmed", "price_up", "out_of_stock", "too_late", "missed_on_us", "ordered", "failed_late", "failed_several"] as const)("%s", (kind) => {
   it("has no cancel link", () => {
     expect(render(kind).text).not.toContain("Cancel this gift");

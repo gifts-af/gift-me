@@ -85,6 +85,50 @@ describe.skipIf(!stack)("held rounds: failures and due rounds (real local databa
     },
   );
 
+  it.each(["out_of_stock", "price_up", "too_late", "failed"])("a %s failure's email names the gift of the same round that was ordered", async (type) => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await placingRound(u);
+    await settleFailed(u, r.orderIds[0], type);
+    await advance(r.roundId, 1);
+    // Still placing: being ordered, not yet "on its way".
+    expect(lastText(u)).toContain("The good news: we're ordering the Linen apron, and we'll email you as soon as the store confirms it.");
+
+    const p = await placingRound(u);
+    await held.pg.query("select concierge.settle_order($1, $2, 'placed', null, '{}')", [u.userId, p.orderIds[1]]);
+    await settleFailed(u, p.orderIds[0], type);
+    await advance(p.roundId, 1);
+    expect(lastText(u)).toContain("The good news: the Linen apron is ordered and on its way.");
+    // Only for the one that failed: the ordered one is charged.
+    expect(lastText(u)).toContain("you haven't been charged for it.");
+
+    // One delivered already isn't still "on its way".
+    const d = await placingRound(u);
+    await held.pg.query("update concierge.orders set status = 'delivered', delivered_at = now() where id = $1", [d.orderIds[1]]);
+    await settleFailed(u, d.orderIds[0], type);
+    await advance(d.roundId, 1);
+    expect(lastText(u)).not.toContain("good news");
+  });
+
+  it("the summary of two failures names a third gift still being ordered", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await placingRound(u, [4200, 3000, 2500]);
+    await settleFailed(u, r.orderIds[0], "price_up");
+    await settleFailed(u, r.orderIds[1], "out_of_stock");
+    await advance(r.roundId, 1);
+    expect(lastText(u)).toContain("2 of them didn't go through.");
+    expect(lastText(u)).toContain("The good news: we're ordering the ");
+  });
+
+  it("a failure next to a held gift doesn't call the held one ordered", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await newRound(u, { totals: [4200, 3000] });
+    held.zinc.plan.set(`https://shop.test/p/${r.ideaIds[0]}`, [{ status: 400, code: "out_of_stock" }]);
+    held.zinc.plan.set(`https://shop.test/p/${r.ideaIds[1]}`, ["402"]);
+    await approve(u, r);
+    const text = mail.filter((m) => m.to === u.email).find((m) => m.subject.includes("out of stock"))!.text;
+    expect(text).not.toContain("good news");
+  });
+
   it("a later failure is told on its own, and the gift named is the one that failed (AC-2, AC-3)", async () => {
     const u = await newUser({ autoTopUp: null });
     const r = await placingRound(u);

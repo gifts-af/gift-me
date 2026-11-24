@@ -411,7 +411,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     const u = await newUser();
     const r = await newRound(u, { totals: [4200, 5000] });
     zinc.plan.set(urlOf(r.ideaIds[1]), ["402"]);
-    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps())).toEqual({ ok: true, status: "held", reason: "funds" });
+    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps())).toMatchObject({ ok: true, status: "held", reason: "funds" });
     const [a, b] = await orders(r.roundId);
     expect(a).toMatchObject({ status: "placing" });
     expect(a.provider_order_id).toMatch(/^zn_/);
@@ -435,7 +435,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     const u = await newUser();
     const r = await newRound(u, { totals: [4200, 5000] });
     zinc.plan.set(urlOf(r.ideaIds[0]), ["timeout"]);
-    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps())).toEqual({ ok: true, status: "held", reason: "retry" });
+    expect(await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps())).toMatchObject({ ok: true, status: "held", reason: "retry" });
     const [a, b] = await orders(r.roundId);
     // Every quick retry used the same key; the second pick was never sent.
     expect(zinc.posts.map((p) => p.ref)).toEqual([a.id, a.id, a.id]);
@@ -874,6 +874,63 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     expect(await round(r.roundId)).toMatchObject({ status: "needs_attention", attention_reason: "failed" });
     // The customer is always told about a failure too.
     expect(advanceRound).toHaveBeenCalledWith(r.roundId);
+  });
+
+  // ─── what each gift came to ───────────────────────────────────────────────
+
+  describe("the result says what happened to each gift of several", () => {
+    async function buyTwo(plan: (r: Round) => void, totals = [4200, 5000]) {
+      const u = await newUser();
+      const r = await newRound(u, { totals });
+      for (const [i, id] of r.ideaIds.entries()) await pg.query("update concierge.gift_ideas set title = $2 where id = $1", [id, `Gift ${i + 1}`]);
+      plan(r);
+      const result = await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps());
+      return { result, ids: (await orders(r.roundId)).map((o) => o.id as string) };
+    }
+    const reject = (r: Round, i: number, code: string) => void zinc.plan.set(urlOf(r.ideaIds[i]), [{ status: 400, code }]);
+    const row = (orderId: string, n: number, status: string, reason: string | null) => ({ orderId, title: `Gift ${n}`, status, reason });
+
+    it("failed + ordered", async () => {
+      const { result, ids } = await buyTwo((r) => reject(r, 0, "out_of_stock"));
+      expect(result).toEqual({
+        ok: true,
+        status: "failed",
+        reason: "out_of_stock",
+        gifts: [row(ids[0], 1, "failed", "out_of_stock"), row(ids[1], 2, "ordered", null)],
+      });
+    });
+
+    it("ordered + held on funds", async () => {
+      const { result, ids } = await buyTwo((r) => void zinc.plan.set(urlOf(r.ideaIds[1]), ["402"]));
+      expect(result).toMatchObject({ status: "held", gifts: [row(ids[0], 1, "ordered", null), row(ids[1], 2, "held", "funds")] });
+    });
+
+    it("failed + held", async () => {
+      const { result, ids } = await buyTwo((r) => {
+        reject(r, 0, "out_of_stock");
+        zinc.plan.set(urlOf(r.ideaIds[1]), ["402"]);
+      });
+      expect(result).toMatchObject({ status: "failed", gifts: [row(ids[0], 1, "failed", "out_of_stock"), row(ids[1], 2, "held", "funds")] });
+    });
+
+    it("two failed, each with its own reason", async () => {
+      const { result, ids } = await buyTwo((r) => {
+        reject(r, 0, "out_of_stock");
+        reject(r, 1, "max_price_exceeded");
+      });
+      expect(result).toMatchObject({ status: "failed", gifts: [row(ids[0], 1, "failed", "out_of_stock"), row(ids[1], 2, "failed", "price_up")] });
+    });
+
+    it("ordered + one Zinc never answered about: not called ordered", async () => {
+      const { result, ids } = await buyTwo((r) => void zinc.plan.set(urlOf(r.ideaIds[1]), ["timeout"]));
+      expect(result).toMatchObject({ status: "ordered", gifts: [row(ids[0], 1, "ordered", null), row(ids[1], 2, "held", "unconfirmed")] });
+    });
+
+    it("all ordered, or one gift: no list", async () => {
+      expect((await buyTwo(() => {})).result).toEqual({ ok: true, status: "ordered", reason: null });
+      const one = await buyTwo((r) => reject(r, 0, "out_of_stock"), [4200]);
+      expect(one.result).toEqual({ ok: true, status: "failed", reason: "out_of_stock" });
+    });
   });
 
   it("a gift that can't arrive in time at approval is too_late, not sent, and the buyer is told", async () => {

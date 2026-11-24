@@ -561,12 +561,16 @@ async function sendOpenFailures(
   // A single failure's button opens that gift's own fix page (ALL-29 AC-16); the page itself signs the buyer in.
   const fix = (o: RoundOrder) => ({ open: { path: fixPath(round.id, o.id) } });
   const orderByText = chooseBy(round.shipByDeadline);
+  // The round's other gifts that were ordered. A delivered one has had its own email.
+  const titles = (...statuses: string[]) => ctx.orders.filter((o) => statuses.includes(o.status)).map((o) => o.title);
+  const onItsWay = titles("placed", "shipped");
+  const ordering = titles("placing");
+  const also = { ...(onItsWay.length > 0 ? { onItsWay } : {}), ...(ordering.length > 0 ? { ordering } : {}) };
   if (failed.length > 1) {
     // Gifts still in play before this news: not cancelled, and not a failure the buyer already heard about.
     const tried = new Set(
       ctx.orders.filter((o) => o.status !== "cancelled" && !(o.status === "failed" && !claimed.includes(o.id))).map((o) => o.ideaId),
     ).size;
-    const onItsWay = ctx.orders.filter((o) => ["placed", "shipped", "delivered"].includes(o.status)).map((o) => o.title);
     return notify(
       {
         ...base,
@@ -575,7 +579,7 @@ async function sendOpenFailures(
           ...occasion,
           tried: Math.max(tried, failed.length),
           failed: failed.map((o) => openRow(o, ctx.personName, ownerAsked, `${deps.notify.baseUrl}${fixPath(round.id, o.id)}`)),
-          ...(onItsWay.length > 0 ? { onItsWay } : {}),
+          ...also,
           orderByText,
         },
         links: open,
@@ -584,7 +588,7 @@ async function sendOpenFailures(
     );
   }
   const [o] = failed;
-  const one = { ...occasion, giftTitle: o.title, orderByText };
+  const one = { ...occasion, ...also, giftTitle: o.title, orderByText };
   switch (o.failureType) {
     case "price_up":
       return notify({ ...base, kind: "price_up", data: one, links: fix(o) }, deps.notify);
@@ -595,16 +599,16 @@ async function sendOpenFailures(
     case "address_withdrawn":
     case "address_rejected": {
       const reason = endedAddressReason(o.failureType, ctx.personName, [o.title], ownerAsked);
-      return notify({ ...base, kind: "needs_attention", data: { ...occasion, reason, orderByText }, links: fix(o) }, deps.notify);
+      return notify({ ...base, kind: "needs_attention", data: { ...occasion, ...also, reason, orderByText }, links: fix(o) }, deps.notify);
     }
     case "store_cancelled": {
       const g = cancelledGift(o);
       const reason = `${g.store ?? "the store"} cancelled the ${o.title}, and the ${g.amountText ?? "money"} is back in your Zinc wallet.`;
-      return notify({ ...base, kind: "needs_attention", data: { ...occasion, reason, orderByText }, links: fix(o) }, deps.notify);
+      return notify({ ...base, kind: "needs_attention", data: { ...occasion, ...also, reason, orderByText }, links: fix(o) }, deps.notify);
     }
     default: {
-      const reason = `the store couldn't place the order for the ${o.title}, and you haven't been charged.`;
-      return notify({ ...base, kind: "needs_attention", data: { ...occasion, reason, orderByText }, links: fix(o) }, deps.notify);
+      const reason = `the store couldn't place the order for the ${o.title}, and you haven't been charged${onItsWay.length + ordering.length > 0 ? " for it" : ""}.`;
+      return notify({ ...base, kind: "needs_attention", data: { ...occasion, ...also, reason, orderByText }, links: fix(o) }, deps.notify);
     }
   }
 }

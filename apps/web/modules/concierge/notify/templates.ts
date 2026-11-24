@@ -69,8 +69,10 @@ export type Funding = { dueText: string; haveText: string; atLeast: boolean; win
 type Gifts = Occasion & { giftTitles: string[] };
 /** One gift, by title. */
 type OneGift = Occasion & { giftTitle: string };
+/** The round's other gifts that were ordered, by title: placed ones, and ones Zinc hasn't confirmed yet. */
+type AlsoOrdered = { onItsWay?: string[]; ordering?: string[] };
 /** One failed gift while the round is open; `orderByText`: the last day to choose again in time. */
-type Failure = OneGift & { orderByText: string };
+type Failure = OneGift & AlsoOrdered & { orderByText: string };
 /** A failed gift in a summary (ALL-116): what happened, and the link text for what to do now. */
 // `url` is that gift's own fix page (ALL-29).
 /** `refunded`: the store cancelled it after it was bought, and the money is back in the Zinc wallet (ALL-33). */
@@ -103,7 +105,7 @@ export type TemplateData = {
   reminder: Occasion & Asks & { ideas: IdeaRow[] };
   final_notice: Occasion & { ideas: IdeaRow[]; orderByText: string };
   /** `orderByText`: when the buyer can still choose again; absent once there's nothing to choose. */
-  needs_attention: Occasion & { reason: string; orderByText?: string };
+  needs_attention: Occasion & AlsoOrdered & { reason: string; orderByText?: string };
   /** Each occasion's delivered gifts without an answer. */
   reaction_prompt: { rounds: (Occasion & { gifts: { title: string }[] })[] };
   needs_address: Occasion & { reminder?: boolean };
@@ -147,7 +149,7 @@ export type TemplateData = {
     personRemoved?: boolean;
   };
   /** ALL-116: `tried`, how many gifts were ordered in the round. */
-  failed_several: Occasion & { tried: number; failed: FailedGift[]; onItsWay?: string[]; orderByText: string };
+  failed_several: Occasion & AlsoOrdered & { tried: number; failed: FailedGift[]; orderByText: string };
   /**
    * ALL-33: gifts the store cancelled after they were bought, too late to ship another. `store`
    * and `amountText` (the refund) are left out when unknown, never guessed.
@@ -336,6 +338,17 @@ function onItsWayLine(titles: string[] | undefined, lead = ""): string[] {
   return [lead ? `${lead}${sentence}` : capitalize(sentence)];
 }
 
+/** Next to a gift that was ordered, "you haven't been charged" alone would cover both. */
+const forIt = (d: AlsoOrdered) => (d.onItsWay?.length || d.ordering?.length ? " for it" : "");
+
+/** The good news in a failure email: the round's other gifts that were ordered; nothing when none. */
+function alsoOrderedLines({ onItsWay, ordering }: AlsoOrdered): string[] {
+  const lines = onItsWayLine(onItsWay, "The good news: ");
+  if (!ordering || ordering.length === 0) return lines;
+  const sentence = `we're ordering ${giftList(ordering)}, and we'll email you as soon as the store confirms ${itOrThem(ordering)}.`;
+  return [...lines, lines.length > 0 ? capitalize(sentence) : `The good news: ${sentence}`];
+}
+
 /**
  * Why a gift for a list owner's shared address ended (ALL-112), for the needs_attention email.
  * `ownerAsked`: the owner has been or will be asked to check it, so the buyer can be told so.
@@ -475,7 +488,10 @@ export const TEMPLATES: {
     subject: `Sorry, there's a problem with ${d.personName}'s gift`,
     ...renderEmail({
       heading: `Sorry, there's a problem with ${d.personName}'s gift`,
-      paragraphs: [`We're sorry. We couldn't finish the gift for ${d.personName}'s ${d.occasion} on ${d.dateText}: ${d.reason}`],
+      paragraphs: [
+        `We're sorry. We couldn't finish the gift for ${d.personName}'s ${d.occasion} on ${d.dateText}: ${d.reason}`,
+        ...alsoOrderedLines(d),
+      ],
       button: { label: "Review the gift", url: links.open },
       footer: d.orderByText
         ? `What happens next: nothing else is bought until you choose. Choose another gift by ${d.orderByText} so it arrives in time.`
@@ -629,7 +645,8 @@ export const TEMPLATES: {
     ...renderEmail({
       heading: `Sorry, ${d.personName}'s gift went up in price`,
       paragraphs: [
-        `We're sorry. The price of the ${d.giftTitle} for ${d.personName}'s ${d.occasion} on ${d.dateText} went up more than you allowed for, so we didn't buy it and you haven't been charged.`,
+        `We're sorry. The price of the ${d.giftTitle} for ${d.personName}'s ${d.occasion} on ${d.dateText} went up more than you allowed for, so we didn't buy it and you haven't been charged${forIt(d)}.`,
+        ...alsoOrderedLines(d),
       ],
       button: { label: "Review the gift", url: links.open },
       footer: `What happens next: approve the new price, or choose a different gift. Nothing is bought until you choose. Choose by ${d.orderByText} so it arrives in time.`,
@@ -641,7 +658,8 @@ export const TEMPLATES: {
     ...renderEmail({
       heading: `Sorry, ${d.personName}'s gift is out of stock`,
       paragraphs: [
-        `We're sorry. The store ran out of the ${d.giftTitle} for ${d.personName}'s ${d.occasion} on ${d.dateText}, so we didn't buy it and you haven't been charged.`,
+        `We're sorry. The store ran out of the ${d.giftTitle} for ${d.personName}'s ${d.occasion} on ${d.dateText}, so we didn't buy it and you haven't been charged${forIt(d)}.`,
+        ...alsoOrderedLines(d),
       ],
       button: { label: "Choose another gift", url: links.open },
       footer: `What happens next: choose another gift by ${d.orderByText} and we'll send it in time. Nothing is bought until you choose.`,
@@ -653,7 +671,8 @@ export const TEMPLATES: {
     ...renderEmail({
       heading: `Sorry, ${d.personName}'s gift can't arrive in time`,
       paragraphs: [
-        `We're sorry. The ${d.giftTitle} wouldn't arrive in time for ${d.personName}'s ${d.occasion} on ${d.dateText} anymore, so we didn't buy it and you haven't been charged.`,
+        `We're sorry. The ${d.giftTitle} wouldn't arrive in time for ${d.personName}'s ${d.occasion} on ${d.dateText} anymore, so we didn't buy it and you haven't been charged${forIt(d)}.`,
+        ...alsoOrderedLines(d),
       ],
       button: { label: "See faster gifts", url: links.open },
       footer: `What happens next: you can still choose something that ships faster, by ${d.orderByText}. Nothing is bought until you choose.`,
@@ -840,7 +859,7 @@ export const TEMPLATES: {
       subject: title,
       ...renderEmail({
         heading: title,
-        paragraphs: [lead, ...onItsWayLine(d.onItsWay, "The good news: ")],
+        paragraphs: [lead, ...alsoOrderedLines(d)],
         rows: d.failed.map((f) => ({ title: f.title, detail: f.detail })),
         button: { label: `Open ${d.personName}'s page`, url: links.open },
         link: d.failed.filter((f) => f.action).map((f) => ({ label: f.action as string, url: f.url })),
