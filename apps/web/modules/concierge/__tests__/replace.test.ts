@@ -398,6 +398,14 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
     { store: "Walmart", url: "https://www.walmart.com/ip/Kettle/123456789", productId: "123456789", catalog: "walmart:123456789", path: "/products/123456789/offers" },
     { store: "Etsy", url: "https://www.etsy.com/listing/6525410/mug", productId: "6525410", catalog: "etsy:6525410", path: "/products/6525410" },
     { store: "a Shopify store", url: "https://www.yetch.store/products/blue-mug", productId: "blue-mug", catalog: "yetch.store:blue-mug", path: "/products/blue-mug" },
+    { store: "a Shopify store with a percent-encoded handle", url: "https://yetch.store/products/caf%C3%A9-mug", productId: "café-mug", catalog: "yetch.store:café-mug", path: "/products/caf%C3%A9-mug" },
+    ...["/gp/aw/d/", "/product/", "/exec/obidos/ASIN/", "/dp/product/", "/Cedar-Fly-Box/dp/"].map((at) => ({
+      store: `Amazon (${at})`,
+      url: `https://www.amazon.com${at}b0listgift`,
+      productId: "B0LISTGIFT",
+      catalog: "amazon:B0LISTGIFT",
+      path: "/products/B0LISTGIFT/offers",
+    })),
   ];
 
   it.each(LIST_GIFTS)("a list gift from $store is checked and bought at today's price, one recorded lookup each", async (g) => {
@@ -422,18 +430,58 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
   });
 
   it.each([
-    { why: "a store Zinc only checks", url: "https://www.rei.com/product/123/mug", productId: null },
-    { why: "a store Zinc only checks, with an id saved", url: "https://www.rei.com/product/123/mug", productId: "123" },
-    { why: "a link that names another product than the one priced", url: "https://www.walmart.com/ip/Kettle/123456789", productId: "987654321" },
-    { why: "a routable store that was priced from the list", url: "https://www.etsy.com/listing/6525410/mug", productId: null },
+    { why: "an Amazon link to another product", url: "https://www.amazon.com/dp/B0OTHERONE", productId: "B0LISTGIFT", outcome: "link_mismatch" },
+    { why: "an Amazon link with no ASIN", url: "https://www.amazon.com/products/B0LISTGIFT", productId: "B0LISTGIFT", outcome: "no_live_price" },
+    { why: "an ASIN saved with another store's link", url: "https://yetch.store/products/blue-mug", productId: "B0LISTGIFT", outcome: "link_mismatch" },
+    { why: "a store Zinc only checks", url: "https://www.rei.com/product/123/mug", productId: null, outcome: "no_live_price" },
+    { why: "a store Zinc only checks, with an id saved", url: "https://www.rei.com/product/123/mug", productId: "123", outcome: "no_live_price" },
+    { why: "a link that names another product than the one priced", url: "https://www.walmart.com/ip/Kettle/123456789", productId: "987654321", outcome: "link_mismatch" },
+    { why: "a routable store that was priced from the list", url: "https://www.etsy.com/listing/6525410/mug", productId: null, outcome: "no_live_price" },
   ])("a list gift that can't be re-checked ($why) makes no lookup and records no cost", async (g) => {
+    let lines: unknown[] = [];
     const { userId, r, failed } = await failedListGift(g);
-    expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps())).toBe("unavailable");
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const quoted = await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps()).finally(() => {
+      lines = log.mock.calls.map((c) => JSON.parse(String(c[0])));
+      log.mockRestore();
+    });
+    expect(quoted).toBe("unavailable");
+    expect(lines).toContainEqual(expect.objectContaining({ event: "order.requote", outcome: g.outcome, lookups: 0, cents: 0 }));
     expect(
       await replaceFailedOrder({ userId, roundId: r.roundId, failedOrderId: failed, ideaId: r.ideaIds[0], shownTotalCents: 9000 }, deps()),
     ).toEqual({ ok: false, error: "unavailable" });
     expect(zinc.calls).toEqual([]);
     expect(recordCost).not.toHaveBeenCalled();
+  });
+
+  it("a list gift with a product id but no link makes no lookup", async () => {
+    const { userId, r, failed } = await failedListGift(LIST_GIFTS[0]);
+    await pg.query("update concierge.gift_ideas set product_url = null where id = $1", [r.ideaIds[0]]);
+    zinc.catalog.set(LIST_GIFTS[0].catalog, { priceCents: 5000 });
+    expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps())).toBe("unavailable");
+    expect(zinc.calls).toEqual([]);
+    expect(recordCost).not.toHaveBeenCalled();
+  });
+
+  it("a Shopify reply with the store's numeric id counts when its handle matches, and not when it doesn't", async () => {
+    const { userId, r, failed } = await failedListGift({ url: "https://yetch.store/products/blue-mug", productId: "blue-mug" });
+    const quote = () => quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps());
+    zinc.catalog.set("yetch.store:blue-mug", { priceCents: 5000, productId: "8123456", handle: "blue-mug" });
+    expect(await quote()).toEqual({ oldCents: 4200, newCents: totalAt(5000) });
+    zinc.catalog.set("yetch.store:blue-mug", { priceCents: 5000, productId: "8123456", handle: "red-mug" });
+    expect(await quote()).toBe("unavailable");
+  });
+
+  it("a list gift's re-check prefers its own seller over a cheaper buy-box one", async () => {
+    const { userId, r, failed } = await failedListGift({ url: "https://www.amazon.com/dp/B0LISTGIFT", productId: "B0LISTGIFT", offerId: "off_own" });
+    zinc.catalog.set("amazon:B0LISTGIFT", {
+      priceCents: 4500,
+      offers: [
+        { offerId: "off_best", priceCents: 4500 },
+        { offerId: "off_own", priceCents: 5000 },
+      ],
+    });
+    expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps())).toEqual({ oldCents: 4200, newCents: totalAt(5000) });
   });
 
   it("an AI idea is still looked up by its saved store and id, whatever its link", async () => {

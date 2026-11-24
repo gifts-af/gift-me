@@ -6,10 +6,11 @@
 // A re-quote looks the idea up on the app's own lookup key (T17), an AI idea by its saved
 // retailer and product id and a list gift by its link, as the idea run priced it: Amazon and
 // Walmart through their offers, preferring the idea's own offer; other stores through the
-// product's details. A gift priced from its list (no product id) can't be re-quoted. Events carry ids, cents and reason codes only (E6);
-// a Zinc failure logs only its kind, never its message (a Shopify path holds the handle).
+// product's details. A gift priced from its list (no product id) can't be re-quoted. Events
+// carry ids, cents and reason codes only (E6); a Zinc failure logs only its kind, never its
+// message (a Shopify path holds the handle).
 import { committedSpendCents, estimatedTotalCents, isShippableAddress, pickOffer, type ZincOffer } from "@gifts-af/core";
-import { isAmazonHost } from "@gifts-af/core/store-page/link";
+import { extractAsin, isAmazonHost } from "@gifts-af/core/store-page/link";
 import { logEvent } from "@/lib/log";
 import type { Cost, RecordCost } from "../costs/record";
 import { hasPaidFeatures } from "../paid-features";
@@ -113,8 +114,13 @@ async function requote(deps: QuoteDeps, idea: IdeaRow, feeCents: number, ids: Re
   let offer: ZincOffer | null = null;
   let outcome = "priced";
   try {
-    offer = await lookUp(deps.lookup, idea, step);
-    if (!offer) outcome = calls === 0 ? "no_live_price" : "unavailable";
+    const route = routeOf(idea);
+    if (typeof route === "string") {
+      outcome = route;
+    } else {
+      offer = await lookUp(deps.lookup, idea, route, step);
+      if (!offer) outcome = "unavailable";
+    }
   } catch (e) {
     if (!(e instanceof ZincError)) throw e;
     outcome = `zinc_${e.kind}`;
@@ -149,28 +155,34 @@ async function requote(deps: QuoteDeps, idea: IdeaRow, feeCents: number, ids: Re
   return newCents;
 }
 
+type Route = Exclude<ListGiftRoute, { kind: "check" }>;
+
 /**
- * Where an idea's price is looked up today, or null when it can't be (so nothing is called or
+ * Where an idea's price is looked up today, or why it can't be (so nothing is called or
  * charged). An AI idea stores Zinc's own retailer name. A list gift stores the store's display
- * name, so it's routed by its link, as the idea run priced it. A route that names another
- * product than the one priced is refused.
+ * name, so it's routed by its link, as the idea run priced it, and refused when the link names
+ * another product than the one priced.
  */
-function routeOf(idea: IdeaRow): Exclude<ListGiftRoute, { kind: "check" }> | null {
+function routeOf(idea: IdeaRow): Route | "no_live_price" | "link_mismatch" {
   const { retailer, retailer_product_id: productId, product_url: url } = idea;
-  if (!productId) return null;
+  if (!productId) return "no_live_price";
   if (idea.source !== "list") {
-    return retailer === "amazon" || retailer === "walmart" ? { kind: "offers", retailer, productId } : null;
+    return retailer === "amazon" || retailer === "walmart" ? { kind: "offers", retailer, productId } : "no_live_price";
   }
-  if (!url) return null;
-  // Amazon's id is the list item's ASIN, which the run had in hand and saved as the product id.
-  const route = listGiftRoute(url, URL.canParse(url) && isAmazonHost(new URL(url).hostname) ? productId : null);
-  return route.kind !== "check" && route.productId === productId ? route : null;
+  if (!url || !URL.canParse(url)) return "no_live_price";
+  const { hostname, pathname } = new URL(url);
+  if (isAmazonHost(hostname)) {
+    const asin = extractAsin(pathname);
+    if (!asin) return "no_live_price";
+    return asin === productId.toUpperCase() ? { kind: "offers", retailer: "amazon", productId } : "link_mismatch";
+  }
+  const route = listGiftRoute(url, null);
+  if (route.kind === "check") return "no_live_price";
+  return route.productId === productId ? route : "link_mismatch";
 }
 
-/** The idea's product at its store today (R1); null when it's gone or has no live price. */
-async function lookUp(lookup: QuoteDeps["lookup"], idea: IdeaRow, step: ZincStep): Promise<ZincOffer | null> {
-  const route = routeOf(idea);
-  if (!route) return null;
+/** The idea's product at its store today (R1); null when it's gone or has no usable price. */
+async function lookUp(lookup: QuoteDeps["lookup"], idea: IdeaRow, route: Route, step: ZincStep): Promise<ZincOffer | null> {
   const { productId } = route;
   const signal = new AbortController().signal;
   if (route.kind === "offers") {
