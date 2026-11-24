@@ -41,7 +41,7 @@ const HELD: Record<string, Words> = {
   paused: { title: "Not ordered yet", body: "Buying is paused right now. We'll order it when it's back on." },
   not_allowed: { title: "Not ordered yet", body: "Buying gifts is open to test accounts during the alpha." },
 };
-const HELD_OTHER: Words = { title: "Not ordered yet", body: "We'll try again shortly and email you what happens." };
+const HELD_OTHER: Words = { title: "Not ordered yet", body: "We'll try again if there's time, and email you what happens." };
 
 const FAILED: Record<string, Words> = {
   price_up: { title: "Price went up", body: "We didn't buy it. We've emailed you what you can do." },
