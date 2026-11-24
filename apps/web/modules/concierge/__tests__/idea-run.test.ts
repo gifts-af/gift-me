@@ -436,6 +436,38 @@ describe("runIdeas: vendor trouble", () => {
     expect(event("ideas.run")).toMatchObject({ error: "ZincError", error_kind: "unavailable", error_status: 503 });
   });
 
+  it("AC-14: with nothing kept, one brainstorm lookup that errored ends failed, not none", async () => {
+    world([9000, 9000], { zinc, gateway });
+    zinc.search.set("thing 2", 503);
+    expect(await runIdeas(req(), deps())).toEqual({ status: "failed" });
+    expect(store.finished).toEqual([{ outcome: "failed", cost: expect.any(Number) }]);
+    expect(event("ideas.run")).toMatchObject({ outcome: "failed", error: "ZincError", error_kind: "unavailable", error_status: 503 });
+  });
+
+  it("AC-14: with nothing kept after the filter, a lookup that errored ends failed", async () => {
+    world([2000, 2000], { zinc, gateway });
+    zinc.search.set("thing 2", 503);
+    gateway.reasons.c1 = "Helps with their pregnancy";
+    expect(await runIdeas(req(), deps())).toEqual({ status: "failed" });
+  });
+
+  it("AC-14: with nothing kept, a list lookup that errored ends failed, with or without a brainstorm", async () => {
+    for (const facts of [[], inputs().facts]) {
+      store = new FakeStore();
+      store.in = inputs({ facts, round: ROUND, listGifts: [gift(1)] });
+      zinc.offers.set(asinOf(1), 503);
+      world([9000], { zinc, gateway });
+      expect(await runIdeas(req({ roundId: "round-1" }), deps())).toEqual({ status: "failed" });
+      expect(store.finished.map((f) => f.outcome)).toEqual(["failed"]);
+    }
+  });
+
+  it("AC-14: a lookup that errored doesn't fail a run that kept something", async () => {
+    store.in = inputs({ facts: [], round: ROUND, listGifts: listWorld(2, zinc) });
+    zinc.offers.set(asinOf(1), 503);
+    expect(await runIdeas(req({ roundId: "round-1" }), deps())).toEqual({ status: "saved", count: 1 });
+  });
+
   it("an unauthorized key ends failed and logs the alert", async () => {
     world([2000, 2000], { zinc, gateway });
     zinc.search.set("thing 1", 401);
@@ -443,6 +475,25 @@ describe("runIdeas: vendor trouble", () => {
     expect(await runIdeas(req(), deps())).toEqual({ status: "failed" });
     expect(event("ideas.zinc_unauthorized")).toMatchObject({ alert: true, run_id: "run-1" });
     expect(event("ideas.run")).toMatchObject({ error: "ZincError", error_kind: "unauthorized", error_status: 401 });
+  });
+
+  it("one unauthorized lookup logs the alert, once, whatever the run came to", async () => {
+    world([2000, 2000], { zinc, gateway });
+    zinc.search.set("thing 2", 401);
+    expect(await runIdeas(req(), deps())).toEqual({ status: "saved", count: 1 });
+    expect(events().filter((e) => e.event === "ideas.zinc_unauthorized")).toEqual([expect.objectContaining({ alert: true, run_id: "run-1" })]);
+  });
+
+  it("an unauthorized list lookup, or photo lookup, logs it too", async () => {
+    store.in = inputs({ facts: [], round: ROUND, listGifts: [gift(1)] });
+    zinc.offers.set(asinOf(1), 401);
+    await runIdeas(req({ roundId: "round-1" }), deps());
+    expect(event("ideas.zinc_unauthorized")).toMatchObject({ alert: true });
+    log.mockClear();
+    store.in = inputs({ facts: [], round: ROUND, listGifts: listWorld(1, zinc) });
+    zinc.details.set(asinOf(1), 403);
+    expect(await runIdeas(req({ roundId: "round-1" }), deps())).toEqual({ status: "saved", count: 1 });
+    expect(event("ideas.zinc_unauthorized")).toMatchObject({ alert: true });
   });
 
   it("an abort while resolving ends deadline, not none", async () => {
