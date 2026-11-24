@@ -302,6 +302,9 @@ Each screen ticket links to the screens it builds. To open one screen directly, 
 - **Shipped:** "Shipped · due <date>" with a "Track it" link to the carrier's page (none for Amazon), and an **It arrived** button.
 - **May be late:** a chip above the line, "May arrive <date> · n days late".
 - **Delivered:** "Delivered". Switching `order_tracking_enabled` off hides the button.
+- **Store cancelled:** an amber chip, "The store cancelled it · $<Zinc's refund amount> back in Zinc", or "the money is back in Zinc" when Zinc didn't say how much.
+
+The Ideas list below drops the gifts shown under "Your gifts", so nothing is listed twice; the other ideas stay as history (owner, 2026-11-23).
 
 **Five emails** (tone as in Tone in emails: apologise first, then explain every real option):
 
