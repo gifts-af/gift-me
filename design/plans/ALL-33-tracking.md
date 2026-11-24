@@ -262,7 +262,7 @@ The five failure modes no task would otherwise test, each pinned by a test in th
   - **With `p_by = 'zinc'`:** allowed on `placed` or `shipped`.
   - **What it does:** sets `delivered`, `delivered_at = now()` and `delivered_by`, then `reconcile_round`.
   - **Otherwise:** a no-op that returns the round's status.
-- **`concierge.store_cancel_order(p_user_id uuid, p_order_id uuid, p_today date) returns table(round_status concierge.round_status, applied boolean)`:**
+- **`concierge.store_cancel_order(p_user_id uuid, p_order_id uuid, p_today date, p_refund_cents integer) returns table(round_status concierge.round_status, applied boolean)`:**
   - **When it acts:** on `placed` or `shipped`. On `placing` or `unconfirmed` (a lost `order.placed`), it first sets `placed` and `placed_at`. It refuses (no-op) on anything else.
   - **What it does:** `fail_order_row(order, 'store_cancelled')`.
   - **Too late:** if `p_today >= ship_by_deadline` or the round's `closed_at` is set, it also sets `resolved = true` and **`failed_after_close = false`**. `fail_order_row` sets that flag on closed rounds, and leaving it would send the "we couldn't buy it, you haven't been charged" email for a gift that was bought. It then calls `reconcile_round(round, 'deadline')` when no given order remains on the round, which leads to `skipped`. Otherwise it calls `reconcile_round(round)`.
@@ -278,7 +278,7 @@ The five failure modes no task would otherwise test, each pinned by a test in th
   - orders `placed`/`shipped` whose `occasion_date >= p_today`;
   - orders that are `failed`, `store_cancelled`, `resolved` and not `failed_after_close`, with neither `fail:<id>` nor `cancel_late:<id>` sent. This leaves out a store cancel that was told through the fix page before the ship-by date, and one the deadline close-out handed to the "couldn't buy it" email. Test: `tracking_candidates skips a store cancel already told as a failure`.
 - **Claim and release:** no new SQL. Tasks 5 and 6 use the existing `store.recordSend(roundId, userId, step)` and `store.forgetSend(roundId, step)`, which upsert a `round_sends` key, ignore duplicates and delete it again (E2). The `StepKey` type in `rounds/store.ts` gains `delivered` and `` `${"late" | "ontime" | "cancel_late"}:${string}` `` (Task 5).
-- **`concierge.prune_tracking_numbers()` returns integer:** sets `packages = '[]'` on orders delivered more than `tracking_prune_days` ago (by `delivered_at`), and on failed orders by `failed_at`. It returns 0 when the setting is ≤ 0.
+- **`concierge.prune_tracking_numbers()` returns integer:** sets `packages = '[]'` on orders delivered more than `tracking_prune_days` ago (by `delivered_at`), on failed orders by `failed_at`, and on placed or shipped orders whose occasion is that long past. It returns 0 when the setting is ≤ 0.
 - **Grants:** every new function is `security definer`, `set search_path = ''`, revoked from `public`/`anon`/`authenticated` and granted to `service_role`. The round screen's "It arrived" calls `mark_delivered` through the server, with the user id from the session.
 
 - [ ] **Step 1: Write the failing pgTAP file** `order_tracking.test.sql`, with one assertion per line below:
@@ -413,7 +413,7 @@ The five failure modes no task would otherwise test, each pinned by a test in th
 - Modify: `zinc/events.ts` (handle `order.cancelled`, outside the tracking switch); `rounds/money-path.ts` (`lateDetail` and `openRow` gain a `store_cancelled` case); `app/rounds/[id]/fix/[orderId]/fix-screen.tsx` and `app/rounds/outcome.tsx` (`WHAT_HAPPENED` / outcome entries for `store_cancelled`)
 - Test: add to `zinc-tracking-events.test.ts`, the fix-screen and outcome component tests, and `round-engine-failures.test.ts`
 
-**Interfaces:** `order.cancelled` → `store_cancel_order(userId, orderId, today)`.
+**Interfaces:** `order.cancelled` → `store_cancel_order(userId, orderId, today, refundCents)`, where `refundCents` is Zinc's `refund_amount` (cents), stored as `orders.refund_cents` and shown in the emails (null → no amount).
 - **Returns `needs_attention`:** call `advanceRound(roundId)`, as `order.failed` does, so the failure email goes out now.
 - **Returns `delivered`:** the remaining gifts all arrived, so call `tellDelivered(roundId)` (Task 6).
 - **The round was past its ship-by date:** nothing is sent now. The daily summary tells it (Task 5).
