@@ -57,7 +57,8 @@ select set_eq(
     'idea_list_lookups_max', 'idea_list_min', 'list_max_items',
     'health_email_enabled', 'health_all_clear_weekday', 'ai_credit_low_cents', 'zinc_app_balance_low_cents',
     'health_vendor_timeout_ms',
-    'order_tracking_enabled', 'zinc_tracking_fetch_enabled', 'late_check_enabled', 'tracking_prune_days'
+    'order_tracking_enabled', 'zinc_tracking_fetch_enabled', 'late_check_enabled', 'tracking_prune_days',
+    'cost_tracking_enabled', 'cost_window_days', 'cost_record_timeout_ms', 'cost_tracking_since'
   ],
   'every fee, limit, default and schedule setting is seeded'
 );

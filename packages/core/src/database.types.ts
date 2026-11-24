@@ -13,6 +13,7 @@ export type Database = {
         Row: {
           auto_topup_on: boolean | null;
           buyer_phone: string | null;
+          costs_excluded: boolean;
           created_at: string;
           funding_mode: string;
           notes_tip_sent_at: string | null;
@@ -33,6 +34,7 @@ export type Database = {
         Insert: {
           auto_topup_on?: boolean | null;
           buyer_phone?: string | null;
+          costs_excluded?: boolean;
           created_at?: string;
           funding_mode?: string;
           notes_tip_sent_at?: string | null;
@@ -52,6 +54,7 @@ export type Database = {
         Update: {
           auto_topup_on?: boolean | null;
           buyer_phone?: string | null;
+          costs_excluded?: boolean;
           created_at?: string;
           funding_mode?: string;
           notes_tip_sent_at?: string | null;
@@ -264,6 +267,55 @@ export type Database = {
           user_id?: string;
         };
         Relationships: [];
+      };
+      cost_events: {
+        Row: {
+          cents: number;
+          created_at: string;
+          estimated: boolean;
+          excluded: boolean;
+          id: number;
+          idea_run_id: string | null;
+          kind: string;
+          order_id: string | null;
+        };
+        ComputedFields: never;
+        Insert: {
+          cents: number;
+          created_at?: string;
+          estimated: boolean;
+          excluded?: boolean;
+          id?: never;
+          idea_run_id?: string | null;
+          kind: string;
+          order_id?: string | null;
+        };
+        Update: {
+          cents?: number;
+          created_at?: string;
+          estimated?: boolean;
+          excluded?: boolean;
+          id?: never;
+          idea_run_id?: string | null;
+          kind?: string;
+          order_id?: string | null;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "cost_events_idea_run_id_fkey";
+            columns: ["idea_run_id"];
+            isOneToOne: false;
+            referencedRelation: "idea_runs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "cost_events_order_id_fkey";
+            columns: ["order_id"];
+            isOneToOne: false;
+            referencedRelation: "orders";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       gift_ideas: {
         Row: {
@@ -596,6 +648,25 @@ export type Database = {
         Update: {
           created_at?: string;
           provider_email_id?: string;
+        };
+        Relationships: [];
+      };
+      monthly_bills: {
+        Row: {
+          cents: number;
+          month: string;
+          vendor: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          cents: number;
+          month: string;
+          vendor: string;
+        };
+        Update: {
+          cents?: number;
+          month?: string;
+          vendor?: string;
         };
         Relationships: [];
       };
@@ -1490,6 +1561,7 @@ export type Database = {
           message_id: string;
         }[];
       };
+      cost_per_gift: { Args: { p_now: string }; Returns: Json };
       delete_occasion: { Args: { p_occasion_id: string }; Returns: undefined };
       delivered_rounds_untold: {
         Args: Record<PropertyKey, never>;
@@ -1749,6 +1821,17 @@ export type Database = {
       reconcile_round: {
         Args: { p_context?: string; p_round_id: string };
         Returns: Database["concierge"]["Enums"]["round_status"];
+      };
+      record_cost: {
+        Args: {
+          p_cents: number;
+          p_estimated: boolean;
+          p_idea_run_id?: string;
+          p_kind: string;
+          p_order_id?: string;
+          p_user_id: string;
+        };
+        Returns: undefined;
       };
       record_outcomes: {
         Args: { p_results: Json; p_round_id: string };
