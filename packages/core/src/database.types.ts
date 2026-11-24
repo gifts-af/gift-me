@@ -1043,8 +1043,11 @@ export type Database = {
       reactions: {
         Row: {
           created_at: string;
+          fact_category: string | null;
+          fact_value: string | null;
           id: string;
           note: string | null;
+          order_id: string | null;
           rating: string;
           round_id: string;
           source: string;
@@ -1054,8 +1057,11 @@ export type Database = {
         ComputedFields: never;
         Insert: {
           created_at?: string;
+          fact_category?: string | null;
+          fact_value?: string | null;
           id?: string;
           note?: string | null;
+          order_id?: string | null;
           rating: string;
           round_id: string;
           source: string;
@@ -1064,8 +1070,11 @@ export type Database = {
         };
         Update: {
           created_at?: string;
+          fact_category?: string | null;
+          fact_value?: string | null;
           id?: string;
           note?: string | null;
+          order_id?: string | null;
           rating?: string;
           round_id?: string;
           source?: string;
@@ -1073,6 +1082,13 @@ export type Database = {
           user_id?: string;
         };
         Relationships: [
+          {
+            foreignKeyName: "reactions_order_id_round_id_user_id_fkey";
+            columns: ["order_id", "round_id", "user_id"];
+            isOneToOne: false;
+            referencedRelation: "orders";
+            referencedColumns: ["id", "round_id", "user_id"];
+          },
           {
             foreignKeyName: "reactions_round_id_user_id_fkey";
             columns: ["round_id", "user_id"];
@@ -1561,6 +1577,7 @@ export type Database = {
           message_id: string;
         }[];
       };
+      close_reacted_rounds: { Args: { p_today: string }; Returns: number };
       cost_per_gift: { Args: { p_now: string }; Returns: Json };
       delete_occasion: { Args: { p_occasion_id: string }; Returns: undefined };
       delivered_rounds_untold: {
@@ -1637,6 +1654,7 @@ export type Database = {
         Returns: Database["concierge"]["Enums"]["round_status"];
       };
       has_paid_features: { Args: { p_user_id: string }; Returns: boolean };
+      has_unanswered_gift: { Args: { p_round_id: string }; Returns: boolean };
       health_snapshot: { Args: { p_now: string }; Returns: Json };
       held_rounds_for_user: {
         Args: { p_user_id: string };
@@ -1757,6 +1775,14 @@ export type Database = {
       prune_tracking_numbers: {
         Args: Record<PropertyKey, never>;
         Returns: number;
+      };
+      reaction_asked_on: { Args: { p_round_id: string }; Returns: string };
+      reactions_due: {
+        Args: { p_today: string };
+        Returns: {
+          round_id: string;
+          user_id: string;
+        }[];
       };
       reapprove_order: {
         Args: {
@@ -1972,6 +1998,18 @@ export type Database = {
       save_ideas: {
         Args: { p_ideas: Json; p_run_id: string };
         Returns: number;
+      };
+      save_reaction: {
+        Args: {
+          p_fact_category: string;
+          p_fact_value: string;
+          p_note: string;
+          p_order_id: string;
+          p_rating: string;
+          p_today: string;
+          p_user_id: string;
+        };
+        Returns: string;
       };
       set_emailed_balance: {
         Args: { p_cents: number; p_round_id: string };
