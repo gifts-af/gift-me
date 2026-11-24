@@ -47,6 +47,12 @@ export function sampleEmails(link: string): SampleEmail[] {
       ];
       add("failed_late-several", kind, { ...SAMPLE_DATA.failed_late.data, failed: two, onItsWay: ["Cast-iron herb planter"] }, links);
     }
+    if (kind === "reaction_prompt") {
+      const [first] = SAMPLE_DATA.reaction_prompt.data.rounds;
+      const dad = { personName: "Dad", occasion: "anniversary", dateText: "Monday, March 16", gifts: [{ title: "Tea sampler" }] };
+      const third = { loved2: link, liked2: link, meh2: link, returned2: link };
+      add("reaction_prompt-several", kind, { rounds: [first, dad] }, { ...links, ...third });
+    }
     if (kind === "no_ideas") add("no_ideas-again", kind, { ...SAMPLE_DATA.no_ideas.data, again: true }, links);
     if (kind === "hold_funds") {
       add("hold_funds-still", kind, { ...SAMPLE_DATA.hold_funds.data, still: true, placedTitle: "Linen apron" }, links);

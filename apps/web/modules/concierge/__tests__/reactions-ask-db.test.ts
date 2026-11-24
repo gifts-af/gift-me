@@ -69,6 +69,23 @@ describe.skipIf(!stack)("asking how the gifts went (real local database)", () =>
     expect(textFor(u)).toHaveLength(1);
   });
 
+  it("a buyer with two rounds due gets one email, and a refusal gives both keys back", async () => {
+    const u = await newUser();
+    const rounds = [await deliveredRound(u), await deliveredRound(u)];
+    held.refuseTo.add(u.email);
+    await run(ASKED_ON);
+    for (const r of rounds) expect(await sends(r.roundId)).not.toContain("reaction_prompt");
+    held.refuseTo.delete(u.email);
+    await run("2001-01-07");
+    expect(inbox(u).map((m) => m.split("@")[0])).toEqual(["How did your gifts go over?"]);
+    for (const r of rounds) {
+      for (const o of r.orderIds) expect(textFor(u)[0]).toContain(`/rounds/${r.roundId}/reaction?gift=${o}&r=meh`);
+      expect(await sends(r.roundId)).toContain("reaction_prompt");
+    }
+    const saved = await held.pg.query("select round_id from concierge.notifications where user_id = $1 and sent_at is not null", [u.userId]);
+    expect(saved.rows).toEqual([{ round_id: null }]);
+  });
+
   it.each(["ordered", "needs_attention", "skipped"])("a round that's %s isn't asked or closed (AC-2)", async (s) => {
     const u = await newUser();
     const r = await deliveredRound(u, { status: s });

@@ -12,10 +12,11 @@ captureLog();
 
 const DAY = "2027-03-21";
 
-function setup(rounds: Record<string, string[]> = { r1: ["o1", "o2"] }) {
+function setup(rounds: Record<string, string[]> = { r1: ["o1", "o2"] }, users: Record<string, string> = {}) {
   const h = harness();
+  for (const u of Object.values(users)) h.notifyStore.recipients.set(u, { email: `${u}@example.com`, timezone: null });
   for (const [roundId, orderIds] of Object.entries(rounds)) {
-    h.store.reactionDue.push({ roundId, userId: USER });
+    h.store.reactionDue.push({ roundId, userId: users[roundId] ?? USER });
     h.store.reactionAsks.set(roundId, {
       personName: "Nora",
       occasionKind: "birthday",
@@ -42,6 +43,62 @@ describe("runReactions", () => {
     expect(h.asked()).toBe(true);
     expect(await h.run()).toEqual({ closed: 0, asked: 0 });
     expect(h.emails).toHaveLength(1);
+  });
+
+  it("a buyer's rounds go in one email, the earlier occasion first, each gift saying whose it was", async () => {
+    const h = setup({ r1: ["o1"], r2: ["o2", "o3"] });
+    Object.assign(h.store.reactionAsks.get("r2")!, { personName: "Dad", occasionKind: "anniversary", occasionDate: "2027-03-18" });
+    expect(await h.run()).toEqual({ closed: 0, asked: 2 });
+    expect(h.emails).toHaveLength(1);
+    const { subject, text } = h.emails[0];
+    expect(subject).toBe("How did your gifts go over?");
+    const rows = [
+      "- Gift o2 (Dad's anniversary, ",
+      "/r2/reaction?gift=o2&r=loved",
+      "- Gift o3 (Dad's anniversary, ",
+      "/r2/reaction?gift=o3&r=returned",
+      "- Gift o1 (Nora's birthday, ",
+      "/r1/reaction?gift=o1&r=loved",
+    ];
+    for (const r of rows) expect(text).toContain(r);
+    const places = rows.map((r) => text.indexOf(r));
+    expect(places).toEqual([...places].sort((a, b) => a - b));
+    expect(h.notifyStore.notifications).toEqual([expect.objectContaining({ kind: "reaction_prompt", roundId: null })]);
+    expect([h.asked("r1"), h.asked("r2")]).toEqual([true, true]);
+    expect(await h.run()).toEqual({ closed: 0, asked: 0 });
+  });
+
+  it("one round's email is recorded against its round", async () => {
+    const h = setup();
+    await h.run();
+    expect(h.notifyStore.notifications).toEqual([expect.objectContaining({ roundId: "r1" })]);
+  });
+
+  it("each buyer gets their own email, and one refused buyer doesn't stop the next", async () => {
+    const h = setup({ r1: ["o1"], r2: ["o2"] }, { r1: "user-a", r2: "user-b" });
+    h.notifyStore.recipients.set("user-a", { email: null, timezone: null });
+    expect(await h.run()).toEqual({ closed: 0, asked: 1 });
+    expect(h.emails.map((e) => e.to)).toEqual(["user-b@example.com"]);
+    expect([h.asked("r1"), h.asked("r2")]).toEqual([false, true]);
+  });
+
+  it.each(["refused", "throws"])("an email for several rounds (%s) gives every key back, even when one can't be", async (how) => {
+    const h = setup({ r1: ["o1"], r2: ["o2"], r3: ["o3"] });
+    if (how === "refused") h.refuseOn.add(DAY);
+    else vi.spyOn(h.notifyStore, "recipient").mockRejectedValue(new Error("send"));
+    const forget = h.store.forgetSend.bind(h.store);
+    vi.spyOn(h.store, "forgetSend").mockImplementation((id, s) => (id === "r1" ? Promise.reject(new Error("forget")) : forget(id, s)));
+    expect(await h.run()).toEqual({ closed: 0, asked: 0 });
+    expect([h.asked("r1"), h.asked("r2"), h.asked("r3")]).toEqual([true, false, false]);
+    expect(named("reactions.ask_failed").map((e) => `${e.round_id} ${e.phase}`)).toEqual(["r1 send", "r2 send", "r3 send", "r1 forget"]);
+  });
+
+  it("a close that throws doesn't skip asking, and still fails the run", async () => {
+    const h = setup();
+    vi.spyOn(h.store, "closeReactedRounds").mockRejectedValue(new Error("close"));
+    await expect(h.run()).rejects.toThrow("close");
+    expect(h.emails).toHaveLength(1);
+    expect(h.asked()).toBe(true);
   });
 
   it("two ticks at once send one email", async () => {
@@ -98,7 +155,7 @@ describe("runReactions", () => {
     h.refuseOn.add(DAY);
     expect(await h.run()).toEqual({ closed: 0, asked: 0 });
     expect(h.asked()).toBe(false);
-    expect(named("reactions.ask_failed")).toEqual([expect.objectContaining({ round_id: "r1", user_id: USER, alert: true })]);
+    expect(named("reactions.ask_failed")).toEqual([expect.objectContaining({ round_id: "r1", user_id: USER, phase: "send", alert: true })]);
     h.refuseOn.clear();
     expect(await h.run()).toEqual({ closed: 0, asked: 1 });
   });
@@ -114,7 +171,9 @@ describe("runReactions", () => {
     expect(h.asked("r1")).toBe(false);
     expect(h.asked("r2")).toBe(true);
     const failed = named("reactions.ask_failed");
-    expect(failed).toEqual([expect.objectContaining({ round_id: "r1", user_id: USER, alert: true })]);
+    expect(failed).toEqual([expect.objectContaining({ round_id: "r1", user_id: USER, phase: "read", alert: true })]);
+    // One round is left, so it's that round's own email.
+    expect(h.emails.map((e) => e.subject)).toEqual(["How did Nora like the gift?"]);
     expect(JSON.stringify(failed)).not.toContain("Nora");
   });
 
@@ -126,7 +185,7 @@ describe("runReactions", () => {
     const record = h.store.recordSend.bind(h.store);
     vi.spyOn(h.store, "recordSend").mockImplementation((id, u, s) => (id === "r2" ? Promise.reject(new Error("claim")) : record(id, u, s)));
     expect(await h.run()).toEqual({ closed: 0, asked: 1 });
-    expect(new Set(named("reactions.ask_failed").map((e) => e.round_id))).toEqual(new Set(["r1", "r2"]));
+    expect(named("reactions.ask_failed").map((e) => `${e.round_id} ${e.phase}`)).toEqual(["r1 read", "r1 forget", "r2 claim"]);
     expect(h.asked("r3")).toBe(true);
   });
 });

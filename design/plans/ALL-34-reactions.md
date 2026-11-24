@@ -10,7 +10,7 @@
 
 ### Who it's for and what they can do
 
-1. **Buyer, email:** one email per occasion lists each gift that arrived, each with four links: Loved it, Liked it, Meh, Returned it. Tapping one opens the page with that answer chosen; Save keeps it. Two taps. Opening a link never saves (email scanners).
+1. **Buyer, email:** one email lists each gift that arrived, each with four links: Loved it, Liked it, Meh, Returned it. Tapping one opens the page with that answer chosen; Save keeps it. Two taps. Opening a link never saves (email scanners).
 2. **Buyer, page:** `/rounds/{id}/reaction` shows every delivered gift with the four choices and an optional note. They can answer some, skip others, and change an answer later.
 3. **Buyer, history:** `/people/{id}/gifts`, from a "Past gifts" row on the person's page, lists past rounds, newest first.
 4. **System:** answers become facts the idea engine reads; the round moves to `complete`.
@@ -23,7 +23,8 @@
 - **Not before the occasion:** answering is refused, and the round screen's link hidden, until the occasion date. A gift can arrive weeks before it's given.
 - **Only `delivered` rounds.** A round still `ordered` isn't asked. Zinc's delivered event can be lost, and "It arrived" takes shipped gifts only, so such a round is never asked and never closes. Known gap, with its own follow-up ticket **[Claude's call]**.
 - **Old rounds at launch,** already past their close date, close without an email.
-- **A refused email** gives its key back (best effort) and is tried at the next tick, until the close date.
+- **One email per buyer per run.** A buyer with several rounds due gets one email listing all their gifts, each with its person, occasion and date. Each round still has its own key.
+- **A refused email** gives back the key of every round it listed (best effort) and is tried at the next tick, until the close date.
 - **Delivered email:** once a round is `complete`, a refused delivered email isn't retried. The buyer has said how it went, so they know it arrived.
 - **Switch:** `reactions_enabled` (1). At 0 nothing is asked or closed and saving is refused ("Not available right now"); history still shows. Turning it back on after a long gap closes the waiting rounds unasked.
 
@@ -46,7 +47,7 @@
 
 | # | Given | When | Then |
 |---|---|---|---|
-| AC-1 | A `delivered` round whose asked-on date is today or earlier, not past its close date | The tick runs | One email listing every delivered gift with four links each; the key is recorded; a second tick sends nothing |
+| AC-1 | A `delivered` round whose asked-on date is today or earlier, not past its close date | The tick runs | One email per buyer listing every unanswered delivered gift of all their due rounds, with four links each; each round's key is recorded; a second tick sends nothing |
 | AC-2 | Asked-on date in the future, or the round is `ordered` / `needs_attention` / `skipped` | The tick runs | No email |
 | AC-3 | The gift arrived after the occasion | The tick runs | It's asked the day after it arrived |
 | AC-4 | The buyer taps "Loved it" in the email, signed in | The page opens, they press Save | Saved in two taps. The GET alone saved nothing |
