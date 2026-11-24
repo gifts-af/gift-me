@@ -13,6 +13,8 @@ const round = (over: Partial<ProgressRound> = {}): ProgressRound => ({
   occasionYear: 2026,
   ...over,
 });
+const GATE = { orderingOn: true, paid: true, setUp: true };
+const NO_ADDRESS = { shared: false, own: false, rejected: false, toPerson: true };
 const order = (status: string, over: Partial<ProgressOrder> = {}): ProgressOrder => ({
   status,
   failureType: null,
@@ -29,7 +31,7 @@ const line = (r: ProgressRound, orders: ProgressOrder[] = [], o: Extra = {}) =>
   progressLine(r, orders, { waiting: null, readyIdeas: 0, hold: holdOf(r, orders), today: TODAY, leaveAfterDays: 14, ...o });
 /** With nothing known about the address: what a hold for one says then. */
 const holdOf = (r: ProgressRound, orders: ProgressOrder[]) =>
-  orders.some((o) => o.status === "held") ? holdState(r.attentionReason, { shared: false, own: false, rejected: false, toPerson: true }) : null;
+  orders.some((o) => o.status === "held") ? holdState(r.attentionReason, { ...GATE, setUp: r.attentionReason !== "setup" }, NO_ADDRESS) : null;
 const text = (...a: Parameters<typeof line>) => line(...a)?.text ?? null;
 
 const HELD = (attentionReason: string | null) => round({ status: "needs_attention", attentionReason });
@@ -107,28 +109,42 @@ describe("a held gift", () => {
 });
 
 describe("what a hold waits on", () => {
-  const none = { shared: false, own: false, rejected: false, toPerson: true };
+  const none = NO_ADDRESS;
   it.each([
-    ["funds", none, "funds", "Waiting on your Zinc balance", true],
-    ["setup", none, "setup", "Waiting on payment setup", true],
-    ["address", none, "address", "Needs an address", true],
+    ["funds", none, {}, "funds", "Waiting on your Zinc balance", true],
+    ["setup", none, { setUp: false }, "setup", "Waiting on payment setup", true],
+    ["address", none, {}, "address", "Needs an address", true],
     // The daily look places a hold for an address someone now shares.
-    ["address", { ...none, shared: true }, "waiting", "Waiting to order", false],
-    ["address", { ...none, shared: true, rejected: true }, "waiting", "Waiting to order", false],
+    ["address", { ...none, shared: true }, {}, "waiting", "Waiting to order", false],
+    ["address", { ...none, shared: true, rejected: true }, {}, "waiting", "Waiting to order", false],
     // Their own address is placed only by saving it, so one that's here still needs the buyer.
-    ["address", { ...none, own: true }, "check_address", "Check the address", true],
+    ["address", { ...none, own: true }, {}, "check_address", "Check the address", true],
     // The store couldn't use it, however well formed it is.
-    ["address", { ...none, own: true, rejected: true }, "address", "Needs an address", true],
+    ["address", { ...none, own: true, rejected: true }, {}, "change_address", "Needs an address", true],
     // Going to the buyer or somewhere else: a person's address can't help it.
-    ["address", { ...none, own: true, shared: true, toPerson: false }, "cancel_only", "Needs an address", true],
-    ["address", null, "waiting", "Waiting to order", false],
-    ["paused", none, "waiting", "Waiting to order", false],
-    ["unconfirmed", none, "waiting", "Waiting to order", false],
-    [null, none, "waiting", "Waiting to order", false],
-  ] as const)("%s, %o: %s", (reason, address, kind, says, needsBuyer) => {
-    const hold = holdState(reason, address);
+    ["address", { ...none, own: true, shared: true, toPerson: false }, {}, "cancel_only", "Needs an address", true],
+    ["address", null, {}, "waiting", "Waiting to order", false],
+    ["paused", none, {}, "waiting", "Waiting to order", false],
+    ["unconfirmed", none, { setUp: false }, "waiting", "Waiting to order", false],
+    [null, none, {}, "waiting", "Waiting to order", false],
+    // Setup unfinished is what's next once the address is there, whatever the stored reason.
+    ["address", { ...none, own: true }, { setUp: false }, "setup", "Waiting on payment setup", true],
+    ["address", { ...none, shared: true }, { setUp: false }, "setup", "Waiting on payment setup", true],
+    ["address", none, { setUp: false }, "address", "Needs an address", true],
+    ["funds", none, { setUp: false }, "setup", "Waiting on payment setup", true],
+    ["retry", none, { setUp: false }, "setup", "Waiting on payment setup", true],
+    // Finished since: the next look places it.
+    ["setup", none, {}, "waiting", "Waiting to order", false],
+  ] as const)("%s, %o, %o: %s", (reason, address, gate, kind, says, needsBuyer) => {
+    const hold = holdState(reason, { ...GATE, ...gate }, address);
     expect(hold).toEqual({ kind, text: says });
     expect(line(HELD(reason), [order("held")], { hold })).toMatchObject({ text: says, needsBuyer });
+  });
+
+  it.each(["funds", "setup", "address", "paused", "retry", "not_allowed"])("%s asks nothing while ordering is off, unpaid or unreadable", (reason) => {
+    for (const gate of [{ ...GATE, orderingOn: false, setUp: false }, { ...GATE, paid: false, setUp: false }, null]) {
+      expect(holdState(reason, gate, NO_ADDRESS)).toEqual({ kind: "waiting", text: "Waiting to order" });
+    }
   });
 
   it("next to one being confirmed, Confirming your order wins: which hold it is can't be read", () => {

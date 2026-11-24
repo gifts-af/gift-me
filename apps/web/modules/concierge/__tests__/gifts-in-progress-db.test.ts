@@ -11,6 +11,7 @@ import { LOCAL_DB, localStack } from "../../../test/local-db";
 vi.mock("server-only", () => ({}));
 const { giftsInProgress } = await import("../rounds/in-progress");
 const { roundView } = await import("../rounds/approval");
+const { readHoldGate } = await import("../rounds/hold-gate");
 
 const stack = await localStack({ api: true });
 
@@ -20,6 +21,7 @@ describe.skipIf(stack === null)("giftsInProgress (real local database)", () => {
   const password = "local-only-password";
   const users: string[] = [];
   let pg: Client;
+  const GATE = { orderingOn: true, paid: true, setUp: true };
   const NOW = new Date();
   const day = (n: number) => new Date(NOW.getTime() + n * 86_400_000).toISOString().slice(0, 10);
 
@@ -41,7 +43,7 @@ describe.skipIf(stack === null)("giftsInProgress (real local database)", () => {
     const db = createClient<Database>(s!.url, s!.publishableKey, { auth: { persistSession: false, autoRefreshToken: false } });
     const r = await db.auth.signInWithPassword({ email, password });
     if (r.error) throw r.error;
-    return { id: data.user.id, db, rows: (personId?: string) => giftsInProgress(db, { now: NOW, leaveAfterDays: 14, personId }) };
+    return { id: data.user.id, db, rows: (personId?: string) => giftsInProgress(db, { now: NOW, leaveAfterDays: 14, personId, gate: async () => GATE }) };
   }
   type User = Awaited<ReturnType<typeof newUser>>;
 
@@ -144,13 +146,23 @@ describe.skipIf(stack === null)("giftsInProgress (real local database)", () => {
 
   it.each([
     ["funds", "Waiting on your Zinc balance"],
-    ["setup", "Waiting on payment setup"],
+    ["setup", "Waiting to order"],
     ["address", "Needs an address"],
     ["paused", "Waiting to order"],
   ])("a %s hold", async (reason, says) => {
     const u = await newUser();
     await round(u, await person(u), { status: "needs_attention", reason, orders: [{ status: "held" }] });
     expect(await said(u)).toEqual([says]);
+    const at = (gate: () => Promise<typeof GATE>) => giftsInProgress(u.db, { now: NOW, leaveAfterDays: 14, gate });
+    const texts = async (gate: () => Promise<typeof GATE>) => (await at(gate)).map((g) => g.line.text);
+    expect(await texts(async () => ({ ...GATE, orderingOn: false }))).toEqual(["Waiting to order"]);
+    expect(await texts(async () => ({ ...GATE, setUp: false }))).toEqual([reason === "address" ? "Needs an address" : "Waiting on payment setup"]);
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    expect(await texts(() => Promise.reject(new Error("down for jordan@example.com")))).toEqual(["Waiting to order"]);
+    const lines = log.mock.calls.map((x) => String(x[0])).join();
+    expect(lines).toContain("gift_progress_read_failed");
+    expect(lines).not.toContain("jordan");
+    log.mockRestore();
   });
 
   it("a failed gift needs a fix until it's resolved", async () => {
@@ -314,19 +326,36 @@ describe.skipIf(stack === null)("giftsInProgress (real local database)", () => {
           { status: "held", idea: 0, shipTo },
         ]);
         expect(await said(u, p)).toEqual(["Needs an address"]);
-        const view = await roundView(roundId, u.db, NOW);
-        expect(view?.hold?.kind).toBe(shipTo === "recipient" ? "address" : "cancel_only");
+        const view = await roundView(roundId, u.db, NOW, async () => GATE);
+        expect(view?.hold?.kind).toBe(shipTo === "recipient" ? "change_address" : "cancel_only");
       }
+    });
+
+    it("the round page names which gifts a hold is about", async () => {
+      const u = await newUser();
+      const p = await person(u, "Mary", { address: true });
+      const roundId = await round(u, p, {
+        status: "needs_attention",
+        reason: "address",
+        ideas: [{}, {}],
+        orders: [
+          { status: "failed", failure: "invalid_shipping_address", resolved: true, idea: 0, shipTo: "buyer" },
+          { status: "held", idea: 0, shipTo: "buyer" },
+          { status: "held", idea: 1 },
+        ],
+      });
+      const refused = (await pg.query("select o.id from concierge.orders o where o.round_id = $1 and status = 'held' and ship_to = 'buyer'", [roundId])).rows[0].id;
+      expect((await roundView(roundId, u.db, NOW, async () => GATE))?.hold).toEqual({ kind: "cancel_only", text: "Needs an address", orderIds: [refused] });
     });
 
     it("the round page says the same, and still opens when the address can't be read", async () => {
       const u = await newUser();
       const p = await person(u, "Mary", { address: true });
       const roundId = await heldRound(u, p);
-      expect((await roundView(roundId, u.db, NOW))?.hold).toEqual({ kind: "check_address", text: "Check the address" });
+      expect((await roundView(roundId, u.db, NOW, async () => GATE))?.hold).toMatchObject({ kind: "check_address", text: "Check the address" });
       const log = vi.spyOn(console, "log").mockImplementation(() => {});
       failRpc(u, "shared_city_for_person");
-      expect((await roundView(roundId, u.db, NOW))?.hold).toEqual({ kind: "waiting", text: "Waiting to order" });
+      expect((await roundView(roundId, u.db, NOW, async () => GATE))?.hold).toMatchObject({ kind: "waiting", text: "Waiting to order" });
       expect(log.mock.calls.map((c) => String(c[0])).join()).toContain("round_hold_failed");
       log.mockRestore();
     });
@@ -405,16 +434,45 @@ describe.skipIf(stack === null)("giftsInProgress (real local database)", () => {
     expect(columns).toEqual(["id, name"]);
   });
 
-  it("nothing is cut off past one page of rounds", async () => {
+  it("nothing is cut off past 1000 rounds, or a web address's length of people", async () => {
     const u = await newUser();
-    const p = await person(u);
-    const o = await pg.query("insert into concierge.occasions (user_id, person_id, kind) values ($1, $2, 'christmas') returning id", [u.id, p]);
     await pg.query(
-      `insert into concierge.gift_rounds (user_id, person_id, occasion_id, occasion_year, occasion_date, ship_by_deadline, status)
-       select $1, $2, $3, 2000 + n, $4, $5, 'awaiting_approval' from generate_series(1, 510) n where 2000 + n < 2999`,
-      [u.id, p, o.rows[0].id, day(29), day(20)],
+      `with p as (
+         insert into public.people (user_id, name, relationship) select $1::uuid, 'Person ' || n, 'friend' from generate_series(1, 1050) n returning id),
+       o as (
+         insert into concierge.occasions (user_id, person_id, kind) select $1::uuid, id, 'christmas' from p returning id, person_id)
+       insert into concierge.gift_rounds (user_id, person_id, occasion_id, occasion_year, occasion_date, ship_by_deadline, status)
+       select $1::uuid, person_id, id, 2030, $2::date, $3::date, 'awaiting_approval' from o`,
+      [u.id, day(29), day(20)],
     );
-    expect(await u.rows()).toHaveLength(510);
+    expect(await u.rows()).toHaveLength(1050);
+  }, 60_000);
+
+  describe("what placing checks, read now (readHoldGate)", () => {
+    const gate = (u: User, zincEnv: string | null = "test") => readHoldGate(u.db, u.id, { adminDb: admin!, zincEnv });
+    const connect = (u: User) =>
+      pg.query("select concierge.zinc_store_secrets($1, $2, $3, $4, 'test')", [u.id, `zn_test_${u.id}`, `zn_whsec_${randomUUID()}`, randomUUID()]);
+    const ordering = (value: string) => pg.query("update concierge.app_settings set value = $1 where key = 'zinc_ordering_enabled'", [value]);
+
+    it("paid, ordering, and a connected account with a phone for this environment", async () => {
+      const was = (await pg.query("select value from concierge.app_settings where key = 'zinc_ordering_enabled'")).rows[0].value as string;
+      const u = await newUser();
+      try {
+        await ordering("1");
+        expect(await gate(u)).toEqual({ orderingOn: true, paid: true, setUp: false });
+        await connect(u);
+        expect((await gate(u)).setUp).toBe(false);
+        await pg.query("update concierge.accounts set buyer_phone = '5555550100' where user_id = $1", [u.id]);
+        expect(await gate(u)).toEqual({ orderingOn: true, paid: true, setUp: true });
+        expect((await gate(u, "live")).setUp).toBe(false);
+        expect((await gate(u, null)).orderingOn).toBe(false);
+        await ordering("0");
+        expect((await gate(u)).orderingOn).toBe(false);
+        expect((await gate(await newUser(false))).paid).toBe(false);
+      } finally {
+        await ordering(JSON.stringify(was));
+      }
+    });
   });
 
   describe("waiting for ideas", () => {

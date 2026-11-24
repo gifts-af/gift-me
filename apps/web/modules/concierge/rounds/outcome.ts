@@ -1,4 +1,5 @@
 import type { CalendarDate } from "@gifts-af/core";
+import type { HoldGate } from "./hold-gate";
 
 // What a round has come to, from its own columns and its orders: the one set of rules behind the
 // round screen's words and the status line on Home and a person's page. Pure: callers read the rows.
@@ -51,40 +52,64 @@ export function roundOutcome<O extends OrderState>(r: RoundDates, orders: O[], t
 }
 
 /** What a held gift waits on, and its words. */
-export type HoldState = { kind: "funds" | "setup" | "address" | "check_address" | "cancel_only" | "waiting"; text: string };
+export type HoldState = { kind: "funds" | "setup" | "address" | "change_address" | "check_address" | "cancel_only" | "waiting"; text: string };
 const HOLDS: Record<HoldState["kind"], string> = {
   funds: "Waiting on your Zinc balance",
   setup: "Waiting on payment setup",
   address: "Needs an address",
+  change_address: "Needs an address",
   check_address: "Check the address",
   cancel_only: "Needs an address",
   waiting: "Waiting to order",
 };
 
 /**
- * Why an open round's held gifts wait, by the round's reason. It only moves when the round is next
- * looked at, so an address hold goes by the address there is now (null: it couldn't be read).
- * `rejected`: the store couldn't use the person's own address. `toPerson`: it ships to the person, the
- * only place whose address can be changed here.
+ * Why an open round's held gifts wait, by the round's reason. That only moves when the round is next
+ * looked at, so it goes by what placing checks (`gate`) and the address there is now; null when one
+ * couldn't be read, which asks nothing of the buyer. `rejected`: the store couldn't use the person's
+ * own address. `toPerson`: it ships to the person, the only place whose address can be changed here.
  */
-export function holdState(
-  reason: string | null,
-  address: { shared: boolean; own: boolean; rejected: boolean; toPerson: boolean } | null,
-): HoldState {
-  return ((kind: HoldState["kind"]) => ({ kind, text: HOLDS[kind] }))(holdKind(reason, address));
+export function holdState(reason: string | null, gate: HoldGate | null, address: AddressFacts | null): HoldState {
+  const kind = holdKind(reason, gate, address);
+  return { kind, text: HOLDS[kind] };
 }
 
-function holdKind(reason: string | null, address: Parameters<typeof holdState>[1]): HoldState["kind"] {
-  if (reason === "funds" || reason === "setup") return reason;
-  // paused, retry and not_allowed are ours; with another gift unconfirmed the hold's reason can't be read.
-  if (reason !== "address" || address === null) return "waiting";
-  if (!address.toPerson) return "cancel_only";
+type AddressFacts = { shared: boolean; own: boolean; rejected: boolean; toPerson: boolean };
+
+function holdKind(reason: string | null, gate: HoldGate | null, address: AddressFacts | null): HoldState["kind"] {
+  // Nothing the buyer does places it while ordering is off or they aren't paid. With another gift
+  // unconfirmed the hold's own reason can't be read.
+  if (gate === null || !gate.orderingOn || !gate.paid || reason === null || reason === "unconfirmed") return "waiting";
+  if (reason === "address") {
+    if (address === null) return "waiting";
+    if (!address.toPerson) return "cancel_only";
+    if (!address.shared && address.rejected) return "change_address";
+    if (!address.shared && !address.own) return "address";
+  }
+  if (!gate.setUp) return "setup";
   // The daily look places one whose address is now shared, but an own address only on saving it.
-  if (address.shared) return "waiting";
-  return address.own && !address.rejected ? "check_address" : "address";
+  if (reason === "address" && address !== null && !address.shared) return "check_address";
+  // paused, retry and not_allowed are ours, and setup is finished.
+  return reason === "funds" ? "funds" : "waiting";
 }
 
 type HeldOrder = { status: string; failureType: string | null; ideaId: string; shipTo: string };
+
+/** The held orders whose address the store couldn't use: the failed order each replaced says so. */
+const refusedOrders = <O extends HeldOrder>(orders: O[]): O[] =>
+  orders.filter((h) => h.status === "held" && orders.some((o) => o.ideaId === h.ideaId && o.failureType === "invalid_shipping_address"));
+
+/** The held orders a hold is about; the round's others only wait for it. */
+export function aboutOrders<O extends HeldOrder & { id: string }>(hold: HoldState, orders: O[]): string[] {
+  const held = orders.filter((o) => o.status === "held");
+  const about =
+    hold.kind === "cancel_only"
+      ? refusedOrders(orders).filter((o) => o.shipTo !== "recipient")
+      : hold.kind === "address" || hold.kind === "change_address" || hold.kind === "check_address"
+        ? held.filter((o) => o.shipTo === "recipient")
+        : held;
+  return about.map((o) => o.id);
+}
 
 /**
  * What the orders say about an address hold. The store refusing an address ends one order and holds
@@ -92,9 +117,7 @@ type HeldOrder = { status: string; failureType: string | null; ideaId: string; s
  * nowhere to be changed.
  */
 export function heldAddress(orders: HeldOrder[]): { rejected: boolean; toPerson: boolean } {
-  const refused = orders.filter(
-    (h) => h.status === "held" && orders.some((o) => o.ideaId === h.ideaId && o.failureType === "invalid_shipping_address"),
-  );
+  const refused = refusedOrders(orders);
   return { rejected: refused.some((h) => h.shipTo === "recipient"), toPerson: refused.every((h) => h.shipTo === "recipient") };
 }
 

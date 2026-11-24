@@ -5,6 +5,7 @@ import { hasPaidFeatures } from "../paid-features";
 import { isId } from "../profile/rules";
 import { fail } from "../purchase/store";
 import { listState, ownAddressShips, personList, sharesAddress } from "./approval";
+import type { HoldGate } from "./hold-gate";
 import { beforeIdeas, heldAddress, holdState, roundOutcome, waitingOn } from "./outcome";
 import { byNeed, progressLine, type ProgressFacts, type ProgressLine } from "./progress";
 
@@ -33,6 +34,7 @@ const ON_THE_WAY = ["placing", "unconfirmed", "placed", "shipped"];
 // How the API is read, not a limit on what shows: every row is read, this many at a time.
 const PAGE = 500;
 const IDS_PER_READ = 100;
+const AT_ONCE = 10;
 
 type Page<T> = PromiseLike<{ data: T[] | null; count: number | null; error: { message: string; code?: string } | null }>;
 
@@ -62,17 +64,19 @@ async function byIds<T>(ids: string[], read: (ids: string[]) => PromiseLike<{ da
 
 /** One answer per person; one that fails is logged and left out, so it can't hide anyone else's. */
 async function perPerson<T>(ids: Set<string>, userId: string | undefined, what: string, read: (id: string) => Promise<T>): Promise<Map<string, T>> {
-  const answers = await Promise.all(
-    [...ids].map(async (id): Promise<[string, T][]> => {
+  const answers = new Map<string, T>();
+  const todo = [...ids];
+  const worker = async () => {
+    for (let id = todo.pop(); id !== undefined; id = todo.pop()) {
       try {
-        return [[id, await read(id)]];
+        answers.set(id, await read(id));
       } catch (err) {
         logEvent("gift_progress_read_failed", { user_id: userId ?? null, person_id: id, what, ...errorFields(err) });
-        return [];
       }
-    }),
-  );
-  return new Map(answers.flat());
+    }
+  };
+  await Promise.all(Array.from({ length: AT_ONCE }, worker));
+  return answers;
 }
 
 /**
@@ -80,11 +84,11 @@ async function perPerson<T>(ids: Set<string>, userId: string | undefined, what: 
  * applies (T26). One set of queries however many rounds there are; a further call per person is
  * made only where the answer can't be read otherwise: a linked person's shared address, and who has
  * claimed the list gifts on offer. `now` is for "today" (UTC, like the tick); `leaveAfterDays` is the
- * setting gift_progress_days.
+ * setting gift_progress_days; `gate` reads what placing checks, only when a gift is held.
  */
 export async function giftsInProgress(
   userDb: UserDb,
-  o: { now: Date; leaveAfterDays: number; personId?: string },
+  o: { now: Date; leaveAfterDays: number; gate: () => Promise<HoldGate>; personId?: string },
 ): Promise<GiftInProgress[]> {
   if (o.personId !== undefined && !isId(o.personId)) return [];
   const db = userDb.schema("concierge");
@@ -154,7 +158,7 @@ export async function giftsInProgress(
   const listed = new Set(
     rounds.filter((x) => x.open && x.r.status === "awaiting_approval" && x.proposed.some((i) => i.list_item_id !== null)).map((x) => x.r.person_id),
   );
-  const [people, addresses, paid, lists] = await Promise.all([
+  const [people, addresses, paid, gate, lists] = await Promise.all([
     byIds([...new Set(rounds.map((x) => x.r.person_id))], (ids) => userDb.from("people").select("id, name").in("id", ids)),
     byIds([...addressIds], (ids) => userDb.from("people").select(ADDRESS).in("id", ids)),
     waiting.length === 0 || userId === undefined
@@ -163,6 +167,12 @@ export async function giftsInProgress(
           logEvent("gift_progress_read_failed", { user_id: userId, what: "paid", ...errorFields(err) });
           return null;
         }),
+    rounds.some((x) => x.held)
+      ? o.gate().catch((err: unknown) => {
+          logEvent("gift_progress_read_failed", { user_id: userId ?? null, what: "hold_gate", ...errorFields(err) });
+          return null;
+        })
+      : null,
     perPerson(listed, userId, "list", async (id) => new Map((await personList(userDb, id))?.map((i) => [i.id, i]))),
   ]);
   const nameOf = new Map(people.map((p) => [p.id, p.name]));
@@ -186,7 +196,7 @@ export async function giftsInProgress(
         today,
         leaveAfterDays: o.leaveAfterDays,
         waiting: waitingFor(),
-        hold: x.held ? holdState(r.attention_reason, isShared === null ? null : { own, shared: isShared, ...heldAddress(orders) }) : null,
+        hold: x.held ? holdState(r.attention_reason, gate, isShared === null ? null : { own, shared: isShared, ...heldAddress(orders) }) : null,
         readyIdeas: ready(),
       });
       if (line === null) return [];

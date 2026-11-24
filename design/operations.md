@@ -278,9 +278,9 @@ Vercel's instant rollback brings back the old budget section, which can't show o
 | Event (ids only, E6) | Means |
 |---|---|
 | `gifts_in_progress_failed` | The list couldn't be read (or the setting is missing), so it wasn't shown |
-| `gift_progress_read_failed` | One person's list or shared address (`what`), or the paid check, couldn't be read; their lines say less, the rest are unchanged |
+| `gift_progress_read_failed` | One person's list or shared address (`what`), the paid check or what placing checks (`hold_gate`) couldn't be read; their lines say less, the rest are unchanged |
 | `gift_progress_round_failed` | One round's line couldn't be worked out, so that row was left out |
-| `round_hold_failed` | The round page couldn't read a held gift's address, so it says "Waiting to order" |
+| `round_hold_failed` | The round page couldn't read a held gift's address or what placing checks, so it says "Waiting to order" |
 
 ## Order tracking (ALL-33)
 

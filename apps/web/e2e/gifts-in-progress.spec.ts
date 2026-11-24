@@ -90,3 +90,40 @@ test("the gifts in progress fit Home and the person's page in light and dark", {
   }
   expect(problems).toEqual([]);
 });
+
+const HELD: [name: string, o: { reason: string; noAddress?: boolean; refused?: "recipient" | "buyer" }, says: string, act: string | null][] = [
+  ["Nora", { reason: "funds" }, "Waiting on your Zinc balance", "Top up your Zinc balance"],
+  ["Bob", { reason: "address", noAddress: true }, "Needs an address", "Add address"],
+  ["Cy", { reason: "address" }, "Check the address", "Open the address"],
+  ["Di", { reason: "address", refused: "recipient" }, "Needs an address", "Change address"],
+  ["Ed", { reason: "address", refused: "buyer" }, "has a link to cancel it", null],
+];
+
+test("a held gift's reason and its action fit the round page in light and dark", { tag: "@layout" }, async ({ page }) => {
+  test.slow();
+  const b = await readyBuyer(await createFreshUser());
+  const rounds: string[] = [];
+  for (const [name, o] of HELD) {
+    const p = await personFor(b.id, name);
+    if (o.noAddress) await rest(`people?id=eq.${p.personId}`, { method: "PATCH", profile: "public", body: { address_line1: null } });
+    const { roundId, ideaIds } = await seedRound(b.id, p, { ideas: IDEAS });
+    const order = { provider_order_id: null, total_cents: null, ship_to: o.refused ?? "recipient" };
+    if (o.refused) await seedOrder(b.id, roundId, ideaIds[0], { ...order, status: "failed", failure_type: "invalid_shipping_address", resolved: true });
+    await seedOrder(b.id, roundId, ideaIds[0], { ...order, status: "held", hold_reason: o.reason });
+    await rest(`gift_rounds?id=eq.${roundId}`, { method: "PATCH", body: { status: "needs_attention", attention_reason: o.reason } });
+    rounds.push(roundId);
+  }
+  await signIn(page, b.creds);
+  const problems: string[] = [];
+  for (const scheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    for (const [i, [name, , says, act]] of HELD.entries()) {
+      await page.goto(`/rounds/${rounds[i]}`);
+      const gifts = page.getByRole("region", { name: "Your gifts" });
+      await expect(gifts).toContainText(says);
+      await expect(gifts.getByRole("link")).toHaveText(act === null ? [] : [act]);
+      problems.push(...(await phoneLayoutProblems(page)).map((p) => `${name} (${scheme}): ${p}`));
+    }
+  }
+  expect(problems).toEqual([]);
+});

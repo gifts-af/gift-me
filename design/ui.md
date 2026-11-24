@@ -206,7 +206,7 @@ My list saves as you go too, with no Save button and no "Unsaved changes" bar. W
 | Waiting on your Zinc balance / payment setup | A gift held for money, or for Zinc or a phone number to be set up | `--warning` |
 | Needs a fix · Choose by Tue, Dec 15 | An order failed or the store cancelled it, with time left | `--warning` |
 | Needs a look | The round needs the buyer and none of the above fits | `--warning` |
-| Waiting to order | Held for a reason on our side, or for an address that is shared now and placed at the next daily look | Muted |
+| Waiting to order | Held for a reason on our side (ordering off, or not paid, outranks every other reason), or for an address that is shared now and placed at the next daily look | Muted |
 | Confirming your order | Sent to Zinc, not confirmed by the store | Muted |
 | Ordered | Bought; not all shipped | Muted |
 | May arrive late · due Sun, Dec 27 | Expected after the occasion, and that day hasn't passed | `--warning` |
@@ -332,7 +332,7 @@ Each screen ticket links to the screens it builds. To open one screen directly, 
 **Mock-ups:** [tracking screens and emails](https://claude.ai/artifact/64XUHT7xfzaibNtWtWpSXx). What's built is on the [screens and emails page](https://claude.ai/artifact/9mrDvFAgoqxvxmzirJFCz6).
 
 **Round screen, "Your gifts":** each bought gift has one status line.
-- **Held:** the same words as in Gifts in progress, with the way to act: **Add address** or **Check the address**, **Finish setup** (Paying for gifts) or **Top up your Zinc balance**. "Waiting to order" needs nothing. One refused for an address that isn't the person's can only be cancelled, from its email, and says so.
+- **Held:** the same words as in Gifts in progress, with the way to act: **Add address**, **Change address** (the store refused it) or **Open the address**, **Finish setup** (Paying for gifts) or **Top up your Zinc balance**. "Waiting to order" needs nothing. One refused for an address that isn't the person's can only be cancelled, from its email, and says so on its own row; the round's other held gifts say "Waiting to order".
 - **Ordered:** "Ordered · usually arrives by <date>" (the store's own range), or just "Ordered".
 - **Shipped:** "Shipped · due <date>" ("was due" once it has passed, and no late chip) with a "Track it" link to the carrier's page (none for Amazon), and an **It arrived** button.
 - **May be late:** a chip above the line, "May arrive <date> · n days late".

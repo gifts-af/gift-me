@@ -10,6 +10,7 @@ import { APP_NAME } from "@/lib/brand";
 import { createClient } from "@/lib/supabase/server";
 import { roundAccess, roundView } from "@/modules/concierge";
 import { roundDbDeps, settingInt, zincWiring } from "@/lib/wiring";
+import { holdGateFor } from "@/lib/hold-gate";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { markArrived, rejectAction, rejectionOutlookAction, setBudgetAction } from "../actions";
 import { OtherAccount } from "../access";
@@ -52,7 +53,7 @@ async function Loaded({ params }: { params: Promise<{ id: string }> }) {
   if (access === "other") return <OtherAccount />;
 
   // Everything shown is read as the user, so RLS applies (T26).
-  const view = await roundView(id, supabase as unknown as SupabaseClient<Database>, new Date());
+  const view = await roundView(id, supabase as unknown as SupabaseClient<Database>, new Date(), holdGateFor(supabase, userId));
   if (!view) notFound();
   const name = view.round.personName;
   // "It arrived" shows only while order tracking is on (E7); markArrived checks again.

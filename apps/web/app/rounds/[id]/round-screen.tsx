@@ -179,7 +179,8 @@ const LINE_LINK = "inline-flex min-h-11 items-center font-semibold text-primary"
 /** What the buyer does about a hold; the other holds are ours, or have nothing here to do. */
 const HOLD_ACTS: Partial<Record<NonNullable<RoundPageView["hold"]>["kind"], string>> = {
   address: "Add address",
-  check_address: "Check the address",
+  change_address: "Change address",
+  check_address: "Open the address",
   setup: "Finish setup",
   funds: "Top up your Zinc balance",
 };
@@ -207,6 +208,8 @@ function GiftStatus({
   // Held with the round past choosing: it's cancelled at the next daily look.
   if (order.status === "held" && hold === null) return <span className="text-[13px] font-semibold">Not ordered</span>;
   if (order.status === "held" && hold !== null) {
+    // Another gift's hold: this one waits for it.
+    if (!hold.orderIds.includes(order.id)) return <span className="text-[13px] font-semibold">Waiting to order</span>;
     const act = HOLD_ACTS[hold.kind];
     return (
       <>
@@ -722,7 +725,7 @@ export function RoundScreen({
 
   const kind = view.hold?.kind;
   const holdHref =
-    kind === "address" || kind === "check_address"
+    kind === "address" || kind === "change_address" || kind === "check_address"
       ? personAddressHref(round.personId, `/rounds/${round.id}`)
       : kind === "funds"
         ? walletUrl
