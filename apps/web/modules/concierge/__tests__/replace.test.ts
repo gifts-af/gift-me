@@ -431,7 +431,7 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
 
   it.each([
     { why: "an Amazon link to another product", url: "https://www.amazon.com/dp/B0OTHERONE", productId: "B0LISTGIFT", outcome: "link_mismatch" },
-    { why: "an Amazon link with no ASIN", url: "https://www.amazon.com/products/B0LISTGIFT", productId: "B0LISTGIFT", outcome: "no_live_price" },
+    { why: "an Amazon link with no ASIN", url: "https://www.amazon.com/products/B0LISTGIFT", productId: "B0LISTGIFT", outcome: "link_mismatch" },
     { why: "an ASIN saved with another store's link", url: "https://yetch.store/products/blue-mug", productId: "B0LISTGIFT", outcome: "link_mismatch" },
     { why: "a store Zinc only checks", url: "https://www.rei.com/product/123/mug", productId: null, outcome: "no_live_price" },
     { why: "a store Zinc only checks, with an id saved", url: "https://www.rei.com/product/123/mug", productId: "123", outcome: "no_live_price" },

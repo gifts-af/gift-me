@@ -10,7 +10,6 @@
 // carry ids, cents and reason codes only (E6); a Zinc failure logs only its kind, never its
 // message (a Shopify path holds the handle).
 import { committedSpendCents, estimatedTotalCents, isShippableAddress, pickOffer, type ZincOffer } from "@gifts-af/core";
-import { extractAsin, isAmazonHost } from "@gifts-af/core/store-page/link";
 import { logEvent } from "@/lib/log";
 import type { Cost, RecordCost } from "../costs/record";
 import { hasPaidFeatures } from "../paid-features";
@@ -155,7 +154,7 @@ async function requote(deps: QuoteDeps, idea: IdeaRow, feeCents: number, ids: Re
   return newCents;
 }
 
-type Route = Exclude<ListGiftRoute, { kind: "check" }>;
+type Route = Extract<ListGiftRoute, { kind: "offers" | "details" }>;
 
 /**
  * Where an idea's price is looked up today, or why it can't be (so nothing is called or
@@ -169,15 +168,11 @@ function routeOf(idea: IdeaRow): Route | "no_live_price" | "link_mismatch" {
   if (idea.source !== "list") {
     return retailer === "amazon" || retailer === "walmart" ? { kind: "offers", retailer, productId } : "no_live_price";
   }
-  if (!url || !URL.canParse(url)) return "no_live_price";
-  const { hostname, pathname } = new URL(url);
-  if (isAmazonHost(hostname)) {
-    const asin = extractAsin(pathname);
-    if (!asin) return "no_live_price";
-    return asin === productId.toUpperCase() ? { kind: "offers", retailer: "amazon", productId } : "link_mismatch";
-  }
-  const route = listGiftRoute(url, null);
+  if (!url) return "no_live_price";
+  // On an Amazon link the saved id is the ASIN the run priced.
+  const route = listGiftRoute(url, productId);
   if (route.kind === "check") return "no_live_price";
+  if (route.kind === "refused") return "link_mismatch";
   return route.productId === productId ? route : "link_mismatch";
 }
 

@@ -356,7 +356,7 @@ Spec and plan: [design/plans/ALL-29-approval.md](plans/ALL-29-approval.md). Deci
 | `round.ideas_rejected` | "None of these" with a new search to come: reason code, ideas rejected |
 | `round.rejection_noted` | "None of these" with no search left: only the reason was saved, the ideas stay buyable |
 | `round.budget_set` | A budget typed on an open round with none (cents) |
-| `ideas.list_gift` | One list gift looked up in an idea run: store route and outcome (qualified, unsupported, over budget, stopped, ...) |
+| `ideas.list_gift` | One list gift looked up in an idea run: store route and outcome (qualified, unsupported, over budget, stopped, `link_mismatch` for an Amazon link that isn't its saved ASIN's, ...) |
 
 None of these is an alert. Rejected-then-regenerated rounds show up as `ideas.run_started` on the next tick.
 

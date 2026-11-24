@@ -1,6 +1,7 @@
 // Product search and offers for the idea engine. Zinc's shapes stop here (E4):
 // callers get ZincHit and ZincOffer, prices in cents. Only search text and product ids go out.
 import { pickOffer, type ZincHit, type ZincOffer } from "@gifts-af/core";
+import { extractAsin, isAmazonHost } from "@gifts-af/core/store-page/link";
 import { z } from "zod";
 import { call, ZincError, type ZincHttp } from "./client";
 
@@ -195,24 +196,34 @@ export type ListGiftRoute =
   | { kind: "details"; retailer: "etsy"; productId: string }
   // Zinc names a Shopify store by its domain, so the shop's host rides along.
   | { kind: "details"; retailer: "shopify"; shop: string; productId: string }
-  | { kind: "check" };
+  | { kind: "check" }
+  // The link and the saved ASIN don't name the same Amazon product: never priced or offered.
+  | { kind: "refused" };
 
 /**
  * How to price a list gift. Zinc's id per store: Amazon the ASIN, Walmart the item id (the
  * number after /ip/), Etsy the listing id (/listing/<id>), Shopify the handle (/products/<handle>).
  * Anything else is checked.
  *
+ * Buying goes by the link, so an Amazon price must be the link's product too: a saved ASIN that
+ * isn't the link's (or a link that names none) is refused. A saved ASIN means nothing on another
+ * store's link.
+ *
  * Best Buy goes to the check too. [Verify] Zinc's get-product docs say `retailer=bestbuy`
  * returns 400 for now, even in test mode (https://www.zinc.com/docs/v2/api-reference/products/get-product.md).
  * When Zinc opens it, add a details route (id: the SKU, `skuId` or the number before ".p").
  */
 export function listGiftRoute(url: string, asin: string | null): ListGiftRoute {
-  if (asin) return { kind: "offers", retailer: "amazon", productId: asin };
   let u: URL;
   try {
     u = new URL(url);
   } catch {
     return { kind: "check" };
+  }
+  if (isAmazonHost(u.hostname)) {
+    const linked = extractAsin(u.pathname);
+    if (asin && asin.toUpperCase() !== linked) return { kind: "refused" };
+    return linked ? { kind: "offers", retailer: "amazon", productId: asin ?? linked } : { kind: "check" };
   }
   const host = u.hostname.replace(/^www\./i, "").toLowerCase();
   const segs = u.pathname.split("/").filter(Boolean);
@@ -279,6 +290,7 @@ export async function listGiftQuote(
   signal: AbortSignal,
 ): Promise<ListGiftQuote> {
   const route = listGiftRoute(item.url, item.asin);
+  if (route.kind === "refused") return { kind: "unsupported" };
   if (route.kind === "offers") {
     const offers = await step(() => productOffers(h, key, route.retailer, route.productId, signal));
     if (offers === "stop") return { kind: "stopped" };

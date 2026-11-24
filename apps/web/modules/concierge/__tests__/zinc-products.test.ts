@@ -345,6 +345,16 @@ describe("listGiftRoute (ALL-29)", () => {
       productId: "B0TEST1234",
     });
   });
+  it.each([
+    ["a different ASIN in the link", "https://www.amazon.com/dp/B0OTHERONE", "B0TEST1234", { kind: "refused" }],
+    ["no ASIN in the link but one saved", "https://www.amazon.com/hz/wishlist/item", "B0TEST1234", { kind: "refused" }],
+    ["a case difference only", "https://www.amazon.co.uk/Mug/dp/b0test1234?th=1", "b0test1234", { kind: "offers", retailer: "amazon", productId: "b0test1234" }],
+    ["no saved ASIN", "https://www.amazon.com/Mug/dp/b0test1234", null, { kind: "offers", retailer: "amazon", productId: "B0TEST1234" }],
+    ["no ASIN at all", "https://www.amazon.com/products/mug", null, { kind: "check" }],
+    ["an ASIN on another store's link", "https://www.walmart.com/ip/1", "B0TEST1234", { kind: "offers", retailer: "walmart", productId: "1" }],
+  ])("an Amazon link's ASIN must agree with the saved one: %s", (_why, url, asin, route) => {
+    expect(listGiftRoute(url, asin)).toEqual(route);
+  });
   it("Best Buy goes straight to the check, as Zinc's product lookup refuses it", () => {
     expect(listGiftRoute("https://www.bestbuy.com/site/some-tv/6525410.p?skuId=6525410", null)).toEqual({ kind: "check" });
   });
@@ -406,6 +416,12 @@ describe("listGiftQuote (ALL-29)", () => {
     const u = new URL(calls[0].url);
     expect(u.pathname).toBe("/products/B0TEST1234/offers");
     expect(u.searchParams.get("retailer")).toBe("amazon");
+  });
+
+  it("an Amazon link naming another product than its ASIN is unsupported, with no call", async () => {
+    const { h, calls } = fake([]);
+    expect(await listGiftQuote(h, KEY, item({ url: "https://www.amazon.com/dp/B0OTHERONE" }), run, signal())).toEqual({ kind: "unsupported" });
+    expect(calls).toEqual([]);
   });
 
   it("a Walmart link uses offers with the walmart retailer", async () => {
