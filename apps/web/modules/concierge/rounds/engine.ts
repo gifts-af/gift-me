@@ -6,7 +6,7 @@ import { planJobs, type JobMessage, type SendJobs } from "./fanout";
 import type { ClaimedRound, RoundStore } from "./store";
 import { retryDeliveredEmails } from "../tracking/delivered";
 import { runHeld, retryOrderedEmails, tellOwnerOfRejection, tellOwnersOfRejections } from "./money-path";
-import { dayOf, releaseQuietly, view, sendHeadsUp, ideaPass, moveToGenerating, sendStep, trySend, finishStep } from "./steps";
+import { dayOf, endedByMove, LeaseLost, releaseQuietly, view, sendHeadsUp, ideaPass, moveToGenerating, sendStep, trySend, finishStep } from "./steps";
 
 // The round engine (ALL-28, design §5.1). The daily tick creates rounds that
 // are due, then claims each due round with a lease and runs its next step:
@@ -396,7 +396,10 @@ export async function advanceRound(
   if (!round) return "busy";
   if (opts.justPlaced && round.status !== "needs_attention") {
     // Nothing to tell (claimNow also takes rounds awaiting approval): give the lease back.
-    if (!(await deps.store.release(round.id, round.lockedUntil))) throw new Error("Lost the lease on the round");
+    if (!(await deps.store.release(round.id, round.lockedUntil))) {
+      const lost = new LeaseLost();
+      if (!(await endedByMove(lost, round, deps))) throw lost;
+    }
     return "busy";
   }
   const s = await deps.store.scheduleSettings();
@@ -407,11 +410,12 @@ export async function advanceRound(
   try {
     const next = result.generate;
     if (!(await deps.store.finish(next.id, next.lockedUntil, { status: next.status, nextActionAt: deps.now }))) {
-      throw new Error("Lost the lease on the round");
+      throw new LeaseLost();
     }
     logEvent("round_step", { round_id: next.id, user_id: next.userId, status: next.status, next_status: next.status, step: "generate_later" });
     return "advanced";
   } catch (err) {
+    if (await endedByMove(err, round, deps)) return "advanced";
     logEvent("round_failed", { round_id: round.id, user_id: round.userId, status: round.status, ...errorFields(err) });
     return "failed";
   }
@@ -480,6 +484,7 @@ async function advanceClaimed(
     const generate = await runStep(round, deps, s);
     return generate ? { generate } : "advanced";
   } catch (err) {
+    if (await endedByMove(err, round, deps)) return "advanced";
     logEvent("round_failed", { ...ids, ...errorFields(err) });
     return "failed";
   }

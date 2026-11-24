@@ -142,7 +142,7 @@ export async function setDatedOccasionAction(id: string, kind: string, month: st
   if (!parsed.ok) return parsed;
   // Both fields empty: About never sends that; clearing never removes a date ("Remove birthday" does).
   if (!parsed.value) return BAD_FORM;
-  return refreshPerson(await setDatedOccasion(id, dated, parsed.value), id);
+  return refreshPerson(await setDatedOccasion(id, dated, parsed.value, await todayForRequest()), id);
 }
 
 /** The year's text; empty clears it. */

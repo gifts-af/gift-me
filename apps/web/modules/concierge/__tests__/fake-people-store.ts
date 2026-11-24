@@ -173,6 +173,14 @@ export class FakePeopleStore implements PeopleStore {
     return true;
   }
 
+  /** What the rounds say about a moved occasion; null has the switch off. */
+  rounds: Awaited<ReturnType<PeopleStore["giftsAround"]>> = null;
+  failGiftsAround = false;
+  async giftsAround() {
+    if (this.failGiftsAround) throw dbError("down", "XX000");
+    return this.rounds;
+  }
+
   async removeOccasion(occasionId: string) {
     this.write("removeOccasion", occasionId);
     if (!this.occasion(occasionId)) throw dbError("Occasion not found", "P0002");

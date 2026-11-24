@@ -38,8 +38,8 @@ export function setBirthYear(id: string, year: number | null, currentYear: numbe
   return service.setBirthYear(createSupabasePeopleStore(), id, year, currentYear);
 }
 
-export function setDatedOccasion(id: string, kind: service.DatedKind, date: MonthDay): Promise<SaveResult> {
-  return service.setDatedOccasion(createSupabasePeopleStore(), id, kind, date);
+export function setDatedOccasion(id: string, kind: service.DatedKind, date: MonthDay, today: CalendarDate): Promise<SaveResult> {
+  return service.setDatedOccasion(createSupabasePeopleStore(), id, kind, date, today);
 }
 
 export function removeDatedOccasion(id: string, kind: service.DatedKind): Promise<SaveResult> {

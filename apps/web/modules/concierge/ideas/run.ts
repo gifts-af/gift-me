@@ -301,6 +301,8 @@ async function attempt(req: IdeaRequest, deps: IdeaDeps, t: Tally): Promise<Idea
     runId,
     kept.map((k, i) => ({ ...k.idea, imageUrl: photos[i], rank: i + 1 })),
   );
+  // The round ended during the run (its date changed, or the occasion was switched off). What it spent still counts.
+  if (count < 0) return end("none");
   await store.finish(runId, "saved", cents(t.spent));
   return { status: "saved", count };
 }

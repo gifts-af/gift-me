@@ -21,9 +21,9 @@ values (:'a', :'mom', :'bday', 2025, '2025-03-14', '2025-03-05', 10000, 'complet
 insert into concierge.gift_rounds (user_id, person_id, occasion_id, occasion_year, occasion_date, ship_by_deadline, budget_cents, status, next_action_at)
 values (:'a', :'mom', :'xmas', 2027, '2027-12-25', '2027-12-16', 10000, 'scheduled', now()) returning id as xmas_round \gset
 
--- Changing something else on the occasion leaves its round alone.
+-- Saving the occasion with nothing changed leaves its round alone.
 select tests.act_as(:'a');
-update concierge.occasions set month = 3, day = 15 where id = :'bday';
+update concierge.occasions set updated_at = now() where id = :'bday';
 select tests.reset_role();
 select is((select status::text from concierge.gift_rounds where id = :'open_round'), 'awaiting_approval', 'editing an occasion leaves its round open');
 

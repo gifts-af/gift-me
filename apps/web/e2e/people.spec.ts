@@ -4,6 +4,7 @@ import { SECOND_USER, TEST_USER } from "./test-user";
 import { createFreshUser } from "./fresh-user";
 import { phoneLayoutProblems } from "./phone-layout";
 import { addMother, addSavedGift, saveBudgets } from "./seed";
+import { personFor, readyBuyer, rest, seedFailedOrder, seedRound } from "./rounds";
 import { session, signIn } from "./sign-in";
 
 // ALL-21: add someone, see their card, switch occasions and budgets, link their
@@ -223,6 +224,43 @@ test("About Mom: each field saves on its own", async ({ page }) => {
   expect(await birthYear(personId)).toBeNull();
   await expect(year).toHaveValue("");
   await expect(year).toBeDisabled();
+});
+
+// Moving a birthday ends a round nobody chose from, and leaves a gift that's set where it is.
+test("moving a birthday ends its open round, or says the gift keeps its date", async ({ page }) => {
+  const buyer = await readyBuyer(await createFreshUser());
+  const open = await personFor(buyer.id, "Olive");
+  const { roundId } = await seedRound(buyer.id, open, { ideas: [{ title: "Vase", totalCents: 2000 }] });
+  const set = await personFor(buyer.id, "Sage");
+  const bought = await seedRound(buyer.id, set, { ideas: [{ title: "Lamp", totalCents: 2000 }] });
+  const order = await seedFailedOrder(buyer.id, bought.roundId, bought.ideaIds[0], "price_up");
+  await rest(`orders?id=eq.${order}`, { method: "PATCH", body: { status: "placed", failure_type: null } });
+  await rest(`gift_rounds?id=eq.${bought.roundId}`, { method: "PATCH", body: { status: "ordered", attention_reason: null } });
+
+  const day = (n: number) => {
+    const d = new Date(Date.now() + n * 86_400_000);
+    return { month: d.getUTCMonth() + 1, day: d.getUTCDate(), text: d.toLocaleString("en-US", { timeZone: "UTC", month: "short", day: "numeric" }) };
+  };
+  const moveTo = async (personId: string, to: ReturnType<typeof day>) => {
+    await page.goto(`/people/${personId}/about`);
+    const birthday = page.getByRole("group", { name: "Birthday" });
+    await expect(birthday.getByRole("spinbutton", { name: "Birthday day" })).toBeEnabled();
+    await birthday.getByRole("combobox", { name: "Birthday month" }).selectOption(String(to.month));
+    await birthday.getByRole("spinbutton", { name: "Birthday day" }).fill(String(to.day));
+    await page.getByRole("textbox", { name: "Name" }).click();
+    await expect(birthday.getByText("Saved", { exact: true })).toBeVisible();
+    return birthday;
+  };
+
+  await signIn(page, buyer.creds);
+  await moveTo(open.personId, day(60));
+  await page.goto(`/rounds/${roundId}`);
+  await expect(page.getByText("The date changed, so this round ended.")).toBeVisible();
+  await expect(page.getByRole("button", { name: /Buy/ })).toHaveCount(0);
+
+  const birthday = await moveTo(set.personId, day(45));
+  await expect(birthday.getByText(`A gift is already set for ${day(50).text}. It keeps that date. It may arrive after the new date.`)).toBeVisible();
+  expect(await rest(`gift_rounds?id=eq.${bought.roundId}&select=status`)).toEqual([{ status: "ordered" }]);
 });
 
 // ALL-127 AC-19: an "Add an address" email sent before this change links to

@@ -16,11 +16,36 @@ export const dayOf = (now: Date): CalendarDate => now.toISOString().slice(0, 10)
 
 /** A round due on a day is due from its first moment, so that day's tick picks it up. */
 const startOf = (day: CalendarDate) => new Date(`${day}T00:00:00Z`);
+
+export class LeaseLost extends Error {
+  constructor() {
+    super("Lost the lease on the round");
+    this.name = "LeaseLost";
+  }
+}
+
+/**
+ * Whether a step stopped because the buyer changed the occasion's date, which ended the round:
+ * a quiet stop, not a failure. A check that fails counts as no, so the failure is still seen.
+ */
+export async function endedByMove(err: unknown, round: ClaimedRound, deps: EngineDeps): Promise<boolean> {
+  if (!(err instanceof LeaseLost)) return false;
+  try {
+    if (!(await deps.store.endedByMove(round.id))) return false;
+  } catch (check) {
+    logEvent("round_move_check_failed", { round_id: round.id, user_id: round.userId, ...errorFields(check) });
+    return false;
+  }
+  logEvent("round_ended_by_move", { round_id: round.id, user_id: round.userId });
+  return true;
+}
+
 /** Gives a lease back without a step; a failure is only logged, as the lease expires anyway. */
 export async function releaseQuietly(round: ClaimedRound, deps: EngineDeps): Promise<void> {
   try {
-    if (!(await deps.store.release(round.id, round.lockedUntil))) throw new Error("Lost the lease on the round");
+    if (!(await deps.store.release(round.id, round.lockedUntil))) throw new LeaseLost();
   } catch (err) {
+    if (await endedByMove(err, round, deps)) return;
     logEvent("round_release_failed", { round_id: round.id, user_id: round.userId, ...errorFields(err) });
   }
 }
@@ -153,6 +178,7 @@ export async function ideaPass(
       await afterIdeaRun(round, outcome, deps, s);
       advanced++;
     } catch (err) {
+      if (await endedByMove(err, claimed, deps)) continue;
       logEvent("round_failed", { ...ids, ...errorFields(err) });
       failed++;
     }
@@ -193,6 +219,9 @@ async function afterIdeaRun(round: ClaimedRound, outcome: IdeaOutcome, deps: Eng
         case "not_paid":
         case "not_found":
           return atDeadline();
+        case "closed":
+          // The round ended while it waited for its run.
+          throw new LeaseLost();
         case "limit":
           break; // the plan sends no_ideas, or waits
       }
@@ -213,7 +242,7 @@ async function afterIdeaRun(round: ClaimedRound, outcome: IdeaOutcome, deps: Eng
 /** Finishes the round at its status, to be looked at again at `at`. */
 async function finishAt(round: ClaimedRound, at: Date, { store }: EngineDeps, step: string): Promise<void> {
   if (!(await store.finish(round.id, round.lockedUntil, { status: round.status, nextActionAt: at }))) {
-    throw new Error("Lost the lease on the round");
+    throw new LeaseLost();
   }
   logEvent("round_step", { round_id: round.id, user_id: round.userId, status: round.status, next_status: round.status, step: `ideas:${step}` });
 }
@@ -221,7 +250,7 @@ async function finishAt(round: ClaimedRound, at: Date, { store }: EngineDeps, st
 /** Saves `generating` and takes a fresh lease on the round, or null if someone else got it. */
 export async function moveToGenerating(round: ClaimedRound, { store, now }: EngineDeps): Promise<ClaimedRound | null> {
   const ok = await store.finish(round.id, round.lockedUntil, { status: "generating", nextActionAt: now });
-  if (!ok) throw new Error("Lost the lease on the round");
+  if (!ok) throw new LeaseLost();
   logEvent("round_step", { round_id: round.id, user_id: round.userId, status: round.status, next_status: "generating", step: null });
   return store.claim(round.id, now);
 }
@@ -243,7 +272,8 @@ export async function sendStep(
 
 /**
  * Records the step, then sends it. An already-recorded step isn't sent again (AC-11).
- * False on a clean refusal: nothing went out, so the record is forgotten.
+ * False on a clean refusal: nothing went out, so the record is forgotten. Throws LeaseLost, with
+ * nothing recorded, when the round is no longer ours (its date changed, say).
  */
 export async function trySend(
   round: ClaimedRound,
@@ -253,6 +283,7 @@ export async function trySend(
   deps: EngineDeps,
   extra: Extra = {},
 ): Promise<boolean> {
+  if (!(await deps.store.holdsLease(round.id, round.lockedUntil))) throw new LeaseLost();
   const fresh = await deps.store.recordSend(round.id, round.userId, step);
   sent.add(step);
   if (!fresh) return true;
@@ -280,6 +311,6 @@ export async function finishStep(
     nextActionAt = upcoming.do === "wait" ? startOf(upcoming.until) : now;
   }
   const ok = await store.finish(round.id, round.lockedUntil, { ...next, nextActionAt });
-  if (!ok) throw new Error("Lost the lease on the round");
+  if (!ok) throw new LeaseLost();
   logEvent("round_step", { round_id: round.id, user_id: round.userId, status: round.status, next_status: next.status, step });
 }

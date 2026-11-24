@@ -149,7 +149,7 @@ describe("one field at a time", () => {
 
   it("sets a date from the month and day picked", async () => {
     expect(await setDatedOccasionAction(ID, "birthday", "11", "30")).toEqual({ ok: true });
-    expect(setDatedOccasion).toHaveBeenCalledWith(ID, "birthday", { month: 11, day: 30 });
+    expect(setDatedOccasion).toHaveBeenCalledWith(ID, "birthday", { month: 11, day: 30 }, "2026-11-01");
   });
 
   it("refuses a date that doesn't exist, or cleared fields, without saving", async () => {

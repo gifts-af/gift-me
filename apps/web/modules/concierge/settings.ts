@@ -3,7 +3,8 @@ import { parseOverBudgetPct } from "./settings-rules";
 import { errorFields, logEvent } from "@/lib/log";
 
 export type ConciergeSettings = { overBudgetPct: number };
-export type SaveResult = { ok: true } | { ok: false; error: string };
+/** `note`: something the person should know about what was saved. */
+export type SaveResult = { ok: true; note?: string } | { ok: false; error: string };
 
 const OVER_BUDGET_ERROR = "Enter a whole number from 0 to 100.";
 

@@ -476,7 +476,7 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
   const db = userDb.schema("concierge");
   const round = await db
     .from("gift_rounds")
-    .select("id, user_id, person_id, occasion_id, occasion_date, ship_by_deadline, budget_cents, status, attention_reason, closed_at")
+    .select("id, user_id, person_id, occasion_id, occasion_year, occasion_date, ship_by_deadline, budget_cents, status, attention_reason, closed_at")
     .eq("id", roundId)
     .maybeSingle();
   if (round.error) fail("Loading the round failed", round.error);
@@ -574,7 +574,9 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
   const bought = ORDERED_STATUSES.has(r.status) ? liveOrders : liveOrders.filter((o) => BOUGHT.has(o.status));
   let closedText: string | null = null;
   if (ended || pastDeadline) {
-    if (bought.length > 0) closedText = `Already ordered: ${bought.map((o) => o.title).join(", ")}`;
+    // Only a date change leaves a round without a year, and never one with a gift on its way.
+    if (r.occasion_year === null) closedText = "The date changed, so this round ended.";
+    else if (bought.length > 0) closedText = `Already ordered: ${bought.map((o) => o.title).join(", ")}`;
     // Zinc may still turn out to have bought it, so nothing here may say no gift is coming.
     else if (liveOrders.some((o) => IN_FLIGHT.has(o.status))) closedText = "We're still confirming your order.";
     else if (today > r.occasion_date) closedText = "This occasion has passed";

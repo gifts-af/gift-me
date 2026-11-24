@@ -88,7 +88,10 @@ class FakeStore implements IdeaStore {
   async finish(_runId: string, outcome: RunEnd, cost: number) {
     this.finished.push({ outcome, cost });
   }
+  /** The round ended during the run: save_ideas says -1. */
+  ended = false;
   async save(_runId: string, ideas: SavedIdea[]) {
+    if (this.ended) return -1;
     this.saved = ideas;
     return ideas.length;
   }
@@ -394,6 +397,15 @@ describe("runIdeas: results", () => {
     expect(store.saved.map((i) => i.retailerProductId)).toEqual(["P1", "P3"]);
     expect(event("ideas.candidate_dropped")).toMatchObject({ reason: "duplicate" });
     expect(event("ideas.run")).toMatchObject({ resolved: 2 });
+  });
+
+  it("a run whose round ended before it could save ends as none, with what it spent", async () => {
+    world([2000, 2000], { zinc, gateway });
+    store.ended = true;
+    expect(await runIdeas(req(), deps())).toEqual({ status: "none" });
+    expect(store.saved).toEqual([]);
+    expect(store.finished).toEqual([{ outcome: "none", cost: expect.any(Number) }]);
+    expect(store.finished[0].cost).toBeGreaterThan(0);
   });
 
   it("a run with nothing left saves nothing and returns none", async () => {

@@ -271,8 +271,8 @@ test("a round starts without an address, resumes when one is saved, and is skipp
   expect(asked).toHaveLength(1);
   expect(asked[0].sent_at).not.toBeNull();
 
-  // 1b. About (ALL-127 AC-2, AC-5): renaming her and moving her birthday by a day
-  // leaves the waiting round alone: same status, same occasion.
+  // 1b. About (ALL-127 AC-2): renaming her leaves the waiting round alone. (Moving her birthday
+  // ends it, T92: people.spec.ts.)
   const roundOccasion = async () => {
     const res = await fetch(`${supabase.url}/rest/v1/gift_rounds?select=status,occasion_id&id=eq.${round.id}`, { headers: concierge });
     return ((await res.json()) as { status: string; occasion_id: string }[])[0];
@@ -285,12 +285,6 @@ test("a round starts without an address, resumes when one is saved, and is skipp
   await name.fill(`${PERSON} Renamed`);
   await name.press("Tab");
   await expect(page.getByTestId("name-field").getByRole("status")).toHaveText("Saved");
-  const moved = new Date(birthday.getTime() + DAY_MS);
-  const dates = page.getByRole("group", { name: "Birthday" });
-  await dates.getByRole("combobox", { name: "Birthday month" }).selectOption(String(moved.getUTCMonth() + 1));
-  await dates.getByRole("spinbutton", { name: "Birthday day" }).fill(String(moved.getUTCDate()));
-  await name.click();
-  await expect(dates.getByRole("status")).toHaveText("Saved");
   expect(await roundOccasion()).toEqual({ status: "needs_address", occasion_id: before.occasion_id });
   // Her name back, so the clean-up by name finds her.
   await name.fill(PERSON);

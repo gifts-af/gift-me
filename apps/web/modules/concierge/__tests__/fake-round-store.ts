@@ -196,6 +196,23 @@ export class FakeRoundStore implements RoundStore {
     r.nextActionAt = now;
   }
 
+  /** What the database does when the occasion's date moves (handle_occasion_moved). */
+  moved = new Set<string>();
+  endByMove(roundId: string) {
+    const r = this.round(roundId);
+    this.moved.add(roundId);
+    r.status = "skipped";
+    r.history.push("skipped");
+    r.nextActionAt = null;
+    r.lockedUntil = null;
+  }
+  async holdsLease(roundId: string, lock: Date) {
+    return this.round(roundId).lockedUntil?.getTime() === lock.getTime();
+  }
+  async endedByMove(roundId: string) {
+    return this.moved.has(roundId);
+  }
+
   async sentSteps(roundId: string) {
     return new Set(this.sends.get(roundId));
   }
@@ -260,6 +277,7 @@ export class FakeRoundStore implements RoundStore {
       orders: [],
       personRemoved: false,
       closedEarly: false,
+      dateChanged: false,
     };
   }
 

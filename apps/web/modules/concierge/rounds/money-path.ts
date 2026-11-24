@@ -7,7 +7,7 @@ import { endedAddressReason, type CancelledGift, type FailedGift, type OtherGift
 import type { ClaimedRound, RoundContext, RoundOrder } from "./store";
 import { fixPath, money, occasionWord, LIVE_HELD } from "./emails";
 import type { EngineDeps } from "./engine";
-import { dayOf, view, type Extra, sendStep, trySend } from "./steps";
+import { dayOf, LeaseLost, view, type Extra, sendStep, trySend } from "./steps";
 
 // The money path (design §5.1): rounds with a held or failed gift. Tells the buyer and the
 // list owner, retries placing, and closes the round at its deadline. See engine.ts for how a
@@ -87,7 +87,7 @@ export async function runHeld(
   await tellNow();
   // Sets next_action_at for what's left (tomorrow, or the deadline once ordered).
   const status = await store.reconcile(round.id);
-  if (!(await store.release(round.id, round.lockedUntil))) throw new Error("Lost the lease on the round");
+  if (!(await store.release(round.id, round.lockedUntil))) throw new LeaseLost();
   logEvent("round_step", { ...ids, status: claimed.status, next_status: status, step: steps.join(",") || null });
 }
 
@@ -137,7 +137,8 @@ async function closeAtDeadline(
     try {
       await sendStep(round, ctx, step, sent, deps, extra);
     } catch (err) {
-      heldOpen();
+      // Not held open: the round isn't ours any more.
+      if (!(err instanceof LeaseLost)) heldOpen();
       throw err;
     }
   };
@@ -346,6 +347,7 @@ export async function tellOrdered(roundId: string, deps: EngineDeps): Promise<vo
           failed: fresh.map((o) => ({ title: o.title, detail: lateDetail(o, ctx.personName) })),
           ...(onItsWay.length > 0 ? { onItsWay } : {}),
           ...(ctx.closedEarly ? { closedEarly: true } : {}),
+          ...(ctx.dateChanged ? { dateChanged: true } : {}),
           ...(ctx.personRemoved ? { personRemoved: true } : {}),
         },
         links: { open },

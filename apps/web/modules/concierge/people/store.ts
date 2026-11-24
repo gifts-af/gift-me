@@ -1,6 +1,7 @@
 import "server-only";
-import type { Address, AddressDraft, OccasionKind } from "@gifts-af/core";
+import type { Address, AddressDraft, CalendarDate, OccasionKind } from "@gifts-af/core";
 import { appSettingInt } from "@/lib/app-settings";
+import { hasPaidFeatures } from "../paid-features";
 import type { ImportAddress } from "./rules";
 import { createClient } from "@/lib/supabase/server";
 import { errorFields, logEvent } from "@/lib/log";
@@ -84,6 +85,12 @@ export interface PeopleStore {
   updatePersonFields(id: string, p: PersonFields): Promise<boolean>;
   addOccasion(personId: string, o: { kind: OccasionKind; month: number | null; day: number | null }): Promise<void>;
   moveOccasion(occasionId: string, month: number, day: number): Promise<boolean>;
+  /**
+   * For what saving a moved date says: the first date on or after today a gift is already set for
+   * (held, being placed or on its way), the dates gifts were given for, and whether the buyer has
+   * paid features. Null when moved dates don't close rounds (the switch).
+   */
+  giftsAround(occasionId: string, today: CalendarDate): Promise<{ setFor: CalendarDate | null; given: CalendarDate[]; paid: boolean } | null>;
   removeOccasion(occasionId: string): Promise<void>;
   setEnabled(occasionId: string, enabled: boolean): Promise<boolean>;
   /** concierge.save_budgets: a number upserts, null removes. Throws P0002 for a person that isn't live and the caller's (ALL-120). */
@@ -273,6 +280,30 @@ export function createSupabasePeopleStore(): PeopleStore {
         .select("id");
       check(error, "Moving an occasion failed");
       return (data ?? []).length > 0;
+    },
+
+    async giftsAround(occasionId, today) {
+      const supabase = await createClient();
+      const concierge = supabase.schema("concierge");
+      const userId = await this.userId();
+      const [on, rounds, paid] = await Promise.all([
+        concierge.rpc("setting_int", { p_key: "moved_dates_close_rounds" }),
+        concierge.from("gift_rounds").select("occasion_date, orders!inner(status)").eq("occasion_id", occasionId),
+        userId ? hasPaidFeatures(supabase, userId) : false,
+      ]);
+      check(on.error, "Reading setting moved_dates_close_rounds failed");
+      check(rounds.error, "Loading the occasion's gifts failed");
+      if (on.data !== 1) return null;
+      const datesWith = (statuses: string[]) =>
+        (rounds.data ?? [])
+          .filter((r) => r.orders.some((o) => statuses.includes(o.status)))
+          .map((r) => r.occasion_date)
+          .sort();
+      return {
+        setFor: datesWith(["held", "placing", "unconfirmed", "placed", "shipped"]).find((d) => d >= today) ?? null,
+        given: datesWith(["delivered"]),
+        paid,
+      };
     },
 
     async removeOccasion(occasionId) {

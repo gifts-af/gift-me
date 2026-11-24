@@ -36,7 +36,7 @@ Birthdays and anniversaries only. **Moved** means the month or day changed. **Op
 | AC-9 | A round claimed, or an idea run under way | The occasion moves | No new paid run, no ideas saved, no new send. An email already being sent can't be recalled. Money spent stays recorded, and the lost lease is a quiet stop, not `round_failed` |
 | AC-10 | A round closed by a move (`skipped`, no year) | Its old link is opened, on any day | "The date changed, so this round ended." Nothing can be bought |
 | AC-11 | A round closed by a move, with no orders | Its old date passes | Not in past gifts, and the person page doesn't link to an empty list. One with failed orders is listed as today |
-| AC-12 | A round of this occasion with a live order (held, placing, unconfirmed, placed, shipped), its date not passed | The buyer saves a new date | It saves, and says "A gift is already set for Dec 28. It keeps that date." If the new date is earlier, or has passed this year, it adds that the gift may arrive late. Leaving the page before it shows can miss it; showing it on the person page is ALL-171 |
+| AC-12 | A round of this occasion with a live order (held, placing, unconfirmed, placed, shipped), its date not passed | The buyer saves a new date | It saves, and says "A gift is already set for Dec 28. It keeps that date." If the new date's occurrence nearest the gift's own date is earlier than it, it adds that the gift may arrive late. Leaving the page before it shows can miss it; showing it on the person page is ALL-171 |
 | AC-13 | A new date that's too close to ship for, with no gift set | The buyer saves it | It saves, and says it's too late for this one and the next one starts as usual. Not shown when the occasion is off, the buyer has no paid features, or a gift for it was already given |
 | AC-14 | `moved_dates_close_rounds` is 0 or missing | The occasion moves | Today's behaviour |
 | AC-15 | A holiday, an unchanged date or any other save | It happens | No round changes |
@@ -97,17 +97,17 @@ A trigger on the occasion's month and day, `security definer`, since owners can 
 
 **Produces:** `concierge.handle_occasion_moved()` trigger `on_occasion_moved`; refusal `'closed'` from `concierge.start_idea_run`; `concierge.save_ideas` returns -1 for a round that ended.
 
-- [ ] Write the failing pgTAP tests, each naming its AC: no orders ends (status, `closed_at`, `occasion_year`, `locked_until`, `next_action_at`); all failed ends, orders `resolved`, an untold one `failed_after_close`, a `store_cancelled` one not; each of held, placing, unconfirmed, placed, shipped, delivered leaves the row identical; an already skipped round identical; two moves leave one null-year round and a new insert for the year succeeds; Feb 29 both ways and Feb 31; switch 0 and missing row change nothing; `enabled` change, same-date update and Christmas change nothing; another user's rounds untouched; a `scheduled` round with no year is refused by the check; a birthday changed to an anniversary on the same date changes nothing; a birthday changed to Christmas ends nothing and doesn't error; signed-in and anonymous roles can't execute `handle_occasion_moved`; `start_idea_run` on an ended round returns `closed` and adds no `idea_runs` row; `save_ideas` returns -1 and adds no idea; `health_snapshot` `no_ideas` excludes it.
-- [ ] `pnpm db:test`: the new file fails, the rest pass.
-- [ ] Write the migration: `occasion_year` drops `not null`; the setting (1); `check (occasion_year is not null or status = 'skipped')`; the trigger `after update of month, day ... when (old.kind in ('birthday', 'anniversary') and new.kind = old.kind and (old.month, old.day) is distinct from (new.month, new.day))`, `security definer`, execute revoked from public, anon and authenticated, locking the occasion's rounds `for update` in id order, checking eligibility after each lock, then `reconcile_round(id, 'deadline')` and, only if it returned `skipped`, `occasion_year = null, locked_until = null`. Copy the latest `start_idea_run`, `save_ideas` and `health_snapshot` bodies and change only: lock the round `for update` after the person lock and return early when `closed_at is not null or status = 'skipped'`; add `and s.occasion_year is not null`. Keep every grant.
-- [ ] `pnpm db:test` passes. `pnpm db:types`, `pnpm db:map`. Commit.
+- [x] Write the failing pgTAP tests, each naming its AC: no orders ends (status, `closed_at`, `occasion_year`, `locked_until`, `next_action_at`); all failed ends, orders `resolved`, an untold one `failed_after_close`, a `store_cancelled` one not; each of held, placing, unconfirmed, placed, shipped, delivered leaves the row identical; an already skipped round identical; two moves leave one null-year round and a new insert for the year succeeds; Feb 29 both ways and Feb 31; switch 0 and missing row change nothing; `enabled` change, same-date update and Christmas change nothing; another user's rounds untouched; a `scheduled` round with no year is refused by the check; a birthday changed to an anniversary on the same date changes nothing; a birthday changed to Christmas ends nothing and doesn't error; signed-in and anonymous roles can't execute `handle_occasion_moved`; `start_idea_run` on an ended round returns `closed` and adds no `idea_runs` row; `save_ideas` returns -1 and adds no idea; `health_snapshot` `no_ideas` excludes it.
+- [x] `pnpm db:test`: the new file fails, the rest pass.
+- [x] Write the migration: `occasion_year` drops `not null`; the setting (1); `check (occasion_year is not null or status = 'skipped')`; the trigger `after update of month, day ... when (old.kind in ('birthday', 'anniversary') and new.kind = old.kind and (old.month, old.day) is distinct from (new.month, new.day))`, `security definer`, execute revoked from public, anon and authenticated, locking the occasion's rounds `for update` in id order, checking eligibility after each lock, then `reconcile_round(id, 'deadline')` and, only if it returned `skipped`, `occasion_year = null, locked_until = null`. Copy the latest `start_idea_run`, `save_ideas` and `health_snapshot` bodies and change only: lock the round `for update` after the person lock and return early when `closed_at is not null or status = 'skipped'`; add `and s.occasion_year is not null`. Keep every grant.
+- [x] `pnpm db:test` passes. `pnpm db:types`, `pnpm db:map`. Commit.
 
 ### Task 2: Two connections (AC-8)
 
 **Files:** create `apps/web/modules/concierge/__tests__/moved-dates-db.test.ts`; add it to `LOCAL_DB_TESTS` in `apps/web/vitest.config.ts`, or `pnpm test:db` skips it.
 
-- [ ] Write the tests with two `pg` clients, modelled on `approval-db.test.ts`: approval holds the round's lock, the move waits, then the round and its order are unchanged; the move holds it, approval waits, then `approve_round` raises and no order exists; a move against `start_idea_run` and `save_ideas`, both ways round: the run or save first and the move waits, or the move first and they refuse.
-- [ ] `pnpm test:db`: they pass against Task 1. Then run them against a copy of the trigger without `for update` (in the test's own transaction) and see the first one fail, so they prove the lock. Commit.
+- [x] Write the tests with two `pg` clients, modelled on `approval-db.test.ts`: approval holds the round's lock, the move waits, then the round and its order are unchanged; the move holds it, approval waits, then `approve_round` raises and no order exists; a move against `start_idea_run` and `save_ideas`, both ways round: the run or save first and the move waits, or the move first and they refuse.
+- [x] `pnpm test:db`: they pass against Task 1. Then run them against a copy of the trigger without `for update` (in the test's own transaction) and see the first one fail, so they prove the lock. Commit.
 
 ### Task 3: The engine stops quietly (AC-3, AC-4, AC-9, AC-16)
 
@@ -115,9 +115,9 @@ A trigger on the occasion's month and day, `security definer`, since owners can 
 
 **Produces:** `RoundStore.holdsLease(roundId: string, lock: Date): Promise<boolean>`; `RoundStore.endedByMove(roundId: string): Promise<boolean>`; `class LeaseLost extends Error` (`steps.ts`); `IdeaRefusal` gains `"closed"`; `IdeaStore.save` may return -1, for which the run is finished as `none` with its real cost and reported as `{ status: "none" }`, so it uses a turn.
 
-- [ ] Write failing tests: a move before `recordSend` sends and records nothing (heads-up, reminder, address request, `no_ideas`); a move between claim and the idea run starts no run; a move during a run saves nothing, sends nothing and records the run's cost, and with `idea_rounds_per_tick` = 1 a second waiting round gets no run; the health email's `failed_runs` doesn't count it; each logs `round_ended_by_move` with ids only, not `round_failed`, and leaves the tick's `failed` count and heartbeat alone; a lease lost for any other reason still logs `round_failed`. In the database test: after a move, a tick creates a round when due and none when the date is today + 200.
-- [ ] Run them: they fail.
-- [ ] Implement: `trySend` calls `holdsLease` before `recordSend` and throws `LeaseLost`; every "Lost the lease" throw becomes `LeaseLost`; the engine's and the idea pass's catch blocks, on `LeaseLost`, ask `endedByMove` and, if true, log and return `"advanced"`. `afterIdeaRun` throws `LeaseLost` on refusal `closed`. Four sites need their own handling, each with a test:
+- [x] Write failing tests: a move before `recordSend` sends and records nothing (heads-up, reminder, address request, `no_ideas`); a move between claim and the idea run starts no run; a move during a run saves nothing, sends nothing and records the run's cost, and with `idea_rounds_per_tick` = 1 a second waiting round gets no run; the health email's `failed_runs` doesn't count it; each logs `round_ended_by_move` with ids only, not `round_failed`, and leaves the tick's `failed` count and heartbeat alone; a lease lost for any other reason still logs `round_failed`. In the database test: after a move, a tick creates a round when due and none when the date is today + 200.
+- [x] Run them: they fail.
+- [x] Implement: `trySend` calls `holdsLease` before `recordSend` and throws `LeaseLost`; every "Lost the lease" throw becomes `LeaseLost`; the engine's and the idea pass's catch blocks, on `LeaseLost`, ask `endedByMove` and, if true, log and return `"advanced"`. `afterIdeaRun` throws `LeaseLost` on refusal `closed`. Four sites need their own handling, each with a test:
 
 | Site | Behaviour |
 |---|---|
@@ -126,15 +126,15 @@ A trigger on the occasion's month and day, `security definer`, since owners can 
 | `advanceRound` with `justPlaced` (its release is outside any try) | Catch `LeaseLost` the same way |
 | `closeAtDeadline`'s `before()` | Rethrow `LeaseLost` before the "held open" alert, so nothing alerts |
 
-- [ ] `pnpm test` and `pnpm test:db` pass. Commit.
+- [x] `pnpm test` and `pnpm test:db` pass. Commit.
 
 ### Task 4: Old links and past gifts (AC-10, AC-11)
 
 **Files:** modify `modules/concierge/rounds/approval.ts`, `modules/concierge/reactions/reactions.ts`; tests `approval-db.test.ts`, `reactions-db.test.ts`, `app/rounds/__tests__/round-screen.test.tsx`.
 
-- [ ] Write failing tests: an ended round shows the exact copy before and after its date, with no buy control, on the round, buy and fix pages; its approve and replace calls are refused; `giftHistory` and `hasPastGifts` leave it out when it has no orders and keep it when it has failed ones; a store-cancelled gift's round (with a year) still shows; on an ended round whose failed order was store-cancelled, the refund still shows beside the new text.
-- [ ] Implement: `roundView` selects `occasion_year`; `closedText` checks the mark first, since such a round has no live order. Both history reads exclude `skipped` with a null year and no orders. `hasPastGifts` keeps failing closed.
-- [ ] Tests pass. Commit.
+- [x] Write failing tests: an ended round shows the exact copy before and after its date, with no buy control, on the round, buy and fix pages; its approve and replace calls are refused; `giftHistory` and `hasPastGifts` leave it out when it has no orders and keep it when it has failed ones; a store-cancelled gift's round (with a year) still shows; on an ended round whose failed order was store-cancelled, the refund still shows beside the new text.
+- [x] Implement: `roundView` selects `occasion_year`; `closedText` checks the mark first, since such a round has no live order. Both history reads exclude `skipped` with a null year and no orders. `hasPastGifts` keeps failing closed.
+- [x] Tests pass. Commit.
 
 ### Task 5: What the save says (AC-12, AC-13)
 
@@ -142,13 +142,13 @@ A trigger on the occasion's month and day, `security definer`, since owners can 
 
 **Produces:** `SaveResult = { ok: true; note?: string } | { ok: false; error: string }`; `PeopleStore.setGiftDate(occasionId: string, today: CalendarDate): Promise<CalendarDate | null>`, the earliest `occasion_date` on or after today of a round with a held, placing, unconfirmed, placed or shipped order; `PeopleStore.canStartRound(occasionId: string, year: number): Promise<boolean>`, true when the occasion is on, the buyer is paid, and no round for that year gave a gift; `setDatedOccasion(store, id, kind, date, today)`.
 
-- [ ] Write failing tests: note for each live status; none once its date has passed; the "may arrive after" sentence when the new date, taken in the kept date's year, is earlier than it, including when it has already passed; the too-late note only with no gift set, `orderBy` null for the next occurrence and `canStartRound` true (a test each for off, unpaid, already delivered, and Dec 28 to Jan 2); no note for an unchanged date, a first date, or the switch at 0; a failed note lookup still saves and says only "Saved"; the form shows the note in a `role="status"` line, clears it on the next edit, and doesn't show one that arrived after the page was left.
-- [ ] Implement. The note is read after the save, so it never blocks one.
-- [ ] Tests pass; `pnpm gallery`, look at the About screen. Commit.
+- [x] Write failing tests: note for each live status; none once its date has passed; the "may arrive after" sentence when the new date, taken in the kept date's year, is earlier than it, including when it has already passed; the too-late note only with no gift set, `orderBy` null for the next occurrence and `canStartRound` true (a test each for off, unpaid, already delivered, and Dec 28 to Jan 2); no note for an unchanged date, a first date, or the switch at 0; a failed note lookup still saves and says only "Saved"; the form shows the note in a `role="status"` line, clears it on the next edit, and doesn't show one that arrived after the page was left.
+- [x] Implement. The note is read after the save, so it never blocks one.
+- [x] Tests pass; `pnpm gallery`, look at the About screen. Commit.
 
 ### Task 6: Docs
 
-- [ ] Technical design §4.1, §5 and the `gift_rounds` row; the next free T# in `design/decisions.md` (read it at commit time: other sessions add numbers); `operations.md`: the setting, `round_ended_by_move`, and that after a code rollback the trigger stays on (set the switch to 0; until then old code logs `round_failed`, can send the email in flight, and says "This gift round was stopped"); the `setDatedOccasion` comment; tick this plan.
+- [x] Technical design §4.1, §5 and the `gift_rounds` row; the next free T# in `design/decisions.md` (read it at commit time: other sessions add numbers); `operations.md`: the setting, `round_ended_by_move`, and that after a code rollback the trigger stays on (set the switch to 0; until then old code logs `round_failed`, can send the email in flight, and says "This gift round was stopped"); the `setDatedOccasion` comment; tick this plan.
 - [ ] After the merge: database map (hook), round engine page, screens page.
 
 ## Review focus
