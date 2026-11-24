@@ -266,3 +266,59 @@ export async function seedOrder(buyerId: string, roundId: string, ideaId: string
   });
   return order.id;
 }
+
+export type PastGiftsSeed = { personId: string; roundId: string; unanswered: { orderId: string; title: string } };
+
+/**
+ * A person with three past rounds: a birthday two days ago with two delivered gifts, the second
+ * unanswered; an older one the store cancelled; and an older one skipped with nothing bought.
+ */
+export async function seedPastGifts(buyerId: string, name: string): Promise<PastGiftsSeed> {
+  const person = await personFor(buyerId, name);
+  const past = async (daysAgo: number, status: string, ideas: IdeaSeed[]) => {
+    const seeded = await seedRound(buyerId, person, { ideas });
+    await rest(`gift_rounds?id=eq.${seeded.roundId}`, {
+      method: "PATCH",
+      body: {
+        status,
+        occasion_date: dayFromNow(-daysAgo),
+        occasion_year: Number(dayFromNow(-daysAgo).slice(0, 4)),
+        ship_by_deadline: dayFromNow(-daysAgo - 10),
+        next_action_at: null,
+      },
+    });
+    return seeded;
+  };
+
+  await past(2 * 365 + 2, "skipped", []);
+  const cancelled = await past(365 + 2, "skipped", [{ title: "Reading lamp", totalCents: 3450 }]);
+  const title = "Loose-leaf tea sampler in a wooden gift box with six tins";
+  const { roundId, ideaIds } = await past(2, "delivered", [
+    { title: "Cozy throw blanket", totalCents: 4218 },
+    { title, totalCents: 1599 },
+  ]);
+  const at = (daysAgo: number) => `${dayFromNow(-daysAgo)}T15:00:00Z`;
+  await seedOrder(buyerId, cancelled.roundId, cancelled.ideaIds[0], {
+    status: "failed",
+    failure_type: "store_cancelled",
+    resolved: true,
+    total_cents: 3450,
+    refund_cents: 3450,
+  });
+  const delivered = { status: "delivered", placed_at: at(9), delivered_at: at(4), delivered_by: "zinc" };
+  const blanket = await seedOrder(buyerId, roundId, ideaIds[0], delivered);
+  const orderId = await seedOrder(buyerId, roundId, ideaIds[1], { ...delivered, delivered_at: at(3), total_cents: 1599 });
+  await rest("rpc/save_reaction", {
+    method: "POST",
+    body: {
+      p_user_id: buyerId,
+      p_order_id: blanket,
+      p_rating: "liked",
+      p_note: "Very soft, but a little small for the couch.",
+      p_fact_category: null,
+      p_fact_value: null,
+      p_today: dayFromNow(0),
+    },
+  });
+  return { personId: person.personId, roundId, unanswered: { orderId, title } };
+}

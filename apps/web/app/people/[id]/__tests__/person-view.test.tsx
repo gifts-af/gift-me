@@ -8,7 +8,8 @@ const getProfile = vi.hoisted(() =>
 );
 const countSavedGifts = vi.hoisted(() => vi.fn(async (...args: unknown[]) => (void args, 0)));
 const onDemandIdeas = vi.hoisted(() => vi.fn(async (...args: unknown[]) => (void args, [] as unknown[])));
-vi.mock("@/modules/concierge", () => ({ getPerson, getProfile, countSavedGifts, onDemandIdeas }));
+const hasPastGifts = vi.hoisted(() => vi.fn(async (...args: unknown[]) => (void args, false)));
+vi.mock("@/modules/concierge", () => ({ hasPastGifts, getPerson, getProfile, countSavedGifts, onDemandIdeas }));
 vi.mock("@/lib/app-settings", () => ({ appSettingInt: async () => cardEnabled.value }));
 vi.mock("@/lib/today", () => ({ todayForRequest: async () => "2026-11-01" }));
 vi.mock("@/lib/supabase/server", () => ({
@@ -152,6 +153,17 @@ describe("PersonView", () => {
     onDemandIdeas.mockResolvedValueOnce([{ id: "i1" }, { id: "i2" }, { id: "i3" }]);
     await show();
     expect(row()).toHaveTextContent("3");
+  });
+
+  it("has a Past gifts row only when there are some", async () => {
+    getPerson.mockResolvedValue(dad);
+    const { unmount } = await show();
+    expect(screen.queryByRole("link", { name: "Past gifts" })).toBeNull();
+    expect(hasPastGifts.mock.calls[0][0]).toBe("p1");
+    unmount();
+    hasPastGifts.mockResolvedValueOnce(true);
+    await show();
+    expect(screen.getByRole("link", { name: "Past gifts" })).toHaveAttribute("href", "/people/p1/gifts");
   });
 
   it("counts saved gifts, and says Linked for someone with a list", async () => {

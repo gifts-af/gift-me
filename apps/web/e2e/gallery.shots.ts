@@ -5,7 +5,7 @@ import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { createFreshUser } from "./fresh-user";
 import { localSupabase } from "./local-supabase";
-import { personFor, readyBuyer, seedFailedOrder, seedRound } from "./rounds";
+import { personFor, readyBuyer, seedFailedOrder, seedPastGifts, seedRound, type PastGiftsSeed } from "./rounds";
 import { addMother, addSavedGift, saveBudgets, saveOneGiftList } from "./seed";
 import { signIn, session, type Credentials } from "./sign-in";
 
@@ -52,7 +52,7 @@ const SIGNED_OUT: [name: string, url: string][] = [
 
 // Filled in by beforeAll: a fresh account with one person (with a saved gift) and a one-gift list,
 // plus a round awaiting approval and another with a gift to fix (ALL-29).
-type Seeded = { user: Credentials; personId: string; shareToken: string; round: { id: string; ideaIds: string[] }; fix: { roundId: string; orderId: string } };
+type Seeded = { user: Credentials; personId: string; shareToken: string; round: { id: string; ideaIds: string[] }; fix: { roundId: string; orderId: string }; past: PastGiftsSeed };
 const SIGNED_IN: [name: string, url: (s: Seeded) => string][] = [
   ["home", () => "/"],
   ["my-list", () => "/lists"],
@@ -64,6 +64,7 @@ const SIGNED_IN: [name: string, url: (s: Seeded) => string][] = [
   ["person-list", (s) => `/people/${s.personId}/list`],
   ["person-address", (s) => `/people/${s.personId}/address`],
   ["person-ideas", (s) => `/people/${s.personId}/ideas`],
+  ["person-past-gifts", (s) => `/people/${s.past.personId}/gifts`],
   ["add-person", () => "/people/new"],
   ["import-people", () => "/people/import"],
   ["settings", () => "/settings"],
@@ -75,6 +76,7 @@ const SIGNED_IN: [name: string, url: (s: Seeded) => string][] = [
   ["round", (s) => `/rounds/${s.round.id}`],
   ["round-buy", (s) => `/rounds/${s.round.id}/buy?ideas=${s.round.ideaIds.slice(0, 2).join(",")}`],
   ["round-fix", (s) => `/rounds/${s.fix.roundId}/fix/${s.fix.orderId}`],
+  ["round-reaction", (s) => `/rounds/${s.past.roundId}/reaction?gift=${s.past.unanswered.orderId}&r=loved`],
 ];
 
 for (const [name, url] of SIGNED_OUT) {
@@ -177,7 +179,7 @@ async function addOnDemandIdeas(user: Credentials, personId: string): Promise<vo
 // A round awaiting approval for Dad (one idea over his budget), and one for Grandpa whose first
 // pick's price went up, written as the engine and Zinc would leave them (ALL-29). The buyer can buy,
 // so the confirm page shows the fake Zinc's balance.
-async function addRounds(user: Credentials): Promise<Pick<Seeded, "round" | "fix">> {
+async function addRounds(user: Credentials): Promise<Pick<Seeded, "round" | "fix" | "past">> {
   const { id } = await readyBuyer(user);
   const ideas = [
     { title: "Rotary fly-tying vise", totalCents: 3150, productId: "B0GALLERY3", reason: "He asked for a new vise, and this one turns as he ties." },
@@ -189,7 +191,7 @@ async function addRounds(user: Credentials): Promise<Pick<Seeded, "round" | "fix
   const grandpa = await personFor(id, "Grandpa");
   const fixRound = await seedRound(id, grandpa, { budgetCents: 7500, ideas });
   const orderId = await seedFailedOrder(id, fixRound.roundId, fixRound.ideaIds[0], "price_up");
-  return { round: { id: round.roundId, ideaIds: round.ideaIds }, fix: { roundId: fixRound.roundId, orderId } };
+  return { round: { id: round.roundId, ideaIds: round.ideaIds }, fix: { roundId: fixRound.roundId, orderId }, past: await seedPastGifts(id, "Nora") };
 }
 
 async function shareToken(user: Credentials): Promise<string> {
