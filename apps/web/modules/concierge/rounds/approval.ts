@@ -17,7 +17,6 @@ import {
 } from "@gifts-af/core";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
-import { unstable_rethrow } from "next/navigation";
 import { errorFields, logEvent } from "@/lib/log";
 import { storeName } from "@gifts-af/core/store-page/link";
 import { hasPaidFeatures } from "../paid-features";
@@ -417,7 +416,6 @@ async function waitingOn(
     if (toldAt !== null && ideasFoundAt.every((at) => Date.parse(at) < Date.parse(toldAt))) return "told";
     return addressed ? "looking" : "address";
   } catch (err) {
-    unstable_rethrow(err);
     logEvent("round_waiting_failed", { round_id: r.id, user_id: r.user_id, ...errorFields(err) });
     return null;
   }
@@ -532,8 +530,9 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
   // From the ship-by day on, as approve_round refuses it.
   const pastDeadline = today >= r.ship_by_deadline;
   const ended = r.closed_at !== null || r.status === "skipped" || ORDERED_STATUSES.has(r.status);
-  // A round can also end with some of its gifts bought: those still count as ordered.
-  const bought = liveOrders.filter((o) => BOUGHT.has(o.status));
+  // An ordered round's orders stay placing until the store confirms them (reconcile_round never leaves
+  // an unconfirmed one there). A round can also end with only some of its gifts bought.
+  const bought = ORDERED_STATUSES.has(r.status) ? liveOrders : liveOrders.filter((o) => BOUGHT.has(o.status));
   let closedText: string | null = null;
   if (ended || pastDeadline) {
     if (bought.length > 0) closedText = `Already ordered: ${bought.map((o) => o.title).join(", ")}`;

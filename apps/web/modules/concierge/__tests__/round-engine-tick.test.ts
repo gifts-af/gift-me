@@ -144,7 +144,7 @@ describe("runTick", () => {
     expect(headsUp.subject).toBe(`${NAME}'s birthday: ${what}`);
     expect(headsUp.text).toContain("Amazon");
     expect(headsUp.text).toContain("Etsy");
-    expect(headsUp.text).not.toMatch(/bamazonb|etsy.com/);
+    for (const raw of ["amazon", "etsy.com"]) expect(headsUp.text).not.toContain(raw);
   });
 
   it("the approval emails link each idea to its buy page and the button to the round screen (ALL-29 AC-1)", async () => {

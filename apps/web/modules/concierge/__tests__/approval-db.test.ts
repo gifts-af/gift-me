@@ -581,13 +581,13 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
     expect((await roundView(r.roundId, await signedIn(u), new Date()))?.closedText).toBe("We're still confirming your order.");
   });
 
-  it("an ordered round whose only order is still placing says it's confirming, not ordered", async () => {
+  it("an ordered round whose only order is still placing says it's ordered: Zinc took it, and it stays placing until the store confirms", async () => {
     const u = await newUser();
     const r = await newRound(u);
     await placedOrder(u, r, 0);
     await pg.query("update concierge.orders set status = 'placing' where round_id = $1", [r.roundId]);
     await pg.query("update concierge.gift_rounds set status = 'ordered' where id = $1", [r.roundId]);
-    expect((await roundView(r.roundId, await signedIn(u), new Date()))?.closedText).toBe("We're still confirming your order.");
+    expect((await roundView(r.roundId, await signedIn(u), new Date()))?.closedText).toBe("Already ordered: Fly rod");
   });
 
   it("a gift the store cancelled in a round the tick hasn't closed yet leaves no gift on its way", async () => {
