@@ -1,5 +1,6 @@
-import { afterEach, describe, it, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
+import { afterEach, describe, it, expect, onTestFinished, vi } from "vitest";
+import { act, render, screen, fireEvent } from "@testing-library/react";
 import AddGiftPanel from "../add-gift-panel";
 
 // The details, image URL included, sit behind "Add by hand" (mock-up "list").
@@ -12,6 +13,17 @@ function fireLoad(img: HTMLElement, naturalWidth: number) {
   Object.defineProperty(img, "naturalWidth", { configurable: true, value: naturalWidth });
   fireEvent.load(img);
 }
+
+it("takes no link until the page can keep it (ALL-161)", async () => {
+  const ui = <AddGiftPanel onAdd={() => {}} />;
+  const container = document.body.appendChild(document.createElement("div"));
+  onTestFinished(() => container.remove());
+  container.innerHTML = renderToString(ui);
+  const link = () => container.querySelector("#product-url");
+  expect(link()).toBeDisabled();
+  await act(async () => void render(ui, { container, hydrate: true }));
+  expect(link()).toBeEnabled();
+});
 
 describe("AddGiftPanel image preview", () => {
   it("renders the preview when a real image loads", () => {

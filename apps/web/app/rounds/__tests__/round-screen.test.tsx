@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { RoundPageIdea, RoundPageOrder, RoundPageView } from "@/modules/concierge";
 import { IdeaPhoto } from "@/components/idea-photo";
@@ -101,6 +102,26 @@ function setup(
 const pick = (title: string) => userEvent.click(screen.getByRole("checkbox", { name: title }));
 
 describe("RoundScreen: picking", () => {
+  it("takes no ticks until the page can keep them (ALL-161)", async () => {
+    const ok = async () => ({ ok: true }) as const;
+    const ui = (
+      <RoundScreen
+        view={view({ ideas: [idea({ title: "Orchid" })] })}
+        rejectAction={async () => ({ ok: true, more: true })}
+        setBudgetAction={ok}
+        outlookAction={async () => true}
+        arrivedAction={ok}
+      />
+    );
+    const container = document.body.appendChild(document.createElement("div"));
+    onTestFinished(() => container.remove());
+    container.innerHTML = renderToString(ui);
+    const box = () => container.querySelector('input[type="checkbox"]');
+    expect(box()).toBeDisabled();
+    await act(async () => void render(ui, { container, hydrate: true }));
+    expect(box()).toBeEnabled();
+  });
+
   it('ticking two ideas shows "2 picked · $60 of $50"', async () => {
     const a = idea({ title: "Orchid" });
     const b = idea({ title: "Cocotte" });
