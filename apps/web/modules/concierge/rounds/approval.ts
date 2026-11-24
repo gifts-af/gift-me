@@ -8,6 +8,7 @@ import {
   isShippableAddress,
   nextBestIdea,
   packagesFromZinc,
+  rejectionFactKey,
   rejectionFacts,
   type CalendarDate,
   type Database,
@@ -59,16 +60,45 @@ async function listGiftsLeft(deps: DbDeps, roundId: string, personId: string): P
   return (await listGiftCandidates(deps.db, personId, roundId)).length > 0;
 }
 
+/** What a reason will do, for the sheet to say before sending (AC-13a). */
+export type RejectionOutlook = {
+  /** New ideas are looked for; otherwise "No more new ideas this time". */
+  more: boolean;
+  /** It leaves a fact the next ideas use. */
+  saves: boolean;
+  /** The next ideas must cost less: only AI ideas set that limit (roundCeiling). */
+  cheaper: boolean;
+};
+
 /**
- * Whether this choice still brings new ideas (runs_after_rejection), so the sheet says
- * "No more new ideas this time" for exactly that choice (AC-13a). Null when the owned idea isn't
- * one of the round's offered ideas. The caller has checked the round is the buyer's.
+ * Whether saving these leaves the reason in use: the typed one when there is one (it's always the
+ * last fact), otherwise any. A fact the buyer removed stays removed (reject_round_ideas).
+ */
+async function savesReason(deps: DbDeps, personId: string, facts: RejectionFact[], text: string | null): Promise<boolean> {
+  const mine = text?.trim() ? facts.filter((f) => f.category === "avoid").slice(-1) : facts;
+  if (mine.length === 0) return false;
+  const { data, error } = await concierge(deps)
+    .from("profile_facts")
+    .select("category, value")
+    .eq("person_id", personId)
+    .eq("active", false)
+    .in("category", ["owns", "avoid"]);
+  if (error) fail("Reading the removed facts failed", error);
+  const removed = new Set((data ?? []).map(rejectionFactKey));
+  return mine.some((f) => !removed.has(rejectionFactKey(f)));
+}
+
+/**
+ * What this choice will do: whether it still brings new ideas (runs_after_rejection), and what it
+ * saves. Null when the owned idea isn't one of the round's offered ideas. The caller has checked
+ * the round is the buyer's.
  */
 export async function rejectionOutlook(
   input: { roundId: string; code: RejectionCode; text: string | null; ownedIdeaId: string | null },
   deps: DbDeps,
-): Promise<boolean | null> {
-  const facts = factsFor(await offeredIdeas(deps, input.roundId), input.code, input.text, input.ownedIdeaId);
+): Promise<RejectionOutlook | null> {
+  const ideas = await offeredIdeas(deps, input.roundId);
+  const facts = factsFor(ideas, input.code, input.text, input.ownedIdeaId);
   if (facts === null) return null;
   const round = await concierge(deps).from("gift_rounds").select("person_id").eq("id", input.roundId).maybeSingle();
   if (round.error) fail("Loading the round failed", round.error);
@@ -80,7 +110,11 @@ export async function rejectionOutlook(
     p_list_gifts: await listGiftsLeft(deps, input.roundId, round.data.person_id),
   });
   if (error) fail("Reading the rejection outlook failed", error);
-  return data === true;
+  return {
+    more: data === true,
+    saves: await savesReason(deps, round.data.person_id, facts, input.text),
+    cheaper: input.code === "too_pricey" && ideas.some((i) => i.source === "generated"),
+  };
 }
 
 export type RejectInput = {
@@ -92,7 +126,7 @@ export type RejectInput = {
   /** What the sheet showed: true for new ideas, false for "No more new ideas this time". */
   expectMore: boolean;
 };
-export type RejectResult = { ok: true; more: boolean } | { ok: false; error: "not_found" | "busy" | "not_open" | "changed" | "too_long" };
+export type RejectResult = { ok: true; more: boolean; saved: boolean } | { ok: false; error: "not_found" | "busy" | "not_open" | "changed" | "too_long" };
 
 type OwnedRound = { id: string; user_id: string; person_id: string; occasion_id: string; status: string; budget_cents: number | null; closed_at: string | null };
 
@@ -135,6 +169,11 @@ export async function rejectRoundIdeas(input: RejectInput, deps: DbDeps): Promis
     const ideas = await offeredIdeas(deps, roundId);
     const facts = factsFor(ideas, code, text, input.ownedIdeaId);
     if (facts === null) return { ok: false, error: "not_found" };
+    // Only words on the page, so a failed read never blocks rejecting: it says nothing was saved.
+    const saved = await savesReason(deps, round.person_id, facts, text).catch((err: unknown) => {
+      logEvent("round.saved_unreadable", { round_id: roundId, user_id: userId, ...errorFields(err) });
+      return false;
+    });
     const { error } = await concierge(deps).rpc("reject_round_ideas", {
       p_round_id: roundId,
       p_user_id: userId,
@@ -164,7 +203,7 @@ export async function rejectRoundIdeas(input: RejectInput, deps: DbDeps): Promis
       // Ideas rejected: none when there's no search left (they stay buyable).
       count: input.expectMore ? ideas.length : 0,
     });
-    return { ok: true, more: input.expectMore };
+    return { ok: true, more: input.expectMore, saved };
   });
 }
 

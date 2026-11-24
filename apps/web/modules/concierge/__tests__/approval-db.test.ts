@@ -140,9 +140,9 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
     const u = await newUser();
     const r = await newRound(u);
     const input = { roundId: r.roundId, code: "not_style" as const, text: "Nothing plastic", ownedIdeaId: null };
-    expect(await rejectionOutlook(input, deps())).toBe(true);
+    expect(await rejectionOutlook(input, deps())).toMatchObject({ more: true });
 
-    expect(await reject(u, r, { text: "Nothing plastic" })).toEqual({ ok: true, more: true });
+    expect(await reject(u, r, { text: "Nothing plastic" })).toMatchObject({ ok: true, more: true });
     expect(await ideaStatuses(r.roundId)).toEqual(["rejected", "rejected"]);
     const rows = await rejections(r.roundId);
     expect(rows).toHaveLength(2);
@@ -167,9 +167,9 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
     const u = await newUser();
     // The next tick isn't before the ship-by day: new ideas couldn't be bought in time.
     const r = await newRound(u, { deadlineIn: 1 });
-    expect(await rejectionOutlook({ roundId: r.roundId, code: "has_it", text: null, ownedIdeaId: r.ideaIds[1] }, deps())).toBe(false);
+    expect(await rejectionOutlook({ roundId: r.roundId, code: "has_it", text: null, ownedIdeaId: r.ideaIds[1] }, deps())).toMatchObject({ more: false });
 
-    expect(await reject(u, r, { code: "has_it", ownedIdeaId: r.ideaIds[1], expectMore: false })).toEqual({ ok: true, more: false });
+    expect(await reject(u, r, { code: "has_it", ownedIdeaId: r.ideaIds[1], expectMore: false })).toMatchObject({ ok: true, more: false });
     expect(await ideaStatuses(r.roundId)).toEqual(["proposed", "proposed"]);
     expect(await rejections(r.roundId)).toEqual([{ idea_id: null, reason_code: "has_it", reason_text: null }]);
     expect(await facts(r.personId)).toEqual([{ category: "owns", value: "Reel", source: "rejection" }]);
@@ -186,13 +186,13 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
     // No facts: only the list can bring ideas, and the round already offers the vase.
     const r = await newRound(u, { listId, ideas: [{ title: "Vase", listItem: itemIds[0] }] });
     const input = { roundId: r.roundId, code: "too_pricey" as const, text: null, ownedIdeaId: null };
-    expect(await rejectionOutlook(input, deps())).toBe(true);
+    expect(await rejectionOutlook(input, deps())).toMatchObject({ more: true });
 
     // Someone claims the lamp: nothing is left to find.
     await pg.query("insert into lists.gift_claims (item_id, claimer_id, claimer_name) values ($1, $2, 'Bea')", [itemIds[1], owner.id]);
-    expect(await rejectionOutlook(input, deps())).toBe(false);
+    expect(await rejectionOutlook(input, deps())).toMatchObject({ more: false });
     expect(await reject(u, r, { code: "too_pricey", expectMore: true })).toEqual({ ok: false, error: "changed" });
-    expect(await reject(u, r, { code: "too_pricey", expectMore: false })).toEqual({ ok: true, more: false });
+    expect(await reject(u, r, { code: "too_pricey", expectMore: false })).toMatchObject({ ok: true, more: false });
     expect(await ideaStatuses(r.roundId)).toEqual(["proposed"]);
     expect(await roundRow(r.roundId)).toMatchObject({ status: "awaiting_approval", locked_until: null });
   });
@@ -202,7 +202,7 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
     const r = await newRound(u);
     await pg.query("update concierge.app_settings set value = '0' where key = 'idea_engine_enabled'");
     try {
-      expect(await rejectionOutlook({ roundId: r.roundId, code: "not_style", text: "No plastic", ownedIdeaId: null }, deps())).toBe(false);
+      expect(await rejectionOutlook({ roundId: r.roundId, code: "not_style", text: "No plastic", ownedIdeaId: null }, deps())).toMatchObject({ more: false });
     } finally {
       await pg.query("update concierge.app_settings set value = '1' where key = 'idea_engine_enabled'");
     }
@@ -251,7 +251,7 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
   it("the saved reason shows in activeFacts for the person", async () => {
     const u = await newUser();
     const r = await newRound(u);
-    expect(await reject(u, r, { code: "too_generic", text: "Something handmade" })).toEqual({ ok: true, more: true });
+    expect(await reject(u, r, { code: "too_generic", text: "Something handmade" })).toMatchObject({ ok: true, more: true });
     const shown = (await activeFacts(await signedIn(u), r.personId)).map((f) => f.value);
     expect(shown).toEqual(expect.arrayContaining(["Too generic: Fly rod, Reel", "Something handmade"]));
   });
@@ -281,6 +281,75 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
     expect(await setRoundBudget({ userId: u.id, roundId: busy.roundId, budgetCents: 5000 }, await signedIn(u), deps())).toBe("busy");
     const closed = await newRound(u, { budget: null, status: "skipped" });
     expect(await setRoundBudget({ userId: u.id, roundId: closed.roundId, budgetCents: 5000 }, await signedIn(u), deps())).toBe("not_open");
+  });
+
+  // ─── what a reason saves ──
+
+  const outlookOf = (r: Round, code: "has_it" | "not_style" | "too_pricey" | "too_generic", o: { text?: string; owned?: string } = {}) =>
+    rejectionOutlook({ roundId: r.roundId, code, text: o.text ?? null, ownedIdeaId: o.owned ?? null }, deps());
+
+  it("an AI idea's reason is saved; Too pricey saves nothing but makes the next ideas cheaper", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    expect(await outlookOf(r, "not_style")).toMatchObject({ saves: true, cheaper: false });
+    expect(await outlookOf(r, "has_it", { owned: r.ideaIds[0] })).toMatchObject({ saves: true, cheaper: false });
+    expect(await outlookOf(r, "too_pricey")).toMatchObject({ saves: false, cheaper: true });
+    expect(await outlookOf(r, "too_pricey", { text: "No cookware" })).toMatchObject({ saves: true, cheaper: true });
+  });
+
+  it("list gifts alone save nothing and set no price limit; a typed reason is still saved", async () => {
+    const u = await newUser();
+    const owner = await newUser();
+    const { listId, itemIds } = await newList(owner, [{ name: "Vase" }, { name: "Lamp" }]);
+    const r = await newRound(u, { listId, ideas: [{ title: "Vase", listItem: itemIds[0] }] });
+    for (const code of ["not_style", "too_generic", "too_pricey"] as const) expect(await outlookOf(r, code)).toMatchObject({ saves: false, cheaper: false });
+    expect(await outlookOf(r, "has_it", { owned: r.ideaIds[0] })).toMatchObject({ saves: false });
+    expect(await outlookOf(r, "not_style", { text: "No glass" })).toMatchObject({ saves: true });
+  });
+
+  it("a reason the buyer removed before isn't saved again, whatever its case and spacing", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    await pg.query(
+      "insert into concierge.profile_facts (user_id, person_id, category, value, source, active) values ($1, $2, 'avoid', 'No  Plastic', 'rejection', false)",
+      [u.id, r.personId],
+    );
+    expect(await outlookOf(r, "too_pricey", { text: " no plastic " })).toMatchObject({ saves: false });
+    expect(await outlookOf(r, "too_pricey", { text: "no glass" })).toMatchObject({ saves: true });
+    // The typed reason is what the buyer reads "the reason" as, so the AI titles being saved isn't enough.
+    expect(await outlookOf(r, "not_style", { text: "no plastic" })).toMatchObject({ saves: false });
+    expect(await reject(u, r, { code: "not_style", text: "no plastic" })).toMatchObject({ ok: true, saved: false });
+  });
+
+  it("a failed read of what's saved never blocks rejecting", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    const d = deps();
+    const schema = d.db.schema.bind(d.db);
+    const db = Object.create(d.db) as ZincDeps["db"];
+    db.schema = ((name: "concierge") => {
+      const s = schema(name);
+      const from = s.from.bind(s);
+      s.from = ((table: string) => {
+        if (table === "profile_facts") throw new Error("read failed");
+        return from(table as "gift_rounds");
+      }) as typeof s.from;
+      return s;
+    }) as typeof db.schema;
+    expect(await rejectRoundIdeas({ userId: u.id, roundId: r.roundId, code: "not_style", text: null, ownedIdeaId: null, expectMore: true }, { ...d, db })).toEqual({ ok: true, more: true, saved: false });
+  });
+
+  it("rejecting says whether the reason was saved, as the outlook did", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    expect(await reject(u, r, { code: "not_style" })).toEqual({ ok: true, more: true, saved: true });
+    const bare = await newRound(u, { ideas: [{ title: "Net" }] });
+    await pg.query("insert into concierge.idea_runs (user_id, person_id, round_id, started_at, outcome) select $1, $2, $3, now() - interval '1 minute', 'saved' from generate_series(1, 2)", [
+      u.id,
+      bare.personId,
+      bare.roundId,
+    ]);
+    expect(await reject(u, bare, { code: "too_pricey", expectMore: false })).toEqual({ ok: true, more: false, saved: false });
   });
 
   // ─── page reads (AC-3, AC-18, AC-29, AC-30, AC-30a) ────────────────────────
@@ -676,7 +745,7 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
     // logEvent writes one JSON event per line.
     const spy = vi.spyOn(console, "log").mockImplementation(() => {});
     try {
-      expect(await reject(u, r, { expectMore: false })).toEqual({ ok: true, more: false });
+      expect(await reject(u, r, { expectMore: false })).toMatchObject({ ok: true, more: false });
       const events = spy.mock.calls.map(([line]) => JSON.parse(String(line)));
       expect(events).toContainEqual(
         expect.objectContaining({ event: "round.rejection_noted", round_id: r.roundId, user_id: u.id, reason_code: "not_style", count: 0 }),

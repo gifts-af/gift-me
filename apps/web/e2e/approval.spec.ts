@@ -244,9 +244,10 @@ test("None of these with no search left keeps the ideas buyable and sends no ema
   await page.getByRole("button", { name: "None of these" }).click();
   const sheet = page.getByRole("dialog", { name: "Why not these?" });
   await sheet.getByRole("button", { name: "Too pricey" }).click();
-  await expect(sheet.getByText("No more new ideas this time")).toBeVisible();
-  await sheet.getByRole("button", { name: "Save the reason" }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Saved. These ideas are still here to buy." })).toBeVisible();
+  await expect(sheet.getByText(/^No more new ideas this time/)).toBeVisible();
+  await sheet.getByRole("button", { name: "Keep these ideas" }).click();
+  // "Too pricey" saves no fact, so nothing says Saved.
+  await expect(page.getByRole("status").filter({ hasText: /^These ideas are still here to buy\.$/ })).toBeVisible();
 
   expect((await roundOf(roundId)).status).toBe("awaiting_approval");
   expect((await ideasOf(roundId)).map((i) => i.status)).toEqual(["proposed", "proposed"]);

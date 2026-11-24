@@ -11,7 +11,7 @@ import { createClient } from "@/lib/supabase/server";
 import { roundAccess, roundView } from "@/modules/concierge";
 import { roundDbDeps, settingInt } from "@/lib/wiring";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { markArrived, outlookAction, rejectAction, setBudgetAction } from "../actions";
+import { markArrived, rejectAction, rejectionOutlookAction, setBudgetAction } from "../actions";
 import { OtherAccount } from "../access";
 import { reactionsOpen } from "../reactions-open";
 import { RoundScreen } from "./round-screen";
@@ -66,7 +66,7 @@ async function Loaded({ params }: { params: Promise<{ id: string }> }) {
         view={view}
         rejectAction={rejectAction}
         setBudgetAction={setBudgetAction}
-        outlookAction={outlookAction}
+        outlookAction={rejectionOutlookAction}
         arrivedAction={tracking ? markArrived : null}
         reactionsOpen={await reactionsOpen(supabase, view.round.occasionDate, new Date())}
       />

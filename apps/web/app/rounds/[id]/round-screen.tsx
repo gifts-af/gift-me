@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   daysBetween,
@@ -19,7 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useHydrated } from "@/lib/use-hydrated";
 import { cn } from "@/lib/utils";
-import type { BuyYourself, RoundPageIdea, RoundPageOrder, RoundPageView } from "@/modules/concierge";
+import type { BuyYourself, RejectionOutlook, RoundPageIdea, RoundPageOrder, RoundPageView } from "@/modules/concierge";
 import { money } from "@/app/people/[id]/money";
 import { deliveredText, storeCancelledText } from "../gift-status";
 import { OverBudgetSheet } from "../over-budget-sheet";
@@ -33,7 +33,7 @@ import { personAddressHref } from "../ship-to";
 // with "It arrived" on a shipped one (design/plans/ALL-33-tracking.md).
 
 export type RejectResult =
-  | { ok: true; more: boolean }
+  | { ok: true; more: boolean; saved: boolean }
   | { ok: false; error: "not_found" | "busy" | "not_open" | "changed" | "too_long" | "session" | "bad_form" };
 export type BudgetResult = { ok: true } | { ok: false; error: string };
 export type ArrivedAction = (roundId: string, orderId: string) => Promise<{ ok: boolean }>;
@@ -345,6 +345,18 @@ function BudgetField({ roundId, action }: { roundId: string; action: (roundId: s
   );
 }
 
+const UNREAD = "That didn't go through.";
+
+/** How long typing pauses before the sheet asks again what the reason will do. */
+const TYPING_PAUSE_MS = 400;
+
+/** What the server says this reason will do, and nothing it didn't say. */
+function outlookWords(o: RejectionOutlook): string {
+  if (!o.more) return `No more new ideas this time. ${o.saves ? "The reason is saved, and these" : "These"} ideas stay here to buy.`;
+  if (o.saves) return o.cheaper ? "The reason is saved, and the next ideas will cost less." : "The reason is saved for next time.";
+  return o.cheaper ? "The next ideas will cost less." : "We'll leave these out this time.";
+}
+
 function NoneOfThese({
   roundId,
   ideas,
@@ -356,30 +368,48 @@ function NoneOfThese({
   /** The ideas still on offer, for "Which one?". */
   ideas: RoundPageIdea[];
   rejectAction: (roundId: string, form: FormData) => Promise<RejectResult>;
-  outlookAction: (roundId: string, input: OutlookInput) => Promise<boolean | null>;
-  onDone: (more: boolean) => void;
+  outlookAction: (roundId: string, input: OutlookInput) => Promise<RejectionOutlook | null>;
+  onDone: (more: boolean, saved: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState<RejectionCode | null>(null);
   const [owned, setOwned] = useState<string | null>(null);
   const [text, setText] = useState("");
-  // Whether this choice still brings new ideas (AC-13a); null until the server has said.
-  const [more, setMore] = useState<boolean | null>(null);
+  // What this choice will do (AC-13a); null until the server has said, for exactly this choice and text.
+  const [outlook, setOutlook] = useState<RejectionOutlook | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // The last check couldn't be read, so there's something to try again.
+  const [failed, setFailed] = useState(false);
   const [sending, startSending] = useTransition();
   const asked = useRef(0);
+  const typing = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(typing.current), []);
 
-  async function check(input: OutlookInput) {
-    const seq = ++asked.current;
-    let answer: boolean | null;
+  /** Forgets the last answer, and any still on its way. */
+  function forget() {
+    asked.current++;
+    clearTimeout(typing.current);
+    setOutlook(null);
+    setFailed(false);
+  }
+
+  /** Asks what this choice will do; true when the server answered for it. */
+  async function check(input: OutlookInput): Promise<boolean> {
+    forget();
+    const seq = asked.current;
+    let answer: RejectionOutlook | null;
     try {
       answer = await outlookAction(roundId, input);
     } catch {
       answer = null;
     }
-    if (seq !== asked.current) return;
-    if (answer === null) setError(TRY_AGAIN);
-    setMore(answer);
+    if (seq !== asked.current) return false;
+    if (answer === null) {
+      setError(UNREAD);
+      setFailed(true);
+    } else setError(null);
+    setOutlook(answer);
+    return answer !== null;
   }
 
   const trimmed = () => text.trim() || null;
@@ -388,28 +418,32 @@ function NoneOfThese({
     setCode(next);
     setOwned(null);
     setError(null);
-    if (next === "has_it") {
-      asked.current++;
-      setMore(null);
-    } else void check({ code: next, ownedIdeaId: null, text: trimmed() });
+    if (next === "has_it") forget();
+    else void check({ code: next, ownedIdeaId: null, text: trimmed() });
   }
 
   function chooseOwned(id: string) {
     setOwned(id);
+    setError(null);
     void check({ code: "has_it", ownedIdeaId: id, text: trimmed() });
   }
 
-  function textDone() {
-    if (code && (code !== "has_it" || owned)) void check({ code, ownedIdeaId: owned, text: trimmed() });
+  // The answer was for the old text: forget it, and ask again once typing pauses.
+  function type(next: string) {
+    setText(next);
+    setError(null);
+    forget();
+    if (!code || (code === "has_it" && !owned)) return;
+    typing.current = setTimeout(() => void check({ code, ownedIdeaId: owned, text: next.trim() || null }), TYPING_PAUSE_MS);
   }
 
   function send() {
-    if (!code || more === null) return;
+    if (!code || outlook === null) return;
     const form = new FormData();
     form.set("code", code);
     if (owned) form.set("owned", owned);
     form.set("text", text);
-    form.set("expectMore", more ? "1" : "0");
+    form.set("expectMore", outlook.more ? "1" : "0");
     setError(null);
     startSending(async () => {
       let result: RejectResult;
@@ -421,16 +455,15 @@ function NoneOfThese({
       }
       if (result.ok) {
         setOpen(false);
-        onDone(result.more);
+        onDone(result.more, result.saved);
       } else if (result.error === "changed") {
         // The outlook moved since the sheet showed it: nothing was saved, so show it again.
-        await check({ code, ownedIdeaId: owned, text: trimmed() });
-        setError("That changed. Check and send again.");
+        if (await check({ code, ownedIdeaId: owned, text: trimmed() })) setError("That changed. Check and send again.");
       } else setError(REJECT_ERRORS[result.error]);
     });
   }
 
-  const ready = code !== null && (code !== "has_it" || owned !== null) && more !== null;
+  const ready = code !== null && (code !== "has_it" || owned !== null) && outlook !== null;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -440,13 +473,14 @@ function NoneOfThese({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Why not these?</DialogTitle>
-          <DialogDescription>The reason is saved to what we know, so the next ideas avoid it.</DialogDescription>
+          <DialogDescription>Tell us why none of these fit.</DialogDescription>
         </DialogHeader>
         <div className="flex flex-wrap gap-2">
           {CHIPS.map((c) => (
             <button
               key={c.code}
               type="button"
+              disabled={sending}
               aria-pressed={code === c.code}
               onClick={() => chooseCode(c.code)}
               className={cn(
@@ -468,6 +502,7 @@ function NoneOfThese({
                   name="owned"
                   value={i.id}
                   checked={owned === i.id}
+                  disabled={sending}
                   onChange={() => chooseOwned(i.id)}
                   className="size-5 flex-none accent-primary"
                 />
@@ -482,26 +517,29 @@ function NoneOfThese({
             value={text}
             maxLength={FACT_VALUE_MAX}
             rows={3}
-            onChange={(e) => setText(e.target.value)}
-            onBlur={textDone}
+            disabled={sending}
+            onChange={(e) => type(e.target.value)}
             className="min-h-20 w-full resize-y rounded-md border border-input bg-background px-3 py-2.5 text-base"
           />
         </label>
-        {more === false && (
-          <div role="note" className="flex flex-col gap-0.5 rounded-md bg-muted px-3 py-2 text-[13px]">
-            <span className="font-semibold">No more new ideas this time</span>
-            <span className="text-muted-foreground">The reason is saved, and these ideas stay here to buy.</span>
-          </div>
-        )}
+        {/* Always here, so a screen reader announces what appears in it. */}
+        <p role="status" aria-label="What happens" className={cn("text-[13px] text-muted-foreground", outlook && "rounded-md bg-muted px-3 py-2")}>
+          {outlook ? outlookWords(outlook) : ""}
+        </p>
         {error && (
           <p role="alert" className="text-[13px] text-destructive">
             {error}
           </p>
         )}
+        {failed && code && (
+          <Button type="button" variant="outline" onClick={() => void check({ code, ownedIdeaId: owned, text: trimmed() })}>
+            Try again
+          </Button>
+        )}
         <Button type="button" disabled={!ready || sending} onClick={send}>
-          {more === false ? "Save the reason" : "Find new ideas"}
+          {!outlook || outlook.more ? "Find new ideas" : outlook.saves ? "Save the reason" : "Keep these ideas"}
         </Button>
-        {more === true && <p className="text-center text-[13px] text-muted-foreground">New ideas come by email, usually by tomorrow.</p>}
+        {outlook?.more && <p className="text-center text-[13px] text-muted-foreground">New ideas come by email, usually by tomorrow.</p>}
       </DialogContent>
     </Dialog>
   );
@@ -520,8 +558,8 @@ export function RoundScreen({
   rejectAction: (roundId: string, form: FormData) => Promise<RejectResult>;
   /** `setBudgetAction` */
   setBudgetAction: (roundId: string, form: FormData) => Promise<BudgetResult>;
-  /** `outlookAction`: whether this reason still brings new ideas; null when it couldn't be read. */
-  outlookAction: (roundId: string, input: OutlookInput) => Promise<boolean | null>;
+  /** `rejectionOutlookAction`: what this reason will do; null when it couldn't be read. */
+  outlookAction: (roundId: string, input: OutlookInput) => Promise<RejectionOutlook | null>;
   /** `markArrived`; null while order tracking is switched off, which hides "It arrived". */
   arrivedAction: ArrivedAction | null;
   /** Whether a delivered gift asks how it went: the switch is on and the occasion has come. */
@@ -740,10 +778,10 @@ export function RoundScreen({
           ideas={offered}
           rejectAction={rejectAction}
           outlookAction={outlookAction}
-          onDone={(more) => {
+          onDone={(more, saved) => {
             setPicked([]);
             setOverOk(false);
-            setDone(more ? "Looking again. New ideas will come by email." : "Saved. These ideas are still here to buy.");
+            setDone(more ? "Looking again. New ideas will come by email." : saved ? "Saved. These ideas are still here to buy." : "These ideas are still here to buy.");
           }}
         />
       )}
