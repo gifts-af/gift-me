@@ -155,6 +155,19 @@ describe.skipIf(!stack)("reactions (real local database)", () => {
       expect(await facts(r.personId)).toEqual([expect.objectContaining({ value: "Fly rod", active: false })]);
     });
 
+    it("an untouched fact follows the note: added, changed and cleared (AC-8)", async () => {
+      const r = await fresh();
+      const values = async () => (await facts(r.personId)).map((f) => f.value);
+      await save(r.orderIds[0], "returned");
+      expect(await values()).toEqual([]);
+      await save(r.orderIds[0], "returned", "too long");
+      expect(await values()).toEqual(["Returned Fly rod: too long"]);
+      await save(r.orderIds[0], "returned", "snapped");
+      expect(await values()).toEqual(["Returned Fly rod: snapped"]);
+      await save(r.orderIds[0], "returned");
+      expect(await values()).toEqual([]);
+    });
+
     it("a deleted fact isn't brought back by a note edit (AC-8)", async () => {
       const r = await fresh();
       await save(r.orderIds[0], "loved");

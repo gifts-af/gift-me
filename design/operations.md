@@ -729,7 +729,7 @@ on conflict (month, vendor) do update set cents = excluded.cents;
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `reactions_enabled` | 1 | Off switch. At 0 nothing is asked or closed, saving is refused ("Not available right now"), and the round screen's link and the "Past gifts" row are hidden. A missing row fails the step loudly (`reactions.run_failed`) |
+| `reactions_enabled` | 1 | Off switch. At 0 nothing is asked or closed, saving is refused ("Not available right now"), and the links to answer are hidden. Past gifts still shows. Any of these four settings missing raises an error, even when this is 0: the daily step alerts (`reactions.run_failed`) if one of the first three is gone, and saving fails without this one or the note limit |
 | `reaction_prompt_after_days` | 1 | Days after the latest of the occasion date, the last gift arriving and the round becoming delivered |
 | `reaction_close_days` | 7 | Days after that when a delivered round closes, answered or not |
 | `reaction_note_max_chars` | 500 | Longest note, in characters |
@@ -746,7 +746,7 @@ on conflict (month, vendor) do update set cents = excluded.cents;
 | `reaction.saved` | An answer was saved (`complete`: the round closed with it) |
 | `reaction.refused` | An answer was turned away, with a `reason` (`off`, `too_early`, `not_delivered`, `sensitive`, `note_too_long`, `not_found`) |
 | `reaction.save_failed` | Saving threw. The buyer saw "try again" |
-| `reaction.switch_unread` | The page couldn't read `reactions_enabled`, so it hid the links and refused the save |
+| `reaction.switch_unread` | A page couldn't read `reactions_enabled`, so it hid the links to answer. It refuses nothing: a save reads the switch itself |
 | `reaction.history_check_failed` | The "Past gifts" row couldn't check for history, so it was left out |
 
 ### Reactions aren't going out
@@ -756,7 +756,7 @@ For `reactions.run_failed` or `reactions.ask_failed`:
 1. Look at the event's error fields (`name`, `code`) in the Vercel logs. For `ask_failed`, `phase` says where it failed and `round_id` which round. Check Resend (status, key, a bounced address) for a refused email.
 2. Nothing is lost: each key is given back, and the next tick asks again until the round's close date. After that the round closes unasked, so look within `reaction_close_days`.
 3. For `run_failed`, check the database and that the four settings above exist in `app_settings`. To stop the noise while you fix it, set `reactions_enabled` to 0 and read **Turning it back on**.
-4. If `ask_failed` has `phase` `forget`, the key couldn't be given back, so that round won't be asked again. To ask it, delete its row (`select * from concierge.round_sends where round_id = '<round_id>' and step = 'reaction_prompt';`), then wait for the next tick.
+4. If `ask_failed` has `phase` `forget`, the key couldn't be given back, so that round won't be asked again. To ask it, delete its row (`delete from concierge.round_sends where round_id = '<round_id>' and step = 'reaction_prompt';`), then wait for the next tick.
 
 ### A round never closes
 

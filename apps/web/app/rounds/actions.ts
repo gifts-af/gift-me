@@ -277,7 +277,8 @@ export type SaveReactionResult = { ok: true; complete: boolean } | { ok: false; 
 
 const ReactionForm = z.object({
   rating: z.enum(RATINGS),
-  // An input bound, not the limit: the database checks reaction_note_max_chars (T23).
+  // Only a bound on what we'll read, well above the real limit. The database checks the note
+  // against reaction_note_max_chars (T23); setting that above this would need this raised too.
   note: z.string().max(2000),
 });
 

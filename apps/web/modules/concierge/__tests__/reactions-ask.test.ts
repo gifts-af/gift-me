@@ -93,6 +93,15 @@ describe("runReactions", () => {
     expect(named("reactions.ask_failed").map((e) => `${e.round_id} ${e.phase}`)).toEqual(["r1 send", "r2 send", "r3 send", "r1 forget"]);
   });
 
+  it("rounds that can't be put in order give every key back, and the next buyer is still asked", async () => {
+    const h = setup({ r1: ["o1"], r2: ["o2"], r3: ["o3"] }, { r1: "user-a", r2: "user-a", r3: "user-b" });
+    h.store.reactionAsks.get("r1")!.occasionDate = "not a date" as never;
+    expect(await h.run()).toEqual({ closed: 0, asked: 1 });
+    expect(h.emails.map((e) => e.to)).toEqual(["user-b@example.com"]);
+    expect([h.asked("r1"), h.asked("r2"), h.asked("r3")]).toEqual([false, false, true]);
+    expect(named("reactions.ask_failed").map((e) => `${e.round_id} ${e.phase}`)).toEqual(["r1 send", "r2 send"]);
+  });
+
   it("a close that throws doesn't skip asking, and still fails the run", async () => {
     const h = setup();
     vi.spyOn(h.store, "closeReactedRounds").mockRejectedValue(new Error("close"));

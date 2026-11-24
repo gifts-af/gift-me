@@ -47,9 +47,9 @@ async function askBuyer(userId: string, roundIds: string[], deps: AskDeps): Prom
     if (ask) claimed.push({ roundId, ask });
   }
   if (claimed.length === 0) return 0;
-  // Earliest occasion first; the round id settles ties, since SQL gives no order.
-  claimed.sort((a, b) => compareDates(a.ask.occasionDate, b.ask.occasionDate) || (a.roundId < b.roundId ? -1 : 1));
   try {
+    // Earliest occasion first; the round id settles ties, since SQL gives no order.
+    claimed.sort((a, b) => compareDates(a.ask.occasionDate, b.ask.occasionDate) || (a.roundId < b.roundId ? -1 : 1));
     const result = await send(userId, claimed, deps);
     if (result.ok) return claimed.length;
     for (const c of claimed) failed("send", userId, c.roundId);

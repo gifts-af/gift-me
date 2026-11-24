@@ -5,7 +5,8 @@ import { rest, readyBuyer, seedPastGifts } from "./rounds";
 import { signIn } from "./sign-in";
 
 // How a gift went over: the page an email's answer opens, and the person's past gifts, against the
-// local Supabase. Each test has its own fresh buyer.
+// local Supabase. Each test has its own fresh buyer. Another spec's tick covers every buyer, so it may
+// claim or close these rounds at any moment: never assert a round's status or an email here.
 
 const reactionsOf = (orderId: string) => rest<{ rating: string; note: string | null }[]>(`reactions?select=rating,note&order_id=eq.${orderId}`);
 

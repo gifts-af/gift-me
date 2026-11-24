@@ -5,7 +5,7 @@
 -- except where a test is about it.
 begin;
 \ir _helpers.psql
-select plan(124);
+select plan(142);
 
 -- ─── Settings, as shipped ────────────────────────────────────────────────────
 select is(concierge.setting_int('reactions_enabled'), 1, 'reactions_enabled ships on');
@@ -166,14 +166,15 @@ select is(tests.rx_fact(:'p', 'loved', 'Lamp'), 0, 'AC-8 ... the old fact is gon
 select is(tests.rx_fact(:'p', 'avoid', 'Didn''t love: Lamp: too big'), 1, 'AC-8 ... and the new one is in');
 select results_eq(format('select rating, note, fact_category from concierge.reactions where order_id = %L', :'o2'),
   $$values ('meh', 'too big', 'avoid')$$, 'AC-8 ... and stored on the reaction');
--- The same rating again touches only the note, whatever fact comes with it.
+-- The same rating with another note: the fact follows the note.
 select tests.rx_save(:'a', :'o2', 'meh', 'far too big', 'avoid', 'Didn''t love: Lamp: far too big');
 select is((select note from concierge.reactions where order_id = :'o2'), 'far too big', 'a same-rating save updates the note');
-select is(tests.rx_fact(:'p', 'avoid', 'Didn''t love: Lamp: far too big'), 0, '... and writes no fact');
-select is(tests.rx_fact(:'p', 'avoid', 'Didn''t love: Lamp: too big'), 1, '... and removes none');
+select is(tests.rx_fact(:'p', 'avoid', 'Didn''t love: Lamp: too big'), 0, '... the old text is gone');
+select is(tests.rx_fact(:'p', 'avoid', 'Didn''t love: Lamp: far too big'), 1, '... the new text is in');
+select is((select fact_value from concierge.reactions where order_id = :'o2'), 'Didn''t love: Lamp: far too big', '... and stored on the reaction');
 -- Changed to a rating with no fact.
 select tests.rx_save(:'a', :'o2', 'liked');
-select is(tests.rx_fact(:'p', 'avoid', 'Didn''t love: Lamp: too big'), 0, 'a rating with no fact removes the old one');
+select is(tests.rx_fact(:'p', 'avoid', 'Didn''t love: Lamp: far too big'), 0, 'a rating with no fact removes the old one');
 select is((select coalesce(fact_category, fact_value) from concierge.reactions where order_id = :'o2'), null, '... and the reaction stores none');
 
 -- A fact the buyer deleted isn't brought back by a repeat save.
@@ -208,7 +209,79 @@ select is((select active from concierge.profile_facts where person_id = :'p' and
 select is(tests.rx_fact(:'p', 'interest', 'Book'), 1, 'AC-8 a fact moved to another category stays');
 select tests.rx_save(:'a', :'ot', 'loved', null, 'loved', 'Scarf');
 select is((select active from concierge.profile_facts where person_id = :'p' and value = 'Scarf'), false, 'AC-8 changing back doesn''t turn it on');
-select is((select fact_value from concierge.reactions where order_id = :'ot'), null, '... and the reaction doesn''t claim it');
+select tests.rx_save(:'a', :'ot', 'loved', 'too warm', 'loved', 'Scarf: too warm');
+select is(tests.rx_fact(:'p', 'loved', 'Scarf: too warm'), 0, '... and a note edit after it writes no other fact');
+
+-- A note edit leaves a fact the buyer edited, turned off, moved or deleted as it is.
+select tests.reset_role();
+select tests.rx_round(:'p') as rn \gset
+select tests.rx_order(:'rn') as n1 \gset
+select tests.rx_order(:'rn') as n2 \gset
+select tests.rx_order(:'rn') as n3 \gset
+select tests.rx_order(:'rn') as n4 \gset
+select tests.rx_order(:'rn') as n5 \gset
+select tests.rx_order(:'rn') as n6 \gset
+select tests.rx_order(:'rn') as n7 \gset
+select tests.act_as_server();
+select tests.rx_save(:'a', :'n1', 'loved', null, 'loved', 'Hat');
+select tests.rx_save(:'a', :'n2', 'loved', null, 'loved', 'Belt');
+select tests.rx_save(:'a', :'n3', 'loved', null, 'loved', 'Wallet');
+select tests.rx_save(:'a', :'n4', 'returned', 'broke', 'avoid', 'Returned Clock: broke');
+select tests.reset_role();
+update concierge.profile_facts set value = 'Big hats' where person_id = :'p' and value = 'Hat';
+update concierge.profile_facts set active = false where person_id = :'p' and value = 'Belt';
+update concierge.profile_facts set category = 'interest' where person_id = :'p' and value = 'Wallet';
+delete from concierge.profile_facts where person_id = :'p' and value = 'Returned Clock: broke';
+select tests.act_as_server();
+select tests.rx_save(:'a', :'n1', 'loved', 'x', 'loved', 'Hat: x');
+select tests.rx_save(:'a', :'n2', 'loved', 'x', 'loved', 'Belt: x');
+select tests.rx_save(:'a', :'n3', 'loved', 'x', 'loved', 'Wallet: x');
+select tests.rx_save(:'a', :'n4', 'returned');
+select tests.rx_save(:'a', :'n4', 'returned', 'late', 'avoid', 'Returned Clock: late');
+select results_eq(
+  format($q$select value, active from concierge.profile_facts where person_id = %L and value_key ~ '(hat|belt|wallet|clock)' order by value$q$, :'p'),
+  $$values ('Belt', false), ('Big hats', true), ('Wallet', true)$$,
+  'AC-8 a note edit leaves an edited, off, moved or deleted fact as the buyer left it, and adds none');
+select is((select fact_value from concierge.reactions where order_id = :'n4'), 'Returned Clock: broke', '... clearing the note first doesn''t forget that the buyer deleted it');
+
+-- A note added to an answer that had no fact, then cleared, then added again.
+select tests.rx_save(:'a', :'n5', 'returned');
+select tests.rx_save(:'a', :'n5', 'returned', 'too loud', 'avoid', 'Returned Drum: too loud');
+select results_eq(
+  format($q$select f.source, f.confirmed, f.active, x.fact_category, x.fact_value
+              from concierge.profile_facts f join concierge.reactions x on x.id = f.source_id
+             where x.order_id = %L$q$, :'n5'),
+  $$values ('reaction', true, true, 'avoid', 'Returned Drum: too loud')$$, 'a note added to a returned gift writes its fact, recorded');
+select tests.rx_save(:'a', :'n5', 'returned', '  ');
+select is(tests.rx_fact(:'p', 'avoid', 'Returned Drum: too loud'), 0, 'clearing the note removes it');
+select is((select coalesce(fact_category, fact_value) from concierge.reactions where order_id = :'n5'), null, '... and records none');
+select tests.rx_save(:'a', :'n5', 'returned', 'broke', 'avoid', 'Returned Drum: broke');
+select is(tests.rx_fact(:'p', 'avoid', 'Returned Drum: broke'), 1, '... and another note writes one again');
+-- The same note again touches nothing, whatever fact comes with it.
+select tests.rx_save(:'a', :'n5', 'returned', ' broke ', 'avoid', 'Returned Drum: else');
+select is(tests.rx_fact(:'p', 'avoid', 'Returned Drum: else'), 0, 'an unchanged note touches no fact');
+select is(tests.rx_fact(:'p', 'avoid', 'Returned Drum: broke'), 1, '... and keeps the one there is');
+-- A change of case isn't a clash with itself.
+select tests.rx_save(:'a', :'n5', 'returned', 'Broke', 'avoid', 'Returned Drum: Broke');
+select is(tests.rx_fact(:'p', 'avoid', 'Returned Drum: Broke'), 1, 'a change of case replaces the text');
+-- Over the limit: nothing is written.
+select throws_ok(format($q$select tests.rx_save(%L, %L, 'returned', 'long', 'avoid', repeat('x', 501))$q$, :'a', :'n5'), '23514', null, 'a note edit whose fact is over the limit is refused');
+select is((select note from concierge.reactions where order_id = :'n5'), 'Broke', '... and keeps the old note');
+
+-- The new text is a fact the person already has.
+select tests.reset_role();
+insert into concierge.profile_facts (user_id, person_id, category, value, source) values
+  (:'a', :'p', 'loved', 'Radio: red', 'note'), (:'a', :'p', 'avoid', 'Returned Fan: noisy', 'note');
+select tests.act_as_server();
+select tests.rx_save(:'a', :'n6', 'loved', null, 'loved', 'Radio');
+select tests.rx_save(:'a', :'n6', 'loved', 'red', 'loved', 'radio: RED');
+select results_eq(format($q$select value, source from concierge.profile_facts where person_id = %L and value_key like 'radio%%'$q$, :'p'),
+  $$values ('Radio: red', 'note')$$, 'a note edit that meets another fact removes ours and keeps the other');
+select is((select coalesce(fact_category, fact_value) from concierge.reactions where order_id = :'n6'), null, '... and records none');
+select tests.rx_save(:'a', :'n7', 'returned');
+select tests.rx_save(:'a', :'n7', 'returned', 'noisy', 'avoid', 'Returned Fan: noisy');
+select is((select source from concierge.profile_facts where person_id = :'p' and value = 'Returned Fan: noisy'), 'note', 'a first note that meets another fact leaves it');
+select is((select fact_category from concierge.reactions where order_id = :'n7'), null, '... and records none');
 
 -- A fact from somewhere else is never claimed or removed.
 select tests.reset_role();
@@ -247,6 +320,9 @@ select tests.act_as_server();
 select is(tests.rx_save(:'a', :'og', 'loved', 'hi', 'loved', 'Vase'), 'complete', 'a removed person''s gift can still be answered');
 select is(tests.rx_fact(:'gone', 'loved', 'Vase'), 0, '... with no fact');
 select is((select fact_category from concierge.reactions where order_id = :'og'), null, '... and none recorded');
+select tests.rx_save(:'a', :'og', 'loved', 'hello', 'loved', 'Vase: hello');
+select is(tests.rx_fact(:'gone', 'loved', 'Vase: hello'), 0, '... nor by a note edit');
+select is((select note from concierge.reactions where order_id = :'og'), 'hello', '... whose note is kept');
 
 -- ─── reactions_due (AC-1 to AC-3) ────────────────────────────────────────────
 select tests.reset_role();

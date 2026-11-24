@@ -109,11 +109,17 @@ $$;
 -- Saves one gift's answer, or changes it, and returns the round's status after.
 -- Closes a delivered round once every delivered gift has an answer.
 --
--- The fact (category and value, or both null) is used only when the rating is
--- new or changed, so a note edit or a repeat save can't bring back a fact the
--- buyer turned off, deleted or edited. A changed rating removes the old fact
--- only if it's still exactly as this reaction wrote it. A fact the person
--- already has is left as it is, and isn't this reaction's to remove later.
+-- The fact (category and value, or both null) is used when the rating is new or
+-- changed, or the same rating comes with another note:
+-- - A changed rating is a new answer: the old fact goes, if it's still exactly as
+--   this reaction wrote it and on, and the new one is added.
+-- - Another note: the reaction's own fact, if still exactly so, takes the new text
+--   (or goes, with no new fact, or when the person already has the new text).
+--   A reaction with no fact recorded adds one. A recorded fact the buyer edited,
+--   turned off or deleted stays as it is, and stays recorded, so no later note
+--   edit brings it back.
+-- A repeat save touches no fact. A fact the person already has is left as it is,
+-- and isn't this reaction's to remove later. A removed person gets none.
 --
 -- The checks here raise P0001 'save_reaction: ...'. A fact over the length limit
 -- is refused by profile_facts' own check (23514). Either way nothing is written.
@@ -132,6 +138,8 @@ declare
   r concierge.gift_rounds;
   v_old concierge.reactions;
   v_reaction_id uuid;
+  v_write boolean;         -- a fact to write, for a person who isn't removed
+  v_add boolean := false;  -- as a new one
 begin
   if v_enabled is null then
     raise exception 'save_reaction: missing setting reactions_enabled';
@@ -164,33 +172,69 @@ begin
     raise exception 'save_reaction: before the occasion' using errcode = 'P0001';
   end if;
 
+  v_write := p_fact_category is not null
+    and exists (select 1 from public.people p where p.id = r.person_id and p.deleted_at is null);
+
   -- The round's lock makes a double tap run one after the other.
   select * into v_old from concierge.reactions x where x.order_id = p_order_id;
-  if v_old.rating = p_rating then
-    update concierge.reactions set note = v_note, source = 'web' where id = v_old.id;
+  if v_old.id is null then
+    insert into concierge.reactions (user_id, round_id, order_id, rating, note, source)
+    values (p_user_id, v_round_id, p_order_id, p_rating, v_note, 'web')
+    returning id into v_reaction_id;
+    v_add := true;
+  elsif v_old.rating <> p_rating then
+    v_reaction_id := v_old.id;
+    delete from concierge.profile_facts f
+     where f.person_id = r.person_id and f.source = 'reaction' and f.source_id = v_old.id and f.active
+       and f.category = v_old.fact_category and f.value = v_old.fact_value;
+    update concierge.reactions
+       set rating = p_rating, note = v_note, source = 'web', fact_category = null, fact_value = null
+     where id = v_old.id;
+    v_add := true;
   else
-    if v_old.id is null then
-      insert into concierge.reactions (user_id, round_id, order_id, rating, note, source)
-      values (p_user_id, v_round_id, p_order_id, p_rating, v_note, 'web')
-      returning id into v_reaction_id;
-    else
-      v_reaction_id := v_old.id;
-      delete from concierge.profile_facts f
-       where f.person_id = r.person_id and f.source = 'reaction' and f.source_id = v_old.id and f.active
-         and f.category = v_old.fact_category and f.value = v_old.fact_value;
-      update concierge.reactions
-         set rating = p_rating, note = v_note, source = 'web', fact_category = null, fact_value = null
-       where id = v_old.id;
-    end if;
-
-    if p_fact_category is not null
-       and exists (select 1 from public.people p where p.id = r.person_id and p.deleted_at is null) then
-      insert into concierge.profile_facts (user_id, person_id, category, value, source, source_id, confirmed)
-      values (p_user_id, r.person_id, p_fact_category, p_fact_value, 'reaction', v_reaction_id, true)
-      on conflict (person_id, category, value_key) do nothing;
-      if found then
-        update concierge.reactions set fact_category = p_fact_category, fact_value = p_fact_value where id = v_reaction_id;
+    v_reaction_id := v_old.id;
+    update concierge.reactions set note = v_note, source = 'web' where id = v_old.id;
+    if v_note is distinct from v_old.note then
+      if v_old.fact_category is null then
+        v_add := true;
+      else
+        begin
+          update concierge.profile_facts f
+             set category = p_fact_category, value = p_fact_value
+           where v_write
+             and f.person_id = r.person_id and f.source = 'reaction' and f.source_id = v_old.id and f.active
+             and f.category = v_old.fact_category and f.value = v_old.fact_value;
+          if found then
+            update concierge.reactions set fact_category = p_fact_category, fact_value = p_fact_value where id = v_old.id;
+          end if;
+        exception when unique_violation then
+          -- The person already has the new text as another fact, so ours goes.
+          v_write := false;
+        end;
+        if not v_write then
+          delete from concierge.profile_facts f
+           where f.person_id = r.person_id and f.source = 'reaction' and f.source_id = v_old.id and f.active
+             and f.category = v_old.fact_category and f.value = v_old.fact_value;
+          if found then
+            update concierge.reactions set fact_category = null, fact_value = null where id = v_old.id;
+          end if;
+        end if;
       end if;
+    end if;
+  end if;
+
+  if v_add and v_write then
+    insert into concierge.profile_facts (user_id, person_id, category, value, source, source_id, confirmed)
+    values (p_user_id, r.person_id, p_fact_category, p_fact_value, 'reaction', v_reaction_id, true)
+    on conflict (person_id, category, value_key) do nothing;
+    -- A fact the buyer turned off counts as this reaction's answer, so a note edit
+    -- can't add it back with other words. So does this reaction's own, if it's there.
+    if found or exists (
+      select 1 from concierge.profile_facts f
+       where f.person_id = r.person_id and f.category = p_fact_category
+         and f.value_key = lower(regexp_replace(btrim(p_fact_value), '\s+', ' ', 'g'))
+         and (not f.active or f.source_id = v_reaction_id)) then
+      update concierge.reactions set fact_category = p_fact_category, fact_value = p_fact_value where id = v_reaction_id;
     end if;
   end if;
 
