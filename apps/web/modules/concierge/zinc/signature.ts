@@ -9,17 +9,20 @@ export function verifySignature(rawBody: string, header: string | null | undefin
   return got.length === want.length && timingSafeEqual(got, want);
 }
 
+// Every event shares this schema, and one that fails to parse is never retried, so only the
+// event name may reject it. A field of an unexpected type is left out instead (E4).
+const text = z.string().optional().catch(undefined);
+const number = z.number().optional().catch(undefined);
+
 // order_id is top level; error_type, the wallet fields and tracking live in `data`.
 const eventData = z
   .object({
-    error_type: z.string(),
-    error: z.string(),
-    amount_cents: z.number(),
-    status: z.string(),
+    error_type: text,
+    error: text,
+    amount_cents: number,
+    status: text,
     // Checked package by package by packagesFromZinc, which keeps only whitelisted fields.
     tracking_numbers: z.unknown(),
-    // Every event shares this schema, so a field only some events use must never reject one:
-    // a strict shape here would drop an order.placed or order.cancelled we can't get back (E4).
     // calendarDay checks the estimate where it's used; refundCents checks the refund below.
     estimated_delivery: z.unknown(),
     refund_amount: z.unknown(),
@@ -28,9 +31,9 @@ const eventData = z
 
 const event = z.object({
   event: z.string(),
-  order_id: z.string().optional(),
-  timestamp: z.string().optional(),
-  data: eventData.optional(),
+  order_id: text,
+  timestamp: text,
+  data: eventData.optional().catch(undefined),
 });
 
 export type ZincEvent = {

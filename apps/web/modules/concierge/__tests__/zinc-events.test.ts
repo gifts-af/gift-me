@@ -321,6 +321,31 @@ describe.skipIf(!dbUp)("Zinc webhooks (real local database, fake Zinc)", () => {
     expect(await orderRow(orderId)).toMatchObject({ status: "failed", failure_type: stored });
   });
 
+  it("order.placed whose data.status is a number still settles the order", async () => {
+    const a = await newAccount();
+    const zincId = randomUUID();
+    const { orderId } = await newOrder(a, { providerOrderId: zincId });
+    expect(await send(a, JSON.stringify({ event: "order.placed", order_id: zincId, data: { status: 200 } }))).toEqual({ status: 200 });
+    expect((await orderRow(orderId)).status).toBe("placed");
+  });
+
+  it("order.failed whose error_type isn't text still fails the order, as a plain failure", async () => {
+    const a = await newAccount();
+    const zincId = randomUUID();
+    const { orderId } = await newOrder(a, { providerOrderId: zincId });
+    expect(await send(a, JSON.stringify({ event: "order.failed", order_id: zincId, data: { error_type: 7 } }))).toEqual({ status: 200 });
+    expect(await orderRow(orderId)).toMatchObject({ status: "failed", failure_type: "failed" });
+  });
+
+  it("a wallet event whose amount_cents is a string still applies", async () => {
+    const a = await newAccount();
+    placeHeld.mockClear();
+    const body = JSON.stringify({ event: "wallet.auto_topup.succeeded", data: { amount_cents: "50000", status: "success" } });
+    expect(await send(a, body)).toEqual({ status: 200 });
+    expect((await pg.query("select auto_topup_on from concierge.accounts where user_id = $1", [a.userId])).rows[0].auto_topup_on).toBe(true);
+    expect(placeHeld).toHaveBeenCalledTimes(1);
+  });
+
   it("auto_topup.failed leaves the setting alone", async () => {
     const a = await newAccount();
     await pg.query("update concierge.accounts set auto_topup_on = true where user_id = $1", [a.userId]);

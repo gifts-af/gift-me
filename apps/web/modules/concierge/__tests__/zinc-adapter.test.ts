@@ -314,6 +314,30 @@ describe("signature", () => {
     expect(e.orderId).toBeUndefined();
   });
 
+  it.each([
+    ["error_type", "errorType", 7],
+    ["error", "error", { message: "x" }],
+    ["status", "status", 200],
+    ["amount_cents", "amountCents", "10000"],
+  ])("an unexpected type in data.%s leaves only that field out", (field, key, bad) => {
+    for (const value of [bad, null]) {
+      const good = { error_type: "out_of_stock", error: "x", status: "ok", amount_cents: 5 };
+      const all = { errorType: "out_of_stock", error: "x", status: "ok", amountCents: 5 };
+      const e = parseEvent({ event: "order.failed", order_id: "zo_1", data: { ...good, [field]: value } });
+      expect(e).toMatchObject({ ...all, event: "order.failed", orderId: "zo_1", [key]: undefined });
+    }
+  });
+
+  it.each([
+    ["order_id", { order_id: 12 }, { orderId: undefined, timestamp: "2026-01-21T09:00:00Z", status: "ok" }],
+    ["timestamp", { timestamp: 1769000000 }, { orderId: "zo_1", timestamp: undefined, status: "ok" }],
+    ["data", { data: "x" }, { orderId: "zo_1", timestamp: "2026-01-21T09:00:00Z", status: undefined }],
+    ["data (null)", { data: null }, { orderId: "zo_1", timestamp: "2026-01-21T09:00:00Z", status: undefined }],
+  ])("an unexpected type in %s leaves only that field out", (_name, bad, expected) => {
+    const good = { event: "order.placed", order_id: "zo_1", timestamp: "2026-01-21T09:00:00Z", data: { status: "ok" } };
+    expect(parseEvent({ ...good, ...bad })).toMatchObject({ event: "order.placed", ...expected });
+  });
+
   it("parses events and rejects junk", () => {
     expect(parseEvent({ event: "order.placed", order_id: "zo_1" })).toMatchObject({ event: "order.placed", orderId: "zo_1" });
     expect(() => parseEvent({ nope: 1 })).toThrow();
