@@ -58,7 +58,7 @@ grant select, insert, update, delete on concierge.monthly_bills to service_role;
 insert into concierge.app_settings (key, value, description) values
   ('cost_tracking_enabled', '1', 'Switch for cost tracking: 1 records costs and works out the cost per gift, 0 records nothing. After an off period, set cost_tracking_since again, because nothing was recorded meanwhile.'),
   ('cost_window_days', '90', 'How many days back the cost-per-gift averages look.'),
-  ('cost_record_timeout_ms', '3000', 'How long recording a cost may take before it is given up on and logged, in milliseconds. A slow write must never hold up the user''s action.')
+  ('cost_record_timeout_ms', '3000', 'How long a cost write may run before it is given up on and logged, in milliseconds. Recording never fails the user''s action, but it can add up to this long, plus one read of this setting, to it.')
 on conflict (key) do nothing;
 
 -- Counting starts when tracking does: orders from before it have no costs

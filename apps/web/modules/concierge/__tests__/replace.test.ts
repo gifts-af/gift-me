@@ -49,7 +49,8 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
     await setSwitch(true);
     zinc = new FakeZinc((key) => key === APP_KEY || users.some((u) => key === `zn_test_${u}`));
     advanceRound.mockClear();
-    recordCost.mockClear();
+    recordCost.mockReset();
+    recordCost.mockImplementation(async () => {});
   });
 
   const deps = (over: Partial<PurchaseDeps & QuoteDeps> = {}): PurchaseDeps & QuoteDeps => {
@@ -206,6 +207,34 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
     expect(leaseDuringRecord).toBeNull();
   });
 
+  it("a plain Error from the lookup is rethrown, and the call's cost is still recorded", async () => {
+    const userId = await newUser();
+    const r = await newRound(userId);
+    const [failed] = await boughtAndFailed(userId, r, { 0: "max_price_exceeded" });
+    const broken = {
+      base: "https://zinc.test",
+      timeoutMs: 1000,
+      fetch: (async () => ({
+        get status(): number {
+          throw new Error("boom");
+        },
+      })) as unknown as typeof fetch,
+    };
+    await expect(quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps({ lookup: { http: broken, key: APP_KEY } }))).rejects.toThrow("boom");
+    expect(recordCost.mock.calls).toEqual([[{ userId, kind: "lookup_price_check", cents: lookupCents, estimated: true, orderId: failed }]]);
+  });
+
+  it("a recorder that throws synchronously can't change the quote either", async () => {
+    const userId = await newUser();
+    const r = await newRound(userId);
+    const [failed] = await boughtAndFailed(userId, r, { 0: "max_price_exceeded" });
+    zinc.catalog.set(`amazon:${r.productIds[0]}`, { priceCents: 5000 });
+    recordCost.mockImplementationOnce((() => {
+      throw new Error("sync");
+    }) as RecordCost);
+    expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps())).toEqual({ oldCents: 4200, newCents: totalAt(5000) });
+  });
+
   it("a Zinc error after the call still records the lookup, and the answer is unchanged", async () => {
     const userId = await newUser();
     const r = await newRound(userId);
@@ -245,10 +274,13 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
     expect(quote).toEqual({ oldCents: 4200, newCents: totalAt(5000) });
 
     zinc.catalog.set(`amazon:${r.productIds[0]}`, { priceCents: 5600 });
+    recordCost.mockClear();
     expect(
       await replaceFailedOrder({ userId, roundId: r.roundId, failedOrderId: failed, ideaId: r.ideaIds[0], shownTotalCents: totalAt(5000) }, deps()),
     ).toEqual({ ok: false, error: "price_changed" });
     expect(offerCalls()).toHaveLength(2);
+    // The re-check inside Buy was a paid call, so it's recorded though the Buy was refused.
+    expect(recordCost.mock.calls).toEqual([[{ userId, kind: "lookup_price_check", cents: lookupCents, estimated: true, orderId: failed }]]);
     expect(zinc.posts).toEqual([]);
     expect(await orders(r.roundId)).toEqual([expect.objectContaining({ id: failed, status: "failed", resolved: false })]);
     expect((await round(r.roundId)).locked_until).toBeNull();

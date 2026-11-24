@@ -122,7 +122,11 @@ async function requote(deps: QuoteDeps, idea: IdeaRow, feeCents: number, ids: Re
     // (it shouldn't) can't change the quote or hide the error being rethrown.
     if (calls > 0) {
       const cost: Cost = { userId: bill.userId, kind: "lookup_price_check", cents: calls * lookupCents, estimated: true, orderId: bill.orderId };
-      await deps.recordCost(cost).catch(() => {});
+      try {
+        await deps.recordCost(cost);
+      } catch {
+        // Bookkeeping only.
+      }
     }
   }
   const newCents = offer
@@ -208,12 +212,6 @@ export async function quoteFailedOrder(input: { userId: string; roundId: string;
 }
 
 /**
- * Replaces one failed order (AC-14, AC-15, AC-15a): with the next-best idea, the same gift at
- * today's price (once, and never above what the page showed), or the same gift to a fixed
- * address. Under the round lease, read again; then the budget check and caps with the other
- * live orders counted, replace_failed_order, placing, and telling the buyer.
- */
-/**
  * `lookup` is null where the app's key isn't set: only a price-rise re-buy needs it. The re-check's
  * cost is written after the round lease is let go, so recording can't hold the round.
  */
@@ -226,6 +224,12 @@ export async function replaceFailedOrder(input: ReplaceInput, deps: PurchaseDeps
   }
 }
 
+/**
+ * Replaces one failed order (AC-14, AC-15, AC-15a): with the next-best idea, the same gift at
+ * today's price (once, and never above what the page showed), or the same gift to a fixed
+ * address. Under the round lease, read again; then the budget check and caps with the other
+ * live orders counted, replace_failed_order, placing, and telling the buyer.
+ */
 async function replaceUnderLease(input: ReplaceInput, deps: PurchaseDeps & { lookup: QuoteDeps["lookup"] | null; recordCost: RecordCost }): Promise<ReplaceResult> {
   const { userId, roundId } = input;
   const ids = { round_id: roundId, user_id: userId, order_id: input.failedOrderId };

@@ -19,7 +19,7 @@ function fake(opts: { setting?: unknown; settingError?: boolean; write?: (args: 
     schema: () => ({
       rpc: (name: string, args: unknown) => {
         if (name === "setting_int") {
-          return Promise.resolve(opts.settingError ? { data: null, error: { message: SECRET } } : { data: opts.setting ?? null, error: null });
+          return Promise.resolve(opts.settingError ? { data: null, error: { message: SECRET, code: "42501" } } : { data: opts.setting ?? null, error: null });
         }
         return {
           abortSignal: (signal: AbortSignal) => {
@@ -67,13 +67,13 @@ describe("costRecorder", () => {
       await expect(costRecorder(() => f.db)(cost)).resolves.toBeUndefined();
       expect(f.writes).toHaveLength(0);
     }
-    expect(failed()).toHaveLength(2);
+    expect(failed().map((c) => (c[1] as { reason: string }).reason)).toEqual(["setting", "setting"]);
   });
 
   it("logs ids and kind only, omitting undefined ids and never the error message", async () => {
     const f = fake({ write: () => ({ data: null, error: { message: SECRET, code: "P0001" } }) });
     await costRecorder(() => f.db, 100)({ userId: "u-1", kind: "ai_capture", cents: 1, estimated: true });
-    expect(failed()).toEqual([["cost.record_failed", { kind: "ai_capture", user_id: "u-1" }]]);
+    expect(failed()).toEqual([["cost.record_failed", { kind: "ai_capture", user_id: "u-1", reason: "write", code: "P0001" }]]);
     expect(JSON.stringify(vi.mocked(logEvent).mock.calls)).not.toContain("secret");
   });
 
@@ -83,8 +83,15 @@ describe("costRecorder", () => {
     await expect(costRecorder(() => { throw new Error(SECRET); }, 100)(cost)).resolves.toBeUndefined();
     const f = fake({ write: () => { throw new Error(SECRET); } });
     await expect(costRecorder(() => f.db, 100)(cost)).resolves.toBeUndefined();
-    expect(failed()).toHaveLength(3);
+    expect(failed().map((c) => (c[1] as { reason: string }).reason)).toEqual(["write", "client", "write"]);
     expect(JSON.stringify(vi.mocked(logEvent).mock.calls)).not.toContain("secret");
+  });
+
+  it("logs the Postgres code of an unreadable setting, never its message", async () => {
+    const f = fake({ settingError: true });
+    await costRecorder(() => f.db)(cost);
+    expect(failed()[0][1]).toMatchObject({ reason: "setting", code: "42501" });
+    expect(JSON.stringify(failed())).not.toContain("secret");
   });
 
   it("resolves even when logEvent itself throws", async () => {
@@ -107,6 +114,6 @@ describe("costRecorder", () => {
     await expect(costRecorder(() => db, 50)(cost)).resolves.toBeUndefined();
     expect(Date.now() - started).toBeLessThan(2000);
     expect(aborted).toBe(true);
-    expect(failed()).toEqual([["cost.record_failed", { kind: "ai_ideas", user_id: "u-1", idea_run_id: "run-1" }]]);
+    expect(failed()).toEqual([["cost.record_failed", { kind: "ai_ideas", user_id: "u-1", idea_run_id: "run-1", reason: "write" }]]);
   });
 });

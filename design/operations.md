@@ -250,7 +250,7 @@ update concierge.app_settings set value = '0' where key = 'zinc_ordering_enabled
 | `ideas.no_credit` | An idea run found the AI Gateway credit gone (a 402) before any AI reply was paid for. The run isn't counted and the buyer isn't emailed: the round waits. With fan-out off the tick starts no further idea run; with fan-out on each due round's job starts its own run, so expect one of these (or `ideas.daily_limit_reached`) per due round, up to `idea_round_runs_per_day` runs a day. The event carries `round_id` and `user_id`. The next 14:00 UTC health email says the same. | **AI credit** under **Health email** below: top up by hand, since auto top-up is off. |
 | `tick.heartbeat_failed` | Writing the tick's heartbeat row (or a job adding its failure to it) failed. The tick or job itself is unaffected. | Nothing if it's one-off. If it repeats, check the database; the health email's "tick didn't finish" line can then be wrong for that day. |
 | `health.send_failed` | Resend refused the owner's health email. The route answers 500. | Check Resend (status, key, a bounced inbox). The next day's check sends again; read `concierge.health_snapshot` by hand meanwhile. |
-| `cost.record_failed` | A cost wasn't recorded (the write failed or timed out). The user's action went through. | **Cost tracking** below. |
+| `cost.record_failed` | A cost wasn't recorded (the client, the timeout setting or the write failed). The user's action went through. | **Cost tracking** below. |
 | `health.costs_failed` | The Monday costs read failed; the email says so. | **Cost tracking** below. |
 
 Log-only alerts (rows above with no health-email line) need the Vercel logs, and Hobby keeps them about an hour (ALL-135), so look soon after one fires. The health email doesn't depend on logs: it reads the database and the vendor balances.
@@ -662,7 +662,7 @@ The Monday health email shows what a completed gift costs: AI, product lookups, 
 |---|---|---|
 | `cost_tracking_enabled` | 1 | 0 records nothing and drops the email section |
 | `cost_window_days` | 90 | How many days back the averages look |
-| `cost_record_timeout_ms` | 3000 | How long recording one cost may take before it is given up on |
+| `cost_record_timeout_ms` | 3000 | How long one cost write may run before it is given up on. Recording never fails the user's action, but can add up to this long plus one settings read |
 | `cost_tracking_since` | the day it shipped | Nothing before this is counted: orders, costs or bill months |
 
 **Turning it off and on.** Set `cost_tracking_enabled` to `0`. While it is 0, no costs are recorded, so the gifts placed then have none. Before turning it back on, reset the start so those gifts aren't counted:
@@ -681,20 +681,32 @@ insert into concierge.accounts (user_id, costs_excluded) values ('<user id>', tr
 on conflict (user_id) do update set costs_excluded = true;
 ```
 
-Only `user_id` is required; the account row may not exist yet. The mark applies to costs recorded after it, so set it before running checks.
+Only `user_id` is required; the account row may not exist yet. The mark applies to costs recorded after it, so **mark the account before any live check** (`pnpm live-check` or by hand).
+
+If a check ran first, repair the idea-run and order costs it left (run as postgres in the SQL editor):
+
+```sql
+update concierge.cost_events set excluded = true
+ where idea_run_id in (select id from concierge.idea_runs where user_id = '<qa user id>');
+```
+
+Costs linked to an order can be repaired the same way with `order_id in (select id from concierge.orders where user_id = '<qa user id>')`. Capture-read costs (`ai_capture`) have no link to a user, so they can't be repaired; they stay in the averages.
 
 **Entering bills.** One row per month and vendor, in cents, with `month` the first of the month. Entering the same month and vendor again replaces the first:
 
 ```sql
 insert into concierge.monthly_bills (month, vendor, cents) values
-  ('2026-10-01', 'Vercel', 2000),
-  ('2026-10-01', 'Supabase', 2500)
+  ('2026-12-01', 'Vercel', 2000),
+  ('2026-12-01', 'Supabase', 2500)
 on conflict (month, vendor) do update set cents = excluded.cents;
 ```
 
+- **The first countable month is the first full month after `cost_tracking_since`.** A month that starts before the start date is never counted, even if you enter it.
 - **Yearly bills go in as one-twelfth each month** (a $12 domain is 100 cents a month).
 - **Never enter AI Gateway credit or Zinc wallet top-ups.** The ledger already counts that spend per call, so a bill would count it twice. Zinc's order fee is added by the app from `zinc_order_fee_cents`.
 - **A bill counts only once its whole month has ended**, and only for months that start on or after `cost_tracking_since`. So the first bills show up in the first Monday email after a full month has passed. Until then the email says "No full month of bills yet" and gives the fixed part without running costs.
+
+**Don't set the fee from the first weeks.** The numbers read low until every counted gift's round started after `cost_tracking_since`, because older rounds' spend wasn't recorded. Wait until the oldest gift in the window is newer than the start date.
 
 **How we see it working.** After an idea run or a capture read there is a new `cost_events` row (`select kind, cents, estimated, excluded, created_at from concierge.cost_events order by id desc limit 10;`). The Monday email has the "Cost per completed gift" section.
 
@@ -702,7 +714,7 @@ on conflict (month, vendor) do update set cents = excluded.cents;
 
 | Event | What it means | What to do |
 |---|---|---|
-| `cost.record_failed` | One cost wasn't recorded: the write failed or took longer than `cost_record_timeout_ms`. The user's action was not affected. The event has `kind` and ids. | Nothing if it's one-off. A failed log doesn't guarantee a missing row, because a timeout can land after the write went through, so check `cost_events` for that idea run or order before adding anything. If it repeats, check the database. |
+| `cost.record_failed` | One cost wasn't recorded: the write failed or took longer than `cost_record_timeout_ms`. The user's action was not affected. The event has `kind`, ids and a `reason`: `client` (the database client couldn't be made, so a key is missing), `setting` (`cost_record_timeout_ms` couldn't be read), or `write` (the write failed or timed out). It may also carry the error's `code` or `status`, never its message. | Nothing if it's one-off. A failed log doesn't guarantee a missing row, because a timeout can land after the write went through, so check `cost_events` for that idea run or order before adding anything. If it repeats, check the database. |
 | `health.costs_failed` | The Monday costs read failed or ran past `health_vendor_timeout_ms`. The email went out with "Costs couldn't be read"; its problems are unaffected. | Run `select concierge.cost_per_gift(now());` in the SQL editor to see the error. A missing or bad setting is the usual cause. |
 
 `health_vendor_timeout_ms` also bounds the costs read. It runs after the vendor balance calls, so with both near the limit the route needs about twice that time; keep it well under half of the route's 60 s.
