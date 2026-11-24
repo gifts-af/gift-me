@@ -3,10 +3,16 @@
 // Skipped when the local stack isn't running.
 import { randomUUID } from "node:crypto";
 import { Client } from "pg";
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { createClient } from "@supabase/supabase-js";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { addDays, parseDate, roundToCreate, type CalendarDate, type Database } from "@gifts-af/core";
 import { LOCAL_DB, localStack } from "../../../test/local-db";
 
-const dbUp = (await localStack({ api: true })) !== null;
+vi.mock("server-only", () => ({}));
+const { createSupabaseRoundStore } = await import("../rounds/store");
+
+const stack = await localStack({ api: true });
+const dbUp = stack !== null;
 
 describe.skipIf(!dbUp)("a date moved at the same moment (real local database)", () => {
   let a: Client;
@@ -138,5 +144,56 @@ describe.skipIf(!dbUp)("a date moved at the same moment (real local database)", 
     const run = (await startRun(a)).rows[0].run_id as string;
     expect((await race(() => saveIdeas(a, run), () => move(b))).status).toBe("fulfilled");
     expect(await roundRow()).toEqual({ status: "skipped", occasion_year: null });
+  });
+
+  // ─── the tick after a move, through the engine's own store ────────────────
+
+  const store = () => createSupabaseRoundStore(createClient<Database>(stack!.supabase!.url, stack!.supabase!.serviceRoleKey, { auth: { persistSession: false } }));
+  const today: CalendarDate = new Date().toISOString().slice(0, 10);
+  /** What the tick's round creation does for this buyer; returns the new round's date, or null. */
+  async function createDue(): Promise<CalendarDate | null> {
+    const st = store();
+    const mine = (await st.candidates(today)).filter((c) => c.userId === user);
+    expect(mine).toHaveLength(1);
+    const plan = roundToCreate(mine[0].rule, today, await st.scheduleSettings());
+    if (!plan) return null;
+    const inserted = await st.insertRound({ userId: user, personId: person, occasionId: occasion, ...plan, budgetCents: null, nextActionAt: new Date() });
+    return inserted ? plan.occasionDate : null;
+  }
+  async function moveTo(date: CalendarDate) {
+    const { month, day } = parseDate(date);
+    await watch.query("update concierge.occasions set month = $2, day = $3 where id = $1", [occasion, month, day]);
+  }
+  async function startOver(date: CalendarDate) {
+    await watch.query("delete from concierge.gift_rounds where occasion_id = $1", [occasion]);
+    await moveTo(date);
+    expect(await createDue()).toBe(date);
+  }
+
+  it("AC-3: the next tick starts a round on the new date, and only one", async () => {
+    await startOver(addDays(today, 30));
+    const was = (await watch.query("select id from concierge.gift_rounds where occasion_id = $1", [occasion])).rows[0].id as string;
+    expect(await store().endedByMove(was)).toBe(false);
+    await moveTo(addDays(today, 27));
+    expect(await store().endedByMove(was)).toBe(true);
+    expect(await createDue()).toBe(addDays(today, 27));
+    expect(await createDue()).toBeNull();
+  });
+
+  it("AC-4: nothing starts while the new date is far off", async () => {
+    await startOver(addDays(today, 30));
+    await moveTo(addDays(today, 200));
+    expect(await createDue()).toBeNull();
+    expect((await watch.query("select count(*)::int as n from concierge.gift_rounds where occasion_id = $1 and status <> 'skipped'", [occasion])).rows[0].n).toBe(0);
+  });
+
+  it("AC-9: a claimed round's lease is gone after a move", async () => {
+    await startOver(addDays(today, 30));
+    const id = (await watch.query("select id from concierge.gift_rounds where occasion_id = $1", [occasion])).rows[0].id as string;
+    const claimed = await store().claim(id, new Date());
+    expect(await store().holdsLease(id, claimed!.lockedUntil)).toBe(true);
+    await moveTo(addDays(today, 27));
+    expect(await store().holdsLease(id, claimed!.lockedUntil)).toBe(false);
+    expect(await store().finish(id, claimed!.lockedUntil, { status: "awaiting_approval", nextActionAt: null })).toBe(false);
   });
 });

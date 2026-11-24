@@ -12,7 +12,7 @@ import { activeFacts, type ActiveFact } from "../profile/profile";
 
 export type AdminDb = ReturnType<typeof createAdminClient>;
 
-export type IdeaRefusal = "not_found" | "not_paid" | "done" | "busy" | "limit" | "daily_limit";
+export type IdeaRefusal = "not_found" | "not_paid" | "done" | "busy" | "limit" | "daily_limit" | "closed";
 
 /** Every number a run uses, from concierge.app_settings (T23). */
 export type IdeaSettings = {
@@ -125,6 +125,7 @@ export interface IdeaStore {
   /** costCents is whole cents, the spend so far. */
   progress(runId: string, stage: RunStage, costCents: number): Promise<void>;
   finish(runId: string, outcome: RunEnd, costCents: number): Promise<void>;
+  /** How many were saved; -1 when the round ended during the run, so none were. */
   save(runId: string, ideas: SavedIdea[]): Promise<number>;
 }
 

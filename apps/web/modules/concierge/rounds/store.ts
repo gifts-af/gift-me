@@ -239,6 +239,10 @@ export interface RoundStore {
   claimNow(roundId: string, now: Date): Promise<ClaimedRound | null>;
   /** Writes the result and releases the lease; false if the lease was lost. */
   finish(roundId: string, lock: Date, next: RoundFinish): Promise<boolean>;
+  /** Whether this lease still holds the round. */
+  holdsLease(roundId: string, lock: Date): Promise<boolean>;
+  /** The round ended because its occasion's date changed (skipped, with no year). */
+  endedByMove(roundId: string): Promise<boolean>;
   sentSteps(roundId: string): Promise<Set<StepKey>>;
   /** false = already recorded, so the email must not go out again. */
   recordSend(roundId: string, userId: string, step: StepKey): Promise<boolean>;
@@ -499,6 +503,23 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
       });
       if (error) fail("Finishing the round failed", error);
       return data === true;
+    },
+
+    async holdsLease(roundId, lock) {
+      const { data, error } = await concierge.from("gift_rounds").select("id").eq("id", roundId).eq("locked_until", lock.toISOString());
+      if (error) fail("Checking the round's lease failed", error);
+      return data.length > 0;
+    },
+
+    async endedByMove(roundId) {
+      const { data, error } = await concierge
+        .from("gift_rounds")
+        .select("id")
+        .eq("id", roundId)
+        .eq("status", "skipped")
+        .is("occasion_year", null);
+      if (error) fail("Checking whether the round's date changed failed", error);
+      return data.length > 0;
     },
 
     async sentSteps(roundId) {
