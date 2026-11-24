@@ -28,7 +28,7 @@ export default function Home() {
         </Suspense>
         <section aria-labelledby="people-heading" className="flex flex-col gap-3">
           <PageTitle id="people-heading">People</PageTitle>
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
             <Suspense fallback={<YouCard />}>
               <YourCard />
             </Suspense>
