@@ -43,6 +43,17 @@ describe("sendMessages", () => {
     expect(bare.kind).toBe("no_credit");
   });
 
+  it.each([401, 402, 404, 500])("a refusal keeps its HTTP status (%i)", async (code) => {
+    expect((await thrown(sendMessages(http(status({}, code)), {}, PRICES, signal()))).status).toBe(code);
+  });
+
+  it("a call with no reply has no status", async () => {
+    const drop = () => {
+      throw new TypeError("fetch failed");
+    };
+    expect((await thrown(sendMessages(http(drop), {}, PRICES, signal()))).status).toBeUndefined();
+  });
+
   it("a 500 is still unavailable", async () => {
     const e = await thrown(sendMessages(http(status({ error: { type: "internal" } }, 500)), {}, PRICES, signal()));
     expect(e.kind).toBe("unavailable");

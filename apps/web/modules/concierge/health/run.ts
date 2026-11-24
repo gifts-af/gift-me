@@ -70,14 +70,20 @@ async function settings(db: Db): Promise<{ report: HealthSettings; vendorTimeout
   };
 }
 
-/** A vendor balance, or null when it isn't checked here or the call failed (logged, never thrown). */
-async function balance(vendor: string, read: ((timeoutMs: number) => Promise<number>) | null, timeoutMs: number): Promise<number | null> {
-  if (!read) return null;
+type Balance = { cents: number | null; failed: boolean };
+
+/**
+ * A vendor balance; null cents when it isn't checked here or the call failed (logged, never thrown).
+ * Tried twice, sharing timeoutMs: one dropped call isn't a problem, two in a row are.
+ */
+async function balance(vendor: string, read: ((timeoutMs: number) => Promise<number>) | null, timeoutMs: number): Promise<Balance> {
+  if (!read) return { cents: null, failed: false };
+  const each = Math.floor(timeoutMs / 2);
   try {
-    return await read(timeoutMs);
+    return { cents: await read(each).catch(() => read(each)), failed: false };
   } catch (e) {
     logEvent("health.vendor_check_failed", { vendor, ...errorFields(e) });
-    return null;
+    return { cents: null, failed: true };
   }
 }
 
@@ -144,15 +150,22 @@ export async function runHealthCheck(deps: HealthDeps): Promise<{ result: Health
   try {
     if ((await setting(db, "health_email_enabled")) === 0) return done("off", 0, false, false);
     const s = await settings(db);
-    const [snapshot, aiCreditCents, zincAppBalanceCents] = await Promise.all([
+    const [snapshot, ai, zinc] = await Promise.all([
       at("snapshot", readSnapshot(db, now)),
       balance("ai_gateway", deps.aiCredits, s.vendorTimeoutMs),
-      // balance() never rejects: a failed vendor call is a null balance, not a failed check.
+      // balance() never rejects: a failed vendor call is a line in the email, not a failed check.
       balance("zinc", deps.zincBalance, s.vendorTimeoutMs),
     ]);
     stage = "snapshot";
     // A vendor with no function isn't set up here; a null balance alone can also mean its call failed.
-    const vendors = { aiCreditCents, zincAppBalanceCents, aiConfigured: deps.aiCredits !== null, zincConfigured: deps.zincBalance !== null };
+    const vendors = {
+      aiCreditCents: ai.cents,
+      zincAppBalanceCents: zinc.cents,
+      aiConfigured: deps.aiCredits !== null,
+      zincConfigured: deps.zincBalance !== null,
+      aiFailed: ai.failed,
+      zincFailed: zinc.failed,
+    };
     const report = healthReport(snapshot, vendors, s.report, now);
     const problems = report.problems.length;
     if (problems === 0 && !report.isWeekly) return done("quiet", 0, false, false);

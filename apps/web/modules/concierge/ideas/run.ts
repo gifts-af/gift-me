@@ -91,7 +91,7 @@ type Tally = {
   kept: number;
   keepMin: number | null;
   refusal: IdeaRefusal | null;
-  error: { name: string; kind: string | null } | null;
+  error: { name: string; kind: string | null; status: number | null } | null;
   /** An AI call was cut off, dropped or its reply couldn't be priced, so what it used was never reported. */
   costUnknown: boolean;
   /** An AI reply's cost was added: a later out-of-credit error ends the run as a counted failure. */
@@ -99,7 +99,7 @@ type Tally = {
 };
 
 type Found = { c: IdeaCandidate; hit: ZincHit; offer: ZincOffer; totalCents: number; fit: "within" | "over"; arriveBy: CalendarDate | null };
-type Resolved = { found: Found } | { drop: DropReason; kind?: ZincErrorKind } | { stopped: true };
+type Resolved = { found: Found } | { drop: DropReason; error?: ZincError } | { stopped: true };
 
 /** Whole cents, rounded up, after dropping float noise below a thousandth of a cent. */
 const cents = (x: number) => Math.ceil(Math.round(x * 1000) / 1000);
@@ -128,8 +128,7 @@ export async function runIdeas(req: IdeaRequest, deps: IdeaDeps): Promise<IdeaOu
   } catch (e) {
     // An AI reply we paid for but couldn't read still counts toward the cap.
     if (e instanceof AiError && e.costCents) paidAi(t, e.costCents);
-    const f = errorFields(e);
-    t.error = { name: String(f.name), kind: typeof f.kind === "string" ? f.kind : null };
+    t.error = errorNote(e);
     // Out of credit before any AI reply was paid for: no AI was bought, so the run doesn't count (T68).
     // It may still have spent Zinc lookup cents in the list pass; idea_round_runs_per_day counts it, which bounds that.
     const noCredit = e instanceof AiError && e.kind === "no_credit" && !t.aiPaid;
@@ -148,12 +147,22 @@ export async function runIdeas(req: IdeaRequest, deps: IdeaDeps): Promise<IdeaOu
       refusal: t.refusal,
       cost_cents: cents(t.spent),
       ms: deps.clock() - startedMs,
-      ...(t.error ? { error: t.error.name, error_kind: t.error.kind } : {}),
+      ...(t.error ? { error: t.error.name, error_kind: t.error.kind, error_status: t.error.status } : {}),
       ...(t.costUnknown ? { costUnknown: true } : {}),
     });
     await recordRun(req, deps.recordCost, t);
   }
   return outcome;
+}
+
+/** What ideas.run says about a failure: fixed tokens and the vendor's HTTP status, never text (E6). */
+function errorNote(e: unknown): NonNullable<Tally["error"]> {
+  const f = errorFields(e);
+  return {
+    name: String(f.name),
+    kind: typeof f.kind === "string" ? f.kind : null,
+    status: typeof f.status === "number" ? f.status : null,
+  };
 }
 
 /**
@@ -263,8 +272,7 @@ async function attempt(req: IdeaRequest, deps: IdeaDeps, t: Tally): Promise<Idea
       if (listed.length === 0) throw e;
       // Keep the list gifts. The failure is still reported in ideas.run.
       if (e instanceof AiError && e.costCents) paidAi(t, e.costCents);
-      const f = errorFields(e);
-      t.error = { name: String(f.name), kind: typeof f.kind === "string" ? f.kind : null };
+      t.error = errorNote(e);
     }
   } else if (listed.length === 0) {
     if (req.signal.aborted) return end("deadline");
@@ -515,7 +523,7 @@ async function brainstormPass(
       if (!v.keep) return { drop: v.reason };
       return { found: { c, hit, offer, totalCents: v.totalCents, fit: v.fit, arriveBy: v.arriveBy } };
     } catch (e) {
-      if (e instanceof ZincError) return { drop: "vendor_error", kind: e.kind };
+      if (e instanceof ZincError) return { drop: "vendor_error", error: e };
       p.halt();
       throw e;
     }
@@ -525,7 +533,7 @@ async function brainstormPass(
   const failure = settled.find((r) => r.status === "rejected");
   if (failure) throw failure.reason;
   const found: Found[] = [];
-  const drops: { drop: DropReason; kind?: ZincErrorKind }[] = [];
+  const drops: { drop: DropReason; error?: ZincError }[] = [];
   // A product already kept from the list isn't offered twice.
   const products = new Set<string>(listed.map((k) => k.amazonId).filter((id) => id !== null));
   for (const one of settled) {
@@ -540,7 +548,7 @@ async function brainstormPass(
       found.push(r.found);
     } else if ("drop" in r) {
       drops.push(r);
-      dropped(r.drop, r.kind);
+      dropped(r.drop, r.error?.kind);
     }
   }
   t.resolved = found.length;
@@ -550,9 +558,10 @@ async function brainstormPass(
   if (req.signal.aborted) return { end: "deadline" };
   if (p.capped()) return { end: "cost_cap" };
   if (found.length === 0 && drops.length > 0 && drops.every((d) => d.drop === "vendor_error")) {
-    if (drops.some((d) => d.kind === "unauthorized")) {
+    if (drops.some((d) => d.error?.kind === "unauthorized")) {
       logEvent("ideas.zinc_unauthorized", { ...ids(req, runId), alert: true });
     }
+    t.error = errorNote(drops[0].error);
     return { end: "failed" };
   }
   if (found.length === 0) return { end: "none" };

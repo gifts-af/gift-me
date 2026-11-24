@@ -421,6 +421,7 @@ describe("runIdeas: vendor trouble", () => {
     expect(await runIdeas(req(), deps())).toEqual({ status: "failed" });
     expect(store.finished).toEqual([{ outcome: "failed", cost: expect.any(Number) }]);
     expect(event("ideas.zinc_unauthorized")).toBeUndefined();
+    expect(event("ideas.run")).toMatchObject({ error: "ZincError", error_kind: "unavailable", error_status: 503 });
   });
 
   it("an unauthorized key ends failed and logs the alert", async () => {
@@ -429,6 +430,7 @@ describe("runIdeas: vendor trouble", () => {
     zinc.search.set("thing 2", 401);
     expect(await runIdeas(req(), deps())).toEqual({ status: "failed" });
     expect(event("ideas.zinc_unauthorized")).toMatchObject({ alert: true, run_id: "run-1" });
+    expect(event("ideas.run")).toMatchObject({ error: "ZincError", error_kind: "unauthorized", error_status: 401 });
   });
 
   it("an abort while resolving ends deadline, not none", async () => {
@@ -524,7 +526,7 @@ describe("runIdeas: out of AI credit", () => {
     expect(await runIdeas(req(), deps())).toEqual({ status: "failed" });
     // 14¢ of brainstorm and 4¢ of lookups were paid for.
     expect(store.finished).toEqual([{ outcome: "failed", cost: 18 }]);
-    expect(event("ideas.run")).toMatchObject({ outcome: "failed", error_kind: "no_credit" });
+    expect(event("ideas.run")).toMatchObject({ outcome: "failed", error_kind: "no_credit", error_status: 402 });
   });
 
   it("with list gifts kept, a 402 still saves them", async () => {

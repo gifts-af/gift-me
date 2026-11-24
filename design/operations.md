@@ -419,7 +419,7 @@ The engine finds gift ideas for a round and on demand (a person's Gift ideas scr
 Once a day Vercel Cron calls `GET /api/health` at 14:00 UTC, two hours after the tick (T87). On Hobby a cron can start anywhere in its hour, so the tick runs 12:00–13:05 at the latest (it stops after 300 s) and the check 14:00–14:59: always at least about an hour apart. The route checks `CRON_SECRET` as the tick does. Its first query pings the database, which also keeps the free Supabase project from pausing (it replaced `/api/keepalive`, T22). Then it reads `concierge.health_snapshot`, the AI Gateway credit and the app's Zinc balance, and emails the owner inbox when something needs the owner. On `health_all_clear_weekday` (Monday) it always emails: the week's counts, plus "All clear" or the problems. Each line in the email carries ids only (round, order, user) and a **What to do** link to its heading below.
 
 - **Turning it off:** set `health_email_enabled` to `0` in `concierge.app_settings`, no deploy needed. The ping still runs, so the database stays awake, and it logs `health.checked {result: "off"}`. Two emails still go with it at 0, because the setting can't be read first: "The database can't be reached" (the ping runs before any setting) and "The health check couldn't run" when the setting itself can't be read or the route's wiring fails.
-- **How we see it working:** one `health.checked` event a day, with `result` (`sent`, `quiet`, `off`, `db_down`, `send_failed` or `failed`), `problems`, `sent` and `weekly`; a `failed` one also has `stage`. The route answers 500 for `db_down`, `send_failed` and `failed`, so Vercel's cron list shows the failure too. `health.send_failed` (an alert) means Resend refused the email. `health.vendor_check_failed {vendor}` means a balance couldn't be read, so that check was skipped that day.
+- **How we see it working:** one `health.checked` event a day, with `result` (`sent`, `quiet`, `off`, `db_down`, `send_failed` or `failed`), `problems`, `sent` and `weekly`; a `failed` one also has `stage`. The route answers 500 for `db_down`, `send_failed` and `failed`, so Vercel's cron list shows the failure too. `health.send_failed` (an alert) means Resend refused the email. `health.vendor_check_failed {vendor}` means a balance couldn't be read in two tries; while something uses that vendor, the email says so too.
 - **A check that can't run says so.** If a setting, the snapshot or the route's own wiring fails, the owner still gets a short fixed email, "The health check couldn't run", naming the stage it stopped at (see its heading below), so a broken checker never looks like a quiet day.
 - **Rolling back:** an instant rollback also restores the older deployment's cron list ([Vercel: rollbacks and cron jobs](https://vercel.com/docs/cron-jobs/manage-cron-jobs#rollbacks-and-promotions-with-cron-jobs)). Rolled back past this change, Vercel calls the old `/api/keepalive` again, which that deployment still has, so the database stays awake; only the health email stops. A run due in the minutes of the switch can be missed or reach the other deployment.
 - **Off production,** `?now=` sets the check's clock, as on the tick.
@@ -433,7 +433,7 @@ Once a day Vercel Cron calls `GET /api/health` at 14:00 UTC, two hours after the
 | `health_all_clear_weekday` | 1 | The day the email always goes, in `Date.getUTCDay()` numbers (0 is Sunday) |
 | `ai_credit_low_cents` | 500 | Warn when the AI Gateway credit drops below this |
 | `zinc_app_balance_low_cents` | 500 | Warn when the app's Zinc balance drops below this |
-| `health_vendor_timeout_ms` | 10000 | How long each vendor balance call may take. Both run together, so keep it well under the route's 60 s |
+| `health_vendor_timeout_ms` | 10000 | How long each vendor balance check may take, its two tries together. Both vendors run together, so keep it well under the route's 60 s |
 
 It also reads `round_max_attempts`, `placing_stale_minutes`, `hold_final_days`, `idea_engine_enabled`, `capture_extraction_enabled` and `amazon_paste_lookup_enabled`. The AI credit is only checked while ideas or capture extraction are on, and the app's Zinc balance only while ideas or Amazon paste lookups are on, so switching those off doesn't bring a daily warning. A setting it can't read fails the check (`health.checked {result: "failed", stage: "settings", alert: true}`) and sends "The health check couldn't run"; there's no fallback value.
 
@@ -490,6 +490,23 @@ An order is `held` with `hold_reason` `retry` (Zinc failed in a way worth trying
 ### Ideas can't run here
 
 `idea_engine_enabled` or `capture_extraction_enabled` is 1, but the AI Gateway (`AI_GATEWAY_BASE`, `AI_GATEWAY_API_KEY`), or for ideas Zinc (`ZINC_API_BASE`, `ZINC_API_KEY`), isn't set on this environment. The line says which. Set the missing env vars in Vercel and redeploy, or set the switch to 0. See **Gift idea engine**.
+
+### Gift ideas failed
+
+At least one idea run ended `failed` in the last day; the line has the count. The tick itself still reports ok. A failed run counts toward `idea_round_runs_max`, so fix it before the next tick or the round may end with no ideas.
+
+1. If **A vendor check failed** is in the same email, start there.
+2. Find the runs: `select id, round_id, started_at, stage from concierge.idea_runs where outcome = 'failed' and finished_at > now() - interval '25 hours' order by finished_at desc;`.
+3. Read `ideas.run` in the function logs (Hobby keeps them about an hour) for `error`, `error_kind` and `error_status`. A 401 or 403 is the key; a 404 is a wrong address or model; a 5xx is the vendor's trouble. A status of 0 or none means no reply, or a reply we couldn't use: `error_kind` says which (`malformed` was an unreadable reply; `unavailable` with no status can also be a model with no price).
+
+### A vendor check failed
+
+The AI Gateway credit or the app's Zinc balance couldn't be read in two tries. Shown only while something uses that vendor. Ideas probably can't run either.
+
+1. Read `health.vendor_check_failed` for the `status`. A 401 or 403 is the key; a 5xx is the vendor's trouble; 0 or none means no reply, or one we couldn't read.
+2. **AI Gateway:** in the key list (`vercel ai-gateway api-keys list`), a production key whose last-active time equals its creation time has never worked. Create a new key, store it as the production `AI_GATEWAY_API_KEY` (Secret) and redeploy.
+3. **Zinc:** check `ZINC_API_KEY` and `ZINC_API_BASE` on production, and Zinc's status.
+4. Confirm with `vercel crons run /api/health`. `vercel env run` on a laptop may use a different key, so it proves nothing about production's.
 
 ### AI credit
 

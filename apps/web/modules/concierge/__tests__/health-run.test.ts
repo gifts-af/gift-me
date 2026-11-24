@@ -59,6 +59,7 @@ const SNAPSHOT = {
     today: { started_at: "2026-11-24T12:00:00Z", finished_at: "2026-11-24T12:04:00Z", result: "ok", rounds_failed: 0, fanout_failed: 0 },
   },
   no_credit_runs: 0,
+  failed_runs: 0,
   stuck_rounds: [{ round_id: "r1", user_id: "u1", attempts: 3 }],
   unconfirmed: [],
   placing_stale: [],
@@ -161,9 +162,10 @@ describe("runHealthCheck", () => {
     const d = deps({ aiCredits, zincBalance });
     const out = await runHealthCheck(d);
 
-    // Each vendor call gets health_vendor_timeout_ms, so a hung one can't outlast the route.
-    expect(aiCredits).toHaveBeenCalledWith(10000);
-    expect(zincBalance).toHaveBeenCalledWith(10000);
+    // The two tries share health_vendor_timeout_ms, so a hung vendor can't outlast the route.
+    expect(aiCredits).toHaveBeenNthCalledWith(1, 5000);
+    expect(aiCredits).toHaveBeenNthCalledWith(2, 5000);
+    expect(zincBalance).toHaveBeenCalledWith(5000);
 
     expect(out).toEqual({ result: "sent", problems: 2 });
     const vendorEvents = events().filter((e) => e.event === "health.vendor_check_failed");
@@ -172,6 +174,38 @@ describe("runHealthCheck", () => {
     // The stuck round and the low Zinc balance still reach the email.
     expect(d.sent[0].text).toContain("A round is stuck");
     expect(d.sent[0].text).toContain("The app's Zinc balance is low");
+  });
+
+  it("AC-17: while AI is in use, a check that fails twice is emailed and logged once", async () => {
+    SETTINGS.idea_engine_enabled = 1;
+    try {
+      const aiCredits = vi.fn(async () => {
+        throw Object.assign(new Error("key sk-live-123 refused"), { status: 401 });
+      });
+      const d = deps({ aiCredits });
+      expect(await runHealthCheck(d)).toEqual({ result: "sent", problems: 2 });
+      expect(aiCredits).toHaveBeenCalledTimes(2);
+      expect(d.sent[0].text).toContain("The AI Gateway balance couldn't be read");
+      expect(d.sent[0].text).not.toContain("sk-live-123");
+      expect(events().filter((e) => e.event === "health.vendor_check_failed")).toEqual([
+        { event: "health.vendor_check_failed", at: expect.any(String), vendor: "ai_gateway", name: "Error", status: 401 },
+      ]);
+    } finally {
+      SETTINGS.idea_engine_enabled = 0;
+    }
+  });
+
+  it("a vendor check that works on its second try is not a problem", async () => {
+    SETTINGS.idea_engine_enabled = 1;
+    try {
+      const aiCredits = vi.fn(async () => 5000).mockRejectedValueOnce(new Error("blip"));
+      const d = deps({ aiCredits });
+      expect(await runHealthCheck(d)).toEqual({ result: "sent", problems: 1 });
+      expect(aiCredits).toHaveBeenCalledTimes(2);
+      expect(events().filter((e) => e.event === "health.vendor_check_failed")).toEqual([]);
+    } finally {
+      SETTINGS.idea_engine_enabled = 0;
+    }
   });
 
   it.each(["ai_credit_low_cents", "health_vendor_timeout_ms", "health_email_enabled"])(

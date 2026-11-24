@@ -10,24 +10,28 @@ export type HealthSettings = {
   amazonPasteLookupEnabled: boolean;
 };
 
-/** Null means not checked, or the call failed. */
+/** Null means not checked, or the call failed; the failed flags say which. */
 export type Vendors = {
   aiCreditCents: number | null;
   zincAppBalanceCents: number | null;
   aiConfigured: boolean;
   zincConfigured: boolean;
+  aiFailed: boolean;
+  zincFailed: boolean;
 };
 
 export type ProblemKind =
   | "db_down"
   | "tick_missed"
   | "no_credit"
+  | "ideas_failed"
   | "tick_failed"
   | "stuck_round"
   | "unconfirmed"
   | "placing"
   | "held_zinc"
   | "ideas_not_configured"
+  | "vendor_failed"
   | "credit_low"
   | "zinc_low"
   | "deadline_close"
@@ -91,6 +95,9 @@ export function healthReport(
     problems.push({ kind: "no_credit", detail: { noCreditRuns: snap.noCreditRuns }, waiting: snap.ideasWaiting });
   }
 
+  // The heartbeat doesn't count these: a tick whose idea runs all failed still finishes ok.
+  if (snap.failedRuns > 0) problems.push({ kind: "ideas_failed", detail: { runs: snap.failedRuns } });
+
   // A failed round step alone retries; repeats show up as stuck rounds and the count goes in the weekly email (T76).
   if (today && (today.result === "failed" || today.fanoutFailed > 0)) {
     problems.push({ kind: "tick_failed", detail: { roundsFailed: today.roundsFailed, fanoutFailed: today.fanoutFailed } });
@@ -120,6 +127,8 @@ export function healthReport(
       const missing = [!vendors.aiConfigured && "AI Gateway", s.ideaEngineEnabled && !vendors.zincConfigured && "Zinc"].filter(Boolean);
       problems.push({ kind: "ideas_not_configured", detail: { missing: missing.join(" and ") } });
     }
+    if (aiInUse && vendors.aiFailed) problems.push({ kind: "vendor_failed", detail: { vendor: "AI Gateway" } });
+    if (zincInUse && vendors.zincFailed) problems.push({ kind: "vendor_failed", detail: { vendor: "Zinc" } });
     if (credit !== null && credit > 0 && credit < s.aiCreditLowCents) {
       problems.push({ kind: "credit_low", detail: { balanceCents: credit, lowCents: s.aiCreditLowCents } });
     }

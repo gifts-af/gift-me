@@ -23,10 +23,24 @@ describe("buildHealthEmail", () => {
     expect(firstRow).toContain("r9");
   });
 
+  it("AC-17 and AC-18: the rows name the vendor and count the failed runs", () => {
+    const report = healthReport(
+      snapshot({ failedRuns: 1 }),
+      { ...vendors, aiCreditCents: null, aiFailed: true },
+      { ...settings, ideaEngineEnabled: true },
+      TUESDAY,
+    );
+    const email = buildHealthEmail(report, BASE);
+    const rows = email.text.split("\n").filter((l) => l.startsWith("- "));
+    expect(rows[0]).toContain("Gift ideas failed (1 idea run failed in the last day)");
+    expect(rows[1]).toContain("A vendor check failed (The AI Gateway balance couldn't be read)");
+  });
+
   it("every row's link is runbookBase#RUNBOOK_ANCHORS[kind]", () => {
     const every = healthReport(
       snapshot({
         noCreditRuns: 1,
+        failedRuns: 1,
         stuckRounds: [{ roundId: "r1", userId: "u1", attempts: 3 }],
         unconfirmed: [{ orderId: "o1", roundId: "r2", userId: "u1" }],
         placingStale: [{ orderId: "o2", roundId: "r3", userId: "u1" }],
