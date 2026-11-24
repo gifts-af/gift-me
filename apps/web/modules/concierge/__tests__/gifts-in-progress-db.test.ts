@@ -133,6 +133,32 @@ describe.skipIf(stack === null)("giftsInProgress (real local database)", () => {
     ]);
   });
 
+  it("a round told it's too late says so on its page and has left Home; told earlier, both say none were found", async () => {
+    const u = await newUser();
+    const personId = await person(u, "Jenn", { address: true });
+    const told = (roundId: string, sentAt: Date) =>
+      pg.query("insert into concierge.notifications (user_id, round_id, kind, channel, sent_at) values ($1, $2, 'no_ideas', 'email', $3)", [u.id, roundId, sentAt]);
+    const late = await round(u, personId, { status: "generating", shipBy: 1 });
+    await told(late, NOW);
+    const early = await round(u, personId, { status: "generating", shipBy: 8, kind: "mothers_day" });
+    await told(early, NOW);
+    expect((await u.rows()).map((g) => [g.roundId, g.line.text])).toEqual([[early, "No ideas found yet"]]);
+    expect(await roundView(late, u.db, NOW)).toMatchObject({ closedText: "It's too late to send a gift in time", waiting: null });
+    expect(await roundView(early, u.db, NOW)).toMatchObject({ closedText: null, waiting: "told" });
+  });
+
+  it("ideas that came back are counted as ready, with the round page's line", async () => {
+    const u = await newUser();
+    const personId = await person(u, "Jenn", { address: true });
+    const roundId = await round(u, personId, { ideas: [{}, {}, { status: "rejected" }] });
+    await pg.query("insert into concierge.rejections (user_id, round_id, idea_id, reason_code, owned) select user_id, round_id, id, 'has_it', status = 'rejected' from concierge.gift_ideas where round_id = $1", [roundId]);
+    await pg.query("insert into concierge.idea_runs (user_id, person_id, round_id, started_at, finished_at, outcome) values ($1, $2, $3, now(), now(), 'none')", [u.id, personId, roundId]);
+    for (const rows of [await u.rows(), await u.rows(personId)]) {
+      expect(rows.map((g) => g.line.text)).toEqual([`2 ideas ready · Choose by ${chooseBy(day(20))}`]);
+    }
+    expect((await roundView(roundId, u.db, NOW))!.restored).toBe("none");
+  });
+
   it("lists what needs the buyer first, then by date, for everyone; a person's page has only theirs", async () => {
     const u = await newUser();
     const [a, b] = [await person(u, "Ann"), await person(u, "Bob")];

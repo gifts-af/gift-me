@@ -221,6 +221,7 @@ export async function giftsInProgress(
           hasAddress: own || isShared === true,
           toldAt: told.at(-1) ?? null,
           ideasFoundAt: r.gift_ideas.map((i) => i.created_at),
+          shipBy: r.ship_by_deadline,
         });
       }
 

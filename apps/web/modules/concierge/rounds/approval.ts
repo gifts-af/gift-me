@@ -467,9 +467,9 @@ async function hasAddress(userDb: UserDb, personId: string): Promise<boolean> {
  */
 async function readWaiting(
   userDb: UserDb,
-  r: { id: string; user_id: string; person_id: string; status: string },
+  r: { id: string; user_id: string; person_id: string; status: string; ship_by_deadline: CalendarDate },
   ideasFoundAt: string[],
-): Promise<RoundPageView["waiting"]> {
+): Promise<ReturnType<typeof waitingOn>> {
   try {
     if (!(await hasPaidFeatures(userDb, r.user_id))) return null;
     const addressed = r.status === "generating" || (await hasAddress(userDb, r.person_id));
@@ -488,7 +488,7 @@ async function readWaiting(
       .limit(1)
       .maybeSingle();
     if (told.error) fail("Reading the round's no-ideas email failed", told.error);
-    return waitingOn({ status: r.status, paid: true, hasAddress: addressed, toldAt: told.data?.sent_at ?? null, ideasFoundAt });
+    return waitingOn({ status: r.status, paid: true, hasAddress: addressed, toldAt: told.data?.sent_at ?? null, ideasFoundAt, shipBy: r.ship_by_deadline });
   } catch (err) {
     logEvent("round_waiting_failed", { round_id: r.id, user_id: r.user_id, ...errorFields(err) });
     return null;
@@ -633,10 +633,13 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date, gate
     today,
   );
   const { live: liveOrders, failed: failedOrders, storeCancelled, closed } = outcome;
-  const closedText =
+  const closedByOutcome =
     closed === null ? null : closed === "ordered" ? `Already ordered: ${outcome.bought.map((o) => o.title).join(", ")}` : CLOSED_TEXT[closed];
 
-  const waiting = closed === null && beforeIdeas(r.status) ? await readWaiting(userDb, r, ideasRes.data.map((i) => i.created_at)) : null;
+  const waitingFor = closed === null && beforeIdeas(r.status) ? await readWaiting(userDb, r, ideasRes.data.map((i) => i.created_at)) : null;
+  // Told it's too late: nothing more is looked for, so it reads as it will once its deadline closes it.
+  const closedText = waitingFor === "too_late" ? CLOSED_TEXT.too_late : closedByOutcome;
+  const waiting = waitingFor === "too_late" ? null : waitingFor;
 
   let hold: RoundPageView["hold"] = null;
   if (closed === null && liveOrders.some((o) => o.status === "held")) {

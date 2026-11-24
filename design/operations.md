@@ -429,7 +429,25 @@ The engine finds gift ideas for a round and on demand (a person's Gift ideas scr
 
 **Deploying and rolling back ALL-167.** The database ships first: the new code reads `rejections.owned` (`readRestored`, on the round screen and in the heads-up) and records `no_ideas_late`, which the old step check refuses. The old code runs on the new database. After a rollback of the code, rows with `no_ideas_late` stay valid and the old code ignores them: a round told too late that day may run once more and be told "no ideas" again, and a round told only by `no_ideas_late` closes without the "skipped" email, since the old code doesn't count that key. Ideas already back stay on offer. Never put the old step check back while `no_ideas_late` rows exist.
 
-**Once, after the code is live:** rounds that were told there were no ideas before it are not due until their ship-by day, so wake them for the next tick, which brings their earlier ideas back where it can and otherwise sends nothing: `update concierge.gift_rounds r set next_action_at = now() where r.status = 'generating' and r.closed_at is null and exists (select 1 from concierge.gift_ideas i where i.round_id = r.id and i.status = 'rejected');` After "None of these", earlier ideas that can come back go out in a heads-up ("your earlier ideas are still here") in place of these. Nothing is sent while the engine is off or the buyer isn't paid; the round skips silently at its deadline.
+**Once, after the code is live:** rounds that were told there were no ideas before it are not due until their ship-by day, so wake them for the next tick, which brings their earlier ideas back where it can and otherwise sends nothing. First list them (read-only), and stop if the list isn't what you expect:
+
+```sql
+select r.id, r.user_id, r.ship_by_deadline, r.next_action_at
+  from concierge.gift_rounds r
+ where r.status = 'generating' and r.closed_at is null
+   and r.ship_by_deadline > (now() at time zone 'utc')::date
+   and exists (select 1 from concierge.gift_ideas i where i.round_id = r.id and i.status = 'rejected')
+ order by r.ship_by_deadline;
+```
+
+Then, once, the same rounds:
+
+```sql
+update concierge.gift_rounds r set next_action_at = now()
+ where r.status = 'generating' and r.closed_at is null
+   and r.ship_by_deadline > (now() at time zone 'utc')::date
+   and exists (select 1 from concierge.gift_ideas i where i.round_id = r.id and i.status = 'rejected');
+``` After "None of these", earlier ideas that can come back go out in a heads-up ("your earlier ideas are still here") in place of these. Nothing is sent while the engine is off or the buyer isn't paid; the round skips silently at its deadline.
 
 **Zinc offers are judged on the worst case:** orders don't choose a shipping method, so each offer is judged on its slowest delivery and its highest shipping price.
 
