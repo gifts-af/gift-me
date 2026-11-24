@@ -9,6 +9,7 @@ import {
   isLate,
   overBudgetLimitCents,
   picksBar,
+  rejectionFacts,
   trackingLink,
   type RejectionCode,
 } from "@gifts-af/core";
@@ -357,7 +358,7 @@ function NoneOfThese({
   ideas: RoundPageIdea[];
   rejectAction: (roundId: string, form: FormData) => Promise<RejectResult>;
   outlookAction: (roundId: string, input: OutlookInput) => Promise<boolean | null>;
-  onDone: (more: boolean) => void;
+  onDone: (more: boolean, saved: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState<RejectionCode | null>(null);
@@ -421,7 +422,7 @@ function NoneOfThese({
       }
       if (result.ok) {
         setOpen(false);
-        onDone(result.more);
+        onDone(result.more, saves);
       } else if (result.error === "changed") {
         // The outlook moved since the sheet showed it: nothing was saved, so show it again.
         await check({ code, ownedIdeaId: owned, text: trimmed() });
@@ -430,7 +431,17 @@ function NoneOfThese({
     });
   }
 
-  const ready = code !== null && (code !== "has_it" || owned !== null) && more !== null;
+  const chosen = code !== null && (code !== "has_it" || owned !== null);
+  const ready = chosen && more !== null;
+  // The server's own rule, so the sheet can't promise to save what it won't (list gift titles never are).
+  const saves = chosen && rejectionFacts(code, text, ideas, ideas.find((i) => i.id === owned) ?? null).length > 0;
+  const promise = saves
+    ? "The reason is saved to what we know, so the next ideas avoid it."
+    : more === true && code === "too_pricey"
+      ? "The next ideas will cost less."
+      : more === true
+        ? "We'll leave these out this time."
+        : "Tell us why, so the next ideas fit better.";
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -440,7 +451,7 @@ function NoneOfThese({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Why not these?</DialogTitle>
-          <DialogDescription>The reason is saved to what we know, so the next ideas avoid it.</DialogDescription>
+          <DialogDescription>{promise}</DialogDescription>
         </DialogHeader>
         <div className="flex flex-wrap gap-2">
           {CHIPS.map((c) => (
@@ -490,7 +501,7 @@ function NoneOfThese({
         {more === false && (
           <div role="note" className="flex flex-col gap-0.5 rounded-md bg-muted px-3 py-2 text-[13px]">
             <span className="font-semibold">No more new ideas this time</span>
-            <span className="text-muted-foreground">The reason is saved, and these ideas stay here to buy.</span>
+            <span className="text-muted-foreground">{saves ? "The reason is saved, and these ideas stay here to buy." : "These ideas stay here to buy."}</span>
           </div>
         )}
         {error && (
@@ -499,7 +510,7 @@ function NoneOfThese({
           </p>
         )}
         <Button type="button" disabled={!ready || sending} onClick={send}>
-          {more === false ? "Save the reason" : "Find new ideas"}
+          {more !== false ? "Find new ideas" : saves ? "Save the reason" : "OK"}
         </Button>
         {more === true && <p className="text-center text-[13px] text-muted-foreground">New ideas come by email, usually by tomorrow.</p>}
       </DialogContent>
@@ -740,10 +751,10 @@ export function RoundScreen({
           ideas={offered}
           rejectAction={rejectAction}
           outlookAction={outlookAction}
-          onDone={(more) => {
+          onDone={(more, saved) => {
             setPicked([]);
             setOverOk(false);
-            setDone(more ? "Looking again. New ideas will come by email." : "Saved. These ideas are still here to buy.");
+            setDone(more ? "Looking again. New ideas will come by email." : saved ? "Saved. These ideas are still here to buy." : "These ideas are still here to buy.");
           }}
         />
       )}

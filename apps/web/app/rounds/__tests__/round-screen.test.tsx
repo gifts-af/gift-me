@@ -410,6 +410,68 @@ describe("RoundScreen: None of these", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("That changed. Check and send again.");
   });
 
+  describe("says what is really saved", () => {
+    const SAVED = "The reason is saved to what we know, so the next ideas avoid it.";
+    const list = () => idea({ title: "Cocotte", source: "list", listItemId: "li1" });
+
+    async function choose(ideas: RoundPageIdea[], reason: string, more: boolean, o: { which?: string; text?: string } = {}) {
+      const p = setup(view({ ideas }), { outlook: more });
+      p.rejectAction.mockResolvedValue({ ok: true, more });
+      await userEvent.click(screen.getByRole("button", { name: "None of these" }));
+      await userEvent.click(await screen.findByRole("button", { name: reason }));
+      if (o.which) await userEvent.click(screen.getByRole("radio", { name: o.which }));
+      if (o.text) await userEvent.type(screen.getByLabelText(/Anything else/), o.text);
+      await userEvent.tab();
+      return p;
+    }
+
+    it("before a reason is chosen it promises nothing", async () => {
+      setup(view({ ideas: [list()] }));
+      await userEvent.click(screen.getByRole("button", { name: "None of these" }));
+      expect(await screen.findByText("Tell us why, so the next ideas fit better.")).toBeInTheDocument();
+      expect(screen.queryByText(SAVED)).toBeNull();
+    });
+
+    it("an AI idea's reason is saved", async () => {
+      await choose([idea({ title: "Orchid" })], "Not their style", true);
+      expect(await screen.findByText(SAVED)).toBeInTheDocument();
+    });
+
+    it("with a list gift and an AI idea, the AI idea's reason is saved", async () => {
+      await choose([list(), idea({ title: "Orchid" })], "Not their style", true);
+      expect(await screen.findByText(SAVED)).toBeInTheDocument();
+    });
+
+    it.each(["Not their style", "Too generic"])("list gifts alone save nothing: %s", async (reason) => {
+      await choose([list()], reason, true);
+      expect(await screen.findByText("We'll leave these out this time.")).toBeInTheDocument();
+      expect(screen.queryByText(SAVED)).toBeNull();
+    });
+
+    it("Already has one, for a list gift, saves nothing (T42)", async () => {
+      await choose([list()], "Already has one", true, { which: "Cocotte" });
+      expect(await screen.findByText("We'll leave these out this time.")).toBeInTheDocument();
+    });
+
+    it("a typed reason is saved, even for list gifts", async () => {
+      await choose([list()], "Not their style", true, { text: "No cookware" });
+      expect(await screen.findByText(SAVED)).toBeInTheDocument();
+    });
+
+    it("Too pricey saves nothing and says the next ideas cost less", async () => {
+      await choose([idea({ title: "Orchid" })], "Too pricey", true);
+      expect(await screen.findByText("The next ideas will cost less.")).toBeInTheDocument();
+    });
+
+    it("with no search left and nothing to save, it says so and the button doesn't say Save", async () => {
+      await choose([list()], "Not their style", false);
+      expect(await screen.findByText("These ideas stay here to buy.")).toBeInTheDocument();
+      expect(screen.queryByText(/is saved|leave these out|cost less/)).toBeNull();
+      await userEvent.click(screen.getByRole("button", { name: "OK" }));
+      expect(await screen.findByText("These ideas are still here to buy.")).toBeInTheDocument();
+    });
+  });
+
   it("None of these isn't shown on an ordered round", () => {
     setup(
       view(
