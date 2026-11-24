@@ -1,5 +1,6 @@
-import { describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { renderToString } from "react-dom/server";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { GUIDED_QUESTIONS } from "@gifts-af/core";
 import { QuestionForm } from "../questions/question-form";
@@ -20,6 +21,27 @@ function setup() {
 }
 
 describe("QuestionForm", () => {
+  it("takes no typing until the page can keep it (ALL-106)", async () => {
+    const action = vi.fn(async () => ({ ok: true }) as const);
+    const ui = <QuestionForm personId="p1" name="Dad" questions={questions} answerAction={action} skipAction={action} />;
+    const container = document.body.appendChild(document.createElement("div"));
+    onTestFinished(() => container.remove());
+    container.innerHTML = renderToString(ui);
+    const boxes = () => [...container.querySelectorAll("textarea")];
+    expect(boxes().length).toBe(2);
+    for (const b of boxes()) expect(b).toBeDisabled();
+    await act(async () => {
+      render(ui, { container, hydrate: true });
+    });
+    for (const b of boxes()) expect(b).toBeEnabled();
+
+    const user = userEvent.setup();
+    const box = within(container).getByLabelText(questions[0].prompt);
+    await user.type(box, "golf");
+    await user.type(within(container).getByLabelText(questions[1].prompt), "a vise");
+    expect(box).toHaveValue("golf");
+  });
+
   it("sends each answer under its question's key", async () => {
     const user = userEvent.setup();
     const { answerAction } = setup();

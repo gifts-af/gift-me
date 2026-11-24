@@ -154,6 +154,7 @@ A button in the server's HTML shows before its click handler is attached, and a 
 
 - **`Button`, `DialogTrigger` and `Switch` do it for you.** A submit button is `disabled`, so an early tap can't send its form the browser's own way (ALL-60). Any other button gets `aria-disabled`, so a keyboard can still reach it. `Button asChild` (a link) is left alone, because links work before the page loads.
 - **A plain `<button>` or another Radix trigger** that's in the server's HTML needs the same: `aria-disabled` from `useHydrated()` (`apps/web/lib/use-hydrated.ts`), plus an `aria-disabled:opacity-45` style.
+- **A text box whose text lives in state** in a form the server sends needs `disabled={!hydrated}`. Text typed before then shows but never reaches state, and the next keystroke anywhere in the form wipes it (ALL-106).
 
 ## Editing and saving (owner, 2026-11-16, ALL-115, T71)
 
