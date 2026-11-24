@@ -29,6 +29,7 @@ describe("sampleEmails", () => {
       "hold_unconfirmed",
       "price_up",
       "out_of_stock",
+      "out_of_stock-partial",
       "too_late",
       "missed_on_us",
       "ordered",

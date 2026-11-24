@@ -322,7 +322,9 @@ describe.skipIf(!stack)("held rounds: lists and addresses (real local database, 
     await zincRejects(u, orderIds[1]);
     await advance(roundId, 1);
     expect(textFor(u)[0]).toContain("didn't buy the Linen apron and you haven't been charged for it.");
-    expect(textFor(u)[0]).not.toContain("Stoneware");
+    // Named only as being ordered.
+    expect(textFor(u)[0]).toContain("The good news: we're ordering the Stoneware mug set");
+    expect(textFor(u)[0].match(/Stoneware/g)).toHaveLength(1);
   });
 
   it("sharing stopped with two picks: one email, naming both (AC-5)", async () => {

@@ -17,11 +17,13 @@ import {
   liveOrders,
   readRound,
   recipientAddress,
+  roundGifts,
   savePersonAddress,
   setting,
   type Account,
   type AddressSnapshot,
   type AddressSource,
+  type GiftRow,
   type PurchaseDeps,
   type RoundRow,
   withLease,
@@ -66,11 +68,20 @@ export type ApproveError =
   | "already_ordered";
 
 /**
+ * One gift of several. `reason`: what it's held for or why it failed; for an ordered one, how
+ * far it has got ("shipped", "delivered"), else null. One sent to Zinc that nothing has confirmed
+ * yet is `held` with `unconfirmed`: it may or may not have been ordered.
+ */
+export type GiftOutcome = { orderId: string; title: string; status: "ordered" | "held" | "failed"; reason: string | null };
+
+/**
  * `held`: waiting (on funds, setup, an address, our switch, or a retry); `failed`: it needs
  * the buyer (price_up, out_of_stock, too_late, failed). `reason` is the round's attention_reason.
+ * A round has one status and one reason however many gifts it has, so when they came to
+ * different things `gifts` says what happened to each; "unknown" when that couldn't be read.
  */
 export type ApproveResult =
-  | { ok: true; status: "ordered" | "held" | "failed"; reason: string | null }
+  | { ok: true; status: "ordered" | "held" | "failed"; reason: string | null; gifts?: GiftOutcome[] | "unknown" }
   | { ok: false; error: ApproveError };
 
 /**
@@ -256,7 +267,7 @@ export async function approveAndBuy(input: ApproveInput, deps: PurchaseDeps): Pr
     return null;
   });
   if (refused) return refused;
-  return tellCustomer(deps, roundId, ids);
+  return tellCustomer(deps, roundId, ids, ideaIds.length > 1);
 }
 
 /**
@@ -264,9 +275,10 @@ export async function approveAndBuy(input: ApproveInput, deps: PurchaseDeps): Pr
  * and a failure needs them, so the engine takes the round straight away. A paused,
  * not_allowed or retry hold waits for the tick, with no email.
  * A failure no longer always shows in the reason (a hold outranks it, ALL-116), so the
- * round's untold failures are read too.
+ * round's untold failures are read too. `several`: the round has more than one gift, so its one
+ * status and reason can't speak for them all.
  */
-export async function tellCustomer(deps: PurchaseDeps, roundId: string, ids: Record<string, string>): Promise<ApproveResult> {
+export async function tellCustomer(deps: PurchaseDeps, roundId: string, ids: Record<string, string>, several: boolean): Promise<ApproveResult> {
   const after = await readRound(deps, roundId);
   const reason = after?.attention_reason ?? null;
   const untold = after?.status === "needs_attention" && (await hasUntoldFailure(deps, roundId));
@@ -280,5 +292,41 @@ export async function tellCustomer(deps: PurchaseDeps, roundId: string, ids: Rec
     }
   }
   const status = after?.status === "ordered" ? "ordered" : failed ? "failed" : "held";
-  return { ok: true, status, reason: status === "ordered" ? null : reason };
+  const round: Extract<ApproveResult, { ok: true }> = { ok: true, status, reason: status === "ordered" ? null : reason };
+  return several ? giftOutcomes(deps, roundId, round, ids) : round;
+}
+
+function outcomeOfGift(o: GiftRow): GiftOutcome {
+  const gift = { orderId: o.id, title: o.title };
+  if (o.status === "failed") return { ...gift, status: "failed", reason: o.failure_type };
+  if (o.status === "held") return { ...gift, status: "held", reason: o.hold_reason };
+  // Placing without Zinc's own id: the send timed out, so nobody knows yet.
+  if (o.status === "unconfirmed" || (o.status === "placing" && o.provider_order_id === null)) {
+    return { ...gift, status: "held", reason: "unconfirmed" };
+  }
+  return { ...gift, status: "ordered", reason: o.status === "shipped" || o.status === "delivered" ? o.status : null };
+}
+
+/**
+ * The result with what each gift came to, read after the buyer was told. Never throws: the
+ * orders are saved, so a failed read must not look like a failed purchase.
+ */
+async function giftOutcomes(
+  deps: PurchaseDeps,
+  roundId: string,
+  round: Extract<ApproveResult, { ok: true }>,
+  ids: Record<string, string>,
+): Promise<ApproveResult> {
+  let gifts: GiftOutcome[];
+  try {
+    gifts = (await roundGifts(deps, roundId)).map(outcomeOfGift);
+  } catch (e) {
+    logEvent("order.gift_outcomes_failed", { ...ids, ...errorFields(e) });
+    return { ...round, gifts: "unknown" };
+  }
+  if (gifts.length === 0) return round;
+  if (gifts.every((g) => g.status === "ordered")) return { ok: true, status: "ordered", reason: null };
+  // The others went meanwhile (cancelled, or sorted out in another tab): the one left speaks.
+  if (gifts.length === 1) return { ok: true, status: gifts[0].status, reason: gifts[0].reason };
+  return { ...round, gifts };
 }

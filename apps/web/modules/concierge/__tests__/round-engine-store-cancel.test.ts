@@ -261,7 +261,9 @@ describe.skipIf(!stack)("store cancellations (real local database, fake Zinc)", 
   // ─── The deadline: every path that covers a store cancel uses its own wording, once ───
 
   /** Emails naming the cancelled mug that also say nothing was charged: there must be none. */
-  const noChargeClaim = (u: User) => mail.filter((m) => m.to === u.email && /Stoneware mug set/.test(m.text) && /haven't been charged/.test(m.text));
+  // Named as another failure's good news ("ordered and on its way"), it isn't what wasn't charged for.
+  const noChargeClaim = (u: User) =>
+    mail.filter((m) => m.to === u.email && /Stoneware mug set/.test(m.text.replace("The good news: the Stoneware mug set is ordered and on its way.", "")) && /haven't been charged/.test(m.text));
 
   it("a cancel on the ship-by day before the deadline look: the store wording once, no 'No gift was chosen'", async () => {
     const u = await newUser({ autoTopUp: null });

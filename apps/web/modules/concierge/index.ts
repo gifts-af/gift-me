@@ -126,7 +126,7 @@ export { hasPaidFeatures } from "./paid-features";
 // Approving and buying from the user's own Zinc wallet (ALL-30, ALL-32 Task 6). The tick, the
 // webhook route, Settings and the people actions bind these in lib/wiring.ts.
 export { approveAndBuy } from "./purchase/approve";
-export type { ApproveError, ApproveInput, ApproveResult } from "./purchase/approve";
+export type { ApproveError, ApproveInput, ApproveResult, GiftOutcome } from "./purchase/approve";
 export { capsFor } from "./purchase/approve";
 export type { ShipTo } from "./purchase/approve";
 export { quoteFailedOrder, replaceFailedOrder } from "./purchase/replace";

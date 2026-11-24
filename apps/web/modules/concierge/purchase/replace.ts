@@ -242,6 +242,7 @@ async function replaceUnderLease(input: ReplaceInput, deps: PurchaseDeps & { loo
   const lock = await claimRoundNow(deps, roundId);
   if (!lock) return { ok: false, error: "busy" };
 
+  let several = false;
   const refused = await withLease(deps, roundId, lock, async (): Promise<ReplaceResult | null> => {
     // The round, the failure and the idea as they are now, before any paid lookup.
     const round = await readRound(deps, roundId);
@@ -272,6 +273,7 @@ async function replaceUnderLease(input: ReplaceInput, deps: PurchaseDeps & { loo
     const account = await readAccount(deps, userId);
     if (!account) return { ok: false, error: "not_allowed" };
     const others = (await liveOrders(deps, roundId)).filter((o) => o.id !== failed.id);
+    several = others.length > 0;
     const committed = committedSpendCents(others.map(asCommitted));
     const fit = capsFor(round, [total], account, input.overBudgetConfirmed === true, deps.settings, committed);
     if (typeof fit === "string") return { ok: false, error: fit };
@@ -309,7 +311,7 @@ async function replaceUnderLease(input: ReplaceInput, deps: PurchaseDeps & { loo
     return null;
   });
   if (refused) return refused;
-  return tellCustomer(deps, roundId, { round_id: roundId, user_id: userId });
+  return tellCustomer(deps, roundId, { round_id: roundId, user_id: userId }, several);
 }
 
 /** replace_failed_order's refusals; "no new total" is a programming error and throws. */

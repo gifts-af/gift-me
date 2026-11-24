@@ -441,6 +441,25 @@ test("an out_of_stock gift is replaced by the next-best idea", async ({ page }) 
   ]);
 });
 
+test("two gifts, one sold out: the page after Buy names each, the ordered one and the failed one", async ({ page }) => {
+  const { soldOut } = FAKE_PRODUCTS;
+  const b = await buyer();
+  const person = await personFor(b.id, "Nora");
+  const { roundId, ideaIds } = await seedRound(b.id, person, {
+    ideas: [
+      { title: soldOut.title, totalCents: 1800, productId: soldOut.productId, url: soldOut.url },
+      { title: "Fly line dressing", totalCents: 1200 },
+    ],
+  });
+  await signIn(page, b.creds);
+  await page.goto(`/rounds/${roundId}/buy?ideas=${ideaIds.join(",")}`);
+  await page.getByRole("button", { name: "Buy now · about $30" }).click();
+  const panel = page.getByRole("status").filter({ hasText: "1 of 2 gifts ordered" });
+  await expect(page.getByRole("heading", { name: "Your gifts for Nora" })).toBeVisible();
+  await expect(panel.getByRole("listitem").filter({ hasText: soldOut.title })).toContainText("It's out of stock");
+  await expect(panel.getByRole("listitem").filter({ hasText: "Fly line dressing" })).toContainText("Ordered");
+});
+
 // ─── layout (AC-26) ─────────────────────────────────────────────────────────
 
 /**

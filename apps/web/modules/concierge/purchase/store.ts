@@ -168,6 +168,40 @@ export async function liveOrders(deps: DbDeps, roundId: string): Promise<OrderRo
   return (data ?? []).filter((o) => !(o.status === "failed" && o.resolved)) as OrderRow[];
 }
 
+/** One of the round's current orders, for telling the buyer what each gift came to. */
+export type GiftRow = {
+  id: string;
+  title: string;
+  status: string;
+  hold_reason: string | null;
+  failure_type: string | null;
+  provider_order_id: string | null;
+};
+
+/** The round's gifts as they stand, in rank order: not cancelled, refunded, or a failure already dealt with. */
+export async function roundGifts(deps: DbDeps, roundId: string): Promise<GiftRow[]> {
+  const { data, error } = await concierge(deps)
+    .from("orders")
+    .select("id, status, hold_reason, failure_type, provider_order_id, resolved, gift_ideas(title, rank)")
+    .eq("round_id", roundId)
+    .not("status", "in", "(cancelled,refunded)")
+    .order("created_at")
+    .order("id");
+  if (error) fail("Loading the round's gifts failed", error);
+  const rows = (data ?? [])
+    .filter((o) => !(o.status === "failed" && o.resolved))
+    .map((o) => ({ ...o, idea: o.gift_ideas as { title: string; rank: number } | null }));
+  rows.sort((a, b) => (a.idea?.rank ?? Number.MAX_SAFE_INTEGER) - (b.idea?.rank ?? Number.MAX_SAFE_INTEGER));
+  return rows.map(({ id, idea, status, hold_reason, failure_type, provider_order_id }) => ({
+    id,
+    title: idea?.title ?? "gift",
+    status,
+    hold_reason,
+    failure_type,
+    provider_order_id,
+  }));
+}
+
 export type IdeaRow = {
   round_id: string | null;
   id: string;

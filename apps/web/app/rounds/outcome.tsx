@@ -2,7 +2,7 @@ import Link from "next/link";
 import { zincFeeNotice } from "@gifts-af/core";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { ApproveError, ReplaceError } from "@/modules/concierge";
+import type { ApproveError, ApproveResult, GiftOutcome, ReplaceError } from "@/modules/concierge";
 import { money } from "@/app/people/[id]/money";
 
 // What the confirm and fix pages say after Buy (ALL-29 AC-2, AC-18, AC-19): every result of
@@ -10,7 +10,7 @@ import { money } from "@/app/people/[id]/money";
 // always told). The actions return only these codes; the words live here.
 
 export type BuyError = ApproveError | ReplaceError | "zinc_off" | "session" | "bad_form";
-export type BuyResult = { ok: true; status: "ordered" | "held" | "failed"; reason: string | null } | { ok: false; error: BuyError };
+export type BuyResult = Extract<ApproveResult, { ok: true }> | { ok: false; error: BuyError };
 
 /**
  * The money notice (decision 53), always shown next to anything that places an order: the
@@ -41,12 +41,14 @@ const HELD: Record<string, Words> = {
   paused: { title: "Not ordered yet", body: "Buying is paused right now. We'll order it when it's back on." },
   not_allowed: { title: "Not ordered yet", body: "Buying gifts is open to test accounts during the alpha." },
 };
-const HELD_OTHER: Words = { title: "Not ordered yet", body: "We'll try again shortly and email you what happens." };
+const HELD_OTHER: Words = { title: "Not ordered yet", body: "We'll try again if there's time, and email you what happens." };
 
 const FAILED: Record<string, Words> = {
   price_up: { title: "Price went up", body: "We didn't buy it. We've emailed you what you can do." },
   out_of_stock: { title: "It's out of stock", body: "We didn't buy it. We've emailed you what you can do." },
   too_late: { title: "It can't arrive in time", body: "We didn't buy it. We've emailed you what you can do." },
+  address_withdrawn: { title: "The address isn't shared any more", body: "We didn't buy it. We've emailed you what you can do." },
+  address_rejected: { title: "The store couldn't ship to that address", body: "We didn't buy it. We've emailed you what you can do." },
   store_cancelled: { title: "The store cancelled it", body: "The money is back in your Zinc wallet. We've emailed you what you can do." },
 };
 const FAILED_OTHER: Words = { title: "The store couldn't take the order", body: "We didn't buy it. We've emailed you what you can do." };
@@ -82,19 +84,75 @@ export function outcomeWords(result: BuyResult): Words {
   return HELD[result.reason ?? ""] ?? HELD_OTHER;
 }
 
+/** "We've emailed you ...": only the gift the round's reason is about was surely just emailed. */
+const EMAILED = / We've emailed you [^.]+\.$/;
+
+function giftWords(g: GiftOutcome, gifts: GiftOutcome[], roundReason: string | null): Words {
+  // Already on its way before this buy, so "when it ships" would be behind the times.
+  if (g.status === "ordered" && g.reason) return { title: g.reason === "delivered" ? "Delivered" : "Shipped", body: null };
+  const words = outcomeWords({ ok: true, status: g.status, reason: g.reason });
+  const about = g.reason === roundReason;
+  // An unconfirmed gift keeps the round from trying the others.
+  if (g.status === "held" && words === HELD_OTHER && (!about || gifts.some((x) => x.reason === "unconfirmed"))) {
+    return { ...words, body: "See what happens next on the gift's page." };
+  }
+  if (about || !words.body) return words;
+  return { ...words, body: words.body.replace(EMAILED, g.status === "failed" ? " See what you can do on the gift's page." : "") };
+}
+
+const NEUTRAL = "What happened with your gifts";
+
+/** The heading over several gifts: how many were ordered, or no count while that isn't certain. */
+function severalTitle(gifts: GiftOutcome[]): string {
+  if (gifts.some((g) => g.reason === "unconfirmed" || g.reason === "store_cancelled")) return NEUTRAL;
+  const ordered = gifts.filter((g) => g.status === "ordered").length;
+  return ordered > 0 ? `${ordered} of ${gifts.length} gifts ordered` : "No gifts ordered yet";
+}
+
+/** Several gifts that came to different things: each by name, with its own words. */
+function GiftOutcomes({ gifts, roundReason }: { gifts: GiftOutcome[]; roundReason: string | null }) {
+  return (
+    <>
+      <p className="text-[17px] font-bold">{severalTitle(gifts)}</p>
+      <ul className="flex flex-col divide-y divide-border">
+        {gifts.map((g) => {
+          const words = giftWords(g, gifts, roundReason);
+          return (
+            <li key={g.orderId} className="flex flex-col gap-0.5 py-2 last:pb-0">
+              <span className="text-[15px] font-semibold [overflow-wrap:anywhere]">{g.title}</span>
+              <span className={cn("text-[15px] font-semibold", g.status === "ordered" ? "text-success" : "text-warning")}>{words.title}</span>
+              {words.body && <span className="text-[15px] text-muted-foreground">{words.body}</span>}
+            </li>
+          );
+        })}
+      </ul>
+    </>
+  );
+}
+
 /** The result panel after Buy: what happened, and the way back to the round. */
 export function Outcome({ result, roundId, children }: { result: BuyResult; roundId: string; children?: React.ReactNode }) {
-  const words = outcomeWords(result);
-  const good = result.ok && result.status === "ordered";
+  const gifts = result.ok ? result.gifts : undefined;
+  const words = gifts === "unknown" ? { title: NEUTRAL, body: "See each one on the gift's page." } : outcomeWords(result);
+  const good = result.ok && result.status === "ordered" && !gifts;
+  // Something was ordered or is waiting (or may be), so the gift's own page comes next.
+  const toGift =
+    result.ok && (gifts === "unknown" || (gifts ? gifts.some((g) => g.status !== "failed") : result.status !== "failed"));
   return (
     <div className="flex flex-col gap-3">
       <div role="status" className={cn("flex flex-col gap-1 rounded-xl p-3", good ? "bg-success-soft" : "border border-border")}>
-        <p className={cn("text-[17px] font-bold", good && "text-success")}>{words.title}</p>
-        {words.body && <p className="text-[15px] text-muted-foreground">{words.body}</p>}
+        {result.ok && Array.isArray(gifts) ? (
+          <GiftOutcomes gifts={gifts} roundReason={result.reason} />
+        ) : (
+          <>
+            <p className={cn("text-[17px] font-bold", good && "text-success")}>{words.title}</p>
+            {words.body && <p className="text-[15px] text-muted-foreground">{words.body}</p>}
+          </>
+        )}
       </div>
       {children}
       <Button asChild variant="outline">
-        <Link href={`/rounds/${roundId}`}>{good ? "Back to the gift" : "See all ideas"}</Link>
+        <Link href={`/rounds/${roundId}`}>{toGift ? "Back to the gift" : "See all ideas"}</Link>
       </Button>
     </div>
   );

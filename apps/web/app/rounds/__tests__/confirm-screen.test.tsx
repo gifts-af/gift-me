@@ -138,6 +138,19 @@ describe("ConfirmScreen", () => {
     expect(await screen.findByText("Waiting on your Zinc balance")).toBeInTheDocument();
   });
 
+  it("the title asks before Buy and stops asking after, for one gift and for several", async () => {
+    setup({ ideas: [idea(), idea()], budgetCents: null });
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Buy these 2 gifts for Mom?");
+    await userEvent.click(screen.getByRole("button", { name: /^Buy anyway|^Buy now/ }));
+    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent("Your gifts for Mom");
+  });
+  it("the title after one gift", async () => {
+    setup();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Buy this for Mom?");
+    await userEvent.click(screen.getByRole("button", { name: "Buy now · about $54.20" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Your gift for Mom" })).toBeInTheDocument();
+  });
+
   it("no address links to the person's address form and back here", async () => {
     setup({ recipient: { kind: "none" } }, { ok: false, error: "no_address" });
     await userEvent.click(screen.getByRole("button", { name: "Buy now · about $54.20" }));
