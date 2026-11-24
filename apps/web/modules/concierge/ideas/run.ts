@@ -24,6 +24,7 @@ import { AI_MODELS } from "@/lib/ai/models";
 import { isSensitive } from "@/lib/ai/sensitive";
 import { errorFields, logEvent } from "@/lib/log";
 import { storeName } from "@gifts-af/core/store-page/link";
+import type { Cost, RecordCost } from "../costs/record";
 import { ZincError, type ZincErrorKind, type ZincHttp } from "../zinc/client";
 import {
   listGiftQuote,
@@ -67,6 +68,8 @@ export type IdeaDeps = {
   sleep: (ms: number) => Promise<void>;
   /** How many runs share Zinc's request rate at once (ALL-125); this run gets 1/share of it. Default 1. */
   zincShare?: number;
+  /** Records what the run cost, once per part, when it ends. Never throws. */
+  recordCost: RecordCost;
 };
 
 /** A true constant: the rate limit is per second. */
@@ -77,7 +80,10 @@ const AMAZON = "amazon";
 type Tally = {
   runId: string | null;
   stage: "checks" | "started" | "brainstormed" | "resolved" | "ranked";
+  /** Cents so far: `ai` + `lookups`. The cap and idea_runs.cost_cents work from this. */
   spent: number;
+  ai: number;
+  lookups: number;
   /** List gifts that qualified (ALL-29). */
   listKept: number;
   candidates: number;
@@ -86,7 +92,7 @@ type Tally = {
   keepMin: number | null;
   refusal: IdeaRefusal | null;
   error: { name: string; kind: string | null } | null;
-  /** An AI call was cut off (timeout or the tick's deadline), so what it used was never reported. */
+  /** An AI call was cut off, dropped or its reply couldn't be priced, so what it used was never reported. */
   costUnknown: boolean;
   /** An AI reply's cost was added: a later out-of-credit error ends the run as a counted failure. */
   aiPaid: boolean;
@@ -104,6 +110,8 @@ export async function runIdeas(req: IdeaRequest, deps: IdeaDeps): Promise<IdeaOu
     runId: null,
     stage: "checks",
     spent: 0,
+    ai: 0,
+    lookups: 0,
     listKept: 0,
     candidates: 0,
     resolved: 0,
@@ -143,13 +151,30 @@ export async function runIdeas(req: IdeaRequest, deps: IdeaDeps): Promise<IdeaOu
       ...(t.error ? { error: t.error.name, error_kind: t.error.kind } : {}),
       ...(t.costUnknown ? { costUnknown: true } : {}),
     });
+    await recordRun(req, deps.recordCost, t);
   }
   return outcome;
+}
+
+/**
+ * The run's AI and lookup costs, each recorded on its own, in unrounded cents. A run that never
+ * started spent nothing. A recorder that throws can't change how the run ends.
+ */
+async function recordRun(req: IdeaRequest, recordCost: RecordCost, t: Tally): Promise<void> {
+  if (t.runId === null) return;
+  const base = { userId: req.userId, ideaRunId: t.runId };
+  const parts: Cost[] = [];
+  // A call whose cost is unknown is recorded even at 0, so the average shows it's an estimate.
+  if (t.ai > 0 || t.costUnknown) parts.push({ ...base, kind: "ai_ideas", cents: t.ai, estimated: t.costUnknown });
+  // Zinc reports no price per lookup, so the setting's price is always an estimate.
+  if (t.lookups > 0) parts.push({ ...base, kind: "lookup_ideas", cents: t.lookups, estimated: true });
+  await Promise.allSettled(parts.map(async (part) => recordCost(part)));
 }
 
 /** Adds an AI reply's cost to the run. */
 function paidAi(t: Tally, costCents: number) {
   t.spent += costCents;
+  t.ai += costCents;
   t.aiPaid = true;
 }
 
@@ -204,6 +229,7 @@ async function attempt(req: IdeaRequest, deps: IdeaDeps, t: Tally): Promise<Idea
       return "stop";
     }
     t.spent += s.zincLookupCents;
+    t.lookups += s.zincLookupCents;
     return call();
   };
   const ctx: JudgeContext = {
@@ -436,13 +462,14 @@ async function brainstormPass(
   const forAi = (text: string) => redactNames(stripContactDetails(text), names);
   const relationship = relationshipLabel(inputs.relationship).toLowerCase();
   const facts = inputs.facts.map((f) => forAi(`${f.category}: ${f.value}${f.source === "capture" ? " (captured)" : ""}`));
-  // An AI call cut off mid-way may have spent, but no reply says how much: the run's cost is then unknown.
+  // An AI call cut off mid-way may have spent, but no reply says how much: the run's cost is then
+  // unknown. An AiError says so itself: a refusal, or a reply we priced, is known even if the signal fired.
   const ai = async <T>(call: (signal: AbortSignal) => Promise<T>): Promise<T> => {
     const signal = AbortSignal.any([req.signal, AbortSignal.timeout(s.aiTimeoutMs)]);
     try {
       return await call(signal);
     } catch (e) {
-      if (signal.aborted) t.costUnknown = true;
+      if (e instanceof AiError ? e.maybeSpent : signal.aborted) t.costUnknown = true;
       throw e;
     }
   };

@@ -406,7 +406,7 @@ The engine finds gift ideas for a round and on demand (a person's Gift ideas scr
 
 **Zinc offers are judged on the worst case:** orders don't choose a shipping method, so each offer is judged on its slowest delivery and its highest shipping price.
 
-**How we see it working:** the events `ideas.run_started` and `ideas.run` in the Vercel logs, with ids, counts, stage, outcome and cents (AI plus Zinc), never names or gift text. `costUnknown: true` on `ideas.run` means an AI call was cut off by its timeout or the tick's deadline, so its cost never came back and `cost_cents` is too low; check the Gateway's own spend for that time. Each run is also a row in `concierge.idea_runs`.
+**How we see it working:** the events `ideas.run_started` and `ideas.run` in the Vercel logs, with ids, counts, stage, outcome and cents (AI plus Zinc), never names or gift text. `costUnknown: true` on `ideas.run` means an AI call was cut off by its timeout or the tick's deadline, its connection dropped, or its reply couldn't be read or priced, so its cost never came back and `cost_cents` is too low; check the Gateway's own spend for that time. Each run is also a row in `concierge.idea_runs`.
 
 **Tests and money.** Browser tests use the fake Gateway (`apps/web/e2e/fake-gateway.ts`) and the fake Zinc (`e2e/fake-zinc.ts`), so they spend nothing. `pnpm ai:eval --ideas` is the only command that calls the real AI and Zinc for ideas; it spends money, so run it only with Jim's go-ahead, never in CI.
 

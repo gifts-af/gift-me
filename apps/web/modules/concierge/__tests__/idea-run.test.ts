@@ -3,6 +3,7 @@
 import type { ScheduleSettings } from "@gifts-af/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AI_MODELS } from "@/lib/ai/models";
+import type { Cost } from "../costs/record";
 import type { IdeaDeps, IdeaRequest } from "../ideas/run";
 import type { IdeaInputs, IdeaRefusal, IdeaSettings, IdeaStore, ListGift, RunEnd, RunStage, SavedIdea } from "../ideas/store";
 
@@ -197,6 +198,7 @@ let store: FakeStore;
 let gateway: FakeGateway;
 let zinc: FakeZinc;
 let log: ReturnType<typeof vi.spyOn>;
+let costs: Cost[];
 
 const req = (o: Partial<IdeaRequest> = {}): IdeaRequest => ({
   userId: "user-1",
@@ -214,6 +216,9 @@ const deps = (): IdeaDeps => ({
   clock: () => t,
   sleep: async (ms) => {
     t += ms;
+  },
+  recordCost: async (cost) => {
+    costs.push(cost);
   },
 });
 
@@ -235,6 +240,7 @@ beforeEach(() => {
   store = new FakeStore();
   gateway = new FakeGateway();
   zinc = new FakeZinc(() => t);
+  costs = [];
   log = vi.spyOn(console, "log").mockImplementation(() => {});
 });
 afterEach(() => {
@@ -1014,5 +1020,242 @@ describe("runIdeas: photos and the price ceiling", () => {
     expect(gateway.bodies[0].content).toContain("Budget: $27.60");
     expect(store.saved.map((i) => i.retailerProductId)).toEqual(["P2"]);
     expect(event("ideas.candidate_dropped")).toMatchObject({ reason: "over_limit" });
+  });
+});
+
+// ─── what each run cost (ALL-144) ─────────
+
+describe("runIdeas: recorded costs (ALL-144 AC-1, AC-2)", () => {
+  const ai = () => costs.find((c) => c.kind === "ai_ideas");
+  const lookups = () => costs.find((c) => c.kind === "lookup_ideas");
+  const finishedCost = () => store.finished.at(-1)!.cost;
+  const total = () => costs.reduce((sum, c) => sum + c.cents, 0);
+
+  /** Answers the brainstorm or the rank with `reply` instead; everything else as usual. */
+  function instead(which: "brainstorm" | "rank", reply: (init?: RequestInit) => Promise<Response>) {
+    const usual = gateway.fetch;
+    gateway.fetch = (async (url: string, init?: RequestInit) => {
+      if (url.endsWith("/v1/models")) return usual(url, init);
+      const isBrainstorm = Boolean(JSON.parse(String(init?.body)).tools);
+      return isBrainstorm === (which === "brainstorm") ? reply(init) : usual(url, init);
+    }) as typeof fetch;
+  }
+  const dropped = async (): Promise<Response> => {
+    throw new TypeError("fetch failed");
+  };
+  const noUsage = async () => json({ content: [{ type: "text", text: "{}" }] });
+  const unreadable = async () => new Response("<html>", { status: 200 });
+  const pricedNotJson = (output_tokens: number) => async () =>
+    json({ content: [{ type: "text", text: "not json" }], usage: { input_tokens: 0, output_tokens } });
+
+  function expectBothParts() {
+    expect(costs).toHaveLength(2);
+    expect(Math.abs(total() - finishedCost())).toBeLessThanOrEqual(1);
+  }
+
+  it("a saved run records AI and lookups separately, and they add up to the run's cost", async () => {
+    world([2000, 2000], { zinc, gateway });
+    gateway.brainstormUsage = { input_tokens: 1234, output_tokens: 1001, server_tool_use: { web_search_requests: 3 } };
+    expect(await runIdeas(req(), deps())).toEqual({ status: "saved", count: 2 });
+    expect(costs).toEqual([
+      // 1.234¢ + 10.01¢ + 3 searches, then the rank's 0.5¢ + 2¢: fractions kept.
+      { userId: "user-1", kind: "ai_ideas", cents: expect.closeTo(16.744, 6), estimated: false, ideaRunId: "run-1" },
+      { userId: "user-1", kind: "lookup_ideas", cents: 4, estimated: true, ideaRunId: "run-1" },
+    ]);
+    expectBothParts();
+    expect(store.finished).toEqual([{ outcome: "saved", cost: 21 }]);
+  });
+
+  it("photo lookups count as lookups", async () => {
+    store.in = inputs({ round: ROUND, listGifts: listWorld(3, zinc) });
+    expect(await runIdeas(roundReq(), deps())).toEqual({ status: "saved", count: 3 });
+    // No AI was used, so there's no AI row.
+    expect(costs).toEqual([{ userId: "user-1", kind: "lookup_ideas", cents: 6, estimated: true, ideaRunId: "run-1" }]);
+    expect(store.finished).toEqual([{ outcome: "saved", cost: 6 }]);
+  });
+
+  it("a run stopped by the cost cap records both", async () => {
+    world([2000, 2000, 2000], { zinc, gateway });
+    gateway.brainstormUsage = { input_tokens: 0, output_tokens: 9550, server_tool_use: { web_search_requests: 3 } };
+    expect(await runIdeas(req(), deps())).toEqual({ status: "cost_cap" });
+    expectBothParts();
+    expect(ai()).toMatchObject({ cents: expect.closeTo(98.5, 6), estimated: false });
+    expect(lookups()).toMatchObject({ cents: 1 });
+  });
+
+  it("a run stopped by the deadline while looking up records both, its AI cost exact", async () => {
+    world([2000, 2000], { zinc, gateway });
+    const controller = new AbortController();
+    zinc.onCall = () => {
+      controller.abort();
+      throw new DOMException("aborted", "AbortError");
+    };
+    expect(await runIdeas(req({ signal: controller.signal }), deps())).toEqual({ status: "deadline" });
+    expectBothParts();
+    expect(ai()?.estimated).toBe(false);
+  });
+
+  it("a run that failed on an unreadable paid reply records its exact cost", async () => {
+    instead("brainstorm", pricedNotJson(2000));
+    expect(await runIdeas(req(), deps())).toEqual({ status: "failed" });
+    expect(costs).toEqual([{ userId: "user-1", kind: "ai_ideas", cents: expect.closeTo(20, 6), estimated: false, ideaRunId: "run-1" }]);
+    expect(finishedCost()).toBe(20);
+    expect(event("ideas.run")).not.toHaveProperty("costUnknown");
+  });
+
+  it("a paid, unreadable reply stays exact even if the deadline passes as it arrives", async () => {
+    const controller = new AbortController();
+    instead("brainstorm", async () => {
+      controller.abort();
+      return pricedNotJson(2000)();
+    });
+    expect(await runIdeas(req({ signal: controller.signal }), deps())).toEqual({ status: "deadline" });
+    expect(ai()).toMatchObject({ cents: expect.closeTo(20, 6), estimated: false });
+  });
+
+  it("a paid, unreadable rank reply after a paid brainstorm counts both replies", async () => {
+    world([2000], { zinc, gateway });
+    instead("rank", pricedNotJson(100));
+    expect(await runIdeas(req(), deps())).toEqual({ status: "failed" });
+    expect(ai()).toMatchObject({ cents: expect.closeTo(15, 6), estimated: false });
+    expectBothParts();
+  });
+
+  it("a brainstorm error swallowed after list gifts qualified still counts", async () => {
+    store.in = inputs({ round: ROUND, listGifts: listWorld(1, zinc) });
+    instead("brainstorm", pricedNotJson(2000));
+    expect(await runIdeas(roundReq(), deps())).toEqual({ status: "saved", count: 1 });
+    expectBothParts();
+    expect(ai()).toMatchObject({ cents: expect.closeTo(20, 6), estimated: false });
+  });
+
+  it.each([
+    ["its connection dropped", dropped],
+    ["its body couldn't be read", unreadable],
+    ["it couldn't be priced", noUsage],
+  ])("an AI call marks the row estimated when %s, at 0 cents with nothing else spent", async (_why, reply) => {
+    instead("brainstorm", reply);
+    expect(await runIdeas(req(), deps())).toEqual({ status: "failed" });
+    expect(costs).toEqual([{ userId: "user-1", kind: "ai_ideas", cents: 0, estimated: true, ideaRunId: "run-1" }]);
+    expect(store.finished).toEqual([{ outcome: "failed", cost: 0 }]);
+    expect(event("ideas.run")).toMatchObject({ costUnknown: true });
+  });
+
+  it.each([
+    ["dropped", dropped],
+    ["unpriced", noUsage],
+  ])("a rank call that was %s after a paid brainstorm marks the row estimated", async (_why, reply) => {
+    world([2000], { zinc, gateway });
+    instead("rank", reply);
+    expect(await runIdeas(req(), deps())).toEqual({ status: "failed" });
+    expect(ai()).toMatchObject({ cents: expect.closeTo(14, 6), estimated: true });
+    expectBothParts();
+  });
+
+  it("a dropped brainstorm swallowed after list gifts qualified marks the row estimated", async () => {
+    store.in = inputs({ round: ROUND, listGifts: listWorld(1, zinc) });
+    instead("brainstorm", dropped);
+    expect(await runIdeas(roundReq(), deps())).toEqual({ status: "saved", count: 1 });
+    expect(ai()).toMatchObject({ cents: 0, estimated: true });
+  });
+
+  it("an AI call cut off by its timeout marks the row estimated", async () => {
+    store.s = settings({ aiTimeoutMs: 5 });
+    instead("brainstorm", (init) => new Promise((_res, rej) => init?.signal?.addEventListener("abort", () => rej(init.signal!.reason))));
+    expect(await runIdeas(req(), deps())).toEqual({ status: "failed" });
+    expect(costs).toEqual([{ userId: "user-1", kind: "ai_ideas", cents: 0, estimated: true, ideaRunId: "run-1" }]);
+  });
+
+  it("an AI call cut off by the deadline marks the row estimated", async () => {
+    const controller = new AbortController();
+    instead("brainstorm", async () => {
+      controller.abort();
+      throw new DOMException("aborted", "AbortError");
+    });
+    expect(await runIdeas(req({ signal: controller.signal }), deps())).toEqual({ status: "deadline" });
+    expect(costs).toEqual([{ userId: "user-1", kind: "ai_ideas", cents: 0, estimated: true, ideaRunId: "run-1" }]);
+  });
+
+  it.each([402, 429, 500, 503])("a brainstorm the Gateway refused (%i) writes no AI row", async (status) => {
+    instead("brainstorm", async () => json({}, status));
+    await runIdeas(req(), deps());
+    expect(store.finished).toHaveLength(1);
+    expect(costs).toEqual([]);
+  });
+
+  it.each([402, 429, 503])("a rank call the Gateway refused (%i) leaves the paid brainstorm exact", async (status) => {
+    world([2000], { zinc, gateway });
+    instead("rank", async () => json({}, status));
+    await runIdeas(req(), deps());
+    expect(ai()).toMatchObject({ cents: expect.closeTo(14, 6), estimated: false });
+  });
+
+  it("a refusal that arrives as the deadline passes isn't marked estimated", async () => {
+    const controller = new AbortController();
+    instead("brainstorm", async () => {
+      controller.abort();
+      return json({}, 429);
+    });
+    expect(await runIdeas(req({ signal: controller.signal }), deps())).toEqual({ status: "deadline" });
+    expect(costs).toEqual([]);
+  });
+
+  it("a dropped price listing is free, so it records nothing", async () => {
+    gateway.fetch = dropped as typeof fetch;
+    expect(await runIdeas(req(), deps())).toEqual({ status: "failed" });
+    expect(costs).toEqual([]);
+  });
+
+  it("an AI-only run writes no lookup row", async () => {
+    gateway.ideas = [];
+    expect(await runIdeas(req(), deps())).toEqual({ status: "none" });
+    expect(costs.map((c) => c.kind)).toEqual(["ai_ideas"]);
+  });
+
+  it("a run refused before it started records nothing", async () => {
+    store.refusal = "not_found";
+    expect(await runIdeas(req(), deps())).toMatchObject({ status: "refused" });
+    expect(costs).toEqual([]);
+  });
+
+  it("a run still records, once, when store.finish throws, and the error is unchanged", async () => {
+    world([2000, 2000], { zinc, gateway });
+    const boom = new Error("finish failed");
+    store.finish = async () => {
+      throw boom;
+    };
+    await expect(runIdeas(req(), deps())).rejects.toBe(boom);
+    expect(costs.map((c) => c.kind)).toEqual(["ai_ideas", "lookup_ideas"]);
+  });
+
+  it.each([
+    ["rejects", () => Promise.reject(new Error("recorder"))],
+    [
+      "throws",
+      () => {
+        throw new Error("recorder");
+      },
+    ],
+  ])("a recorder that %s changes neither the outcome nor a thrown error", async (_how, recordCost) => {
+    world([2000, 2000], { zinc, gateway });
+    expect(await runIdeas(req(), { ...deps(), recordCost })).toEqual({ status: "saved", count: 2 });
+    const boom = new Error("finish failed");
+    store.finish = async () => {
+      throw boom;
+    };
+    await expect(runIdeas(req(), { ...deps(), recordCost })).rejects.toBe(boom);
+  });
+
+  it("the run waits for its records", async () => {
+    world([2000], { zinc, gateway });
+    let done = 0;
+    await runIdeas(req(), {
+      ...deps(),
+      recordCost: async () => {
+        await new Promise((r) => setTimeout(r, 5));
+        done++;
+      },
+    });
+    expect(done).toBe(2);
   });
 });
