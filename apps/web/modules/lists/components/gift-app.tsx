@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { onBeforeLeaving } from "@/lib/leaving-page";
 import { saveList } from "@/modules/lists/actions/lists";
@@ -20,7 +21,7 @@ import Link from "next/link";
 import { PageFrame } from "@/components/app-shell/page-frame";
 import NamePrompt, { skippedNamePrompt } from "./name-prompt";
 import ShareButton from "./share-button";
-import { Banner, buttonClass, inputClass } from "./ui";
+import { Banner, inputClass } from "./ui";
 
 export { UNDO_MS } from "@/modules/lists/lib/list-saver";
 
@@ -390,9 +391,9 @@ export default function GiftApp({ initial, footer = null, needsName = false, sav
                   {list.status === "idle" && !list.listId ? "" : STATUS_TEXT[list.status]}
                 </p>
                 {list.status === "error" && (
-                  <button type="button" className={`${buttonClass.link} text-[13px]`} onClick={saver.retry}>
+                  <Button type="button" variant="link" size="sm" className="px-1 text-[13px]" onClick={saver.retry}>
                     Try again
-                  </button>
+                  </Button>
                 )}
               </div>
             )}
@@ -453,9 +454,9 @@ export default function GiftApp({ initial, footer = null, needsName = false, sav
             <span aria-hidden="true" className="text-muted-foreground">
               ·
             </span>
-            <button ref={undoRef} type="button" className={buttonClass.secondarySm} onClick={undoRemove}>
+            <Button ref={undoRef} type="button" variant="secondary" size="sm" onClick={undoRemove}>
               Undo
-            </button>
+            </Button>
           </div>
         </div>
       )}

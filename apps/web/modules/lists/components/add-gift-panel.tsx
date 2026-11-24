@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { useLayoutEffect, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 import { lookupProductLink, storeName, type MissingField } from "@/modules/lists/lib/product-link";
 import { centsToInputValue, formatCents, parsePriceToCents } from "@/modules/lists/lib/format";
@@ -7,7 +8,7 @@ import type { AmazonLookupResult, AmazonProduct } from "@/modules/lists/lib/amaz
 import type { ReadPage } from "@/modules/lists/lib/gift-link";
 import type { Gift } from "@/modules/lists/lib/lists";
 import LookupStatus, { type Lookup, type LookupProduct } from "./lookup-status";
-import { buttonClass, inputClass, labelClass } from "./ui";
+import { inputClass, labelClass } from "./ui";
 import { useHydrated } from "@/lib/use-hydrated";
 
 // The editable fields, held as typed: the price stays a string until submit.
@@ -304,9 +305,9 @@ export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }: Add
           </div>
           {/* type="button" is essential: the default is submit, and being the
               first button in the form it would become the implicit Enter target. */}
-          <button type="button" className={buttonClass.secondary} onClick={handleAutofill} disabled={pending} aria-busy={pending}>
+          <Button type="button" variant="secondary" onClick={handleAutofill} disabled={pending} aria-busy={pending}>
             {pending ? "Looking…" : "Add"}
-          </button>
+          </Button>
         </div>
         <LookupStatus lookup={lookup} pending={pending} />
         {/* Desktop Chrome only, and only before a gift is under way (ALL-65). */}
@@ -340,23 +341,25 @@ export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }: Add
                 Edit details
               </button>
             </div>
-            <button ref={addRef} type="submit" className={buttonClass.secondarySm}>
+            <Button ref={addRef} type="submit" variant="secondary" size="sm">
               Add to list
-            </button>
+            </Button>
           </div>
         )}
 
         {mode !== "details" && (
-          <button
+          <Button
             type="button"
-            className={`${buttonClass.link} self-start`}
+            variant="link"
+            size="sm"
+            className="px-1 self-start"
             onClick={() => {
               setMode("details");
               focusSoon(nameRef);
             }}
           >
             Add by hand
-          </button>
+          </Button>
         )}
 
         {mode === "details" && (
@@ -426,19 +429,21 @@ export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }: Add
             </div>
 
             <div className="flex items-center gap-3">
-              <button ref={addRef} type="submit" className={buttonClass.secondary}>
+              <Button ref={addRef} type="submit" variant="secondary">
                 Add to list
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className={buttonClass.link}
+                variant="link"
+                size="sm"
+                className="px-1"
                 onClick={() => {
                   setMode("closed");
                   setErrors({});
                 }}
               >
                 Cancel
-              </button>
+              </Button>
             </div>
           </fieldset>
         )}

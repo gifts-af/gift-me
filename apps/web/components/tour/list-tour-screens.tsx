@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { Phone } from "./phone";
 import { MY_LIST } from "./tour-data";
 
@@ -48,9 +49,9 @@ export function ShareScreen() {
         </span>
       </div>
       {/* In the tour it does nothing: there's no real link to copy. */}
-      <button type="button" className="min-h-11 self-start rounded-lg bg-secondary px-4 text-[15px] font-semibold text-secondary-foreground">
+      <Button type="button" variant="secondary" size="sm" className="self-start">
         Copy link
-      </button>
+      </Button>
     </Phone>
   );
 }
@@ -69,14 +70,14 @@ export function ClaimScreen({ claimed, onClaim }: { claimed: string[]; onClaim: 
           {claimed.includes(gift.name) ? (
             <span className="rounded-full bg-muted px-2 py-0.5 text-[12px] font-semibold text-muted-foreground">Claimed</span>
           ) : (
-            <button
+            <Button
               type="button"
               aria-label={`Claim ${gift.name}`}
               onClick={() => onClaim(gift.name)}
-              className="min-h-11 rounded-lg bg-primary px-3 text-[14px] font-bold text-primary-foreground hover:bg-primary/90"
+              size="sm"
             >
               Claim
-            </button>
+            </Button>
           )}
         </div>
       ))}

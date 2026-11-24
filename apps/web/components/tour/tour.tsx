@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { RequestAccessButton } from "@/components/home/request-access-dialog";
 import { DoneScreen } from "./done-screen";
-import { END_LINK, END_PRIMARY, EndScreen } from "./end-screen";
+import { END_LINK, EndScreen } from "./end-screen";
 import { ListScreen } from "./list-screen";
 import { PeopleScreen } from "./people-screen";
 import { PickScreen } from "./pick-screen";
@@ -53,7 +53,7 @@ export function Tour() {
       {current.id === "end" && (
         <EndScreen
           line="The concierge is still being built. Join the waitlist and we'll email you when it's ready."
-          primary={<RequestAccessButton kind="waitlist" className={END_PRIMARY} />}
+          primary={<RequestAccessButton kind="waitlist" variant="default" />}
           secondary={<RequestAccessButton className={END_LINK}>Just want the list? Request access</RequestAccessButton>}
         />
       )}

@@ -360,7 +360,7 @@ export function PersonForm(props: Props) {
         </p>
       )}
 
-      <Button type="submit" className="min-h-12 w-full text-base font-semibold" disabled={busy || preparing} aria-busy={busy || preparing}>
+      <Button type="submit" className="w-full" disabled={busy || preparing} aria-busy={busy || preparing}>
         <span className="truncate">{busy ? "Saving…" : preparing ? "Preparing photo…" : submitLabel}</span>
       </Button>
     </form>

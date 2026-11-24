@@ -59,18 +59,6 @@ export function BlockedButton({ id, reason, className = "", children }: BlockedB
   );
 }
 
-export const buttonClass = {
-  primary:
-    "inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-primary px-5 text-base font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-45 aria-disabled:opacity-45",
-  secondary:
-    "inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-secondary px-5 text-base font-semibold text-secondary-foreground hover:bg-secondary/70 disabled:opacity-45 aria-disabled:opacity-45",
-  secondarySm:
-    "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-secondary px-3.5 text-[15px] font-semibold text-secondary-foreground hover:bg-secondary/70 disabled:opacity-45 aria-disabled:opacity-45",
-  primarySm:
-    "inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-primary px-3.5 text-[15px] font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-45 aria-disabled:opacity-45",
-  link: "inline-flex min-h-11 items-center px-1 text-[15px] text-muted-foreground underline underline-offset-[3px] hover:text-foreground",
-};
-
 export const inputClass =
   "min-h-11 w-full rounded-md border border-input bg-background px-3 py-2.5 text-base aria-[invalid=true]:border-destructive";
 

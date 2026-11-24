@@ -137,6 +137,7 @@ The gift list and the concierge each **work on their own**, and are linked light
 
 - **Tailwind CSS plus shadcn/ui** (T15), in shadcn's "new-york" style, with the tokens above in `apps/web/app/globals.css`. Already installed: button, card, input, label, checkbox, badge, dropdown-menu.
 - **Expected additions** **[Claude's call]**: `sheet` (bottom sheets for "reject with a reason" and "More"), `dialog` (claim a gift), `textarea`, `skeleton` (loading states) and `sonner` (short "Saved" messages). Each is added by the ticket that first needs it, not up front.
+- **Buttons and links that look like buttons use `Button`** (`components/ui/button.tsx`): a link is `Button asChild`, and a dialog's opener is `DialogTrigger asChild` around a `Button`. Main size 48 px tall with 16 px text, small 44 px with 15 px, weight 600. The exceptions are the pictures of buttons in the home page and tour previews (`components/home/pick-preview.tsx`, `list-preview.tsx`, `concierge.tsx`), which can't be pressed.
 - **Dropdowns use `NativeSelect`** (`components/ui/native-select.tsx`, ALL-109): the phone's own picker, styled to match `Input` with a chevron. iPhone Safari otherwise draws a plain `<select>` grey next to white text boxes.
 - **Forms are cards:** each group of fields sits in the same bordered card, and a group that's all optional says "Optional" once in its heading (the person form, ALL-109).
 - **The extension** (ALL-22) uses the same Tailwind setup and copies the token block, so it matches the app.

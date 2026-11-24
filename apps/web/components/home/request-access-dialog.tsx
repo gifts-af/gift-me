@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { RequestAccessForm } from "@/app/request-access/request-access-form";
+import { Button } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -32,10 +33,13 @@ const COPY: Record<RequestKind, { button: string; title: string; description: st
 // kind="waitlist" it's the concierge waitlist (ALL-71), whose thank-you can
 // switch the same box to Request access for the list.
 export function RequestAccessButton({
+  variant,
   className,
   children,
   kind = "access",
 }: {
+  /** Which Button it is; without it, className alone styles it (a text link). */
+  variant?: "default" | "secondary";
   className?: string;
   children?: React.ReactNode;
   kind?: RequestKind;
@@ -43,6 +47,7 @@ export function RequestAccessButton({
   const { open, onOpenChange, closeSoon } = useSelfClosingDialog();
   const [shown, setShown] = useState<RequestKind>(kind);
   const copy = COPY[shown];
+  const label = children ?? COPY[kind].button;
 
   return (
     <Dialog
@@ -52,7 +57,15 @@ export function RequestAccessButton({
         onOpenChange(next);
       }}
     >
-      <DialogTrigger className={className}>{children ?? COPY[kind].button}</DialogTrigger>
+      {variant ? (
+        <DialogTrigger asChild>
+          <Button type="button" variant={variant} className={className}>
+            {label}
+          </Button>
+        </DialogTrigger>
+      ) : (
+        <DialogTrigger className={className}>{label}</DialogTrigger>
+      )}
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{copy.title}</DialogTitle>

@@ -1,9 +1,10 @@
+import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
 import type { ClaimResult } from "@/modules/lists/actions/claims";
 import type { Gift, SharedList } from "@/modules/lists/lib/lists";
 import Modal from "./modal";
-import { Banner, buttonClass, inputClass, labelClass } from "./ui";
+import { Banner, inputClass, labelClass } from "./ui";
 
 const NAME_KEY = "giftme:guest-name";
 const MAX_NAME_LENGTH = 80;
@@ -140,14 +141,14 @@ export default function ClaimDialog({ gift, viewer, loginHref, onConfirm, onClos
               </p>
             )}
 
-            <button type="submit" className={`${buttonClass.primary} w-full`} disabled={pending} aria-busy={pending}>
+            <Button type="submit" className="w-full" disabled={pending} aria-busy={pending}>
               {pending ? "Claiming…" : "Claim gift"}
-            </button>
+            </Button>
           </>
         )}
-        <button type="button" className={`${buttonClass.link} self-center`} onClick={onClose}>
+        <Button type="button" variant="link" size="sm" className="px-1 self-center" onClick={onClose}>
           Cancel
-        </button>
+        </Button>
       </form>
     </Modal>
   );

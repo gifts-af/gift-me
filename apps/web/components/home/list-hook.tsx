@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { HeroCallout } from "@/components/home/hero-callout";
 import { RequestAccessButton } from "@/components/home/request-access-dialog";
+import { Button } from "@/components/ui/button";
 import { ListPreview } from "./list-preview";
 
 // The list hero (ALL-71): the part that works today, first. Same layout as
@@ -17,13 +18,10 @@ export function ListHook() {
           Add gifts from any shop. Text one link when someone asks. Family claims a gift so nobody doubles up.
         </p>
         <div className="flex flex-col gap-3 md:flex-row">
-          <Link
-            href="/tour/list"
-            className="inline-flex min-h-12 items-center justify-center rounded-lg bg-primary px-6 font-bold text-primary-foreground hover:bg-primary/90"
-          >
-            Take the tour
-          </Link>
-          <RequestAccessButton className="inline-flex min-h-12 items-center justify-center rounded-lg bg-secondary px-6 font-bold text-secondary-foreground hover:bg-secondary/70" />
+          <Button asChild>
+            <Link href="/tour/list">Take the tour</Link>
+          </Button>
+          <RequestAccessButton variant="secondary" />
         </div>
         <Link
           href="/auth/login"
