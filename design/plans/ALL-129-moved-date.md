@@ -1,6 +1,6 @@
 # ALL-129 Moving a birthday leaves an open round on the old date: Spec and Plan
 
-**Status:** spec approved by the owner, 2026-11-24; plan reviewed (no blockers; fixes applied), waiting for the owner. Cut to rule 1 after three adversarial reviews, by the owner's stop rule: the third found a blocker in rule 2 (keeping the yearly key right for rounds that already have a gift), which is now its own ticket. No code yet.
+**Status:** spec approved by the owner, 2026-11-24; plan approved by the owner, 2026-11-24. Cut to rule 1 after three adversarial reviews, by the owner's stop rule: the third found a blocker in rule 2 (keeping the yearly key right for rounds that already have a gift), which is now its own ticket. No code yet.
 
 **Goal:** when a birthday or anniversary date changes, an open round with no gift chosen ends, and the real date can have one.
 
@@ -36,8 +36,8 @@ Birthdays and anniversaries only. **Moved** means the month or day changed. **Op
 | AC-9 | A round claimed, or an idea run under way | The occasion moves | No new paid run, no ideas saved, no new send. An email already being sent can't be recalled. Money spent stays recorded, and the lost lease is a quiet stop, not `round_failed` |
 | AC-10 | A round closed by a move (`skipped`, no year) | Its old link is opened, on any day | "The date changed, so this round ended." Nothing can be bought |
 | AC-11 | A round closed by a move, with no orders | Its old date passes | Not in past gifts, and the person page doesn't link to an empty list. One with failed orders is listed as today |
-| AC-12 | A round of this occasion with a live order (held, placing, unconfirmed, placed, shipped), its date not passed | The buyer saves a new date | It saves, and says "A gift is already set for Dec 28. It keeps that date." If the new date is earlier, or has passed this year, it adds that the gift may arrive late. Leaving the page before it shows can miss it; showing it on the person page is ALL-171 **[Claude's call]** |
-| AC-13 | A new date that's too close to ship for, with no gift set | The buyer saves it | It saves, and says it's too late for this one and the next one starts as usual **[Claude's call]**. Not shown when the occasion is off, the buyer has no paid features, or a gift for it was already given |
+| AC-12 | A round of this occasion with a live order (held, placing, unconfirmed, placed, shipped), its date not passed | The buyer saves a new date | It saves, and says "A gift is already set for Dec 28. It keeps that date." If the new date is earlier, or has passed this year, it adds that the gift may arrive late. Leaving the page before it shows can miss it; showing it on the person page is ALL-171 |
+| AC-13 | A new date that's too close to ship for, with no gift set | The buyer saves it | It saves, and says it's too late for this one and the next one starts as usual. Not shown when the occasion is off, the buyer has no paid features, or a gift for it was already given |
 | AC-14 | `moved_dates_close_rounds` is 0 or missing | The occasion moves | Today's behaviour |
 | AC-15 | A holiday, an unchanged date or any other save | It happens | No round changes |
 | AC-16 | The weekly health email | A round was closed by a move | Not counted under `no_ideas` or `rounds_failed` |
