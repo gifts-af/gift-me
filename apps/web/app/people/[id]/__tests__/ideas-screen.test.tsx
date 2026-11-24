@@ -20,6 +20,7 @@ const VISE: ShownIdea = {
   imageUrl: "https://m.media-amazon.com/images/I/vise.jpg",
   retailerProductId: "B0FAKEVISE",
   sellerName: "Amazon.com",
+  priceCents: 4299,
   totalCents: 4754,
   arriveBy: "2026-12-04",
   reason: "They want a new vise.",
@@ -51,6 +52,12 @@ function setup({
 const suggest = () => screen.getByRole("button", { name: "Suggest ideas for Dad" });
 
 describe("IdeasScreen", () => {
+  it("shows the item's own price, as saved gifts do, then the whole cost", () => {
+    setup();
+    expect(screen.getByText("$42.99 · Amazon")).toBeInTheDocument();
+    expect(screen.getByText("About $47.54 with shipping, tax and the order fee")).toBeInTheDocument();
+  });
+
   it("shows the button and money notice with the offer", () => {
     setup();
     expect(suggest()).toBeEnabled();
@@ -111,11 +118,12 @@ describe("IdeasScreen", () => {
     expect(screen.getByRole("link", { name: "Answer a few questions" })).toHaveAttribute("href", "/people/p1/questions");
   });
 
-  it("shows each idea: title, store, full cost, arrival and reason, keeping its product id", () => {
+  it("shows each idea: title, store, price, full cost, arrival and reason, keeping its product id", () => {
     setup();
     const item = screen.getByRole("listitem");
     expect(item).toHaveTextContent("Rotary fly-tying vise");
-    expect(item).toHaveTextContent("$47.54 · Amazon");
+    expect(item).toHaveTextContent("$42.99 · Amazon");
+    expect(item).toHaveTextContent("About $47.54");
     expect(item).toHaveTextContent("Arrives by Fri, Dec 4 if ordered today");
     expect(item).toHaveTextContent("They want a new vise.");
     expect(item).toHaveAttribute("data-retailer-product-id", "B0FAKEVISE");

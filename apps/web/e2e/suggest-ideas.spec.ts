@@ -81,7 +81,8 @@ test("Suggest finds three checked ideas, and a second run replaces them", async 
     expect(s?.price_cents).toBe(idea.priceCents);
     const item = page.locator(`li[data-retailer-product-id="${idea.productId}"]`);
     await expect(item).toContainText(idea.productTitle);
-    await expect(item).toContainText(`${money(s!.est_total_cents)} · Amazon`);
+    await expect(item).toContainText(`${money(s!.price_cents)} · Amazon`);
+    await expect(item).toContainText(`About ${money(s!.est_total_cents)} with shipping, tax and the order fee`);
     await expect(item).toContainText(idea.reason);
     // No occasion, so no arrival date.
     await expect(item).not.toContainText("Arrives by");
@@ -123,6 +124,8 @@ test("Suggest finds three checked ideas, and a second run replaces them", async 
   const savedGifts = page.getByRole("region", { name: "Saved gifts" }).getByRole("listitem");
   await expect(savedGifts).toHaveCount(1);
   await expect(savedGifts).toContainText(vise.productTitle);
+  // The same price on both screens.
+  await expect(savedGifts).toContainText(`${money(vise.priceCents)} · Amazon`);
 });
 
 test("without paid features there's no button, only the line saying why", async ({ page }) => {

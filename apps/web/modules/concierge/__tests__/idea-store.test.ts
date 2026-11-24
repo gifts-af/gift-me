@@ -560,6 +560,7 @@ describe.skipIf(!dbUp)("createSupabaseIdeaStore", () => {
       productUrl: "https://www.amazon.com/dp/B0ROD",
       retailerProductId: "B0ROD",
       sellerName: "Amazon",
+      priceCents: 2000,
       totalCents: 2760,
       arriveBy: "2026-11-22",
       reason: "He fishes every weekend",

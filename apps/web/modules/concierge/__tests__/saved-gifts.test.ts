@@ -188,13 +188,14 @@ describe("saveIdea", () => {
       title: "Fly-tying vise",
       price_cents: 3999,
       product_url: "https://www.amazon.com/dp/B0TESTVISE",
+      image_url: "https://m.media-amazon.com/images/I/vise.jpg",
       retailer_product_id: "B0TESTVISE",
       ...overrides,
     };
     return store;
   }
 
-  it("copies the idea's title, item price, link and product id, and logs ids only", async () => {
+  it("copies the idea's title, item price, link, photo and product id, and logs ids only", async () => {
     const store = storeWithIdea();
     const log = vi.fn();
     expect(await saveIdea(store, log, MY_PERSON, IDEA)).toEqual({ ok: true });
@@ -204,11 +205,20 @@ describe("saveIdea", () => {
         name: "Fly-tying vise",
         price_cents: 3999,
         product_url: "https://www.amazon.com/dp/B0TESTVISE",
-        image_url: null,
+        image_url: "https://m.media-amazon.com/images/I/vise.jpg",
         retailer_product_id: "B0TESTVISE",
       }),
     ]);
     expect(log).toHaveBeenCalledWith("saved_gifts.save_idea", { user_id: ME, person_id: MY_PERSON, idea_id: IDEA });
+  });
+
+  it.each([
+    ["none", null],
+    ["too long to keep", `https://m.media-amazon.com/${"x".repeat(2048)}`],
+  ])("saves without a photo when the idea's is %s", async (_, image_url) => {
+    const store = storeWithIdea({ image_url });
+    expect(await saveIdea(store, vi.fn(), MY_PERSON, IDEA)).toEqual({ ok: true });
+    expect(store.rows[0].image_url).toBeNull();
   });
 
   it("cuts a long product title to the 200 characters a saved gift keeps", async () => {
@@ -276,7 +286,7 @@ describe("saveIdea", () => {
 describe("savedProductIds", () => {
   it("lists the product ids saved for a person, skipping gifts typed in by hand", async () => {
     const store = new FakeSavedGiftsStore();
-    store.ideas[IDEA] = { person_id: MY_PERSON, title: "Vise", price_cents: 3999, product_url: null, retailer_product_id: "B0TESTVISE" };
+    store.ideas[IDEA] = { person_id: MY_PERSON, title: "Vise", price_cents: 3999, product_url: null, image_url: null, retailer_product_id: "B0TESTVISE" };
     await saveIdea(store, vi.fn(), MY_PERSON, IDEA);
     await saveGift(store, vi.fn(), MY_PERSON, REEL);
     expect(await savedProductIds(store, MY_PERSON)).toEqual(["B0TESTVISE"]);

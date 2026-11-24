@@ -25,6 +25,7 @@ export type IdeaToSave = {
   title: string;
   price_cents: number;
   product_url: string | null;
+  image_url: string | null;
   retailer_product_id: string | null;
 };
 
@@ -76,7 +77,7 @@ export function createSupabaseSavedGiftsStore(): SavedGiftsStore {
       const { data, error } = await (await client)
         .schema("concierge")
         .from("gift_ideas")
-        .select("person_id, title, price_cents, product_url, retailer_product_id")
+        .select("person_id, title, price_cents, product_url, image_url, retailer_product_id")
         .eq("id", ideaId)
         .is("round_id", null)
         .maybeSingle();

@@ -14,6 +14,9 @@ export type ShownIdea = {
   imageUrl: string | null;
   retailerProductId: string | null;
   sellerName: string | null;
+  /** The item alone. */
+  priceCents: number;
+  /** The item, shipping, estimated tax and the order fee. */
   totalCents: number;
   arriveBy: CalendarDate | null;
   reason: string | null;
@@ -24,7 +27,7 @@ export async function onDemandIdeas(db: Db, personId: string): Promise<ShownIdea
   const { data, error } = await db
     .schema("concierge")
     .from("gift_ideas")
-    .select("id, title, retailer, product_url, image_url, retailer_product_id, seller_name, est_total_cents, arrive_by, reason, over_budget")
+    .select("id, title, retailer, product_url, image_url, retailer_product_id, seller_name, price_cents, est_total_cents, arrive_by, reason, over_budget")
     .eq("person_id", personId)
     .is("round_id", null)
     .order("rank");
@@ -37,6 +40,7 @@ export async function onDemandIdeas(db: Db, personId: string): Promise<ShownIdea
     imageUrl: i.image_url,
     retailerProductId: i.retailer_product_id,
     sellerName: i.seller_name,
+    priceCents: i.price_cents,
     totalCents: i.est_total_cents,
     arriveBy: i.arrive_by,
     reason: i.reason,
