@@ -79,6 +79,8 @@ export type RoundOrder = {
   /** Where it ships, city only (never the full address); null when unknown. */
   shipCity: string | null;
   status: string;
+  /** Zinc took it and gave it an id; false while a placing order's send is unanswered. */
+  sent: boolean;
   holdReason: string | null;
   failureType: string | null;
   resolved: boolean;
@@ -554,7 +556,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
           .order("rank"),
         concierge
           .from("orders")
-          .select("id, idea_id, status, hold_reason, failure_type, resolved, failed_at, failed_after_close, max_price_cents, fee_cents, total_cents, refund_cents, ship_city, delivered_at, created_at, gift_ideas(title, retailer)")
+          .select("id, idea_id, status, provider_order_id, hold_reason, failure_type, resolved, failed_at, failed_after_close, max_price_cents, fee_cents, total_cents, refund_cents, ship_city, delivered_at, created_at, gift_ideas(title, retailer)")
           .eq("round_id", roundId)
           .order("created_at")
           .order("id"),
@@ -627,6 +629,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
           store: (o.gift_ideas as { retailer: string | null } | null)?.retailer ?? null,
           shipCity: o.ship_city,
           status: o.status,
+          sent: o.provider_order_id !== null,
           holdReason: o.hold_reason,
           failureType: o.failure_type,
           resolved: o.resolved,

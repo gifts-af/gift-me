@@ -3,7 +3,7 @@ import { Suspense } from "react";
 import { notFound, unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 import { AppNav } from "@/components/app-shell/app-nav";
-import { BackLink, PageFrame, PageTitle } from "@/components/app-shell/page-frame";
+import { BackLink, PageFrame } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
 import { APP_NAME } from "@/lib/brand";
 import { errorFields, logEvent } from "@/lib/log";
@@ -118,7 +118,6 @@ async function Loaded({ params, searchParams }: { params: Params; searchParams: 
   return (
     <>
       <BackLink href={`/rounds/${id}`} label={view.round.personName ? `Gift for ${view.round.personName}` : "Gift"} />
-      <PageTitle>{picks.length === 1 ? `Buy this for ${name}?` : `Buy these ${picks.length} gifts for ${name}?`}</PageTitle>
       <ConfirmScreen
         roundId={id}
         personId={view.round.personId}

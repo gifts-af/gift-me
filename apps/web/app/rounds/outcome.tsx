@@ -84,27 +84,39 @@ export function outcomeWords(result: BuyResult): Words {
   return HELD[result.reason ?? ""] ?? HELD_OTHER;
 }
 
-function giftWords(g: GiftOutcome): Words {
+/** "We've emailed you ...": only the gift the round's reason is about was surely just emailed. */
+const EMAILED = / We've emailed you [^.]+\.$/;
+
+function giftWords(g: GiftOutcome, gifts: GiftOutcome[], roundReason: string | null): Words {
   // Already on its way before this buy, so "when it ships" would be behind the times.
   if (g.status === "ordered" && g.reason) return { title: g.reason === "delivered" ? "Delivered" : "Shipped", body: null };
-  return outcomeWords({ ok: true, status: g.status, reason: g.reason });
+  const words = outcomeWords({ ok: true, status: g.status, reason: g.reason });
+  const about = g.reason === roundReason;
+  // An unconfirmed gift keeps the round from trying the others.
+  if (g.status === "held" && words === HELD_OTHER && (!about || gifts.some((x) => x.reason === "unconfirmed"))) {
+    return { ...words, body: "See what happens next on the gift's page." };
+  }
+  if (about || !words.body) return words;
+  return { ...words, body: words.body.replace(EMAILED, g.status === "failed" ? " See what you can do on the gift's page." : "") };
 }
 
-/** The heading over several gifts: how many were ordered, or no count while one may have been. */
+const NEUTRAL = "What happened with your gifts";
+
+/** The heading over several gifts: how many were ordered, or no count while that isn't certain. */
 function severalTitle(gifts: GiftOutcome[]): string {
+  if (gifts.some((g) => g.reason === "unconfirmed" || g.reason === "store_cancelled")) return NEUTRAL;
   const ordered = gifts.filter((g) => g.status === "ordered").length;
-  if (ordered > 0) return `${ordered} of ${gifts.length} gifts ordered`;
-  return gifts.some((g) => g.reason === "unconfirmed") ? "What happened with your gifts" : "No gifts ordered yet";
+  return ordered > 0 ? `${ordered} of ${gifts.length} gifts ordered` : "No gifts ordered yet";
 }
 
 /** Several gifts that came to different things: each by name, with its own words. */
-function GiftOutcomes({ gifts }: { gifts: GiftOutcome[] }) {
+function GiftOutcomes({ gifts, roundReason }: { gifts: GiftOutcome[]; roundReason: string | null }) {
   return (
     <>
       <p className="text-[17px] font-bold">{severalTitle(gifts)}</p>
       <ul className="flex flex-col divide-y divide-border">
         {gifts.map((g) => {
-          const words = giftWords(g);
+          const words = giftWords(g, gifts, roundReason);
           return (
             <li key={g.orderId} className="flex flex-col gap-0.5 py-2 last:pb-0">
               <span className="text-[15px] font-semibold [overflow-wrap:anywhere]">{g.title}</span>
@@ -120,14 +132,17 @@ function GiftOutcomes({ gifts }: { gifts: GiftOutcome[] }) {
 
 /** The result panel after Buy: what happened, and the way back to the round. */
 export function Outcome({ result, roundId, children }: { result: BuyResult; roundId: string; children?: React.ReactNode }) {
-  const words = outcomeWords(result);
   const gifts = result.ok ? result.gifts : undefined;
+  const words = gifts === "unknown" ? { title: NEUTRAL, body: "See each one on the gift's page." } : outcomeWords(result);
   const good = result.ok && result.status === "ordered" && !gifts;
+  // Something was ordered or is waiting (or may be), so the gift's own page comes next.
+  const toGift =
+    result.ok && (gifts === "unknown" || (gifts ? gifts.some((g) => g.status !== "failed") : result.status !== "failed"));
   return (
     <div className="flex flex-col gap-3">
       <div role="status" className={cn("flex flex-col gap-1 rounded-xl p-3", good ? "bg-success-soft" : "border border-border")}>
-        {gifts ? (
-          <GiftOutcomes gifts={gifts} />
+        {result.ok && Array.isArray(gifts) ? (
+          <GiftOutcomes gifts={gifts} roundReason={result.reason} />
         ) : (
           <>
             <p className={cn("text-[17px] font-bold", good && "text-success")}>{words.title}</p>
@@ -137,7 +152,7 @@ export function Outcome({ result, roundId, children }: { result: BuyResult; roun
       </div>
       {children}
       <Button asChild variant="outline">
-        <Link href={`/rounds/${roundId}`}>{good ? "Back to the gift" : "See all ideas"}</Link>
+        <Link href={`/rounds/${roundId}`}>{toGift ? "Back to the gift" : "See all ideas"}</Link>
       </Button>
     </div>
   );

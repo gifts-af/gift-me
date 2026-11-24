@@ -535,7 +535,7 @@ export function RoundScreen({
   // A missing account row reads as no allowance: the server refuses anything over the budget then.
   const pct = view.overBudgetPct ?? 0;
   const ordered = new Set(view.liveOrders.map((o) => o.ideaId));
-  const failed = new Set(view.failedOrders.map((o) => o.ideaId));
+  const failed = new Set(view.closedText === null ? view.failedOrders.map((o) => o.ideaId) : []);
   const canBuy = view.closedText === null && round.status === "awaiting_approval";
 
   const bought = [...view.liveOrders, ...view.storeCancelled];

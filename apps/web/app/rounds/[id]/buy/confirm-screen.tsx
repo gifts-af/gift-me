@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { classifyTotal, overBudgetLimitCents } from "@gifts-af/core";
 import { storeName } from "@gifts-af/core/store-page/link";
+import { PageTitle } from "@/components/app-shell/page-frame";
 import { IdeaPhoto } from "@/components/idea-photo";
 import { shortDate } from "@/lib/occasion-format";
 import { Button } from "@/components/ui/button";
@@ -95,7 +96,18 @@ export function ConfirmScreen(p: ConfirmScreenProps) {
   const [thrown, setThrown] = useState(false);
   const [pending, startTransition] = useTransition();
 
-  if (result) return <Outcome result={result} roundId={roundId} />;
+  if (result) {
+    const gifts = ideas.length === 1 ? "gift" : "gifts";
+    return (
+      <>
+        {/* Refused, nothing was bought; either way it no longer asks. */}
+        <PageTitle>{result.ok ? `Your ${gifts} for ${personName}` : `${ideas.length === 1 ? "Gift" : "Gifts"} for ${personName}`}</PageTitle>
+        <Outcome result={result} roundId={roundId} />
+      </>
+    );
+  }
+
+  const title = <PageTitle>{ideas.length === 1 ? `Buy this for ${personName}?` : `Buy these ${ideas.length} gifts for ${personName}?`}</PageTitle>;
 
   const seeAll = (
     <Button asChild variant="outline">
@@ -123,6 +135,7 @@ export function ConfirmScreen(p: ConfirmScreenProps) {
   if (p.blocked) {
     return (
       <>
+        {title}
         <p role="status" className="rounded-xl border border-border p-3 text-[15px] font-semibold">
           {p.blocked}
         </p>
@@ -162,6 +175,7 @@ export function ConfirmScreen(p: ConfirmScreenProps) {
   const n = ideas.length;
   return (
     <>
+      {title}
       {cards}
 
       <ul aria-label="What it costs" className="flex flex-col gap-1.5 rounded-xl border border-border p-3 text-[15px]">

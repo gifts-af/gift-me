@@ -5,11 +5,11 @@ import { Outcome, type BuyResult } from "../outcome";
 // What the confirm and fix pages say after Buy. The result's gifts come from the real rows in
 // purchase.test.ts and replace.test.ts.
 
-type Gift = NonNullable<Extract<BuyResult, { ok: true }>["gifts"]>[number];
+type Gift = Exclude<NonNullable<Extract<BuyResult, { ok: true }>["gifts"]>, "unknown">[number];
 let n = 0;
 const gift = (title: string, status: Gift["status"], reason: string | null = null): Gift => ({ orderId: `o${++n}`, title, status, reason });
 
-function show(gifts: Gift[] | undefined, status: "ordered" | "held" | "failed", reason: string | null) {
+function show(gifts: Gift[] | "unknown" | undefined, status: "ordered" | "held" | "failed", reason: string | null) {
   render(<Outcome result={{ ok: true, status, reason, ...(gifts ? { gifts } : {}) }} roundId="r1" />);
   return screen.getByRole("status");
 }
@@ -48,7 +48,8 @@ describe("Outcome with several gifts", () => {
 
   it("unconfirmed + ordered: the unconfirmed one isn't called ordered", () => {
     show([gift("Fly reel", "held", "unconfirmed"), gift("Tote", "ordered")], "held", "unconfirmed");
-    expect(screen.getByText("1 of 2 gifts ordered")).toBeInTheDocument();
+    // It may have been ordered too, so there's no count.
+    expect(screen.getByText("What happened with your gifts")).toBeInTheDocument();
     expect(row("Fly reel").getByText("Waiting on Zinc")).toBeInTheDocument();
   });
 
@@ -69,6 +70,50 @@ describe("Outcome with several gifts", () => {
     expect(row("Mug").getByText("Delivered")).toBeInTheDocument();
     expect(row("Vase").getByText("Shipped")).toBeInTheDocument();
     expect(screen.queryByText(/when it ships/)).toBeNull();
+  });
+
+  it("a store cancel gets the neutral heading too: it was ordered once", () => {
+    show([gift("Fly reel", "failed", "store_cancelled"), gift("Tote", "ordered")], "failed", "failed");
+    expect(screen.getByText("What happened with your gifts")).toBeInTheDocument();
+  });
+
+  it("only the gift the round's reason is about says we've emailed; the others point to the gift's page", () => {
+    show([gift("Fly reel", "held", "funds"), gift("Tote", "failed", "out_of_stock")], "failed", "unconfirmed");
+    expect(screen.queryByText(/We've emailed/)).toBeNull();
+    expect(row("Fly reel").getByText("Add money to your Zinc balance and we'll order it.")).toBeInTheDocument();
+    expect(row("Tote").getByText("We didn't buy it. See what you can do on the gift's page.")).toBeInTheDocument();
+  });
+
+  it("a hold that is the round's reason says we've emailed how", () => {
+    show([gift("Fly reel", "held", "funds"), gift("Tote", "ordered")], "held", "funds");
+    expect(row("Fly reel").getByText("Add money to your Zinc balance and we'll order it. We've emailed you how.")).toBeInTheDocument();
+  });
+
+  it.each(["unconfirmed", "retry"])("a gift to try again beside an unconfirmed one isn't promised shortly (round reason %s)", (reason) => {
+    show([gift("Fly reel", "held", "unconfirmed"), gift("Tote", "held", "retry")], "held", reason);
+    expect(screen.queryByText(/try again shortly/)).toBeNull();
+    expect(row("Tote").getByText("See what happens next on the gift's page.")).toBeInTheDocument();
+  });
+
+  it("when what happened to each couldn't be read, says neither reason nor outcome", () => {
+    const panel = show("unknown", "failed", "out_of_stock");
+    expect(panel).toHaveTextContent("What happened with your gifts");
+    expect(panel).toHaveTextContent("See each one on the gift's page.");
+    expect(panel).not.toHaveTextContent(/stock|didn't buy/);
+    expect(screen.getByRole("link", { name: "Back to the gift" })).toBeInTheDocument();
+  });
+
+  it("goes back to the gift when anything was ordered or is held, and to the ideas when nothing was", () => {
+    show([gift("Fly reel", "failed", "out_of_stock"), gift("Tote", "ordered")], "failed", "out_of_stock");
+    expect(screen.getByRole("link")).toHaveTextContent("Back to the gift");
+  });
+  it("all failed: See all ideas", () => {
+    show([gift("Fly reel", "failed", "out_of_stock"), gift("Tote", "failed", "too_late")], "failed", "out_of_stock");
+    expect(screen.getByRole("link")).toHaveTextContent("See all ideas");
+  });
+  it("one held: Back to the gift", () => {
+    show(undefined, "held", "funds");
+    expect(screen.getByRole("link")).toHaveTextContent("Back to the gift");
   });
 
   it("one gift reads as it always has", () => {

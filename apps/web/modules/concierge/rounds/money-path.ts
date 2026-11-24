@@ -2,7 +2,7 @@ import { EMAILED_HOLDS, nextAction, type ScheduleSettings, type StepKey } from "
 import { shortDate } from "@/lib/occasion-format";
 import { errorFields, logEvent } from "@/lib/log";
 import { notify, type NotifyResult } from "../notify/notify";
-import { endedAddressReason, type CancelledGift, type FailedGift } from "../notify/templates";
+import { endedAddressReason, type CancelledGift, type FailedGift, type OtherGifts } from "../notify/templates";
 import type { ClaimedRound, RoundContext, RoundOrder } from "./store";
 import { chooseBy, fixPath, money, occasionWord, LIVE_HELD } from "./emails";
 import type { EngineDeps } from "./engine";
@@ -561,11 +561,18 @@ async function sendOpenFailures(
   // A single failure's button opens that gift's own fix page (ALL-29 AC-16); the page itself signs the buyer in.
   const fix = (o: RoundOrder) => ({ open: { path: fixPath(round.id, o.id) } });
   const orderByText = chooseBy(round.shipByDeadline);
-  // The round's other gifts that were ordered. A delivered one has had its own email.
-  const titles = (...statuses: string[]) => ctx.orders.filter((o) => statuses.includes(o.status)).map((o) => o.title);
-  const onItsWay = titles("placed", "shipped");
-  const ordering = titles("placing");
-  const also = { ...(onItsWay.length > 0 ? { onItsWay } : {}), ...(ordering.length > 0 ? { ordering } : {}) };
+  // The round's other gifts. One held, unconfirmed, or sent with no answer yet may be bought any
+  // moment (a tick places right after this email), so nothing is promised about it.
+  const titles = (is: (o: RoundOrder) => boolean) => {
+    const list = ctx.orders.filter(is).map((o) => o.title);
+    return list.length > 0 ? list : undefined;
+  };
+  const also: OtherGifts = {
+    onItsWay: titles((o) => o.status === "placed" || o.status === "shipped"),
+    ordering: titles((o) => o.status === "placing" && o.sent),
+    arrived: titles((o) => o.status === "delivered"),
+    working: titles((o) => o.status === "held" || o.status === "unconfirmed" || (o.status === "placing" && !o.sent)),
+  };
   if (failed.length > 1) {
     // Gifts still in play before this news: not cancelled, and not a failure the buyer already heard about.
     const tried = new Set(
@@ -607,7 +614,7 @@ async function sendOpenFailures(
       return notify({ ...base, kind: "needs_attention", data: { ...occasion, ...also, reason, orderByText }, links: fix(o) }, deps.notify);
     }
     default: {
-      const reason = `the store couldn't place the order for the ${o.title}, and you haven't been charged${onItsWay.length + ordering.length > 0 ? " for it" : ""}.`;
+      const reason = `the store couldn't place the order for the ${o.title}, and you haven't been charged for it.`;
       return notify({ ...base, kind: "needs_attention", data: { ...occasion, ...also, reason, orderByText }, links: fix(o) }, deps.notify);
     }
   }

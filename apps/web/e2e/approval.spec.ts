@@ -455,6 +455,7 @@ test("two gifts, one sold out: the page after Buy names each, the ordered one an
   await page.goto(`/rounds/${roundId}/buy?ideas=${ideaIds.join(",")}`);
   await page.getByRole("button", { name: "Buy now · about $30" }).click();
   const panel = page.getByRole("status").filter({ hasText: "1 of 2 gifts ordered" });
+  await expect(page.getByRole("heading", { name: "Your gifts for Nora" })).toBeVisible();
   await expect(panel.getByRole("listitem").filter({ hasText: soldOut.title })).toContainText("It's out of stock");
   await expect(panel.getByRole("listitem").filter({ hasText: "Fly line dressing" })).toContainText("Ordered");
 });

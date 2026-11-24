@@ -281,7 +281,7 @@ describe("failed_several (ALL-116: two or more failed while the round is open)",
 });
 
 describe("a failure email names the round's other gifts that were ordered", () => {
-  type Others = { onItsWay?: string[]; ordering?: string[] };
+  type Others = { onItsWay?: string[]; ordering?: string[]; arrived?: string[]; working?: string[] };
   const textFor = (kind: "price_up" | "out_of_stock" | "too_late", d: Others) => TEMPLATES[kind]({ ...SAMPLE_DATA[kind].data, ...d }, SAMPLE_DATA[kind].links).text;
 
   it.each(["price_up", "out_of_stock", "too_late"] as const)("%s: a placed gift, one still being ordered, both, and none", (kind) => {
@@ -293,6 +293,32 @@ describe("a failure email names the round's other gifts that were ordered", () =
     expect(both).toContain("The good news: the Linen apron is ordered and on its way.");
     expect(both).toContain("We're ordering the Tote and the Vase, and we'll email you as soon as the store confirms them.");
     expect(textFor(kind, {})).not.toContain("good news");
+  });
+
+  it.each(["price_up", "out_of_stock", "too_late"] as const)("%s: what else is bought depends on the other gifts", (kind) => {
+    const alone = textFor(kind, {});
+    expect(alone).toContain("Nothing is bought until you choose.");
+    expect(alone).toContain("you haven't been charged for it.");
+    for (const d of [{ onItsWay: ["Tote"] }, { ordering: ["Tote"] }, { arrived: ["Tote"] }]) {
+      expect(textFor(kind, d)).toContain("Nothing else is bought until you choose.");
+    }
+    // One that may be bought any moment: nothing is promised about buying.
+    const working = textFor(kind, { working: ["Tote", "Vase"] });
+    expect(working).toContain("We're still working on the Tote and the Vase.");
+    expect(working).not.toMatch(/is bought until/);
+    expect(textFor(kind, { arrived: ["Tote"] })).toContain("The good news: the Tote has arrived.");
+    expect(textFor(kind, { arrived: ["Tote", "Vase"], onItsWay: ["Mug"] })).toContain("The Tote and the Vase have arrived.");
+  });
+
+  it("needs_attention and failed_several say what we're still working on instead of that nothing is bought", () => {
+    const a = SAMPLE_DATA.needs_attention;
+    const one = TEMPLATES.needs_attention({ ...a.data, working: ["Tote"] }, a.links).text;
+    expect(one).toContain("What happens next: we're still working on the Tote. Choose another gift by");
+    expect(one).not.toMatch(/is bought until/);
+    const s = SAMPLE_DATA.failed_several;
+    const several = TEMPLATES.failed_several({ ...s.data, working: ["Tote"] }, s.links).text;
+    expect(several).toContain("We're still working on the Tote.");
+    expect(several).not.toMatch(/is bought until/);
   });
 
   it("needs_attention and failed_several too", () => {
@@ -364,7 +390,7 @@ describe("the other gift emails match the approved wording (ALL-116)", () => {
     const mail = render("price_up");
     expect(mail.subject).toBe("Sorry, the price of Mom's gift went up");
     expect(mail.text).toContain(
-      "We're sorry. The price of the Le Creuset mug set for Mom's birthday on Saturday, March 14 went up more than you allowed for, so we didn't buy it and you haven't been charged.",
+      "We're sorry. The price of the Le Creuset mug set for Mom's birthday on Saturday, March 14 went up more than you allowed for, so we didn't buy it and you haven't been charged for it.",
     );
     expect(mail.text).toContain("Review the gift:");
     expect(mail.text).toContain("Nothing is bought until you choose. Choose by Thursday, March 5 so it arrives in time.");

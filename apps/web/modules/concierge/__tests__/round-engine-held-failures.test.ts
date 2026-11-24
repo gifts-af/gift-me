@@ -27,6 +27,8 @@ describe.skipIf(!stack)("held rounds: failures and due rounds (real local databa
     for (const id of r.ideaIds) held.zinc.plan.set(`https://shop.test/p/${id}`, ["timeout"]);
     await approve(u, r);
     await held.pg.query("update concierge.orders set status = 'placing', hold_reason = null where round_id = $1 and status = 'held'", [r.roundId]);
+    // Zinc took each one, so it has Zinc's id.
+    await held.pg.query("update concierge.orders set provider_order_id = 'zn_' || id where round_id = $1 and status = 'placing'", [r.roundId]);
     await held.pg.query("select concierge.reconcile_round($1)", [r.roundId]);
     const rows = await held.pg.query(
       "select o.id from concierge.orders o join concierge.gift_ideas i on i.id = o.idea_id where o.round_id = $1 order by i.rank",
@@ -101,12 +103,13 @@ describe.skipIf(!stack)("held rounds: failures and due rounds (real local databa
     // Only for the one that failed: the ordered one is charged.
     expect(lastText(u)).toContain("you haven't been charged for it.");
 
-    // One delivered already isn't still "on its way".
+    // One delivered already isn't still "on its way": it has arrived.
     const d = await placingRound(u);
     await held.pg.query("update concierge.orders set status = 'delivered', delivered_at = now() where id = $1", [d.orderIds[1]]);
     await settleFailed(u, d.orderIds[0], type);
     await advance(d.roundId, 1);
-    expect(lastText(u)).not.toContain("good news");
+    expect(lastText(u)).toContain("The good news: the Linen apron has arrived.");
+    expect(lastText(u)).not.toContain("on its way");
   });
 
   it("the summary of two failures names a third gift still being ordered", async () => {
@@ -127,6 +130,37 @@ describe.skipIf(!stack)("held rounds: failures and due rounds (real local databa
     await approve(u, r);
     const text = mail.filter((m) => m.to === u.email).find((m) => m.subject.includes("out of stock"))!.text;
     expect(text).not.toContain("good news");
+    expect(text).toContain("We're still working on the Linen apron.");
+    expect(text).not.toMatch(/is bought until/);
+  });
+
+  it("a failure next to a send that timed out: not called ordered, only still being worked on", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await newRound(u, { totals: [4200, 3000] });
+    held.zinc.plan.set(`https://shop.test/p/${r.ideaIds[0]}`, [{ status: 400, code: "out_of_stock" }]);
+    held.zinc.plan.set(`https://shop.test/p/${r.ideaIds[1]}`, ["timeout"]);
+    const result = await approve(u, r);
+    expect(result).toMatchObject({ status: "failed", gifts: [{ status: "failed" }, { status: "held", reason: "unconfirmed" }] });
+    expect(lastText(u)).not.toContain("good news");
+    expect(lastText(u)).toContain("We're still working on the Linen apron.");
+    expect(lastText(u)).not.toMatch(/is bought until/);
+  });
+
+  it("too late beside a gift that's fine: the email claims nothing about the one bought next", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await newRound(u, { totals: [4200, 3000] });
+    await held.pg.query("update concierge.gift_ideas set delivery_days_max = 60 where id = $1", [r.ideaIds[0]]);
+    const result = await approve(u, r);
+    // Found before anything is sent, so the good one waits for the next try.
+    expect(result).toMatchObject({ status: "failed", gifts: [{ status: "failed", reason: "too_late" }, { status: "held", reason: "retry" }] });
+    expect(inbox(u)).toEqual(["Sorry, Mary's gift can't arrive in time@0"]);
+    expect(lastText(u)).toContain("The Stoneware mug set wouldn't arrive in time");
+    expect(lastText(u)).toContain("you haven't been charged for it.");
+    expect(lastText(u)).toContain("We're still working on the Linen apron.");
+    expect(lastText(u)).not.toMatch(/is bought until|haven't been charged\./);
+    await advance(r.roundId, 1);
+    const apron = await held.pg.query("select status from concierge.orders where round_id = $1 and idea_id = $2", [r.roundId, r.ideaIds[1]]);
+    expect(apron.rows[0].status).toBe("placing");
   });
 
   it("a later failure is told on its own, and the gift named is the one that failed (AC-2, AC-3)", async () => {
