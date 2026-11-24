@@ -288,6 +288,17 @@ describe.skipIf(!stack)("reactions (real local database)", () => {
   });
 
   describe("giftHistory and hasPastGifts", () => {
+    it.each([
+      ["no orders", [], false],
+      ["a failed order", [{ title: "Pan", status: "failed", failure: "out_of_stock", resolved: true }], true],
+      ["a store cancel", [{ title: "Pan", status: "failed", failure: "store_cancelled", resolved: true, refund: 3300 }], true],
+    ] as [string, Gift[], boolean][])("a round its date change ended, with %s: past is %s", async (_name, gifts, past) => {
+      const r = await fresh({ status: "skipped", date: "2026-01-10", gifts });
+      await pg.query("update concierge.gift_rounds set occasion_year = null where id = $1", [r.roundId]);
+      expect((await giftHistory(r.personId, buyer.db, NOW)).length > 0).toBe(past);
+      expect(await hasPastGifts(r.personId, buyer.db, NOW)).toBe(past);
+    });
+
     it("lists past rounds newest first, with cost, outcome, reaction and note (AC-11)", async () => {
       const personId = await newPerson(buyer);
       const complete = await newRound(buyer, personId, { date: "2024-12-25", gifts: [{ title: "Mug" }] });

@@ -494,6 +494,33 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
     expect((await roundView(closed.roundId, await signedIn(u), new Date()))?.closedText).toBe("This gift round was stopped");
   });
 
+  const MOVED = "The date changed, so this round ended.";
+  const endByMove = (roundId: string) =>
+    pg.query("update concierge.gift_rounds set status = 'skipped', closed_at = now(), occasion_year = null where id = $1", [roundId]);
+
+  it.each([30, 0, -8])("a round its date change ended says so, with the ship-by day %i days away", async (deadlineIn) => {
+    const u = await newUser();
+    const r = await newRound(u, { deadlineIn });
+    await endByMove(r.roundId);
+    const view = await roundView(r.roundId, await signedIn(u), new Date());
+    expect(view?.closedText).toBe(MOVED);
+    expect(view?.nextBestIdeaId).toBeNull();
+  });
+
+  it("a moved round whose gift the store cancelled says so and still shows the refunded gift", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    await pg.query(
+      `insert into concierge.orders (user_id, round_id, idea_id, funding_mode, max_price_cents, fee_cents, status, failure_type, resolved, refund_cents, ship_to, ship_city, ship_state)
+       values ($1, $2, $3, 'zinc_wallet', 4500, 100, 'failed', 'store_cancelled', true, 4500, 'recipient', 'Dayton', 'OH')`,
+      [u.id, r.roundId, r.ideaIds[0]],
+    );
+    await endByMove(r.roundId);
+    const view = await roundView(r.roundId, await signedIn(u), new Date());
+    expect(view?.closedText).toBe(MOVED);
+    expect(view?.storeCancelled).toHaveLength(1);
+  });
+
   it("a closed round with a gift on its way says so, never that it's too late", async () => {
     const u = await newUser();
     const r = await newRound(u, { ideas: [{ title: "Fly rod" }, { title: "Reel" }] });

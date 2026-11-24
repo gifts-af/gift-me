@@ -225,7 +225,7 @@ export async function giftHistory(personId: string, userDb: Db, now: Date): Prom
     .schema("concierge")
     .from("gift_rounds")
     .select(
-      "id, occasion_date, status, occasions(kind), orders(id, status, failure_type, resolved, total_cents, refund_cents, delivered_at, created_at, gift_ideas(title), reactions(rating, note))",
+      "id, occasion_year, occasion_date, status, occasions(kind), orders(id, status, failure_type, resolved, total_cents, refund_cents, delivered_at, created_at, gift_ideas(title), reactions(rating, note))",
     )
     .eq("person_id", personId)
     .order("occasion_date", { ascending: false })
@@ -237,6 +237,8 @@ export async function giftHistory(personId: string, userDb: Db, now: Date): Prom
   const today = dayOf(now);
   return data
     .filter((r) => OVER.includes(r.status) || (r.occasion_date < today && (r.status === "skipped" || r.orders.some(isGiven))))
+    // A round its date change ended (no year) that never got as far as an order isn't a past gift.
+    .filter((r) => r.occasion_year !== null || r.orders.length > 0)
     .map((r) => ({
       roundId: r.id,
       occasionKind: r.occasions?.kind ?? null,
@@ -267,8 +269,10 @@ export async function hasPastGifts(personId: string, userDb: Db, now: Date): Pro
   try {
     const db = userDb.schema("concierge");
     const today = dayOf(now);
-    const [over, given, enabled] = await Promise.all([
-      db.from("gift_rounds").select("id").eq("person_id", personId).or(`status.in.(${OVER.join()}),and(status.eq.skipped,occasion_date.lt.${today})`).limit(1),
+    const [over, moved, given, enabled] = await Promise.all([
+      db.from("gift_rounds").select("id").eq("person_id", personId).or(`status.in.(${OVER.join()}),and(status.eq.skipped,occasion_year.not.is.null,occasion_date.lt.${today})`).limit(1),
+      // Ended by a date change (no year): past only with an order, as in giftHistory.
+      db.from("gift_rounds").select("id, orders!inner(id)").eq("person_id", personId).is("occasion_year", null).lt("occasion_date", today).limit(1),
       db
         .from("orders")
         .select("id, gift_rounds!inner(id)")
@@ -279,10 +283,11 @@ export async function hasPastGifts(personId: string, userDb: Db, now: Date): Pro
       db.rpc("setting_int", { p_key: "reactions_enabled" }),
     ]);
     if (over.error) fail("Looking for past rounds failed", over.error);
+    if (moved.error) fail("Looking for moved rounds failed", moved.error);
     if (given.error) fail("Looking for given gifts failed", given.error);
     if (enabled.error) fail("Reading setting reactions_enabled failed", enabled.error);
     if (typeof enabled.data !== "number") return false;
-    return over.data.length > 0 || given.data.length > 0;
+    return over.data.length > 0 || moved.data.length > 0 || given.data.length > 0;
   } catch (error) {
     logEvent("reaction.history_check_failed", { person_id: personId, ...errorFields(error) });
     return false;
