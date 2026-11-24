@@ -616,6 +616,9 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
       const view = await roundView(r.roundId, db, new Date());
       expect(view?.round.id).toBe(r.roundId);
       expect(view?.waiting).toBeNull();
+      // A missing address is still asked for.
+      const asking = await newRound(u, { status: "needs_address", ideas: [] });
+      expect((await roundView(asking.roundId, db, new Date()))?.waiting).toBe("address");
       const lines = log.mock.calls.map((c) => String(c[0]));
       expect(lines.some((l) => l.includes("round_waiting_failed"))).toBe(true);
       expect(lines.join()).not.toContain("jordan@example.com");

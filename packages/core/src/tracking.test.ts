@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  arrivalState,
   calendarDay,
   expectedArrival,
   isLate,
@@ -92,6 +93,18 @@ describe("packagesFromZinc", () => {
       { carrier: "ups", tracking_number: "1", estimated_delivery_date: "soon" },
     ]);
     expect(out[0]!.estimatedDeliveryDate).toBeNull();
+  });
+});
+
+describe("arrivalState", () => {
+  it.each([
+    ["2026-12-27", "2026-12-20", "late"],
+    ["2026-12-25", "2026-12-20", "due"],
+    ["2026-12-20", "2026-12-20", "due"],
+    ["2026-12-19", "2026-12-20", "past"],
+    ["2026-12-27", "2026-12-28", "past"],
+  ])("%s on %s is %s", (expected, today, says) => {
+    expect(arrivalState(expected, "2026-12-25", today)).toBe(says);
   });
 });
 

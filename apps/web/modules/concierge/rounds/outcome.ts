@@ -50,6 +50,54 @@ export function roundOutcome<O extends OrderState>(r: RoundDates, orders: O[], t
   return { live, failed, storeCancelled, bought, closed };
 }
 
+/** What a held gift waits on, and its words. */
+export type HoldState = { kind: "funds" | "setup" | "address" | "check_address" | "cancel_only" | "waiting"; text: string };
+const HOLDS: Record<HoldState["kind"], string> = {
+  funds: "Waiting on your Zinc balance",
+  setup: "Waiting on payment setup",
+  address: "Needs an address",
+  check_address: "Check the address",
+  cancel_only: "Needs an address",
+  waiting: "Waiting to order",
+};
+
+/**
+ * Why an open round's held gifts wait, by the round's reason. It only moves when the round is next
+ * looked at, so an address hold goes by the address there is now (null: it couldn't be read).
+ * `rejected`: the store couldn't use the person's own address. `toPerson`: it ships to the person, the
+ * only place whose address can be changed here.
+ */
+export function holdState(
+  reason: string | null,
+  address: { shared: boolean; own: boolean; rejected: boolean; toPerson: boolean } | null,
+): HoldState {
+  return ((kind: HoldState["kind"]) => ({ kind, text: HOLDS[kind] }))(holdKind(reason, address));
+}
+
+function holdKind(reason: string | null, address: Parameters<typeof holdState>[1]): HoldState["kind"] {
+  if (reason === "funds" || reason === "setup") return reason;
+  // paused, retry and not_allowed are ours; with another gift unconfirmed the hold's reason can't be read.
+  if (reason !== "address" || address === null) return "waiting";
+  if (!address.toPerson) return "cancel_only";
+  // The daily look places one whose address is now shared, but an own address only on saving it.
+  if (address.shared) return "waiting";
+  return address.own && !address.rejected ? "check_address" : "address";
+}
+
+type HeldOrder = { status: string; failureType: string | null; ideaId: string; shipTo: string };
+
+/**
+ * What the orders say about an address hold. The store refusing an address ends one order and holds
+ * another for the same idea, with no address of its own; one going to the buyer or elsewhere then has
+ * nowhere to be changed.
+ */
+export function heldAddress(orders: HeldOrder[]): { rejected: boolean; toPerson: boolean } {
+  const refused = orders.filter(
+    (h) => h.status === "held" && orders.some((o) => o.ideaId === h.ideaId && o.failureType === "invalid_shipping_address"),
+  );
+  return { rejected: refused.some((h) => h.shipTo === "recipient"), toPerson: refused.every((h) => h.shipTo === "recipient") };
+}
+
 /** Whether a round is at a point where it has no ideas yet. */
 export const beforeIdeas = (status: string) => NO_IDEAS_YET.has(status);
 

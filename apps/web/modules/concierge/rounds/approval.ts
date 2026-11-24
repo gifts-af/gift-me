@@ -25,7 +25,7 @@ import { isId } from "../profile/rules";
 import { listGiftCandidates } from "../ideas/store";
 import { claimRoundNow, concierge, fail, withLease } from "../purchase/store";
 import type { DbDeps } from "../zinc/types";
-import { beforeIdeas, roundOutcome, waitingOn, type Closed } from "./outcome";
+import { beforeIdeas, heldAddress, holdState, roundOutcome, waitingOn, type Closed, type HoldState } from "./outcome";
 import { createSupabaseRoundStore } from "./store";
 
 type UserDb = SupabaseClient<Database>;
@@ -343,6 +343,8 @@ export type RoundPageView = {
     budgetCents: number | null;
     status: string;
     attentionReason: string | null;
+    /** UTC, like the tick. */
+    today: CalendarDate;
   };
   overBudgetPct: number | null;
   ideas: RoundPageIdea[];
@@ -363,6 +365,8 @@ export type RoundPageView = {
    * paid features, when nothing is looked for.
    */
   waiting: "looking" | "told" | "address" | null;
+  /** Why an open round's held gifts wait; null with none. */
+  hold: HoldState | null;
   nextBestIdeaId: string | null;
   buyYourself: BuyYourself[];
 };
@@ -429,18 +433,21 @@ export const ownAddressShips = (p: AddressRow) =>
     country: p.country,
   });
 
+/** Whether the address saved on the person could be shipped to. */
+async function ownAddress(userDb: UserDb, personId: string): Promise<boolean> {
+  const { data, error } = await userDb
+    .from("people")
+    .select("recipient_first_name, recipient_last_name, address_line1, address_line2, city, state, zip, country")
+    .eq("id", personId)
+    .maybeSingle();
+  if (error) fail("Reading the person's address failed", error);
+  return data !== null && ownAddressShips(data);
+}
+
 /** Whether a gift could ship to the person: a usable address of their own, or one shared through their list. */
 async function hasAddress(userDb: UserDb, personId: string): Promise<boolean> {
-  const [person, shared] = await Promise.all([
-    userDb
-      .from("people")
-      .select("recipient_first_name, recipient_last_name, address_line1, address_line2, city, state, zip, country")
-      .eq("id", personId)
-      .maybeSingle(),
-    sharesAddress(userDb, personId),
-  ]);
-  if (person.error) fail("Reading the person's address failed", person.error);
-  return shared || (person.data !== null && ownAddressShips(person.data));
+  const [own, shared] = await Promise.all([ownAddress(userDb, personId), sharesAddress(userDb, personId)]);
+  return own || shared;
 }
 
 /**
@@ -455,6 +462,8 @@ async function readWaiting(
   try {
     if (!(await hasPaidFeatures(userDb, r.user_id))) return null;
     const addressed = r.status === "generating" || (await hasAddress(userDb, r.person_id));
+    // Before the next read, so its failure never hides "Add address".
+    if (r.status === "needs_address" && !addressed) return "address";
     const told = await userDb
       .schema("concierge")
       .from("notifications")
@@ -472,6 +481,22 @@ async function readWaiting(
   } catch (err) {
     logEvent("round_waiting_failed", { round_id: r.id, user_id: r.user_id, ...errorFields(err) });
     return null;
+  }
+}
+
+/** Why the round's held gifts wait, by the address there is now; a failed read of it is logged and claims nothing. */
+async function readHold(
+  userDb: UserDb,
+  r: { id: string; user_id: string; person_id: string; attention_reason: string | null },
+  orders: Parameters<typeof heldAddress>[0],
+): Promise<HoldState> {
+  if (r.attention_reason !== "address") return holdState(r.attention_reason, null);
+  try {
+    const [own, shared] = await Promise.all([ownAddress(userDb, r.person_id), sharesAddress(userDb, r.person_id)]);
+    return holdState(r.attention_reason, { own, shared, ...heldAddress(orders) });
+  } catch (err) {
+    logEvent("round_hold_failed", { round_id: r.id, user_id: r.user_id, ...errorFields(err) });
+    return holdState(r.attention_reason, null);
   }
 }
 
@@ -511,7 +536,7 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
     db
       .from("orders")
       .select(
-        "id, idea_id, status, failure_type, resolved, total_cents, refund_cents, max_price_cents, fee_cents, est_delivery_date, placed_at, delivered_at, packages, created_at",
+        "id, idea_id, status, failure_type, resolved, ship_to, total_cents, refund_cents, max_price_cents, fee_cents, est_delivery_date, placed_at, delivered_at, packages, created_at",
       )
       .eq("round_id", roundId)
       .order("created_at")
@@ -586,6 +611,15 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
 
   const waiting = closed === null && beforeIdeas(r.status) ? await readWaiting(userDb, r, ideasRes.data.map((i) => i.created_at)) : null;
 
+  const held = closed === null && liveOrders.some((o) => o.status === "held");
+  const hold = held
+    ? await readHold(
+        userDb,
+        r,
+        ordersRes.data.map((o) => ({ status: o.status, failureType: o.failure_type, ideaId: o.idea_id, shipTo: o.ship_to })),
+      )
+    : null;
+
   const buyable = ideas.filter((i) => !i.claimed && !i.noLongerShared && !liveOrders.some((o) => o.ideaId === i.id));
   const nextBestIdeaId =
     closedText === null
@@ -627,6 +661,7 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
       budgetCents: r.budget_cents,
       status: r.status,
       attentionReason: r.attention_reason,
+      today,
     },
     overBudgetPct: account.data?.over_budget_pct ?? null,
     ideas,
@@ -635,6 +670,7 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
     storeCancelled,
     closedText,
     waiting,
+    hold,
     nextBestIdeaId,
     buyYourself,
   };
