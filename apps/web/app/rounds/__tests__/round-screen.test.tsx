@@ -2,7 +2,7 @@ import { renderToString } from "react-dom/server";
 import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { RoundPageIdea, RoundPageOrder, RoundPageView } from "@/modules/concierge";
+import type { RejectionOutlook, RoundPageIdea, RoundPageOrder, RoundPageView } from "@/modules/concierge";
 import { IdeaPhoto } from "@/components/idea-photo";
 import { RoundScreen, type BudgetResult, type RejectResult } from "../[id]/round-screen";
 
@@ -87,17 +87,19 @@ function order(o: Partial<RoundPageOrder> = {}): RoundPageOrder {
 
 type ArrivedAction = (roundId: string, orderId: string) => Promise<{ ok: boolean }>;
 
+const OUTLOOK: RejectionOutlook = { more: true, saves: true, cheaper: false };
+
 function setup(
   v: RoundPageView,
   {
-    outlook = true,
+    outlook = {},
     arrived = vi.fn<ArrivedAction>(async () => ({ ok: true })),
     reactionsOpen = false,
-  }: { outlook?: boolean | null; arrived?: ArrivedAction | null; reactionsOpen?: boolean } = {},
+  }: { outlook?: Partial<RejectionOutlook> | null; arrived?: ArrivedAction | null; reactionsOpen?: boolean } = {},
 ) {
-  const rejectAction = vi.fn(async (...a: [string, FormData]): Promise<RejectResult> => (void a, { ok: true, more: true }));
+  const rejectAction = vi.fn(async (...a: [string, FormData]): Promise<RejectResult> => (void a, { ok: true, more: true, saved: true }));
   const setBudgetAction = vi.fn(async (...a: [string, FormData]): Promise<BudgetResult> => (void a, { ok: true }));
-  const outlookAction = vi.fn(async (...a: [string, { code: string; ownedIdeaId: string | null; text: string | null }]) => (void a, outlook));
+  const outlookAction = vi.fn(async (...a: [string, { code: string; ownedIdeaId: string | null; text: string | null }]) => (void a, outlook === null ? null : { ...OUTLOOK, ...outlook }));
   render(
     <RoundScreen view={v} rejectAction={rejectAction} setBudgetAction={setBudgetAction} outlookAction={outlookAction} arrivedAction={arrived} reactionsOpen={reactionsOpen} />,
   );
@@ -112,9 +114,9 @@ describe("RoundScreen: picking", () => {
     const ui = (
       <RoundScreen
         view={view({ ideas: [idea({ title: "Orchid" })] })}
-        rejectAction={async () => ({ ok: true, more: true })}
+        rejectAction={async () => ({ ok: true, more: true, saved: true })}
         setBudgetAction={ok}
-        outlookAction={async () => true}
+        outlookAction={async () => OUTLOOK}
         arrivedAction={ok}
         reactionsOpen={false}
       />
@@ -258,9 +260,9 @@ describe("RoundScreen: picking", () => {
 describe("RoundScreen: picks after the round changes", () => {
   function props() {
     return {
-      rejectAction: vi.fn(async (...a: [string, FormData]): Promise<RejectResult> => (void a, { ok: true, more: true })),
+      rejectAction: vi.fn(async (...a: [string, FormData]): Promise<RejectResult> => (void a, { ok: true, more: true, saved: true })),
       setBudgetAction: vi.fn(async (...a: [string, FormData]): Promise<BudgetResult> => (void a, { ok: true })),
-      outlookAction: vi.fn(async (...a: [string, { code: string; ownedIdeaId: string | null; text: string | null }]) => (void a, true)),
+      outlookAction: vi.fn(async (...a: [string, { code: string; ownedIdeaId: string | null; text: string | null }]) => (void a, OUTLOOK)),
       arrivedAction: null,
       reactionsOpen: false,
     };
@@ -385,12 +387,12 @@ describe("RoundScreen: None of these", () => {
   });
 
   it("with no search left the sheet says No more new ideas this time before confirming", async () => {
-    const { rejectAction } = setup(view({ ideas: [idea()] }), { outlook: false });
+    const { rejectAction } = setup(view({ ideas: [idea()] }), { outlook: { more: false } });
     await userEvent.click(screen.getByRole("button", { name: "None of these" }));
     await userEvent.click(await screen.findByRole("button", { name: "Too generic" }));
-    expect(await screen.findByText("No more new ideas this time")).toBeInTheDocument();
+    expect(await screen.findByText(/^No more new ideas this time/)).toBeInTheDocument();
     await userEvent.type(screen.getByLabelText("Anything else? (optional)"), "Rather an experience");
-    await userEvent.click(screen.getByRole("button", { name: "Save the reason" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Save the reason" }));
     await waitFor(() => expect(rejectAction).toHaveBeenCalledTimes(1));
     const form = rejectAction.mock.calls[0][1];
     expect(form.get("code")).toBe("too_generic");
@@ -404,70 +406,91 @@ describe("RoundScreen: None of these", () => {
     await userEvent.click(screen.getByRole("button", { name: "None of these" }));
     await userEvent.click(await screen.findByRole("button", { name: "Not their style" }));
     await waitFor(() => expect(screen.getByRole("button", { name: "Find new ideas" })).toBeEnabled());
-    outlookAction.mockResolvedValueOnce(false);
+    outlookAction.mockResolvedValueOnce({ ...OUTLOOK, more: false });
     await userEvent.click(screen.getByRole("button", { name: "Find new ideas" }));
-    expect(await screen.findByText("No more new ideas this time")).toBeInTheDocument();
+    expect(await screen.findByText(/^No more new ideas this time/)).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("That changed. Check and send again.");
   });
 
-  describe("says what is really saved", () => {
-    const SAVED = "The reason is saved to what we know, so the next ideas avoid it.";
-    const list = () => idea({ title: "Cocotte", source: "list", listItemId: "li1" });
+  describe("says only what the server says", () => {
+    const AVOID = "The reason is saved, so the next ideas avoid it.";
+    const status = () => screen.getByRole("status", { name: "What happens" });
 
-    async function choose(ideas: RoundPageIdea[], reason: string, more: boolean, o: { which?: string; text?: string } = {}) {
-      const p = setup(view({ ideas }), { outlook: more });
-      p.rejectAction.mockResolvedValue({ ok: true, more });
+    async function open(outlook: Partial<RejectionOutlook> | null) {
+      const p = setup(view({ ideas: [idea({ title: "Orchid" })] }), { outlook });
       await userEvent.click(screen.getByRole("button", { name: "None of these" }));
-      await userEvent.click(await screen.findByRole("button", { name: reason }));
-      if (o.which) await userEvent.click(screen.getByRole("radio", { name: o.which }));
-      if (o.text) await userEvent.type(screen.getByLabelText(/Anything else/), o.text);
-      await userEvent.tab();
       return p;
     }
+    const chip = async (name: string) => userEvent.click(await screen.findByRole("button", { name }));
 
     it("before a reason is chosen it promises nothing", async () => {
-      setup(view({ ideas: [list()] }));
-      await userEvent.click(screen.getByRole("button", { name: "None of these" }));
-      expect(await screen.findByText("Tell us why, so the next ideas fit better.")).toBeInTheDocument();
-      expect(screen.queryByText(SAVED)).toBeNull();
+      await open({});
+      expect(status()).toHaveTextContent(/^$/);
     });
 
-    it("an AI idea's reason is saved", async () => {
-      await choose([idea({ title: "Orchid" })], "Not their style", true);
-      expect(await screen.findByText(SAVED)).toBeInTheDocument();
+    it.each<[Partial<RejectionOutlook>, string]>([
+      [{ saves: true }, AVOID],
+      [{ saves: true, cheaper: true }, "The reason is saved, and the next ideas will cost less."],
+      [{ saves: false, cheaper: true }, "The next ideas will cost less."],
+      [{ saves: false }, "We'll leave these out this time."],
+      [{ more: false, saves: true }, "No more new ideas this time. The reason is saved, and these ideas stay here to buy."],
+      [{ more: false, saves: false }, "No more new ideas this time. These ideas stay here to buy."],
+    ])("%o", async (outlook, text) => {
+      await open(outlook);
+      await chip("Too pricey");
+      await waitFor(() => expect(status()).toHaveTextContent(new RegExp(`^${text.replace(/[.()]/g, "\\$&")}$`)));
     });
 
-    it("with a list gift and an AI idea, the AI idea's reason is saved", async () => {
-      await choose([list(), idea({ title: "Orchid" })], "Not their style", true);
-      expect(await screen.findByText(SAVED)).toBeInTheDocument();
+    it("a new choice clears the last answer until the server says", async () => {
+      const p = await open({ saves: true });
+      await chip("Not their style");
+      await waitFor(() => expect(status()).toHaveTextContent(AVOID));
+      let answer!: (o: RejectionOutlook) => void;
+      p.outlookAction.mockImplementationOnce((...a) => (void a, new Promise((r) => (answer = r))));
+      await chip("Too pricey");
+      expect(status()).toHaveTextContent(/^$/);
+      expect(screen.getByRole("button", { name: "Find new ideas" })).toBeDisabled();
+      answer({ more: true, saves: false, cheaper: true });
+      await waitFor(() => expect(status()).toHaveTextContent("The next ideas will cost less."));
     });
 
-    it.each(["Not their style", "Too generic"])("list gifts alone save nothing: %s", async (reason) => {
-      await choose([list()], reason, true);
-      expect(await screen.findByText("We'll leave these out this time.")).toBeInTheDocument();
-      expect(screen.queryByText(SAVED)).toBeNull();
+    it("typing clears the answer, and asks again by itself with the new text", async () => {
+      const p = await open({ saves: false });
+      await chip("Too pricey");
+      await waitFor(() => expect(status()).toHaveTextContent("We'll leave these out this time."));
+      p.outlookAction.mockResolvedValue({ more: true, saves: true, cheaper: false });
+      await userEvent.type(screen.getByLabelText(/Anything else/), "No glass");
+      expect(screen.getByRole("button", { name: "Find new ideas" })).toBeDisabled();
+      await waitFor(() => expect(status()).toHaveTextContent(AVOID), { timeout: 3000 });
+      expect(p.outlookAction).toHaveBeenLastCalledWith("r1", { code: "too_pricey", ownedIdeaId: null, text: "No glass" });
     });
 
-    it("Already has one, for a list gift, saves nothing (T42)", async () => {
-      await choose([list()], "Already has one", true, { which: "Cocotte" });
-      expect(await screen.findByText("We'll leave these out this time.")).toBeInTheDocument();
+    it("an answer for older text is dropped", async () => {
+      const p = await open({ saves: false });
+      let late!: (o: RejectionOutlook) => void;
+      p.outlookAction.mockImplementationOnce((...a) => (void a, new Promise((r) => (late = r))));
+      await chip("Not their style");
+      await chip("Too generic");
+      await waitFor(() => expect(status()).toHaveTextContent("We'll leave these out this time."));
+      late({ more: false, saves: true, cheaper: false });
+      await new Promise((r) => setTimeout(r, 20));
+      expect(status()).toHaveTextContent("We'll leave these out this time.");
     });
 
-    it("a typed reason is saved, even for list gifts", async () => {
-      await choose([list()], "Not their style", true, { text: "No cookware" });
-      expect(await screen.findByText(SAVED)).toBeInTheDocument();
+    it("with no search left the button keeps the ideas, and the page says what was saved", async () => {
+      const p = await open({ more: false, saves: false });
+      p.rejectAction.mockResolvedValue({ ok: true, more: false, saved: false });
+      await chip("Not their style");
+      await userEvent.click(await screen.findByRole("button", { name: "Keep these ideas" }));
+      expect(await screen.findByText("These ideas are still here to buy.")).toBeInTheDocument();
+      expect(screen.queryByText(/Saved/)).toBeNull();
     });
 
-    it("Too pricey saves nothing and says the next ideas cost less", async () => {
-      await choose([idea({ title: "Orchid" })], "Too pricey", true);
-      expect(await screen.findByText("The next ideas will cost less.")).toBeInTheDocument();
-    });
-
-    it("with no search left and nothing to save, it says so and the button doesn't say Save", async () => {
-      await choose([list()], "Not their style", false);
-      expect(await screen.findByText("These ideas stay here to buy.")).toBeInTheDocument();
-      expect(screen.queryByText(/is saved|leave these out|cost less/)).toBeNull();
-      await userEvent.click(screen.getByRole("button", { name: "OK" }));
+    it("the page's Saved comes from the server's answer to sending, not the sheet's", async () => {
+      const p = await open({ more: false, saves: true });
+      p.rejectAction.mockResolvedValue({ ok: true, more: false, saved: false });
+      await chip("Not their style");
+      await userEvent.click(await screen.findByRole("button", { name: "Save the reason" }));
       expect(await screen.findByText("These ideas are still here to buy.")).toBeInTheDocument();
     });
   });

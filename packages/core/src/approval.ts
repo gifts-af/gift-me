@@ -13,7 +13,7 @@ type IdeaRef = { title: string; source: "generated" | "list" };
 export type RejectionFact = { category: "owns" | "avoid"; value: string };
 
 // Same as profile_facts.value_key: lower(regexp_replace(btrim(value), '\s+', ' ', 'g')).
-const factKey = (f: RejectionFact) => `${f.category}\u0000${f.value.trim().replace(/\s+/g, " ").toLowerCase()}`;
+export const rejectionFactKey = (f: { category: string; value: string }) => `${f.category}\u0000${f.value.trim().replace(/\s+/g, " ").toLowerCase()}`;
 
 /** The number of characters as the database counts them: code points, so an emoji is one. */
 const chars = (s: string) => Array.from(s).length;
@@ -68,7 +68,7 @@ export function rejectionFacts(
   // The database refuses two facts with the same category and value key (error 21000).
   const seen = new Set<string>();
   return facts.filter((f) => {
-    const k = factKey(f);
+    const k = rejectionFactKey(f);
     if (seen.has(k)) return false;
     seen.add(k);
     return true;

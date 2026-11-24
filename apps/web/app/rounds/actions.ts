@@ -15,6 +15,7 @@ import {
   parseBudget,
   quoteFailedOrder,
   rejectionOutlook,
+  type RejectionOutlook,
   rejectRoundIdeas,
   replaceFailedOrder,
   roundAccess,
@@ -77,13 +78,13 @@ export async function rejectAction(roundId: string, form: FormData): Promise<Rej
 }
 
 /**
- * Whether this reason still brings new ideas, for the sheet (AC-13a). Only reads; the round
+ * What this reason will do, for the sheet to say (AC-13a). Only reads; the round
  * must be the signed-in user's. Null when it can't say.
  */
 export async function outlookAction(
   roundId: string,
   input: { code: string; ownedIdeaId: string | null; text: string | null },
-): Promise<boolean | null> {
+): Promise<RejectionOutlook | null> {
   const id = RoundId.safeParse(roundId);
   const parsed = z
     .object({ code: Code, ownedIdeaId: z.uuid().nullable(), text: z.string().trim().max(FACT_VALUE_MAX).nullable() })
