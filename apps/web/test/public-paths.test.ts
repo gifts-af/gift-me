@@ -1,3 +1,5 @@
+import { readdirSync } from "node:fs";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { NextResponse } from "next/server";
 import { homeRewrite, isPublicPath, signInRedirect, withCookies } from "@/lib/supabase/proxy";
@@ -15,6 +17,8 @@ describe("isPublicPath", () => {
     "/api/rounds/job",
     // Resend posts inbound mail here, signed with Svix (ALL-31).
     "/api/inbound/resend",
+    // Zinc posts each buyer's order and wallet events here, signed (ALL-32, ALL-164).
+    "/api/zinc/webhook/0b6f7c3e-1a2b-4c5d-8e9f-001122334455",
     // The Chrome extension posts captures here with a bearer token (ALL-22).
     "/api/captures",
     // ...and retries a capture's read the same way (ALL-25).
@@ -45,10 +49,23 @@ describe("isPublicPath", () => {
     "/a/abc",
   ])("lets signed-out visitors reach %s", (path) => expect(isPublicPath(path)).toBe(true));
 
-  it.each(["/", "/settings", "/api/other", "/api/keepalive", "/lists/123", "/api/captures/x/other", "/api/captures/a/b/extract", "/api/lists/items/x"])(
+  it.each(["/", "/settings", "/api/other", "/api/keepalive", "/lists/123", "/api/captures/x/other", "/api/captures/a/b/extract", "/api/lists/items/x", "/api/zinc/webhook", "/api/zinc/webhook/", "/api/zinc/webhook/a/b", "/api/zinc/other"])(
     "sends signed-out visitors on %s to sign in",
     (path) => expect(isPublicPath(path)).toBe(false),
   );
+});
+
+// Every API route checks its own caller (a signature, a secret, a token or the session), because
+// a redirect to the sign-in page means nothing to a program. A new one fails here until it's public.
+describe("every API route", () => {
+  const api = path.resolve(__dirname, "../app/api");
+  const routes = readdirSync(api, { recursive: true, encoding: "utf8" })
+    .map((f) => f.replaceAll("\\", "/"))
+    .filter((f) => /(^|\/)route\.tsx?$/.test(f))
+    .map((f) => `/api/${f.replace(/\/?route\.tsx?$/, "")}`.replace(/\[[^\]]+\]/g, "0b6f7c3e-1a2b-4c5d-8e9f-001122334455"));
+
+  it("finds the routes", () => expect(routes).toContain("/api/health"));
+  it.each(routes)("%s answers for itself, with no redirect to sign in", (route) => expect(isPublicPath(route)).toBe(true));
 });
 
 describe("signInRedirect", () => {

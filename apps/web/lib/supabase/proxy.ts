@@ -26,6 +26,9 @@ export function isPublicPath(pathname: string) {
     pathname === "/api/rounds/job" ||
     // Resend posts received mail here; the route checks the Svix signature (ALL-31).
     pathname === "/api/inbound/resend" ||
+    // Each buyer's Zinc account posts its events here with no session; the route checks the
+    // HMAC signature against that buyer's secret.
+    /^\/api\/zinc\/webhook\/[^/]+$/.test(pathname) ||
     // The extension calls this cross-origin with a bearer token; the route checks it (ALL-22).
     pathname === "/api/captures" ||
     /^\/api\/captures\/[^/]+\/extract$/.test(pathname) ||
