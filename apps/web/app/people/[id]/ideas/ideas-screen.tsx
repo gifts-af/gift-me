@@ -170,8 +170,9 @@ export function IdeasScreen({
                   <span className="self-start rounded-md bg-warning-soft px-2 py-0.5 text-xs font-semibold text-warning">Over budget</span>
                 )}
                 <p className="text-[13px] text-muted-foreground">
-                  {store ? `${money(idea.totalCents)} · ${store}` : money(idea.totalCents)}
+                  {store ? `${money(idea.priceCents)} · ${store}` : money(idea.priceCents)}
                 </p>
+                <p className="text-[13px] text-muted-foreground">{`About ${money(idea.totalCents)} with shipping, tax and fee`}</p>
                 {idea.arriveBy && (
                   <p className="text-[13px] text-muted-foreground">Arrives by {shortDate(idea.arriveBy)} if ordered today</p>
                 )}

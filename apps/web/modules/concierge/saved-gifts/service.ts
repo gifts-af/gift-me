@@ -13,6 +13,8 @@ const AT_CAP = "You've saved as many gifts for them as we keep. Remove one to ad
 export const IDEA_REPLACED = "This idea was replaced. Refresh to see the new ones.";
 /** The saved_gifts name limit (rules.ts, the table's check). */
 const MAX_NAME = 200;
+/** The saved_gifts image_url limit (the table's check). */
+const MAX_IMAGE_URL = 2048;
 
 function errorCode(e: unknown): string | undefined {
   return typeof e === "object" && e !== null && "code" in e ? String((e as { code: unknown }).code) : undefined;
@@ -108,7 +110,8 @@ export async function saveIdea(store: SavedGiftsStore, log: Log, personId: strin
       name,
       price_cents: idea.price_cents,
       product_url: idea.product_url,
-      image_url: null,
+      // Zinc's photo, https only. One too long to keep is dropped rather than failing the save.
+      image_url: idea.image_url !== null && idea.image_url.length <= MAX_IMAGE_URL ? idea.image_url : null,
       retailer_product_id: idea.retailer_product_id,
     });
   } catch (e) {

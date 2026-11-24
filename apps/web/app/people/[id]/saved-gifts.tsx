@@ -211,7 +211,7 @@ export function SavedGifts({
               {gift.imageUrl ? (
                 // A store's photo, like the gift cards on My list.
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={gift.imageUrl} alt="" className="size-12 shrink-0 rounded-md bg-muted object-contain" />
+                <img src={gift.imageUrl} alt="" referrerPolicy="no-referrer" className="size-12 shrink-0 rounded-md bg-muted object-contain" />
               ) : (
                 <div className="size-12 shrink-0 rounded-md bg-muted" aria-hidden="true" />
               )}
