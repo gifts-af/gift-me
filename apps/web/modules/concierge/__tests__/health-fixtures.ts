@@ -1,3 +1,4 @@
+import type { CostPerGift } from "../health/costs";
 import type { HealthSnapshot } from "../health/store";
 import type { HealthSettings, Vendors } from "../health/report";
 
@@ -32,6 +33,27 @@ export function snapshot(over: Partial<HealthSnapshot> = {}): HealthSnapshot {
     deadlineClose: [],
     ideasWaiting: [],
     weekly: { waitingAddress: 0, waitingFunds: 0, waitingSetup: 0, waitingApproval: 0, noIdeas: 0, roundsFailed: 0, failedCaptures: 0 },
+    ...over,
+  };
+}
+
+export function costs(over: Partial<CostPerGift> = {}): CostPerGift {
+  return {
+    since: "2026-11-25T15:00:00.000Z",
+    windowDays: 90,
+    gifts: 12,
+    aiCents: 372,
+    lookupCents: 252,
+    aiRecords: 41,
+    aiEstimated: 2,
+    bills: [
+      { month: "2026-12-01", vendors: ["Resend", "domain"] },
+      { month: "2027-01-01", vendors: ["Resend", "domain"] },
+    ],
+    billCents: 500,
+    billGifts: 6,
+    orderFeeCents: 100,
+    excludedCents: 42,
     ...over,
   };
 }

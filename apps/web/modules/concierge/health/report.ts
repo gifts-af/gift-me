@@ -1,3 +1,4 @@
+import type { CostPerGift } from "./costs";
 import type { HealthSnapshot } from "./store";
 
 export type HealthSettings = {
@@ -43,7 +44,13 @@ export type Problem = {
   waiting?: HealthSnapshot["ideasWaiting"];
 };
 
-export type HealthReport = { problems: Problem[]; weekly: HealthSnapshot["weekly"] | null; isWeekly: boolean };
+export type HealthReport = {
+  problems: Problem[];
+  weekly: HealthSnapshot["weekly"] | null;
+  isWeekly: boolean;
+  /** Added on the weekly day, after the report is built; null when cost tracking is off. */
+  costs?: CostPerGift | "unreadable" | null;
+};
 
 /** The one-line report for a check that couldn't run, so a dead checker isn't silent. */
 export function checkFailedReport(stage: HealthStage): HealthReport {

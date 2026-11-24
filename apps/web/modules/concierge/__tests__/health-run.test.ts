@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { HealthDeps } from "../health/run";
 import type { OutgoingEmail } from "@/lib/resend";
+import { costs, MONDAY } from "./health-fixtures";
 
 vi.mock("server-only", () => ({}));
 const { runHealthCheck } = await import("../health/run");
@@ -67,20 +68,30 @@ const SNAPSHOT = {
   weekly: { waiting_address: 0, waiting_funds: 0, waiting_setup: 0, waiting_approval: 0, no_ideas: 0, rounds_failed: 0, failed_captures: 0 },
 };
 
+/** How cost_per_gift answers. */
+type CostReply = (signal: AbortSignal) => Promise<{ data: unknown; error: unknown }>;
+
 /**
  * A client that answers the ping, setting_int from SETTINGS and health_snapshot with SNAPSHOT,
  * or with an error whose text must never reach the email or the logs.
  */
-function upDb(snapshotFails = false) {
+function upDb(snapshotFails = false, costReply: CostReply | null = null) {
   const snapshotError = { message: "column r.updated_at does not exist near jordan@example.com", code: "42703" };
   const concierge = {
     from: () => ({ select: () => ({ limit: async () => ({ data: [], error: null }) }) }),
-    rpc: async (fn: string, args: { p_key?: string }) =>
-      fn === "setting_int"
-        ? { data: SETTINGS[args.p_key!] ?? null, error: null }
-        : snapshotFails
-          ? { data: null, error: snapshotError }
-          : { data: SNAPSHOT, error: null },
+    rpc: (fn: string, args: { p_key?: string }) => {
+      if (fn === "cost_per_gift") {
+        if (!costReply) throw new Error("no cost reply for jordan@example.com");
+        return { abortSignal: costReply };
+      }
+      return Promise.resolve(
+        fn === "setting_int"
+          ? { data: SETTINGS[args.p_key!] ?? null, error: null }
+          : snapshotFails
+            ? { data: null, error: snapshotError }
+            : { data: SNAPSHOT, error: null },
+      );
+    },
   };
   return { schema: () => concierge } as unknown as HealthDeps["db"];
 }
@@ -219,5 +230,77 @@ describe("runHealthCheck", () => {
     } finally {
       SNAPSHOT.stuck_rounds = [{ round_id: "r1", user_id: "u1", attempts: 3 }];
     }
+  });
+
+  describe("the costs", () => {
+    const costRow = /^- Cost per completed gift.*$/m;
+
+    it("AC-9: on a Monday they're read and shown", async () => {
+      const read = vi.fn(async () => ({ data: costs(), error: null }));
+      const d = deps({ db: upDb(false, read), now: MONDAY });
+      expect(await runHealthCheck(d)).toEqual({ result: "sent", problems: 1 });
+      expect(read).toHaveBeenCalledTimes(1);
+      expect(d.sent[0].text).toContain("A round is stuck");
+      expect(d.sent[0].text).toContain("- QA account: $0.42 (Not counted above)");
+      expect(events().filter((e) => e.event === "health.costs_failed")).toEqual([]);
+    });
+
+    it("AC-11: on any other day they aren't read, even when an email goes out", async () => {
+      const read = vi.fn(async () => ({ data: costs(), error: null }));
+      const d = deps({ db: upDb(false, read) });
+      expect(await runHealthCheck(d)).toEqual({ result: "sent", problems: 1 });
+      expect(read).not.toHaveBeenCalled();
+      expect(d.sent[0].text).not.toMatch(costRow);
+    });
+
+    it("tracking off shows no section and logs no failure", async () => {
+      const d = deps({ db: upDb(false, async () => ({ data: null, error: null })), now: MONDAY });
+      expect(await runHealthCheck(d)).toEqual({ result: "sent", problems: 1 });
+      expect(d.sent[0].text).not.toMatch(costRow);
+      expect(events().filter((e) => e.event === "health.costs_failed")).toEqual([]);
+    });
+
+    it.each<[string, Record<string, unknown>, CostReply | null]>([
+      [
+        "a query error",
+        { code: "P0001" },
+        async () => ({ data: null, error: { message: "row of jordan@example.com", details: "jordan@example.com", code: "P0001" } }),
+      ],
+      ["a client that throws", { name: "Error" }, null],
+      ["a rejected read", { name: "Error" }, async () => Promise.reject(new Error("jordan@example.com refused"))],
+      ["an answer in the wrong shape", { name: "ZodError" }, async () => ({ data: { ...costs(), gifts: "jordan@example.com" }, error: null })],
+      [
+        "a hung read",
+        { name: "TimeoutError" },
+        (signal) => new Promise((_resolve, reject) => signal.addEventListener("abort", () => reject(signal.reason))),
+      ],
+    ])("AC-11: %s leaves the rest of the email exactly as it was", async (_what, logged, reply) => {
+      const was = SETTINGS.health_vendor_timeout_ms;
+      SETTINGS.health_vendor_timeout_ms = 20;
+      try {
+        const good = deps({ db: upDb(false, async () => ({ data: null, error: null })), now: MONDAY });
+        const goodResult = await runHealthCheck(good);
+        const goodChecked = events().find((e) => e.event === "health.checked");
+        log.mock.calls.length = 0;
+
+        const d = deps({ db: upDb(false, reply), now: MONDAY });
+        expect(await runHealthCheck(d)).toEqual(goodResult);
+        expect(d.sent).toHaveLength(1);
+        expect(d.sent[0].subject).toBe(good.sent[0].subject);
+        const line = "- Cost per completed gift (Costs couldn't be read)\n";
+        expect(d.sent[0].text).toContain(line);
+        expect(d.sent[0].text.replace(line, "")).toBe(good.sent[0].text);
+
+        const failed = events().filter((e) => e.event === "health.costs_failed");
+        expect(failed).toEqual([expect.objectContaining(logged)]);
+        // Never an alert: the costs aren't a problem the owner must act on.
+        expect(failed[0]).not.toHaveProperty("alert");
+        expect(events().find((e) => e.event === "health.checked")).toEqual({ ...goodChecked, at: expect.any(String) });
+        expect(JSON.stringify(events())).not.toContain("jordan@example.com");
+        expect(d.sent[0].html).not.toContain("jordan@example.com");
+      } finally {
+        SETTINGS.health_vendor_timeout_ms = was;
+      }
+    });
   });
 });

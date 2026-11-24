@@ -28,6 +28,8 @@ describe.skipIf(!stack)("runHealthCheck (real local database)", () => {
   let pg: Client;
   let log: { mock: { calls: unknown[][] } };
   let users: string[] = [];
+  let costRuns: string[] = [];
+  let billMonths: string[] = [];
   const beatDays: string[] = [];
   // A year no real tick or other test reaches, and a different month for each test, so the
   // heartbeat, idea run and capture windows never overlap.
@@ -160,6 +162,11 @@ describe.skipIf(!stack)("runHealthCheck (real local database)", () => {
   });
   afterEach(async () => {
     vi.restoreAllMocks();
+    // Before the users: deleting them clears the link that marks these rows as the test's.
+    await pg.query("delete from concierge.cost_events where idea_run_id = any($1::uuid[])", [costRuns]);
+    await pg.query("delete from concierge.monthly_bills where month = any($1::date[])", [billMonths]);
+    costRuns = [];
+    billMonths = [];
     if (users.length) await pg.query("delete from auth.users where id = any($1::uuid[])", [users]);
     users = [];
   });
@@ -233,6 +240,46 @@ describe.skipIf(!stack)("runHealthCheck (real local database)", () => {
     expect(sent[0].text).toContain("1 waiting on an address");
     expect(sent[0].text).toContain("1 waiting on funds");
     expect(checked()).toMatchObject({ result: "sent", problems: 0, sent: true, weekly: true });
+  });
+
+  it("AC-9: on a Monday, the window's costs, bills and gifts are in the email", async () => {
+    const { now, today } = dayIn(1);
+    await tickRan(today);
+    const u = await user();
+    // Two gifts last month, which has a bill.
+    const billMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)).toISOString().slice(0, 10);
+    const inMonth = `${addDays(billMonth, 10)}T12:00:00Z`;
+    const gifts = [];
+    for (let n = 0; n < 2; n++) gifts.push(await order(await round(u, "ordered", null, addDays(today, 30)), "delivered"));
+    await pg.query("update concierge.orders set placed_at = $2 where id = any($1::uuid[])", [gifts, inMonth]);
+    const run = (
+      await pg.query(
+        `insert into concierge.idea_runs (user_id, person_id, started_at, finished_at, outcome)
+         select user_id, person_id, $2, $2, 'saved' from concierge.gift_rounds where user_id = $1 limit 1 returning id`,
+        [u, inMonth],
+      )
+    ).rows[0].id;
+    costRuns.push(run);
+    await pg.query(
+      `insert into concierge.cost_events (created_at, kind, cents, estimated, excluded, idea_run_id)
+       values ($1, 'ai_ideas', 62.5, false, false, $2), ($1, 'ai_ideas', 1.5, true, false, $2),
+              ($1, 'lookup_ideas', 42, true, false, $2), ($1, 'ai_ideas', 7.25, false, true, $2)`,
+      [inMonth, run],
+    );
+    billMonths.push(billMonth);
+    await pg.query("insert into concierge.monthly_bills (month, vendor, cents) values ($1, 'Resend', 300)", [billMonth]);
+
+    const { deps: d, sent } = deps(now);
+    expect(await runHealthCheck(d)).toMatchObject({ result: "sent" });
+    const text = sent[0].text;
+    expect(text).toMatch(/- Cost per completed gift \(Counted since \w{3} \d{1,2}, \d{4}\. 2 completed gifts\)/);
+    expect(text).toContain("- AI suggestions: $0.32 ($0.64 in total, 1 of 2 AI records estimated)");
+    expect(text).toContain("- Product lookups: $0.21 ($0.42 in total)");
+    expect(text).toMatch(/- Running the service: \$1\.50 \(\$3\.00 of bills over 2 gifts\. \w{3}: Resend\)/);
+    expect(text).toMatch(/- Fixed part of the fee: \$\d+\.\d\d, or \$\d+\.\d\d with running the service/);
+    expect(text).toContain("- QA account: $0.07 (Not counted above)");
+    expect(healthEvents().filter((e) => e.event === "health.costs_failed")).toEqual([]);
+    expect(checked()).toMatchObject({ result: "sent", weekly: true });
   });
 
   it("AC-7: on a Monday, two addTickCounts failures show in the weekly counts and a no_credit idea_runs row leads with Out of AI credit", async () => {
