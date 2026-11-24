@@ -1,6 +1,7 @@
 import { daysBetween, expectedArrival, trackingNews, type CalendarDate, type StepKey } from "@gifts-af/core";
 import { shortDate } from "@/lib/occasion-format";
 import { errorFields, logEvent } from "@/lib/log";
+import { storeLabel } from "@/lib/store-label";
 import { notify, type NotifyDeps, type NotifyResult } from "../notify/notify";
 import type { NewsItem } from "../notify/templates";
 import { money, occasionWord } from "../rounds/emails";
@@ -137,7 +138,7 @@ function send(userId: string, items: Item[], deps: TrackingNewsDeps): Promise<No
   if (items.length === 1) {
     const [{ c, news, expected }] = items;
     if (news === "cancelled") {
-      const store = c.store ? { store: c.store.charAt(0).toUpperCase() + c.store.slice(1) } : {};
+      const store = c.store ? { store: storeLabel(c.store)! } : {};
       return notify(
         { ...base, kind: "store_cancelled_late", data: { ...occasion(c), gifts: [{ title: c.title, ...store, ...amountText(c) }] }, links: {} },
         deps.notify,

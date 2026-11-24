@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { AppNav } from "@/components/app-shell/app-nav";
 import { BackLink, PageFrame, PageTitle } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
+import { storeLabel } from "@/lib/store-label";
 import { todayForRequest } from "@/lib/today";
 import { getPerson, listSavedGifts } from "@/modules/concierge";
 import { storeName } from "@/modules/lists";
@@ -39,7 +40,7 @@ async function Loaded({ params }: { params: Promise<{ id: string }> }) {
       <SavedGifts
         personId={person.id}
         name={person.name}
-        gifts={gifts.map((g) => ({ ...g, store: g.productUrl ? storeName(g.productUrl) : null }))}
+        gifts={gifts.map((g) => ({ ...g, store: storeLabel(g.productUrl ? storeName(g.productUrl) : null) }))}
         readAction={readGiftLinkAction}
         saveAction={saveGiftAction}
         removeAction={removeSavedGiftAction}

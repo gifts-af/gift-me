@@ -5,6 +5,7 @@
 // the only service-role read, and it says nothing but whose round it is.
 import {
   FACT_VALUE_MAX,
+  isShippableAddress,
   nextBestIdea,
   packagesFromZinc,
   rejectionFacts,
@@ -16,8 +17,9 @@ import {
 } from "@gifts-af/core";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
-import { logEvent } from "@/lib/log";
+import { errorFields, logEvent } from "@/lib/log";
 import { storeName } from "@gifts-af/core/store-page/link";
+import { hasPaidFeatures } from "../paid-features";
 import { isId } from "../profile/rules";
 import { listGiftCandidates } from "../ideas/store";
 import { claimRoundNow, concierge, fail, withLease } from "../purchase/store";
@@ -315,6 +317,12 @@ export type RoundPageView = {
   storeCancelled: RoundPageOrder[];
   /** What happened, for a round that's no longer open (AC-18); null while it is. */
   closedText: string | null;
+  /**
+   * What an open round with no ideas yet is doing: looking for them; told that none were found (the
+   * no-ideas email, and no idea since); or needing the person's address. Null otherwise, and without
+   * paid features, when nothing is looked for.
+   */
+  waiting: "looking" | "told" | "address" | null;
   nextBestIdeaId: string | null;
   buyYourself: BuyYourself[];
 };
@@ -347,9 +355,78 @@ async function personList(userDb: UserDb, personId: string): Promise<ListItem[] 
   return ListShape.parse(data).items;
 }
 
+/** Whether a gift could ship to the person: a usable address of their own, or one shared through their list. */
+async function hasAddress(userDb: UserDb, personId: string): Promise<boolean> {
+  const [person, shared] = await Promise.all([
+    userDb
+      .from("people")
+      .select("recipient_first_name, recipient_last_name, address_line1, address_line2, city, state, zip, country")
+      .eq("id", personId)
+      .maybeSingle(),
+    userDb.rpc("shared_city_for_person", { p_person_id: personId }),
+  ]);
+  if (person.error) fail("Reading the person's address failed", person.error);
+  // The person was deleted: there is no one to ship to (as personList).
+  if (shared.error && shared.error.code !== "P0002") fail("Reading the shared city failed", shared.error);
+  if (shared.error === null && shared.data !== null) return true;
+  const p = person.data;
+  return (
+    p !== null &&
+    isShippableAddress({
+      firstName: p.recipient_first_name,
+      lastName: p.recipient_last_name,
+      line1: p.address_line1,
+      line2: p.address_line2,
+      city: p.city,
+      state: p.state,
+      zip: p.zip,
+      country: p.country,
+    })
+  );
+}
+
+/**
+ * What a round with no ideas yet is waiting on (RoundPageView.waiting). Only words on the page, so a
+ * failed read is logged and says nothing: the buy and fix pages read the same view.
+ */
+async function waitingOn(
+  userDb: UserDb,
+  r: { id: string; user_id: string; person_id: string; status: string },
+  ideasFoundAt: string[],
+): Promise<RoundPageView["waiting"]> {
+  try {
+    if (!(await hasPaidFeatures(userDb, r.user_id))) return null;
+    // The round itself only moves at the next daily tick, so its status can lag a saved address.
+    const addressed = r.status === "generating" || (await hasAddress(userDb, r.person_id));
+    if (r.status === "needs_address" && !addressed) return "address";
+    const told = await userDb
+      .schema("concierge")
+      .from("notifications")
+      .select("sent_at")
+      .eq("round_id", r.id)
+      .eq("kind", "no_ideas")
+      .eq("channel", "email")
+      .not("sent_at", "is", null)
+      .is("error", null)
+      .order("sent_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (told.error) fail("Reading the round's no-ideas email failed", told.error);
+    const toldAt = told.data?.sent_at ?? null;
+    if (toldAt !== null && ideasFoundAt.every((at) => Date.parse(at) < Date.parse(toldAt))) return "told";
+    return addressed ? "looking" : "address";
+  } catch (err) {
+    logEvent("round_waiting_failed", { round_id: r.id, user_id: r.user_id, ...errorFields(err) });
+    return null;
+  }
+}
+
 const ORDERED_STATUSES = new Set(["ordered", "delivered", "complete"]);
 // Not given, as concierge.order_is_given counts it (failed ones are split out below).
 const NOT_LIVE = new Set(["cancelled", "failed", "refunded"]);
+const BOUGHT = new Set(["placed", "shipped", "delivered"]);
+const IN_FLIGHT = new Set(["placing", "unconfirmed"]);
+const NO_IDEAS_YET = new Set(["scheduled", "needs_address", "generating"]);
 
 /**
  * The round screen's read, with the signed-in user's client: null when RLS hides the round
@@ -371,7 +448,7 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
     db
       .from("gift_ideas")
       .select(
-        "id, title, reason, retailer, retailer_product_id, product_url, image_url, source, list_item_id, price_cents, est_total_cents, over_budget, rank, status, arrive_by, handling_days_max, delivery_days_max",
+        "id, title, reason, retailer, retailer_product_id, product_url, image_url, source, list_item_id, price_cents, est_total_cents, over_budget, rank, status, arrive_by, handling_days_max, delivery_days_max, created_at",
       )
       .eq("round_id", roundId)
       .order("rank"),
@@ -452,10 +529,22 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
   const today = now.toISOString().slice(0, 10);
   // From the ship-by day on, as approve_round refuses it.
   const pastDeadline = today >= r.ship_by_deadline;
+  const ended = r.closed_at !== null || r.status === "skipped" || ORDERED_STATUSES.has(r.status);
+  // An ordered round's orders stay placing until the store confirms them (reconcile_round never leaves
+  // an unconfirmed one there). A round can also end with only some of its gifts bought.
+  const bought = ORDERED_STATUSES.has(r.status) ? liveOrders : liveOrders.filter((o) => BOUGHT.has(o.status));
   let closedText: string | null = null;
-  if (ORDERED_STATUSES.has(r.status) && liveOrders.length > 0) closedText = `Already ordered: ${liveOrders.map((o) => o.title).join(", ")}`;
-  else if (r.closed_at !== null || r.status === "skipped" || ORDERED_STATUSES.has(r.status) || pastDeadline)
-    closedText = "This occasion has passed";
+  if (ended || pastDeadline) {
+    if (bought.length > 0) closedText = `Already ordered: ${bought.map((o) => o.title).join(", ")}`;
+    // Zinc may still turn out to have bought it, so nothing here may say no gift is coming.
+    else if (liveOrders.some((o) => IN_FLIGHT.has(o.status))) closedText = "We're still confirming your order.";
+    else if (today > r.occasion_date) closedText = "This occasion has passed";
+    else if (storeCancelled.length > 0 || (ended && all.some((o) => o.status === "cancelled" || o.status === "refunded"))) closedText = "No gift is on its way";
+    else if (pastDeadline) closedText = "It's too late to send a gift in time";
+    else closedText = "This gift round was stopped";
+  }
+
+  const waiting = closedText === null && NO_IDEAS_YET.has(r.status) ? await waitingOn(userDb, r, ideasRes.data.map((i) => i.created_at)) : null;
 
   const buyable = ideas.filter((i) => !i.claimed && !i.noLongerShared && !liveOrders.some((o) => o.ideaId === i.id));
   const nextBestIdeaId =
@@ -505,6 +594,7 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
     failedOrders,
     storeCancelled,
     closedText,
+    waiting,
     nextBestIdeaId,
     buyYourself,
   };

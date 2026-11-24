@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { OCCASION_NAMES, shortDate } from "@/lib/occasion-format";
+import { chooseBy, OCCASION_NAMES, shortDate } from "@/lib/occasion-format";
 import { Switch } from "@/components/ui/switch";
 import type { PersonDetail, SaveResult } from "@/modules/concierge";
 
@@ -10,7 +10,7 @@ type Row = PersonDetail["occasions"][number];
 function orderByLine(row: Row): string | null {
   if (!row.enabled) return null;
   if (!row.orderBy) return "Too late to ship";
-  return `Order by ${shortDate(row.orderBy.date)}${row.orderBy.fast ? " with fast shipping" : ""}`;
+  return `Order by ${chooseBy(row.orderBy.date)}${row.orderBy.fast ? " with fast shipping" : ""}`;
 }
 
 /** Each occasion with a switch, its next date and when to order by. */

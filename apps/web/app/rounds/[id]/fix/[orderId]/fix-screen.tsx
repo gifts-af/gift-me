@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import Link from "next/link";
 import { classifyTotal, overBudgetLimitCents } from "@gifts-af/core";
 import { IdeaPhoto } from "@/components/idea-photo";
-import { shortDate } from "@/lib/occasion-format";
+import { chooseBy, shortDate } from "@/lib/occasion-format";
 import { Button } from "@/components/ui/button";
 import type { RoundPageIdea, RoundPageOrder } from "@/modules/concierge";
 import { money } from "@/app/people/[id]/money";
@@ -258,7 +258,7 @@ export function FixScreen(p: FixScreenProps) {
         <h2 id="fix-what" className="text-[17px] font-bold">
           {words.title}
         </h2>
-        <p className="text-[15px]">{`${words.body} Choose by ${shortDate(p.shipByDeadline)} to still arrive in time.`}</p>
+        <p className="text-[15px]">{`${words.body} Choose by ${chooseBy(p.shipByDeadline)} to still arrive in time.`}</p>
         {idea && (
           <div className="flex items-start gap-3 rounded-xl border border-border p-3">
             <IdeaPhoto url={idea.imageUrl} title={idea.title} />

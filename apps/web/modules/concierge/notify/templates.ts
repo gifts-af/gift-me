@@ -97,7 +97,8 @@ export type NewsItem = Occasion & { title: string } & (
 export type TemplateData = {
   test: Record<string, never>;
   heads_up:
-    | (Occasion & Asks & { mode: "reminder"; ideas: IdeaRow[]; late?: boolean; funding?: Funding })
+    /** `allFromList`: every gift is from their own list, so the subject may say so. */
+    | (Occasion & Asks & { mode: "reminder"; ideas: IdeaRow[]; allFromList?: boolean; late?: boolean; funding?: Funding })
     | (Occasion & Asks & {
         mode: "auto_buy";
         ideas: IdeaRow[];
@@ -449,8 +450,10 @@ export const TEMPLATES: {
         }),
       };
     }
+    const n = d.ideas.length;
+    const what = d.allFromList ? `${n === 1 ? "gift" : "gifts"} from their list` : n === 1 ? "gift idea" : "gift ideas";
     return {
-      subject: `${d.personName}'s ${d.occasion}: ${d.ideas.length} gifts from their list`,
+      subject: `${d.personName}'s ${d.occasion}: ${n} ${what}`,
       ...renderEmail({
         heading: `${d.personName}'s ${d.occasion} is coming up`,
         paragraphs: [
@@ -709,8 +712,7 @@ export const TEMPLATES: {
       heading: `${d.personName}'s gift is ordered`,
       paragraphs: [
         `We ordered the ${d.giftTitle} for ${d.personName}'s ${d.occasion} on ${d.dateText}.` +
-          (d.cityText ? ` It's on its way to ${d.cityText}.` : " It's on its way.") +
-          " We'll let you know when it ships.",
+          (d.cityText ? ` It's on its way to ${d.cityText}.` : " It's on its way."),
       ],
       button: { label: `Open ${d.personName}'s page`, url: links.open },
     }),

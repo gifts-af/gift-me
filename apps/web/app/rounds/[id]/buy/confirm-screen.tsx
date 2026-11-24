@@ -7,6 +7,7 @@ import { storeName } from "@gifts-af/core/store-page/link";
 import { PageTitle } from "@/components/app-shell/page-frame";
 import { IdeaPhoto } from "@/components/idea-photo";
 import { shortDate } from "@/lib/occasion-format";
+import { storeLabel } from "@/lib/store-label";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
@@ -65,9 +66,9 @@ const STAY = new Set(["busy", "needs_confirmation", "gift_message_too_long", "no
 function storeOf(i: RoundPageIdea): string | null {
   if (i.productUrl) {
     const name = storeName(i.productUrl);
-    if (name) return name;
+    if (name) return storeLabel(name);
   }
-  return i.retailer ? i.retailer.charAt(0).toUpperCase() + i.retailer.slice(1) : null;
+  return storeLabel(i.retailer);
 }
 
 function Line({ label, value, strong }: { label: string; value: string; strong?: boolean }) {

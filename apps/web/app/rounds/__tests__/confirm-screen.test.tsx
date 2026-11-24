@@ -95,6 +95,8 @@ describe("ConfirmScreen", () => {
     await userEvent.click(screen.getByRole("button", { name: "Buy now · about $54.20" }));
     expect(buyAction.mock.calls[0][1].get("over")).toBeNull();
     expect(await screen.findByText("Ordered")).toBeInTheDocument();
+    // There is no shipped email, so none is promised.
+    expect(screen.getByText("You'll find its delivery updates on the gift's page.")).toBeInTheDocument();
   });
 
   it("past the most allowed there's no button", () => {

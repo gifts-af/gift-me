@@ -1,10 +1,11 @@
 import { EMAILED_HOLDS, nextAction, type ScheduleSettings, type StepKey } from "@gifts-af/core";
-import { shortDate } from "@/lib/occasion-format";
+import { chooseBy, shortDate } from "@/lib/occasion-format";
+import { storeLabel } from "@/lib/store-label";
 import { errorFields, logEvent } from "@/lib/log";
 import { notify, type NotifyResult } from "../notify/notify";
 import { endedAddressReason, type CancelledGift, type FailedGift, type OtherGifts } from "../notify/templates";
 import type { ClaimedRound, RoundContext, RoundOrder } from "./store";
-import { chooseBy, fixPath, money, occasionWord, LIVE_HELD } from "./emails";
+import { fixPath, money, occasionWord, LIVE_HELD } from "./emails";
 import type { EngineDeps } from "./engine";
 import { dayOf, view, type Extra, sendStep, trySend } from "./steps";
 
@@ -407,7 +408,7 @@ function lateDetail(o: RoundOrder, personName: string): string {
 function cancelledGift(o: RoundOrder): CancelledGift {
   return {
     title: o.title,
-    ...(o.store ? { store: o.store.charAt(0).toUpperCase() + o.store.slice(1) } : {}),
+    ...(o.store ? { store: storeLabel(o.store)! } : {}),
     ...(o.refundCents !== null && o.refundCents > 0 ? { amountText: money(o.refundCents) } : {}),
   };
 }

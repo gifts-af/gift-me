@@ -33,7 +33,7 @@ describe("failures", () => {
   // The heads-up and the skip are where the send record is the only guard:
   // nextAction keeps saying "generate" or "skip" until the status moves on.
   it.each([
-    { step: "heads_up", day: "2027-02-11", subject: "Zelda Quartermain's birthday: 2 gifts", status: "awaiting_approval" },
+    { step: "heads_up", day: "2027-02-11", subject: "Zelda Quartermain's birthday: 2 gift ideas", status: "awaiting_approval" },
     { step: "skipped", day: "2027-03-11", subject: "No gift for", status: "skipped" },
   ])("never resends $step after a crash mid-step (AC-11)", async ({ day, subject, status }) => {
     const h = harness();

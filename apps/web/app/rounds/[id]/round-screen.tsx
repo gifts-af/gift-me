@@ -13,7 +13,8 @@ import {
   type RejectionCode,
 } from "@gifts-af/core";
 import { IdeaPhoto } from "@/components/idea-photo";
-import { OCCASION_NAMES, shortDate } from "@/lib/occasion-format";
+import { chooseBy, OCCASION_NAMES, shortDate } from "@/lib/occasion-format";
+import { storeLabel } from "@/lib/store-label";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useHydrated } from "@/lib/use-hydrated";
@@ -22,6 +23,7 @@ import type { BuyYourself, RoundPageIdea, RoundPageOrder, RoundPageView } from "
 import { money } from "@/app/people/[id]/money";
 import { deliveredText, storeCancelledText } from "../gift-status";
 import { OverBudgetSheet } from "../over-budget-sheet";
+import { personAddressHref } from "../ship-to";
 
 // The round screen (ALL-29, design/plans/ALL-29-approval.md AC-5–AC-7, AC-9, AC-12, AC-13a,
 // AC-17, AC-18, AC-29, AC-30): list gifts first, then the AI's ideas; tick one or more and go on
@@ -53,11 +55,6 @@ const REJECT_ERRORS: Record<Exclude<Extract<RejectResult, { ok: false }>["error"
   bad_form: "That didn't go through. Reload and try again.",
 };
 const TRY_AGAIN = "That didn't go through. Try again.";
-
-/** "Amazon" from the stored "amazon". */
-function storeLabel(retailer: string | null): string | null {
-  return retailer ? retailer.charAt(0).toUpperCase() + retailer.slice(1) : null;
-}
 
 /**
  * A list gift from a store Zinc can only check has no live price: it's offered at the list's own
@@ -147,7 +144,7 @@ function IdeaCard({
 }
 
 function BuyYourselfRow({ item }: { item: BuyYourself }) {
-  const meta = [item.priceCents !== null ? money(item.priceCents) : null, item.storeName].filter(Boolean).join(" · ");
+  const meta = [item.priceCents !== null ? money(item.priceCents) : null, storeLabel(item.storeName)].filter(Boolean).join(" · ");
   const note = item.claimed ? "Someone else is getting this" : item.claimedByMe ? "Already on one of your orders" : null;
   return (
     <li className={cn("flex items-start gap-3 rounded-xl border border-border p-3", note && "opacity-50")}>
@@ -630,7 +627,7 @@ export function RoundScreen({
   const subline = [
     occasion ? `${occasion} ${shortDate(round.occasionDate)}` : shortDate(round.occasionDate),
     budget !== null ? `Budget ${money(budget)}` : null,
-    view.closedText === null ? `Choose by ${shortDate(round.shipByDeadline)}` : null,
+    view.closedText === null ? `Choose by ${chooseBy(round.shipByDeadline)}` : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -649,8 +646,19 @@ export function RoundScreen({
           {done}
         </p>
       )}
-      {!done && view.closedText === null && round.status === "generating" && (
+      {!done && view.waiting === "looking" && (
         <p className="text-[15px] text-muted-foreground">Looking for new ideas. They&apos;ll come by email.</p>
+      )}
+      {!done && view.waiting === "told" && (
+        <p className="text-[15px] text-muted-foreground">We haven&apos;t found ideas that fit yet. We emailed you about it.</p>
+      )}
+      {view.waiting === "address" && (
+        <>
+          <p className="text-[15px] text-muted-foreground">{`We need ${round.personName ? `${round.personName}'s` : "their"} address before we can look for gifts.`}</p>
+          <Button asChild variant="outline">
+            <Link href={personAddressHref(round.personId, `/rounds/${round.id}`)}>Add address</Link>
+          </Button>
+        </>
       )}
 
       {bought.length > 0 && (

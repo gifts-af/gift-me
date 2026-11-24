@@ -335,7 +335,7 @@ describe.skipIf(!stack)("held rounds: holds and the deadline (real local databas
     expect(texts.some((t) => t.includes("We ordered the Stoneware mug set for Mary's Christmas"))).toBe(true);
     expect(texts.some((t) => t.includes("We ordered the Linen apron for Mary's Christmas"))).toBe(true);
     for (const t of texts) {
-      expect(t).toContain("It's on its way to Dayton. We'll let you know when it ships.");
+      expect(t).toContain("It's on its way to Dayton.");
       expect(t).not.toContain("12 Oak St");
     }
     expect((await sends(r.roundId)).filter((s: string) => s.startsWith("ordered:"))).toHaveLength(2);

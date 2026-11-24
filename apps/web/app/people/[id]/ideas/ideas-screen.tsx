@@ -6,6 +6,7 @@ import { Check } from "lucide-react";
 import { IDEA_RUN_OFF, ideaRunNotice } from "@gifts-af/core";
 import { IdeaPhoto } from "@/components/idea-photo";
 import { shortDate } from "@/lib/occasion-format";
+import { storeLabel } from "@/lib/store-label";
 import { Button } from "@/components/ui/button";
 import type { IdeaRunOffer, ShownIdea } from "@/modules/concierge";
 import { money } from "../money";
@@ -71,11 +72,6 @@ function SaveIdea({
       )}
     </div>
   );
-}
-
-/** "Amazon" from the stored "amazon". */
-function storeLabel(retailer: string | null): string | null {
-  return retailer ? retailer.charAt(0).toUpperCase() + retailer.slice(1) : null;
 }
 
 export function IdeasScreen({

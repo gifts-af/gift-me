@@ -153,6 +153,8 @@ export type RoundContext = {
     reason: string | null;
     /** The retailer's name; null when unknown. */
     store: string | null;
+    /** A gift from the person's own list, not an AI idea. */
+    fromList: boolean;
   }[];
   /**
    * The idea checks (ALL-27, round_idea_state): the person has an active fact, and the round may
@@ -550,7 +552,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
         concierge.from("occasions").select("kind").eq("id", round.occasion_id).single(),
         concierge
           .from("gift_ideas")
-          .select("id, title, est_total_cents, over_budget, arrive_by, reason, retailer")
+          .select("id, title, est_total_cents, over_budget, arrive_by, reason, retailer, source")
           .eq("round_id", roundId)
           .eq("status", "proposed")
           .order("rank"),
@@ -620,6 +622,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
           arriveBy: i.arrive_by,
           reason: i.reason,
           store: i.retailer,
+          fromList: i.source === "list",
         })),
         ...ideaState,
         orders: orders.data.map((o) => ({

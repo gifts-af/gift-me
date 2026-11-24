@@ -56,6 +56,7 @@ function view(o: Partial<RoundPageView> = {}, round: Partial<RoundPageView["roun
     failedOrders: [],
     storeCancelled: [],
     closedText: null,
+    waiting: null,
     nextBestIdeaId: null,
     buyYourself: [],
     ...o,
@@ -423,6 +424,35 @@ describe("RoundScreen: None of these", () => {
     expect(screen.getByText("Already ordered: Orchid")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "None of these" })).toBeNull();
     expect(screen.queryByRole("checkbox")).toBeNull();
+  });
+});
+
+describe("RoundScreen: dates and what's happening", () => {
+  it("says the last day a gift can really be chosen", () => {
+    setup(view({ ideas: [idea({ title: "Orchid" })] }));
+    expect(screen.getByText(/Choose by Tue, Dec 8/)).toBeInTheDocument();
+  });
+
+  it("looking says so", () => {
+    setup(view({ waiting: "looking" }, { status: "scheduled" }));
+    expect(screen.getByText("Looking for new ideas. They'll come by email.")).toBeInTheDocument();
+  });
+
+  it("after the no-ideas email it says so, and not that it's looking", () => {
+    setup(view({ waiting: "told" }, { status: "scheduled" }));
+    expect(screen.getByText("We haven't found ideas that fit yet. We emailed you about it.")).toBeInTheDocument();
+    expect(screen.queryByText(/Looking for new ideas/)).toBeNull();
+  });
+
+  it("with no address it asks, opens the form and comes back here", () => {
+    setup(view({ waiting: "address" }, { status: "needs_address" }));
+    expect(screen.getByText("We need Mom's address before we can look for gifts.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Add address" })).toHaveAttribute("href", `/people/p1/address?open=1&next=${encodeURIComponent("/rounds/r1")}`);
+  });
+
+  it("says nothing when nothing is being looked for", () => {
+    setup(view({ waiting: null }, { status: "generating" }));
+    expect(screen.queryByText(/Looking for new ideas|haven't found ideas|address before/)).toBeNull();
   });
 });
 

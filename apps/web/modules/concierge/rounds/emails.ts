@@ -1,14 +1,12 @@
-import { addDays, type AttentionReason, type CalendarDate, type OccasionKind, type RenamedStepKey, type StepKey } from "@gifts-af/core";
-import { OCCASION_NAMES, shortDate } from "@/lib/occasion-format";
+import { type AttentionReason, type OccasionKind, type RenamedStepKey, type StepKey } from "@gifts-af/core";
+import { chooseBy, OCCASION_NAMES, shortDate } from "@/lib/occasion-format";
+import { storeLabel } from "@/lib/store-label";
 import { notify, type NotifyDeps, type NotifyResult } from "../notify/notify";
 import type { ClaimedRound, RoundContext, RoundOrder } from "./store";
 import type { EngineDeps } from "./engine";
 import type { Extra } from "./steps";
 
 // The round engine's emails: turns a step and the round's context into a notify() call.
-
-/** "Choose by": the day before the ship-by day, since that day's tick closes the round. */
-export const chooseBy = (shipBy: CalendarDate) => shortDate(addDays(shipBy, -1));
 
 // Pages of the round screen (ALL-29); the emails link to them with plain links, no token.
 const roundPath = (roundId: string) => `/rounds/${roundId}`;
@@ -65,7 +63,7 @@ export async function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundCo
     price: money(i.totalCents),
     ...(i.overBudget ? { overBudget: true } : {}),
     ...(i.arriveBy ? { arriveBy: shortDate(i.arriveBy) } : {}),
-    ...(i.store ? { store: i.store } : {}),
+    ...(i.store ? { store: storeLabel(i.store)! } : {}),
     ...(i.reason ? { reason: i.reason } : {}),
   }));
   // The approval emails link each idea's "Buy this" and the one button to the round screen with
@@ -95,7 +93,7 @@ export async function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundCo
         {
           ...base,
           kind: "heads_up",
-          data: { ...occasion, ...asks, mode: "reminder", ideas, late: round.late, ...(extra.funding ? { funding: extra.funding } : {}) },
+          data: { ...occasion, ...asks, mode: "reminder", ideas, allFromList: ctx.ideas.every((i) => i.fromList), late: round.late, ...(extra.funding ? { funding: extra.funding } : {}) },
           links: { ...approval, ...questionsLink },
         },
         notifyDeps,

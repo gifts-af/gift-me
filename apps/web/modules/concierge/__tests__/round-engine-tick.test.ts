@@ -129,13 +129,31 @@ describe("runTick", () => {
     expect(links[0].expiresAt).toEqual(new Date("2027-03-11T23:59:00Z"));
   });
 
+  it.each([
+    ["AI ideas", [false, false], "2 gift ideas"],
+    ["a mix", [true, false], "2 gift ideas"],
+    ["list gifts", [true, true], "2 gifts from their list"],
+  ])("the heads-up's subject and stores are true for %s", async (_what, [one, two], what) => {
+    const h = harness();
+    h.store.ideas.set("round-1", [
+      { id: "idea-1", title: "Stoneware mug set", totalCents: 4200, store: "amazon", fromList: one },
+      { id: "idea-2", title: "Herb planter", totalCents: 3850, store: "etsy.com", fromList: two },
+    ]);
+    await h.runDays("2027-02-11", "2027-02-20");
+    const headsUp = h.emails.find((e) => e.subject.includes("2 gift"))!;
+    expect(headsUp.subject).toBe(`${NAME}'s birthday: ${what}`);
+    expect(headsUp.text).toContain("Amazon");
+    expect(headsUp.text).toContain("Etsy");
+    for (const raw of ["amazon", "etsy.com"]) expect(headsUp.text).not.toContain(raw);
+  });
+
   it("the approval emails link each idea to its buy page and the button to the round screen (ALL-29 AC-1)", async () => {
     const h = harness();
     await h.runDays("2027-02-11", "2027-03-11");
     const ids = h.store.ideas.get("round-1")!.map((i) => i.id);
     expect(ids).toHaveLength(2);
     const round = `${BASE}/rounds/round-1`;
-    const approval = h.emails.filter((e) => /gifts from their list|Reminder|Last chance/.test(e.subject));
+    const approval = h.emails.filter((e) => /gift ideas?$|gifts? from their list|Reminder|Last chance/.test(e.subject));
     expect(approval).toHaveLength(4);
     for (const e of approval) {
       expect(e.html).toContain(`href="${round}"`);
