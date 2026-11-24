@@ -65,6 +65,8 @@ Every line carries ids only (round, order, user) and a link to its runbook secti
 | AC-14 | `health_email_enabled` = 0 | The health job runs | It still does the keepalive query, sends nothing, logs `health.checked {result: "off"}` |
 | AC-15 | A fixture user with a name, email, street address and gift titles owns every flagged item | The email renders | None of those strings appear in its HTML or text; it goes only to the owner inbox through `renderEmail` |
 | AC-16 | The tick route is called without the cron secret | — | The heartbeat isn't written |
+| AC-17 | Something uses the AI Gateway (or Zinc), and its balance can't be read in two tries | The health job runs | The email names the vendor; the log has the HTTP status. One failed try alone is not a problem (2026-11-24, owner) |
+| AC-18 | An idea run ended `failed` in the last day | The health job runs | The email says gift ideas failed, with the count (2026-11-24, owner) |
 
 ### Out of scope
 

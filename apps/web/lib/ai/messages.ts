@@ -23,12 +23,14 @@ export class AiError extends Error {
   /**
    * `costCents`: what a reply we received and priced cost before it failed, so the caller still
    * counts it. A number, never text. `maybeSpent`: the call may have been charged, but no reply
-   * says how much. Never true for a refusal, or with `costCents`.
+   * says how much. Never true for a refusal, or with `costCents`. `status`: the reply's HTTP status
+   * when the Gateway refused the call; none when there was no reply.
    */
   constructor(
     public kind: keyof typeof AI_ERROR_MESSAGES,
     public costCents?: number,
     public maybeSpent = false,
+    public status?: number,
   ) {
     super(AI_ERROR_MESSAGES[kind]);
     this.name = "AiError";
@@ -47,8 +49,8 @@ async function call(h: GatewayHttp, path: string, init: RequestInit, paid: boole
     if (init.signal?.aborted) throw error;
     throw new AiError("unavailable", undefined, paid);
   }
-  if (res.status === PAYMENT_REQUIRED) throw new AiError("no_credit");
-  if (!res.ok) throw new AiError("unavailable");
+  if (res.status === PAYMENT_REQUIRED) throw new AiError("no_credit", undefined, false, res.status);
+  if (!res.ok) throw new AiError("unavailable", undefined, false, res.status);
   try {
     return await res.json();
   } catch {

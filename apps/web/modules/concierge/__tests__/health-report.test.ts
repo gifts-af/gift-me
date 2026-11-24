@@ -166,9 +166,30 @@ describe("healthReport", () => {
     expect(r.problems).toEqual([{ kind: "zinc_low", detail: { balanceCents: 120, lowCents: 500 } }]);
   });
 
-  it("a failed vendor call (null) adds no problem", () => {
+  it("AC-17: a failed vendor call is a problem naming the vendor, while something uses it", () => {
+    const failed = { ...vendors, aiCreditCents: null, zincAppBalanceCents: null, aiFailed: true, zincFailed: true };
+    expect(run(snapshot(), failed, spending).problems).toEqual([
+      { kind: "vendor_failed", detail: { vendor: "AI Gateway" } },
+      { kind: "vendor_failed", detail: { vendor: "Zinc" } },
+    ]);
+    expect(run(snapshot(), failed, settings).problems).toEqual([]);
+  });
+
+  it("a balance not checked here (null, no failure) adds no problem", () => {
     const r = run(snapshot(), { ...vendors, aiCreditCents: null, zincAppBalanceCents: null }, spending);
     expect(r.problems).toEqual([]);
+  });
+
+  it("AC-18: failed idea runs are a problem with their count, whatever is switched on", () => {
+    const snap = snapshot({ failedRuns: 2 });
+    expect(run(snap).problems).toEqual([{ kind: "ideas_failed", detail: { runs: 2 } }]);
+    expect(run(snap, vendors, spending).problems).toEqual([{ kind: "ideas_failed", detail: { runs: 2 } }]);
+  });
+
+  it("puts failed runs right after no_credit, and failed vendor calls before low balances", () => {
+    const snap = snapshot({ noCreditRuns: 1, failedRuns: 1 });
+    const v = { ...vendors, aiCreditCents: null, aiFailed: true, zincAppBalanceCents: 1 };
+    expect(kinds(run(snap, v, spending).problems)).toEqual(["no_credit", "ideas_failed", "vendor_failed", "zinc_low"]);
   });
 
   it("orders the kinds db_down first, then tick, credit, failures, then the table's order", () => {

@@ -524,7 +524,7 @@ describe("runIdeas: out of AI credit", () => {
     expect(await runIdeas(req(), deps())).toEqual({ status: "failed" });
     // 14¢ of brainstorm and 4¢ of lookups were paid for.
     expect(store.finished).toEqual([{ outcome: "failed", cost: 18 }]);
-    expect(event("ideas.run")).toMatchObject({ outcome: "failed", error_kind: "no_credit" });
+    expect(event("ideas.run")).toMatchObject({ outcome: "failed", error_kind: "no_credit", error_status: 402 });
   });
 
   it("with list gifts kept, a 402 still saves them", async () => {

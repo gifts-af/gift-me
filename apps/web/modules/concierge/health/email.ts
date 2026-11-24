@@ -9,12 +9,14 @@ export const RUNBOOK_ANCHORS: Record<ProblemKind, string> = {
   db_down: "the-database-cant-be-reached",
   tick_missed: "the-tick-didnt-finish",
   no_credit: "ai-credit",
+  ideas_failed: "gift-ideas-failed",
   tick_failed: "the-tick-reported-failures",
   stuck_round: "stuck-rounds",
   unconfirmed: "order-unconfirmed",
   placing: "order-stuck-placing",
   held_zinc: "held-for-a-zinc-problem",
   ideas_not_configured: "ideas-cant-run-here",
+  vendor_failed: "a-vendor-check-failed",
   credit_low: "ai-credit",
   zinc_low: "zinc-app-balance-low",
   deadline_close: "waiting-on-the-buyer",
@@ -25,12 +27,14 @@ const TITLES: Record<ProblemKind, string> = {
   db_down: "The database can't be reached",
   tick_missed: "Today's round engine run didn't finish",
   no_credit: "Out of AI credit: ideas are paused",
+  ideas_failed: "Gift ideas failed",
   tick_failed: "The tick reported failures",
   stuck_round: "A round is stuck",
   unconfirmed: "An order can't be confirmed",
   placing: "An order is stuck placing",
   held_zinc: "An order is held for a Zinc problem",
   ideas_not_configured: "Ideas can't run on this environment",
+  vendor_failed: "A vendor check failed",
   credit_low: "AI credit is low",
   zinc_low: "The app's Zinc balance is low",
   deadline_close: "Waiting on the buyer, deadline close",
@@ -58,6 +62,10 @@ function describe(p: Problem): string {
       return p.waiting?.length
         ? `Waiting on ideas: ${p.waiting.map((w) => `round ${w.roundId}`).join(", ")}`
         : "No round is waiting on ideas near its deadline";
+    case "ideas_failed":
+      return `${plural(Number(d.runs), "idea run", "idea runs")} failed in the last day`;
+    case "vendor_failed":
+      return `The ${d.vendor} balance couldn't be read`;
     case "tick_failed":
       return `${plural(Number(d.fanoutFailed), "fan-out send failed", "fan-out sends failed")}, ${plural(Number(d.roundsFailed), "round step failed", "round steps failed")}`;
     case "stuck_round":
