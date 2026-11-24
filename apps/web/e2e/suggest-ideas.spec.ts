@@ -82,7 +82,7 @@ test("Suggest finds three checked ideas, and a second run replaces them", async 
     const item = page.locator(`li[data-retailer-product-id="${idea.productId}"]`);
     await expect(item).toContainText(idea.productTitle);
     await expect(item).toContainText(`${money(s!.price_cents)} · Amazon`);
-    await expect(item).toContainText(`About ${money(s!.est_total_cents)} with shipping, tax and the order fee`);
+    await expect(item).toContainText(`About ${money(s!.est_total_cents)} with shipping, tax and fee`);
     await expect(item).toContainText(idea.reason);
     // No occasion, so no arrival date.
     await expect(item).not.toContainText("Arrives by");

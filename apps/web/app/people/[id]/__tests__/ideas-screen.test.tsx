@@ -55,7 +55,7 @@ describe("IdeasScreen", () => {
   it("shows the item's own price, as saved gifts do, then the whole cost", () => {
     setup();
     expect(screen.getByText("$42.99 · Amazon")).toBeInTheDocument();
-    expect(screen.getByText("About $47.54 with shipping, tax and the order fee")).toBeInTheDocument();
+    expect(screen.getByText("About $47.54 with shipping, tax and fee")).toBeInTheDocument();
   });
 
   it("shows the button and money notice with the offer", () => {
