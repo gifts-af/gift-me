@@ -445,7 +445,7 @@ export type Database = {
           next_action_at: string | null;
           occasion_date: string;
           occasion_id: string;
-          occasion_year: number;
+          occasion_year: number | null;
           person_id: string;
           seen_balance_cents: number | null;
           ship_by_deadline: string;
@@ -472,7 +472,7 @@ export type Database = {
           next_action_at?: string | null;
           occasion_date: string;
           occasion_id: string;
-          occasion_year: number;
+          occasion_year?: number | null;
           person_id: string;
           seen_balance_cents?: number | null;
           ship_by_deadline: string;
@@ -498,7 +498,7 @@ export type Database = {
           next_action_at?: string | null;
           occasion_date?: string;
           occasion_id?: string;
-          occasion_year?: number;
+          occasion_year?: number | null;
           person_id?: string;
           seen_balance_cents?: number | null;
           ship_by_deadline?: string;
@@ -1445,7 +1445,7 @@ export type Database = {
           next_action_at: string | null;
           occasion_date: string;
           occasion_id: string;
-          occasion_year: number;
+          occasion_year: number | null;
           person_id: string;
           seen_balance_cents: number | null;
           ship_by_deadline: string;
@@ -1480,7 +1480,7 @@ export type Database = {
           next_action_at: string | null;
           occasion_date: string;
           occasion_id: string;
-          occasion_year: number;
+          occasion_year: number | null;
           person_id: string;
           seen_balance_cents: number | null;
           ship_by_deadline: string;
@@ -1523,7 +1523,7 @@ export type Database = {
           next_action_at: string | null;
           occasion_date: string;
           occasion_id: string;
-          occasion_year: number;
+          occasion_year: number | null;
           person_id: string;
           seen_balance_cents: number | null;
           ship_by_deadline: string;
@@ -1558,7 +1558,7 @@ export type Database = {
           next_action_at: string | null;
           occasion_date: string;
           occasion_id: string;
-          occasion_year: number;
+          occasion_year: number | null;
           person_id: string;
           seen_balance_cents: number | null;
           ship_by_deadline: string;
@@ -1683,7 +1683,7 @@ export type Database = {
           next_action_at: string | null;
           occasion_date: string;
           occasion_id: string;
-          occasion_year: number;
+          occasion_year: number | null;
           person_id: string;
           seen_balance_cents: number | null;
           ship_by_deadline: string;
