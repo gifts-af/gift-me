@@ -387,21 +387,76 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
     expect(view?.failedOrders).toEqual([]);
   });
 
-  it("on the ship-by day the round is closed: the occasion has passed and nothing is buyable", async () => {
+  it("on the ship-by day the round is closed: it's too late, and nothing is buyable", async () => {
     const u = await newUser();
     // approve_round refuses from the ship-by day on (today >= ship_by_deadline).
     const r = await newRound(u, { deadlineIn: 0 });
     const view = await roundView(r.roundId, await signedIn(u), new Date());
-    expect(view?.closedText).toBe("This occasion has passed");
+    expect(view?.closedText).toBe("It's too late to send a gift in time");
     expect(view?.nextBestIdeaId).toBeNull();
   });
 
   it("a past round says the occasion has passed", async () => {
     const u = await newUser();
-    const r = await newRound(u, { deadlineIn: -3, status: "skipped" });
+    const r = await newRound(u, { deadlineIn: -8, status: "skipped" });
     const view = await roundView(r.roundId, await signedIn(u), new Date());
     expect(view?.closedText).toBe("This occasion has passed");
     expect(view?.nextBestIdeaId).toBeNull();
+  });
+
+  it("a skipped round whose occasion is still ahead says it's too late to send a gift", async () => {
+    const u = await newUser();
+    const r = await newRound(u, { deadlineIn: -3, status: "skipped" });
+    expect((await roundView(r.roundId, await signedIn(u), new Date()))?.closedText).toBe("It's too late to send a gift in time");
+  });
+
+  it("on the occasion day itself the occasion hasn't passed", async () => {
+    const u = await newUser();
+    const r = await newRound(u, { deadlineIn: -7, status: "skipped" });
+    expect((await roundView(r.roundId, await signedIn(u), new Date()))?.closedText).toBe("It's too late to send a gift in time");
+  });
+
+  it("a round skipped or closed before its ship-by day says it was stopped", async () => {
+    const u = await newUser();
+    const skipped = await newRound(u, { status: "skipped" });
+    expect((await roundView(skipped.roundId, await signedIn(u), new Date()))?.closedText).toBe("This gift round was stopped");
+    const closed = await newRound(u);
+    await pg.query("update concierge.gift_rounds set closed_at = now() where id = $1", [closed.roundId]);
+    expect((await roundView(closed.roundId, await signedIn(u), new Date()))?.closedText).toBe("This gift round was stopped");
+  });
+
+  it("a closed round with a gift on its way says so, never that it's too late", async () => {
+    const u = await newUser();
+    const r = await newRound(u, { ideas: [{ title: "Fly rod" }, { title: "Reel" }] });
+    await placedOrder(u, r, 0);
+    await pg.query("update concierge.gift_rounds set status = 'skipped', ship_by_deadline = current_date where id = $1", [r.roundId]);
+    expect((await roundView(r.roundId, await signedIn(u), new Date()))?.closedText).toBe("Already ordered: Fly rod");
+  });
+
+  it("toldNoIdeas: after the no-ideas email went, until ideas are found", async () => {
+    const u = await newUser();
+    const r = await newRound(u, { status: "generating", ideas: [] });
+    const told = async () => (await roundView(r.roundId, await signedIn(u), new Date()))?.toldNoIdeas;
+    expect(await told()).toBe(false);
+    const add = (sentAt: string | null, error: string | null) =>
+      pg.query("insert into concierge.notifications (user_id, round_id, person_id, kind, channel, sent_at, error) values ($1, $2, $3, 'no_ideas', 'email', $4, $5)", [
+        u.id,
+        r.roundId,
+        r.personId,
+        sentAt,
+        error,
+      ]);
+    await add(null, "refused");
+    expect(await told()).toBe(false);
+    await add(new Date(Date.now() - 60_000).toISOString(), null);
+    expect(await told()).toBe(true);
+    // Found, then "None of these": the round is looking again.
+    await pg.query(
+      `insert into concierge.gift_ideas (user_id, round_id, person_id, title, product_url, price_cents, est_total_cents, handling_days_max, delivery_days_min, delivery_days_max, rank, source, status)
+       values ($1, $2, $3, 'Net', 'https://shop.test/p', 4000, 4000, 2, 3, 5, 1, 'generated', 'rejected')`,
+      [u.id, r.roundId, r.personId],
+    );
+    expect(await told()).toBe(false);
   });
 
   it("a failure resolved by replace_failed_order is no longer in failedOrders", async () => {
@@ -434,7 +489,7 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
     expect(after?.liveOrders.map((o) => o.ideaId)).toEqual([r.ideaIds[1]]);
   });
 
-  it("a refunded order isn't live, and a closed round says the occasion has passed", async () => {
+  it("a refunded order isn't live, and a closed round says no gift is on its way", async () => {
     const u = await newUser();
     const r = await newRound(u);
     await placedOrder(u, r, 0);
@@ -442,7 +497,7 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
     await pg.query("update concierge.gift_rounds set status = 'needs_attention', closed_at = now() where id = $1", [r.roundId]);
     const view = await roundView(r.roundId, await signedIn(u), new Date());
     expect(view?.liveOrders).toEqual([]);
-    expect(view?.closedText).toBe("This occasion has passed");
+    expect(view?.closedText).toBe("No gift is on its way");
     expect(view?.nextBestIdeaId).toBeNull();
   });
 

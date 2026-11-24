@@ -51,7 +51,7 @@ export class FakeRoundStore implements RoundStore {
   occasionKinds = new Map<string, OccasionKind>();
   rounds: FakeRound[] = [];
   sends = new Map<string, Set<StepKey>>();
-  ideas = new Map<string, { id?: string; title: string; totalCents: number; arriveBy?: string | null; reason?: string | null; store?: string; overBudget?: boolean }[]>();
+  ideas = new Map<string, { id?: string; title: string; totalCents: number; arriveBy?: string | null; reason?: string | null; store?: string; fromList?: boolean; overBudget?: boolean }[]>();
   /** Per round; a round not in here has facts and runs left. */
   ideaState = new Map<string, Partial<FakeIdeaState>>();
   writes: string[] = [];
@@ -246,6 +246,7 @@ export class FakeRoundStore implements RoundStore {
         arriveBy: i.arriveBy ?? null,
         reason: i.reason ?? null,
         store: i.store ?? null,
+        fromList: i.fromList ?? false,
         overBudget: i.overBudget ?? false,
       })),
       hasFacts: true,

@@ -79,7 +79,7 @@ const ERRORS: Record<BuyError, Words> = {
 
 export function outcomeWords(result: BuyResult): Words {
   if (!result.ok) return ERRORS[result.error];
-  if (result.status === "ordered") return { title: "Ordered", body: "We'll email you when it ships." };
+  if (result.status === "ordered") return { title: "Ordered", body: "You'll find its delivery updates on the gift's page." };
   if (result.status === "failed") return FAILED[result.reason ?? ""] ?? FAILED_OTHER;
   return HELD[result.reason ?? ""] ?? HELD_OTHER;
 }

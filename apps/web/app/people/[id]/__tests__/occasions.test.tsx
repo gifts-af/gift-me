@@ -20,12 +20,12 @@ describe("Occasions", () => {
   it("shows the next date and the normal order-by date", () => {
     setup([christmas]);
     expect(screen.getByText("Fri, Dec 25")).toBeInTheDocument();
-    expect(screen.getByText("Order by Wed, Dec 16")).toBeInTheDocument();
+    expect(screen.getByText("Order by Tue, Dec 15")).toBeInTheDocument();
   });
 
   it("says when fast shipping is needed", () => {
     setup([{ ...christmas, orderBy: { date: "2026-12-22", fast: true } }]);
-    expect(screen.getByText("Order by Tue, Dec 22 with fast shipping")).toBeInTheDocument();
+    expect(screen.getByText("Order by Mon, Dec 21 with fast shipping")).toBeInTheDocument();
   });
 
   it("says when it is too late to ship", () => {

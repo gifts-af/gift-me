@@ -315,6 +315,8 @@ export type RoundPageView = {
   storeCancelled: RoundPageOrder[];
   /** What happened, for a round that's no longer open (AC-18); null while it is. */
   closedText: string | null;
+  /** The no-ideas email went and no idea was found since, so the page doesn't say it's still looking. */
+  toldNoIdeas: boolean;
   nextBestIdeaId: string | null;
   buyYourself: BuyYourself[];
 };
@@ -350,6 +352,7 @@ async function personList(userDb: UserDb, personId: string): Promise<ListItem[] 
 const ORDERED_STATUSES = new Set(["ordered", "delivered", "complete"]);
 // Not given, as concierge.order_is_given counts it (failed ones are split out below).
 const NOT_LIVE = new Set(["cancelled", "failed", "refunded"]);
+const BOUGHT = new Set(["placed", "shipped", "delivered"]);
 
 /**
  * The round screen's read, with the signed-in user's client: null when RLS hides the round
@@ -367,11 +370,11 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
   const r = round.data;
   if (!r) return null;
 
-  const [ideasRes, ordersRes, account, person, occasion, list, schedule] = await Promise.all([
+  const [ideasRes, ordersRes, toldRes, account, person, occasion, list, schedule] = await Promise.all([
     db
       .from("gift_ideas")
       .select(
-        "id, title, reason, retailer, retailer_product_id, product_url, image_url, source, list_item_id, price_cents, est_total_cents, over_budget, rank, status, arrive_by, handling_days_max, delivery_days_max",
+        "id, title, reason, retailer, retailer_product_id, product_url, image_url, source, list_item_id, price_cents, est_total_cents, over_budget, rank, status, arrive_by, handling_days_max, delivery_days_max, created_at",
       )
       .eq("round_id", roundId)
       .order("rank"),
@@ -383,6 +386,16 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
       .eq("round_id", roundId)
       .order("created_at")
       .order("id"),
+    db
+      .from("notifications")
+      .select("sent_at")
+      .eq("round_id", roundId)
+      .eq("kind", "no_ideas")
+      .not("sent_at", "is", null)
+      .is("error", null)
+      .order("sent_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
     db.from("accounts").select("over_budget_pct").eq("user_id", r.user_id).maybeSingle(),
     userDb.from("people").select("name").eq("id", r.person_id).maybeSingle(),
     db.from("occasions").select("kind").eq("id", r.occasion_id).maybeSingle(),
@@ -391,6 +404,7 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
   ]);
   if (ideasRes.error) fail("Loading the round's ideas failed", ideasRes.error);
   if (ordersRes.error) fail("Loading the round's orders failed", ordersRes.error);
+  if (toldRes.error) fail("Reading the round's no-ideas email failed", toldRes.error);
   if (account.error) fail("Reading the account failed", account.error);
   if (person.error) fail("Loading the round's person failed", person.error);
   if (occasion.error) fail("Loading the round's occasion failed", occasion.error);
@@ -452,10 +466,17 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
   const today = now.toISOString().slice(0, 10);
   // From the ship-by day on, as approve_round refuses it.
   const pastDeadline = today >= r.ship_by_deadline;
+  const ended = r.closed_at !== null || r.status === "skipped" || ORDERED_STATUSES.has(r.status);
+  // A round can also end with some of its gifts bought: those still count as ordered.
+  const bought = ORDERED_STATUSES.has(r.status) ? liveOrders : liveOrders.filter((o) => BOUGHT.has(o.status));
   let closedText: string | null = null;
-  if (ORDERED_STATUSES.has(r.status) && liveOrders.length > 0) closedText = `Already ordered: ${liveOrders.map((o) => o.title).join(", ")}`;
-  else if (r.closed_at !== null || r.status === "skipped" || ORDERED_STATUSES.has(r.status) || pastDeadline)
-    closedText = "This occasion has passed";
+  if (ended || pastDeadline) {
+    if (bought.length > 0) closedText = `Already ordered: ${bought.map((o) => o.title).join(", ")}`;
+    else if (today > r.occasion_date) closedText = "This occasion has passed";
+    else if (ended && all.some((o) => o.status === "cancelled" || o.status === "refunded")) closedText = "No gift is on its way";
+    else if (pastDeadline) closedText = "It's too late to send a gift in time";
+    else closedText = "This gift round was stopped";
+  }
 
   const buyable = ideas.filter((i) => !i.claimed && !i.noLongerShared && !liveOrders.some((o) => o.ideaId === i.id));
   const nextBestIdeaId =
@@ -505,6 +526,7 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date): Pro
     failedOrders,
     storeCancelled,
     closedText,
+    toldNoIdeas: toldRes.data?.sent_at != null && ideasRes.data.every((i) => Date.parse(i.created_at) < Date.parse(toldRes.data!.sent_at!)),
     nextBestIdeaId,
     buyYourself,
   };

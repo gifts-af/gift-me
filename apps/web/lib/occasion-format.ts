@@ -1,4 +1,4 @@
-import { parseDate, type OccasionKind } from "@gifts-af/core";
+import { addDays, parseDate, type CalendarDate, type OccasionKind } from "@gifts-af/core";
 
 export const OCCASION_NAMES: Record<OccasionKind, string> = {
   birthday: "Birthday",
@@ -23,3 +23,6 @@ export function shortDate(date: string): string {
   const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
   return `${WEEKDAYS[weekday]}, ${MONTHS[month - 1]} ${day}`;
 }
+
+/** The last day to choose: the day before the ship-by day, since buying is refused from that day on. */
+export const chooseBy = (shipBy: CalendarDate) => shortDate(addDays(shipBy, -1));

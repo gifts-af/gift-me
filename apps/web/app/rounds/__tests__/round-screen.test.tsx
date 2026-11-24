@@ -56,6 +56,7 @@ function view(o: Partial<RoundPageView> = {}, round: Partial<RoundPageView["roun
     failedOrders: [],
     storeCancelled: [],
     closedText: null,
+    toldNoIdeas: false,
     nextBestIdeaId: null,
     buyYourself: [],
     ...o,
@@ -423,6 +424,40 @@ describe("RoundScreen: None of these", () => {
     expect(screen.getByText("Already ordered: Orchid")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "None of these" })).toBeNull();
     expect(screen.queryByRole("checkbox")).toBeNull();
+  });
+});
+
+describe("RoundScreen: dates and what's happening", () => {
+  it("says the last day a gift can really be chosen", () => {
+    setup(view({ ideas: [idea({ title: "Orchid" })] }));
+    expect(screen.getByText(/Choose by Tue, Dec 8/)).toBeInTheDocument();
+  });
+
+  it("generating says it's looking, until the no-ideas email went", () => {
+    setup(view({}, { status: "generating" }));
+    expect(screen.getByText("Looking for new ideas. They'll come by email.")).toBeInTheDocument();
+  });
+
+  it("after the no-ideas email it says so, and not that it's looking", () => {
+    setup(view({ toldNoIdeas: true }, { status: "generating" }));
+    expect(screen.getByText("We haven't found ideas that fit yet. We emailed you about it.")).toBeInTheDocument();
+    expect(screen.queryByText(/Looking for new ideas/)).toBeNull();
+  });
+
+  it("scheduled says when we'll look", () => {
+    setup(view({}, { status: "scheduled" }));
+    expect(screen.getByText("We'll look for ideas closer to the day.")).toBeInTheDocument();
+  });
+
+  it("needs_address asks for the address, with a link to add it", () => {
+    setup(view({}, { status: "needs_address" }));
+    expect(screen.getByText("We need Mom's address before we can look for gifts.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Add address" })).toHaveAttribute("href", "/people/p1/address");
+  });
+
+  it("a closed round shows only why it's closed", () => {
+    setup(view({ closedText: "This gift round was stopped", toldNoIdeas: true }, { status: "needs_address" }));
+    expect(screen.queryByText(/haven't found ideas|We need Mom's address|closer to the day/)).toBeNull();
   });
 });
 

@@ -460,20 +460,38 @@ describe("the other gift emails match the approved wording (ALL-116)", () => {
   });
 });
 
+describe("heads_up's subject says where the gifts came from", () => {
+  const idea = { title: "Fly rod", price: "$40" };
+  const subject = (n: number, allFromList?: boolean) =>
+    TEMPLATES.heads_up(
+      { personName: "Jenn", occasion: "Christmas", dateText: "Fri, Dec 25", mode: "reminder", ideas: Array.from({ length: n }, () => idea), ...(allFromList ? { allFromList } : {}) },
+      { choose: "https://x.test/r", ...Object.fromEntries(Array.from({ length: n }, (_, i) => [`buy${i}`, "https://x.test/b"])) },
+    ).subject;
+
+  it.each([
+    [3, true, "Jenn's Christmas: 3 gifts from their list"],
+    [1, true, "Jenn's Christmas: 1 gift from their list"],
+    [3, undefined, "Jenn's Christmas: 3 gift ideas"],
+    [1, undefined, "Jenn's Christmas: 1 gift idea"],
+  ])("%i, all from the list: %s", (n, list, want) => expect(subject(n, list)).toBe(want));
+});
+
 describe("ordered (PRD A-8, owner)", () => {
   it("says it's ordered and where it's going, city only, with one button", () => {
     const mail = render("ordered");
     expect(mail.subject).toBe("Mom's gift is ordered");
     expect(mail.text).toContain(
-      "We ordered the Le Creuset mug set for Mom's birthday on Saturday, March 14. It's on its way to Dayton. We'll let you know when it ships.",
+      "We ordered the Le Creuset mug set for Mom's birthday on Saturday, March 14. It's on its way to Dayton.",
     );
+    // There is no shipped email, so none is promised.
+    expect(mail.text).not.toContain("ships");
     expect(mail.text).toContain("Open Mom's page:");
     expect(mail.html.match(/<a[\s>]/g)).toHaveLength(1);
   });
 
   it("leaves the place out when the city isn't known", () => {
     const s = SAMPLE_DATA.ordered;
-    expect(TEMPLATES.ordered({ ...s.data, cityText: undefined }, s.links).text).toContain("It's on its way. We'll let you know");
+    expect(TEMPLATES.ordered({ ...s.data, cityText: undefined }, s.links).text).toContain("It's on its way.");
   });
 });
 

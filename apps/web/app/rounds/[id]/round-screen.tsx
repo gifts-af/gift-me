@@ -13,7 +13,8 @@ import {
   type RejectionCode,
 } from "@gifts-af/core";
 import { IdeaPhoto } from "@/components/idea-photo";
-import { OCCASION_NAMES, shortDate } from "@/lib/occasion-format";
+import { chooseBy, OCCASION_NAMES, shortDate } from "@/lib/occasion-format";
+import { storeLabel } from "@/lib/store-label";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useHydrated } from "@/lib/use-hydrated";
@@ -53,11 +54,6 @@ const REJECT_ERRORS: Record<Exclude<Extract<RejectResult, { ok: false }>["error"
   bad_form: "That didn't go through. Reload and try again.",
 };
 const TRY_AGAIN = "That didn't go through. Try again.";
-
-/** "Amazon" from the stored "amazon". */
-function storeLabel(retailer: string | null): string | null {
-  return retailer ? retailer.charAt(0).toUpperCase() + retailer.slice(1) : null;
-}
 
 /**
  * A list gift from a store Zinc can only check has no live price: it's offered at the list's own
@@ -630,7 +626,7 @@ export function RoundScreen({
   const subline = [
     occasion ? `${occasion} ${shortDate(round.occasionDate)}` : shortDate(round.occasionDate),
     budget !== null ? `Budget ${money(budget)}` : null,
-    view.closedText === null ? `Choose by ${shortDate(round.shipByDeadline)}` : null,
+    view.closedText === null ? `Choose by ${chooseBy(round.shipByDeadline)}` : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -650,7 +646,20 @@ export function RoundScreen({
         </p>
       )}
       {!done && view.closedText === null && round.status === "generating" && (
-        <p className="text-[15px] text-muted-foreground">Looking for new ideas. They&apos;ll come by email.</p>
+        <p className="text-[15px] text-muted-foreground">
+          {view.toldNoIdeas ? "We haven't found ideas that fit yet. We emailed you about it." : "Looking for new ideas. They'll come by email."}
+        </p>
+      )}
+      {view.closedText === null && round.status === "scheduled" && (
+        <p className="text-[15px] text-muted-foreground">We&apos;ll look for ideas closer to the day.</p>
+      )}
+      {view.closedText === null && round.status === "needs_address" && (
+        <>
+          <p className="text-[15px] text-muted-foreground">{`We need ${round.personName ? `${round.personName}'s` : "their"} address before we can look for gifts.`}</p>
+          <Button asChild variant="outline">
+            <Link href={`/people/${round.personId}/address`}>Add address</Link>
+          </Button>
+        </>
       )}
 
       {bought.length > 0 && (

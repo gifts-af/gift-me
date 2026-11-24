@@ -92,6 +92,11 @@ function setup(
 }
 
 describe("FixScreen: a price rise", () => {
+  it("gives the last day a gift can really be chosen", () => {
+    setup();
+    expect(screen.getByText(/Choose by Tue, Dec 8 to still arrive in time/)).toBeInTheDocument();
+  });
+
   it("the price_up fix page makes no lookup until Check today's price is tapped, and shows the money notice by it", async () => {
     const { checkPriceAction } = setup();
     expect(screen.getByRole("heading", { name: "The price went up" })).toBeInTheDocument();
