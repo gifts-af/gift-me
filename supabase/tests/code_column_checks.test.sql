@@ -1,7 +1,7 @@
 -- Code columns accept the values the app writes and refuse anything else.
 begin;
 \ir _helpers.psql
-select plan(40);
+select plan(43);
 
 select tests.create_user('codes@example.com') as u \gset
 insert into public.people (user_id, name, relationship) values (:'u', 'P', 'friend') returning id as p \gset
@@ -39,10 +39,10 @@ select lives_ok(format($$insert into concierge.round_sends (round_id, user_id, s
   from unnest(array[
     'heads_up', 'reminder_1@2', 'hold:1:notice', 'hold:2:short:2030-01-05', 'fail:1:notice',
     'fail:' || :'ord', 'ordered:' || :'ord', 'late_fail:' || :'ord',
-    'late:' || :'ord', 'ontime:' || :'ord', 'cancel_late:' || :'ord', 'delivered'
+    'late:' || :'ord', 'ontime:' || :'ord', 'cancel_late:' || :'ord', 'late:2:' || :'ord', 'ontime:12:' || :'ord', 'delivered'
   ]) s;
 select throws_ok(format($$insert into concierge.round_sends (round_id, user_id, step) values (%L, %L, %L)$$, :'r', :'u', s), '23514', null, 'step ' || s || ' is refused')
-  from unnest(array['reminder_3', 'fail:abc', 'hold:x:notice', 'late:abc']) s;
+  from unnest(array['reminder_3', 'fail:abc', 'hold:x:notice', 'late:abc', 'late:1:' || :'ord']) s;
 
 -- ─── rejections.reason_code ─────────────────────────────────────────────────
 

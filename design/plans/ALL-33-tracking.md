@@ -51,9 +51,9 @@ There's no tracking link in the payload. We build one from the carrier's public 
 
 **When it's checked:** on each tracking event above, and in its own daily-run step (like the housekeeping prune) for every `placed` or `shipped` order whose occasion date is today or later.
 
-**Told once:**
-- **Late:** each order is told late once (`late:<order id>`).
-- **Back on time:** if the estimate later moves back on or before the occasion, the order is told good news once (`ontime:<order id>`).
+**Told once per change:**
+- **Late:** each order is told when it turns late (`late:<order id>`).
+- **Back on time:** if the estimate later moves back on or before the occasion, the order is told good news (`ontime:<order id>`). Late again after that is told again (`late:2:<order id>`, and so on; owner, 2026-11-24).
 - **Not after the day:** nothing is told once the occasion date has passed.
 - **Same as failures:** keys are claimed in `round_sends` the same way the failure notices are.
 

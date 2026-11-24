@@ -87,9 +87,10 @@ export type CancelledGift = { title: string; store?: string; amountText?: string
 /**
  * One gift's news in the daily summary (ALL-33). `expectedText`: when it's now expected;
  * `url`: the round screen, only for a shipped late gift ("It already arrived").
+ * `again`: it was late before, then back on time.
  */
 export type NewsItem = Occasion & { title: string } & (
-    | { kind: "late"; expectedText: string; daysLate: number; url?: string }
+    | { kind: "late"; expectedText: string; daysLate: number; again?: boolean; url?: string }
     | { kind: "cancelled"; amountText?: string }
     | { kind: "on_time"; expectedText: string }
   );
@@ -161,7 +162,7 @@ export type TemplateData = {
    */
   store_cancelled_late: Occasion & { gifts: CancelledGift[] };
   /** ALL-33: one gift now expected after the occasion; `daysLate`, how many days after. */
-  gift_late: OneGift & { expectedText: string; daysLate: number };
+  gift_late: OneGift & { expectedText: string; daysLate: number; again?: boolean };
   /** ALL-33: a gift told late is expected on or before the occasion again. */
   gift_on_time: OneGift & { expectedText: string };
   /** ALL-33: two or more gifts' news, across the buyer's people and occasions, in the order told. */
@@ -305,7 +306,7 @@ function newsRow(i: NewsItem): { title: string; detail: string; link?: { label: 
   switch (i.kind) {
     case "late":
       return {
-        title: `${i.title} may arrive late`,
+        title: `${i.title} may arrive late${i.again ? " again" : ""}`,
         detail: `${forDay} Now expected ${i.expectedText}, ${daysLateText(i.daysLate)}. It's on its way and can't be cancelled.`,
         ...(i.url ? { link: { label: "It already arrived", url: i.url } } : {}),
       };
@@ -779,13 +780,13 @@ export const TEMPLATES: {
   },
 
   gift_late: (d, links) => {
-    const title = `${d.personName}'s gift may arrive after ${theirDay(d.occasion)}`;
+    const title = `${d.personName}'s gift may ${d.again ? "be late again" : `arrive after ${theirDay(d.occasion)}`}`;
     return {
       subject: title,
       ...renderEmail({
         heading: title,
         paragraphs: [
-          `We're sorry. The ${d.giftTitle} for ${d.personName}'s ${d.occasion} on ${d.dateText} is now expected ${d.expectedText}, ${daysLateText(d.daysLate)}.`,
+          `${d.again ? "We're sorry, this changed again." : "We're sorry."} The ${d.giftTitle} for ${d.personName}'s ${d.occasion} on ${d.dateText} is now expected ${d.expectedText}, ${daysLateText(d.daysLate)}.`,
           "It's already on its way, so it can't be cancelled.",
         ],
         rows: [

@@ -9,8 +9,8 @@ import type { RoundStore, TrackingCandidate } from "../rounds/store";
 
 // The daily tracking news (ALL-33): one email per buyer per day with every gift that's newly late,
 // back on time, or cancelled by the store too late to ship another. Bad news first. One item is
-// told with that item's own email. Each item is claimed once in round_sends (`late:`, `ontime:`,
-// `cancel_late:<order id>`), the same keys the deadline close-out claims for store cancels, so
+// told with that item's own email. Every change of a gift's timing is told. Each item is claimed once
+// in round_sends (`late:`, `ontime:`, `late:2:`, ... and `cancel_late:<order id>`), the same keys the deadline close-out claims for store cancels, so
 // whichever runs first tells it and the other skips it.
 
 export type TrackingNewsDeps = {
@@ -21,7 +21,7 @@ export type TrackingNewsDeps = {
   setting: (key: string) => Promise<number>;
 };
 
-type Item = { c: TrackingCandidate; step: StepKey; news: "late" | "cancelled" | "on_time"; expected?: CalendarDate };
+type Item = { c: TrackingCandidate; step: StepKey; news: "late" | "cancelled" | "on_time"; expected?: CalendarDate; again?: boolean };
 
 const ORDER: Item["news"][] = ["late", "cancelled", "on_time"];
 
@@ -52,6 +52,20 @@ export async function runTrackingNews(deps: TrackingNewsDeps): Promise<{ sent: n
   return { sent };
 }
 
+/** The key for the nth time: `late:<id>`, then `late:2:<id>`, ... */
+const nthKey = (c: TrackingCandidate, kind: "late" | "ontime", n: number): StepKey => (n === 1 ? `${kind}:${c.orderId}` : `${kind}:${n}:${c.orderId}`);
+
+/** The newest number told of this kind; 0 when never. The newest, not a count, so a missing key can't mute the gift. */
+function newest(c: TrackingCandidate, kind: "late" | "ontime"): number {
+  let last = 0;
+  for (const step of c.sentSteps) {
+    const [k, ...rest] = step.split(":");
+    if (k !== kind || rest.at(-1) !== c.orderId) continue;
+    last = Math.max(last, rest.length === 1 ? 1 : Number(rest[0]));
+  }
+  return last;
+}
+
 /**
  * What each candidate has to tell. A store cancel is always told (money came back); the late
  * check has its own switch, read only when there's a placed or shipped gift to check, so a
@@ -80,15 +94,13 @@ async function newsItems(deps: TrackingNewsDeps): Promise<Item[]> {
       logEvent("tracking.no_expected_date", ids);
       continue;
     }
-    const news = trackingNews({
-      expected: expected.date,
-      occasionDate: c.occasionDate,
-      today: deps.today,
-      sentLate: c.sentSteps.has(`late:${c.orderId}`),
-      sentOnTime: c.sentSteps.has(`ontime:${c.orderId}`),
-    });
-    if (news === "late") items.push({ c, step: `late:${c.orderId}`, news: "late", expected: expected.date });
-    if (news === "on_time") items.push({ c, step: `ontime:${c.orderId}`, news: "on_time", expected: expected.date });
+    const [lastLate, lastOnTime] = [newest(c, "late"), newest(c, "ontime")];
+    const news = trackingNews({ expected: expected.date, occasionDate: c.occasionDate, today: deps.today, lastLate, lastOnTime });
+    if (news === "late") {
+      const n = lastOnTime + 1;
+      items.push({ c, step: nthKey(c, "late", n), news: "late", expected: expected.date, again: n > 1 });
+    }
+    if (news === "on_time") items.push({ c, step: nthKey(c, "ontime", lastLate), news: "on_time", expected: expected.date });
   }
   return items;
 }
@@ -136,7 +148,7 @@ function send(userId: string, items: Item[], deps: TrackingNewsDeps): Promise<No
   const rounds = new Set(items.map((i) => i.c.roundId));
   const base = { userId, ...(rounds.size === 1 ? { roundId: items[0].c.roundId } : {}) };
   if (items.length === 1) {
-    const [{ c, news, expected }] = items;
+    const [{ c, news, expected, again }] = items;
     if (news === "cancelled") {
       const store = c.store ? { store: storeLabel(c.store)! } : {};
       return notify(
@@ -150,7 +162,7 @@ function send(userId: string, items: Item[], deps: TrackingNewsDeps): Promise<No
         {
           ...base,
           kind: "gift_late",
-          data: { ...gift, daysLate: daysBetween(c.occasionDate, expected!) },
+          data: { ...gift, daysLate: daysBetween(c.occasionDate, expected!), ...(again ? { again } : {}) },
           // "It already arrived" only for a shipped gift: a placed one can't be marked arrived.
           links: c.status === "shipped" ? { arrived: { path: roundPath(c.roundId) } } : {},
         },
@@ -162,7 +174,7 @@ function send(userId: string, items: Item[], deps: TrackingNewsDeps): Promise<No
   return notify({ ...base, kind: "tracking_news", data: { items: items.map((i) => newsItem(i, deps.notify.baseUrl)) }, links: {} }, deps.notify);
 }
 
-function newsItem({ c, news, expected }: Item, baseUrl: string): NewsItem {
+function newsItem({ c, news, expected, again }: Item, baseUrl: string): NewsItem {
   const common = { ...occasion(c), title: c.title };
   if (news === "cancelled") return { kind: "cancelled", ...common, ...amountText(c) };
   const expectedText = shortDate(expected!);
@@ -172,6 +184,7 @@ function newsItem({ c, news, expected }: Item, baseUrl: string): NewsItem {
     ...common,
     expectedText,
     daysLate: daysBetween(c.occasionDate, expected!),
+    ...(again ? { again } : {}),
     ...(c.status === "shipped" ? { url: `${baseUrl}${roundPath(c.roundId)}` } : {}),
   };
 }

@@ -799,6 +799,22 @@ describe("failed_several with store-cancelled gifts (bought, then refunded)", ()
   });
 });
 
+describe("late again, after good news", () => {
+  it("gift_late says again in the subject and the first line", () => {
+    const s = SAMPLE_DATA.gift_late;
+    const mail = TEMPLATES.gift_late({ ...s.data, again: true }, s.links);
+    expect(mail.subject).toBe("Mom's gift may be late again");
+    expect(mail.text).toContain("We're sorry, this changed again.");
+    expect(TEMPLATES.gift_late(s.data, s.links).text).not.toContain("again");
+  });
+
+  it("the summary's row says again", () => {
+    const item = { kind: "late" as const, personName: "Mom", occasion: "birthday", dateText: "Saturday, March 14", title: "Mug", expectedText: "Mon, Mar 16", daysLate: 2 };
+    expect(TEMPLATES.tracking_news({ items: [{ ...item, again: true }, { ...item, title: "Vase" }] }, {}).text).toContain("Mug may arrive late again");
+    expect(TEMPLATES.tracking_news({ items: [item, { ...item, title: "Vase" }] }, {}).text).not.toContain("again");
+  });
+});
+
 describe("gift_late (one gift may arrive after the occasion)", () => {
   const s = () => SAMPLE_DATA.gift_late;
 

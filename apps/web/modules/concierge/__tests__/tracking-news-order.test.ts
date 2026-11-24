@@ -90,3 +90,61 @@ describe("the daily summary's row order", () => {
     expect(await summaryRows([...candidates].reverse())).toEqual(expected);
   });
 });
+
+describe("a gift whose date keeps changing", () => {
+  const ID = "00000000-0000-0000-0000-000000000210";
+
+  /** Runs the news once, with what was told so far; the keys it claimed. */
+  async function claimed(est: string, told: string[]): Promise<string[]> {
+    const notifyStore = new FakeStore();
+    notifyStore.recipients.set(USER, { email: "buyer@example.com", timezone: null });
+    const keys: string[] = [];
+    const store = {
+      trackingCandidates: async () => [late(1, { orderId: ID, estDeliveryDate: est, sentSteps: new Set(told as StepKey[]) })],
+      recordSend: async (_r: string, _u: string, step: StepKey) => !told.includes(step) && Boolean(keys.push(step)),
+      forgetSend: async () => {},
+    } as unknown as RoundStore;
+    await runTrackingNews({
+      store,
+      notify: { store: notifyStore, channels: [{ name: "email", send: async () => ({ ok: true as const, id: "m1" }) }], baseUrl: "https://giftsaf.test", now: new Date(`${TODAY}T12:00:00Z`) },
+      today: TODAY,
+      setting: async () => 1,
+    });
+    return keys;
+  }
+
+  it("claims a new key for each change, and nothing when nothing changed", async () => {
+    const LATE = "2030-12-28";
+    const FINE = "2030-12-20";
+    const told: string[] = [];
+    const steps: [string, string[]][] = [
+      [LATE, [`late:${ID}`]],
+      [LATE, []],
+      [FINE, [`ontime:${ID}`]],
+      [FINE, []],
+      [LATE, [`late:2:${ID}`]],
+      [LATE, []],
+      [FINE, [`ontime:2:${ID}`]],
+      [LATE, [`late:3:${ID}`]],
+    ];
+    for (const [est, want] of steps) {
+      const got = await claimed(est, told);
+      expect(got).toEqual(want);
+      told.push(...got);
+    }
+  });
+
+  it.each([
+    ["late:2 given back after ontime:2", "2030-12-28", [`late:${ID}`, `ontime:${ID}`, `ontime:2:${ID}`], [`late:3:${ID}`]],
+    ["the first late deleted", "2030-12-28", [`ontime:${ID}`], [`late:2:${ID}`]],
+    ["the first on-time missing", "2030-12-20", [`late:${ID}`, `late:2:${ID}`], [`ontime:2:${ID}`]],
+    ["more than nine", "2030-12-28", [`late:10:${ID}`, `ontime:10:${ID}`], [`late:11:${ID}`]],
+  ])("a gap in the keys never mutes a gift: %s", async (_what, est, told, want) => {
+    expect(await claimed(est, told)).toEqual(want);
+  });
+
+  it("another gift's keys don't count", async () => {
+    const other = "00000000-0000-0000-0000-000000000999";
+    expect(await claimed("2030-12-28", [`late:${other}`, `ontime:${other}`])).toEqual([`late:${ID}`]);
+  });
+});
