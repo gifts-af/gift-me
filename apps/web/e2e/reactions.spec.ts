@@ -25,14 +25,12 @@ test("an email's answer opens chosen, saves only on Save, and shows in past gift
   await card.getByRole("button", { name: /^Save/ }).click();
   await expect(card.getByText("Saved. Thanks for telling us.")).toBeVisible();
   expect(await reactionsOf(unanswered.orderId)).toEqual([{ rating: "loved", note: "Uses it daily" }]);
-  await expect(page).toHaveURL(`/rounds/${roundId}/reaction`);
-  // The other gift's typing lives through this save and the next, though the address changed.
+  // The other gift's typing lives through this save and the next.
   await expect(other.getByRole("textbox")).toHaveValue("Half typed");
   await card.getByRole("radio", { name: "Liked it" }).check({ force: true });
   await card.getByRole("button", { name: /^Save/ }).click();
   await expect(card.getByText("Saved. Thanks for telling us.")).toBeVisible();
   await expect.poll(() => reactionsOf(unanswered.orderId)).toEqual([{ rating: "liked", note: "Uses it daily" }]);
-  await expect(page).toHaveURL(`/rounds/${roundId}/reaction`);
   await expect(other.getByRole("textbox")).toHaveValue("Half typed");
 
   await page.getByRole("link", { name: "Back to Nora" }).click();

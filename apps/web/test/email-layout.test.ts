@@ -91,6 +91,17 @@ describe("renderEmail rows with a link (ALL-29)", () => {
     expect(text).toContain("- Plain · $10\n");
   });
 
+  it("a row with choices renders each 44px tall, escaped, with its address in the text", () => {
+    const links = [{ label: "Loved it", url: "https://x.test/?a=1&r=loved" }, { label: "Me<h", url: "https://x.test/2" }];
+    const { html, text } = renderEmail({ heading: "Hi", paragraphs: [], rows: [{ title: "Mug", links }] });
+    expect(html).toContain('href="https://x.test/?a=1&amp;r=loved"');
+    expect(html).toContain(">Me&lt;h</a>");
+    const choices = html.match(/<a [^>]*>/g)!;
+    expect(choices).toHaveLength(2);
+    for (const a of choices) for (const css of ["display:inline-block", "padding:11px 4px", "border:1px", "line-height:20px"]) expect(a).toContain(css);
+    expect(text).toContain("- Mug\n  Loved it: https://x.test/?a=1&r=loved\n  Me<h: https://x.test/2");
+  });
+
   it("escapes a row's reason", () => {
     const { html } = renderEmail({ heading: "Hi", paragraphs: ["x"], rows: [{ title: "T", reason: "<b>&" }] });
     expect(html).toContain("&lt;b&gt;&amp;");

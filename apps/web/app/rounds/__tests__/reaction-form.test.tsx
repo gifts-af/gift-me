@@ -156,15 +156,13 @@ describe("ReactionForm", () => {
     expect(saveAction).not.toHaveBeenCalled();
   });
 
-  it("keeps focus on Save, announces it, and drops the link's answer from the address", async () => {
-    window.history.replaceState(null, "", "/rounds/r1/reaction?gift=o1&r=loved");
+  it("keeps focus on Save and announces it", async () => {
     setup({ opened: { orderId: "o1", rating: "loved" } });
     await userEvent.click(save("Cozy blanket"));
     expect(await screen.findByText(SAVED)).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent(SAVED);
     expect(save("Cozy blanket")).toHaveFocus();
     expect(save("Cozy blanket")).not.toHaveClass(TEAL);
-    expect(window.location.pathname + window.location.search).toBe("/rounds/r1/reaction");
   });
 
   it("names each group of answers, and leaves the photo out for screen readers", () => {

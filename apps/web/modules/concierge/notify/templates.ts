@@ -1,3 +1,4 @@
+import { RATING_LABELS, RATINGS, type Rating } from "@gifts-af/core";
 import { APP_NAME } from "@/lib/brand";
 import { renderEmail } from "@/lib/email-layout";
 
@@ -103,7 +104,8 @@ export type TemplateData = {
   final_notice: Occasion & { ideas: IdeaRow[]; orderByText: string };
   /** `orderByText`: when the buyer can still choose again; absent once there's nothing to choose. */
   needs_attention: Occasion & { reason: string; orderByText?: string };
-  reaction_prompt: { personName: string; occasion: string; giftTitle: string };
+  /** The delivered gifts without an answer. */
+  reaction_prompt: Occasion & { gifts: { title: string }[] };
   needs_address: Occasion & { reminder?: boolean };
   /**
    * `held`: the buyer chose a gift, but it couldn't be bought before the deadline. `partial`:
@@ -177,7 +179,8 @@ export type TemplateLinks = {
   reminder: { choose: string; questions?: string; [buy: `buy${number}`]: string };
   final_notice: { choose: string; [buy: `buy${number}`]: string };
   needs_attention: { open: string };
-  reaction_prompt: { open: string };
+  // `{rating}{i}` opens the answer page with that answer chosen for gifts[i].
+  reaction_prompt: { [answer: `${Rating}${number}`]: string };
   needs_address: { addAddress: string };
   skipped: { open: string };
   hold_funds: { cancel: string };
@@ -209,6 +212,13 @@ export type TemplateLinks = {
   notes_cant_cancel: Record<string, never>;
   no_ideas: { questions: string };
 };
+
+/** A gift's answer link. Missing, it would render href="undefined": refuse rather than send that. */
+function answerLink(links: TemplateLinks["reaction_prompt"], rating: Rating, i: number): string {
+  const url = links[`${rating}${i}`];
+  if (!url) throw new Error(`No link for answer ${rating}${i}`);
+  return url;
+}
 
 /** An idea's "Buy this" link. Missing, it would render href="undefined": refuse rather than send that. */
 function buyLink(links: Record<string, string | undefined>, i: number): string {
@@ -473,17 +483,20 @@ export const TEMPLATES: {
     }),
   }),
 
-  reaction_prompt: (d, links) => ({
-    subject: `How did ${d.personName} like the gift?`,
-    ...renderEmail({
-      heading: `How did ${d.personName} like it?`,
-      paragraphs: [
-        `${d.giftTitle} should have reached ${d.personName} for their ${d.occasion}.`,
-        "Tell us how it went and we'll choose better next time.",
-      ],
-      button: { label: "Tell us", url: links.open },
-    }),
-  }),
+  reaction_prompt: (d, links) => {
+    const subject = `How did ${d.personName} like the ${d.gifts.length === 1 ? "gift" : "gifts"}?`;
+    return {
+      subject,
+      ...renderEmail({
+        heading: subject,
+        paragraphs: [
+          `Tell us how the ${d.gifts.length === 1 ? "gift" : "gifts"} for ${d.personName}'s ${d.occasion} on ${d.dateText} went over, and we'll choose better next time. Tap an answer, then tap Save on the page that opens.`,
+        ],
+        rows: d.gifts.map((g, i) => ({ title: g.title, links: RATINGS.map((r) => ({ label: RATING_LABELS[r], url: answerLink(links, r, i) })) })),
+        footer: "You can skip any gift. Nothing is saved until you tap Save.",
+      }),
+    };
+  },
 
   needs_address: (d, links) => ({
     subject: `We need ${d.personName}'s address`,
@@ -946,8 +959,8 @@ export const SAMPLE_DATA: {
     links: { open: "https://example.com/rounds/r1/fix/o1" },
   },
   reaction_prompt: {
-    data: { personName: "Mom", occasion: "birthday", giftTitle: "The stoneware mug set" },
-    links: { open: "https://example.com/a/reaction-token" },
+    data: { ...OCC, gifts: [{ title: "Cozy throw blanket" }, { title: "Reading lamp" }] },
+    links: Object.fromEntries([0, 1].flatMap((i) => RATINGS.map((r) => [`${r}${i}`, `https://example.com/rounds/r1/reaction/${r}${i}`]))),
   },
   needs_address: { data: OCC, links: { addAddress: "https://example.com/a/address-token" } },
   skipped: { data: OCC, links: { open: "https://example.com/a/skipped-token" } },

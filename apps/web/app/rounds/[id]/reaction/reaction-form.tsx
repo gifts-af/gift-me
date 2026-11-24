@@ -30,13 +30,6 @@ export type ReactionFormProps = {
 export function ReactionForm({ gifts, noteMaxChars, opened, personName, personId, saveAction }: ReactionFormProps) {
   const [answered, setAnswered] = useState(() => new Set(gifts.filter((g) => g.rating !== null).map((g) => g.orderId)));
   const allAnswered = gifts.every((g) => answered.has(g.orderId));
-  // After a save, a reload mustn't choose the link's answer again over the saved one. Next puts its
-  // own address back when the saved page arrives, so this runs after every render. Keeping Next's
-  // state object makes its router leave the page alone, so what's typed on other cards stays.
-  const dropQuery = useRef(false);
-  useEffect(() => {
-    if (dropQuery.current && window.location.search) window.history.replaceState(window.history.state, "", window.location.pathname);
-  });
 
   return (
     <>
@@ -49,10 +42,7 @@ export function ReactionForm({ gifts, noteMaxChars, opened, personName, personId
             opened={opened?.orderId === g.orderId}
             chosen={opened?.orderId === g.orderId ? opened.rating : null}
             saveAction={saveAction}
-            onSaved={() => {
-              dropQuery.current = true;
-              setAnswered((a) => new Set(a).add(g.orderId));
-            }}
+            onSaved={() => setAnswered((a) => new Set(a).add(g.orderId))}
           />
         ))}
       </ul>

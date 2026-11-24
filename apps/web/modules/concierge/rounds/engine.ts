@@ -69,6 +69,8 @@ export type EngineDeps = {
   pruneTrackingNumbers?: () => Promise<number>;
   /** The daily tracking news (ALL-33): late, back-on-time and late store-cancel news, one email per buyer. */
   trackingNews?: () => Promise<{ sent: number }>;
+  /** Closes answered rounds and asks how the gifts went over (runReactions), bound by the caller. */
+  reactions?: () => Promise<{ closed: number; asked: number }>;
   /** Queues due rounds for their own function calls (ALL-125); the tick runs them itself without it. */
   sendJobs?: SendJobs;
   /** A test clock: queued messages carry the tick's `now`. */
@@ -159,6 +161,16 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
       logEvent("tracking.news_run", { sent });
     } catch (err) {
       logEvent("tracking.news_run_failed", { ...errorFields(err), alert: true });
+    }
+  }
+
+  // Rounds whose gifts are answered close, and buyers are asked how the gifts went over: on its own
+  // so it can't fail the tick, and whatever round_engine_enabled says (its switch is reactions_enabled).
+  if (deps.reactions) {
+    try {
+      logEvent("reactions.run", { ...(await deps.reactions()) });
+    } catch (err) {
+      logEvent("reactions.run_failed", { ...errorFields(err), alert: true });
     }
   }
 

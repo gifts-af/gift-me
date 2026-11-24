@@ -163,5 +163,6 @@ export type { BuyYourself, RejectInput, RejectResult, RoundPageIdea, RoundPageOr
 export { costRecorder } from "./costs/record";
 export type { Cost, CostKind, RecordCost } from "./costs/record";
 // How a gift went over: saving an answer, the answer page, and a person's gift history.
+export { runReactions } from "./reactions/ask";
 export { giftHistory, hasPastGifts, reactionView, saveReaction } from "./reactions/reactions";
 export type { PastGift, PastGiftOutcome, PastRound, ReactionRefusal, ReactionSaveResult, ReactionView } from "./reactions/reactions";
