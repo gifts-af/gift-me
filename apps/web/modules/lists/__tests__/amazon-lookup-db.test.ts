@@ -28,6 +28,8 @@ describe.skipIf(!dbUp)("Amazon paste lookups on local Supabase", () => {
   const users: string[] = [];
   const realFetch = globalThis.fetch;
   let zincCalls = 0;
+  /** Every request that went to Supabase's API, by URL. */
+  let apiUrls: string[] = [];
 
   async function signedInClient(): Promise<SupabaseClient> {
     const email = `amazon-lookup-${randomUUID()}@example.test`;
@@ -43,13 +45,17 @@ describe.skipIf(!dbUp)("Amazon paste lookups on local Supabase", () => {
 
   beforeEach(() => {
     zincCalls = 0;
+    apiUrls = [];
     vi.spyOn(console, "log").mockImplementation(() => {});
     vi.stubEnv("ZINC_API_BASE", ZINC);
     vi.stubEnv("ZINC_API_KEY", "zn_test_LOCAL_DB");
     // Only Zinc is faked: every other request (Supabase's API) goes through.
     vi.stubGlobal("fetch", async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input instanceof Request ? input.url : input);
-      if (!url.startsWith(ZINC)) return realFetch(input, init);
+      if (!url.startsWith(ZINC)) {
+        apiUrls.push(url);
+        return realFetch(input, init);
+      }
       zincCalls++;
       return new Response(
         JSON.stringify({ status: "completed", product_id: ASIN, title: "Headband", main_image: null, price: 1195 }),
@@ -81,6 +87,13 @@ describe.skipIf(!dbUp)("Amazon paste lookups on local Supabase", () => {
 
     expect(await lookUpAmazon(ASIN)).toEqual({ ok: false, reason: "over_limit" });
     expect(zincCalls).toBe(limit);
+  });
+
+  it("writes no cost record for a lookup (decision 57: gift lists stay free and never write concierge tables)", async () => {
+    current = await signedInClient();
+    expect(await lookUpAmazon(ASIN)).toMatchObject({ ok: true });
+    expect(zincCalls).toBe(1);
+    expect(apiUrls.filter((u) => /cost_events|record_cost/.test(u))).toEqual([]);
   });
 
   it("counts each person separately", async () => {

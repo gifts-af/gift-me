@@ -59,9 +59,11 @@ const schema = z.object({
   ),
 });
 
-// The Gateway reports a call's cost in dollars, as a string ("0.001966").
+// The Gateway reports a call's cost in dollars, as a string ("0.001966") or a number.
 const gatewayCost = z.object({
-  gateway: z.object({ cost: z.string().trim().min(1).pipe(z.coerce.number<string>().nonnegative()) }),
+  gateway: z.object({
+    cost: z.union([z.string().trim().min(1).pipe(z.coerce.number<string>().nonnegative()), z.number().nonnegative().finite()]),
+  }),
 });
 
 function reportedCents(providerMetadata: unknown): number | null {

@@ -9,6 +9,7 @@ import { createClient } from "@/lib/supabase/server";
 import { buyingWiring, lookupWiring, roundDbDeps, settingInt } from "@/lib/wiring";
 import {
   approveAndBuy,
+  costRecorder,
   markGiftArrived,
   MAX_BUDGET_CENTS,
   parseBudget,
@@ -199,7 +200,10 @@ export async function checkPriceAction(roundId: string, orderId: string): Promis
   if (!lookup) return { ok: false, error: "unavailable" };
   // quoteFailedOrder checks the round and order are this user's and the round can still change,
   // reads with the service role and looks up on the app's own key; it never orders.
-  const result = await quoteFailedOrder({ userId: user.userId, roundId: id.data, orderId: order.data }, { ...roundDbDeps(new Date()), lookup });
+  const result = await quoteFailedOrder(
+    { userId: user.userId, roundId: id.data, orderId: order.data },
+    { ...roundDbDeps(new Date()), lookup, recordCost: costRecorder(createAdminClient) },
+  );
   return typeof result === "string" ? { ok: false, error: result } : { ok: true, oldCents: result.oldCents, newCents: result.newCents };
 }
 
@@ -232,7 +236,7 @@ export async function replaceAction(roundId: string, orderId: string, form: Form
       ...(shipTo ? { shipTo } : {}),
       overBudgetConfirmed: overOf(form),
     },
-    { ...purchase, lookup },
+    { ...purchase, lookup, recordCost: costRecorder(createAdminClient) },
   );
   if (result.ok) revalidatePath(`/rounds/${id.data}`);
   return result;

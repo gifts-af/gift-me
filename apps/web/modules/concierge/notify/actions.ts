@@ -62,10 +62,10 @@ export function cancelDone(o: CancelOutcome): { title: string; body: string } {
 }
 
 /**
- * What file_note needs beyond the database (ALL-31): the capture store for the link's user (on
- * the service-role client), the model that reads it, the recorder of what that cost, and for the "can't cancel" email the
- * inbound daily cap (its count and inbound_max_per_user_per_day, read only when sending) and
- * notify. The confirm route passes a builder, called only when a file_note link runs; a caller
+ * What file_note needs beyond the database: the capture store for the link's user (on the
+ * service-role client), the model that reads it, the recorder of what that cost, and for the
+ * "can't cancel" email the inbound daily cap (its count and inbound_max_per_user_per_day, read
+ * only when sending) and notify. The confirm route passes a builder, called only when a file_note link runs; a caller
  * without one can't run file_note.
  */
 export type NoteDeps = {

@@ -10,6 +10,7 @@
 // a Zinc failure logs only its kind, never its message (a Shopify path holds the handle).
 import { committedSpendCents, estimatedTotalCents, isShippableAddress, pickOffer, type ZincOffer } from "@gifts-af/core";
 import { logEvent } from "@/lib/log";
+import type { Cost, RecordCost } from "../costs/record";
 import { hasPaidFeatures } from "../paid-features";
 import { ZincError, type ZincHttp } from "../zinc/client";
 import { listGiftRoute, productDetails, productOffers, type ZincStep } from "../zinc/products";
@@ -36,8 +37,11 @@ import {
   withLease,
 } from "./store";
 
-/** Our database and clock plus the app's own lookup key, as the idea run uses it (ZINC_API_KEY, T17). */
-export type QuoteDeps = DbDeps & { lookup: { http: ZincHttp; key: string } };
+/**
+ * Our database and clock plus the app's own lookup key, as the idea run uses it (ZINC_API_KEY, T17),
+ * and where a lookup's cost is recorded (never throws).
+ */
+export type QuoteDeps = DbDeps & { lookup: { http: ZincHttp; key: string }; recordCost: RecordCost };
 
 /**
  * `not_current`: the failure was fixed or replaced already (a stale tab). `not_open`: the round
@@ -94,9 +98,10 @@ function isCurrentFailure(o: FailedOrderRow | null, userId: string, roundId: str
 /**
  * Today's estimated total for an idea (price, shipping, the tax estimate and the order fee,
  * as the idea run works it out), or null when it can't be had. One paid lookup, logged as
- * `order.requote` with its cost.
+ * `order.requote` with its cost, which is also recorded for the failed order and its buyer
+ * whenever a call was made, whatever way it ends.
  */
-async function requote(deps: QuoteDeps, idea: IdeaRow, feeCents: number, ids: Record<string, string>): Promise<number | null> {
+async function requote(deps: QuoteDeps, idea: IdeaRow, feeCents: number, ids: Record<string, string>, bill: { userId: string; orderId: string }): Promise<number | null> {
   const [taxPct, lookupCents] = await Promise.all([setting(deps, "idea_tax_estimate_pct"), setting(deps, "zinc_lookup_cents")]);
   let calls = 0;
   // Every Zinc call is charged (counted at zinc_lookup_cents); there's one at most here.
@@ -112,6 +117,13 @@ async function requote(deps: QuoteDeps, idea: IdeaRow, feeCents: number, ids: Re
   } catch (e) {
     if (!(e instanceof ZincError)) throw e;
     outcome = `zinc_${e.kind}`;
+  } finally {
+    // Zinc reports no price per lookup, so the setting's is an estimate. A recorder that throws
+    // (it shouldn't) can't change the quote or hide the error being rethrown.
+    if (calls > 0) {
+      const cost: Cost = { userId: bill.userId, kind: "lookup_price_check", cents: calls * lookupCents, estimated: true, orderId: bill.orderId };
+      await deps.recordCost(cost).catch(() => {});
+    }
   }
   const newCents = offer
     ? estimatedTotalCents({
@@ -191,7 +203,7 @@ export async function quoteFailedOrder(input: { userId: string; roundId: string;
   if (await priceRiseFixed(deps, failed.idea_id, failed.id)) return "once";
   const idea = (await readIdeas(deps, [failed.idea_id])).get(failed.idea_id);
   if (!idea) return "unavailable";
-  const newCents = await requote(deps, idea, await setting(deps, "zinc_order_fee_cents"), ids);
+  const newCents = await requote(deps, idea, await setting(deps, "zinc_order_fee_cents"), ids, { userId, orderId });
   return newCents === null ? "unavailable" : { oldCents: idea.est_total_cents, newCents };
 }
 
@@ -201,8 +213,20 @@ export async function quoteFailedOrder(input: { userId: string; roundId: string;
  * address. Under the round lease, read again; then the budget check and caps with the other
  * live orders counted, replace_failed_order, placing, and telling the buyer.
  */
-/** `lookup` is null where the app's key isn't set: only a price-rise re-buy needs it. */
-export async function replaceFailedOrder(input: ReplaceInput, deps: PurchaseDeps & { lookup: QuoteDeps["lookup"] | null }): Promise<ReplaceResult> {
+/**
+ * `lookup` is null where the app's key isn't set: only a price-rise re-buy needs it. The re-check's
+ * cost is written after the round lease is let go, so recording can't hold the round.
+ */
+export async function replaceFailedOrder(input: ReplaceInput, deps: PurchaseDeps & { lookup: QuoteDeps["lookup"] | null; recordCost: RecordCost }): Promise<ReplaceResult> {
+  const costs: Cost[] = [];
+  try {
+    return await replaceUnderLease(input, { ...deps, recordCost: async (cost) => void costs.push(cost) });
+  } finally {
+    await Promise.allSettled(costs.map(async (cost) => deps.recordCost(cost)));
+  }
+}
+
+async function replaceUnderLease(input: ReplaceInput, deps: PurchaseDeps & { lookup: QuoteDeps["lookup"] | null; recordCost: RecordCost }): Promise<ReplaceResult> {
   const { userId, roundId } = input;
   const ids = { round_id: roundId, user_id: userId, order_id: input.failedOrderId };
 
@@ -234,7 +258,7 @@ export async function replaceFailedOrder(input: ReplaceInput, deps: PurchaseDeps
       if (await priceRiseFixed(deps, idea.id, failed.id)) return { ok: false, error: "once" };
       if (input.shownTotalCents === undefined) return { ok: false, error: "price_changed" };
       if (!deps.lookup) return { ok: false, error: "unavailable" };
-      const today = await requote({ ...deps, lookup: deps.lookup }, idea, deps.settings.feeCents, ids);
+      const today = await requote({ ...deps, lookup: deps.lookup }, idea, deps.settings.feeCents, ids, { userId, orderId: failed.id });
       if (today === null) return { ok: false, error: "unavailable" };
       if (today > input.shownTotalCents) return { ok: false, error: "price_changed" };
       total = today;

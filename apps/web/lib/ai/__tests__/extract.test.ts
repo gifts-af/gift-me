@@ -151,6 +151,12 @@ describe("what a read cost (ALL-144 AC-3)", () => {
     expect(await costOf({ cost: "0" })).toBe(0);
   });
 
+  it("takes a cost reported as a number too, and refuses a negative one", async () => {
+    expect(await costOf({ cost: 0.001966 })).toBeCloseTo(0.1966, 10);
+    expect(await costOf({ cost: 0 })).toBe(0);
+    expect(await costOf({ cost: -0.01 })).toBeNull();
+  });
+
   it.each([
     ["no metadata", undefined],
     ["no cost", { generationId: "gen_1" }],
@@ -211,8 +217,12 @@ describe("callRefused (ALL-144 AC-3)", () => {
 
   it("is true for the missing sign-in, which the SDK reports without a status in production", async () => {
     vi.stubEnv("NODE_ENV", "production");
-    const err = await answer(401, error("authentication_error"));
-    vi.unstubAllEnvs();
+    let err: unknown;
+    try {
+      err = await answer(401, error("authentication_error"));
+    } finally {
+      vi.unstubAllEnvs();
+    }
     expect(err).not.toHaveProperty("statusCode");
     expect(callRefused(err)).toBe(true);
   });

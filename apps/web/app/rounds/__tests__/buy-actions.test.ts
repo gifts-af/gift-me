@@ -2,20 +2,24 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // buyAction's input checks (ALL-29 Task 12): malformed input is refused before the session or
 // any money path is touched. The real action runs in the round journeys (Task 13).
-const { createClient, approveAndBuy, quoteFailedOrder, buyingWiring, lookupWiring } = vi.hoisted(() => ({
+const { createClient, approveAndBuy, quoteFailedOrder, replaceFailedOrder, costRecorder, createAdminClient, recorder, buyingWiring, lookupWiring } = vi.hoisted(() => ({
   createClient: vi.fn(),
   approveAndBuy: vi.fn(),
   quoteFailedOrder: vi.fn(),
+  replaceFailedOrder: vi.fn(),
+  costRecorder: vi.fn(),
+  createAdminClient: vi.fn(),
+  recorder: vi.fn(),
   buyingWiring: vi.fn(),
   lookupWiring: vi.fn(),
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient }));
-vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
+vi.mock("@/lib/supabase/admin", () => ({ createAdminClient }));
 vi.mock("@/lib/wiring", () => ({ buyingWiring, lookupWiring, roundDbDeps: vi.fn() }));
-vi.mock("@/modules/concierge", () => ({ approveAndBuy, quoteFailedOrder, MAX_BUDGET_CENTS: 1 }));
+vi.mock("@/modules/concierge", () => ({ approveAndBuy, quoteFailedOrder, replaceFailedOrder, costRecorder, MAX_BUDGET_CENTS: 1 }));
 
-import { buyAction, checkPriceAction } from "../actions";
+import { buyAction, checkPriceAction, replaceAction } from "../actions";
 
 const ROUND = "00000000-0000-4000-8000-000000000001";
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
@@ -26,7 +30,10 @@ function form(o: Record<string, string>): FormData {
   return f;
 }
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  costRecorder.mockReturnValue(recorder);
+});
 
 describe("buyAction input", () => {
   it("refuses more than 50 ideas before reading the session", async () => {
@@ -49,5 +56,29 @@ describe("checkPriceAction", () => {
     expect(await checkPriceAction(ROUND, id(2))).toEqual({ ok: false, error: "zinc_off" });
     expect(lookupWiring).not.toHaveBeenCalled();
     expect(quoteFailedOrder).not.toHaveBeenCalled();
+  });
+});
+
+describe("price-check cost recording", () => {
+  const signedIn = () => createClient.mockResolvedValue({ auth: { getClaims: async () => ({ data: { claims: { sub: "u1" } } }) } });
+
+  it("checkPriceAction gives the quote a recorder built on the service-role client", async () => {
+    signedIn();
+    buyingWiring.mockResolvedValue({ engine: {}, purchase: {} });
+    lookupWiring.mockResolvedValue({ key: "k" });
+    quoteFailedOrder.mockResolvedValue({ oldCents: 1, newCents: 2 });
+    await checkPriceAction(ROUND, id(2));
+    expect(costRecorder).toHaveBeenCalledWith(createAdminClient);
+    expect(quoteFailedOrder.mock.calls[0][1]).toMatchObject({ recordCost: recorder });
+  });
+
+  it("replaceAction gives the re-buy a recorder built on the service-role client", async () => {
+    signedIn();
+    buyingWiring.mockResolvedValue({ engine: {}, purchase: { env: "test" } });
+    lookupWiring.mockResolvedValue({ key: "k" });
+    replaceFailedOrder.mockResolvedValue({ ok: false, error: "once" });
+    await replaceAction(ROUND, id(2), form({ ideaId: id(3), shownTotalCents: "5000" }));
+    expect(costRecorder).toHaveBeenCalledWith(createAdminClient);
+    expect(replaceFailedOrder.mock.calls[0][1]).toMatchObject({ env: "test", recordCost: recorder });
   });
 });
