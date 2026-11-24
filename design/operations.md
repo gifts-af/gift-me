@@ -230,7 +230,7 @@ update concierge.app_settings set value = '0' where key = 'zinc_ordering_enabled
 | `order.sweep_failed` | Looking up a stuck "placing" order at Zinc failed (Zinc down, an answer we couldn't read, or our database). `kind` and `code` say which. | Nothing if it clears on the next tick (the sweep runs every tick and never resends). If it repeats for the same `order_id`, check Zinc's status and the buyer's key; if Zinc can't find the order, follow **Unconfirmed orders**. |
 | `order.unconfirmed` | The sweep looked up an order stuck "placing" and Zinc has no record of it, so we don't know if it was bought. The buyer has been told "we're confirming your gift". | Open the buyer's Zinc dashboard, find the order by our `order_id` in its metadata (the `order_id` in the event), and settle it with `concierge.settle_order` as placed or failed (**Unconfirmed orders** above). The buyer is emailed on the next tick. |
 | `zinc.webhook_unmatched` | Zinc sent an order event (placed or failed) we can't tie to any order of ours, and Zinc says it has no such order for that buyer's key (or the order carries no reference). The buyer's order may be stuck "placing" or "unconfirmed". | Check the order in the buyer's Zinc dashboard, then settle ours with `concierge.settle_order` as placed or failed (**Unconfirmed orders** above). |
-| `tracking.news_failed` | The daily tracking summary (late, back-on-time or store-cancelled news) for one buyer couldn't be sent: the email was refused, or looking up their gifts failed. The keys are given back, so nothing is lost. | **Order tracking** below, "News isn't going out". |
+| `tracking.news_failed` | The daily tracking summary (late, back-on-time or store-cancelled news) for one buyer couldn't be sent: the email was refused, or claiming or sending it threw. The keys are given back, so nothing is lost. (A failed gift lookup is `tracking.news_run_failed` instead.) | **Order tracking** below, "News isn't going out". |
 | `tracking.news_release_failed` | The summary failed and then giving the claimed keys back failed too, so those gifts won't be told on the next run. | **Order tracking** below, "News isn't going out", step 4. |
 | `tracking.news_run_failed` | The whole daily news step threw before it could look at buyers (a setting or the database). No news went out that day. | **Order tracking** below, "News isn't going out". |
 | `tracking.delivered_email_failed` | The "your gifts arrived" email was refused or couldn't be built, from a Zinc `delivered` event, the buyer's "It arrived" tap, or the daily retry. | **Order tracking** below, "Delivered email isn't going out". |
@@ -292,7 +292,16 @@ For `tracking.news_failed`, `tracking.news_release_failed` or `tracking.news_run
 1. Look at the event's error fields (`name`, `code`) in the Vercel logs. Check Resend (status, key, a bounced address) for a refused email.
 2. Nothing is lost for `news_failed`: the keys are given back and the next daily run tries again. Late news stops mattering after the occasion date, so look the same day.
 3. For `news_run_failed`, check the database and that `late_check_enabled` and `order_tracking_enabled` exist in `app_settings`. To stop the noise while you fix it, set `late_check_enabled` to 0 (store cancels are still told).
-4. For `news_release_failed`, those gifts' `late:`, `ontime:` or `cancel_late:` rows are still in `concierge.round_sends`. Delete the rows for the event's user so the next run sends them.
+4. For `news_release_failed`, the keys couldn't be given back, so those gifts stay marked as told although the email never went out. Don't delete every `late:`, `ontime:` or `cancel_late:` row for the buyer: that would also resend news they already got. Delete only the rows made in the failed run, using the event's `user_id` and the time it was logged (`created_at` is when the keys were claimed, a moment before the event):
+
+   ```sql
+   select round_id, step, created_at from concierge.round_sends
+   where user_id = '<user_id from the event>'
+     and (step like 'late:%' or step like 'ontime:%' or step like 'cancel_late:%')
+     and created_at between '<event time minus 5 minutes>' and '<event time>';
+   ```
+
+   Check the list looks right, then delete exactly those `(round_id, step)` rows. The next daily run sends them. If the occasion date has passed there is nothing to resend.
 
 ### Delivered email isn't going out
 
