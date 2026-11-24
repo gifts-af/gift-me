@@ -3,6 +3,7 @@
 import { useActionState, useEffect, useState } from "react";
 import { submitFeedback } from "@/app/feedback/actions";
 import { useHumanCheck } from "@/components/human-check";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -12,6 +13,7 @@ import {
   DialogTrigger,
   useSelfClosingDialog,
 } from "@/components/ui/dialog";
+import { cn } from "@/lib/utils";
 
 const input =
   "min-h-11 w-full rounded-md border border-input bg-background px-3 py-2.5 text-base font-normal aria-[invalid=true]:border-destructive";
@@ -22,7 +24,7 @@ export function FeedbackButton({ className }: { className?: string }) {
   const { open, onOpenChange, closeSoon } = useSelfClosingDialog();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogTrigger className={className}>Send feedback</DialogTrigger>
+      <DialogTrigger className={cn(buttonVariants({ variant: "secondary" }), className)}>Send feedback</DialogTrigger>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Tell us the sad story</DialogTitle>
@@ -116,13 +118,12 @@ function FeedbackForm({ onSent }: { onSent: () => void }) {
           {result.message}
         </p>
       )}
-      <button
+      <Button
         type="submit"
         disabled={pending || !human.token}
-        className="min-h-12 rounded-lg bg-primary font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-45"
       >
         {pending ? "Sending…" : "Send"}
-      </button>
+      </Button>
     </form>
   );
 }

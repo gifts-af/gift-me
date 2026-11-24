@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { HeroCallout } from "@/components/home/hero-callout";
 import { RequestAccessButton } from "@/components/home/request-access-dialog";
+import { Button } from "@/components/ui/button";
 import { PickPreview } from "./pick-preview";
 
 export function Hook() {
@@ -14,13 +15,10 @@ export function Hook() {
           Where we&apos;re heading: we remember the dates, find the gift, and ship it. You just tap yes.
         </p>
         <div className="flex flex-col gap-3 md:flex-row">
-          <Link
-            href="/tour"
-            className="inline-flex min-h-12 items-center justify-center rounded-lg bg-primary px-6 font-bold text-primary-foreground hover:bg-primary/90"
-          >
-            Take the tour
-          </Link>
-          <RequestAccessButton kind="waitlist" className="inline-flex min-h-12 items-center justify-center rounded-lg bg-secondary px-6 font-bold text-secondary-foreground hover:bg-secondary/70" />
+          <Button asChild>
+            <Link href="/tour">Take the tour</Link>
+          </Button>
+          <RequestAccessButton kind="waitlist" variant="secondary" />
         </div>
         <Link
           href="/auth/login"

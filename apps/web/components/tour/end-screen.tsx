@@ -1,7 +1,5 @@
 import Link from "next/link";
 
-export const END_PRIMARY =
-  "inline-flex min-h-12 items-center justify-center rounded-lg bg-primary px-6 font-bold text-primary-foreground hover:bg-primary/90";
 export const END_LINK =
   "inline-flex min-h-11 items-center justify-center text-[15px] text-muted-foreground underline underline-offset-[3px] hover:text-foreground";
 

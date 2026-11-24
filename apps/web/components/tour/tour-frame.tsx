@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { HomeTopBar } from "@/components/home/home-top-bar";
-import { useHydrated } from "@/lib/use-hydrated";
+import { Button } from "@/components/ui/button";
 
 // The frame both tours share (ALL-46, ALL-71): step counter, Skip tour, the
 // caption, the phone screen and Back/Next. Phone: one column (step, caption,
@@ -26,8 +26,6 @@ export function TourFrame({
   children: React.ReactNode;
 }) {
   const last = step === total - 1;
-  // Faded until the page can respond: before then a tap does nothing (ALL-110).
-  const notReady = useHydrated() ? undefined : true;
 
   // Each new step's caption takes focus, so keyboard and screen-reader users
   // aren't dropped when a button they pressed disappears (the last step has
@@ -65,23 +63,22 @@ export function TourFrame({
         {!last && (
           <div className="flex gap-3 md:col-start-1 md:row-start-3 md:self-start">
             {step > 0 && (
-              <button
+              <Button
                 type="button"
                 onClick={onBack}
-                aria-disabled={notReady}
-                className="min-h-12 flex-1 rounded-lg bg-secondary font-bold text-secondary-foreground hover:bg-secondary/70 aria-disabled:opacity-45"
+                variant="secondary"
+                className="flex-1"
               >
                 Back
-              </button>
+              </Button>
             )}
-            <button
+            <Button
               type="button"
               onClick={onNext}
-              aria-disabled={notReady}
-              className="min-h-12 flex-[2] rounded-lg bg-primary font-bold text-primary-foreground hover:bg-primary/90 aria-disabled:opacity-45"
+              className="flex-[2]"
             >
               Next
-            </button>
+            </Button>
           </div>
         )}
       </main>

@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { type TourGift, money } from "./tour-data";
 import { Phone } from "./phone";
 
@@ -44,16 +45,15 @@ export function PickScreen({
           </button>
         );
       })}
-      <button
+      <Button
         type="button"
         disabled={chosen.length === 0}
         onClick={onSend}
-        className="min-h-12 rounded-lg bg-primary font-bold text-primary-foreground disabled:opacity-45"
       >
         {chosen.length === 0
           ? "Pick a gift"
           : `Send ${chosen.length} gift${chosen.length > 1 ? "s" : ""} · ${money(total)}`}
-      </button>
+      </Button>
       <p className="text-[13px] text-muted-foreground">Prices include shipping and tax.</p>
     </Phone>
   );

@@ -1,6 +1,7 @@
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Share } from "lucide-react";
 import { useEffect, useState } from "react";
-import { BlockedButton, buttonClass } from "./ui";
+import { BlockedButton } from "./ui";
 
 const COPIED_MS = 2000;
 
@@ -36,7 +37,7 @@ export default function ShareButton({ blockedReason, onShare, copiedSignal = 0 }
 
   if (blockedReason) {
     return (
-      <BlockedButton id="share-tooltip" reason={blockedReason} className={buttonClass.secondarySm}>
+      <BlockedButton id="share-tooltip" reason={blockedReason} className={buttonVariants({ variant: "secondary", size: "sm" })}>
         {label}
       </BlockedButton>
     );
@@ -47,8 +48,8 @@ export default function ShareButton({ blockedReason, onShare, copiedSignal = 0 }
   }
 
   return (
-    <button type="button" className={buttonClass.secondarySm} onClick={handleClick}>
+    <Button type="button" variant="secondary" size="sm" onClick={handleClick}>
       {label}
-    </button>
+    </Button>
   );
 }

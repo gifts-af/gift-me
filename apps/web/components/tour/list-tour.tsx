@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { RequestAccessButton } from "@/components/home/request-access-dialog";
-import { END_PRIMARY, EndScreen } from "./end-screen";
+import { EndScreen } from "./end-screen";
 import { ClaimScreen, MyListScreen, ShareScreen } from "./list-tour-screens";
 import { TourFrame } from "./tour-frame";
 import { LIST_TOUR_STEPS } from "./tour-data";
@@ -29,7 +29,7 @@ export function ListTour() {
       {current.id === "end" && (
         <EndScreen
           line="Your list works today. GiftsAF is invite only for now. Want in?"
-          primary={<RequestAccessButton className={END_PRIMARY} />}
+          primary={<RequestAccessButton variant="default" />}
         />
       )}
     </TourFrame>

@@ -1,5 +1,6 @@
 "use client";
 
+import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
@@ -11,7 +12,7 @@ import type { GiftClaim, SharedGift, SharedList as SharedListData } from "@/modu
 import ClaimDialog from "./claim-dialog";
 import GiftList from "./gift-list";
 import GiftSummary from "./gift-summary";
-import { Banner, buttonClass } from "./ui";
+import { Banner } from "./ui";
 import ViewDialog from "./view-dialog";
 
 /**
@@ -98,25 +99,28 @@ export default function SharedList({ list, token, nav, top }: SharedListProps) {
         <>
           <span className="text-[13px] text-muted-foreground">Claimed by {gift.claim.mine ? "you" : gift.claim.name}</span>
           {gift.claim.mine && (
-            <button
+            <Button
               type="button"
-              className={buttonClass.secondarySm}
+              variant="secondary"
+              size="sm"
               onClick={() => handleUnclaim(gift)}
               disabled={unclaimingId === gift.id}
               aria-busy={unclaimingId === gift.id}
               aria-label={`Unclaim ${gift.name}`}
             >
               {unclaimingId === gift.id ? "Unclaiming…" : "Unclaim"}
-            </button>
+            </Button>
           )}
         </>
       );
     }
 
     return (
-      <button
+      <Button
         type="button"
-        className={`${buttonClass.secondarySm} w-full`}
+        variant="secondary"
+        size="sm"
+        className="w-full"
         onClick={() => {
           setActionError("");
           setClaiming(gift);
@@ -124,7 +128,7 @@ export default function SharedList({ list, token, nav, top }: SharedListProps) {
         aria-label={`Claim ${gift.name}`}
       >
         Claim
-      </button>
+      </Button>
     );
   }
 

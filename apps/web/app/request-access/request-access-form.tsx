@@ -3,6 +3,7 @@
 import { useActionState, useEffect } from "react";
 import { submitAccessRequest } from "./actions";
 import { useHumanCheck } from "@/components/human-check";
+import { Button } from "@/components/ui/button";
 import type { RequestKind } from "@/lib/access-request";
 
 const input =
@@ -111,13 +112,12 @@ export function RequestAccessForm({
           {result.message}
         </p>
       )}
-      <button
+      <Button
         type="submit"
         disabled={pending || !human.token}
-        className="min-h-12 rounded-lg bg-primary font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-45"
       >
         {pending ? "Sending…" : kind === "waitlist" ? "Join the waitlist" : "Request access"}
-      </button>
+      </Button>
     </form>
   );
 }

@@ -1,7 +1,7 @@
+import { Button } from "@/components/ui/button";
 import type { Gift } from "@/modules/lists/lib/lists";
 import { storeName } from "@/modules/lists/lib/product-link";
 import Modal from "./modal";
-import { buttonClass } from "./ui";
 
 /**
  * Shown before opening an unclaimed gift's product page, as a reminder to
@@ -22,19 +22,15 @@ export default function ViewDialog({ gift, onClose }: ViewDialogProps) {
       <p id="view-dialog-desc" className="text-[15px] text-muted-foreground">
         If you buy {gift.name}, come back and claim it, so nobody else buys it too.
       </p>
-      <a
-        className={`${buttonClass.primary} w-full whitespace-normal text-center`}
-        href={gift.productUrl ?? undefined}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={onClose}
-      >
-        Open on {storeName(gift.productUrl ?? "")}, and I’ll claim it if I buy it
-        <span className="sr-only"> (opens in a new tab)</span>
-      </a>
-      <button type="button" className={`${buttonClass.link} self-center`} onClick={onClose}>
+      <Button asChild className="w-full whitespace-normal text-center">
+        <a href={gift.productUrl ?? undefined} target="_blank" rel="noopener noreferrer" onClick={onClose}>
+          Open on {storeName(gift.productUrl ?? "")}, and I’ll claim it if I buy it
+          <span className="sr-only"> (opens in a new tab)</span>
+        </a>
+      </Button>
+      <Button type="button" variant="link" size="sm" className="px-1 self-center" onClick={onClose}>
         Cancel
-      </button>
+      </Button>
     </Modal>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { RequestAccessForm } from "@/app/request-access/request-access-form";
+import { buttonVariants, type ButtonProps } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -13,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import type { RequestKind } from "@/lib/access-request";
 import { APP_NAME } from "@/lib/brand";
+import { cn } from "@/lib/utils";
 
 const COPY: Record<RequestKind, { button: string; title: string; description: string }> = {
   access: {
@@ -32,10 +34,13 @@ const COPY: Record<RequestKind, { button: string; title: string; description: st
 // kind="waitlist" it's the concierge waitlist (ALL-71), whose thank-you can
 // switch the same box to Request access for the list.
 export function RequestAccessButton({
+  variant,
   className,
   children,
   kind = "access",
 }: {
+  /** Looks like this kind of Button; without it, className alone styles it (a text link). */
+  variant?: ButtonProps["variant"];
   className?: string;
   children?: React.ReactNode;
   kind?: RequestKind;
@@ -52,7 +57,7 @@ export function RequestAccessButton({
         onOpenChange(next);
       }}
     >
-      <DialogTrigger className={className}>{children ?? COPY[kind].button}</DialogTrigger>
+      <DialogTrigger className={cn(variant && buttonVariants({ variant }), className)}>{children ?? COPY[kind].button}</DialogTrigger>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{copy.title}</DialogTitle>
