@@ -154,6 +154,7 @@ end;
 $$;
 
 -- ─── reconcile_round: ordered → delivered ───────────────────────────────────
+-- Copied from 20261114100000_every_failure_told.sql. A later migration that changes reconcile_round must copy this version, not the older one.
 create or replace function concierge.reconcile_round(p_round_id uuid, p_context text default null)
 returns concierge.round_status
 language plpgsql
