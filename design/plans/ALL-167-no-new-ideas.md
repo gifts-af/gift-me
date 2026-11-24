@@ -16,16 +16,16 @@
 
 | # | Given | When | Then |
 |---|---|---|---|
-| AC-1 | "None of these" rejected the round's ideas; the new search ended `none` and no search is left | The run ends | In that same step and lease, the latest rejected set that can still be offered is `proposed` again, the heads-up goes with "We didn't find anything new. These are still here if you want one.", and the round becomes `awaiting_approval` |
-| AC-2 | As AC-1, but the last allowed run ended `failed`, `cost_cap` or `deadline` | The run ends | The same, worded "We couldn't finish looking. These are still here if you want one." |
+| AC-1 | "None of these" rejected the round's ideas; the new search, started after that, ended `none` and no search is left | The run ends | In that same step and lease, the latest rejected set that can still be offered is `proposed` again, the heads-up goes with "We didn't find anything new. These are still here if you want one.", and the round becomes `awaiting_approval` |
+| AC-2 | As AC-1, but the last allowed run ended `failed`, `cost_cap` or `deadline`, or was killed and is past its lease | The run ends | The same, worded "We couldn't finish looking. These are still here if you want one." |
 | AC-3 | The run was the day before ship-by | The run ends | AC-1 and AC-2 still happen that day, since the next tick would close the round |
-| AC-4 | Rejected as "Already has one", naming a gift | Ideas come back | That gift stays rejected: a list gift by `rejections.owned`, an AI idea also by the active `owns` fact with its title (rejections made before this change) |
+| AC-4 | Rejected as "Already has one", naming a gift | Ideas come back | That gift stays rejected: a list gift by `rejections.owned`, an AI idea also by the active `owns` fact with its title (rejections made before this change). Noting the reason with no search left marks it too. A list gift rejected as "Already has one" without saying which (before this change, or by the old code) counts as owned |
 | AC-5 | A rejected idea can't arrive in time from today (`canArriveInTime`; unknown delivery days count as can't), is live, bought, failed or cancelled on any order, is bought for the person in another round, or is a list gift claimed or no longer shared | Ideas come back | It stays rejected. "Too pricey" ideas come back |
 | AC-6 | Several sets were rejected | Ideas come back | Only the latest set |
 | AC-7 | A budget was set after the ideas were made | Ideas come back | Each is marked over budget or not again |
-| AC-8 | Nothing can come back | The run ends | The no-ideas email as today, worded by AC-10 when it's too late |
+| AC-8 | Nothing can come back, or bringing them back fails (logged as an alert; a lost lease stops the step) | The run ends | The no-ideas email as today, worded by AC-10 when it's too late |
 | AC-9 | A run is still allowed, the engine is off, the buyer isn't paid, the outcome is `no_credit`, or the round was never rejected | The run ends | Nothing comes back |
-| AC-10 | The next tick isn't before the ship-by day (`today + 1 >= ship_by_deadline`, as `runs_after_rejection`) and the no-ideas email is due | The run ends | It goes that day, says no gift can arrive in time, suggests something local, and asks for no facts |
+| AC-10 | The next tick isn't before the ship-by day (`today + 1 >= ship_by_deadline`, as `runs_after_rejection`) and the no-ideas email is due | The run ends | It goes that day, says no gift can arrive in time, suggests something local, and asks for no facts. It is recorded as `no_ideas_late`: after it the round gets no other run or email that day, and the close sends no skipped email |
 | AC-11 | The round's last counted run ended `none` and no active fact is newer than its start | Anything asks for a run | None starts, even with runs left |
 | AC-12 | As AC-11 with a newer active fact | Same | One may start, within `idea_round_runs_max` and its one extra |
 | AC-13 | The last run ended `failed`, `deadline` or `cost_cap` with runs left | The next tick | The retry is allowed as today |
@@ -65,7 +65,7 @@
 **Architecture:** one migration, the round step after an idea run, the run's outcome rule, two email variants and one page line.
 
 1. **Outcome rule (AC-14):** `ideas/run.ts`.
-2. **SQL:** `rejections.owned`; `reject_round_ideas` takes `p_owned_idea_id` (drop and recreate, old call shape still works); `round_idea_state` and `runs_after_rejection` (AC-11, AC-12, AC-15; preview branch `n.runs <= max`); `restore_rejected_ideas(round, lock)` guarded by lease token, `generating`, open, no non-rejected idea, no unfinished run, last counted run ended `none`/`failed`/`cost_cap`/`deadline`, no run left, before ship-by, under `save_ideas`' person advisory lock; returns the count. pgTAP for each guard.
+2. **SQL:** `rejections.owned`; `reject_round_ideas` takes `p_owned_idea_id` (drop and recreate, old call shape still works; the app falls back to it on a database without the argument); `round_sends` takes `no_ideas_late`; `round_idea_state` and `runs_after_rejection` (AC-11, AC-12, AC-15; preview branch `n.runs <= max`); `restore_rejected_ideas(round, lock, now)` guarded by lease token, `generating`, open, no non-rejected idea, no unfinished run, last counted run ended `none`/`failed`/`cost_cap`/`deadline`, no run left, before ship-by, under `save_ideas`' person advisory lock; returns the count and how that search ended. pgTAP for each guard.
 3. **Engine (AC-1 to AC-3, AC-8 to AC-10, AC-17 to AC-20):** `afterIdeaRun`, and a generating round with ideas goes to `sendHeadsUp` without a run.
 4. **Emails and page:** heads-up variant, no-ideas too-late variant, the page line; samples and gallery.
 
