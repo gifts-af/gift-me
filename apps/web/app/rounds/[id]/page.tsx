@@ -13,6 +13,7 @@ import { roundDbDeps, settingInt } from "@/lib/wiring";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { markArrived, outlookAction, rejectAction, setBudgetAction } from "../actions";
 import { OtherAccount } from "../access";
+import { reactionsOpen } from "../reactions-open";
 import { RoundScreen } from "./round-screen";
 
 // The round screen (ALL-29), from the round emails' button or a person's page. Loading only
@@ -67,6 +68,7 @@ async function Loaded({ params }: { params: Promise<{ id: string }> }) {
         setBudgetAction={setBudgetAction}
         outlookAction={outlookAction}
         arrivedAction={tracking ? markArrived : null}
+        reactionsOpen={await reactionsOpen(supabase, view.round.occasionDate, new Date())}
       />
     </>
   );

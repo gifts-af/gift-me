@@ -274,6 +274,7 @@ function GiftRow({
   roundId,
   occasionDate,
   fixHref,
+  reactionHref,
   arrivedAction,
 }: {
   order: RoundPageOrder;
@@ -281,6 +282,7 @@ function GiftRow({
   roundId: string;
   occasionDate: string;
   fixHref: string | null;
+  reactionHref: string | null;
   arrivedAction: ArrivedAction | null;
 }) {
   const meta = [money(order.totalCents ?? idea?.totalCents ?? order.maxPriceCents), storeLabel(idea?.retailer ?? null)].filter(Boolean).join(" · ");
@@ -292,6 +294,11 @@ function GiftRow({
         <span className="text-[13px] text-muted-foreground">{meta}</span>
         <GiftStatus order={order} occasionDate={occasionDate} fixHref={fixHref} />
         {order.status === "shipped" && arrivedAction && <ArrivedButton roundId={roundId} orderId={order.id} action={arrivedAction} />}
+        {reactionHref && (
+          <Link href={reactionHref} className={cn(LINE_LINK, "self-start text-[13px]")}>
+            How did it go?
+          </Link>
+        )}
       </span>
     </li>
   );
@@ -508,6 +515,7 @@ export function RoundScreen({
   setBudgetAction,
   outlookAction,
   arrivedAction,
+  reactionsOpen,
 }: {
   view: RoundPageView;
   /** `rejectAction` */
@@ -518,6 +526,8 @@ export function RoundScreen({
   outlookAction: (roundId: string, input: OutlookInput) => Promise<boolean | null>;
   /** `markArrived`; null while order tracking is switched off, which hides "It arrived". */
   arrivedAction: ArrivedAction | null;
+  /** Whether a delivered gift asks how it went: the switch is on and the occasion has come. */
+  reactionsOpen: boolean;
 }) {
   const { round } = view;
   const budget = round.budgetCents;
@@ -655,6 +665,7 @@ export function RoundScreen({
                 roundId={round.id}
                 occasionDate={round.occasionDate}
                 fixHref={fixable.has(o.id) ? `/rounds/${round.id}/fix/${o.id}` : null}
+                reactionHref={reactionsOpen && o.status === "delivered" ? `/rounds/${round.id}/reaction?gift=${o.id}` : null}
                 arrivedAction={arrivedAction}
               />
             ))}
