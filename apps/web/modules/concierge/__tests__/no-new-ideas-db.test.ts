@@ -913,6 +913,26 @@ describe.skipIf(!stack)("a search that finds nothing (real local database)", () 
     expect((await page(r)).restored).toBe("none");
   });
 
+  it("AC-11, AC-15: None of these again for the same reason says there's no new search, and pays for none", async () => {
+    const r = await newRound();
+    const same = { code: "not_style" as const, text: "Nothing plastic" };
+    await reject(r, same);
+    // The search starts after the facts were saved, whichever clock is ahead.
+    await engine(r, "none", { now: new Date(Date.now() + 1000) }).tick();
+    expect(await ideas(r)).toEqual(["proposed", "proposed"]);
+    expect(await rejectionOutlook({ roundId: r.roundId, ...same, ownedIdeaId: null }, zincDeps())).toMatchObject({ more: false });
+    // What an old sheet would send is refused once, not in a loop.
+    const send = (expectMore: boolean) => rejectRoundIdeas({ userId: r.userId, roundId: r.roundId, ...same, ownedIdeaId: null, expectMore }, zincDeps());
+    expect(await send(true)).toEqual({ ok: false, error: "changed" });
+    expect(await send(false)).toMatchObject({ ok: true, more: false });
+    expect(await ideas(r)).toEqual(["proposed", "proposed"]);
+    expect(await status(r)).toBe("awaiting_approval");
+    // Saving it did touch the fact; that still earns nothing, even well after the search.
+    await pg.query("update concierge.profile_facts set updated_at = now() where person_id = $1", [r.personId]);
+    expect(await rejectionOutlook({ roundId: r.roundId, code: "too_pricey", text: null, ownedIdeaId: null }, zincDeps())).toMatchObject({ more: false });
+    expect(await runs(r)).toBe(2);
+  });
+
   it("AC-15: ... and with a new fact and a run left the sheet says so and the search runs", async () => {
     const r = await restored();
     const input = { roundId: r.roundId, code: "not_style" as const, text: "Nothing plastic", ownedIdeaId: null };

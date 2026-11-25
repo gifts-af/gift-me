@@ -27,10 +27,10 @@
 | AC-9 | A run is still allowed, the engine is off, the buyer isn't paid, the outcome is `no_credit`, or the round was never rejected | The run ends | Nothing comes back |
 | AC-10 | The next tick isn't before the ship-by day (`today + 1 >= ship_by_deadline`, as `runs_after_rejection`) and the no-ideas email is due | The run ends | It goes that day, says no gift can arrive in time, suggests something local, and asks for no facts. It is recorded as `no_ideas_late`: after it the round gets no other run or email that day, and, if the email really went, the close sends no skipped email; otherwise it does. A round that ran is never skipped in silence |
 | AC-11 | The round's last counted run ended `none` and no active fact is newer than its start | Anything asks for a run | None starts, even with runs left |
-| AC-12 | As AC-11 with a newer active fact | Same | One may start, within `idea_round_runs_max` and its one extra |
+| AC-12 | As AC-11 with an active fact added, changed or turned back on since | Same | One may start, within `idea_round_runs_max` and its one extra |
 | AC-13 | The last run ended `failed`, `deadline` or `cost_cap` with runs left | The next tick | The retry is allowed as today |
 | AC-14 | Nothing was kept and any lookup ended in a vendor error (brainstorm or list pass) | The run ends | It is `failed`, not `none` |
-| AC-15 | Ideas came back | The buyer says "None of these" again | With no search left they stay buyable; if the reason saves a new fact and a run is left, the search runs, and the sheet said so beforehand. The sheet's answer and the rejection agree for every `idea_round_runs_max` |
+| AC-15 | Ideas came back (a reason whose fact is already there, on or off, isn't new) | The buyer says "None of these" again | With no search left they stay buyable; if the reason saves a new fact and a run is left, the search runs, and the sheet said so beforehand. The sheet's answer and the rejection agree for every `idea_round_runs_max` |
 | AC-16 | Ideas came back | The buyer buys one | Price checks and caps as any idea; an idea that stayed rejected is still refused |
 | AC-17 | The heads-up send is refused or the process dies after the ideas came back | The next tick | The round is still `generating` with ideas, and goes straight to the heads-up: one email, no run |
 | AC-18 | Two ticks or jobs act at once | | Ideas come back once, one email (the lease, checked in the SQL) |

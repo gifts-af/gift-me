@@ -145,6 +145,13 @@ describe.skipIf(stack === null)("giftsInProgress (real local database)", () => {
     expect((await u.rows()).map((g) => [g.roundId, g.line.text])).toEqual([[early, "No ideas found yet"]]);
     expect(await roundView(late, u.db, NOW)).toMatchObject({ closedText: "It's too late to send a gift in time", waiting: null });
     expect(await roundView(early, u.db, NOW)).toMatchObject({ closedText: null, waiting: "told" });
+    // The same for one with no address to ask for any more.
+    const noAddress = await person(u, "Bob");
+    const asked = await round(u, noAddress, { status: "needs_address", shipBy: 1 });
+    expect(await roundView(asked, u.db, NOW)).toMatchObject({ closedText: null, waiting: "address" });
+    await told(asked, NOW);
+    expect(await u.rows(noAddress)).toEqual([]);
+    expect(await roundView(asked, u.db, NOW)).toMatchObject({ closedText: "It's too late to send a gift in time", waiting: null });
   });
 
   it("ideas that came back are counted as ready, with the round page's line", async () => {

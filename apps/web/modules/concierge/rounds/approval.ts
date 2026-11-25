@@ -470,11 +470,11 @@ async function readWaiting(
   r: { id: string; user_id: string; person_id: string; status: string; ship_by_deadline: CalendarDate },
   ideasFoundAt: string[],
 ): Promise<ReturnType<typeof waitingOn>> {
+  let needsAddress = false;
   try {
     if (!(await hasPaidFeatures(userDb, r.user_id))) return null;
     const addressed = r.status === "generating" || (await hasAddress(userDb, r.person_id));
-    // Before the next read, so its failure never hides "Add address".
-    if (r.status === "needs_address" && !addressed) return "address";
+    needsAddress = r.status === "needs_address" && !addressed;
     const told = await userDb
       .schema("concierge")
       .from("notifications")
@@ -491,7 +491,8 @@ async function readWaiting(
     return waitingOn({ status: r.status, paid: true, hasAddress: addressed, toldAt: told.data?.sent_at ?? null, ideasFoundAt, shipBy: r.ship_by_deadline });
   } catch (err) {
     logEvent("round_waiting_failed", { round_id: r.id, user_id: r.user_id, ...errorFields(err) });
-    return null;
+    // A failed read of the told email never hides "Add address".
+    return needsAddress ? "address" : null;
   }
 }
 
