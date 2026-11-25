@@ -305,7 +305,7 @@ select id, email, email_confirmed_at from auth.users where email = lower('ACCOUN
    end $$;
    ```
 
-2. **Wait for gifts on their way**, theirs and other people's being sent to their shared address. This must come back empty. A held gift to a shared address ends at the next tick. For `placed` or `shipped`, look in Zinc's dashboard: one that has really arrived, or was cancelled, still shows here if its news was lost. Ask the buyer to tap "It arrived" on the round, as in **Gift reactions > A round never closes**; don't skip this step.
+2. **Wait for gifts on their way**, theirs and other people's being sent to their shared address. This must come back empty. A held gift to a shared address ends at the next tick. For `placed` or `shipped`, look in Zinc's dashboard, because one whose news was lost stays here; don't skip this step.
 
    ```sql
    select o.id, o.status, o.user_id = 'ACCOUNT_ID' as theirs, o.updated_at
@@ -313,6 +313,15 @@ select id, email, email_confirmed_at from auth.users where email = lower('ACCOUN
    where (o.user_id = 'ACCOUNT_ID' or o.address_owner_id = 'ACCOUNT_ID')
      and o.status in ('held', 'placing', 'unconfirmed', 'placed', 'shipped');
    ```
+
+   **If Zinc's dashboard says it was delivered** (check the order there first), the owner may mark it arrived. This is the function behind Zinc's delivered event and the "It arrived" tap; `zinc` means Zinc said so, and it also takes a gift whose shipped news was lost, which the tap doesn't. It must answer `applied = true`. The next tick sends the buyer the delivered email, unless their account has been erased by then.
+
+   ```sql
+   select * from concierge.mark_delivered(
+     (select user_id from concierge.orders where id = 'ORDER_ID'), 'ORDER_ID', 'zinc');
+   ```
+
+   If Zinc says it was cancelled, or nothing at all, stop and ask the owner. `placing` and `unconfirmed` follow **Unconfirmed orders**.
 
 3. **Save the list of files** (copy the result; it's needed in step 5, after the rows that name them are gone). Read only: never delete from `storage.objects`, which leaves the files behind.
 
@@ -414,7 +423,7 @@ select id, email, email_confirmed_at from auth.users where email = lower('ACCOUN
 
 **What `admin.hard_delete_account` removes.** Deleting the `auth.users` row cascades to their sign-ins, profile, own address, lists (gifts, the claims on them, links to them), people (hidden ones too), and everything the concierge keeps: settings, budgets, occasions, captures, facts, questions, saved gifts, ideas, rounds, orders and their addresses, reactions, messages and emailed buttons. Their Zinc secrets leave Vault with their settings row. `admin.deletion_log` keeps ids, who asked and why. Step 4 clears what doesn't cascade: names on claims, shared addresses on other people's finished orders, and Supabase's sign-in records.
 
-**What stays with other accounts:** what they typed or copied about this person. That's their entry for the person, facts, gift messages, and ideas and saved gifts copied from the list. It's theirs; if the person asks for that too, follow **Erase what's kept about someone with no account**.
+**What stays with other accounts:** what they typed or copied about this person. That's their entry for the person, facts, and ideas and saved gifts copied from the list. If the person asks for that too, follow **Erase what's kept about someone with no account**. Gift messages other people wrote are kept (owner, 2026-11-25).
 
 ### Erase a person from an account
 
@@ -430,7 +439,7 @@ select id, name, deleted_at, created_at from public.people where user_id = 'ACCO
    update public.people set deleted_at = now() where id = 'PERSON_ID' and deleted_at is null;
    ```
 
-2. **Wait for gifts on their way** (as step 2 above; must be empty):
+2. **Wait for gifts on their way** (must be empty; a delivered gift whose news was lost is marked as in step 2 above):
 
    ```sql
    select o.id, o.status, o.updated_at
@@ -534,8 +543,8 @@ order by 1, 2;
 It can't look inside pictures (photos, screenshots), and doesn't look at product links, tracking details, or a birth year.
 
 1. Show the owner the matches. A name alone is never enough. If it isn't clearly them, erase nothing and say we couldn't find them.
-2. **A whole person:** follow **Erase a person from an account**, with `'the person'` as who asked. It removes that account's gift history for them too.
-3. **Only mentioned:** a capture, fact, saved gift or emailed note is its own row, so delete that row (and a capture's or note's file, as above). Clear the text of an answer, rejection, gift message, or idea's reason; on a reaction, clear `fact_category` and `fact_value` together. A claim's name becomes `'Someone'`. Ask the account's owner to change a list's title or gifts, or their own address. An order address goes only once its order is finished: delete the `order_addresses` row and set the order's `ship_city` and `ship_state` to `''`. `admin.deletion_log` has no kind for these, so note the date and row ids on the ticket.
+2. **A whole person:** follow **Erase a person from an account**, with `'the person'` as who asked. That account loses its gift history for them, and its owner is told (step 4; owner, 2026-11-25).
+3. **Only mentioned:** a capture, fact, saved gift or emailed note is its own row, so delete that row (and a capture's or note's file, as above). Clear the text of an answer, rejection, or idea's reason; on a reaction, clear `fact_category` and `fact_value` together. A claim's name becomes `'Someone'`. A gift message stays (owner, 2026-11-25): it goes only with the person or account it belongs to. Ask the account's owner to change a list's title or gifts, or their own address. An order address goes only once its order is finished: delete the `order_addresses` row and set the order's `ship_city` and `ship_state` to `''`. `admin.deletion_log` has no kind for these, so note the date and row ids on the ticket.
 4. Email the account holder that the person (or detail) was erased because that person asked, and that no more gifts will be bought for them.
 5. Tell the person who asked that it's done, or that we found nothing, without saying whose account it was.
 6. If they also have an account, that's **Erase an account**. Claims made signed out carry only the name they typed, with no account, so they're found here.
@@ -555,7 +564,7 @@ It can't look inside pictures (photos, screenshots), and doesn't look at product
 | A list photo at its public address | Can stay in the network's cache for a while after the file is deleted. **[Verify]** for how long |
 | Google | The contacts token is never stored. Signing in with Google can leave its token in `auth.flow_state`, which step 4 clears. Google keeps its own record of the sign-in; they can remove GiftsAF in their Google account |
 | Browsers | The extension's session and any list draft, until they sign out or clear it |
-| What other accounts typed or copied about them | Stays theirs: their entry for the person, facts, gift messages, ideas and saved gifts. Erased only on a separate request, for what we're told to look for |
+| What other accounts typed or copied about them | Stays theirs: their entry for the person, facts, ideas and saved gifts. Erased only on a separate request, for what we're told to look for. Gift messages are kept |
 
 ## Google verification
 

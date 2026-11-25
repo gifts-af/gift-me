@@ -55,10 +55,10 @@ export default function PrivacyPage() {
             through their own Zinc account may be able to see the full address there.
           </p>
           <p>
-            When you claim a gift on someone&apos;s list, everyone with the list&apos;s link can see who claimed it, except
-            its owner when they&apos;re signed in. {/* Holds whichever way the owner decides what stands in for a missing name. */}
-            It shows the name on your account, or what we use for you if you haven&apos;t set one. If you claim without
-            signing in, it shows the name you typed.
+            When you claim a gift on someone&apos;s list, everyone with the list&apos;s link sees who claimed it, by name,
+            never by email, except its owner when they&apos;re signed in. The name is the one on your account, or else
+            the one Google sent when you signed up, or the one you typed if you weren&apos;t signed in. With none of those,
+            it says &quot;Someone&quot;.
           </p>
         </Section>
 
@@ -195,8 +195,8 @@ export default function PrivacyPage() {
           </ul>
           <p>
             Other people&apos;s accounts keep what they typed or copied about you, such as their entry for you, what they
-            noted you like, gift messages, and gifts copied from your list. Erasing your account doesn&apos;t remove it;
-            ask for that too.
+            noted you like, and gifts copied from your list. Erasing your account doesn&apos;t remove that; ask for it
+            too. Gift messages other people wrote are kept, as theirs.
           </p>
           <p>
             If a gift is being ordered or is on its way, we wait until that&apos;s finished. If you claimed a gift on

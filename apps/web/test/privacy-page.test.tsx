@@ -47,6 +47,7 @@ describe("the privacy page", () => {
       expect.stringMatching(/^A person you added: we email your account's address to check, then erase/),
       expect.stringMatching(/^You, in someone else's account: .*only look for what you tell us/),
     ]);
+    expect(asking).toHaveTextContent(/Gift messages other people wrote are kept/);
     expect(asking).toHaveTextContent(/Other people's accounts keep what they typed or copied about you/);
     expect(section("What your account keeps")).toHaveTextContent(/emailed note .* within four days/);
   });
@@ -61,7 +62,7 @@ describe("the privacy page", () => {
   it("says who sees the name on a claim", () => {
     render(<PrivacyPage />);
     expect(section("What your account keeps")).toHaveTextContent(/everyone with the list's link.*except its owner/);
-    expect(section("What your account keeps")).toHaveTextContent(/name you typed/);
+    expect(section("What your account keeps")).toHaveTextContent(/by name, never by email/);
   });
 
   it("says what the AI gets when it looks for ideas", () => {

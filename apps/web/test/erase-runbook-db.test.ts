@@ -24,7 +24,7 @@ const stack = await localStack({ api: false });
 describe("the erase runbook", () => {
   it("has no SQL that the tests below don't run", () => {
     const counts = [BEFORE, ACCOUNT, PERSON, SEARCH].map((b) => b.length);
-    expect(counts).toEqual([1, 6, 6, 1]);
+    expect(counts).toEqual([1, 7, 6, 1]);
     expect(section.match(/```sql/g)).toHaveLength(counts.reduce((a, b) => a + b));
   });
 });
@@ -46,7 +46,7 @@ describe.skipIf(!stack)("the erase runbook's SQL (real local database)", () => {
   /** Runs a runbook block with its placeholders filled in, as a person would. */
   const run = async (sql: string, values: Record<string, string> = {}) => {
     for (const [name, value] of Object.entries(values)) sql = sql.replaceAll(name, value);
-    const left = sql.match(/\b(ACCOUNT_ID|ACCOUNT_EMAIL|PERSON_ID)\b/);
+    const left = sql.match(/\b(ACCOUNT_ID|ACCOUNT_EMAIL|PERSON_ID|ORDER_ID)\b/);
     if (left) throw new Error(`Nothing given for ${left[0]}`);
     return (await pg.query(sql)).rows;
   };
@@ -178,7 +178,7 @@ describe.skipIf(!stack)("the erase runbook's SQL (real local database)", () => {
     await file("person-photos", `${b.id}/${friend}/p.jpg`);
     const files = [capture, photo, `${mine.item}.jpg`].sort();
 
-    const [stop, wait, listFiles, erase, filesLeft, check] = ACCOUNT;
+    const [stop, wait, , listFiles, erase, filesLeft, check] = ACCOUNT;
     await run(stop, gone);
     expect(await rows("select paid_features, concierge_access from concierge.accounts where user_id = $1", a.id)).toEqual([
       { paid_features: false, concierge_access: false },
@@ -215,7 +215,7 @@ describe.skipIf(!stack)("the erase runbook's SQL (real local database)", () => {
     await order(a.id, await person(a.id, "Mom"), status);
     const gone = { ACCOUNT_ID: a.id, ACCOUNT_EMAIL: a.email };
     expect(await run(ACCOUNT[1], gone)).toMatchObject([{ status, theirs: true }]);
-    await expect(run(ACCOUNT[3], gone)).rejects.toThrow(/still being ordered/);
+    await expect(run(ACCOUNT[4], gone)).rejects.toThrow(/still being ordered/);
   });
 
   it("won't erase an account whose shared address someone's gift is going to", async () => {
@@ -224,14 +224,38 @@ describe.skipIf(!stack)("the erase runbook's SQL (real local database)", () => {
     await order(b.id, await person(b.id, "Ada"), "shipped", { address_source: "shared", address_owner_id: a.id });
     const gone = { ACCOUNT_ID: a.id, ACCOUNT_EMAIL: a.email };
     expect(await run(ACCOUNT[1], gone)).toMatchObject([{ status: "shipped", theirs: false }]);
-    await expect(run(ACCOUNT[3], gone)).rejects.toThrow(/still being ordered/);
+    await expect(run(ACCOUNT[4], gone)).rejects.toThrow(/still being ordered/);
+  });
+
+  it.each(["placed", "shipped"])("a %s gift Zinc says arrived can be marked, and then the account erased", async (status) => {
+    const a = await user("Ada");
+    const b = await user("Bo");
+    const gone = { ACCOUNT_ID: a.id, ACCOUNT_EMAIL: a.email };
+    const mine = await order(a.id, await person(a.id, "Mom"), status);
+    const theirs = await order(b.id, await person(b.id, "Ada"), status, { address_source: "shared", address_owner_id: a.id });
+    const [stop, wait, arrived, , erase] = ACCOUNT;
+    await run(stop, gone);
+    expect(await run(wait, gone)).toHaveLength(2);
+    for (const o of [mine, theirs]) {
+      expect(await run(arrived, { ORDER_ID: o.id })).toEqual([{ round_status: "delivered", applied: true }]);
+    }
+    expect(await run(wait, gone)).toEqual([]);
+    await run(erase, gone);
+    expect(await count("auth.users", "id = $1", a.id)).toBe(0);
+    expect(await count("concierge.order_addresses", "order_id = $1", theirs.id)).toBe(0);
+  });
+
+  it.each(["placing", "unconfirmed"])("a %s gift can't be marked as arrived", async (status) => {
+    const a = await user("Ada");
+    const { id } = await order(a.id, await person(a.id, "Mom"), status);
+    expect(await run(ACCOUNT[2], { ORDER_ID: id })).toMatchObject([{ applied: false }]);
   });
 
   it("won't erase while a round is being worked on", async () => {
     const a = await user("Ada");
     const { round } = await order(a.id, await person(a.id, "Mom"), "delivered");
     await pg.query("update concierge.gift_rounds set locked_until = now() + interval '5 minutes' where id = $1", [round]);
-    await expect(run(ACCOUNT[3], { ACCOUNT_ID: a.id, ACCOUNT_EMAIL: a.email })).rejects.toThrow(/being worked on/);
+    await expect(run(ACCOUNT[4], { ACCOUNT_ID: a.id, ACCOUNT_EMAIL: a.email })).rejects.toThrow(/being worked on/);
   });
 
   it("erases one person and leaves the rest of the account", async () => {
