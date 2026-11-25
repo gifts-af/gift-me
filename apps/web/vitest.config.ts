@@ -10,6 +10,7 @@ const LOCAL_DB_TESTS = [
   "modules/concierge/__tests__/code-columns-db.test.ts",
   "modules/concierge/__tests__/cost-record-db.test.ts",
   "lib/__tests__/wiring.test.ts",
+  "test/erase-runbook-db.test.ts",
   "modules/concierge/__tests__/add-from-link.test.ts",
   "modules/concierge/__tests__/approval-db.test.ts",
   "modules/concierge/__tests__/capture-store-scope.test.ts",
