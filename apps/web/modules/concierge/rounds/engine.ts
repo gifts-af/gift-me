@@ -2,12 +2,12 @@ import { nextAction, roundToCreate, toldBefore, type ScheduleSettings } from "@g
 import { errorFields, logEvent } from "@/lib/log";
 import type { IdeaOutcome } from "../ideas/run";
 import type { NotifyDeps } from "../notify/notify";
-import { planJobs, type JobMessage, type SendJobs } from "./fanout";
+import { planJobs, retryJob, type BuyerMessage, type JobMessage, type RoundMessage, type SendJobs } from "./fanout";
 import type { ClaimedRound, RoundStore } from "./store";
 import { retryDeliveredEmails } from "../tracking/delivered";
 import { runHeld, retryOrderedEmails, tellOwnerOfRejection, tellOwnersOfRejections } from "./money-path";
 import { LeaseLost } from "./lease-lost";
-import { dayOf, endedByMove, releaseQuietly, view, sendHeadsUp, ideaPass, isNoIdeas, moveToGenerating, restoreIdeas, sendStep, sendTooLate, trySend, finishStep } from "./steps";
+import { dayOf, endedByMove, releaseQuietly, view, sendHeadsUp, ideaPass, isNoIdeas, type IdeaTurn, moveToGenerating, restoreIdeas, sendStep, sendTooLate, trySend, finishStep } from "./steps";
 
 // The round engine (ALL-28, design §5.1). The daily tick creates rounds that
 // are due, then claims each due round with a lease and runs its next step:
@@ -52,6 +52,17 @@ export type EngineZinc = {
   lookahead: (userId: string, days: number, feeCents: number) => Promise<{ cents: number; atLeast: boolean }>;
   /** The user's Zinc wallet page, for "Top up your Zinc balance". */
   walletUrl: string;
+};
+
+/** What a round's ordinary steps need. No placing side: those steps never place a gift. EngineDeps fits it. */
+export type StepDeps = {
+  store: RoundStore;
+  notify: NotifyDeps;
+  now: Date;
+  generateIdeas: GenerateIdeas;
+  /** For the heads-up's low-balance warning; null where Zinc is off. */
+  zinc: Pick<EngineZinc, "wallet" | "lookahead" | "walletUrl"> | null;
+  clock?: () => number;
 };
 
 export type EngineDeps = {
@@ -246,9 +257,9 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
   if (tickDeadline === null) {
     for (const round of ideaTurns) await releaseQuietly(round, deps);
   } else {
-    const ideas = await ideaPass(ideaTurns, deps, s, tickDeadline);
-    advanced += ideas.advanced;
-    failed += ideas.failed;
+    const turns = await ideaPass(ideaTurns, deps, s, tickDeadline);
+    advanced += turns.filter((t) => t.result === "advanced").length;
+    failed += turns.filter((t) => t.result === "failed").length;
   }
 
   const summary = { enabled: true, created, advanced, failed };
@@ -257,47 +268,93 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
 }
 
 /**
- * What one queue job came to (ALL-125). "off": the fan-out switch (or, for a round message, the
+ * What one queue job came to. "off": the fan-out switch (or, for a round message, the
  * engine) is off. "busy": nothing was run, because another run holds the round, it's no longer
- * due, or it belongs to the other kind of message now.
+ * due, a date change ended it, or it belongs to the other kind of message now. "waiting": a round
+ * whose idea run was refused busy or at the daily limit, was off, found no AI credit or didn't
+ * start; no step finished and the round stays due.
  */
-export type JobResult = "off" | "busy" | "advanced" | "failed";
+export type JobResult = "off" | "busy" | "advanced" | "waiting" | "failed";
 
 /**
- * Runs one queue message (ALL-125): one round, or one buyer's held gifts. Every round is claimed
- * first (claim_round), so a step never runs twice at once and placing never runs on a round
- * someone else holds. Throws only when it fails before claiming any round (a setting it reads
- * first, the fan-out switch among them, couldn't be read): no lease is held, so handleJob
- * rethrows and the queue redelivers, which a deadline-day held gift can't wait a day for. A
- * failure once a round is claimed is logged and returns "failed": the lease stands, and the next
- * tick (and round_stuck) picks the round up.
+ * Runs one round message: the round's step, and its idea run when that's the step, then the
+ * follow-up when that run was refused busy. Its deps can't place a gift.
  */
-export async function runRoundJob(message: JobMessage, deps: EngineDeps): Promise<JobResult> {
+export async function runRoundMessage(message: RoundMessage, deps: StepDeps & { sendJobs: SendJobs }): Promise<JobResult> {
   const jobStartMs = (deps.clock ?? Date.now)();
+  const outcome = await runJob(message, deps, (progress) => roundJob(message.roundId, deps, jobStartMs, progress));
+  await sendRetry(message, outcome, deps);
+  return outcome.result;
+}
+
+/**
+ * The person has another idea run under way, so the round's turn comes again today: one delayed
+ * message, up to idea_busy_retries_max. Only once the round was given back, as the message has to
+ * claim it. Never throws: a round with no follow-up is still due for the next tick.
+ */
+async function sendRetry(message: RoundMessage, outcome: JobOutcome, deps: StepDeps & { sendJobs: SendJobs }): Promise<void> {
+  const { turn } = outcome;
+  if (turn?.result !== "waiting" || turn.ideas !== "refused:busy" || turn.release !== "released") return;
+  const notSent = (reason: "settings" | "send_failed") =>
+    logEvent("round_retry_not_sent", { round_id: message.roundId, user_id: turn.userId, reason });
+  let delaySeconds: number;
+  let retriesMax: number;
+  try {
+    [delaySeconds, retriesMax] = await Promise.all([deps.store.setting("idea_busy_retry_seconds"), deps.store.setting("idea_busy_retries_max")]);
+  } catch {
+    return notSent("settings");
+  }
+  if (delaySeconds <= 0 || (message.retry ?? 0) >= retriesMax) return;
+  try {
+    const { failed } = await deps.sendJobs([retryJob(message, dayOf(deps.now), delaySeconds)]);
+    if (failed > 0) notSent("send_failed");
+  } catch {
+    notSent("send_failed");
+  }
+}
+
+/** Runs one buyer message: the buyer's held gifts. */
+export async function runBuyerMessage(message: BuyerMessage, deps: EngineDeps): Promise<JobResult> {
+  return (await runJob(message, deps, (progress) => buyerJob(message.roundIds, deps, progress))).result;
+}
+
+/**
+ * What both kinds of message share. Every round is claimed first (claim_round), so a step never
+ * runs twice at once and placing never runs on a round someone else holds. Throws only when it
+ * fails before claiming any round (a setting it reads first, the fan-out switch among them,
+ * couldn't be read): no lease is held, so handleJob rethrows and the queue redelivers, which a
+ * deadline-day held gift can't wait a day for. A failure once a round is claimed is logged and
+ * comes back as "failed": the lease stands, and the next tick (and round_stuck) picks the round up.
+ */
+async function runJob(
+  message: JobMessage,
+  { store }: StepDeps,
+  job: (progress: JobProgress) => Promise<JobOutcome>,
+): Promise<JobOutcome> {
   const id: Record<string, string> = message.kind === "round" ? { round_id: message.roundId } : { user_id: message.userId };
   const progress: JobProgress = { claimed: false };
-  let result: JobResult;
-  let rounds = 0;
+  let outcome: JobOutcome;
   try {
-    if ((await deps.store.setting("round_fanout_enabled")) !== 1) result = "off";
-    else if (message.kind === "round") ({ result, rounds } = await roundJob(message.roundId, deps, jobStartMs, progress));
-    else ({ result, rounds } = await buyerJob(message.roundIds, deps, progress));
+    if ((await store.setting("round_fanout_enabled")) !== 1) outcome = { result: "off", rounds: 0 };
+    else outcome = await job(progress);
   } catch (err) {
     // Before any claim, handleJob logs it (with the alert) as it rethrows.
     if (!progress.claimed) throw err;
-    logEvent("round_job", { ...errorFields(err), kind: message.kind, result: "failed", ...id, rounds });
-    return "failed";
+    logEvent("round_job", { ...errorFields(err), kind: message.kind, result: "failed", ...id, rounds: 0 });
+    return { result: "failed", rounds: 0 };
   }
-  logEvent("round_job", { kind: message.kind, result, ...id, rounds });
-  return result;
+  const { result, rounds, turn } = outcome;
+  logEvent("round_job", { kind: message.kind, result, ...id, rounds, ...(turn?.ideas === undefined ? {} : { ideas: turn.ideas }) });
+  return outcome;
 }
 
-type JobOutcome = { result: JobResult; rounds: number };
+/** `turn` is the idea turn, when a round message's job had one; its `userId` is the round's. */
+type JobOutcome = { result: JobResult; rounds: number; turn?: IdeaTurn & { userId: string } };
 /** Set once the job holds a round's lease: from then on a failure is acknowledged, not redelivered. */
 type JobProgress = { claimed: boolean };
 
 /** A round message: the round's step, and its idea run when that's the step (one run, no per-tick cap). */
-async function roundJob(roundId: string, deps: EngineDeps, jobStartMs: number, progress: JobProgress): Promise<JobOutcome> {
+async function roundJob(roundId: string, deps: StepDeps, jobStartMs: number, progress: JobProgress): Promise<JobOutcome> {
   const { store } = deps;
   if (!(await engineOn(store))) return { result: "off", rounds: 0 };
   // Before the claim, so a failed read never leaves a lease held for round_lock_minutes.
@@ -310,7 +367,7 @@ async function roundJob(roundId: string, deps: EngineDeps, jobStartMs: number, p
     await releaseQuietly(round, deps);
     return { result: "busy", rounds: 0 };
   }
-  const step = await advanceClaimed(round, deps, s, false, 0);
+  const step = await guardedStep(round, deps, () => runStep(round, deps, s));
   if (step === "advanced") return { result: "advanced", rounds: 1 };
   if (step === "failed") return { result: "failed", rounds: 0 };
   let deadlineMs: number;
@@ -322,9 +379,9 @@ async function roundJob(roundId: string, deps: EngineDeps, jobStartMs: number, p
     await releaseQuietly(step.generate, deps);
     return { result: "failed", rounds: 0 };
   }
-  const ideas = await ideaPass([step.generate], deps, s, jobStartMs + deadlineMs, 1);
-  if (ideas.advanced > 0) return { result: "advanced", rounds: 1 };
-  return { result: ideas.failed > 0 ? "failed" : "busy", rounds: 0 };
+  // One round in, so one turn out.
+  const [turn] = await ideaPass([step.generate], deps, s, jobStartMs + deadlineMs, 1);
+  return { result: turn!.result, rounds: turn!.result === "advanced" ? 1 : 0, turn: { ...turn!, userId: round.userId } };
 }
 
 /**
@@ -464,7 +521,7 @@ async function createDueRounds(
 /** What a claimed round's step came to: done, failed, or an idea run for the idea pass (lease kept). */
 type StepResult = "advanced" | "failed" | { generate: ClaimedRound };
 
-/** Runs a claimed round's step. Never throws. */
+/** Runs a claimed round's step, a money round's included. Never throws. */
 async function advanceClaimed(
   round: ClaimedRound,
   deps: EngineDeps,
@@ -472,17 +529,24 @@ async function advanceClaimed(
   justPlaced: boolean,
   placeBy: number,
 ): Promise<StepResult> {
+  return guardedStep(round, deps, () =>
+    round.status === "needs_attention" ? runHeld(round, deps, s, justPlaced, placeBy) : runStep(round, deps, s),
+  );
+}
+
+/** The stuck check, the step, and what a failure comes to, for every claimed round. Never throws. */
+async function guardedStep(
+  round: ClaimedRound,
+  deps: StepDeps,
+  step: () => Promise<ClaimedRound | void>,
+): Promise<StepResult> {
   const ids = { round_id: round.id, user_id: round.userId, status: round.status, attempts: round.attempts };
   try {
     // `attempts` counts this claim, so above the limit means that many claims
     // already ended without finishing (a throw or a killed process). Log it for
     // the owner and still try: the round recovers by itself once the fault is fixed.
     if (round.attempts > (await deps.store.setting("round_max_attempts"))) logEvent("round_stuck", ids);
-    if (round.status === "needs_attention") {
-      await runHeld(round, deps, s, justPlaced, placeBy);
-      return "advanced";
-    }
-    const generate = await runStep(round, deps, s);
+    const generate = await step();
     return generate ? { generate } : "advanced";
   } catch (err) {
     if (await endedByMove(err, round, deps)) return "advanced";
@@ -492,7 +556,7 @@ async function advanceClaimed(
 }
 
 /** Runs a round's step; returns the round, still leased, when its step is an idea run. */
-async function runStep(claimed: ClaimedRound, deps: EngineDeps, s: ScheduleSettings): Promise<ClaimedRound | void> {
+async function runStep(claimed: ClaimedRound, deps: StepDeps, s: ScheduleSettings): Promise<ClaimedRound | void> {
   const { store, now } = deps;
   const today = dayOf(now);
   let round = claimed;

@@ -5,7 +5,7 @@ import type { Funding } from "../notify/templates";
 import { LeaseLost } from "./lease-lost";
 import type { ClaimedRound, RoundContext, RoundFinish } from "./store";
 import { money, sendEmail } from "./emails";
-import type { EngineDeps } from "./engine";
+import type { StepDeps } from "./engine";
 
 // Taking one ordinary step of a round: record the send, notify, finish (see engine.ts),
 // plus the heads-up and the idea pass.
@@ -22,7 +22,7 @@ const startOf = (day: CalendarDate) => new Date(`${day}T00:00:00Z`);
  * Whether a step stopped because the buyer changed the occasion's date, which ended the round:
  * a quiet stop, not a failure. A check that fails counts as no, so the failure is still seen.
  */
-export async function endedByMove(err: unknown, round: ClaimedRound, deps: EngineDeps): Promise<boolean> {
+export async function endedByMove(err: unknown, round: ClaimedRound, deps: StepDeps): Promise<boolean> {
   if (!(err instanceof LeaseLost)) return false;
   try {
     if (!(await deps.store.endedByMove(round.id))) return false;
@@ -34,13 +34,18 @@ export async function endedByMove(err: unknown, round: ClaimedRound, deps: Engin
   return true;
 }
 
-/** Gives a lease back without a step; a failure is only logged, as the lease expires anyway. */
-export async function releaseQuietly(round: ClaimedRound, deps: EngineDeps): Promise<void> {
+/** What giving a lease back came to. "ended": a date change had ended the round. "failed": the lease runs out by itself. */
+export type Release = "released" | "ended" | "failed";
+
+/** Gives a lease back without a step. Never throws: a failure is only logged, as the lease expires anyway. */
+export async function releaseQuietly(round: ClaimedRound, deps: StepDeps): Promise<Release> {
   try {
     if (!(await deps.store.release(round.id, round.lockedUntil))) throw new LeaseLost();
+    return "released";
   } catch (err) {
-    if (await endedByMove(err, round, deps)) return;
+    if (await endedByMove(err, round, deps)) return "ended";
     logEvent("round_release_failed", { round_id: round.id, user_id: round.userId, ...errorFields(err) });
+    return "failed";
   }
 }
 
@@ -49,7 +54,7 @@ export async function releaseQuietly(round: ClaimedRound, deps: EngineDeps): Pro
  * wallet, when auto top-up isn't known to be on. Only for a user with paid features and
  * Zinc connected; any Zinc error leaves it out rather than holding up the email.
  */
-async function headsUpFunding(round: ClaimedRound, deps: EngineDeps): Promise<Funding | undefined> {
+async function headsUpFunding(round: ClaimedRound, deps: StepDeps): Promise<Funding | undefined> {
   const { zinc, store } = deps;
   if (!zinc) return undefined;
   try {
@@ -101,7 +106,7 @@ export function view(round: ClaimedRound, ctx: RoundContext, sent: Set<StepKey>,
  * (T85). True when any did; the round stays generating, for sendHeadsUp. A failure (a database
  * without the function, say) never silences the round: the no-ideas email goes as if none came back.
  */
-export async function restoreIdeas(round: ClaimedRound, { store, now }: EngineDeps): Promise<boolean> {
+export async function restoreIdeas(round: ClaimedRound, { store, now }: StepDeps): Promise<boolean> {
   const ids = { round_id: round.id, user_id: round.userId };
   let back: { count: number; outcome: string | null };
   try {
@@ -120,7 +125,7 @@ export async function restoreIdeas(round: ClaimedRound, { store, now }: EngineDe
 export const isNoIdeas = (step: StepKey) => step === "no_ideas" || step === "no_ideas_again" || step === "no_ideas_late";
 
 /** Sends the heads-up with the round's saved ideas and moves it to awaiting approval. */
-export async function sendHeadsUp(round: ClaimedRound, deps: EngineDeps, s: ScheduleSettings): Promise<void> {
+export async function sendHeadsUp(round: ClaimedRound, deps: StepDeps, s: ScheduleSettings): Promise<void> {
   const ctx = await deps.store.roundContext(round.id);
   const sent = await deps.store.sentSteps(round.id);
   const funding = await headsUpFunding(round, deps);
@@ -132,21 +137,29 @@ export async function sendHeadsUp(round: ClaimedRound, deps: EngineDeps, s: Sche
 const USES_TURN: IdeaOutcome["status"][] = ["saved", "none", "failed", "deadline", "cost_cap"];
 
 /**
- * The idea pass (ALL-27, design §5.1 "Long steps"): the rounds waiting for ideas, nearest
+ * How one round's turn in the idea pass ended. "waiting": no step finished and the round stays due.
+ * "busy": it isn't ours any more. `ideas`: what its run came to ("saved", "refused:busy"), or why
+ * none started ("no_time", "no_turn"). `release`: how giving the lease back went, when that was all the turn did.
+ */
+export type IdeaTurn = { result: "advanced" | "waiting" | "busy" | "failed"; ideas?: string; release?: Release };
+
+/**
+ * The idea pass (design §5.1 "Long steps"): the rounds waiting for ideas, nearest
  * deadline first. Each run starts only while fewer than idea_rounds_per_tick have started and
  * its worst case fits before the tick's deadline; a refusal doesn't use a turn. Rounds that
  * get no turn are released, with no run counted, for the next tick. Once a run finds the AI
  * credit gone (no_credit), every later run would too, so the rest are released without one.
+ * Returns one turn per round.
  */
 export async function ideaPass(
   turns: ClaimedRound[],
-  deps: EngineDeps,
+  deps: StepDeps,
   s: ScheduleSettings,
   tickDeadline: number,
   /** A job's own cap (ALL-125), in place of reading idea_rounds_per_tick. */
   maxRuns?: number,
-): Promise<{ advanced: number; failed: number }> {
-  if (turns.length === 0) return { advanced: 0, failed: 0 };
+): Promise<IdeaTurn[]> {
+  if (turns.length === 0) return [];
   const { store } = deps;
   const clock = deps.clock ?? Date.now;
   let worstMs: number;
@@ -163,71 +176,95 @@ export async function ideaPass(
     worstMs = ideaRunWorstMs(aiMs, zincMs, listLookupsMax, zincPerSecond);
   } catch (err) {
     logEvent("ideas.pass_failed", { ...errorFields(err) });
-    for (const round of turns) await releaseQuietly(round, deps);
-    return { advanced: 0, failed: turns.length };
+    const unread: IdeaTurn[] = [];
+    for (const round of turns) unread.push({ result: "failed", release: await releaseQuietly(round, deps) });
+    return unread;
   }
 
-  let advanced = 0;
-  let failed = 0;
+  const done: IdeaTurn[] = [];
   let started = 0;
   let noCredit = false;
   const byDeadline = [...turns].sort((a, b) => (a.shipByDeadline < b.shipByDeadline ? -1 : a.shipByDeadline > b.shipByDeadline ? 1 : 0));
   for (const claimed of byDeadline) {
-    if (noCredit || started >= perTick || tickDeadline - clock() < worstMs) {
-      await releaseQuietly(claimed, deps);
+    const noTurn = noCredit || started >= perTick;
+    if (noTurn || tickDeadline - clock() < worstMs) {
+      const release = await releaseQuietly(claimed, deps);
+      // Ended by a date change: no run ended, so there's no outcome to tell.
+      done.push(release === "ended" ? { result: "busy", release } : { result: "waiting", ideas: noTurn ? "no_turn" : "no_time", release });
       continue;
     }
     const ids = { round_id: claimed.id, user_id: claimed.userId, status: claimed.status };
+    // Set as soon as the run ends, so a throw after it keeps what the run came to.
+    let ideas: string | undefined;
     try {
       // Saved as `generating` first, so a run that dies is tried again from there.
       let round = claimed;
       if (round.status !== "generating") {
         const regained = await moveToGenerating(round, deps);
-        if (!regained) continue; // another run took it in between; it carries on
+        if (!regained) {
+          done.push({ result: "busy" }); // another run took it in between; it carries on
+          continue;
+        }
         round = regained;
       }
       // moveToGenerating let go of the lease for a moment, and another run may have told the buyer it's too late.
       if ((await store.sentSteps(round.id)).has("no_ideas_late")) {
-        await releaseQuietly(round, deps);
+        done.push({ result: "busy", release: await releaseQuietly(round, deps) });
         continue;
       }
       const outcome = await deps.generateIdeas(
         { id: round.id, userId: round.userId, personId: round.personId },
         AbortSignal.timeout(Math.max(0, tickDeadline - clock())),
       );
+      ideas = cameTo(outcome);
       if (USES_TURN.includes(outcome.status)) started++;
       if (outcome.status === "no_credit") noCredit = true;
-      await afterIdeaRun(round, outcome, deps, s);
-      advanced++;
+      const release = await afterIdeaRun(round, outcome, ideas, deps, s);
+      if (release) done.push({ result: release === "ended" ? "busy" : "waiting", ideas, release });
+      else done.push({ result: "advanced", ideas });
     } catch (err) {
-      if (await endedByMove(err, claimed, deps)) continue;
+      if (await endedByMove(err, claimed, deps)) {
+        done.push({ result: "busy", ideas });
+        continue;
+      }
       logEvent("round_failed", { ...ids, ...errorFields(err) });
-      failed++;
+      done.push({ result: "failed", ideas });
     }
   }
-  return { advanced, failed };
+  return done;
 }
+
+/** What a run came to, for the log: "none", "refused:busy" (a reason, never text). */
+const cameTo = (outcome: IdeaOutcome) => (outcome.status === "refused" ? `refused:${outcome.reason}` : outcome.status);
 
 /**
  * The too-late email, once. A refusal keeps the record, so no duplicate tick or job can run or tell
  * again before the ship-by day; the close then emails the buyer instead (lateEmailSent).
  */
-export async function sendTooLate(round: ClaimedRound, ctx: RoundContext, sent: Set<StepKey>, deps: EngineDeps): Promise<void> {
+export async function sendTooLate(round: ClaimedRound, ctx: RoundContext, sent: Set<StepKey>, deps: StepDeps): Promise<void> {
   if (await trySend(round, ctx, "no_ideas_late", sent, deps)) return;
   logEvent("round_too_late_email_failed", { round_id: round.id, user_id: round.userId });
   await deps.store.recordSend(round.id, round.userId, "no_ideas_late");
   sent.add("no_ideas_late");
 }
 
-/** What a round does after its idea run (S1); `round` is generating, with its lease. */
-async function afterIdeaRun(round: ClaimedRound, outcome: IdeaOutcome, deps: EngineDeps, s: ScheduleSettings): Promise<void> {
+/**
+ * What a round does after its idea run (S1); `round` is generating, with its lease. Returns how the
+ * release went when the round was only given back to wait; nothing when it took a step.
+ */
+async function afterIdeaRun(
+  round: ClaimedRound,
+  outcome: IdeaOutcome,
+  ideas: string,
+  deps: StepDeps,
+  s: ScheduleSettings,
+): Promise<Release | void> {
   const { store } = deps;
-  // What the run came to, for round_step: "none", "refused:busy" (a reason, never text).
-  const ended = outcome.status === "refused" ? `refused:${outcome.reason}` : outcome.status;
-  const atDeadline = () => finishAt(round, startOf(round.shipByDeadline), deps, ended);
+  const atDeadline = () => finishAt(round, startOf(round.shipByDeadline), deps, ideas);
   const release = async () => {
-    await releaseQuietly(round, deps);
-    logEvent("round_step", { round_id: round.id, user_id: round.userId, status: round.status, next_status: round.status, step: `ideas:${ended}` });
+    const released = await releaseQuietly(round, deps);
+    logEvent("round_step", { round_id: round.id, user_id: round.userId, status: round.status, next_status: round.status, step: `ideas:${ideas}` });
+    return released;
   };
   switch (outcome.status) {
     case "saved":
@@ -281,11 +318,11 @@ async function afterIdeaRun(round: ClaimedRound, outcome: IdeaOutcome, deps: Eng
     }
     if (action.do === "wait") return atDeadline();
   }
-  return finishStep(round, ctx, sent, { status: "generating" }, deps, s, `ideas:${ended}`);
+  return finishStep(round, ctx, sent, { status: "generating" }, deps, s, `ideas:${ideas}`);
 }
 
 /** Finishes the round at its status, to be looked at again at `at`. */
-async function finishAt(round: ClaimedRound, at: Date, { store }: EngineDeps, step: string): Promise<void> {
+async function finishAt(round: ClaimedRound, at: Date, { store }: StepDeps, step: string): Promise<void> {
   if (!(await store.finish(round.id, round.lockedUntil, { status: round.status, nextActionAt: at }))) {
     throw new LeaseLost();
   }
@@ -293,7 +330,7 @@ async function finishAt(round: ClaimedRound, at: Date, { store }: EngineDeps, st
 }
 
 /** Saves `generating` and takes a fresh lease on the round, or null if someone else got it. */
-export async function moveToGenerating(round: ClaimedRound, { store, now }: EngineDeps): Promise<ClaimedRound | null> {
+export async function moveToGenerating(round: ClaimedRound, { store, now }: StepDeps): Promise<ClaimedRound | null> {
   const ok = await store.finish(round.id, round.lockedUntil, { status: "generating", nextActionAt: now });
   if (!ok) throw new LeaseLost();
   logEvent("round_step", { round_id: round.id, user_id: round.userId, status: round.status, next_status: "generating", step: null });
@@ -309,7 +346,7 @@ export async function sendStep(
   ctx: RoundContext,
   step: StepKey,
   sent: Set<StepKey>,
-  deps: EngineDeps,
+  deps: StepDeps,
   extra: Extra = {},
 ): Promise<void> {
   if (!(await trySend(round, ctx, step, sent, deps, extra))) throw new Error(`Sending ${step} failed`);
@@ -325,7 +362,7 @@ export async function trySend(
   ctx: RoundContext,
   step: StepKey,
   sent: Set<StepKey>,
-  deps: EngineDeps,
+  deps: StepDeps,
   extra: Extra = {},
 ): Promise<boolean> {
   if (!(await deps.store.holdsLease(round.id, round.lockedUntil))) throw new LeaseLost();
@@ -345,7 +382,7 @@ export async function finishStep(
   ctx: RoundContext,
   sent: Set<StepKey>,
   next: Omit<RoundFinish, "nextActionAt">,
-  { store, now }: EngineDeps,
+  { store, now }: StepDeps,
   s: ScheduleSettings,
   step: StepKey | `ideas:${string}` | null = null,
 ): Promise<void> {

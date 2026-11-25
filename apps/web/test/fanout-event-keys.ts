@@ -16,6 +16,8 @@ export const FANOUT_EVENT_KEYS = new Set([
   "round_id",
   "user_id",
   "rounds",
+  // What the idea run came to: a fixed outcome or refusal reason.
+  "ideas",
   "delivery_count",
   // errorFields(err)
   "name",

@@ -6,15 +6,15 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { Client } from "pg";
 import { addDays, type CalendarDate, type Database } from "@gifts-af/core";
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { LOCAL_DB, localStack } from "../../../test/local-db";
 import type { Channel } from "../notify/channels";
 import { createSupabaseNotifyStore } from "../notify/store";
 import { createSupabaseIdeaStore } from "../ideas/store";
 import { placeRound } from "../purchase/place";
 import type { PurchaseDeps } from "../purchase/store";
-import { advanceRound, runRoundJob, runTick, type EngineDeps, type GenerateIdeas } from "../rounds/engine";
-import { planJobs, type JobMessage, type SendJobs } from "../rounds/fanout";
+import { advanceRound, runBuyerMessage, runRoundMessage, runTick, type EngineDeps, type GenerateIdeas } from "../rounds/engine";
+import { planJobs, type JobMessage, type QueuedJob, type RoundMessage, type SendJobs } from "../rounds/fanout";
 import { createSupabaseRoundStore, type RoundStore } from "../rounds/store";
 import { FakeZinc } from "./fake-zinc";
 
@@ -35,7 +35,7 @@ describe.skipIf(!stack)("fan-out jobs (real local database, fake Zinc; ALL-125)"
 
   // Shared switches, saved and put back (another agent shares this database).
   const ON = ["round_fanout_enabled", "round_engine_enabled", "zinc_ordering_enabled", "idea_engine_enabled"];
-  const SAVED = [...ON, "idea_round_runs_per_day"];
+  const SAVED = [...ON, "idea_round_runs_per_day", "idea_busy_retry_seconds", "idea_busy_retries_max"];
   beforeAll(async () => {
     pg = new Client({ connectionString: LOCAL_DB });
     await pg.connect();
@@ -93,6 +93,12 @@ describe.skipIf(!stack)("fan-out jobs (real local database, fake Zinc; ALL-125)"
     return deps;
   }
 
+  /** Each message to its own function, as the job route does. */
+  const runJob = (message: JobMessage, deps: EngineDeps) =>
+    message.kind === "round"
+      ? runRoundMessage(message, { ...deps, sendJobs: async (jobs) => ({ sent: jobs.length, failed: 0 }) })
+      : runBuyerMessage(message, deps);
+
   async function newUser(): Promise<string> {
     const userId = randomUUID();
     users.push(userId);
@@ -107,21 +113,28 @@ describe.skipIf(!stack)("fan-out jobs (real local database, fake Zinc; ALL-125)"
   }
 
   type RoundOpts = { status: string; deadline: CalendarDate; nextAt: string; headsUpOn?: CalendarDate | null; idea?: boolean; fact?: boolean };
-  /** A round for a person of its own (idea runs are one at a time per person). */
-  async function newRound(userId: string, o: RoundOpts): Promise<{ roundId: string; ideaId: string | null }> {
+  async function newPerson(userId: string): Promise<string> {
     const person = await pg.query(
       `insert into public.people (user_id, name, relationship, recipient_first_name, recipient_last_name, address_line1, city, state, zip, country)
        values ($1, 'Mary', 'friend', 'Mary', 'Allen', '12 Oak St', 'Dayton', 'OH', '45402', 'US') returning id`,
       [userId],
     );
-    const personId = person.rows[0].id as string;
+    return person.rows[0].id;
+  }
+  /** A round for a person of its own (idea runs are one at a time per person), or for `on`'s. */
+  async function newRound(userId: string, o: RoundOpts, on?: { personId: string; kind: string }): Promise<{ roundId: string; ideaId: string | null }> {
+    const personId = on?.personId ?? (await newPerson(userId));
     if (o.fact) {
       await pg.query("insert into concierge.profile_facts (user_id, person_id, category, value, source) values ($1, $2, 'interest', 'pottery', 'capture')", [
         userId,
         personId,
       ]);
     }
-    const occasion = await pg.query("insert into concierge.occasions (user_id, person_id, kind) values ($1, $2, 'christmas') returning id", [userId, personId]);
+    const occasion = await pg.query("insert into concierge.occasions (user_id, person_id, kind) values ($1, $2, $3) returning id", [
+      userId,
+      personId,
+      on?.kind ?? "christmas",
+    ]);
     const round = await pg.query(
       `insert into concierge.gift_rounds (user_id, person_id, occasion_id, occasion_year, occasion_date, ship_by_deadline, budget_cents, status, next_action_at, heads_up_on)
        values ($1, $2, $3, 2030, $4::date + 10, $4::date, 20000, $5, $6, $7) returning id`,
@@ -192,7 +205,7 @@ describe.skipIf(!stack)("fan-out jobs (real local database, fake Zinc; ALL-125)"
     // The first POST waits, so the other job runs while the first still holds the lease.
     let open!: () => void;
     zinc.gate = new Promise<void>((resolve) => (open = resolve));
-    const jobs = [runRoundJob(message, engine(now)), runRoundJob(message, engine(now))];
+    const jobs = [runJob(message, engine(now)), runJob(message, engine(now))];
     await Promise.race([Promise.race(jobs), pause(3000)]);
     open();
     const results = await Promise.all(jobs);
@@ -214,7 +227,7 @@ describe.skipIf(!stack)("fan-out jobs (real local database, fake Zinc; ALL-125)"
     const jobs = planJobs(await onlyOurs(deps.store, new Set([earlier, later])).dueRounds(now), true, now, false);
     expect(jobs.map((j) => j.message)).toEqual([{ kind: "buyer", userId, roundIds: [earlier, later] }]);
 
-    expect(await runRoundJob(jobs[0]!.message, deps)).toBe("advanced");
+    expect(await runJob(jobs[0]!.message, deps)).toBe("advanced");
 
     expect(zinc.posts).toHaveLength(1);
     expect((await orderRows(earlier))[0].status).not.toBe("held");
@@ -266,7 +279,7 @@ describe.skipIf(!stack)("fan-out jobs (real local database, fake Zinc; ALL-125)"
     const results: string[] = [];
     // Every message's job starts at once, each with its own client.
     const sendJobs: SendJobs = async (jobs) => {
-      results.push(...(await Promise.all(jobs.map((j) => runRoundJob(j.message, engine(now, generateIdeas))))));
+      results.push(...(await Promise.all(jobs.map((j) => runJob(j.message, engine(now, generateIdeas))))));
       return { sent: jobs.length, failed: 0 };
     };
     const tick = engine(now, generateIdeas);
@@ -287,4 +300,190 @@ describe.skipIf(!stack)("fan-out jobs (real local database, fake Zinc; ALL-125)"
       expect(new Date(row.next_action_at).getTime()).toBeLessThanOrEqual(now.getTime());
     }
   }, 60_000);
+
+  describe("a round refused busy", () => {
+    const set = (key: string, value: number) => pg.query("update concierge.app_settings set value = $2 where key = $1", [key, String(value)]);
+    const runsOf = async (roundId: string) =>
+      (await pg.query("select count(*)::int as n from concierge.idea_runs where round_id = $1", [roundId])).rows[0].n as number;
+    // Rows can't show overlap: started_at is the test's clock and finished_at the real one. So the
+    // fake runs leave their own marks, and everything here is one person's.
+    let marks: string[];
+    let active: number;
+    let mostActive: number;
+    let sent: QueuedJob[];
+    let open: () => void;
+    let held: Promise<void>;
+    let log: MockInstance;
+    let now: Date;
+
+    beforeEach(async () => {
+      marks = [];
+      active = 0;
+      mostActive = 0;
+      sent = [];
+      held = new Promise<void>((resolve) => (open = resolve));
+      log = vi.spyOn(console, "log").mockImplementation(() => {});
+      // A random far-off year, so the daily count is the test's own.
+      now = new Date(`${3000 + Math.floor(Math.random() * 5000)}-07-01T12:00:00Z`);
+      await set("idea_round_runs_per_day", 5);
+      await set("idea_busy_retry_seconds", 300);
+      await set("idea_busy_retries_max", 3);
+    });
+    afterEach(() => {
+      open();
+      log.mockRestore();
+    });
+
+    /** A real run (start_idea_run and its finish) with no AI between: it stays open until `open()`. */
+    const runAt =
+      (at: Date): GenerateIdeas =>
+      async (round) => {
+        const store = createSupabaseIdeaStore(client());
+        const started = await store.start({ userId: round.userId, personId: round.personId, roundId: round.id }, at);
+        if ("refused" in started) return { status: "refused", reason: started.refused };
+        marks.push(`start ${round.id}`);
+        mostActive = Math.max(mostActive, ++active);
+        await held;
+        marks.push(`finish ${round.id}`);
+        active--;
+        await store.finish(started.runId, "failed", 0);
+        return { status: "failed" };
+      };
+    const capture: SendJobs = async (jobs) => {
+      sent.push(...jobs);
+      return { sent: jobs.length, failed: 0 };
+    };
+    const job = (message: RoundMessage, at = now) => runRoundMessage(message, { ...engine(at, runAt(at)), sendJobs: capture });
+    const later = () => new Date(now.getTime() + 5 * 60_000);
+    /** Takes what was sent so far and runs it, as the queue would 5 minutes on. */
+    const runFollowUps = async () => {
+      const results: string[] = [];
+      for (const j of sent.splice(0)) results.push(await job(j.message as RoundMessage, later()));
+      return results;
+    };
+    const ideasLogged = (roundId: string) =>
+      log.mock.calls
+        .map((c) => JSON.parse(String(c[0])) as Record<string, unknown>)
+        .filter((e) => e.event === "round_job" && e.round_id === roundId)
+        .map((e) => `${String(e.result)} ${String(e.ideas)}`);
+
+    async function person() {
+      const userId = await newUser();
+      const personId = await newPerson(userId);
+      const year = now.getUTCFullYear();
+      await pg.query("insert into concierge.profile_facts (user_id, person_id, category, value, source) values ($1, $2, 'interest', 'pottery', 'capture')", [
+        userId,
+        personId,
+      ]);
+      const round = async (kind: string) =>
+        (
+          await newRound(
+            userId,
+            { status: "scheduled", deadline: `${year}-08-01`, nextAt: `${year}-06-30T00:00:00Z`, idea: false },
+            { personId, kind },
+          )
+        ).roundId;
+      return { userId, personId, round };
+    }
+    /** Both rounds' jobs at once; the one whose run started is held open until the other has ended. */
+    async function bothAtOnce() {
+      const p = await person();
+      const ids = [await p.round("christmas"), await p.round("valentines_day")];
+      const jobs = ids.map((roundId) => job({ kind: "round", roundId }));
+      await Promise.race(jobs);
+      open();
+      const results = await Promise.all(jobs);
+      const first = ids[results.indexOf("advanced")]!;
+      const second = ids[results.indexOf("waiting")]!;
+      expect([...results].sort()).toEqual(["advanced", "waiting"]);
+      expect(ideasLogged(second)).toEqual(["waiting refused:busy"]);
+      return { first, second };
+    }
+
+    it("AC-1: one person's two rounds both run the same day, the second by its follow-up", async () => {
+      const { first, second } = await bothAtOnce();
+      const followUps = sent.length;
+      await runFollowUps();
+
+      expect({ followUps, firstRuns: await runsOf(first), secondRuns: await runsOf(second) }).toEqual({
+        followUps: 1,
+        firstRuns: 1,
+        secondRuns: 1,
+      });
+      expect(mostActive).toBe(1);
+      expect(marks).toEqual([`start ${first}`, `finish ${first}`, `start ${second}`, `finish ${second}`]);
+      expect(sent).toEqual([]);
+    }, 30_000);
+
+    it("AC-2: with one run a day left, the follow-up is refused and sends nothing more", async () => {
+      await set("idea_round_runs_per_day", 1);
+      const { first, second } = await bothAtOnce();
+      expect(sent).toHaveLength(1);
+
+      expect(await runFollowUps()).toEqual(["waiting"]);
+      expect(ideasLogged(second)).toEqual(["waiting refused:busy", "waiting refused:daily_limit"]);
+      expect([await runsOf(first), await runsOf(second)]).toEqual([1, 0]);
+      expect(sent).toEqual([]);
+    }, 30_000);
+
+    it("AC-7: an on-demand run under way for the person puts their round off too", async () => {
+      const p = await person();
+      const roundId = await p.round("christmas");
+      await pg.query("insert into concierge.idea_runs (user_id, person_id, started_at) values ($1, $2, $3)", [
+        p.userId,
+        p.personId,
+        new Date(now.getTime() - 60_000),
+      ]);
+      expect(await job({ kind: "round", roundId })).toBe("waiting");
+      expect(sent.map((j) => ({ message: j.message, delaySeconds: j.delaySeconds }))).toEqual([
+        { message: { kind: "round", roundId, retry: 1 }, delaySeconds: 300 },
+      ]);
+      expect((await roundRow(roundId)).locked_until).toBeNull();
+      expect(await runsOf(roundId)).toBe(0);
+    }, 30_000);
+
+    it("AC-3: two copies of one message make one run and no follow-up", async () => {
+      const roundId = await (await person()).round("christmas");
+      const jobs = [job({ kind: "round", roundId }), job({ kind: "round", roundId })];
+      await Promise.race(jobs);
+      open();
+      expect((await Promise.all(jobs)).sort()).toEqual(["advanced", "busy"]);
+      expect(await runsOf(roundId)).toBe(1);
+      expect(sent).toEqual([]);
+    }, 30_000);
+
+    it("AC-9 (c): the person is deleted before the follow-up, so it does nothing", async () => {
+      const p = await person();
+      const roundId = await p.round("christmas");
+      await pg.query("insert into concierge.idea_runs (user_id, person_id, started_at) values ($1, $2, $3)", [p.userId, p.personId, now]);
+      expect(await job({ kind: "round", roundId })).toBe("waiting");
+      expect(sent).toHaveLength(1);
+
+      await pg.query("begin");
+      try {
+        await pg.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: p.userId, role: "authenticated" })]);
+        await pg.query("select public.delete_person($1)", [p.personId]);
+        await pg.query("commit");
+      } catch (err) {
+        await pg.query("rollback");
+        throw err;
+      }
+      // The app's delete is soft: the round stays, ended.
+      expect((await roundRow(roundId)).status).toBe("skipped");
+      // The other run is over, so only the deletion stops this one.
+      await pg.query("update concierge.idea_runs set finished_at = now() where person_id = $1", [p.personId]);
+
+      const followUp = sent[0]!;
+      expect(await runFollowUps()).toEqual(["busy"]);
+
+      // An erasure removes the rows themselves.
+      await pg.query("delete from public.people where id = $1", [p.personId]);
+      expect(await roundRow(roundId)).toBeUndefined();
+      sent.push(followUp);
+      expect(await runFollowUps()).toEqual(["busy"]);
+
+      expect(await runsOf(roundId)).toBe(0);
+      expect(sent).toEqual([]);
+    }, 30_000);
+  });
 });
