@@ -2,7 +2,7 @@
 -- the settings that go with it. Only the server claims, releases or turns off.
 begin;
 \ir _helpers.psql
-select plan(52);
+select plan(55);
 
 select tests.create_user('a@example.com') as a \gset
 select tests.create_user('b@example.com') as b \gset
@@ -10,6 +10,13 @@ select tests.create_user('c@example.com') as c \gset
 select tests.create_user('d@example.com') as d \gset
 select tests.create_user('t@example.com') as t \gset
 select tests.create_user('x@example.com') as x \gset
+
+-- ─── The shipped settings, before any test changes them ──────────────────────
+
+select is(concierge.setting_int('google_import_enabled'), 0, 'Google import is off');
+select is(concierge.setting_int('concierge_requests_per_day'), 10, '10 requests a day');
+select is(concierge.setting_int('amazon_paste_lookups_per_user_per_day'), 10, '10 Amazon lookups a day per person');
+select is(concierge.setting_int('amazon_paste_lookups_per_day_total'), 200, '200 Amazon lookups a day across everyone');
 
 -- ─── Reading ─────────────────────────────────────────────────────────────────
 
@@ -71,6 +78,24 @@ select throws_ok(
   '42501', null, 'a user cannot turn access off'
 );
 
+-- The function grants themselves (anon can't even reach the schema, so the
+-- refusals above don't prove them).
+select is(
+  (select bool_or(has_function_privilege(r, f, 'execute'))
+     from unnest(array['anon', 'authenticated']) r,
+          unnest(array['concierge.claim_access_request(uuid)', 'concierge.release_access_request(uuid)',
+                        'concierge.turn_off_concierge_access(uuid)']) f),
+  false, 'anon and authenticated cannot execute claim, release or turn-off'
+);
+select is(has_function_privilege('anon', 'concierge.has_concierge_access(uuid)', 'execute'), false,
+  'anon cannot execute the access check');
+select is(
+  (select bool_and(has_function_privilege('service_role', f, 'execute'))
+     from unnest(array['concierge.has_concierge_access(uuid)', 'concierge.claim_access_request(uuid)',
+                       'concierge.release_access_request(uuid)', 'concierge.turn_off_concierge_access(uuid)']) f),
+  true, 'the server can execute all four'
+);
+
 select tests.act_as_anon();
 select throws_ok(
   format($q$select concierge.claim_access_request(%L)$q$, :'b'),
@@ -126,9 +151,9 @@ select is(concierge.claim_access_request(:'c'), 'claimed', 'after a release the 
 
 -- Another user can't read b's flag or date straight from the table.
 select tests.act_as(:'c');
-select is(
-  (select count(*) from concierge.accounts where user_id = :'b'), 0::bigint,
-  'another user reads none of the flag or date from the table'
+select is_empty(
+  format($q$select concierge_access, access_requested_at from concierge.accounts where user_id = %L$q$, :'b'),
+  'another user reads neither the flag nor the date from the table'
 );
 select tests.reset_role();
 
@@ -267,13 +292,6 @@ select is(
   (select over_budget_pct from concierge.accounts where user_id = :'f'), 33,
   'the backfill leaves an existing row''s other settings alone'
 );
-
--- ─── Settings ────────────────────────────────────────────────────────────────
-
-select is(concierge.setting_int('google_import_enabled'), 0, 'Google import is off');
-select is(concierge.setting_int('concierge_requests_per_day'), 10, '10 requests a day');
-select is(concierge.setting_int('amazon_paste_lookups_per_user_per_day'), 10, '10 Amazon lookups a day per person');
-select is(concierge.setting_int('amazon_paste_lookups_per_day_total'), 200, '200 Amazon lookups a day across everyone');
 
 select * from finish();
 rollback;
