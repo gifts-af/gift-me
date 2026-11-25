@@ -12,7 +12,7 @@ const photo = new File(["x".repeat(100)], "me.png", { type: "image/png" });
 
 type Result = { ok: true; id: string } | { ok: false; error: string; existingId?: string };
 
-function setup(addResult: Result = { ok: true, id: "new1" }, extra: { initialName?: string; shareToken?: string; heldGiftNotice?: boolean } = {}) {
+function setup(addResult: Result = { ok: true, id: "new1" }, extra: { initialName?: string; shareToken?: string; heldGiftNotice?: boolean; initialBirthday?: { month: number; day: number } } = {}) {
   const calls: string[] = [];
   const action = vi.fn(async (...args: [unknown, FormData]) => {
     void args;
@@ -73,6 +73,27 @@ describe("PersonForm", () => {
     expect(form.get("birthYear")).toBe("");
     expect(form.has("anniversaryMonth")).toBe(false);
     expect(t.upload).not.toHaveBeenCalled();
+  });
+
+  it("starts with the list owner's birthday, and sends it with no year (ALL-182 AC-5)", async () => {
+    const t = setup(undefined, { initialBirthday: { month: 3, day: 14 } });
+    expect(screen.getByText("From their list. You can change it.")).toBeVisible();
+    await fill();
+    await save();
+    expect(sent(t).get("birthdayMonth")).toBe("3");
+    expect(sent(t).get("birthdayDay")).toBe("14");
+    expect(sent(t).get("birthYear")).toBe("");
+  });
+
+  it("sends none once it's cleared, and the note goes (ALL-182 AC-5)", async () => {
+    const t = setup(undefined, { initialBirthday: { month: 3, day: 14 } });
+    await userEvent.selectOptions(screen.getByLabelText("Birthday month"), "Month");
+    expect(screen.queryByText("From their list. You can change it.")).toBeNull();
+    await userEvent.clear(screen.getByLabelText("Birthday day"));
+    await fill();
+    await save();
+    expect(sent(t).get("birthdayMonth")).toBe("");
+    expect(sent(t).get("birthdayDay")).toBe("");
   });
 
   it("shows the anniversary only for a wife or husband", async () => {

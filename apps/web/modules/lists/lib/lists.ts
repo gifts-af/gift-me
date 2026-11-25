@@ -255,6 +255,21 @@ export async function getPersonListPhotos(personId: string): Promise<ListPhoto[]
 }
 
 /**
+ * The birthday the owner of a current link saved to share, for the Add form.
+ * Null when there's none, or the read failed: the form then starts empty.
+ */
+export async function getOwnerBirthday(token: string): Promise<{ month: number; day: number } | null> {
+  if (!UUID_PATTERN.test(token)) return null;
+  const supabase = await createClient();
+  const { data, error } = await supabase.schema("lists").rpc("owner_birthday", { p_token: token });
+  if (error) {
+    logEvent("lists.owner_birthday_failed", { code: typeof error.code === "string" ? error.code : null });
+    return null;
+  }
+  return data as { month: number; day: number } | null;
+}
+
+/**
  * What a link preview may say about a list: the owner's name and a gift
  * count. Null for an unknown or malformed token. Callable by anyone.
  */

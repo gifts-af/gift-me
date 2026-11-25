@@ -7,13 +7,13 @@ import { readAccess } from "@/components/concierge-gate";
 import { appSettingInt } from "@/lib/app-settings";
 import { errorFields, logEvent } from "@/lib/log";
 import { createClient } from "@/lib/supabase/server";
-import { getSharedList } from "@/modules/lists";
+import { getOwnerBirthday, getSharedList } from "@/modules/lists";
 import { addPersonAction, setPhotoAction } from "../actions";
 import { PersonForm } from "../person-form";
 
 // Add someone you buy for. Signed-out visitors are sent to sign in by proxy.ts.
 // From a shared list's "Add … to your people" (ALL-123), `?list=<token>`
-// starts the form with the owner's name and links the list on save.
+// starts the form with the owner's name, and their birthday if they share it, and links the list on save.
 export default function NewPersonPage({ searchParams }: { searchParams: Promise<{ list?: string | string[] }> }) {
   return (
     <>
@@ -34,12 +34,12 @@ export default function NewPersonPage({ searchParams }: { searchParams: Promise<
  * The list behind a `?list=` token, when it's someone else's; getSharedList
  * refuses a malformed token. If the list can't be read, the plain form shows.
  */
-async function fromList(list: string | string[] | undefined): Promise<{ token: string; ownerName: string } | null> {
+async function fromList(list: string | string[] | undefined): Promise<{ token: string; ownerName: string; birthday: { month: number; day: number } | null } | null> {
   if (typeof list !== "string") return null;
   try {
     const shared = await getSharedList(list);
     if (!shared || shared.isOwner) return null;
-    return { token: list, ownerName: shared.ownerName ?? "" };
+    return { token: list, ownerName: shared.ownerName ?? "", birthday: await getOwnerBirthday(list) };
   } catch (error) {
     unstable_rethrow(error);
     logEvent("people.share_read_failed", errorFields(error));
@@ -66,6 +66,7 @@ async function Form({ searchParams }: { searchParams: Promise<{ list?: string | 
       px={px}
       doneHref="/give"
       initialName={link?.ownerName}
+      initialBirthday={link?.birthday ?? undefined}
       shareToken={link?.token}
       heldGiftNotice={access?.access !== false}
     />

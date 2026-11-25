@@ -1,5 +1,8 @@
 import type { MyAddress } from "@/lib/account-address";
+import type { MyBirthday } from "@/lib/account-birthday";
+import { monthDay } from "@/lib/occasion-format";
 import type { PaymentSummary } from "@/modules/concierge";
+import type { MyList } from "@/modules/lists";
 
 /** The right-hand text of Settings' "Paying for gifts" row (ALL-115 AC-9). */
 const PAYMENT_TEXT: Record<PaymentSummary | "error", string> = {
@@ -21,4 +24,18 @@ export function paymentRowText(s: PaymentSummary | "error"): string {
 export function addressRowText(a: MyAddress): string {
   if (a.kind === "unavailable") return "Couldn't load";
   return a.kind === "saved" ? a.address.line1 : "Not added";
+}
+
+/** The right-hand text of Settings' "Birthday" row. */
+export function birthdayRowText(b: MyBirthday): string {
+  if (b.kind === "unavailable") return "Couldn't load";
+  return b.kind === "saved" ? monthDay(b) : "Not added";
+}
+
+/**
+ * Birthday shows once you have a list, since it does nothing before that
+ * (principle 10). A saved one always shows, so it can be removed.
+ */
+export function showBirthdayRow(b: MyBirthday, myList: MyList | null, on: boolean): boolean {
+  return b.kind === "saved" || (on && (myList?.list != null || myList?.loadError != null));
 }

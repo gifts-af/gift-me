@@ -127,6 +127,10 @@ export default function PrivacyPage() {
             people whose lists you use, can&apos;t see your captures or notes; we can, only to fix a problem. A gift
             photo you add to your list is the exception: it&apos;s public, as described above.
           </p>
+          <p>
+            You can save your birthday in Settings: the month and day, never the year. Anyone signed in with your list
+            link can see it when they add you to their people, and they keep it if you remove yours later.
+          </p>
         </Section>
 
         <Section title="What the AI reads">
