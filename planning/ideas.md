@@ -128,7 +128,7 @@ One line each (CLAUDE.md > Scope freeze). Reviewed when the freeze lifts.
 - Tell the buyer when a note or capture was read but nothing was learned from it (ALL-144's live check).
 - On the fix page, "Yes, pick it" in the over-budget pop-up looks like it bought the gift; it only unlocks "Buy anyway" (ALL-29's real order).
 - List gifts from stores we can't price, and Amazon ones with no product code, assume free shipping, so an order can be refused on price (ALL-29's real order).
-- Find friends and their lists: (1) after linking someone's list, offer to share yours back, which adds you to their people if you aren't there already; (2) Google Contacts email matching, where a match sends a request and never opens a list, with opt-in findability, verified emails only, lookup caps, and contact emails discarded after the check (would revise T45) (Jim, 2026-11-25).
+- Find friends and their lists: (1) after linking someone's list, offer to share yours back, which adds you to their people if you aren't there already, for anyone holding the link; (2) Google Contacts email matching, where a match sends a request and never opens a list, with verified emails only, lookup caps, and contact emails discarded after the check (would revise T45). Two visible toggles, findable and can be added back, both on by default for new users (Jim, 2026-11-25).
 
 ## A common thread
 
