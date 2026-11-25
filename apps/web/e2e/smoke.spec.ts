@@ -73,6 +73,8 @@ test("the site opens on the tab this browser last used, My list on a new one", a
 
   await page.getByRole("link", { name: "Get", exact: true }).click();
   await expect(page).toHaveURL(/\/lists$/);
+  // Sitting on My list prefetches Give's link; that mustn't count as opening it.
+  await page.waitForLoadState("networkidle");
   await openSite(page);
   await expect(page).toHaveURL(/\/lists$/);
 

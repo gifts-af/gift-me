@@ -4,7 +4,7 @@
 
 **Goal:** anyone can sign up at giftsaf.com, build a wish list and share it, free; the concierge (Give) is something they request and we approve.
 
-**Links:** [ALL-179](https://linear.app/allens-forever/issue/ALL-179). Revises T34 (invite only), T30 and T58 (everyone lands on Give at `/`), T37 and the ALL-71 waitlist, T43 (a signed-in request has no Turnstile), T45 (import off for now), T69's reason, T78 (the shared-list card) and planning 57's caps. Keeps planning decision 53 (what costs money is off unless `paid_features` is on) and D59 (friends use the concierge once card payments ship).
+**Links:** [ALL-179](https://linear.app/allens-forever/issue/ALL-179). Revises T34 (invite only), T30 and T58 (everyone lands on Give at `/`; landing since revised by T98), T37 and the ALL-71 waitlist, T43 (a signed-in request has no Turnstile), T45 (import off for now), T69's reason, T78 (the shared-list card) and planning 57's caps. Keeps planning decision 53 (what costs money is off unless `paid_features` is on) and D59 (friends use the concierge once card payments ship).
 
 **Scope freeze:** built as the owner's exception (2026-11-25).
 

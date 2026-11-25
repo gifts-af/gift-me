@@ -80,7 +80,8 @@ test("take the tour, then sign in", async ({ page }) => {
   // eslint-disable-next-line no-restricted-syntax -- this tests the tour's "Already have an account? Sign in" form
   await page.getByLabel("Password").fill(TEST_USER.password);
   await page.getByRole("button", { name: "Sign in" }).click();
-  await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
+  // A browser that's never opened Give lands on your own list (T98).
+  await expect(page.getByRole("region", { name: "My list" })).toBeVisible();
 });
 
 test("take the list tour from the home page", async ({ page }) => {

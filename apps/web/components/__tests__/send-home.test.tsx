@@ -36,8 +36,9 @@ afterEach(() => {
 describe("SendHome", () => {
   it.each<[string, string | null, Reply, string | undefined, string]>([
     ["My list on a new browser, even with access", "u1", row(true), undefined, "/lists"],
-    ["Give when it was the last tab used, with access", "u1", row(true), "give", "/give"],
-    ["My list when Give was last used but there's no access", "u1", row(false), "give", "/lists"],
+    ["Give when it was the last tab used", "u1", row(true), "give", "/give"],
+    ["Give when it was the last tab used, without concierge access too", "u1", row(false), "give", "/give"],
+    ["My list when it was the last tab used", "u1", row(true), "get", "/lists"],
     ["My list without (AC-3)", "u1", row(false), undefined, "/lists"],
     ["My list with no account row (AC-3)", "u1", { data: null, error: null }, undefined, "/lists"],
     ["sign-in with no session", null, row(true), undefined, "/auth/login"],
