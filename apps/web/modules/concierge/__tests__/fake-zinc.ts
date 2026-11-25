@@ -83,7 +83,7 @@ export class FakeZinc {
       const price = this.products.get(url)?.priceCents;
       if (price !== undefined && body.max_price < price) {
         const id = `zn_${this.orders.size + 1}_${ref.slice(0, 8)}`;
-        this.orders.set(ref, { id, status: "order_failed", job_result: { success: false, error_type: "max_price_exceeded" } });
+        this.orders.set(ref, { id, status: "order_failed", job_result: { success: false, error_type: "max_price_exceeded", error_details: null, price_components: null, estimated_delivery: null, merchant_order_ids: null } });
         return json(200, { id });
       }
       const b = this.next(url);

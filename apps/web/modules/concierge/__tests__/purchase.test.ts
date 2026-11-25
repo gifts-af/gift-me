@@ -465,7 +465,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     zinc.orders.set(a.id, {
       id: "zn_late",
       status: "order_placed",
-      job_result: { success: true, price_components: { subtotal: 4000, shipping: 0, tax: 320, total: 4320, currency: "USD" } },
+      job_result: { success: true, error: null, error_type: null, error_details: null, estimated_delivery: null, price_components: { subtotal: 4000, shipping: 0, tax: 320, total: 4320, currency: "USD", line_items: null } },
     });
     zinc.posts = [];
     await placeHeldForUser(u.userId, deps());
@@ -488,7 +488,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     zinc.plan.set(urlOf(r.ideaIds[0]), ["timeout"]);
     await approveAndBuy({ userId: u.userId, roundId: r.roundId, ideaIds: r.ideaIds }, deps());
     const [a] = await orders(r.roundId);
-    zinc.orders.set(a.id, { id: "zn_gone", status: "failed", job_result: { success: false, error_type: "out_of_stock" } } as never);
+    zinc.orders.set(a.id, { id: "zn_gone", status: "order_failed", job_result: { success: false, error: "Product is currently out of stock", error_type: "out_of_stock", price_components: null, estimated_delivery: null, merchant_order_ids: null } });
     advanceRound.mockClear();
     const later = new Date(Date.now() + 31 * 60_000);
     await sweepStalePlacing(deps({ now: later }));
@@ -498,7 +498,7 @@ describe.skipIf(!dbUp)("approve, place and sweep (real local database, fake Zinc
     zinc.plan.set(urlOf(v.ideaIds[0]), ["timeout"]);
     await approveAndBuy({ userId: u.userId, roundId: v.roundId, ideaIds: v.ideaIds }, deps());
     const [b] = await orders(v.roundId);
-    zinc.orders.set(b.id, { id: "zn_ok", status: "order_placed", job_result: { success: true } });
+    zinc.orders.set(b.id, { id: "zn_ok", status: "order_placed", job_result: { success: true, error: null, error_type: null, error_details: null, estimated_delivery: null, price_components: null } });
     const orderPlaced = vi.fn(async () => Promise.reject(new Error("email down")));
     expect(await sweepStalePlacing(deps({ now: later, orderPlaced }))).toBeGreaterThanOrEqual(1);
     expect((await orders(v.roundId))[0]).toMatchObject({ status: "placed" });
