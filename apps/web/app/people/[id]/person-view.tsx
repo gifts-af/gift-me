@@ -9,6 +9,7 @@ import { appSettingInt } from "@/lib/app-settings";
 import { createClient } from "@/lib/supabase/server";
 import { todayForRequest } from "@/lib/today";
 import { getPerson, countSavedGifts, getProfile, hasPastGifts, onDemandIdeas, type Db, type PersonDetail } from "@/modules/concierge";
+import { getPersonListPhotos, getPersonShareToken } from "@/modules/lists";
 import { SettingsRow } from "@/components/settings-row";
 import {
   deleteFactAction,
@@ -21,6 +22,7 @@ import {
 } from "../actions";
 import { BudgetRow } from "./budget-row";
 import { DeletePerson } from "./delete-person";
+import { LinkedList } from "./linked-list";
 import { ListLink } from "./list-link";
 import { Occasions } from "./occasions";
 import { ReadinessBanner } from "./readiness";
@@ -71,19 +73,22 @@ export async function PersonView({
   if (!userId) redirect("/");
   const person = await getPerson(id, await todayForRequest());
   if (!person) notFound();
-  const [profile, savedGifts, ideas, cardSetting, pastGifts, access] = await Promise.all([
+  // With the card on, the top of the page has the link to their list, or asks for one, instead of
+  // the Their list row. Read first, so off also stops the reads behind the link.
+  const listAtTop = (await appSettingInt("list_link_card_enabled")) === 1;
+  const showList = listAtTop && person.keepsList;
+  const [profile, savedGifts, ideas, pastGifts, listPhotos, listToken, access] = await Promise.all([
     getProfile(supabase as unknown as Db, person.id, person.keepsList),
     countSavedGifts(person.id),
     onDemandIdeas(supabase as unknown as Db, person.id),
-    appSettingInt("list_link_card_enabled"),
     hasPastGifts(person.id, supabase as unknown as Db, new Date()),
+    showList ? getPersonListPhotos(person.id) : [],
+    showList ? getPersonShareToken(person.id) : null,
     readAccess(),
   ]);
   // A failed check hides the concierge's parts, as no access does. Not where a
   // held gift would ship: that's money, so it's said unless there's surely none.
   const hasAccess = access?.access ?? false;
-  // With the card on, an unlinked person gets the prompt at the top instead of the Their list row.
-  const askForList = cardSetting === 1 && !person.keepsList;
   const base = `/people/${person.id}`;
 
   return (
@@ -103,7 +108,17 @@ export async function PersonView({
         </div>
       </header>
 
-      {askForList && (
+      {showList && (
+        // Straight to the list: the router would replay a redirect from Their list with an earlier
+        // photo's gift still on it.
+        <LinkedList
+          name={person.name}
+          href={listToken ? `/share/${listToken}` : `${base}/list`}
+          photos={listToken ? listPhotos : []}
+        />
+      )}
+
+      {listAtTop && !person.keepsList && (
         <ListLink variant="prompt" name={person.name} personId={person.id} keepsList={false} heldGiftNotice={access?.access !== false} linkAction={linkUnlinkedListAction} />
       )}
 
@@ -157,7 +172,7 @@ export async function PersonView({
           value={savedGifts > 0 ? String(savedGifts) : "None"}
         />
         {pastGifts && <SettingsRow href={`${base}/gifts`} label="Past gifts" value="" />}
-        {!askForList && (
+        {!listAtTop && (
           <SettingsRow href={`${base}/list`} label="Their list" value={person.keepsList ? "Linked" : "Not linked"} />
         )}
         <SettingsRow href={`${base}/address`} label="Shipping address" value={addressSummary(person.address)} />

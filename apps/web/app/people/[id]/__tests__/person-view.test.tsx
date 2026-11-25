@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 
 const getPerson = vi.hoisted(() => vi.fn());
 const cardEnabled = vi.hoisted(() => ({ value: 1 }));
@@ -12,6 +12,9 @@ const readAccess = vi.hoisted(() => vi.fn());
 const hasPastGifts = vi.hoisted(() => vi.fn(async (...args: unknown[]) => (void args, false)));
 vi.mock("@/modules/concierge", () => ({ hasPastGifts, getPerson, getProfile, countSavedGifts, onDemandIdeas }));
 vi.mock("@/components/concierge-gate", () => ({ readAccess }));
+const getPersonListPhotos = vi.hoisted(() => vi.fn(async (...args: unknown[]) => (void args, [] as { giftId: string; name: string; url: string }[])));
+const getPersonShareToken = vi.hoisted(() => vi.fn(async (...args: unknown[]) => (void args, "tok" as string | null)));
+vi.mock("@/modules/lists", () => ({ getPersonListPhotos, getPersonShareToken }));
 vi.mock("@/lib/app-settings", () => ({ appSettingInt: async () => cardEnabled.value }));
 vi.mock("@/lib/today", () => ({ todayForRequest: async () => "2026-11-01" }));
 vi.mock("@/lib/supabase/server", () => ({
@@ -107,13 +110,64 @@ describe("PersonView", () => {
       expect(screen.queryByRole("link", { name: /^Their list/ })).toBeNull();
     });
 
-    it("is gone for a linked person, who gets the Their list: Linked row", async () => {
+    it("gives way to one link to their list, above their gifts in progress, for a linked person", async () => {
+      getPerson.mockResolvedValue({ ...dad, keepsList: true });
+      render(await PersonView({ id: "p1", photoFailed: false, gifts: <p>Their gifts</p> }));
+      expect(screen.queryByText("Does Dad have a GiftsAF list?")).toBeNull();
+      expect(screen.getByRole("heading", { level: 2, name: "Dad's GiftsAF list" })).toBeInTheDocument();
+      const link = screen.getByRole("link", { name: "See their list" });
+      expect(link).toHaveAttribute("href", "/share/tok");
+      expect(link.compareDocumentPosition(screen.getByText("Their gifts")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(screen.queryByRole("link", { name: /^Their list/ })).toBeNull();
+    });
+
+    it("shows the photos of gifts on their list beside the link", async () => {
+      getPerson.mockResolvedValue({ ...dad, keepsList: true });
+      getPersonListPhotos.mockResolvedValueOnce([
+        { giftId: "g1", name: "Kettle", url: "https://x.test/1.jpg" },
+        { giftId: "g2", name: "Socks", url: "https://x.test/2.jpg" },
+      ]);
+      const { container } = await show();
+      expect(getPersonListPhotos.mock.calls.at(-1)).toEqual(["p1"]);
+      const photos = [...container.querySelectorAll("img")];
+      expect(photos.map((i) => i.getAttribute("src"))).toEqual(["https://x.test/1.jpg", "https://x.test/2.jpg"]);
+      for (const photo of photos) expect(photo).toHaveAttribute("referrerpolicy", "no-referrer");
+      // Each opens the list at its own gift.
+      expect(screen.getByRole("link", { name: "See Kettle on their list" })).toHaveAttribute("href", "/share/tok#gift-g1");
+      expect(screen.getByRole("link", { name: "See Socks on their list" })).toHaveAttribute("href", "/share/tok#gift-g2");
+      // A photo the store no longer serves leaves no broken image.
+      fireEvent.error(photos[0]);
+      expect([...container.querySelectorAll("img")].map((i) => i.getAttribute("src"))).toEqual(["https://x.test/2.jpg"]);
+      expect(screen.queryByRole("link", { name: "See Kettle on their list" })).toBeNull();
+    });
+
+    it("falls back to Their list, with no photos, when the list's link can't be read", async () => {
+      getPerson.mockResolvedValue({ ...dad, keepsList: true });
+      getPersonShareToken.mockResolvedValueOnce(null);
+      getPersonListPhotos.mockResolvedValueOnce([{ giftId: "g1", name: "Kettle", url: "https://x.test/1.jpg" }]);
+      const { container } = await show();
+      expect(screen.getByRole("link", { name: "See their list" })).toHaveAttribute("href", "/people/p1/list");
+      expect(container.querySelectorAll("img")).toHaveLength(0);
+    });
+
+    it("has no list link for an unlinked person, and reads no list", async () => {
+      getPersonListPhotos.mockClear();
+      getPerson.mockResolvedValue(dad);
+      await show();
+      expect(getPersonListPhotos).not.toHaveBeenCalled();
+      expect(screen.queryByRole("link", { name: "See their list" })).toBeNull();
+    });
+
+    it("keeps a linked person's Their list row with the setting at 0, with no link at the top and no list read", async () => {
+      getPersonListPhotos.mockClear();
+      getPersonShareToken.mockClear();
+      cardEnabled.value = 0;
       getPerson.mockResolvedValue({ ...dad, keepsList: true });
       await show();
-      expect(screen.queryByText("Does Dad have a GiftsAF list?")).toBeNull();
-      const row = screen.getByRole("link", { name: /^Their list/ });
-      expect(row).toHaveAttribute("href", "/people/p1/list");
-      expect(row).toHaveTextContent("Linked");
+      expect(screen.getByRole("link", { name: /^Their list/ })).toHaveTextContent("Linked");
+      expect(screen.queryByRole("link", { name: "See their list" })).toBeNull();
+      expect(getPersonListPhotos).not.toHaveBeenCalled();
+      expect(getPersonShareToken).not.toHaveBeenCalled();
     });
 
     it("is off with the setting at 0: today's Not linked row instead", async () => {
@@ -180,13 +234,12 @@ describe("PersonView", () => {
     expect(screen.getByRole("link", { name: "Past gifts" })).toHaveAttribute("href", "/people/p1/gifts");
   });
 
-  it("counts saved gifts, and says Linked for someone with a list", async () => {
+  it("counts saved gifts, and says Their own list for someone with a list", async () => {
     getPerson.mockResolvedValue({ ...dad, keepsList: true });
     countSavedGifts.mockResolvedValueOnce(2);
     await show();
     expect(screen.getByText("Their own list").querySelector("svg")).not.toBeNull();
     expect(screen.getByRole("link", { name: /^Saved gifts/ })).toHaveTextContent("2");
-    expect(screen.getByRole("link", { name: /^Their list/ })).toHaveTextContent("Linked");
   });
 
   it("sums up the address: the street, or what's missing", async () => {

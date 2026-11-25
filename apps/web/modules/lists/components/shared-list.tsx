@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { claimGift, unclaimGift, type UnclaimResult } from "@/modules/lists/actions/claims";
 import { PageFrame } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
@@ -43,6 +43,14 @@ export default function SharedList({ list, token, nav, top }: SharedListProps) {
   const [unclaimingId, setUnclaimingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
   const [announcement, setAnnouncement] = useState("");
+
+  // A link to one gift. The list streams in after the page does, too late for the browser's own
+  // jump to it.
+  useEffect(() => {
+    if (window.location.hash.startsWith("#gift-")) {
+      document.getElementById(window.location.hash.slice(1))?.scrollIntoView({ block: "center" });
+    }
+  }, []);
 
   const loginHref = `/auth/login?next=${encodeURIComponent(`/share/${token}`)}`;
 

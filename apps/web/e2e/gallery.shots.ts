@@ -6,7 +6,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { createFreshUser } from "./fresh-user";
 import { localSupabase } from "./local-supabase";
 import { personFor, readyBuyer, rest, seedFailedOrder, seedOrder, seedPastGifts, seedRound, type PastGiftsSeed } from "./rounds";
-import { addMother, addSavedGift, saveBudgets, saveOneGiftList } from "./seed";
+import { addMother, addSavedGift, linkListWithPhotos, saveBudgets, saveOneGiftList } from "./seed";
 import { signIn, session, type Credentials } from "./sign-in";
 
 // Screenshots for the gallery (ALL-000, see playwright.gallery.config.ts).
@@ -52,11 +52,12 @@ const SIGNED_OUT: [name: string, url: string][] = [
 
 // Filled in by beforeAll: a fresh account with one person (with a saved gift) and a one-gift list,
 // plus a round awaiting approval and another with a gift to fix (ALL-29).
-type Seeded = { user: Credentials; personId: string; dadId: string; heldId: string; shareToken: string; round: { id: string; ideaIds: string[] }; fix: { roundId: string; orderId: string }; past: PastGiftsSeed };
+type Seeded = { user: Credentials; personId: string; linkedId: string; dadId: string; heldId: string; shareToken: string; round: { id: string; ideaIds: string[] }; fix: { roundId: string; orderId: string }; past: PastGiftsSeed };
 const SIGNED_IN: [name: string, url: (s: Seeded) => string][] = [
   ["home", () => "/give"],
   ["my-list", () => "/lists"],
   ["person", (s) => `/people/${s.personId}`],
+  ["person-linked-list", (s) => `/people/${s.linkedId}`],
   ["person-gift-in-progress", (s) => `/people/${s.dadId}`],
   ["person-questions", (s) => `/people/${s.personId}/questions`],
   ["person-budget", (s) => `/people/${s.personId}/budget`],
@@ -89,7 +90,7 @@ for (const [name, url] of SIGNED_OUT) {
 
 test.describe("signed in", () => {
   let seeded: Seeded;
-  test.beforeAll(async () => {
+  test.beforeAll(async ({}, testInfo) => {
     // Every worker seeds its own user with several sign-ins at once, which ran close to the
     // default 30 s on a laptop even before ALL-128 added a saved idea.
     test.setTimeout(60_000);
@@ -99,7 +100,10 @@ test.describe("signed in", () => {
     await saveBudgets(user, personId, { any: 7500, mothers_day: 5000 });
     await addOnDemandIdeas(user, personId);
     await saveOneGiftList(user);
-    seeded = { user, personId, shareToken: await shareToken(user), ...(await addRounds(user)) };
+    const linkedId = await addMother(user, "Grandma Rose");
+    const photo = (n: number) => `${testInfo.project.use.baseURL}/pwa-icon/192?v=${n}`;
+    await linkListWithPhotos(await createFreshUser(), user, linkedId, [1, 2, 3].map(photo));
+    seeded = { user, personId, linkedId, shareToken: await shareToken(user), ...(await addRounds(user)) };
   });
 
   for (const [name, url] of SIGNED_IN) {
