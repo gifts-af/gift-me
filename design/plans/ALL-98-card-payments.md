@@ -14,7 +14,12 @@ A typical buyer won't keep $100 parked in a Zinc account (owner). Friends join o
 |---|---|---|
 | What happens to wallets? | Hidden from new buyers. Existing wallet accounts keep theirs. Moving them and deleting the code is later work | Owner, 2026-11-25 |
 | Where is the card entered? | Stripe's own page, then back to the gift. Revises 59's "inline" | Owner, 2026-11-25 |
-| First fixed part | Set from estimates; $1.50 suggested. ALL-76 sets the final amount. A setting (T23) | Owner, 2026-11-25; amount not confirmed |
+| First fixed part | $2.00, from estimates. ALL-76 sets the final amount. A setting (T23) | Owner, 2026-11-25 |
+| After a declined card | Saving a new one buys the waiting gift, named on the Add-a-card screen. After a removed card, the buyer taps Buy again | Owner, 2026-11-25 |
+| Wallet buyers and shared addresses | Not blocked: the only wallet buyers are the owner and Jim | Owner, 2026-11-25 |
+| Store cancels | We refund everything and absorb Stripe's fee | Owner, 2026-11-25 |
+| A decline Zinc doesn't tell apart | Today's "couldn't buy it" page | Owner, 2026-11-25 |
+| Cards | US only at launch if card fees vary | Owner, 2026-11-25 |
 | Sandbox test first | Yes, once the real order is settled. **No plan is written until it passes** (list below) | Owner, 2026-11-25; the gate is Claude's call |
 | Returns, disputes | By hand, with a runbook (59) | Owner, 2026-11-24 |
 
@@ -33,11 +38,11 @@ Placing has one sensible way: add Zinc's `payment` object to today's order. Char
 ```
 Buy for Jimmy
 Mouse pad                    $22.59
-GiftsAF fee (i)               $2.53
-Most you'll pay              $25.12
+GiftsAF fee (i)               $3.05
+Most you'll pay              $25.64
 [ Add a card ]   then back here: Visa ending 4242  [ Buy now ]
 ```
-(Amounts are only an example: $1.50 fixed, plus the card fee on the whole charge. The real page also allows for the price cap.)
+(Amounts are only an example: $2.00 fixed, plus the card fee on the whole charge. The real page also allows for the price cap.)
 
 - **First gift:** Add a card, Stripe's page, back to the same gift. Nothing is bought until Buy now.
 - **Later gifts:** the same two taps as today.
@@ -58,7 +63,7 @@ Most you'll pay              $25.12
 | AC-8 | The order fails | Any time | Nothing is charged; the email says a pending hold drops off |
 | AC-9 | The store cancels | After the charge | The email says the whole charge is refunded, fee included |
 | AC-10 | Zinc posts an event to the app's webhook | It's handled | Signature checked; the order is found first and the user comes from it; only `connect` orders change there, and only wallet orders at a buyer's own webhook. An unknown order gets 200 and an alert |
-| AC-11 | A list owner's shared address | A buyer uses connect | The buyer can't see the street anywhere they can reach (real order), then the sharing wording returns to "never your street" |
+| AC-11 | A list owner's shared address | A buyer uses connect | The buyer can't see the street anywhere they can reach (real order). The sharing wording stays as it is while wallet buyers remain, because they can still see a street in Zinc **[Claude's call]** |
 | AC-12 | `connect_enabled` is off | Anyone | No connect order is placed (checked in SQL under the lock) and Add a card is hidden; held ones are `paused`; events, sweep, tracking and Remove still work |
 | AC-13 | The buyer removes their card | Settings | It's detached at Stripe; unplaced gifts are held, placed ones unaffected; a remove can't race a send |
 | AC-14 | A connect order's price is known | It's recorded | Zinc's fee and the card fee each write a cost record (ALL-144) |
@@ -79,6 +84,7 @@ Most you'll pay              $25.12
 - **Data.** Two ids on `accounts` (customer, payment method), never readable by the buyer's client. No card number, brand or last four stored. The confirm page says "Saved card"; details are read from Stripe in Settings.
 - **Stripe customer:** we send our user id only (T42). Stripe's page may collect more itself; turn off what can be, and list the rest on `/privacy`. Consent text on Stripe's page says when we charge and how much.
 - **Settings:** `connect_enabled` (0), the margin, card fee percent and fixed cents, the fee labels.
+- **Left to the build:** consent wording, and the name on card statements (`GIFTSAF` suggested), shown to the owner as a mock-up.
 - **Off switch:** `connect_enabled`, plus `zinc_ordering_enabled`.
 
 ## Out of scope
@@ -97,7 +103,6 @@ Moving wallet accounts; a spending page (ALL-145); a returns flow; tax; digital 
 3. What makes the charge: whether the total includes our fees, how Zinc rounds, who pays Stripe's fee, whether the card fee is a fixed rate.
 4. Whether events come to one app webhook, and what a hold looks like.
 
-**Owner:** the fixed part ($1.50?); the consent wording; the public name on statements (`GIFTSAF`?).
 
 ## Principles check
 
