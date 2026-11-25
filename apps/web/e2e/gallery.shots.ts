@@ -74,6 +74,7 @@ const SIGNED_IN: [name: string, url: (s: Seeded) => string][] = [
   ["settings-over-budget", () => "/settings/over-budget"],
   ["settings-reminders", () => "/settings/reminders"],
   ["settings-address", () => "/settings/address"],
+  ["settings-birthday", () => "/settings/birthday"],
   ["settings-paying", () => "/settings/paying"],
   ["shared-list", (s) => `/share/${s.shareToken}`],
   ["round", (s) => `/rounds/${s.round.id}`],
@@ -115,6 +116,20 @@ test.describe("signed in", () => {
       await shoot(page, name);
     });
   }
+
+  // The note about a birthday shows only once Share has been used.
+  test("my-list-shared", async ({ page }) => {
+    await page.addInitScript(() => Object.defineProperty(navigator, "clipboard", { value: { writeText: async () => {} } }));
+    await signIn(page, seeded.user);
+    await page.goto("/lists");
+    await page.getByRole("button", { name: "Share", exact: true }).click();
+    const skip = page.getByRole("button", { name: "Skip" });
+    await expect(skip.or(page.getByText("No birthday saved.")).first()).toBeVisible();
+    if (await skip.isVisible()) await skip.click();
+    await expect(skip).toHaveCount(0);
+    await expect(page.getByText("No birthday saved.")).toBeVisible();
+    await shoot(page, "my-list-shared");
+  });
 });
 
 // Emails are read on phones, and their colors don't follow dark mode, so only the light phone.
