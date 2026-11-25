@@ -156,7 +156,17 @@ So leftovers from a killed run, a switch a test left flipped, or another session
 
   No row back means the email is mistyped or not confirmed, and nothing changed.
 
-  `concierge_access` is set too because a paid user without access would start rounds whose links show the request page. **Before turning it on, count their people and near occasions** (Concierge access, below), because it can start rounds for all of them. To turn paid features off, run the same statement with `false` in the `paid_features` slot only (`select id, false, true`), so access stays on. Check it with `select email, paid_features from concierge.accounts a join auth.users u on u.id = a.user_id where paid_features;`. Without the flag, captures still save but aren't read, and the person page and extension say why. To stop reading for everyone instead, set `capture_extraction_enabled` to 0.
+  `concierge_access` is set too because a paid user without access would start rounds whose links show the request page. **Before turning it on, count their people and near occasions** (Concierge access, below), because it can start rounds for all of them. Check it with `select email, paid_features from concierge.accounts a join auth.users u on u.id = a.user_id where paid_features;`. Without the flag, captures still save but aren't read, and the person page and extension say why. To stop reading for everyone instead, set `capture_extraction_enabled` to 0.
+
+  **Turning it off** needs no confirmed email. Set `paid_features` to false only, so `concierge_access` stays on:
+
+  ```sql
+  update concierge.accounts set paid_features = false
+  where user_id = (select id from auth.users where email = 'PERSON_EMAIL')
+  returning user_id;
+  ```
+
+  No row back means the email is mistyped or the person has no account row, and nothing changed. The person can sign in as before, and can come back on later by running the turn-on statement.
 - `pg_cron` and `pg_net` are on in `dev` only and aren't used: Vercel Cron runs the round tick (T49).
 
 ## Concierge access (ALL-179)

@@ -150,6 +150,23 @@ describe("PersonView", () => {
       expect(container.querySelectorAll("img")).toHaveLength(0);
     });
 
+    it("shows the linked card for a linked person without concierge access", async () => {
+      readAccess.mockResolvedValue({ access: false, requested: false });
+      getPerson.mockResolvedValue({ ...dad, keepsList: true });
+      await show();
+      expect(screen.getByRole("heading", { level: 2, name: "Dad's GiftsAF list" })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "See their list" })).toHaveAttribute("href", "/share/tok");
+      expect(screen.queryByText("Does Dad have a GiftsAF list?")).toBeNull();
+    });
+
+    it("shows the linked card for a linked person when the access check fails", async () => {
+      readAccess.mockResolvedValue(null);
+      getPerson.mockResolvedValue({ ...dad, keepsList: true });
+      await show();
+      expect(screen.getByRole("heading", { level: 2, name: "Dad's GiftsAF list" })).toBeInTheDocument();
+      expect(screen.getByRole("link", { name: "See their list" })).toHaveAttribute("href", "/share/tok");
+    });
+
     it("has no list link for an unlinked person, and reads no list", async () => {
       getPersonListPhotos.mockClear();
       getPerson.mockResolvedValue(dad);

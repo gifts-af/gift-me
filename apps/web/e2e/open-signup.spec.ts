@@ -153,7 +153,8 @@ test("without access, you can add people, from scratch or a shared list, and use
   await page.getByLabel("Who are they to you?").selectOption({ label: "Mother" });
   await page.getByRole("button", { name: "Add Odalys" }).click();
   await expect(page).toHaveURL(/\/people\/[0-9a-f-]{36}$/);
-  await expect(page.getByRole("link", { name: /^Their list/ })).toContainText("Linked");
+  await expect(page.getByRole("link", { name: "See their list" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Does Odalys have a GiftsAF list?" })).toHaveCount(0);
   await page.goto("/give");
   await expect(page.getByRole("link", { name: "Odalys", exact: true })).toBeVisible();
   await expect(page.getByText("Their own list", { exact: true })).toBeVisible();
