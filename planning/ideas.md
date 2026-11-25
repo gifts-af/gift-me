@@ -129,6 +129,7 @@ One line each (CLAUDE.md > Scope freeze). Reviewed when the freeze lifts.
 - On the fix page, "Yes, pick it" in the over-budget pop-up looks like it bought the gift; it only unlocks "Buy anyway" (ALL-29's real order).
 - List gifts from stores we can't price, and Amazon ones with no product code, assume free shipping, so an order can be refused on price (ALL-29's real order).
 - Check all Google contacts by email for who's on GiftsAF: undecided (would revise T45); exact-email search is ALL-122, friends' lists and share back are ALL-180.
+- "Buy it for them" on shared lists (owner, 2026-11-25; after launch, not MVP): we order, claim and ship the gift for a fee, while "I'll get it myself" and "I already got it" stay free. Needs card payments (ALL-98), an opt-in delivery address, and paying without concierge access; fee (lower than the concierge?), guest checkout and refunds undecided.
 
 ## A common thread
 
