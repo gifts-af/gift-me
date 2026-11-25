@@ -841,7 +841,7 @@ You need the Supabase CLI signed in as allensforever711 (`pnpm supabase login`, 
 **Rules:**
 
 - **Leave it as you found it.** A spec that adds anything removes it in `test.afterEach`, so a failed check still cleans up. Specs that only read are best. A PR adding a spec here gets checked for this in review.
-- **No people, and nothing that buys or emails.** Adding a person can schedule real gift rounds on production, so test those paths locally. If a ticket truly needs them on production, ask the owner first.
+- **No people, and nothing that buys or emails.** Adding a person can schedule real gift rounds on production, so test those paths locally. If a ticket truly needs them on production, ask the owner first. **Until launch (owner, 2026-11-25; revises T60):** a test that needs rounds may turn on the account's paid features and add one made-up person, and its round emails may go to the `+qa` inbox. Never buy. Afterwards turn paid features off and remove the person. Force the run with `npx --no-install vercel crons run /api/rounds/tick` instead of waiting a day; check first which rounds are due and how much of `idea_round_runs_per_day` is left, because it runs everyone's due rounds.
 - **Post the result on the ticket**, as a live check (T44).
 
 ## Shared material
