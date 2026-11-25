@@ -1,7 +1,7 @@
 import type { StepKey } from "@gifts-af/core";
 import { describe, expect, it, vi } from "vitest";
 import type { IdeaOutcome } from "../ideas/run";
-import { runRoundJob, runTick, type EngineZinc } from "../rounds/engine";
+import { runRoundMessage, runTick, type EngineZinc } from "../rounds/engine";
 import { USER, PERSON, OCCASION, NAME, EMAIL, at, harness, events, named, captureLog } from "./round-engine-fakes";
 
 vi.mock("server-only", () => ({}));
@@ -123,6 +123,28 @@ describe("the idea pass (ALL-27)", () => {
     expect(limited).toHaveLength(1);
     expect(limited[0]).toMatchObject({ round_id: "round-1", user_id: USER, alert: true });
     for (const key of Object.keys(limited[0])) expect(["event", "at", "round_id", "user_id", "alert"]).toContain(key);
+  });
+
+  it.each<[string, IdeaOutcome | null, Record<string, number>]>([
+    ["refused:busy", { status: "refused", reason: "busy" }, {}],
+    ["refused:daily_limit", { status: "refused", reason: "daily_limit" }, {}],
+    ["off", { status: "off" }, {}],
+    ["no_credit", { status: "no_credit" }, {}],
+    ["no_time", null, { tick_deadline_ms: 100_000 }],
+    ["no_turn", null, { idea_rounds_per_tick: 0 }],
+  ])("AC-11: fan-out off, a round that only waits (%s) is released and counted as neither advanced nor failed", async (_, outcome, settings) => {
+    const h = harness();
+    for (const [k, v] of Object.entries(settings)) h.store.settings.set(k, v);
+    if (outcome) h.generateIdeas.mockResolvedValue(outcome);
+
+    const summary = await h.tick("2027-02-11");
+
+    expect(summary).toEqual({ enabled: true, created: 1, advanced: 0, failed: 0 });
+    expect(named("round_tick")).toEqual([expect.objectContaining({ advanced: 0, failed: 0 })]);
+    expect(h.generateIdeas).toHaveBeenCalledTimes(outcome ? 1 : 0);
+    expect(h.store.round("round-1")).toMatchObject({ status: outcome ? "generating" : "scheduled", lockedUntil: null, attempts: 0 });
+    expect(h.store.writes).toContain("release:round-1");
+    expect(h.store.round("round-1").nextActionAt!.getTime()).toBeLessThanOrEqual(at("2027-02-11").getTime());
   });
 
   it("rounds nearest their deadline go first", async () => {
@@ -441,8 +463,9 @@ describe("the idea pass (ALL-27)", () => {
       const h = two();
       h.generateIdeas.mockResolvedValue({ status: "no_credit" });
 
-      await runTick(h.deps(at("2027-02-11")));
+      const summary = await runTick(h.deps(at("2027-02-11")));
 
+      expect(summary).toMatchObject({ advanced: 0, failed: 0 });
       expect(h.generateIdeas).toHaveBeenCalledTimes(1);
       for (const r of h.store.rounds) {
         expect(r.lockedUntil).toBeNull();
@@ -461,8 +484,9 @@ describe("the idea pass (ALL-27)", () => {
       const alertsBefore = named("ideas.no_credit").length;
 
       h.store.settings.set("round_fanout_enabled", 1);
+      const sendJobs = async () => ({ sent: 0, failed: 0 });
       for (const r of h.store.rounds) {
-        expect(await runRoundJob({ kind: "round", roundId: r.id }, h.deps(at("2027-02-12")))).toBe("advanced");
+        expect(await runRoundMessage({ kind: "round", roundId: r.id }, { ...h.deps(at("2027-02-12")), sendJobs })).toBe("waiting");
       }
 
       expect(h.generateIdeas).toHaveBeenCalledTimes(3);

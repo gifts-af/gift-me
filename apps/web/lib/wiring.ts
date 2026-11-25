@@ -38,6 +38,7 @@ import {
   type DbDeps,
   type QuoteDeps,
   type SendJobs,
+  type StepDeps,
   type ZincDeps,
 } from "@/modules/concierge";
 
@@ -134,6 +135,40 @@ function ideaWiring(db: SupabaseClient<Database>, env: Env, now: Date, zincShare
   };
 }
 
+/** What every round needs, whether or not its job can place a gift. */
+function roundBase(now: Date, env: Env, zincShare: number): { db: SupabaseClient<Database>; base: Omit<StepDeps, "zinc"> } {
+  if (!Number.isInteger(zincShare) || zincShare < 1) throw new Error("zincShare must be at least 1.");
+  const db = createAdminClient();
+  return {
+    db,
+    base: {
+      store: createSupabaseRoundStore(db),
+      notify: { store: createSupabaseNotifyStore(db), channels: defaultChannels(env), baseUrl: siteUrl(env), now },
+      now,
+      generateIdeas: ideaWiring(db, env, now, zincShare),
+    },
+  };
+}
+
+/**
+ * A round message's deps: the wallet side for the heads-up's low-balance warning, and nothing that
+ * places a gift. So the wiring itself reads no fee or margin, and Zinc being off here isn't worth a log.
+ */
+export async function roundWiring(now: Date, env: Env, zincShare: number): Promise<StepDeps> {
+  const { db, base } = roundBase(now, env, zincShare);
+  const wiring = await zincWiring(db, env);
+  if (!wiring) return { ...base, zinc: null };
+  const zinc: ZincDeps = { ...wiring.deps, now };
+  return {
+    ...base,
+    zinc: {
+      wallet: (userId) => getZincWallet(userId, zinc),
+      lookahead: (userId, days, fee) => fundingLookahead(userId, zinc, fee, days),
+      walletUrl: wiring.walletUrl,
+    },
+  };
+}
+
 /**
  * The round engine and the buying side, wired to each other (ALL-32 Task 7): the engine
  * places held rounds and sweeps through the real placeRound and sweepStalePlacing, and an
@@ -149,14 +184,9 @@ export async function buyingWiring(
   // rate (`zincShare`, the queue's maxConcurrency).
   opts: { sendJobs?: SendJobs; testClock?: boolean; zincShare?: number } = {},
 ): Promise<{ engine: EngineDeps; purchase: PurchaseDeps | null }> {
-  const db = createAdminClient();
-  const zincShare = opts.zincShare ?? 1;
-  if (!Number.isInteger(zincShare) || zincShare < 1) throw new Error("zincShare must be at least 1.");
+  const { db, base } = roundBase(now, env, opts.zincShare ?? 1);
   const engine: EngineDeps = {
-    store: createSupabaseRoundStore(db),
-    notify: { store: createSupabaseNotifyStore(db), channels: defaultChannels(env), baseUrl: siteUrl(env), now },
-    now,
-    generateIdeas: ideaWiring(db, env, now, zincShare),
+    ...base,
     ...(opts.sendJobs ? { sendJobs: opts.sendJobs } : {}),
     ...(opts.testClock !== undefined ? { testClock: opts.testClock } : {}),
     zinc: null,

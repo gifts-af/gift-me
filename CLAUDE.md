@@ -29,6 +29,7 @@ In force until the Gift Concierge MVP is finished; the owner lifts it. Where it 
 4. **At most 3 tickets in progress**, original-plan (wave) tickets first. Card payments (ALL-98) come last.
 
 **Exceptions (owner):** ALL-179, opening list sign-up before Christmas (2026-11-25).
+**Exceptions (Jim):** ALL-180, friends' lists, then sharing a list back (2026-11-25).
 
 ### How we build
 

@@ -8,6 +8,40 @@
 
 **Scope freeze:** built as the owner's exception (2026-11-25).
 
+## Change: people are free (option B)
+
+**Status:** approved by the owner, 2026-11-25, with yes to the 500-file cap, "Add … to your people" for signed-out visitors, and T61's city and state. The owner chose B after Tasks 1 to 4 were built for A. Those tasks' text below is kept as the record of what was built; Task 4b changes it. Where this section and Tasks 2 to 4 disagree, this section wins.
+
+**Why:** family needs everyone's lists in one place for Christmas. It adds no new spending: AI, rounds, reading captures and buying each check `paid_features`, which the review confirmed in the code. Small existing costs stay: Amazon lookups (capped), one "not read" reply ever to an unpaid account's emailed note (it counts toward Resend's 100 a day), and store pages read for pasted links (no per-person limit; `store_page_read_enabled` turns it off).
+
+**What changes:** anyone signed in can add people, link their lists and see them on Give. Access is asked for where the concierge starts: gift ideas, and the concierge settings.
+
+| # | Replaces | Now |
+|---|---|---|
+| AC-4 | Give shows the pitch | `/give` shows People to everyone, plus a Request access card for someone without access (their request state: ask, sent, busy, error). The card says ideas, reminders and buying come with the concierge |
+| AC-5 | People and settings show the pitch | Without access, only `people/[id]/ideas` and the settings pages reminders, over-budget and paying show the pitch, and none of their own content. Every other people page works |
+| AC-8 | The card about their people is hidden | Claiming and the card work for every signed-in account, as today |
+| AC-9 | With access, as today | Unchanged, and the back link and title on the ungated pages show straight away again |
+| AC-13 | A failed check | On `/give`, People still shows, and the card says "We couldn't check your access. Refresh to try again." On a gated page, the retry line |
+| AC-14 | Why access can't be turned off mid-purchase | Unchanged |
+| AC-19 | new | These lines change for everyone, because they promise something only the concierge does: no people yet ("Add the people you buy for, and keep their lists in one place."); the birthday hint on the add and About forms ("The year is just for age-right ideas.", no "We'll suggest gifts before it"); "We won't suggest gifts for it" ("It won't be used for gift ideas."); "We suggest ideas" and "so we suggest ideas" ("No list linked"). Without access, a person's page also hides the readiness banner, the Gift ideas row and the "Order by" lines. Other lines stay: they describe what facts are for, or what happens when a gift ships |
+| AC-20 | new | An account without paid features has a person with an occasion inside its lead time, and so does a paid one. After a real tick, the paid one has a round; the unpaid one has no round, idea run, cost event or notification |
+| AC-21 | new | Storage refuses a file over the bucket's ceiling or of the wrong type, and an account's files past the cap, for `person-photos` and `captures`, proved by real uploads. Today's uploads, imports included, still work |
+
+AC-3 stays: without access you land on My list, and Give is one tap away. AC-6, 7, 10, 11, 12, 15, 16, 17 and 18 stay.
+
+**Storage, found while writing this:** `person-photos` and `captures` have no size or type limit in production, and any account can upload straight to them. This matters under A too. A migration in PR 2 sets, like `list-photos`: photos 1 MB, JPEG, PNG or WebP (the app stores a 512 px copy; import compares against a new stored-size setting, not the 10 MB picker one); captures 3 MB, the types `IMAGE_EXTENSIONS` allows. pgTAP checks each ceiling is above its setting. A new setting, `storage_files_per_account`, caps files per account in each bucket (500), checked by the insert policies.
+
+**Accepted:** strangers can store other people's names, birthdays, photos and addresses, private to their account, with no cap on people. T61's shared city and state can be seen by any account holding a list's link, as its switch already says. The owner accepted both.
+
+**Erasing what we hold (AC-22, PR 3):** the privacy page points to `/feedback`, which has no page today, so nobody can use it. PR 3 adds a public way to reach us (the existing feedback form on its own page), and `operations.md` gets steps to erase an account or a person, photos included, tried once on dev. The page promises nothing those steps don't do.
+
+**Approving someone later:** turning on `paid_features` can start rounds for everyone they've added. The runbook says to count their people and near occasions first.
+
+**Left out, as before:** the extension needs no change: people added there now show on the site, which closes the gap above. Server actions and database rules aren't gated (approach 1).
+
+**Work:** Task 2's gate stays in the code but wraps four pages, not fourteen. On the ideas page the back link stays outside it. Task 3 stays, with People outside the gate. Task 4 loses its shared-list part. A new **Task 4b** does this section, with its own review, before Task 5. Task 6 keeps "Add … to your people" for signed-out visitors, leading to sign-up and back to that list. Task 5 adds the storage migration and keeps the second backfill, which now only decides who sees the request card.
+
 ## Spec: what it does
 
 ### Why
@@ -19,7 +53,7 @@ The owner's family is asking for Christmas ideas now. Building and sharing a lis
 ### Who it's for and what they can do
 
 1. **Start a list:** as a relative, I can sign up with Google or email and land on My list, so I can share it for Christmas.
-2. **Ask for the concierge:** as a signed-in list user, I can open Give, see what the concierge does, and ask for access in one tap.
+2. **Keep my people's lists:** as a signed-in list user, I can add people and their lists on Give, free, and ask for the concierge in one tap.
 3. **Let someone in:** as the owner, I get an email for each request and can give that account access.
 4. **Nothing changes for those already in:** as someone with access, Give is as it is today.
 
@@ -82,7 +116,7 @@ Google says review usually takes 3 to 5 business days. **[Verify]** that a pendi
 
 ### Out of scope
 
-- **The Chrome extension.** Saving to My list keeps working. Someone without access could still add a person and save for them through it, and couldn't see that person on the site. Fixing it needs a store submission, so it's parked.
+- **The Chrome extension.** It needs no change: people added there show on the site.
 - An in-app approval screen, or an automatic "you're in" email.
 - Enforcing access in the database rules (approach 2).
 - Multiple lists, finding people on GiftsAF, and anything else in the freeze's parked list.
@@ -95,13 +129,13 @@ Google says review usually takes 3 to 5 business days. **[Verify]** that a pendi
 | 2. Also in the database rules | Airtight, but changes the privacy rules a month before Christmas | Rejected |
 | 3. Reuse `paid_features` | Approving someone would let them spend our money, against decision 53 | Rejected |
 
-For what Give shows: the owner picked **A, the pitch with Request access**, over free People (B) and no Give tab (C).
+For what Give shows: the owner first picked **A, the pitch with Request access**, over free People (B) and no Give tab (C), then switched to **B** the same day.
 
 ## What was decided, and why
 
 | Question | Answer | Who |
 |---|---|---|
-| What does Give show without access? | The tab stays; a pitch and one Request access button | Owner |
+| What does Give show without access? | People, and a Request access card (B; first A, the pitch) | Owner |
 | Where is access checked? | On the pages | Owner |
 | Where do people land? | No access: My list. Access: People. The Give tab is `/give` for everyone | Claude's call, shown to the owner |
 | Existing accounts? | Keep access | Claude's call, shown to the owner |
@@ -114,7 +148,7 @@ For what Give shows: the owner picked **A, the pitch with Request access**, over
 | "We got it" email | Yes | Owner |
 | Cap on access requests | 10 a day across everyone | **[Claude's call]** |
 | Mail scanners can open, and so use up, a confirmation link | Accepted for now; Google is the first button | **[Claude's call]** |
-| Extension asks for access? | **No. Changed from what the owner was shown**: parked, it needs a store submission | **[Claude's call]** |
+| Extension asks for access? | No need under B | Owner |
 | How is someone let in? | The owner runs one SQL statement (`operations.md`, beside paid features) and replies to the request email, which goes to the person | **[Claude's call]** |
 | Signed-out concierge requests? | The waitlist form stays, reworded "Request concierge access"; it emails the owner as today, and stores nothing | **[Claude's call]** |
 | What happens to `/request-access`? | It becomes the concierge request page, so old links still work; the "access" kind goes away | **[Claude's call]** |
@@ -235,14 +269,31 @@ Facts to check during the admin steps. The first doesn't change the code.
 - [ ] **Step 5:** Implement: Settings shows the three groups only with access, and loads their data only then; the share `Card` returns null for a signed-in viewer without access, and also if the check fails (logged, after `unstable_rethrow`), so a claim never breaks; `sendTestEmail` checks `hasConciergeAccess` first, inside its `try`. Run → pass.
 - [ ] **Step 6:** Commit `feat: request concierge access in one tap (ALL-179)`.
 
-### Task 5: Import off, and the runbook (AC-15, AC-14)
+### Task 4b: People are free (AC-4, AC-5, AC-9, AC-13, AC-19, AC-20)
+
+**Files:**
+- Modify: `app/give/page.tsx` and the ten `app/people` pages other than `[id]/ideas` (gate off, so each is as on main at ab574de, keeping Task 3's `/give` addresses); `app/people/[id]/ideas/page.tsx` (back link outside the gate); `components/concierge-gate.tsx` (drop `frame`, which then has no caller); `components/home/concierge-pitch.tsx`; `components/home/people-section.tsx`, `person-card.tsx`; `app/people/person-form.tsx`, `[id]/about/about-form.tsx`, `[id]/person-view.tsx`, `[id]/readiness.tsx` (or where it's rendered), `[id]/occasions.tsx`; `e2e/open-signup.spec.ts` and the tests of those components
+- Create: `components/home/request-access-card.tsx` and its test; `modules/concierge/__tests__/free-account-db.test.ts`
+- Unchanged: `app/share/`, the three settings pages, `/rounds`, `/a/`
+
+**Produces:** `<RequestAccessCard>`: async server component on `/give`, in its own Suspense with `fallback={null}`, after People. With access it renders nothing. Without: heading "Want gifts found and shipped for you?", text "Gift ideas, reminders and buying come with the concierge. Request access and we'll email you when you're in.", and Task 4's button; requested: "You asked for access. We'll email you when you're in."; failed check: "We couldn't check your access. Refresh to try again." It uses `readAccess`.
+
+- [ ] **Step 1: Failing component tests** for the card's four states, each AC-19 line, and a person page with and without access (readiness banner, Gift ideas row, "Order by" lines).
+- [ ] **Step 2: Failing journeys**, replacing Task 2's: no access can add a person from `/people/new`, see them on `/give`, open the ten people pages, and add someone from a shared list; `[id]/ideas` and the three settings pages show the pitch, and ideas keeps its back link; the request button on `/give` ends at "You asked for access".
+- [ ] **Step 3: Failing local-db test (AC-20):** two accounts, each with a person, an address and an occasion inside its lead time; run the real tick with the fakes the other round tests use. Paid: one `gift_rounds` row. Unpaid: none, and no `idea_runs`, `cost_events` or `notifications` rows. Prove it can fail by setting `paid_features` on the unpaid account.
+- [ ] **Step 4:** Implement. The person page reads access once and passes a boolean down; if that check fails it hides the same three things, logs it, and shows the rest.
+- [ ] **Step 5:** From Task 4's review: the sent state is announced (`role="status"` in an always-mounted wrapper) and focus isn't lost; action tests for `already`, `busy` and release throwing; the test-email refusal matches "part of the concierge" in the unit test and the journey.
+- [ ] **Step 6:** Full checks and `pnpm e2e`. Commit `feat: people are free, the concierge is by request (ALL-179)`.
+
+### Task 5: Import off, and the runbook (AC-15, AC-14, AC-21)
 
 **Files:** Modify `app/people/import/import-section.tsx`, `components/home/people-section.tsx`, `e2e/contacts-import.spec.ts`, `e2e/global-setup.ts` (`google_import_enabled: 1` in `RUN_SETTINGS`), `design/operations.md`, `design/technical-design.md`.
 
 - [ ] **Step 1:** Failing component tests: at 0, Give has no "Import from Google" and Import says "Google import is off for now. Add people by hand." with a link to `/people/new`, and never loads Google's script; at 1 both are as today; if the setting can't be read, it counts as off; `importContactsAction` refuses at 0. `e2e-live/all-104-connect-button.spec.ts` opens Import on production: expect the off text.
 - [ ] **Step 2:** Implement with `appSettingInt("google_import_enabled")`. Run → pass.
 - [ ] **Step 3:** `operations.md`: letting someone in (the `insert … on conflict` statement setting `concierge_access`, then reply to their email), changing the paid-features statement to set `concierge_access` too, since paid without access would start rounds whose address links show the pitch, turning it off (`select concierge.turn_off_concierge_access(id)`), the off switches, and after-rollback steps.
-- [ ] **Step 4: Backfill again.** A data-only migration repeats Task 1's backfill, so accounts made between PR 1 and PR 2 (still invitees) keep Give. It changes no tables, so no `db:map`. List the accounts it adds.
+- [ ] **Step 4a: Storage limits (AC-21).** Failing first: pgTAP for the two buckets' ceilings and types, each ceiling above its setting, and `storage_files_per_account` (500); and a local-db Vitest test with real uploads: over the ceiling, wrong type, at the cap (the setting lowered in the test), and an ordinary upload and replacement that still work at the cap. Then one migration: `update storage.buckets` (photos 1048576; JPEG, PNG, WebP; captures 3145728; JPEG, PNG, WebP, GIF), new settings `person_photo_stored_max_bytes` (1000000) and `storage_files_per_account`, and the two insert policies counting the account's own files in that bucket. Import compares against `person_photo_stored_max_bytes`. Regenerate `db:map`.
+- [ ] **Step 4b: Backfill again.** A data-only migration repeats Task 1's backfill, so accounts made between PR 1 and PR 2 (still invitees) keep access and don't see the request card. It changes no tables, so no `db:map`. List the accounts it adds.
 - [ ] **Step 5:** `pnpm gallery`; commit `feat: Google import behind a setting (ALL-179)`; adversarial review; open PR 2. Before merging, the owner has recorded the import video. After: live check with the QA account: check it has no paid features, Zinc key or open round, turn access off, check, then turn it on again; republish the screens page.
 
 ### Between PR 2 and PR 3: admin steps (owner, as allensforever711)
@@ -250,13 +301,13 @@ Facts to check during the admin steps. The first doesn't change the code.
 - [ ] **Sign-up email:** Supabase production > Auth: sender (Resend SMTP), confirmation required, 3 emails an hour. The confirm and reset templates use `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=<email or recovery>&next={{ .RedirectTo }}`, which works in any browser; the default link needs the one that signed up. Proof: AC-3 on a phone outside the team, and a password reset.
 - [ ] **Existing accounts (before opening):** list them, so a stray one is seen.
 - [ ] **Google:** publish the app. Proof: a Google account that isn't a test user signs in, with no warning.
-- [ ] **Limits:** the `person-photos` bucket has a size limit set; Supabase sign-up rate limits are on.
+- [ ] **Limits:** Supabase sign-up rate limits are on.
 
 ### Task 6: Public pages (AC-1, AC-2)
 
 **Files:** `components/home/{list-hook,hook,home-top-bar,request-access-dialog}.tsx`, `components/tour/{tour,list-tour,end-screen}.tsx`, `app/request-access/{page,request-access-form}.tsx`, `lib/access-request.ts`, `lib/form-email-samples.ts`, `app/auth/login/page.tsx`, `components/sign-up-form.tsx`, `app/share/[token]/list-card.tsx`, `app/auth/sign-up-success/page.tsx` (drop "Open it on this device"), `README.md`. Tests that change: `e2e/{home,smoke,add-from-list-link,emails}.spec.ts`, `e2e-live/all-123-share-signed-out.spec.ts`, `test/{login-page,access-request,request-access-page,human-check,early-tap,auth-forms}`, and the home and tour component tests.
 
-**Copy:** list button "Start your list, free" → `/auth/sign-up`; bar "Sign in" → `/auth/login`; concierge button "Request concierge access"; "Have an invite? Sign in" → "Already have an account? Sign in"; list tour end "Your list is free. Start it now."; concierge tour end "We're letting people into the concierge a few at a time." The form's only kind is the concierge request; its thank-you links to sign-up for a list. The form keeps emailing `inboxFor("waitlist")`; signed-in requests use `access`. Shared list, signed out: "Add … to your people" and "Request access" go; "Sign up" and "Sign in" stay, both with `next=/share/<token>`.
+**Copy:** list button "Start your list, free" → `/auth/sign-up`; bar "Sign in" → `/auth/login`; concierge button "Request concierge access"; "Have an invite? Sign in" → "Already have an account? Sign in"; list tour end "Your list is free. Start it now."; concierge tour end "We're letting people into the concierge a few at a time." The form's only kind is the concierge request; its thank-you links to sign-up for a list. The form keeps emailing `inboxFor("waitlist")`; signed-in requests use `access`. Shared list, signed out: "Add … to your people" stays and leads to sign-up, "Request access" goes, and "Sign in" stays, both with `next=/share/<token>`.
 
 - [ ] **Step 1:** Update the component tests to that copy and those links, plus: no signed-out page contains "invite only" (home, login, sign-up, both tours' ends, shared list); sign-up from a share passes `next` through Google and email; a route test for `/auth/confirm` with a full-URL `next` of `/`, `/share/<token>` and `/auth/update-password`, for types `email` and `recovery`, redirecting to each, and to `/` for another site. Run → fail (the route test may already pass).
 - [ ] **Step 2:** Implement; remove `RequestKind`. Run → pass.
@@ -264,7 +315,8 @@ Facts to check during the admin steps. The first doesn't change the code.
 
 ### Task 7: Privacy page, decisions, docs
 
-- [ ] Privacy page: a "Google sign-in and contacts" section (sign-in gives name and email; import reads contacts in the browser, only ticked ones are saved, Google access is revoked straight away, never used for ads), and the account data list sign-up keeps. Update its date.
+- [ ] **Erasing (AC-22):** a public `/feedback` page with the existing form (add it to `isPublicPath`, with a test), and `operations.md` steps to erase an account or a person, photos and captures included, tried once on dev.
+- [ ] Privacy page, which now also covers what people store about others and promises only what those steps do: a "Google sign-in and contacts" section (sign-in gives name and email; import reads contacts in the browser, only ticked ones are saved, Google access is revoked straight away, never used for ads), and the account data list sign-up keeps. Update its date.
 - [ ] Draft Google's scope reason in `operations.md`: import needs names, birthdays, addresses and photos of chosen contacts; no narrower read scope gives them; read in the browser only.
 - [ ] `design/decisions.md` next T# and `planning/decisions.md` next number, marking each revised decision named in **Links**; `strategy.md`; roadmap page; `design/ui.md`; ALL-78 gets the extension listing's "invite only" line.
 - [ ] Adversarial review; PR 3 `Closes ALL-179` only if every box is ticked. Live check: a relative-style sign-up on a phone, list made and link texted. Evidence on the ticket.
@@ -279,4 +331,4 @@ Facts to check during the admin steps. The first doesn't change the code.
 
 ### Consistency check
 
-Every AC has a task: AC-1, 2 → 6; 3, 4, 9, 17 → 3 (AC-3's email half → admin steps); 5, 13 → 2; 6, 7, 8, 16, 18 → 4 (18's cap → 1); 10, 11, 14 → 1; 12 → 1 and existing paid-features tests; 15 → 5.
+Every AC has a task: AC-1, 2 → 6; 3, 4, 9, 17 → 3 (AC-3's email half → admin steps); 5, 13 → 2; 6, 7, 8, 16, 18 → 4 (18's cap → 1); 10, 11, 14 → 1; 12 → 1 and existing paid-features tests; 15, 21 → 5; 19, 20 → 4b, which also revises 4, 5, 8, 9 and 13; 22 → 7.

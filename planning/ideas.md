@@ -128,6 +128,7 @@ One line each (CLAUDE.md > Scope freeze). Reviewed when the freeze lifts.
 - Tell the buyer when a note or capture was read but nothing was learned from it (ALL-144's live check).
 - On the fix page, "Yes, pick it" in the over-budget pop-up looks like it bought the gift; it only unlocks "Buy anyway" (ALL-29's real order).
 - List gifts from stores we can't price, and Amazon ones with no product code, assume free shipping, so an order can be refused on price (ALL-29's real order).
+- Check all Google contacts by email for who's on GiftsAF: undecided (would revise T45); exact-email search is ALL-122, friends' lists and share back are ALL-180.
 
 ## A common thread
 
