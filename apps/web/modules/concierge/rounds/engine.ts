@@ -268,10 +268,11 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
 }
 
 /**
- * What one queue job came to (ALL-125). "off": the fan-out switch (or, for a round message, the
+ * What one queue job came to. "off": the fan-out switch (or, for a round message, the
  * engine) is off. "busy": nothing was run, because another run holds the round, it's no longer
  * due, a date change ended it, or it belongs to the other kind of message now. "waiting": a round
- * whose idea run was refused, found no AI credit or didn't start; no step finished and the round stays due.
+ * whose idea run was refused busy or at the daily limit, was off, found no AI credit or didn't
+ * start; no step finished and the round stays due.
  */
 export type JobResult = "off" | "busy" | "advanced" | "waiting" | "failed";
 

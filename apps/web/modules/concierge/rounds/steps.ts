@@ -144,7 +144,7 @@ const USES_TURN: IdeaOutcome["status"][] = ["saved", "none", "failed", "deadline
 export type IdeaTurn = { result: "advanced" | "waiting" | "busy" | "failed"; ideas?: string; release?: Release };
 
 /**
- * The idea pass (ALL-27, design §5.1 "Long steps"): the rounds waiting for ideas, nearest
+ * The idea pass (design §5.1 "Long steps"): the rounds waiting for ideas, nearest
  * deadline first. Each run starts only while fewer than idea_rounds_per_tick have started and
  * its worst case fits before the tick's deadline; a refusal doesn't use a turn. Rounds that
  * get no turn are released, with no run counted, for the next tick. Once a run finds the AI
