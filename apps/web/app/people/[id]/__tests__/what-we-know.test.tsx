@@ -52,16 +52,16 @@ const knowledge = (over: Partial<Knowledge> = {}): Knowledge => ({
   ...over,
 });
 
-function setup(k: Knowledge = knowledge(), questionsHref: string | null = "/people/p1/questions") {
+function setup(k: Knowledge = knowledge(), questionsHref: string | null = "/people/p1/questions", hasAccess = true) {
   const actions = {
     editAction: vi.fn(async (...a: [unknown, FormData]) => (void a, ok as Result)),
     setActiveAction: vi.fn(async (...a: [unknown, FormData]) => (void a, ok as Result)),
     deleteAction: vi.fn(async (...a: [unknown, FormData]) => (void a, ok as Result)),
     readAction: vi.fn(async (...a: [unknown, FormData]) => (void a, ok as Result)),
   };
-  const view = render(<WhatWeKnow personId="p1" name="Dad" knowledge={k} questionsHref={questionsHref} {...actions} />);
+  const view = render(<WhatWeKnow personId="p1" name="Dad" knowledge={k} questionsHref={questionsHref} hasAccess={hasAccess} {...actions} />);
   const rerender = (next: Knowledge) =>
-    view.rerender(<WhatWeKnow personId="p1" name="Dad" knowledge={next} questionsHref={questionsHref} {...actions} />);
+    view.rerender(<WhatWeKnow personId="p1" name="Dad" knowledge={next} questionsHref={questionsHref} hasAccess={hasAccess} {...actions} />);
   return { ...actions, rerender };
 }
 
@@ -89,6 +89,15 @@ describe("WhatWeKnow", () => {
   it("points to the questions when there's nothing yet", () => {
     setup(knowledge({ groups: [] }));
     expect(screen.getByText(/Nothing yet/)).toBeInTheDocument();
+  });
+
+  it.each([
+    [true, "Nothing yet. Capture a page about Dad with the extension and we'll learn from it."],
+    [false, "Nothing yet. Capture a page about Dad with the extension."],
+  ])("with no questions open, points to a capture; with access %s, that's all it says (AC-19)", (hasAccess, text) => {
+    setup(knowledge({ groups: [] }), null, hasAccess);
+    expect(screen.getByText(/^Nothing yet/)).toHaveTextContent(text, { normalizeWhitespace: true });
+    expect(screen.queryByText(/learn from it/) !== null).toBe(hasAccess);
   });
 
   it("opens a fact in place when it's tapped, with no Save button (ALL-127)", async () => {

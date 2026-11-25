@@ -116,7 +116,7 @@ describe("PersonForm", () => {
     expect(screen.getByLabelText("Birthday day")).toBeInTheDocument();
     expect(screen.getByLabelText("Birth year (optional)")).toHaveAttribute("name", "birthYear");
     expect(screen.getByText("Optional")).toBeInTheDocument();
-    expect(screen.getByText(/The year is just for age-right ideas/)).toBeInTheDocument();
+    expect(screen.getByText("The year is just for age-right ideas.")).toBeInTheDocument();
   });
 
   it("labels the submit button with the typed name", async () => {

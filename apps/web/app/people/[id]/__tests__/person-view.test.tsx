@@ -8,8 +8,10 @@ const getProfile = vi.hoisted(() =>
 );
 const countSavedGifts = vi.hoisted(() => vi.fn(async (...args: unknown[]) => (void args, 0)));
 const onDemandIdeas = vi.hoisted(() => vi.fn(async (...args: unknown[]) => (void args, [] as unknown[])));
+const readAccess = vi.hoisted(() => vi.fn());
 const hasPastGifts = vi.hoisted(() => vi.fn(async (...args: unknown[]) => (void args, false)));
 vi.mock("@/modules/concierge", () => ({ hasPastGifts, getPerson, getProfile, countSavedGifts, onDemandIdeas }));
+vi.mock("@/components/concierge-gate", () => ({ readAccess }));
 vi.mock("@/lib/app-settings", () => ({ appSettingInt: async () => cardEnabled.value }));
 vi.mock("@/lib/today", () => ({ todayForRequest: async () => "2026-11-01" }));
 vi.mock("@/lib/supabase/server", () => ({
@@ -52,6 +54,7 @@ async function show(photoFailed = false) {
 describe("PersonView", () => {
   beforeEach(() => {
     getPerson.mockReset();
+    readAccess.mockResolvedValue({ access: true, requested: false });
     cardEnabled.value = 1;
   });
 
@@ -66,7 +69,7 @@ describe("PersonView", () => {
     getPerson.mockResolvedValue(dad);
     await show();
     expect(screen.getByRole("heading", { level: 1, name: "Dad" })).toBeInTheDocument();
-    expect(screen.getByText("No list of their own, so we suggest ideas")).toBeInTheDocument();
+    expect(screen.getByText("No list linked")).toBeInTheDocument();
     const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
     expect(headings).toEqual(["Does Dad have a GiftsAF list?", "What we know", "Occasions", "Gifts"]);
     expect(getProfile.mock.calls[0].slice(1)).toEqual(["p1", false]);
@@ -98,7 +101,7 @@ describe("PersonView", () => {
       await show();
       const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
       expect(headings[0]).toBe("Does Dad have a GiftsAF list?");
-      expect(screen.getByText("Paste the link they sent you, and their gift ideas will come from their own list.")).toBeInTheDocument();
+      expect(screen.getByText("Paste the link they sent you, and their own list is linked.")).toBeInTheDocument();
       expect(screen.getByRole("textbox", { name: "Their list link" })).toBeInTheDocument();
       expect(screen.getByText("If a gift for them is waiting on an address, it will ship to this list's owner.")).toBeInTheDocument();
       expect(screen.queryByRole("link", { name: /^Their list/ })).toBeNull();
@@ -206,6 +209,48 @@ describe("PersonView", () => {
     const { container } = await show();
     expect(screen.getByRole("link", { name: /^Shipping address/ })).toHaveTextContent("Tampa, FL");
     expect(container.innerHTML).not.toMatch(/Oak|line1/);
+  });
+
+  describe("the concierge's parts", () => {
+    const readiness = { score: 40, label: "Ideas could be better", step: { kind: "answer", count: 3 } };
+    const late = { ...dad, occasions: [...dad.occasions, { kind: "christmas", enabled: true, date: "2026-12-25", orderBy: null, budgetCents: null }] };
+    const parts = () => ({
+      readiness: screen.queryByText("Ideas could be better") !== null,
+      ideas: screen.queryByRole("link", { name: /^Gift ideas/ }) !== null,
+      orderBy: screen.queryByText(/^Order by/) !== null,
+      tooLate: screen.queryByText("Too late to ship") !== null,
+      learn: screen.queryByText(/we'll learn from it/) !== null,
+    });
+    const profile = () => getProfile.mockResolvedValueOnce({ groups: [], off: [], unread: 0, openCount: 0, readiness });
+
+    it("shows them with access (AC-9)", async () => {
+      getPerson.mockResolvedValue(late);
+      profile();
+      await show();
+      expect(parts()).toEqual({ readiness: true, ideas: true, orderBy: true, tooLate: true, learn: true });
+    });
+
+    it.each([
+      ["without access", { access: false, requested: false }],
+      ["when the check fails", null],
+    ])("hides them, and shows the rest, %s (AC-19)", async (_, access) => {
+      readAccess.mockResolvedValue(access);
+      getPerson.mockResolvedValue(late);
+      profile();
+      await show();
+      expect(parts()).toEqual({ readiness: false, ideas: false, orderBy: false, tooLate: false, learn: false });
+      expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual([
+        "Does Dad have a GiftsAF list?",
+        "What we know",
+        "Occasions",
+        "Gifts",
+      ]);
+      expect(screen.getByText(/^Nothing yet/)).toHaveTextContent("Capture a page about Dad with the extension.");
+      expect(screen.getByText("Fri, Dec 25")).toBeInTheDocument();
+      expect(screen.getByRole("switch", { name: "Birthday" })).toBeChecked();
+      for (const name of [/^About Dad/, /^Budget/, /^Saved gifts/, /^Shipping address/]) expect(screen.getByRole("link", { name })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Delete Dad" })).toBeInTheDocument();
+    });
   });
 
   it("notes a photo that failed to save", async () => {

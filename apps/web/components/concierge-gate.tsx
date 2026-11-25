@@ -2,8 +2,6 @@ import { redirect, unstable_rethrow } from "next/navigation";
 import type { ReactNode } from "react";
 import type { Database } from "@gifts-af/core";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { requestAccessAction } from "@/app/give/actions";
-import { RequestAccessButton } from "@/app/give/request-access-button";
 import { ConciergePitch } from "@/components/home/concierge-pitch";
 import { errorFields, logEvent } from "@/lib/log";
 import { createClient } from "@/lib/supabase/server";
@@ -44,20 +42,16 @@ export function AccessCheckFailed() {
  * Put everything the page shows inside, title included, and the gate inside a
  * Suspense. Server components passed as children don't run unless the gate
  * returns them. It goes in pages, not layouts, which don't run again when you
- * move between their pages. `frame` wraps what shows instead of the page, for
- * a page that brings its own top bar and frame.
+ * move between their pages. `back` is the way out, above what shows instead of
+ * the page, for a page that brings its own.
  */
-export async function ConciergeGate({
-  children,
-  frame = (notice) => notice,
-}: {
-  children: ReactNode;
-  frame?: (notice: ReactNode) => ReactNode;
-}) {
+export async function ConciergeGate({ children, back }: { children: ReactNode; back?: ReactNode }) {
   const state = await readAccess();
-  if (!state) return frame(<AccessCheckFailed />);
-  if (state.access) return children;
-  return frame(
-    <ConciergePitch requested={state.requested} requestButton={<RequestAccessButton action={requestAccessAction} />} />,
+  if (state?.access) return children;
+  return (
+    <>
+      {back}
+      {state ? <ConciergePitch requested={state.requested} /> : <AccessCheckFailed />}
+    </>
   );
 }

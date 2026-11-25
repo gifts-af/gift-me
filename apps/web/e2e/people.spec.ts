@@ -287,14 +287,14 @@ test("add Mom, set her occasions and budget, link her list, delete her", async (
   await page.getByLabel("Who are they to you?").selectOption({ label: "Mother" });
   await page.getByRole("button", { name: `Add ${mom}` }).click();
 
-  // 2. Her card: Add birthday, a next occasion, and "We suggest ideas".
+  // 2. Her card: Add birthday, a next occasion, and "No list linked".
   await expect(page).toHaveURL(/\/give$/);
   const momLink = page.getByRole("link", { name: mom, exact: true });
   await expect(momLink).toBeVisible();
   const card = page.locator("div", { has: momLink }).last();
   await expect(card.getByRole("link", { name: "Add birthday" })).toBeVisible();
   await expect(card).toContainText(/Christmas|Mother's Day/);
-  await expect(card).toContainText("We suggest ideas");
+  await expect(card).toContainText("No list linked");
 
   // 2b. "Add birthday" opens About (ALL-127): the birthday saves on leaving the date.
   await card.getByRole("link", { name: "Add birthday" }).click();

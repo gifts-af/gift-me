@@ -258,12 +258,18 @@ describe("AboutForm", () => {
       }
     });
 
+    it("says only what the year is for (AC-19)", () => {
+      setup();
+      expect(screen.getByText("The year is just for age-right ideas.")).toBeInTheDocument();
+    });
+
     it("asks before removing, then removes the birthday and its year (AC-7)", async () => {
       const { a } = setup({ birthYear: 1960 });
       const user = userEvent.setup();
       await user.click(screen.getByRole("button", { name: "Remove birthday" }));
       const dialog = screen.getByRole("dialog");
       expect(within(dialog).getByRole("heading", { name: "Remove Mom's birthday?" })).toBeInTheDocument();
+      expect(within(dialog).getByText("Their birth year goes too. It won't be used for gift ideas.")).toBeInTheDocument();
       await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
       expect(a.removeDate).not.toHaveBeenCalled();
 

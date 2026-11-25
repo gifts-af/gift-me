@@ -70,7 +70,7 @@ describe("ListLink", () => {
     it("asks about the person, with the copy, and no page-only line", () => {
       prompt();
       expect(screen.getByRole("heading", { level: 2, name: "Does Dad have a GiftsAF list?" })).toBeInTheDocument();
-      expect(screen.getByText("Paste the link they sent you, and their gift ideas will come from their own list.")).toBeInTheDocument();
+      expect(screen.getByText("Paste the link they sent you, and their own list is linked.")).toBeInTheDocument();
       expect(screen.getByText("If a gift for them is waiting on an address, it will ship to this list's owner.")).toBeInTheDocument();
       expect(screen.queryByText("You don't need their list to buy for them.")).toBeNull();
     });

@@ -34,8 +34,13 @@ describe("sendTestEmail", () => {
     expect(m.send).toHaveBeenCalledWith("u1", expect.anything());
   });
 
+  it("refuses without access, saying why, and sends nothing (AC-16)", async () => {
+    m.rpc.mockResolvedValue({ data: false, error: null });
+    expect(await sendTestEmail()).toEqual({ ok: false, error: expect.stringContaining("part of the concierge") });
+    expect(m.send).not.toHaveBeenCalled();
+  });
+
   it.each([
-    ["without access (AC-16)", () => m.rpc.mockResolvedValue({ data: false, error: null })],
     ["when the access check fails", () => m.rpc.mockResolvedValue({ data: null, error: { message: "down" } })],
     ["when the sign-in check fails", () => m.getClaims.mockResolvedValue({ data: null, error: { message: "down" } })],
     ["with no session", () => m.getClaims.mockResolvedValue({ data: null, error: null })],

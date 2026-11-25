@@ -3,7 +3,6 @@ import { redirect } from "next/navigation";
 import { AppNav } from "@/components/app-shell/app-nav";
 import { BackLink, PageFrame } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
-import { ConciergeGate } from "@/components/concierge-gate";
 import { PersonGifts } from "./person-gifts";
 import { PersonView } from "./person-view";
 
@@ -27,13 +26,9 @@ export default function PersonPage({
         <AppNav current="give" />
       </TopBar>
       <PageFrame>
+        <BackLink href="/give" label="People" />
         <Suspense fallback={<p className="text-[15px] text-muted-foreground">Loading…</p>}>
-          <ConciergeGate>
-            <BackLink href="/give" label="People" />
-            <Suspense fallback={<p className="text-[15px] text-muted-foreground">Loading…</p>}>
-              <Loaded params={params} searchParams={searchParams} />
-            </Suspense>
-          </ConciergeGate>
+          <Loaded params={params} searchParams={searchParams} />
         </Suspense>
       </PageFrame>
     </>

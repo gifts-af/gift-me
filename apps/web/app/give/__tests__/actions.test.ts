@@ -48,6 +48,32 @@ describe("requestAccessAction", () => {
     expect(m.refresh).not.toHaveBeenCalled();
   });
 
+  it("says sent, with no email, to someone who already asked", async () => {
+    m.rpc.mockResolvedValue({ data: "already", error: null });
+    expect(await requestAccessAction()).toEqual({ status: "sent" });
+    expect(m.send).not.toHaveBeenCalled();
+    expect(m.refresh).toHaveBeenCalledOnce();
+  });
+
+  it("says busy, with no email, once today's requests are used up", async () => {
+    m.rpc.mockResolvedValue({ data: "busy", error: null });
+    expect(await requestAccessAction()).toEqual({ status: "busy" });
+    expect(m.send).not.toHaveBeenCalled();
+    expect(m.refresh).not.toHaveBeenCalled();
+  });
+
+  it("says it didn't send, and logs ids only, when the owner's email and then the release fail", async () => {
+    m.send.mockResolvedValue({ ok: false, error: "jordan@example.test" });
+    m.rpc.mockImplementation(async (name: string) =>
+      name === "claim_access_request" ? { data: "claimed", error: null } : { data: null, error: { message: "jordan@example.test" } },
+    );
+    expect(await requestAccessAction()).toEqual({ status: "error" });
+    expect(m.refresh).not.toHaveBeenCalled();
+    const logged = vi.mocked(console.log).mock.calls.map(([line]) => String(line));
+    expect(logged.map((line) => JSON.parse(line).event)).toEqual(["concierge_access.request_email_failed", "concierge_access.request_failed"]);
+    expect(logged.join()).not.toContain("jordan");
+  });
+
   it.each([
     ["no session", () => m.getClaims.mockResolvedValue({ data: null, error: null })],
     ["a failed sign-in check", () => m.getClaims.mockResolvedValue({ data: null, error: { message: "down" } })],

@@ -10,9 +10,9 @@ const christmas: Row = {
   kind: "christmas", enabled: true, date: "2026-12-25", orderBy: { date: "2026-12-16", fast: false }, budgetCents: null,
 };
 
-function setup(rows: Row[], result: { ok: true } | { ok: false; error: string } = { ok: true }) {
+function setup(rows: Row[], result: { ok: true } | { ok: false; error: string } = { ok: true }, hasAccess = true) {
   const action = vi.fn(async (...a: [unknown, FormData]) => (void a, result));
-  render(<Occasions personId="p1" occasions={rows} action={action} />);
+  render(<Occasions personId="p1" occasions={rows} hasAccess={hasAccess} action={action} />);
   return action;
 }
 
@@ -31,6 +31,12 @@ describe("Occasions", () => {
   it("says when it is too late to ship", () => {
     setup([{ ...christmas, orderBy: null }]);
     expect(screen.getByText("Too late to ship")).toBeInTheDocument();
+  });
+
+  it.each([christmas, { ...christmas, orderBy: null }])("shows the date alone without the concierge, which does the ordering (%#)", (row) => {
+    setup([row], { ok: true }, false);
+    expect(screen.getByText("Fri, Dec 25")).toBeInTheDocument();
+    expect(screen.queryByText(/Order by|Too late/)).not.toBeInTheDocument();
   });
 
   it("shows no order-by line for a switched-off occasion", () => {

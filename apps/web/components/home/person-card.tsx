@@ -4,7 +4,7 @@ import { OCCASION_NAMES, shortDate } from "@/lib/occasion-format";
 import { PersonAvatar } from "@/components/person-avatar";
 import type { PersonCard as Card } from "@/modules/concierge";
 
-/** One person on Give: who, what's next, and where their ideas come from. */
+/** One person on Give: who, what's next, and whether their list is linked. */
 export function PersonCard({ person }: { person: Card }) {
   const Source = person.keepsList ? ListChecks : Sparkles;
   return (
@@ -24,7 +24,7 @@ export function PersonCard({ person }: { person: Card }) {
         )}
         <p className="mt-0.5 flex items-center gap-1.5 text-[13px] text-muted-foreground">
           <Source className="size-3.5" aria-hidden="true" />
-          {person.keepsList ? "Their own list" : "We suggest ideas"}
+          {person.keepsList ? "Their own list" : "No list linked"}
         </p>
         {!person.hasBirthday && (
           <Link

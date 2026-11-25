@@ -1,9 +1,8 @@
-import { Suspense, type ReactNode } from "react";
+import { Suspense } from "react";
 import { notFound, redirect } from "next/navigation";
 import { AppNav } from "@/components/app-shell/app-nav";
 import { BackLink, PageFrame, PageTitle } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
-import { ConciergeGate } from "@/components/concierge-gate";
 import { appSettingInt } from "@/lib/app-settings";
 import { todayForRequest } from "@/lib/today";
 import { getPerson } from "@/modules/concierge";
@@ -23,21 +22,10 @@ export default function ListPage({ params }: { params: Promise<{ id: string }> }
   // is sent.
   return (
     <Suspense fallback={null}>
-      <ConciergeGate frame={framed}>
-        <Loaded params={params} />
-      </ConciergeGate>
+      <Loaded params={params} />
     </Suspense>
   );
 }
-
-const framed = (children: ReactNode) => (
-  <>
-    <TopBar>
-      <AppNav current="give" />
-    </TopBar>
-    <PageFrame>{children}</PageFrame>
-  </>
-);
 
 async function Loaded({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -49,11 +37,16 @@ async function Loaded({ params }: { params: Promise<{ id: string }> }) {
     redirect(token ? `/share/${token}` : `/people/${person.id}`);
   }
 
-  return framed(
+  return (
     <>
-      <BackLink href={`/people/${person.id}`} label={person.name} />
-      <PageTitle>{person.name}&apos;s list</PageTitle>
-      <ListLink variant="page" name={person.name} personId={person.id} keepsList={person.keepsList} linkAction={linkListAction} unlinkAction={unlinkListAction} />
-    </>,
+      <TopBar>
+        <AppNav current="give" />
+      </TopBar>
+      <PageFrame>
+        <BackLink href={`/people/${person.id}`} label={person.name} />
+        <PageTitle>{person.name}&apos;s list</PageTitle>
+        <ListLink variant="page" name={person.name} personId={person.id} keepsList={person.keepsList} linkAction={linkListAction} unlinkAction={unlinkListAction} />
+      </PageFrame>
+    </>
   );
 }

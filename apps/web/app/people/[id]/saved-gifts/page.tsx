@@ -3,7 +3,6 @@ import { notFound } from "next/navigation";
 import { AppNav } from "@/components/app-shell/app-nav";
 import { BackLink, PageFrame, PageTitle } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
-import { ConciergeGate } from "@/components/concierge-gate";
 import { storeLabel } from "@/lib/store-label";
 import { todayForRequest } from "@/lib/today";
 import { getPerson, listSavedGifts } from "@/modules/concierge";
@@ -21,9 +20,7 @@ export default function SavedGiftsPage({ params }: { params: Promise<{ id: strin
       </TopBar>
       <PageFrame>
         <Suspense fallback={<p className="text-[15px] text-muted-foreground">Loading…</p>}>
-          <ConciergeGate>
-            <Loaded params={params} />
-          </ConciergeGate>
+          <Loaded params={params} />
         </Suspense>
       </PageFrame>
     </>

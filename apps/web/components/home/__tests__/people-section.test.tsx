@@ -20,6 +20,7 @@ describe("PeopleSection", () => {
   it("invites you to add someone when there is no one", async () => {
     listPeople.mockResolvedValue([]);
     render(await PeopleSection());
+    expect(screen.getByText("Add the people you buy for, and keep their lists in one place.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Add someone you buy for" })).toBeInTheDocument();
   });
 

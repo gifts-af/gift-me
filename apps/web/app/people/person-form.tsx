@@ -332,7 +332,7 @@ export function PersonForm(props: Props) {
             onYear={setBYear}
           />
           <p className="text-[13px] text-muted-foreground">
-            We&apos;ll suggest gifts before it. The year is just for age-right ideas.
+            The year is just for age-right ideas.
           </p>
         </fieldset>
 

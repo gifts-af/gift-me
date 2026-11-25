@@ -79,7 +79,7 @@ export function ListLink({
         >
           <p className="text-[13px] text-muted-foreground">
             {prompt
-              ? "Paste the link they sent you, and their gift ideas will come from their own list."
+              ? "Paste the link they sent you, and their own list is linked."
               : "You don't need their list to buy for them."}
           </p>
           <Label htmlFor="list-link">Their list link</Label>

@@ -4,6 +4,7 @@ import { relationshipLabel } from "@gifts-af/core";
 import { OCCASION_NAMES, monthDay, shortDate } from "@/lib/occasion-format";
 import { PersonAvatar } from "@/components/person-avatar";
 import { PageTitle } from "@/components/app-shell/page-frame";
+import { readAccess } from "@/components/concierge-gate";
 import { appSettingInt } from "@/lib/app-settings";
 import { createClient } from "@/lib/supabase/server";
 import { todayForRequest } from "@/lib/today";
@@ -52,7 +53,8 @@ function RowGroup({ title, children }: { title?: string; children: React.ReactNo
 /**
  * A person's page (ALL-127, T71): who they are, what we know, then a short
  * list of rows. Each row shows its value and opens its own screen, where it
- * changes. An unknown, deleted or someone else's id is a 404.
+ * changes. Without concierge access, what only the concierge does is left out.
+ * An unknown, deleted or someone else's id is a 404.
  */
 export async function PersonView({
   id,
@@ -69,13 +71,16 @@ export async function PersonView({
   if (!userId) redirect("/");
   const person = await getPerson(id, await todayForRequest());
   if (!person) notFound();
-  const [profile, savedGifts, ideas, cardSetting, pastGifts] = await Promise.all([
+  const [profile, savedGifts, ideas, cardSetting, pastGifts, access] = await Promise.all([
     getProfile(supabase as unknown as Db, person.id, person.keepsList),
     countSavedGifts(person.id),
     onDemandIdeas(supabase as unknown as Db, person.id),
     appSettingInt("list_link_card_enabled"),
     hasPastGifts(person.id, supabase as unknown as Db, new Date()),
+    readAccess(),
   ]);
+  // A failed check hides the concierge's parts, as no access does.
+  const hasAccess = access?.access ?? false;
   // With the card on, an unlinked person gets the prompt at the top instead of the Their list row.
   const askForList = cardSetting === 1 && !person.keepsList;
   const base = `/people/${person.id}`;
@@ -96,7 +101,7 @@ export async function PersonView({
             ) : (
               <Sparkles className="size-3.5" aria-hidden="true" />
             )}
-            {person.keepsList ? "Their own list" : "No list of their own, so we suggest ideas"}
+            {person.keepsList ? "Their own list" : "No list linked"}
           </p>
         </div>
       </header>
@@ -113,12 +118,13 @@ export async function PersonView({
         </p>
       )}
 
-      {profile.readiness && <ReadinessBanner personId={person.id} name={person.name} readiness={profile.readiness} />}
+      {hasAccess && profile.readiness && <ReadinessBanner personId={person.id} name={person.name} readiness={profile.readiness} />}
 
       <WhatWeKnow
         personId={person.id}
         name={person.name}
         knowledge={profile}
+        hasAccess={hasAccess}
         questionsHref={profile.openCount > 0 ? `${base}/questions` : null}
         editAction={editFactAction}
         setActiveAction={setFactActiveAction}
@@ -130,7 +136,7 @@ export async function PersonView({
         <SettingsRow href={`${base}/about`} label={`About ${person.name}`} value={aboutSummary(person)} />
       </RowGroup>
 
-      <Occasions personId={person.id} occasions={person.occasions} action={setOccasionEnabledAction} />
+      <Occasions personId={person.id} occasions={person.occasions} hasAccess={hasAccess} action={setOccasionEnabledAction} />
 
       <RowGroup title="Gifts">
         <BudgetRow
@@ -139,7 +145,9 @@ export async function PersonView({
           defaultCents={person.defaultBudgetCents}
           occasions={person.occasions}
         />
-        <SettingsRow href={`${base}/ideas`} label="Gift ideas" value={ideas.length > 0 ? String(ideas.length) : "None"} />
+        {hasAccess && (
+          <SettingsRow href={`${base}/ideas`} label="Gift ideas" value={ideas.length > 0 ? String(ideas.length) : "None"} />
+        )}
         <SettingsRow
           href={`${base}/saved-gifts`}
           label="Saved gifts"

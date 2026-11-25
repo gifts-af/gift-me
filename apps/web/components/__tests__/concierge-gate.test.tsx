@@ -9,7 +9,6 @@ vi.mock("@/lib/supabase/server", () => ({ createClient }));
 vi.mock("server-only", () => ({}));
 
 import { ConciergeGate } from "../concierge-gate";
-import { ConciergePitch } from "../home/concierge-pitch";
 
 type Reply = { data: { concierge_access: boolean; access_requested_at: string | null } | null; error: { message: string } | null };
 
@@ -56,6 +55,7 @@ describe("ConciergeGate", () => {
     client("u1", reply);
     await show();
     expect(screen.getByRole("heading", { level: 1, name: "Gifting, handled AF." })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Request access" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Take the tour" })).toHaveAttribute("href", "/tour");
     expect(child).not.toHaveBeenCalled();
   });
@@ -97,19 +97,17 @@ describe("ConciergeGate", () => {
     expect(logged).not.toContain("auth service down");
   });
 
-  it("puts the pitch and the retry line, but not the page, in the frame it's given", async () => {
-    const frame = (notice: React.ReactNode) => <main>{notice}</main>;
+  it("puts the way back above the pitch and the retry line, but not above the page", async () => {
+    const back = <p>Back</p>;
     client("u1", row(false));
-    render(await ConciergeGate({ frame, children: <Child /> }));
-    expect(screen.getByRole("main")).toHaveTextContent("Gifting, handled AF.");
+    expect(render(await ConciergeGate({ back, children: <Child /> })).container).toHaveTextContent(/^BackGifting, handled AF\./);
     cleanup();
     client("u1", { data: null, error: { message: "down" } });
-    render(await ConciergeGate({ frame, children: <Child /> }));
-    expect(screen.getByRole("main")).toHaveTextContent("We couldn't load this.");
+    expect(render(await ConciergeGate({ back, children: <Child /> })).container).toHaveTextContent(/^BackWe couldn't load this\./);
     cleanup();
     client("u1", row(true));
-    render(await ConciergeGate({ frame, children: <Child /> }));
-    expect(screen.queryByRole("main")).toBeNull();
+    render(await ConciergeGate({ back, children: <Child /> }));
+    expect(screen.queryByText("Back")).toBeNull();
   });
 
   it("sends a visitor with no session (no data, no error) to sign in", async () => {
@@ -128,15 +126,5 @@ describe("ConciergeGate", () => {
     );
     expect(isHangingPromiseRejectionError(error)).toBe(true);
     expect(console.log).not.toHaveBeenCalled();
-  });
-});
-
-describe("ConciergePitch", () => {
-  it("shows the request button it's given, until the request is sent", () => {
-    const button = <button>Request access</button>;
-    const { rerender } = render(<ConciergePitch requested={false} requestButton={button} />);
-    expect(screen.getByRole("button", { name: "Request access" })).toBeInTheDocument();
-    rerender(<ConciergePitch requested requestButton={button} />);
-    expect(screen.queryByRole("button")).toBeNull();
   });
 });

@@ -32,7 +32,7 @@ export async function PeopleSection() {
     return (
       <>
         <p className="col-span-full text-[15px] text-muted-foreground">
-          Add the people you buy for, and we&apos;ll suggest gifts before each birthday and holiday.
+          Add the people you buy for, and keep their lists in one place.
         </p>
         {add}
       </>
