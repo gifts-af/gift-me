@@ -202,6 +202,25 @@ describe("orders", () => {
     expect(await findOrderByReference(h, KEY, "order-1")).toEqual({ providerOrderId: "zo_1", status: "placed" });
   });
 
+  // Zinc's own replies: it sends every field of job_result, null when it has nothing to say.
+  it("reads a reply whose job_result fields are null", async () => {
+    const list = (o: unknown[]) => ({ status: 200, body: { orders: o, total: o.length, limit: 10, offset: 0 } });
+    const pc = { subtotal: 4222, tax: 369, shipping: 599, discount: 0, fees: 0, total: 5190, currency: "USD", cart_items: null, line_items: null };
+    const nulls = { error: null, error_type: null, error_details: null, estimated_delivery: null };
+    const { h } = fake([
+      list([{ id: "zo_1", status: "order_placed", job_result: { ...nulls, success: true, price_components: pc } }]),
+      list([{ id: "zo_1", status: "order_failed", job_result: { ...nulls, success: false, price_components: null } }]),
+      list([{ id: "zo_1", status: "in_progress", job_result: { ...nulls, success: null, price_components: null } }]),
+    ]);
+    expect(await findOrderByReference(h, KEY, "order-1")).toEqual({
+      providerOrderId: "zo_1",
+      status: "placed",
+      price: { subtotalCents: 4222, shippingCents: 599, taxCents: 369, totalCents: 5190 },
+    });
+    expect(await findOrderByReference(h, KEY, "order-1")).toEqual({ providerOrderId: "zo_1", status: "failed" });
+    expect(await findOrderByReference(h, KEY, "order-1")).toEqual({ providerOrderId: "zo_1", status: "pending" });
+  });
+
   it("a lookup's unreadable 2xx is unavailable (we can't tell), not rejected", async () => {
     const { h } = fake([{ status: 200, body: { orders: "nope" } }, { status: 200, raw: "<html>" }]);
     await expect(findOrderByReference(h, KEY, "order-1")).rejects.toMatchObject({ kind: "unavailable" });
