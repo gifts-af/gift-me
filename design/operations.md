@@ -425,7 +425,7 @@ The engine finds gift ideas for a round and on demand (a person's Gift ideas scr
 
 **The tick and ideas.** Each tick does the money pass first (placing orders, the stale-order sweep, rejection notices). Then the idea pass runs, bounded by `tick_deadline_ms` and `idea_rounds_per_tick`. The deadline bounds only the idea pass: held (`needs_attention`) rounds and every other step run first with no deadline, as before. Rounds that don't get an idea turn before the deadline are released for the next tick. If `tick_deadline_ms` can't be read, the idea pass is skipped.
 
-**Emails.** When a round gets no ideas, the buyer gets one "We don't have gift ideas for {name} yet" email (`no_ideas`), then a second after a new fact brings one more run, and the second promises neither a retry nor a skip. With every run spent, either says we'll skip. On the last tick before ship-by the email instead says no gift can arrive in time, suggests something local and asks for nothing (`no_ideas_late`); the close the next day then sends no email. If that email is refused, or the process dies before it goes, `round_too_late_email_failed` (a refusal only) is logged, nothing more is tried that day, and the close sends the "skipped" email instead.
+**Emails.** When a round gets no ideas, the buyer gets one "We don't have gift ideas for {name} yet" email (`no_ideas`), then a second after a new fact brings one more run, and the second promises neither a retry nor a skip. With every run spent, either says we'll skip. On the last tick before ship-by the email instead says no gift can arrive in time, suggests something local and asks for nothing (`no_ideas_late`); the close the next day then sends no email. If that email is refused, or the process dies before it goes, `round_too_late_email_failed` (a refusal only) is logged, nothing more is tried that day, and the close sends the "skipped" email instead. After "None of these", earlier ideas that can come back go out in a heads-up ("your earlier ideas are still here") in place of these. Nothing is sent while the engine is off or the buyer isn't paid; the round skips silently at its deadline.
 
 **Deploying and rolling back ALL-167.** The database ships first: the new code reads `rejections.owned` (`readRestored`, on the round screen and in the heads-up) and records `no_ideas_late`, which the old step check refuses. The old code runs on the new database. After a rollback of the code, rows with `no_ideas_late` stay valid and the old code ignores them: a round told too late that day may run once more and be told "no ideas" again, and a round told only by `no_ideas_late` closes without the "skipped" email, since the old code doesn't count that key. Ideas already back stay on offer. Never put the old step check back while `no_ideas_late` rows exist.
 
@@ -447,7 +447,7 @@ update concierge.gift_rounds r set next_action_at = now()
  where r.status = 'generating' and r.closed_at is null
    and r.ship_by_deadline > (now() at time zone 'utc')::date
    and exists (select 1 from concierge.gift_ideas i where i.round_id = r.id and i.status = 'rejected');
-``` After "None of these", earlier ideas that can come back go out in a heads-up ("your earlier ideas are still here") in place of these. Nothing is sent while the engine is off or the buyer isn't paid; the round skips silently at its deadline.
+```
 
 **Zinc offers are judged on the worst case:** orders don't choose a shipping method, so each offer is judged on its slowest delivery and its highest shipping price.
 
