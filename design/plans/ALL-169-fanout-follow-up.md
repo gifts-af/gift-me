@@ -1,6 +1,6 @@
 # ALL-169 Fan-out follow-up: Spec and Plan
 
-**Status:** spec approved by Jim, 2026-11-24, after an adversarial review. The review changed the redelivery to a new delayed message; that part was reviewed with the plan. Plan approved by Jim, 2026-11-25: built subagent-driven, after PR #135 merges. No code yet.
+**Status:** spec approved by Jim, 2026-11-24, after an adversarial review. The review changed the redelivery to a new delayed message; that part was reviewed with the plan. Plan approved by Jim, 2026-11-25: built subagent-driven, after PR #135 merged. Built (T93), PR pending.
 
 **Goal:** with fan-out on, two rounds for one person both start their idea run the same day, the job log says what happened, and round messages build only the wiring they use.
 
