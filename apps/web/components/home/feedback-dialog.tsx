@@ -28,7 +28,12 @@ export function FeedbackButton({ className }: { className?: string }) {
           <DialogTitle>Tell us the sad story</DialogTitle>
           <DialogDescription>What broke, or what bugged you? It goes straight to Jim and Aaron.</DialogDescription>
         </DialogHeader>
-        <FeedbackForm onSent={closeSoon} sentNote="It's in our inbox. This closes itself in a few seconds." />
+        <FeedbackForm
+          onSent={closeSoon}
+          sentNote="It's in our inbox. This closes itself in a few seconds."
+          question="What happened?"
+          placeholder="The share link opened a blank page when I…"
+        />
       </DialogContent>
     </Dialog>
   );

@@ -9,7 +9,7 @@ const { default: FeedbackPage, metadata } = await import("@/app/feedback/page");
 afterEach(() => vi.clearAllMocks());
 
 async function send(message: string) {
-  fireEvent.change(screen.getByLabelText("What happened?"), { target: { value: message } });
+  fireEvent.change(screen.getByLabelText("What would you like to tell us?"), { target: { value: message } });
   fireEvent.click(await screen.findByRole("button", { name: "Send" }));
 }
 
@@ -18,7 +18,9 @@ describe("the feedback page", () => {
     render(<FeedbackPage />);
     expect(metadata.title).toBe(`Feedback · ${APP_NAME}`);
     expect(screen.getByRole("heading", { level: 1 })).toBeInTheDocument();
-    expect(screen.getByLabelText("What happened?")).toBeRequired();
+    expect(screen.getByLabelText("What would you like to tell us?")).toBeRequired();
+    expect(screen.getByPlaceholderText(/erase/)).toBeInTheDocument();
+    expect(screen.getByRole("contentinfo")).toContainElement(screen.getByRole("link", { name: "Feedback" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -33,6 +35,7 @@ describe("the feedback page", () => {
     await send("Please erase my account");
     expect(await screen.findByText("Thanks. Got it.")).toBeInTheDocument();
     expect(screen.queryByText(/closes itself/)).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveFocus();
   });
 
   it("keeps the text and says so when sending fails", async () => {
@@ -40,6 +43,6 @@ describe("the feedback page", () => {
     render(<FeedbackPage />);
     await send("It broke");
     expect(await screen.findByRole("alert")).toHaveTextContent("Please try again");
-    expect(screen.getByLabelText("What happened?")).toHaveValue("It broke");
+    expect(screen.getByLabelText("What would you like to tell us?")).toHaveValue("It broke");
   });
 });

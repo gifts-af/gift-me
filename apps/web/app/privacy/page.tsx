@@ -46,17 +46,26 @@ export default function PrivacyPage() {
           </p>
           <p>
             After that we keep what you add: your lists and gifts, the gifts you claim, your settings and time zone, your
-            own address and phone number if you enter them, the people you add, and any gift ideas, orders and emailed
-            notes. Anyone with your list&apos;s link can see your name and the list. If you share your address, people
+            own address if you enter it, a phone number if you set up paying for gifts, the people you add, and any gift
+            ideas, orders and emailed notes. An emailed note we can&apos;t match to a person is cleared within four days.
+          </p>
+          <p>
+            Anyone with your list&apos;s link can see your name and the list. If you share your address, people
             who linked your list see your city and state, and gifts they order can ship to you. Someone who orders
             through their own Zinc account may be able to see the full address there.
+          </p>
+          <p>
+            When you claim a gift on someone&apos;s list, everyone with the list&apos;s link can see who claimed it, except
+            its owner when they&apos;re signed in. {/* Holds whichever way the owner decides what stands in for a missing name. */}
+            It shows the name on your account, or what we use for you if you haven&apos;t set one. If you claim without
+            signing in, it shows the name you typed.
           </p>
         </Section>
 
         <Section title="What you save about other people">
           <p>
-            You can save other people&apos;s names, birthdays, photos and addresses, and what they like. It&apos;s
-            private to your account: no other user sees it, and it goes only to the services listed below, when they need
+            You can save other people&apos;s names, birthdays, photos, addresses and phone numbers, and what they
+            like. It&apos;s private to your account: no other user sees it, and it goes only to the services listed below, when they need
             it. We look only to fix a problem, or to find someone who asks us to erase what&apos;s kept about them. Photos
             go in private storage.
           </p>
@@ -126,6 +135,11 @@ export default function PrivacyPage() {
             name we have on file for them, though the page or your note may contain it. What it finds shows on the
             person&apos;s page as AI suggestions, marked as such, and you can turn off or remove any of them.
           </p>
+          <p>
+            To find gift ideas, when you ask or when a gift date is near, we send an AI model the occasion and budget,
+            how you know the person, what we know they like, and gifts already suggested. It may search the web with
+            that. We don&apos;t send their name or address, though what you wrote about them may contain it.
+          </p>
         </Section>
 
         <Section title="Who else handles it">
@@ -138,7 +152,7 @@ export default function PrivacyPage() {
             <li>Google handles Continue with Google.</li>
             <li>
               When you approve a gift, Zinc and the store it&apos;s bought from get what&apos;s needed to ship it: the
-              recipient&apos;s name and address.
+              recipient&apos;s name and address, your phone number, and any gift message.
             </li>
           </ul>
         </Section>
@@ -180,13 +194,18 @@ export default function PrivacyPage() {
             </li>
           </ul>
           <p>
+            Other people&apos;s accounts keep what they typed or copied about you, such as their entry for you, what they
+            noted you like, gift messages, and gifts copied from your list. Erasing your account doesn&apos;t remove it;
+            ask for that too.
+          </p>
+          <p>
             If a gift is being ordered or is on its way, we wait until that&apos;s finished. If you claimed a gift on
             someone&apos;s list, we take your name off and leave the gift marked as taken. We keep a record that something
             was erased, when, and why, without names or other details.
           </p>
           <p>
-            Some copies we can&apos;t erase: emails already delivered, our email provider&apos;s copies, server logs and any
-            backups until they expire, what Zinc, the store and the other services keep, and anything someone saved
+            Some copies we can&apos;t erase: emails already delivered, our email provider&apos;s copies, server and sign-in
+            logs, any backups, what Zinc, the store and the other services keep, and anything someone saved
             outside {APP_NAME}.
           </p>
         </Section>

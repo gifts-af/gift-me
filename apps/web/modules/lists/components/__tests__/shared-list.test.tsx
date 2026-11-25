@@ -96,6 +96,8 @@ describe("SharedList", () => {
       />,
     );
     const about = screen.getByRole("link", { name: "What is GiftsAF?" });
+    expect(screen.getByRole("link", { name: "Privacy" })).toHaveAttribute("href", "/privacy");
+    expect(screen.getByRole("link", { name: "Feedback" })).toHaveAttribute("href", "/feedback");
     expect(about).toHaveAttribute("href", "/");
     const claim = screen.getByRole("button", { name: "Claim Board game" });
     expect(claim.compareDocumentPosition(about) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

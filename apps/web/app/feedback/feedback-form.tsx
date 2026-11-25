@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
 import { submitFeedback } from "./actions";
 import { useHumanCheck } from "@/components/human-check";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,17 @@ const input =
 
 // Used on the feedback page and in the home page's box. The box closes itself,
 // so it passes `onSent` and its own closing words.
-export function FeedbackForm({ onSent, sentNote }: { onSent?: () => void; sentNote: string }) {
+export function FeedbackForm({
+  onSent,
+  sentNote,
+  question,
+  placeholder,
+}: {
+  onSent?: () => void;
+  sentNote: string;
+  question: string;
+  placeholder: string;
+}) {
   const [result, action, pending] = useActionState(submitFeedback, null);
   const human = useHumanCheck();
   const { reset } = human;
@@ -27,10 +37,15 @@ export function FeedbackForm({ onSent, sentNote }: { onSent?: () => void; sentNo
   useEffect(() => {
     if (sent) onSent?.();
   }, [sent, onSent]);
+  // The button that had focus is gone once sent.
+  const thanks = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (sent) thanks.current?.focus();
+  }, [sent]);
 
   if (sent) {
     return (
-      <div role="status" className="flex flex-col gap-1 rounded-2xl bg-accent p-5 text-accent-foreground">
+      <div ref={thanks} tabIndex={-1} role="status" className="flex flex-col gap-1 rounded-2xl bg-accent p-5 text-accent-foreground">
         <p className="text-[18px] font-bold">Thanks. Got it.</p>
         <p className="text-[15px]">{sentNote}</p>
       </div>
@@ -41,13 +56,13 @@ export function FeedbackForm({ onSent, sentNote }: { onSent?: () => void; sentNo
   return (
     <form action={action} className="flex flex-col gap-4" noValidate>
       <label className="grid gap-1.5 text-[14px] font-semibold" htmlFor="fb-message">
-        What happened?
+        {question}
         <textarea
           id="fb-message"
           name="message"
           required
           rows={5}
-          placeholder="The share link opened a blank page when I…"
+          placeholder={placeholder}
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           className={`${input} min-h-32 resize-y`}

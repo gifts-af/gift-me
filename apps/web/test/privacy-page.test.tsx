@@ -37,4 +37,35 @@ describe("the privacy page", () => {
     expect(within(asking).getByRole("link", { name: "Feedback" })).toHaveAttribute("href", "/feedback");
     expect(asking).toHaveTextContent(/can't erase/);
   });
+
+  it("promises the three kinds of erasing, and says what stays (AC-22)", () => {
+    render(<PrivacyPage />);
+    const asking = section("Asking us to erase data");
+    const bullets = within(asking).getAllByRole("listitem").map((li) => li.textContent);
+    expect(bullets).toEqual([
+      expect.stringMatching(/^Your account: we email the account's address to check it's you, then erase/),
+      expect.stringMatching(/^A person you added: we email your account's address to check, then erase/),
+      expect.stringMatching(/^You, in someone else's account: .*only look for what you tell us/),
+    ]);
+    expect(asking).toHaveTextContent(/Other people's accounts keep what they typed or copied about you/);
+    expect(section("What your account keeps")).toHaveTextContent(/emailed note .* within four days/);
+  });
+
+  it("says what Zinc and the store get", () => {
+    render(<PrivacyPage />);
+    expect(section("Who else handles it")).toHaveTextContent(
+      /the recipient's name and address, your phone number, and any gift message/,
+    );
+  });
+
+  it("says who sees the name on a claim", () => {
+    render(<PrivacyPage />);
+    expect(section("What your account keeps")).toHaveTextContent(/everyone with the list's link.*except its owner/);
+    expect(section("What your account keeps")).toHaveTextContent(/name you typed/);
+  });
+
+  it("says what the AI gets when it looks for ideas", () => {
+    render(<PrivacyPage />);
+    expect(section("What the AI reads")).toHaveTextContent(/ideas.*occasion.*budget/);
+  });
 });

@@ -24,7 +24,11 @@ export default function FeedbackPage() {
             To ask us to erase data, leave your email so we can check it&apos;s you and tell you when it&apos;s done.
           </p>
         </div>
-        <FeedbackForm sentNote="It's in our inbox. If you left your email, we'll reply there." />
+        <FeedbackForm
+          sentNote="It's in our inbox. If you left your email, we'll reply there."
+          question="What would you like to tell us?"
+          placeholder="Something broke, or please erase…"
+        />
       </main>
       <HomeFooter />
     </div>

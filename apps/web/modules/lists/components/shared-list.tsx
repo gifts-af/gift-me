@@ -186,12 +186,21 @@ export default function SharedList({ list, token, nav, top }: SharedListProps) {
           />
         </section>
         {/* Guests arrive here on a task; a quiet way to find out more (ALL-46). */}
-        <Link
-          href="/"
-          className="inline-flex min-h-11 items-center self-center text-[13px] text-muted-foreground underline underline-offset-[3px] hover:text-foreground"
-        >
-          What is GiftsAF?
-        </Link>
+        <div className="flex flex-wrap justify-center gap-x-5">
+          {[
+            ["/", "What is GiftsAF?"],
+            ["/privacy", "Privacy"],
+            ["/feedback", "Feedback"],
+          ].map(([href, label]) => (
+            <Link
+              key={href}
+              href={href}
+              className="inline-flex min-h-11 items-center text-[13px] text-muted-foreground underline underline-offset-[3px] hover:text-foreground"
+            >
+              {label}
+            </Link>
+          ))}
+        </div>
       </PageFrame>
 
       {viewing && <ViewDialog gift={viewing} onClose={() => setViewing(null)} />}
