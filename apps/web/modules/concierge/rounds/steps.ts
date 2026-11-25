@@ -149,7 +149,7 @@ export type IdeaTurn = { result: "advanced" | "waiting" | "busy" | "failed"; ide
  * its worst case fits before the tick's deadline; a refusal doesn't use a turn. Rounds that
  * get no turn are released, with no run counted, for the next tick. Once a run finds the AI
  * credit gone (no_credit), every later run would too, so the rest are released without one.
- * Returns one turn per round, in the order they were taken.
+ * Returns one turn per round.
  */
 export async function ideaPass(
   turns: ClaimedRound[],
@@ -181,7 +181,7 @@ export async function ideaPass(
     return unread;
   }
 
-  const ended: IdeaTurn[] = [];
+  const done: IdeaTurn[] = [];
   let started = 0;
   let noCredit = false;
   const byDeadline = [...turns].sort((a, b) => (a.shipByDeadline < b.shipByDeadline ? -1 : a.shipByDeadline > b.shipByDeadline ? 1 : 0));
@@ -190,7 +190,7 @@ export async function ideaPass(
     if (noTurn || tickDeadline - clock() < worstMs) {
       const release = await releaseQuietly(claimed, deps);
       // Ended by a date change: no run ended, so there's no outcome to tell.
-      ended.push(release === "ended" ? { result: "busy", release } : { result: "waiting", ideas: noTurn ? "no_turn" : "no_time", release });
+      done.push(release === "ended" ? { result: "busy", release } : { result: "waiting", ideas: noTurn ? "no_turn" : "no_time", release });
       continue;
     }
     const ids = { round_id: claimed.id, user_id: claimed.userId, status: claimed.status };
@@ -202,14 +202,14 @@ export async function ideaPass(
       if (round.status !== "generating") {
         const regained = await moveToGenerating(round, deps);
         if (!regained) {
-          ended.push({ result: "busy" }); // another run took it in between; it carries on
+          done.push({ result: "busy" }); // another run took it in between; it carries on
           continue;
         }
         round = regained;
       }
       // moveToGenerating let go of the lease for a moment, and another run may have told the buyer it's too late.
       if ((await store.sentSteps(round.id)).has("no_ideas_late")) {
-        ended.push({ result: "busy", release: await releaseQuietly(round, deps) });
+        done.push({ result: "busy", release: await releaseQuietly(round, deps) });
         continue;
       }
       const outcome = await deps.generateIdeas(
@@ -220,18 +220,18 @@ export async function ideaPass(
       if (USES_TURN.includes(outcome.status)) started++;
       if (outcome.status === "no_credit") noCredit = true;
       const release = await afterIdeaRun(round, outcome, ideas, deps, s);
-      if (release) ended.push({ result: release === "ended" ? "busy" : "waiting", ideas, release });
-      else ended.push({ result: "advanced", ideas });
+      if (release) done.push({ result: release === "ended" ? "busy" : "waiting", ideas, release });
+      else done.push({ result: "advanced", ideas });
     } catch (err) {
       if (await endedByMove(err, claimed, deps)) {
-        ended.push({ result: "busy", ideas });
+        done.push({ result: "busy", ideas });
         continue;
       }
       logEvent("round_failed", { ...ids, ...errorFields(err) });
-      ended.push({ result: "failed", ideas });
+      done.push({ result: "failed", ideas });
     }
   }
-  return ended;
+  return done;
 }
 
 /** What a run came to, for the log: "none", "refused:busy" (a reason, never text). */
@@ -255,15 +255,15 @@ export async function sendTooLate(round: ClaimedRound, ctx: RoundContext, sent: 
 async function afterIdeaRun(
   round: ClaimedRound,
   outcome: IdeaOutcome,
-  ended: string,
+  ideas: string,
   deps: StepDeps,
   s: ScheduleSettings,
 ): Promise<Release | void> {
   const { store } = deps;
-  const atDeadline = () => finishAt(round, startOf(round.shipByDeadline), deps, ended);
+  const atDeadline = () => finishAt(round, startOf(round.shipByDeadline), deps, ideas);
   const release = async () => {
     const released = await releaseQuietly(round, deps);
-    logEvent("round_step", { round_id: round.id, user_id: round.userId, status: round.status, next_status: round.status, step: `ideas:${ended}` });
+    logEvent("round_step", { round_id: round.id, user_id: round.userId, status: round.status, next_status: round.status, step: `ideas:${ideas}` });
     return released;
   };
   switch (outcome.status) {
@@ -318,7 +318,7 @@ async function afterIdeaRun(
     }
     if (action.do === "wait") return atDeadline();
   }
-  return finishStep(round, ctx, sent, { status: "generating" }, deps, s, `ideas:${ended}`);
+  return finishStep(round, ctx, sent, { status: "generating" }, deps, s, `ideas:${ideas}`);
 }
 
 /** Finishes the round at its status, to be looked at again at `at`. */

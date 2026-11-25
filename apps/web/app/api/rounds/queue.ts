@@ -62,6 +62,6 @@ export function sendJobsWith(send: SendBatch, secret: string): SendJobs {
   };
 }
 
-/** The tick's sender: the real queue, messages signed with the tick's own CRON_SECRET. */
+/** The tick's and the job route's sender: the real queue, messages signed with CRON_SECRET. */
 export const queueSendJobs = (secret: string): SendJobs => sendJobsWith(sendBatch, secret);
 export { handleCallback };

@@ -152,7 +152,7 @@ function roundBase(now: Date, env: Env, zincShare: number): { db: SupabaseClient
 
 /**
  * A round message's deps: the wallet side for the heads-up's low-balance warning, and nothing that
- * places a gift. So it reads no fee or margin, and Zinc being off here isn't worth a log.
+ * places a gift. So the wiring itself reads no fee or margin, and Zinc being off here isn't worth a log.
  */
 export async function roundWiring(now: Date, env: Env, zincShare: number): Promise<StepDeps> {
   const { db, base } = roundBase(now, env, zincShare);

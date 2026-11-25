@@ -187,7 +187,13 @@ describe.skipIf(!stack)("a search that finds nothing (real local database)", () 
       generateIdeas,
       zinc: null,
     };
-    return { deps, generateIdeas, tick: () => runTick(deps), job: () => runRoundMessage({ kind: "round", roundId: r.roundId }, { ...deps, sendJobs: async () => ({ sent: 0, failed: 0 }) }) };
+    const sendJobs = async () => ({ sent: 0, failed: 0 });
+    return {
+      deps,
+      generateIdeas,
+      tick: () => runTick(deps),
+      job: () => runRoundMessage({ kind: "round", roundId: r.roundId }, { ...deps, sendJobs }),
+    };
   }
 
   const status = async (r: Round) => (await pg.query("select status::text as s from concierge.gift_rounds where id = $1", [r.roundId])).rows[0].s;

@@ -119,13 +119,13 @@ describe.skipIf(!supabase)("Zinc and engine wiring (real local database and engi
     }) satisfies typeof fetch);
   }
 
-  it("AC-12: a round message doesn't read the order margin, which the buying side needs", async () => {
-    unreadable("order_price_margin_pct");
+  it.each(["order_price_margin_pct", "zinc_order_fee_cents"])("AC-12: a round message's wiring doesn't read %s, which the buying side needs", async (key) => {
+    unreadable(key);
     try {
       await expect(wiring.roundWiring(new Date(), { ...base, EMAIL_OUTBOX: "log" }, 1)).resolves.toMatchObject({
         zinc: { walletUrl: "https://app.zinc.test/wallet" },
       });
-      await expect(wiring.buyingWiring(new Date(), { ...base, EMAIL_OUTBOX: "log" })).rejects.toThrow("order_price_margin_pct");
+      await expect(wiring.buyingWiring(new Date(), { ...base, EMAIL_OUTBOX: "log" })).rejects.toThrow(key);
     } finally {
       vi.unstubAllGlobals();
     }

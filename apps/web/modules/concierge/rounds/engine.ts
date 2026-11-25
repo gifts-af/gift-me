@@ -276,7 +276,7 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
 export type JobResult = "off" | "busy" | "advanced" | "waiting" | "failed";
 
 /**
- * Runs one round message (ALL-125): the round's step, and its idea run when that's the step. Its
+ * Runs one round message: the round's step, and its idea run when that's the step. Its
  * deps can't place a gift.
  */
 export async function runRoundMessage(message: RoundMessage, deps: StepDeps & { sendJobs: SendJobs }): Promise<JobResult> {
@@ -284,7 +284,7 @@ export async function runRoundMessage(message: RoundMessage, deps: StepDeps & { 
   return runJob(message, deps, (progress) => roundJob(message.roundId, deps, jobStartMs, progress));
 }
 
-/** Runs one buyer message (ALL-125): the buyer's held gifts. */
+/** Runs one buyer message: the buyer's held gifts. */
 export async function runBuyerMessage(message: BuyerMessage, deps: EngineDeps): Promise<JobResult> {
   return runJob(message, deps, (progress) => buyerJob(message.roundIds, deps, progress));
 }
