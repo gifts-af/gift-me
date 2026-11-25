@@ -31,7 +31,8 @@ export default function GiftList<G extends Gift>({
       {gifts.map((gift) => (
         // Keyed by a per-add id, never the ASIN: adding the same product twice
         // would collide and make React remove the wrong card.
-        <li key={gift.id} className="min-w-0">
+        // The id is what a link to one gift on a list points at.
+        <li key={gift.id} id={`gift-${gift.id}`} className="min-w-0">
           <GiftCard gift={gift} onRemove={onRemove} onView={onView} actions={renderActions?.(gift)} />
         </li>
       ))}

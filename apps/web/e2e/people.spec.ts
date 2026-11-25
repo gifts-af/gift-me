@@ -3,7 +3,7 @@ import { localSupabase } from "./local-supabase";
 import { SECOND_USER, TEST_USER } from "./test-user";
 import { createFreshUser } from "./fresh-user";
 import { phoneLayoutProblems } from "./phone-layout";
-import { addMother, addSavedGift, saveBudgets } from "./seed";
+import { addMother, addSavedGift, linkListWithPhotos, saveBudgets } from "./seed";
 import { personFor, readyBuyer, rest, seedFailedOrder, seedRound } from "./rounds";
 import { session, signIn } from "./sign-in";
 
@@ -105,7 +105,7 @@ async function addBirthday(user: { email: string; password: string }, personId: 
 // The layout of each screen these journeys pass through, on every browser, in
 // light and dark (ALL-127 AC-20). The journeys are behavior, so they run on the
 // iPhone only (ALL-118).
-test("the Add form, Home, a person's page, About and the moved screens fit the screen", { tag: "@layout" }, async ({ page }) => {
+test("the Add form, Home, a person's page, About and the moved screens fit the screen", { tag: "@layout" }, async ({ page, baseURL }) => {
   // Sixteen page loads (eight screens, light and dark).
   test.slow();
   const user = await createFreshUser();
@@ -115,6 +115,9 @@ test("the Add form, Home, a person's page, About and the moved screens fit the s
   await addSavedGift(user, personId, `Hand-tied fly-fishing reel with a spare spool and a carry case ${"x".repeat(56)}`);
   // A long Budget row (ALL-120): it's cut short, never pushed off the screen.
   await saveBudgets(user, personId, { any: 7500, christmas: 12500, mothers_day: 5050 });
+  // A long name beside three photos, so the linked list's card is checked at its widest.
+  const linkedId = await addMother(user, "Grandma Featherstonehaugh");
+  await linkListWithPhotos(await createFreshUser(), user, linkedId, [1, 2, 3].map((n) => `${baseURL}/pwa-icon/192?v=${n}`));
   await signIn(page, user);
   // The full phone check (ALL-109): sideways scroll, small links, text past the edge.
   // Collected for every screen, so one run lists them all.
@@ -128,6 +131,10 @@ test("the Add form, Home, a person's page, About and the moved screens fit the s
       // The list prompt at the top (ALL-123), in place of the Their list row.
       await expect(page.getByRole("heading", { name: "Does Mom have a GiftsAF list?" })).toBeVisible();
       await expect(page.getByRole("textbox", { name: "Their list link" })).toBeVisible();
+    }],
+    ["Linked person page", `/people/${linkedId}`, async () => {
+      await expect(page.getByRole("link", { name: "See their list" })).toBeVisible();
+      await expect(page.getByRole("region", { name: /GiftsAF list$/ }).locator("img")).toHaveCount(3);
     }],
     ["About", `/people/${personId}/about`, () => expect(page.getByRole("button", { name: "Remove birthday" })).toBeVisible()],
     ["Budget screen", `/people/${personId}/budget`, () => expect(page.getByRole("textbox", { name: "Any occasion" })).toBeVisible()],
@@ -143,6 +150,16 @@ test("the Add form, Home, a person's page, About and the moved screens fit the s
     }
   }
   expect(problems).toEqual([]);
+  // The narrowest phones: the photos never cover the button.
+  for (const width of [320, 360]) {
+    await page.setViewportSize({ width, height: 812 });
+    await page.goto(`/people/${linkedId}`);
+    const button = await page.getByRole("link", { name: "See their list" }).boundingBox();
+    const photo = await page.getByRole("link", { name: "See Gift 1 on their list" }).boundingBox();
+    if (!button || !photo) throw new Error("The linked list's card isn't showing");
+    const apart = photo.x >= button.x + button.width - 4 || photo.y >= button.y + button.height - 4;
+    expect(apart, `photos clear of the button at ${width}px`).toBe(true);
+  }
 });
 
 // ALL-127: About Mom saves each field as you go, with no Save button.
@@ -339,10 +356,11 @@ test("add Mom, set her occasions and budget, link her list, delete her", async (
 
   // 4. SECOND_USER's list, linked by its share link in the prompt at the top (ALL-123): "Their own list".
   const sharePath = await secondUserShareLink();
-  await expect(page.getByRole("link", { name: /^Their list/ })).toHaveCount(0);
+  const theirList = page.getByRole("link", { name: "See their list" });
+  await expect(theirList).toHaveCount(0);
   await page.getByRole("textbox", { name: "Their list link" }).fill(new URL(sharePath, page.url()).toString());
   await page.getByRole("button", { name: "Link", exact: true }).click();
-  await expect(page.getByRole("link", { name: /^Their list/ })).toContainText("Linked");
+  await expect(theirList).toBeVisible();
   await expect(page.getByRole("heading", { name: `Does ${mom} have a GiftsAF list?` })).toHaveCount(0);
   await page.goto("/");
   await expect(page.locator("div", { has: momLink }).last()).toContainText("Their own list");
@@ -425,4 +443,28 @@ test("save a gift for someone, then remove it", async ({ page }) => {
   // 5. Back on her page, the row counts what's saved.
   await page.getByRole("link", { name: "Mom", exact: true }).click();
   await expect(page.getByRole("link", { name: /^Saved gifts/ })).toContainText("1");
+});
+
+test("a photo on a linked person's card opens their list at that gift, and Back returns", async ({ page, baseURL }) => {
+  const user = await createFreshUser();
+  const personId = await addMother(user, "Mom");
+  // Gifts after the first three make the list long enough to scroll; their photos stay off the card.
+  const photos = Array.from({ length: 12 }, (_, i) => (i === 0 || i === 8 || i === 9 ? `${baseURL}/pwa-icon/192?v=${i}` : null));
+  await linkListWithPhotos(await createFreshUser(), user, personId, photos);
+  await signIn(page, user);
+  await page.goto(`/people/${personId}`);
+  await page.getByRole("link", { name: "See Gift 9 on their list" }).click();
+  await expect(page).toHaveURL(/\/share\/[0-9a-f-]{36}#gift-[0-9a-f-]{36}$/);
+  await expect(page.getByRole("button", { name: "Claim Gift 9" })).toBeInViewport();
+  await expect(page.getByRole("heading", { level: 1 })).not.toBeInViewport();
+  await page.goBack();
+  await expect(page).toHaveURL(new RegExp(`/people/${personId}$`));
+  // Another photo opens at its own gift, and the button at the top.
+  await page.getByRole("link", { name: "See Gift 1 on their list" }).click();
+  await expect(page.getByRole("button", { name: "Claim Gift 1", exact: true })).toBeInViewport();
+  await page.goBack();
+  await expect(page).toHaveURL(new RegExp(`/people/${personId}$`));
+  await page.getByRole("link", { name: "See their list" }).click();
+  await expect(page).toHaveURL(/\/share\/[0-9a-f-]{36}$/);
+  await expect(page.getByRole("heading", { level: 1 })).toBeInViewport();
 });

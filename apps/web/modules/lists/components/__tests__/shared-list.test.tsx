@@ -33,6 +33,26 @@ const guest: SharedListData["viewer"] = { signedIn: false, email: null, name: nu
 const unnamed = { cardEnabled: false, ownerName: null, linkedPerson: null };
 
 describe("SharedList", () => {
+  it("scrolls to the gift the address names, and nowhere without one", () => {
+    const scrolled: string[] = [];
+    HTMLElement.prototype.scrollIntoView = function () {
+      scrolled.push(this.id);
+    };
+    const list: SharedListData = { title: "t", ...unnamed, isOwner: false, viewer: guest, items: [item("a", "Kettle"), item("b", "Socks")] };
+    try {
+      render(<SharedList token="t" list={list} />).unmount();
+      window.location.hash = "#gift-gone";
+      render(<SharedList token="t" list={list} />).unmount();
+      expect(scrolled).toEqual([]);
+      window.location.hash = "#gift-b";
+      const { rerender } = render(<SharedList token="t" list={list} />);
+      rerender(<SharedList token="t" list={{ ...list, items: [...list.items] }} />);
+      expect(scrolled).toEqual(["gift-b"]);
+    } finally {
+      window.location.hash = "";
+    }
+  });
+
   it("lets a friend claim and shows who claimed what", () => {
     render(
       <SharedList

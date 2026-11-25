@@ -63,8 +63,8 @@ test("add a list's owner from their link, open their list from their page, and r
   // 3. Their page, with the list already linked in the same save (AC-8).
   await expect(page).toHaveURL(/\/people\/[0-9a-f-]{36}$/);
   const personUrl = page.url();
-  const theirList = page.getByRole("link", { name: /^Their list/ });
-  await expect(theirList).toContainText("Linked");
+  const theirList = page.getByRole("link", { name: "See their list" });
+  await expect(theirList).toBeVisible();
   await expect(page.getByRole("heading", { name: `Does ${name} have a GiftsAF list?` })).toHaveCount(0);
 
   // 4. Their list is the same screen as the share link, with Remove (AC-5).

@@ -226,6 +226,34 @@ export async function getPersonShareToken(personId: string): Promise<string | nu
   return (data as string | null) ?? null;
 }
 
+// How many photos fit beside the link on a person's page.
+const PERSON_LIST_PHOTOS = 3;
+
+/** A gift's photo, and which gift it is. */
+export type ListPhoto = { giftId: string; name: string; url: string };
+
+/**
+ * The first few photos on the list the signed-in user's person is linked to,
+ * in list order, leaving out claimed gifts: a photo of one would sell a gift that's taken. None when unlinked or unreadable: the page only decorates
+ * its link to the list with them.
+ */
+export async function getPersonListPhotos(personId: string): Promise<ListPhoto[]> {
+  if (!UUID_PATTERN.test(personId)) return [];
+  const supabase = await createClient();
+  const { data, error } = await supabase.schema("lists").rpc("person_list", { p_person_id: personId });
+  if (error) {
+    logEvent("person_list_photos_failed", { person_id: personId, code: typeof error.code === "string" ? error.code : null });
+    return [];
+  }
+  const items = (data as { items?: { id: string; name: string; image_url: string | null; claimed: boolean }[] } | null)?.items ?? [];
+  const photos: ListPhoto[] = [];
+  for (const { id, name, image_url: url, claimed } of items) {
+    if (photos.length === PERSON_LIST_PHOTOS) break;
+    if (url && !claimed && !photos.some((photo) => photo.url === url)) photos.push({ giftId: id, name, url });
+  }
+  return photos;
+}
+
 /**
  * What a link preview may say about a list: the owner's name and a gift
  * count. Null for an unknown or malformed token. Callable by anyone.

@@ -373,7 +373,7 @@ async function linkOnPage(page: Page, personId: string, base: string, token: str
   await linkField.fill(`${base}/share/${token}`);
   await expect.poll(() => linkField.evaluate((el) => Object.keys(el).some((k) => k.startsWith("__reactProps")))).toBe(true);
   await linkField.press("Enter");
-  await expect(page.getByRole("link", { name: /^Their list/ })).toContainText("Linked");
+  await expect(page.getByRole("link", { name: "See their list" })).toBeVisible();
 }
 
 const dayFromNow = (n: number) => new Date(Date.now() + n * DAY_MS).toISOString().slice(0, 10);
