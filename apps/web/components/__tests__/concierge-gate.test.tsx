@@ -13,10 +13,10 @@ import { ConciergePitch } from "../home/concierge-pitch";
 
 type Reply = { data: { concierge_access: boolean; access_requested_at: string | null } | null; error: { message: string } | null };
 
-function client(userId: string | null, reply: Reply) {
+function client(userId: string | null, reply: Reply, claimsError: { message: string } | null = null) {
   const query = { select: () => query, eq: () => query, maybeSingle: async () => reply };
   createClient.mockResolvedValue({
-    auth: { getClaims: async () => ({ data: userId ? { claims: { sub: userId } } : null, error: null }) },
+    auth: { getClaims: async () => ({ data: userId && !claimsError ? { claims: { sub: userId } } : null, error: claimsError }) },
     schema: () => ({ from: () => query }),
   });
 }
@@ -86,6 +86,17 @@ describe("ConciergeGate", () => {
     expect(logged).not.toContain("secret detail");
   });
 
+  it("shows the retry line, not a redirect, when the sign-in check itself fails (AC-13)", async () => {
+    client(null, row(true), { message: "auth service down" });
+    await show();
+    expect(screen.getByText("We couldn't load this. Refresh to try again.")).toBeInTheDocument();
+    expect(child).not.toHaveBeenCalled();
+    expect(screen.queryByText("Request access")).toBeNull();
+    const logged = String(vi.mocked(console.log).mock.calls[0][0]);
+    expect(JSON.parse(logged)).toMatchObject({ event: "concierge_access.check_failed" });
+    expect(logged).not.toContain("auth service down");
+  });
+
   it("puts the pitch and the retry line, but not the page, in the frame it's given", async () => {
     const frame = (notice: React.ReactNode) => <main>{notice}</main>;
     client("u1", row(false));
@@ -101,7 +112,7 @@ describe("ConciergeGate", () => {
     expect(screen.queryByRole("main")).toBeNull();
   });
 
-  it("sends a signed-out visitor to sign in", async () => {
+  it("sends a visitor with no session (no data, no error) to sign in", async () => {
     client(null, row(true));
     await expect(ConciergeGate({ children: <Child /> })).rejects.toMatchObject({
       digest: expect.stringContaining("/auth/login"),

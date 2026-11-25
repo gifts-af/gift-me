@@ -26,7 +26,11 @@ export async function ConciergeGate({
   let state: Awaited<ReturnType<typeof getAccessState>> | null = null;
   try {
     const supabase = (await createClient()) as unknown as SupabaseClient<Database>;
-    userId = (await supabase.auth.getClaims()).data?.claims?.sub ?? null;
+    // No session comes back as no data and no error: that's a redirect. An
+    // error means the check failed, which must not look like signed out.
+    const { data, error } = await supabase.auth.getClaims();
+    if (error) throw error;
+    userId = data?.claims?.sub ?? null;
     if (userId) state = await getAccessState(supabase, userId);
   } catch (error) {
     unstable_rethrow(error);
