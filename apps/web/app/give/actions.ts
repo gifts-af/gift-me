@@ -41,7 +41,7 @@ export async function requestAccessAction(): Promise<{ status: "sent" | "busy" |
         log: logEvent,
       },
     );
-    // Any gated page can show the button, so whichever one it was is re-read.
+    // Give and the gated pages can all show the button, so whichever it was is re-read.
     if (result.status === "sent") refresh();
     return result;
   } catch (error) {

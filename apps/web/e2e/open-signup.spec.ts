@@ -297,6 +297,13 @@ test("one tap asks for access, and asking again changes nothing (AC-6)", async (
   await expect(card(page)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Request access" })).toHaveCount(0);
   await expect(page.getByRole("heading", { level: 1, name: "People" })).toBeVisible();
+  // Back on Give it still says so, and focus isn't taken again.
+  await page.getByRole("link", { name: "Get", exact: true }).click();
+  await expect(page.getByRole("region", { name: "My list" })).toBeVisible();
+  await page.getByRole("link", { name: "Give", exact: true }).click();
+  await expect(sent).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "People" })).toBeVisible();
+  await expect(sent).not.toBeFocused();
   const asked = await account(id);
   expect(asked.concierge_access).toBe(false);
   expect(Math.abs(Date.now() - Date.parse(asked.access_requested_at!))).toBeLessThan(60_000);

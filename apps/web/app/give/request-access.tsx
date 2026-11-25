@@ -29,19 +29,39 @@ export function RequestAccess({
   const sentRef = useRef<HTMLDivElement>(null);
   const isSent = requested || status === "sent";
 
-  // Only for the tap made here, not a page opened after asking.
+  // Set by an answer to the tap made here, so focus moves once for it.
+  const focusSent = useRef(false);
   useEffect(() => {
-    if (status === "sent") sentRef.current?.focus();
+    if (!focusSent.current) return;
+    focusSent.current = false;
+    sentRef.current?.focus();
   }, [status]);
 
+  // Next.js keeps a page you leave in a hidden <Activity>, which runs effect
+  // cleanups. Its messages go, and an answer still on its way is dropped; the
+  // re-read page says whether it was sent.
+  const visit = useRef(0);
+  useEffect(
+    () => () => {
+      visit.current += 1;
+      setStatus(null);
+    },
+    [],
+  );
+
   function send() {
+    const asked = visit.current;
     setStatus(null);
     startTransition(async () => {
+      let answer: Status = "error";
       try {
-        setStatus((await action()).status);
+        answer = (await action()).status;
       } catch {
-        setStatus("error");
+        // It couldn't be reached.
       }
+      if (asked !== visit.current) return;
+      focusSent.current = answer === "sent";
+      setStatus(answer);
     });
   }
 

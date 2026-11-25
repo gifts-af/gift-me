@@ -28,7 +28,7 @@ describe.skipIf(!stack)("a free account at the daily tick (real local database)"
   let pg: Client;
   const users: string[] = [];
   const before = new Map<string, string>();
-  // The idea limits leave room for these two accounts, whatever else ran today.
+  // The idea limits leave room for these accounts, whatever else ran today.
   const SETTINGS = {
     round_engine_enabled: 1,
     round_fanout_enabled: 0,
@@ -141,20 +141,27 @@ describe.skipIf(!stack)("a free account at the daily tick (real local database)"
     };
   }
 
-  it("AC-20: the paid account's person gets a round; the free one's gets nothing, until it's paid", async () => {
+  it("AC-20: the paid account's person gets a round; a free one's gets nothing, asked for access or not, until it's paid", async () => {
     const paid = await newUser();
     const free = await newUser();
+    // Someone who asked for access has an account row, not paid for.
+    const asked = await newUser();
+    await pg.query("insert into concierge.accounts (user_id, paid_features, access_requested_at) values ($1, false, now())", [asked]);
     await pay(paid);
     const everything = { rounds: 1, ideaRuns: 1, costEvents: 1, notifications: 1 };
 
     expect(await tick()).toMatchObject({ enabled: true, failed: 0 });
     expect(await made(paid)).toEqual(everything);
-    expect(await made(free)).toEqual({ rounds: 0, ideaRuns: 0, costEvents: 0, notifications: 0 });
+    const nothing = { rounds: 0, ideaRuns: 0, costEvents: 0, notifications: 0 };
+    expect(await made(free)).toEqual(nothing);
+    expect(await made(asked)).toEqual(nothing);
 
-    // The free account lacked only paid features.
+    // They lacked only paid features.
     await pay(free);
+    await pay(asked);
     expect(await tick()).toMatchObject({ enabled: true, failed: 0 });
     expect(await made(free)).toEqual(everything);
+    expect(await made(asked)).toEqual(everything);
     expect(await made(paid)).toEqual(everything);
   }, 30_000);
 });
