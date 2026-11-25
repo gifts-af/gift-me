@@ -56,11 +56,19 @@ const offersReply = z.object({ offers: z.array(z.unknown()) });
  */
 export type ZincRetailer = string;
 
+/** What to count as shipping when Amazon's says free: its free shipping needs a minimum order (app_settings). */
+export type AmazonShipping = {
+  /** At this item price or more, free is free; 0 always takes Zinc's word. */
+  amazonFreeShippingFromCents: number;
+  amazonShippingCents: number;
+};
+
 export async function productOffers(
   h: ZincHttp,
   key: string,
   retailer: ZincRetailer,
   productId: string,
+  ship: AmazonShipping,
   signal: AbortSignal,
 ): Promise<ZincOffer[]> {
   const r = await call(h, "GET", `/products/${encodeURIComponent(productId)}/offers`, offersReply, {
@@ -80,7 +88,10 @@ export async function productOffers(
       retailer === "amazon" &&
       o.handling_days.min === slowest.delivery_days.min &&
       o.handling_days.max === slowest.delivery_days.max;
-    const shippingCents = Math.max(...o.shipping_options.map((s) => s.price));
+    const quotedCents = Math.max(...o.shipping_options.map((s) => s.price));
+    // The order ships alone, so Amazon's free shipping on a bigger basket isn't free here.
+    const estimated = retailer === "amazon" && quotedCents === 0 && o.price < ship.amazonFreeShippingFromCents;
+    const shippingCents = estimated ? ship.amazonShippingCents : quotedCents;
     out.push({
       offerId: o.offer_id ?? null,
       priceCents: o.price,
@@ -294,12 +305,13 @@ export async function listGiftQuote(
   key: string,
   item: { url: string; asin: string | null; listPriceCents: number | null },
   step: ZincStep,
+  ship: AmazonShipping,
   signal: AbortSignal,
 ): Promise<ListGiftQuote> {
   const route = listGiftRoute(item.url, item.asin);
   if (route.kind === "refused") return { kind: "unsupported" };
   if (route.kind === "offers") {
-    const offers = await step(() => productOffers(h, key, route.retailer, route.productId, signal));
+    const offers = await step(() => productOffers(h, key, route.retailer, route.productId, ship, signal));
     if (offers === "stop") return { kind: "stopped" };
     const best = pickOffer(offers);
     return best

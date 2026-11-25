@@ -28,6 +28,8 @@ export type IdeaSettings = {
   zincLookupCents: number;
   zincRequestsPerSecond: number;
   orderFeeCents: number;
+  amazonFreeShippingFromCents: number;
+  amazonShippingCents: number;
   /** The most Zinc lookups of list gifts in one run (ALL-29). */
   listLookupsMax: number;
   /** With fewer list gifts than this qualifying, the brainstorm adds ideas. */
@@ -142,6 +144,8 @@ const SETTING_KEYS = {
   zincLookupCents: "zinc_lookup_cents",
   zincRequestsPerSecond: "zinc_requests_per_second",
   orderFeeCents: "zinc_order_fee_cents",
+  amazonFreeShippingFromCents: "amazon_free_shipping_from_cents",
+  amazonShippingCents: "amazon_shipping_estimate_cents",
   listLookupsMax: "idea_list_lookups_max",
   listMin: "idea_list_min",
 } as const;

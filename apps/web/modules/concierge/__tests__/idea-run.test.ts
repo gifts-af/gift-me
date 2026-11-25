@@ -36,6 +36,8 @@ const settings = (o: Partial<IdeaSettings> = {}): IdeaSettings => ({
   zincLookupCents: 1,
   zincRequestsPerSecond: 10,
   orderFeeCents: 100,
+  amazonFreeShippingFromCents: 0,
+  amazonShippingCents: 699,
   listLookupsMax: 10,
   listMin: 3,
   schedule: SCHEDULE,

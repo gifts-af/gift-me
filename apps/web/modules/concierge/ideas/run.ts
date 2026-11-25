@@ -370,7 +370,7 @@ async function listPass(gifts: ListGift[], p: PassDeps & { t: Tally; stopped: ()
       return lookup(call, () => !enough());
     };
     try {
-      const q = await listGiftQuote(deps.zinc.http, deps.zinc.key, { url: g.url, asin: g.asin, listPriceCents: g.listPriceCents }, step, req.signal);
+      const q = await listGiftQuote(deps.zinc.http, deps.zinc.key, { url: g.url, asin: g.asin, listPriceCents: g.listPriceCents }, step, s, req.signal);
       if (q.kind === "stopped" || q.kind === "unsupported") {
         note(q.kind);
         return null;
@@ -542,7 +542,7 @@ async function brainstormPass(
       if (hits === "stop") return { stopped: true };
       const hit = matchHit(hits, c.brand);
       if (!hit) return { drop: "not_found" };
-      const offers = await lookup(() => productOffers(deps.zinc.http, deps.zinc.key, "amazon", hit.productId, req.signal));
+      const offers = await lookup(() => productOffers(deps.zinc.http, deps.zinc.key, "amazon", hit.productId, s, req.signal));
       if (offers === "stop") return { stopped: true };
       const offer = pickOffer(offers);
       if (!offer) return { drop: "unavailable" };
