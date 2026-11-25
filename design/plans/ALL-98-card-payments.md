@@ -66,7 +66,7 @@ Most you'll pay              $25.64
 | AC-10 | Zinc posts an event to the app's webhook | It's handled | Signature checked; the order is found first and the user comes from it; only `connect` orders change there, and only wallet orders at a buyer's own webhook. A definite unknown order gets 200 and an alert; a failed lookup still errors, so Zinc retries |
 | AC-11 | A list owner's shared address | A buyer uses connect | The buyer can't see the street anywhere they can reach (real order). The sharing wording stays as it is while wallet buyers remain, because they can still see a street in Zinc **[Claude's call]** |
 | AC-12 | `connect_enabled` is off | Anyone | No connect order is placed (checked in SQL under the lock) and Add a card is hidden; held ones show as `paused` whatever their stored reason, so nobody is asked for a card; events, sweep, tracking and Remove still work |
-| AC-13 | The buyer removes their card | Settings | It's detached at Stripe; unplaced gifts end as `card_needed` until the buyer adds a card and taps Buy again; placed ones unaffected; refused while an order is `placing` or `unconfirmed` |
+| AC-13 | The buyer removes their card | Settings | It's detached at Stripe; unplaced gifts end as `card_needed` at their next placing try, and need a card and a Buy again tap; placed ones unaffected; refused while an order is `placing` or `unconfirmed` |
 | AC-14 | A connect order's price is known | It's recorded | Zinc's fee and the card fee are each counted once, whichever of the webhook and the sweep comes first; the report's fee from settings isn't added again for connect orders (ALL-144) |
 | AC-15 | Fee settings change | Next approval | New amounts, no deploy; approved orders, held ones included, keep theirs |
 | AC-16 | A wallet buyer | Anything above | As today, proved by the existing wallet tests |
@@ -80,8 +80,8 @@ Most you'll pay              $25.64
 - **Fee math (`packages/core`), one function each way.** `charge(goods) = ceil((goods + margin + zinc_fee + card_fixed) / (1 - pct))`; `cap(maxCharge) = floor(maxCharge * (1 - pct)) - margin - zinc_fee - card_fixed`. Integer math on basis points. Subtracting a fee worked out at the lower price is wrong: the fee grows with the price ($22.59 could have charged $27.71 against $27.63 shown). Property-tested across cents. $50 + $2.50 + $1 gives Zinc's $55.41; the sandbox hold rounds to the nearest cent, so ours is the same or 1 cent more.
 - **`max_price` excludes margin and fees** (Zinc docs). Every total comes from the idea's price, shipping and tax plus the buyer's fee, because `est_total_cents` already contains the wallet's $1.
 - **Saved on the order at approval:** the four fee inputs and the approved maximum. The re-check uses them, not today's settings. Budget code that adds a flat fee (`committedSpendCents`, `sequentialCaps`, `recheckedCaps`, `replace_failed_order`) gets a connect path: goods first, then `charge`. The wallet meaning of `fee_cents` and `total_cents` doesn't change; on a connect order `fee_cents` is the whole GiftsAF fee: at the cap until the order settles, then Zinc's actual charge minus the goods total, or `charge(total) - total` from the saved inputs if Zinc doesn't report it.
-- **Placing.** `placeRound` and `begin_placing` gate on a saved card instead of a wallet when `funding_mode` is `connect`. One app Zinc key places these, separate from the lookup key and on a Zinc account with no wallet money; a connect order whose body has no `payment` is refused before it's sent. Wallet orders keep the buyer's key. `begin_placing` records the card on each order and returns it; only that card is sent, resends included. Other wallet checks to split: `hold-gate.ts`, `rounds/store.ts` (`canBuy`), `steps.ts` (balance warning), and the fee wording. Dev, previews and production each need their own Zinc account and Stripe mode, with today's environment check.
-- **No card.** No new hold, and nothing placed by itself: a decline, a removal, or a send with no saved card ends the gift as the failure `card_needed`, which the fix page replaces on a tap. A decline always fails its own order; if the saved card is still the one recorded on it, it also clears the card and fails the buyer's other held connect orders, as a removal does. Approval without a card is refused. Remove follows `zinc_forget`'s lock order, clears the database first, then detaches at Stripe. **[Claude's call, 2026-11-25: replaces a separate needs-a-tap mark]**
+- **Placing.** `placeRound` and `begin_placing` gate on a saved card instead of a wallet when `funding_mode` is `connect`. One app Zinc key places these, separate from the lookup key and on a Zinc account with no wallet money; a connect order whose body has no `payment` is refused before it's sent. Wallet orders keep the buyer's key. Approval records the card on each order; only that card is sent, resends included. Other wallet checks to split: `hold-gate.ts`, `rounds/store.ts` (`canBuy`), `steps.ts` (balance warning), and the fee wording. Dev, previews and production each need their own Zinc account and Stripe mode, with today's environment check.
+- **No card.** Each order records the card it was approved with and is only ever sent on that card. A decline fails its own order as `card_needed` and, if that card is still the saved one, clears it. `begin_placing` ends any gift whose recorded card isn't the saved one as `card_needed`, so a removed, declined or replaced card stops every waiting gift without touching other rounds. The fix page replaces it on a tap. Approval without a card is refused. Remove takes the account lock, refuses while an order is `placing` or `unconfirmed`, clears the database, then detaches at Stripe. **[Claude's call, 2026-11-25: replaces a separate needs-a-tap mark]**
 - **Data.** Two ids on `accounts` (customer, payment method), never readable by the buyer's client. No card number, brand or last four stored. The confirm page says "Saved card"; details are read from Stripe in Settings.
 - **Stripe customer:** we send our user id only (T42). Stripe's page may collect more itself; turn off what can be, and list the rest on `/privacy`. Consent text on Stripe's page says when we charge and how much.
 - **Settings:** `connect_enabled` (0), `margin_cents` (100) and `zinc_fee_cents` (100), which make the $2.00 fixed part; `card_fee_bps` (290), `card_fee_fixed_cents` (30); the fee labels.
@@ -129,7 +129,7 @@ Moving wallet accounts; a spending page (ALL-145); a returns flow; tax; digital 
 - Integer math. `max_price` never includes margin or fees.
 - Every money write is in SQL under the round lock, then the account lock, in that order.
 - Logs carry ids, cents and reason codes only. Never a key, card, customer id, name or address (E6).
-- Wallet behaviour doesn't change; its existing tests pass unedited (AC-16). Migrations only add (E7), and ship in their own PR first.
+- Wallet behaviour doesn't change; its existing tests pass unedited (AC-16). `code_column_checks.test.sql` only gains the new values. Migrations only add (E7), and ship in their own PR first.
 - Copied SQL functions start from the latest definition (`grep -l "function concierge.<name>(" supabase/migrations/*.sql | tail -1`), and the header names it.
 
 ### Assumptions until the real card order
@@ -185,11 +185,11 @@ expect(() => chargeCents(100, { ...F, cardFeeBps: 10000 })).toThrow(RangeError);
 
 **Produces:**
 - `accounts.stripe_customer_id text`, `stripe_payment_method_id text`. No grants to `authenticated`.
-- `orders.margin_cents`, `zinc_fee_cents`, `card_fee_bps`, `card_fee_fixed_cents`, `max_charge_cents`, `final_charge_cents` (integer), `payment_method_id text`. No grants. Check: a `connect` row has all four fee inputs and `max_charge_cents`.
+- `orders.margin_cents`, `zinc_fee_cents`, `card_fee_bps`, `card_fee_fixed_cents`, `max_charge_cents`, `final_charge_cents` (integer), `payment_method_id text`. No grants. Check: a `connect` row has all four fee inputs, `max_charge_cents` and `payment_method_id`.
 - `gift_ideas.goods_cents integer`, backfilled `greatest(0, est_total_cents - setting_int('zinc_order_fee_cents'))`.
 - Failure type `card_needed`, added to the check in `20261124110000_order_tracking.sql`.
-- `card_sessions (id uuid pk, user_id, stripe_session_id unique, round_id, idea_ids uuid[], failed_order_id null, created_at, used_at)`: service role only.
-- Settings: the four fees, `connect_enabled` 0, `stripe_timeout_ms` 10000, `card_session_minutes` 60, and the four fee labels (text).
+- `card_sessions (id uuid pk, user_id, stripe_session_id unique, stripe_customer_id, round_id null, idea_ids uuid[] null, failed_order_id null, created_at, used_at)`: service role only. No round means it came from Settings.
+- Settings: the four fees, `connect_enabled` 0, `stripe_timeout_ms` 10000, `card_session_minutes` 60, the fee labels (text), and planning 61's amounts behind (i): Zinc $1.00, AI and lookups $0.65, running the service $0.35 (`margin_cents` is the last two; a pgTAP test checks the sum).
 - `cost_events` kinds `zinc_order_fee` and `card_fee`, unique on `(order_id, kind)` for those two.
 
 - [ ] pgTAP, failing first: a signed-in user can't select or update any new account or order column, or read `card_sessions`; a `connect` order without fee inputs is refused; a wallet order without them is fine; a second `card_fee` row for one order is refused; the backfill gives 2359 for an idea of 2459 with a $1 fee.
@@ -200,15 +200,15 @@ expect(() => chargeCents(100, { ...F, cardFeeBps: 10000 })).toThrow(RangeError);
 **Files:** the same migration; `card_payments.test.sql`.
 
 **Produces:**
-- `approve_round`, `replace_failed_order`: lock the account after the round; take `funding_mode` from it, never from the caller. For `connect`: refuse `no_card` with no customer, card or phone; refuse `connect_off` when `connect_enabled` isn't 1; refuse `fees_changed` unless the sent fee inputs equal today's settings; save them, `max_charge_cents`, and `fee_cents = max_charge_cents - max_price_cents`. `replace_failed_order` accepts the same idea for `card_needed`.
-- `fail_order_row`: its replacement row also copies the fee columns and `address_owner_id`. `reapprove_order` (unused, T81) refuses a connect order.
-- `begin_placing`, for `connect` orders: `zinc_ordering_enabled` and `connect_enabled` (`paused`, replacing any stored reason), paid features, phone (`setup`), then with no customer or card `fail_order_row(..., 'card_needed')`. Writes `payment_method_id` from the locked account. A round whose held orders mix modes is refused.
+- `approve_round`, `replace_failed_order`: lock the account after the round; take `funding_mode` from it, never from the caller; no account row means wallet, as today. For `connect`: refuse `no_card` with no customer, card or phone; refuse `connect_off` when `connect_enabled` isn't 1; refuse `fees_changed` unless the sent fee inputs equal today's settings; save them, `max_charge_cents`, `payment_method_id`, and `fee_cents = max_charge_cents - max_price_cents`. `replace_failed_order` accepts the same idea for `card_needed`, any number of times, and updates `goods_cents` with `est_total_cents` on any re-quote.
+- `save_ideas`: saves `goods_cents`; a caller that sends none (old code) gets the total minus the wallet fee.
+- `fail_order_row`: its replacement row also copies the fee columns, `max_charge_cents`, `payment_method_id` and `address_owner_id`.
+- `begin_placing`, for `connect` orders: `zinc_ordering_enabled` and `connect_enabled` (`paused`, replacing any stored reason), paid features, phone (`setup`). Then, if any held order's `payment_method_id` is distinct from the account's, fail those as `card_needed`, reconcile and return none; the rest place on a later try. Held orders of mixed modes: returns none and the app logs `order.mixed_modes` with `alert: true`.
 - `gate_held_orders`: `paused` replaces any reason on connect orders.
-- `decline_card(p_order_id uuid)`, internal: fails that order as `card_needed`; if its `payment_method_id` is still the account's, nulls the account's card and fails the buyer's other held connect orders as `card_needed`.
-- `record_outcomes`: new outcome `card_declined` calls `decline_card`. An `unsent` connect order whose `payment_method_id` isn't the account's current one fails as `card_needed`. `insufficient` on a connect order raises `22023`.
-- `settle_order`: failure type `card_declined` on a connect order calls `decline_card`. For `placed`, saves `final_charge_cents` from `p_price`, else `ceil((total + margin + zinc fee + fixed) * 10000 / (10000 - bps))`; sets `fee_cents` to it minus `total_cents`; writes `zinc_order_fee` and `card_fee` with `on conflict do nothing`, the card fee marked estimated without Zinc's number. No cost rows while tracking is off.
-- `save_card(p_user_id, p_session_id text, p_customer text, p_payment_method text) returns text`: `ok`, `used` or `not_yours`. Locks the account; uses the session once; changes no order.
-- `remove_card(p_user_id) returns jsonb`: `{status: 'ok'|'placing', payment_method_id}`. Locks rounds then the account, as `zinc_forget`; `placing` while any order is `placing` or `unconfirmed`; otherwise nulls the card, fails held connect orders as `card_needed` and reconciles.
+- `record_outcomes`: new outcome `card_declined` fails that order as `card_needed` and, if its `payment_method_id` is still the account's, nulls the account's card (account lock after the round's; no other round is touched). Declines are applied before the rest. An `unsent` connect order whose card is distinct from the account's fails as `card_needed`. `insufficient` on a connect order raises `22023`.
+- `settle_order`: failure type `card_declined` on a connect order does the same as `record_outcomes`. For `placed`, saves `final_charge_cents` from `p_price`, else `ceil((total + margin + zinc fee + fixed) * 10000 / (10000 - bps))`; sets `fee_cents` to it minus `total_cents`; writes `zinc_order_fee` and `card_fee` with `on conflict do nothing`, the card fee marked estimated without Zinc's number. No total: keeps `fee_cents` at the cap, writes no card-fee row. No cost rows while tracking is off.
+- `save_card(p_user_id, p_session_id text, p_customer text, p_payment_method text) returns text`: `ok`, `used` or `not_yours` (another user, or a customer that isn't the row's). Locks the account; uses the session once; changes no order.
+- `remove_card(p_user_id) returns text`: `ok` or `placing`. Locks only the account (`begin_placing` takes it too, so a send can't start in between); `placing` while any order is `placing` or `unconfirmed`; otherwise nulls the card. Changes no order.
 - `cost_per_gift`: also returns `cardGifts`, `zincFeeCents`, `cardFeeCents`; `orderFeeCents` stays the wallet setting.
 
 - [ ] pgTAP, failing first:
@@ -216,14 +216,17 @@ expect(() => chargeCents(100, { ...F, cardFeeBps: 10000 })).toThrow(RangeError);
   2. No card: `approve_round` raises `no_card` and writes nothing.
   3. Held gift A; `remove_card`; `save_card`; `begin_placing` on A returns no rows, and A is `failed`/`card_needed`.
   4. Sent with card 1, card 2 saved, decline of card 1: that order fails, the account keeps card 2, nothing else changes.
-  5. Declined with the card still saved: the account's card is null and the other held connect order is `card_needed`.
+  5. Two rounds. Round 1's order is declined with the card still saved: the account's card is null and round 2 is untouched; after a new card is saved, `begin_placing` on round 2 places nothing and its gift is `card_needed`. Same round: an unsent sibling is `card_needed` at once.
   6. Removed while a sibling is `placing`: `remove_card` returns `placing` and nothing changes.
   7. `connect_enabled` 0: `begin_placing` returns no rows; a `setup` hold reads `paused`.
   8. `settle_order` twice, the second with another price: one row of each cost kind; first price kept.
   9. Goods 2349, no Zinc charge reported: `final_charge_cents` 2657, `fee_cents` 308.
   10. `replace_failed_order` on `card_needed`: a new row with a new `idempotency_key` and today's fees; the old row is resolved; past ship-by it's refused.
   11. A wallet order through each function gives today's result (existing files pass unedited).
-  12. Same session twice: `used`. Another user's session: `not_yours`, no card saved.
+  12. `settle_order` `placed` with no prices on a connect order succeeds, and `fee_cents` is unchanged.
+  13. An old-shape `save_ideas` payload gets `goods_cents`; a price-rise replacement updates both columns; a missing account row approves as wallet.
+  14. Declined twice in a row: two replacements, two idempotency keys.
+  15. Same session twice: `used`. Another user's session: `not_yours`, no card saved.
 - [ ] Write the functions; `pnpm db:test` passes. Commit. **PR 1: Tasks 1 to 3, merged and migrated before any later PR.**
 
 ### Task 4: Stripe client and saving a card (AC-1, AC-2, AC-13, AC-17)
@@ -234,17 +237,17 @@ expect(() => chargeCents(100, { ...F, cardFeeBps: 10000 })).toThrow(RangeError);
 ```ts
 export type StripeHttp = { key: string; mode: "test" | "live"; timeoutMs: number; fetch: typeof fetch };
 export type CardDeps = DbDeps & { stripe: StripeHttp; siteUrl: string };
-export async function startCardSession(d: CardDeps, i: { userId: string; roundId: string; ideaIds: string[]; failedOrderId?: string; phone: string }): Promise<{ url: string } | "off" | "bad_phone">;
+export async function startCardSession(d: CardDeps, i: { userId: string; from: { roundId: string; ideaIds: string[]; failedOrderId?: string } | "settings"; phone: string }): Promise<{ url: string } | "off" | "bad_phone">;
 export async function finishCardSession(d: CardDeps, i: { userId: string; sessionId: string }): Promise<{ backTo: string } | "cancelled" | "used" | "not_yours">;
 export async function savedCard(d: CardDeps, userId: string): Promise<{ brand: string; last4: string } | null>; // Settings only, read live
 export async function removeCard(d: CardDeps, userId: string): Promise<"ok" | "placing" | "detach_failed">;
 export async function stripeWiring(db: SupabaseClient<Database>, env?: Env): Promise<StripeHttp | null>;
 ```
 - `stripeWiring` is null unless `sk_test_` goes with `ZINC_ENV=test`, or `sk_live_` with `live`.
-- The customer holds `metadata[user_id]` only: no name or email (T42). Session: `mode=setup`, card only, `usage=off_session`, our consent text.
+- The customer holds `metadata[user_id]` only: no name or email (T42). It's created with a Stripe idempotency key made from the user id, and saved on the `card_sessions` row. Session: `mode=setup`, card only, `usage=off_session`, our consent text.
 - `finishCardSession` reads the session back from Stripe and requires status `complete`, the stored row's user, our customer, the same mode, and a row no older than `card_session_minutes`. `backTo` is built from the stored row, never from the request.
 - A first card needs `buyer_phone`, saved by the same form (AC-17).
-- `removeCard` clears the database, then detaches. A failed detach logs `card.detach_failed` with `alert: true`.
+- `removeCard` clears the database, then detaches every payment method on the customer. `finishCardSession` detaches the old ones too, when no order is `placing` or `unconfirmed`. A failed detach logs `card.detach_failed` with `alert: true`.
 
 - [ ] Unit tests, failing first: each `finishCardSession` requirement, when missed, saves nothing; a replayed return is `used`; a live key with `ZINC_ENV=test` is null; `removeCard` returning `placing` makes no Stripe call; request bodies contain no email or name; a session Stripe reports as not complete saves nothing. Implement; pass; commit.
 
@@ -263,9 +266,10 @@ export function capsForPayer(round: Pick<RoundRow, "budget_cents">, totals: numb
 - Connect runs the same budget math on whole charges with a fee of 0, then `goodsCapCents`. Because `fee_cents = max_charge - max_price`, `committedSpendCents` needs no change.
 - Idea runs save `goods_cents`, and `est_total_cents` for the buyer's payer, so emails and over-budget flags count the fee. A re-quote sets both.
 - `ApproveInput` and `ReplaceInput` gain `shownMaxCents?: number`, required for connect; a higher maximum today returns `price_changed` with the new one. `no_card` and `connect_off` join `ApproveError`; `fees_changed` is shown as `price_changed`.
-- `recheckedCaps` uses each order's saved inputs.
+- `recheckedCaps` for connect: totals are `chargeCents(goods, saved inputs)`, fee 0, then `goodsCapCents(…, saved inputs)`, then the lower of that and the saved cap.
+- `replaceFailedOrder` and `quoteFailedOrder` allow the same idea for `card_needed`, re-quoted without the once rule; a gift that can't be re-quoted uses its saved estimate, still capped.
 
-- [ ] Tests, failing first: for goods of $22.59 and `order_price_margin_pct` 10, `chargeCents` of every price up to the cap is at most the shown maximum; budget $25 and goods $22.59 is over budget for connect and within for a wallet; two picks together stay within the ceiling; a fee raised after the page loaded returns `price_changed` and writes nothing; a held order re-checked after a fee change keeps its own inputs; a wallet approval's payload is identical to today's. Implement; `pnpm test` and `pnpm test:db` pass; commit.
+- [ ] Tests, failing first: for goods of $22.59 and `order_price_margin_pct` 10, `chargeCents` of every price up to the cap is at most the shown maximum; budget $25 and goods $22.59 is over budget for connect and within for a wallet; two picks together stay within the ceiling; a fee raised after the page loaded returns `price_changed` and writes nothing; a held order re-checked after a fee change keeps its own inputs; a `card_needed` gift is bought again at today's price, twice in a row, and at its saved estimate when it can't be re-quoted; a wallet approval's payload is identical to today's. Implement; `pnpm test` and `pnpm test:db` pass; commit.
 
 ### Task 6: Placing and the sweep (AC-3, AC-6, AC-7, AC-8, AC-12, AC-19)
 
@@ -280,19 +284,20 @@ export function zincKeyFor(d: PurchaseDeps, o: { user_id: string; funding_mode: 
 export async function connectWiring(db: SupabaseClient<Database>, env?: Env): Promise<{ apiKey: string; webhookSecret: string } | null>;
 ```
 - The app's Zinc key and the lookup key must differ; `connectWiring` is null if they match or the key's prefix (`zn_test_` or not) doesn't fit `ZINC_ENV`. A connect row with no `payment` throws before any request.
-- A 402 on a connect order: a listed code gives `cardDeclined`, anything else `rejected` as `failed`. After any ambiguous try, still `unavailable` (T56).
+- `failureTypeFor(code, fundingMode)` replaces `failureType` at all four places (a first 4xx, an order found already failed, the sweep, the event): on a connect order a listed code is `card_declined`. A 402 that isn't listed is `failed`, never `funds`. After any ambiguous try, still `unavailable` (T56).
+- `cardDeclined` stops the run: the rest are `unsent`.
 - App key refused (401) or missing: the round is `paused` with `zinc.connect_unauthorized`, `alert: true`.
-- The wallet balance step and "low balance" emails skip connect orders. The sweep uses `zincKeyFor` and passes `connect.final_charge` when Zinc sends it. A final charge above `max_charge_cents` logs `order.over_max_charge` with `alert: true`.
+- The wallet balance step and "low balance" emails skip connect orders. The sweep uses `zincKeyFor`. `placedPrice(found): PlacedPrice`, in `zinc/orders.ts`, reads prices and `connect.final_charge`, and `alertIfOver(order, price)` logs `order.over_max_charge` with `alert: true` above `max_charge_cents`; the sweep and Task 7 both use them.
 
-- [ ] Tests against the fake, failing first: the body has the exact `payment` object and the saved margin; a wallet body has none; a 402 with and without a known code never gives `funds`; a decline after a timeout stays `placing`; a resend sends the recorded card after the buyer replaced theirs; a 401 pauses and emails nobody; the sweep looks a connect order up with the app key and a wallet one with the buyer's; an overcharge alerts. Implement; pass; commit.
+- [ ] Tests against the fake, failing first: the body has the exact `payment` object and the saved margin; a wallet body has none; a 402 with and without a known code never gives `funds`; a decline at each of the four places clears the card; two gifts, the first declined, makes exactly one POST; a decline after a timeout stays `placing`; a resend sends the order's recorded card even after the buyer replaced theirs; a 401 pauses and emails nobody; the sweep looks a connect order up with the app key and a wallet one with the buyer's; an overcharge alerts. Implement; pass; commit.
 
 ### Task 7: App webhook (AC-8, AC-9, AC-10)
 
 **Files:** `zinc/events.ts`, `zinc/tracking-events.ts`, `app/api/zinc/webhook/app/route.ts`; tests; the `isPublicPath` test.
 
-**Produces:** `handleAppZincWebhook(rawBody: string, signature: string | null, deps: Deps & { secret: string; connectKey: string }): Promise<{ status: 200 | 401 }>`; `findConnectOrder(zincOrderId: string, deps): Promise<{ orderId: string; userId: string } | null>`, which throws on a failed lookup. `findOurOrder` and the per-buyer handlers only match `zinc_wallet` rows.
+**Produces:** `handleAppZincWebhook(rawBody: string, signature: string | null, deps: Deps & { secret: string; connectKey: string }): Promise<{ status: 200 | 401 }>`; `findConnectOrder(zincOrderId: string, deps): Promise<{ orderId: string; userId: string } | null>`, which throws on a failed lookup. `findOurOrder` and the per-buyer handlers only match `zinc_wallet` rows. Before any connect order settles as placed, from `order.placed` or a tracking event, the Zinc order is fetched for `placedPrice`, so Zinc's charge is saved and checked; a failed fetch throws and Zinc retries.
 
-- [ ] Tests, failing first: bad signature 401; a wallet order's id on the app webhook changes nothing and alerts; a connect order's id on a buyer's webhook changes nothing; definite unknown is 200 and `zinc.unknown_order` with `alert: true`; a lookup 500 throws; the same event twice is one settlement; `order.cancelled` after the charge tells the buyer; wallet events here are ignored; the path needs no session. Implement; pass; commit.
+- [ ] Tests, failing first: bad signature 401; a wallet order's id on the app webhook changes nothing and alerts; a connect order's id on a buyer's webhook changes nothing; definite unknown is 200 and `zinc.unknown_order` with `alert: true`; a lookup 500 throws; the same event twice is one settlement; a charge over the maximum alerts from `order.placed` and from a tracking event; `order.cancelled` after the charge tells the buyer; wallet events here are ignored; the path needs no session. Implement; pass; commit.
 
 ### Task 8: Screens (AC-1, AC-4, AC-5, AC-6, AC-12, AC-13, AC-17)
 
@@ -307,26 +312,27 @@ export async function connectWiring(db: SupabaseClient<Database>, env?: Env): Pr
 
 ### Task 9: Emails, costs and docs (AC-5, AC-8, AC-9, AC-11, AC-14, AC-20)
 
-**Files:** `rounds/emails.ts`, `notify/templates.ts`, `rounds/money-path.ts`, `health/costs.ts`; `design/operations.md` (env vars, webhook setup, returns, disputes, account deletion), `design/decisions.md` (a new T#, revising T16, T56, T61), planning decision 59, design §6.5a and §8.
+**Files:** `rounds/emails.ts`, `notify/templates.ts`, `rounds/money-path.ts`, `health/costs.ts`; `design/operations.md` (env vars, webhook setup, returns, disputes, account deletion, and a line for each alert: `card.detach_failed`, `zinc.connect_unauthorized`, `zinc.unknown_order`, `order.over_max_charge`, `order.mixed_modes`), `design/decisions.md` (a new T#, revising T16, T56, T61), planning decision 59, design §6.5a and §8.
 
-- [ ] Tests, failing first, for connect ordered, failed, cancelled, held and deadline emails: gift, fee and total are right, and "Zinc" and "balance" don't appear; failed says "If you see a pending hold, it will drop off"; cancelled says the whole charge is refunded, fee included; a wallet email is unchanged; no street appears on any connect screen or email for a shared address; the Monday cost report counts a connect order's Zinc fee once. Implement; pass; commit. **PR 2: Tasks 4 to 9.**
+- `card_needed` gets its own words in `lateDetail`, `openRow` and `sendOpenFailures` (`money-path.ts`): "We couldn't charge your card. Nothing was bought. Add a card and tap Buy again." Never "the store couldn't place the order".
+- [ ] Tests, failing first, for connect ordered, failed, `card_needed` (open, summary and after the round closed), cancelled, held and deadline emails: gift, fee and total are right, and "Zinc" and "balance" don't appear; failed says "If you see a pending hold, it will drop off"; cancelled says the whole charge is refunded, fee included; a wallet email is unchanged; no street appears on any connect screen or email for a shared address; the Monday cost report counts a connect order's Zinc fee once. Implement; pass; commit. **PR 2: Tasks 4 to 7. PR 3: Tasks 8 and 9.**
 
 ### Task 10: Launch (AC-12, AC-18), only with the owner's go-ahead
 
 **Files:** `supabase/migrations/<date>_card_payments_launch.sql`, its pgTAP.
 
 - Sets `accounts.funding_mode` and the column default to `connect`, except accounts with `zinc_connected_at` set, a wallet order `held`, `placing` or `unconfirmed`, or an unresolved wallet failure.
-- [ ] pgTAP for each exception. **PR 3**, merged after ALL-75, the live Stripe account, the second Zinc account and its webhook.
+- [ ] pgTAP for each exception. **PR 4**, merged after ALL-75, the live Stripe account, the second Zinc account and its webhook.
 - [ ] The owner turns `connect_enabled` on. One gift under $25, bought by a person on a connect account, agreed with the owner first (the QA account never buys). Check the charge against the maximum shown, the Stripe settlement, one `card_fee` and one `zinc_order_fee` row, the email, tracking on the app webhook, and that no street shows for a shared address. Evidence on ALL-98.
 - **Turning it off:** `connect_enabled` 0. Orders already sent settle as usual.
 
 ### Review focus
 
 1. A second tab, or Back from Stripe, buys twice: Task 8's one-order e2e.
-2. The card is swapped or removed between the tap and the send: Task 3 (4) and (6), Task 6's resend test.
+2. The card is swapped or removed between the tap and the send: Task 3 (3) to (6), Task 6's resend test.
 3. The fee or price changes while on Stripe's page: Task 5's `price_changed` test.
 4. A saved card that Stripe has since removed: Task 6, an unlisted code gives `failed`, nothing retried.
-5. Two gifts in one round, one declined: Task 3 (5) and Task 8's decline e2e, run with two gifts.
+5. Two gifts, one declined: Task 3 (5), Task 6's one-POST test, and Task 8's decline e2e run with two gifts.
 
 ### Coverage
 
