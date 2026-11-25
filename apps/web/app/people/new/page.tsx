@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { AppNav } from "@/components/app-shell/app-nav";
 import { PageFrame, PageTitle } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
+import { ConciergeGate } from "@/components/concierge-gate";
 import { appSettingInt } from "@/lib/app-settings";
 import { errorFields, logEvent } from "@/lib/log";
 import { createClient } from "@/lib/supabase/server";
@@ -20,9 +21,13 @@ export default function NewPersonPage({ searchParams }: { searchParams: Promise<
         <AppNav current="give" />
       </TopBar>
       <PageFrame>
-        <PageTitle>Add someone you buy for</PageTitle>
-        <Suspense fallback={null}>
-          <Form searchParams={searchParams} />
+        <Suspense fallback={<p className="text-[15px] text-muted-foreground">Loading…</p>}>
+          <ConciergeGate>
+            <PageTitle>Add someone you buy for</PageTitle>
+            <Suspense fallback={null}>
+              <Form searchParams={searchParams} />
+            </Suspense>
+          </ConciergeGate>
         </Suspense>
       </PageFrame>
     </>

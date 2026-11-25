@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { AppNav } from "@/components/app-shell/app-nav";
 import { BackLink, PageFrame, PageTitle } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
+import { ConciergeGate } from "@/components/concierge-gate";
 import { PayingForGiftsSection } from "../paying-for-gifts-section";
 
 // For the Server Actions on this page: finishing Zinc setup or saving the phone places held gifts.
@@ -17,10 +18,14 @@ export default function PayingPage() {
         <AppNav />
       </TopBar>
       <PageFrame>
-        <BackLink href="/settings" label="Settings" />
-        <PageTitle>Paying for gifts</PageTitle>
-        <Suspense fallback={<p className="text-[15px] text-muted-foreground">Loading your settings…</p>}>
-          <PayingForGiftsSection />
+        <Suspense fallback={<p className="text-[15px] text-muted-foreground">Loading…</p>}>
+          <ConciergeGate>
+            <BackLink href="/settings" label="Settings" />
+            <PageTitle>Paying for gifts</PageTitle>
+            <Suspense fallback={<p className="text-[15px] text-muted-foreground">Loading your settings…</p>}>
+              <PayingForGiftsSection />
+            </Suspense>
+          </ConciergeGate>
         </Suspense>
       </PageFrame>
     </>
