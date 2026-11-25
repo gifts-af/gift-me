@@ -18,7 +18,7 @@ import ViewDialog from "./view-dialog";
 /**
  * `nav` fills the top bar (the page builds it; this is a client component), and
  * `top` is the card: above the heading when signed in, below the heading and
- * above the gifts when signed out, so a visitor sees the list first (ALL-179).
+ * above the gifts when signed out, so a visitor sees the list first.
  */
 export type SharedListProps = {
   list: SharedListData;

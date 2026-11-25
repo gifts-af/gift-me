@@ -26,7 +26,7 @@ async function attempt(action: Action, token: string, personId: string): Promise
  * The card above a shared list for anyone but its owner (ALL-123): add the
  * owner to your people, link someone you already have, or see who it's linked
  * to and remove that link. Signed out, it sits below the list's heading and says
- * what it's for (ALL-179), then points to sign-up or sign-in, and back here.
+ * what it's for, then points to sign-up or sign-in, and back here.
  */
 export function ListCard({
   state,
