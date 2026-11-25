@@ -1,6 +1,6 @@
 # Find friends and share lists back: Spec
 
-> **Status: draft, not approved, parked under the scope freeze.** No ticket yet; renamed to `ALL-<n>-find-friends.md` when the owner makes an exception or lifts the freeze. Direction from Jim, 2026-11-25. No plan or code yet.
+> **Status: draft, reviewed once (T55) and revised, not approved, parked under the scope freeze.** No ticket yet; renamed to `ALL-<n>-find-friends.md` when the owner makes an exception or lifts the freeze. Direction from Jim, 2026-11-25. No plan or code yet.
 
 **Goal:** people can find friends who are already on GiftsAF and see each other's lists without passing links back and forth.
 
@@ -19,37 +19,41 @@ Every signed-in account, with or without concierge access. Lists, claiming, shar
 1. **Friends' lists:** as any user, I can see the lists of people I'm connected to, under Get.
 2. **Share back:** after opening Sam's list, I can share mine with Sam, and I'm added to Sam's people.
 3. **Control it:** I can turn off being added, or turn on being found, in Settings > Friends.
-4. **Find friends:** I can see which Google contacts are on GiftsAF and findable, and ask for their list.
+4. **Find friends (its own ticket; AC-16 to AC-19 and its toggle ship there, T42):** I can see which Google contacts are on GiftsAF and findable, and ask for their list.
 
 ### Acceptance criteria
 
 | # | Given | When | Then |
 |---|---|---|---|
-| AC-1 | any signed-in user with linked people | they open Get | "Friends' lists" shows each one's name and opens their list; only their own links show |
+| AC-1 | any signed-in user, concierge or not | they open a share link and tap "Save to friends' lists", or someone shares with them | the list is under Friends' lists in Get, with Open and Remove; nobody else's links show |
 | AC-2 | signed in, on Sam's current share link, Sam's "added" toggle on | they open it | "Share yours back" is offered, saying they'll be added to Sam's people |
 | AC-3 | the same, and they confirm | the server runs it | Sam gets a person with their display name, relationship `friend`, linked to the list they chose to share |
-| AC-4 | the added person | it is created | it has no occasion, birthday, address or budget, and no round or email about a gift starts until Sam adds an occasion |
-| AC-5 | Sam already has a person linked to the sharer's account, through any of their lists | they share back | nothing is added or changed, and it still says shared |
-| AC-6 | Sam has an unlinked person with the same display name | they share back | no duplicate is created and nothing is linked until Sam answers "Is this your <name>?" (Yes links; No adds) |
-| AC-7 | someone was added | Sam opens Get or Give | Sam sees "<name> shared their list with you", with Keep and Remove. Remove deletes the person like any other |
+| AC-4 | the added person | it is created | there are no occasions, person or occasion budgets, birthday or address, and no round or gift email. The owner's `friend` budget default applies as usual once they add an occasion |
+| AC-5 | Sam already has a live person linked to the sharer's account, through any list | they share back | nothing is added; the sharer sees the same answer as for a new add (so it can't be used to probe Sam's people) |
+| AC-6 | Sam has an unlinked person who may be the sharer | they share back | no name matching: a separate person is added. Sam (with concierge access) can move the link to one of their own people; it shows the shared city first, and refuses while that person has an open round or a held order |
+| AC-7 | someone was added | Sam opens Get or Give | Sam sees "<name> shared their list with you", with Keep and Remove. **Until Keep, the link never supplies a shipping address.** Keep is stored on the link |
 | AC-8 | Sam removed someone | they share back again | they are added again (the toggle is the way to stop it) |
 | AC-9 | Sam's "added" toggle off, or an old or reset token, or Sam's own list | someone offers or calls it directly | it isn't offered, and the database refuses |
 | AC-10 | the sharer has no list, or no display name | they share back | they're asked for it first; the email is never used as a name |
-| AC-11 | two tries at once | both run | one person is created |
-| AC-12 | the sharer resets their link or turns sharing off | Sam opens it | access ends, as in decision 43 |
-| AC-13 | the sharer has address sharing on | they confirm | they're told first that Sam could send gifts to it (decision 42, T61) |
+| AC-11 | share back, add from link, `link_unlinked_person` or `link_person` run at once, on any lists | all run | one live person per (owner, linked account): one lock or unique index, shared by every linking path (revises T78) |
+| AC-12 | I shared with Sam | I open Settings > Friends and tap Stop sharing | Sam's link to my list is removed and nobody else's is |
+| AC-13 | the sharer is about to share, in either direction | they confirm | if address sharing is on they're told Sam could ship there; the address switch says how many people can |
 | AC-14 | a new account | it is created | "Let people find me by email" is off; "Let people add themselves to my people" is on. Both show in Settings > Friends to every user |
 | AC-15 | an existing account | this ships | finding is off; adding is off, with one prompt offering it **[Claude's call]** |
-| AC-16 | import on, after the Google popup | they tap "Check who's on GiftsAF" | only contact emails are sent; the answer holds only contacts whose owner is findable with a verified email. Emails aren't stored or logged |
+| AC-16 | import on, after the Google popup | they tap "Check who's on GiftsAF" | only emails are sent, capped per request, per person and in total per day. The answer holds only findable accounts whose email is proven: a Google identity, or confirmed after a recorded cutover. An older password account never matches. Emails aren't stored, logged or in error reports |
 | AC-17 | a match | it shows | the name is the one in their own contacts; the friend's list, items and photo aren't shown |
 | AC-18 | they tap "Ask for their list" | it is saved | the friend sees the request, and can Share or Not now. Share follows AC-3 in the asker's direction: the friend's list is linked to a person of the asker's. Not now is never told, and that asker can't ask again |
 | AC-19 | the friend turns finding off | anyone checks again | no match; an open request stays theirs to answer |
-| AC-20 | a daily cap is reached (shares, emails checked, requests), or an off switch is 0 | anyone tries | it refuses with a plain message |
+| AC-20 | a cap is reached (shares sent, shares received, emails checked by one person or by everyone, requests), or a switch is 0 | anyone tries | it refuses plainly. Switches stop new adds or checks only; existing friends' lists keep working |
 | AC-21 | any action here | it runs | one event with ids only (E6) |
+
+| AC-22 | any share-back call | the database runs it | signed-in only; refuses a list the caller doesn't own; takes no name, user id or person id from the client (the name is `profiles.display_name`); toggles and requests are readable by their owner only |
+| AC-23 | a sharer deletes their account | it is deleted | people they were auto-added as go too, if untouched |
+| AC-24 | a list-only account on either side | it walks stories 1 to 3 | every step works without a concierge page (revises ALL-179 AC-5, AC-7, AC-8) |
 
 ### Settings (T23)
 
-`friends_share_back_enabled`, `friends_find_enabled` (both ship at 0), `friends_shares_per_day` (20), `friends_emails_checked_per_day` (2000), `friends_requests_per_day` (20). Amounts are **[Claude's call]**. A missing setting refuses.
+`friends_share_back_enabled`, `friends_find_enabled` (both ship at 0), `friends_shares_per_day` (20), `friends_received_per_day` (20), `friends_emails_checked_per_day` (1000), `friends_emails_checked_per_day_total` (5000), `friends_requests_per_day` (20). Amounts are **[Claude's call]**. A missing setting refuses.
 
 ### Out of scope
 
@@ -72,7 +76,9 @@ Matching: the server compares the emails and discards them. Hashing was rejected
 - **[Owner]** Revise T45: contact emails reach our server when the user taps Check.
 - **[Verify]** Contacts access needs Google's review before story 4 can open; `google_import_enabled` is 0.
 - **[Verify]** Which existing emails are really verified. Google sign-ins are; password accounts made while confirmation wasn't required aren't proof.
-- **[Verify]** T78's "never a second person on one list" holds when AC-6's question is answered late.
+- **[Owner]** Links made by share back stay out of shared addresses until Keep. Should they wait for ALL-98 as well (T61)?
+- **[Owner]** Automatic add, or pending until Sam accepts (the reviewer's pick)?
+- **[Verify]** T45 and ALL-179 tell Google only ticked contacts are saved, so story 4 needs new review text and a privacy page change.
 
 ## Principles check
 
