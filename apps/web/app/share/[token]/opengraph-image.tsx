@@ -29,16 +29,21 @@ const font = (file: string) => readFile(join(process.cwd(), "assets/fonts", file
 // pushes "wish list" off the picture.
 const MAX_NAME = 32;
 
+// Whole characters as people see them: a joined emoji or an accented letter is one.
+const segmenter = new Intl.Segmenter("en", { granularity: "grapheme" });
+const characters = (text: string) => Array.from(segmenter.segment(text), (s) => s.segment);
+
 function possessive(name: string) {
-  const chars = Array.from(name);
+  const chars = characters(name);
   return `${chars.length > MAX_NAME ? `${chars.slice(0, MAX_NAME - 1).join("")}…` : name}’s`;
 }
 
 // The name has the 620 px beside the tag: shorter type for a long word or name.
 function nameSize(text: string) {
-  const word = Math.max(...text.split(/\s+/).map((w) => Array.from(w).length));
-  if (word <= 9 && text.length <= 18) return 96;
-  return word <= 13 && text.length <= 26 ? 72 : 52;
+  const word = Math.max(...text.split(/\s+/).map((w) => characters(w).length));
+  const { length } = characters(text);
+  if (word <= 9 && length <= 18) return 96;
+  return word <= 13 && length <= 26 ? 72 : 52;
 }
 
 export default async function Image({ params }: { params: Promise<{ token: string }> }) {
