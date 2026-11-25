@@ -4,13 +4,15 @@ import { AppNav } from "@/components/app-shell/app-nav";
 import { BackLink, PageFrame, PageTitle } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
 import { getMyAddress, type MyAddress } from "@/lib/account-address";
+import { birthdaySharingOn, getMyBirthday, type MyBirthday } from "@/lib/account-birthday";
+import { appSettingInt } from "@/lib/app-settings";
 import { createClient } from "@/lib/supabase/server";
 import { isTimeZone, timeZoneOptions } from "@/lib/time-zones";
 import { getMyList } from "@/modules/lists";
 import { saveTimezone } from "./actions";
 import { ConciergeGroups } from "./concierge-groups";
 import { Group } from "./group";
-import { addressRowText } from "./rows";
+import { addressRowText, birthdayRowText, showBirthdayRow } from "./rows";
 import { SettingsRow } from "@/components/settings-row";
 import { TimeZoneRow } from "./time-zone-row";
 
@@ -18,10 +20,12 @@ async function YourGroup() {
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getClaims();
   const userId = auth?.claims?.sub;
-  const [{ data: profile }, myList, address, requestHeaders] = await Promise.all([
+  const [{ data: profile }, myList, address, birthday, birthdayOn, requestHeaders] = await Promise.all([
     supabase.from("profiles").select("timezone, display_name").maybeSingle(),
     getMyList(),
     userId ? getMyAddress(supabase, userId) : Promise.resolve<MyAddress>({ kind: "unavailable" }),
+    userId ? getMyBirthday(supabase, userId) : Promise.resolve<MyBirthday>({ kind: "unavailable" }),
+    userId ? birthdaySharingOn(appSettingInt) : false,
     headers(),
   ]);
   const saved = profile?.timezone ?? null;
@@ -38,6 +42,9 @@ async function YourGroup() {
         <TimeZoneRow zones={zones} saved={saved} fallback={fallback} action={saveTimezone} />
       </div>
       {showAddress && <SettingsRow href="/settings/address" label="My address" value={addressRowText(address)} />}
+      {showBirthdayRow(birthday, myList, birthdayOn) && (
+        <SettingsRow href="/settings/birthday" label="Birthday" value={birthdayRowText(birthday)} />
+      )}
     </Group>
   );
 }

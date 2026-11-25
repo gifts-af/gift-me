@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { onBeforeLeaving } from "@/lib/leaving-page";
 import { saveList } from "@/modules/lists/actions/lists";
 import { lookUpAmazon } from "@/modules/lists/actions/amazon-lookup";
@@ -141,17 +141,19 @@ type SaveName = (name: string) => Promise<{ ok: true } | { ok: false; error: str
 type GiftAppProps = {
   initial: MyList | null;
   footer?: ReactNode;
+  shareHint?: ReactNode;
   needsName?: boolean;
   saveName?: SaveName | null;
 };
 
 /**
  * `initial` is null for a guest. `footer` shows below the list once a saved list exists.
+ * `shareHint` shows beside the save status once Share has been used.
  * `needsName` (no display name yet) makes Share ask for one, saved with `saveName` (ALL-136).
  * The list is built from `initial` once: a later render with new data (a
  * router refresh) doesn't replace what's on screen.
  */
-export default function GiftApp({ initial, footer = null, needsName = false, saveName = null }: GiftAppProps) {
+export default function GiftApp({ initial, footer = null, shareHint = null, needsName = false, saveName = null }: GiftAppProps) {
   const isGuest = initial === null;
   const loadError = initial?.loadError ?? null;
   // Fixed at the first render, so a refresh that fails to load can't stop a
@@ -299,6 +301,9 @@ export default function GiftApp({ initial, footer = null, needsName = false, sav
   // they give one or skip it on this device.
   const [named, setNamed] = useState(!needsName);
   const [askingName, setAskingName] = useState(false);
+  const [shared, setShared] = useState(false);
+  // Next keeps this page's state when it's left: the note waits for the next Share.
+  useLayoutEffect(() => () => setShared(false), []);
   // Bumped when the prompt copies the link, so Share shows "Copied!" then too.
   const [copiedAfterPrompt, setCopiedAfterPrompt] = useState(0);
 
@@ -315,6 +320,7 @@ export default function GiftApp({ initial, footer = null, needsName = false, sav
     if (!list.shareToken) return false;
     const url = `${window.location.origin}/share/${list.shareToken}`;
     setAnnouncement("");
+    setShared(true);
     try {
       // Undefined outside a secure context, e.g. a phone on plain HTTP.
       await navigator.clipboard.writeText(url);
@@ -326,6 +332,9 @@ export default function GiftApp({ initial, footer = null, needsName = false, sav
     setAnnouncement("Share link copied.");
     return true;
   }
+
+  // "Saving…" and a failed save need the row for themselves.
+  const hintShown = shared && shareHint !== null && list.status === "idle";
 
   return (
     <>
@@ -387,10 +396,12 @@ export default function GiftApp({ initial, footer = null, needsName = false, sav
             <GiftSummary gifts={gifts} />
             {canSave && (
               <div className="flex items-center gap-1">
+                {hintShown && shareHint}
                 <p
                   role="status"
                   aria-label="Save status"
-                  className={`text-[13px] ${list.status === "error" ? "text-destructive" : "text-muted-foreground"}`}
+                  // No room for both beside a phone's summary.
+                  className={`text-[13px] ${hintShown ? "ml-2 max-sm:sr-only" : ""} ${list.status === "error" ? "text-destructive" : "text-muted-foreground"}`}
                 >
                   {list.status === "idle" && !list.listId ? "" : STATUS_TEXT[list.status]}
                 </p>

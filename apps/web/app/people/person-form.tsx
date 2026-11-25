@@ -47,6 +47,8 @@ type Props = {
   doneHref: string;
   /** The list owner's name, from a list link (ALL-123). */
   initialName?: string;
+  /** The birthday the list's owner shares (Settings). */
+  initialBirthday?: { month: number; day: number };
   /** A shared list's token (ALL-123): sent as `list`, so the save also links that list. */
   shareToken?: string;
   /** Say where a gift held for an address would ship. Off only for someone surely without the concierge. */
@@ -57,7 +59,7 @@ type Props = {
 };
 
 /** Month, day and (birthday only) year on one row. Labels are for screen readers. */
-function DateFields({
+export function DateFields({
   name,
   label,
   month,
@@ -139,8 +141,10 @@ export function PersonForm(props: Props) {
   const [name, setName] = useState(props.initialName ?? "");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [relationship, setRelationship] = useState("");
-  const [bMonth, setBMonth] = useState("");
-  const [bDay, setBDay] = useState("");
+  const firstMonth = props.initialBirthday ? String(props.initialBirthday.month) : "";
+  const firstDay = props.initialBirthday ? String(props.initialBirthday.day) : "";
+  const [bMonth, setBMonth] = useState(firstMonth);
+  const [bDay, setBDay] = useState(firstDay);
   const [bYear, setBYear] = useState("");
   const [aMonth, setAMonth] = useState("");
   const [aDay, setADay] = useState("");
@@ -335,6 +339,9 @@ export function PersonForm(props: Props) {
             onDay={setBDay}
             onYear={setBYear}
           />
+          {props.initialBirthday && bMonth === firstMonth && bDay === firstDay && (
+            <p className="text-[13px] text-muted-foreground">From their list. You can change it.</p>
+          )}
           <p className="text-[13px] text-muted-foreground">
             The year is just for age-right ideas.
           </p>

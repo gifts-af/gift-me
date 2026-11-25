@@ -28,7 +28,7 @@
 | AC-9 | the list page, its preview, `get_shared_list` | anyone opens them | they carry no birthday |
 | AC-10 | `list_birthday_enabled` isn't exactly 1, or `list_link_card_enabled` isn't | the Add form or Settings opens | the database function returns nothing, so nothing is filled in. Settings hides the row unless one is saved; its screen then offers only Remove, and saving is refused. A failed or missing setting counts as off and never breaks the page |
 | AC-11 | save or remove | it runs | one event, user id only, never the date; failures add an error code |
-| AC-13 | no birthday saved, the feature on | they tap Share on My list | the link copies as today, and on the Saved row, moving nothing, a small note says "No birthday saved. Add it (optional)" (phones: without "(optional)", and Saved is hidden meanwhile), linking to the Birthday screen. Not shown before Share, with one saved, when the read failed, to guests, or while a save has failed. It never delays or blocks the copy |
+| AC-13 | no birthday saved, the feature on | they tap Share on My list | the link copies as today, and on the Saved row, moving nothing, a small note says "No birthday saved. Add it (optional)" (phones: without "(optional)", and Saved is hidden meanwhile), linking to the Birthday screen. Not shown before Share, with one saved, when the read failed, to guests, while a save is on its way or has failed, or on coming back to the page. It never delays or blocks the copy |
 | AC-12 | the account is deleted | | the row goes with it |
 
 ### Out of scope

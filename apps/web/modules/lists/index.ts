@@ -6,6 +6,7 @@ export { default as SharedList } from "./components/shared-list";
 export {
   getMyList,
   getMyListSummary,
+  getOwnerBirthday,
   getPersonListPhotos,
   getPersonShareToken,
   getSharedList,

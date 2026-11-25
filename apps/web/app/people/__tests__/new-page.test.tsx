@@ -11,7 +11,9 @@ vi.mock("@/lib/app-settings", () => ({ appSettingInt: async () => 512 }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: async () => ({ auth: { getClaims: async () => ({ data: { claims: { sub: "u1" } } }) } }),
 }));
-vi.mock("@/modules/lists", () => ({ getSharedList: async () => ({ isOwner: false, ownerName: "Sam" }) }));
+const shared = vi.hoisted(() => ({ isOwner: false, ownerName: "Sam" }));
+const getOwnerBirthday = vi.hoisted(() => vi.fn<(token: string) => Promise<{ month: number; day: number } | null>>());
+vi.mock("@/modules/lists", () => ({ getSharedList: async () => shared, getOwnerBirthday }));
 vi.mock("../actions", () => ({ addPersonAction: vi.fn(), setPhotoAction: vi.fn() }));
 
 const { default: NewPersonPage } = await import("../new/page");
@@ -36,7 +38,30 @@ async function show(list?: string) {
 const notice = () => screen.queryByText("If a gift for them is waiting on an address, it will ship to this list's owner.");
 
 describe("adding someone from a shared list", () => {
-  beforeEach(() => readAccess.mockReset());
+  beforeEach(() => {
+    readAccess.mockReset();
+    shared.isOwner = false;
+    getOwnerBirthday.mockReset().mockResolvedValue(null);
+  });
+
+  it("starts with their birthday when they saved one (ALL-182 AC-5)", async () => {
+    getOwnerBirthday.mockResolvedValue({ month: 3, day: 14 });
+    await show("a-token");
+    expect(getOwnerBirthday).toHaveBeenCalledWith("a-token");
+    expect(screen.getByLabelText("Birthday month")).toHaveValue("3");
+    expect(screen.getByLabelText("Birthday day")).toHaveValue(14);
+  });
+
+  it("starts empty with none (ALL-182 AC-6)", async () => {
+    await show("a-token");
+    expect(screen.getByLabelText("Birthday month")).toHaveValue("");
+  });
+
+  it("never asks for your own (ALL-182 AC-6)", async () => {
+    shared.isOwner = true;
+    await show("a-token");
+    expect(getOwnerBirthday).not.toHaveBeenCalled();
+  });
 
   it.each([
     ["shows where held gifts ship, with access", { access: true, requested: false }, true],

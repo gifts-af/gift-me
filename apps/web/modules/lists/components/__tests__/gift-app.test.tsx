@@ -92,6 +92,94 @@ describe("GiftApp", () => {
     vi.restoreAllMocks();
   });
 
+  describe("the note under Share (ALL-182 AC-13)", () => {
+    const HINT = <p>No birthday saved</p>;
+    const share = () => user.click(screen.getByRole("button", { name: /Share/ }));
+
+    it("shows once the link is copied, and not before", async () => {
+      render(<GiftApp initial={member} shareHint={HINT} />);
+      expect(screen.queryByText("No birthday saved")).toBeNull();
+      await share();
+      expect(await navigator.clipboard.readText()).toContain("/share/tok");
+      expect(screen.getByText("No birthday saved")).toBeVisible();
+      expect(screen.getByRole("button", { name: "Copied!" })).toBeVisible();
+    });
+
+    it("shows when the link has to be copied by hand", async () => {
+      render(<GiftApp initial={member} shareHint={HINT} />);
+      vi.spyOn(navigator.clipboard, "writeText").mockRejectedValue(new Error("no"));
+      await share();
+      expect(screen.getByLabelText("Share link")).toBeVisible();
+      expect(screen.getByText("No birthday saved")).toBeVisible();
+    });
+
+    it("shows after the name prompt copies the link, either way", async () => {
+      for (const button of ["Save and copy link", "Skip"]) {
+        localStorage.clear();
+        const { unmount } = render(<GiftApp initial={member} needsName saveName={async () => ({ ok: true })} shareHint={HINT} />);
+        await share();
+        const dialog = await screen.findByRole("dialog");
+        expect(screen.queryByText("No birthday saved")).toBeNull();
+        await user.type(within(dialog).getByLabelText("Your name"), "Sam");
+        await user.click(within(dialog).getByRole("button", { name: button }));
+        expect(await screen.findByText("No birthday saved")).toBeVisible();
+        unmount();
+      }
+    });
+
+    it("gives way while a save is on its way", async () => {
+      const answer = deferred<SaveListResult>();
+      vi.mocked(saveList).mockReturnValueOnce(answer.promise);
+      render(<GiftApp initial={member} shareHint={HINT} />);
+      await share();
+      await addByHand("Lamp");
+      await vi.waitFor(() => expect(screen.getByRole("status", { name: "Save status" })).toHaveTextContent("Saving…"));
+      expect(screen.queryByText("No birthday saved")).toBeNull();
+      answer.resolve({ ok: true, listId: "list-1", shareToken: "tok", version: "v2", items: whole([]) });
+      expect(await screen.findByText("No birthday saved")).toBeVisible();
+    });
+
+    it("is gone when My list is shown again", async () => {
+      const ui = (mode: "visible" | "hidden") => (
+        <Activity mode={mode}>
+          <GiftApp initial={member} shareHint={HINT} />
+        </Activity>
+      );
+      const { rerender } = render(ui("visible"));
+      await share();
+      rerender(ui("hidden"));
+      rerender(ui("visible"));
+      expect(screen.queryByText("No birthday saved")).toBeNull();
+    });
+
+    it("gives way when a save fails, and the status still reads Couldn't save", async () => {
+      vi.mocked(saveList).mockResolvedValue({ ok: false, error: "No." });
+      render(<GiftApp initial={member} shareHint={HINT} />);
+      await share();
+      expect(screen.getByText("No birthday saved")).toBeVisible();
+      await addByHand("Lamp");
+      await vi.waitFor(() => expect(screen.getByRole("status", { name: "Save status" })).toHaveTextContent("Couldn't save"));
+      expect(screen.queryByText("No birthday saved")).toBeNull();
+      // Saved again, it's back, and nothing is left unsaved for the next test.
+      savesSucceed();
+      await user.click(screen.getByRole("button", { name: "Try again" }));
+      expect(await screen.findByText("No birthday saved")).toBeVisible();
+    });
+
+    it("never shows to a guest, whose Share is blocked or missing", async () => {
+      render(<GiftApp initial={null} shareHint={HINT} />);
+      for (const b of screen.queryAllByRole("button", { name: /Share/ })) await user.click(b);
+      expect(screen.queryByText("No birthday saved")).toBeNull();
+    });
+
+    it("goes once there's a birthday", async () => {
+      const { rerender } = render(<GiftApp initial={member} shareHint={HINT} />);
+      await share();
+      rerender(<GiftApp initial={member} shareHint={null} />);
+      expect(screen.queryByText("No birthday saved")).toBeNull();
+    });
+  });
+
   describe("the footer (ALL-63)", () => {
     const FOOTER = <p>The footer</p>;
 
