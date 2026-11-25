@@ -28,6 +28,8 @@ In force until the Gift Concierge MVP is finished; the owner lifts it. Where it 
 3. **Done** means merged, tests passing and one live check. A check that waits on a date or an unlikely event doesn't keep a ticket open.
 4. **At most 3 tickets in progress**, original-plan (wave) tickets first. Card payments (ALL-98) come last.
 
+**Exceptions (owner):** ALL-179, opening list sign-up before Christmas (2026-11-25).
+
 ### How we build
 
 Numbered E1–E10 (E for engineering), so they never get mixed up with the PRD's requirement ids like B-5. Each principle ends with **Breaks it:**, the thing to look for in a diff. Existing code that breaks one is fixed when we next touch it, not all at once.

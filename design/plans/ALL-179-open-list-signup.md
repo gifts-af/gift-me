@@ -1,6 +1,6 @@
 # ALL-179 Open list sign-up, and the concierge by request: Spec and Plan
 
-**Status:** spec approved by the owner, 2026-11-25. The plan has had its adversarial review, with fixes worked in; no code until the owner approves it.
+**Status:** spec approved by the owner, 2026-11-25. Plan reviewed, and approved by the owner the same day, with both new [Claude's call] rows (10 requests a day, mail scanners) agreed. Built subagent-driven.
 
 **Goal:** anyone can sign up at giftsaf.com, build a wish list and share it, free; the concierge (Give) is something they request and we approve.
 
