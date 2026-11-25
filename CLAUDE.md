@@ -19,6 +19,15 @@ Every plan is checked against these (`design/plans/TEMPLATE.md` > Principles che
 9. **No work without a ticket, except quick touch-ups; no ticket done without evidence** (T44, T64). Every change starts from a Linear ticket unless it's a quick touch-up (see Git > When a change needs no ticket), and a ticket isn't Done until its test evidence is posted on it (see Git > Evidence on the ticket).
 10. **Collect the minimum, as late as possible** (T42). Ask for a piece of personal data only when a feature the person is using right now can't work without it, keep it only while it's needed, and send outside services IDs, not names or emails.
 
+### Scope freeze (owner, 2026-11-25)
+
+In force until the Gift Concierge MVP is finished; the owner lifts it. Where it conflicts with another rule here, this wins.
+
+1. **New tickets** only for a wrong charge or gift, a late or lost gift, or a privacy leak. Everything else, including review suggestions and follow-ups, gets one line in `planning/ideas.md` > Parked during the scope freeze.
+2. **Rare cases:** don't build, test or hold a ticket open for them. If the blast radius would be big, raise it with the owner in a sentence or two first.
+3. **Done** means merged, tests passing and one live check. A check that waits on a date or an unlikely event doesn't keep a ticket open.
+4. **At most 3 tickets in progress**, original-plan (wave) tickets first. Card payments (ALL-98) come last.
+
 ### How we build
 
 Numbered E1–E10 (E for engineering), so they never get mixed up with the PRD's requirement ids like B-5. Each principle ends with **Breaks it:**, the thing to look for in a diff. Existing code that breaks one is fixed when we next touch it, not all at once.

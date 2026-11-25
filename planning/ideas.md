@@ -109,6 +109,12 @@ See something you like in a shop or at a friend's? Take a photo, then tap Share 
 - **To work out:** iPhone (a native app, or a camera button only), what happens when the product can't be identified, and the cost per photo.
 - **Source:** owner, 2026-11-21.
 
+## Parked during the scope freeze
+
+One line each (CLAUDE.md > Scope freeze). Reviewed when the freeze lifts.
+
+- Nothing parked yet.
+
 ## A common thread
 
 Ideas 1, 2, 4 and 5 all use the same building block: **a scannable code tied to a gift that someone claims securely.** If any of these move forward, that's the piece to design once and reuse.
