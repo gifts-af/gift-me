@@ -280,13 +280,15 @@ test("add Mom, set her occasions and budget, link her list, delete her", async (
   await deleteLeftovers(mom);
   await signIn(page);
   await page.goto("/give");
-  // The Home Screen tip and the streamed sections above the link push it down as
-  // they arrive, so a tap before then can miss it.
-  await expect(page.getByRole("heading", { name: "Add GiftsAF to your Home Screen" })).toBeVisible();
+  // Sections that stream in above the link (and the Home Screen tip, where it shows) push it
+  // down as they arrive, so a tap can miss it.
   await expect(page.locator('template[id^="B:"]')).toHaveCount(0); // React's marks for sections not in yet.
 
   // 1. Add her with only a name and Mother.
-  await page.getByRole("link", { name: "Add someone you buy for" }).first().click();
+  await expect(async () => {
+    if (!page.url().endsWith("/people/new")) await page.getByRole("link", { name: "Add someone you buy for" }).first().click({ timeout: 2000 });
+    await expect(page).toHaveURL(/\/people\/new$/, { timeout: 5000 });
+  }).toPass();
   await page.getByLabel("Name").fill(mom);
   await page.getByLabel("Who are they to you?").selectOption({ label: "Mother" });
   await page.getByRole("button", { name: `Add ${mom}` }).click();

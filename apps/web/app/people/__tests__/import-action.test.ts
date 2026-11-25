@@ -6,7 +6,8 @@ const importPeople = vi.hoisted(() => vi.fn());
 const revalidatePath = vi.hoisted(() => vi.fn());
 // The Zinc wiring is server-only glue; these tests never place an order.
 vi.mock("@/lib/wiring", () => ({ placeHeld: async () => {} }));
-vi.mock("@/lib/app-settings", () => ({ appSettingInt: async () => 20 }));
+const appSettingInt = vi.hoisted(() => vi.fn(async () => 1));
+vi.mock("@/lib/app-settings", () => ({ appSettingInt }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: async () => ({}) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
 const scheduleNotesTip = vi.hoisted(() => vi.fn());
@@ -32,6 +33,23 @@ describe("importContactsAction", () => {
     importPeople.mockReset();
     revalidatePath.mockClear();
     scheduleNotesTip.mockReset();
+    appSettingInt.mockResolvedValue(1);
+  });
+
+  it.each([
+    ["is off", () => appSettingInt.mockResolvedValue(0)],
+    ["can't be read", () => appSettingInt.mockRejectedValue(new Error("boom"))],
+  ])("saves nothing when the Google import switch %s (AC-15)", async (_what, arrange) => {
+    vi.spyOn(console, "log").mockImplementation(() => {});
+    arrange();
+    expect(await importContactsAction(null, form([good]))).toEqual({
+      ok: false,
+      error: "Google import is off for now. Add people by hand.",
+    });
+    expect(appSettingInt).toHaveBeenCalledWith("google_import_enabled");
+    expect(importPeople).not.toHaveBeenCalled();
+    expect(revalidatePath).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
   });
 
   it("saves the checked rows and refreshes Home", async () => {

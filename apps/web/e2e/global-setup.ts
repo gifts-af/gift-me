@@ -24,13 +24,15 @@ export default async function globalSetup() {
   };
 }
 
-// Settings the round specs need for the whole run, set once here because specs run at the same
+// Settings specs need for the whole run, set once here because specs run at the same
 // time and one spec putting a value back would pull it from under another (ALL-29):
 // - buying on, for approval.spec.ts's purchases, which go to the fake Zinc;
+// - Google import on, for contacts-import.spec.ts;
 // - room in the tick's idea pass, which is global: every spec's rounds want a turn, and every run
 //   of the day counts (ALL-125). The fakes answer at once, so a high limit stays well inside the tick.
 const RUN_SETTINGS: Record<string, number> = {
   zinc_ordering_enabled: 1,
+  google_import_enabled: 1,
   idea_rounds_per_tick: 100,
   idea_round_runs_per_day: 100,
 };

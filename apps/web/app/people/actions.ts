@@ -6,6 +6,7 @@ import { GUIDED_QUESTIONS, IDEA_RUN_OFF, ideaRunWorstMs, parseDate, type Occasio
 import { createExtractor } from "@/lib/ai/extract";
 import { AI_MODELS } from "@/lib/ai/models";
 import { appSettingInt } from "@/lib/app-settings";
+import { googleImportEnabled } from "@/lib/google-import";
 import { errorFields, logEvent } from "@/lib/log";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -236,6 +237,7 @@ export async function deletePersonAction(_previous: SaveResult | null, formData:
 // The Google Contacts import (ALL-24): the checklist sends only the ticked
 // contacts, as JSON in `rows`. Rows the checks refuse count as failed.
 export async function importContactsAction(_previous: ImportResult | null, formData: FormData): Promise<ImportResult> {
+  if (!(await googleImportEnabled())) return { ok: false, error: "Google import is off for now. Add people by hand." };
   const currentYear = parseDate(await todayForRequest()).year;
   const parsed = parseImportRows(text(formData, "rows"), currentYear);
   if (!parsed.ok) return parsed;
