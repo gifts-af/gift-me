@@ -57,7 +57,10 @@ export function SignUpForm({ next: rawNext }: { next?: string }) {
 
   return (
     <div className="flex flex-col gap-7">
-      <GoogleButton next={next} />
+      <GoogleButton
+        next={next}
+        note="Your Google name shows on lists you share and gifts you claim. Change it in Settings."
+      />
       <Divider>or</Divider>
       <form method="post" onSubmit={handleSignUp} className="flex flex-col gap-3">
         <div className="grid gap-1.5">

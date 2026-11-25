@@ -56,9 +56,10 @@ export default function PrivacyPage() {
           </p>
           <p>
             When you claim a gift on someone&apos;s list, everyone with the list&apos;s link sees who claimed it, by name,
-            never by email, except its owner when they&apos;re signed in. The name is the one on your account, or else
-            the one Google sent when you signed up, or the one you typed if you weren&apos;t signed in. With none of those,
-            it says &quot;Someone&quot;.
+            never by email, except its owner when they&apos;re signed in. The name is the one on your account, or the
+            one you typed if you weren&apos;t signed in. Signing up with Google starts your account with your Google name.
+            If your account has no name, or you clear it, claims you make after that say &quot;Someone&quot;. Changing or
+            clearing your name doesn&apos;t change claims you already made.
           </p>
         </Section>
 
@@ -147,7 +148,7 @@ export default function PrivacyPage() {
           <ul className="list-disc pl-5">
             <li>Supabase stores the data, and Vercel runs the site.</li>
             <li>Anthropic&apos;s Claude, through Vercel&apos;s AI Gateway, reads captures and suggests gift ideas.</li>
-            <li>Resend sends our emails and receives the notes you email us. Feedback reaches us in Gmail.</li>
+            <li>Resend sends our emails and receives the notes you email us. Feedback and concierge requests reach us in Gmail.</li>
             <li>Cloudflare checks that our public forms are used by people, not bots.</li>
             <li>Google handles Continue with Google.</li>
             <li>

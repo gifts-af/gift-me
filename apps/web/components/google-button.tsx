@@ -3,13 +3,15 @@
 import { Button } from "@/components/ui/button";
 import { authFormError } from "@/lib/auth-form-errors";
 import { createClient } from "@/lib/supabase/client";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { FormError } from "./auth-frame";
 
 // Leaves for Google, which returns to /auth/callback and then to `next`.
 // `loginHint` is an email Google pre-selects, skipping its account chooser
 // when that account is already in the browser (ALL-23, AC-7).
-export function GoogleButton({ next = "/", loginHint }: { next?: string; loginHint?: string }) {
+// `note` is a quiet line under the button.
+export function GoogleButton({ next = "/", loginHint, note }: { next?: string; loginHint?: string; note?: string }) {
+  const noteId = useId();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,9 +34,21 @@ export function GoogleButton({ next = "/", loginHint }: { next?: string; loginHi
 
   return (
     <div className="flex flex-col gap-2">
-      <Button type="button" className="w-full" onClick={signIn} disabled={pending} aria-busy={pending}>
+      <Button
+        type="button"
+        className="w-full"
+        onClick={signIn}
+        disabled={pending}
+        aria-busy={pending}
+        aria-describedby={note ? noteId : undefined}
+      >
         {pending ? "Opening Google…" : "Continue with Google"}
       </Button>
+      {note && (
+        <p id={noteId} className="text-center text-[13px] text-muted-foreground">
+          {note}
+        </p>
+      )}
       {error && <FormError>{error}</FormError>}
     </div>
   );

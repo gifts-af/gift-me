@@ -134,7 +134,7 @@ test("a guest's list is still there after signing up", async ({ page }) => {
   await page.goto("/lists");
   await addGiftByHand(page, "Kettle");
   await page.getByRole("link", { name: "Sign in", exact: true }).click();
-  await page.getByRole("link", { name: "Create an account" }).click();
+  await page.getByRole("link", { name: "Create an account", exact: true }).click();
   await expect(page).toHaveURL(/\/auth\/sign-up\?next=%2Flists$/);
   await page.getByLabel("Email").fill(`e2e-${randomUUID()}@example.test`);
   // eslint-disable-next-line no-restricted-syntax -- this tests the sign-up form

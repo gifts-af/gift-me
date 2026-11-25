@@ -52,7 +52,6 @@ export default function SharedList({ list, token, nav, top }: SharedListProps) {
     }
   }, []);
 
-
   // The owner sees their own title; everyone else sees whose list it is, with
   // a custom title as a smaller line (ALL-123). With the switch off it names
   // nobody, not even your own linked person (AC-25).

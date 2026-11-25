@@ -501,7 +501,7 @@ select id, name, deleted_at, created_at from public.people where user_id = 'ACCO
 
 ### Erase what's kept about someone with no account
 
-People are saved under any name ("Mom"), so we can only look for what we're told, and we say so. Put what they gave us in place of `THEIR_NAME`, `THEIR_STREET` and `THEIR_PHONE`, leave the rest as `none-given` (never empty, which matches everyone), and set the birthday's month and day if given. A phone can be saved with or without punctuation: try both. It reads every account, so run it only for a request.
+People are saved under any name ("Mom"), so we can only look for what we're told, and we say so. Put what they gave us in place of `THEIR_NAME`, `THEIR_STREET` and `THEIR_PHONE`, leave the rest as `none-given` (never empty, which matches everyone), and set the birthday's month and day if given. A phone can be saved with or without punctuation: try both. Double any apostrophe (`O'Brien` becomes `O''Brien`). It reads every account, so run it only for a request.
 
 ```sql
 with asked as (

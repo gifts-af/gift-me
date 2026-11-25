@@ -134,6 +134,20 @@ describe("sign up's name hint", () => {
   });
 });
 
+describe("sign up's Google button", () => {
+  it("says where a Google name shows, right under it", () => {
+    render(<SignUpForm />);
+    expect(screen.getByRole("button", { name: "Continue with Google" })).toHaveAccessibleDescription(
+      "Your Google name shows on lists you share and gifts you claim. Change it in Settings.",
+    );
+  });
+
+  it("says nothing on sign in", () => {
+    render(<LoginForm />);
+    expect(screen.queryByText(/Your Google name/)).toBeNull();
+  });
+});
+
 // Supabase's own words never reach the page.
 describe("sign-in and sign-up errors are in our words", () => {
   const RAW = "raw Supabase text";
@@ -148,6 +162,8 @@ describe("sign-in and sign-up errors are in our words", () => {
     ["email_exists", "You already have an account with this email. Sign in instead."],
     ["weak_password", "That password is too easy to guess. Try a longer one, with letters, numbers and symbols."],
     ["over_request_rate_limit", "Too many tries. Wait a few minutes, then try again."],
+    ["signup_disabled", "Sign-ups are paused right now."],
+    ["email_address_invalid", "That email address doesn't work. Check it and try again."],
     ["toString", "Something went wrong. Please try again in a minute."],
     [undefined, "Something went wrong. Please try again in a minute."],
   ])("sign up, %s", async (code, words) => {
@@ -191,6 +207,19 @@ describe("sign-in and sign-up errors are in our words", () => {
     prefill("New password", "pw-123456");
     fireEvent.click(screen.getByRole("button", { name: "Save new password" }));
     expect(await alert()).toBe(words);
+  });
+
+  // The reset link's session is gone, as auth-js says it (no code) and as the server does.
+  it.each([
+    ["no session", { name: "AuthSessionMissingError", message: RAW }],
+    ["session_not_found", { code: "session_not_found", message: RAW }],
+    ["session_expired", { code: "session_expired", message: RAW }],
+  ])("update password, %s", async (_case, error) => {
+    auth.updateUser.mockResolvedValue({ error });
+    render(<UpdatePasswordForm />);
+    prefill("New password", "pw-123456");
+    fireEvent.click(screen.getByRole("button", { name: "Save new password" }));
+    expect(await alert()).toBe("This reset link has expired. Ask for a new one.");
   });
 
   it("Continue with Google", async () => {

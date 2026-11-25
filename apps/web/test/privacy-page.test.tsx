@@ -27,8 +27,12 @@ describe("the privacy page", () => {
 
   it("covers sign-up and what people store about others", () => {
     render(<PrivacyPage />);
-    expect(section("What your account keeps")).toHaveTextContent(/email/);
-    expect(section("What you save about other people")).toHaveTextContent(/names.*birthdays.*photos.*addresses/);
+    expect(section("What your account keeps")).toHaveTextContent(
+      "Signing up saves your email and, if you give one, your name.",
+    );
+    expect(section("What you save about other people")).toHaveTextContent(
+      "You can save other people's names, birthdays, photos, addresses and phone numbers, and what they like. It's private to your account: no other user sees it",
+    );
   });
 
   it("says how to ask for erasing, by the page anyone can open (AC-22)", () => {
@@ -52,6 +56,11 @@ describe("the privacy page", () => {
     expect(section("What your account keeps")).toHaveTextContent(/emailed note .* within four days/);
   });
 
+  it("says what reaches us in Gmail", () => {
+    render(<PrivacyPage />);
+    expect(section("Who else handles it")).toHaveTextContent("Feedback and concierge requests reach us in Gmail.");
+  });
+
   it("says what Zinc and the store get", () => {
     render(<PrivacyPage />);
     expect(section("Who else handles it")).toHaveTextContent(
@@ -63,6 +72,9 @@ describe("the privacy page", () => {
     render(<PrivacyPage />);
     expect(section("What your account keeps")).toHaveTextContent(/everyone with the list's link.*except its owner/);
     expect(section("What your account keeps")).toHaveTextContent(/by name, never by email/);
+    expect(section("What your account keeps")).toHaveTextContent(
+      "The name is the one on your account, or the one you typed if you weren't signed in. Signing up with Google starts your account with your Google name. If your account has no name, or you clear it, claims you make after that say \"Someone\". Changing or clearing your name doesn't change claims you already made.",
+    );
   });
 
   it("says what the AI gets when it looks for ideas", () => {
