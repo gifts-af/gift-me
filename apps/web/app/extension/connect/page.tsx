@@ -12,7 +12,7 @@ export default function ExtensionConnectPage() {
         <AppNav />
       </TopBar>
       <PageFrame>
-        <BackLink href="/" label="Give" />
+        <BackLink href="/give" label="Give" />
         <PageTitle>Connect the extension</PageTitle>
         <ConnectClient action={createExtensionToken} />
       </PageFrame>

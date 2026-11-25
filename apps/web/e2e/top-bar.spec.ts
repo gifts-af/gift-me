@@ -44,7 +44,7 @@ test.describe("My list", () => {
       throw new Error(`Asked before leaving: ${dialog.message()}`);
     });
     await page.getByRole("link", { name: "Give" }).click();
-    await expect(page).toHaveURL(/\/$/);
+    await expect(page).toHaveURL(/\/give$/);
   });
 });
 
@@ -72,7 +72,7 @@ test.describe("which bar each page gets", () => {
   test("every signed-in page has the tabs and account menu, with the right tab marked", async ({ page }) => {
     await signIn(page);
     for (const [path, current] of [
-      ["/", "Give"],
+      ["/give", "Give"],
       ["/lists", "Get"],
       ["/people/new", "Give"],
       ["/people/import", "Give"],
@@ -127,7 +127,7 @@ test.describe("which bar each page gets", () => {
 test.describe("the You card on Give", () => {
   test("comes first and invites someone with no people and no list", { tag: "@layout" }, async ({ page }) => {
     await signIn(page, await createFreshUser());
-    await page.goto("/");
+    await page.goto("/give");
     const you = page.getByRole("link", { name: /^You/ });
     await expect(you).toContainText("Start your wish list");
     await expect(you).toHaveAttribute("href", "/lists");
@@ -139,7 +139,7 @@ test.describe("the You card on Give", () => {
 
   test("shows the new count after adding a gift and pressing Give", async ({ page }) => {
     await signIn(page, await createFreshUser());
-    await page.goto("/");
+    await page.goto("/give");
     await page.getByRole("link", { name: "Get" }).click();
     await addGiftByHand(page, "Wool socks");
     await expect(page.getByRole("status", { name: "Save status" })).toHaveText("Saved");
@@ -158,7 +158,7 @@ test.describe("at 320 px, the narrowest phone", { tag: "@layout" }, () => {
     const user = await createFreshUser();
     await saveOneGiftList(user);
     await signIn(page, user);
-    await page.goto("/");
+    await page.goto("/give");
     await expect(page.getByRole("link", { name: /^You/ })).toBeVisible();
     expect(await phoneLayoutProblems(page)).toEqual([]);
     for (const path of ["/lists", "/settings", "/settings/over-budget", "/settings/reminders", "/settings/paying", "/settings/address"]) {
@@ -173,7 +173,7 @@ test.describe("at 320 px, the narrowest phone", { tag: "@layout" }, () => {
     // space for a scrollbar. "Every signed-in page fits" still covers it for scrolling.
     test.skip(info.project.name === "desktop");
     await signIn(page, await createFreshUser());
-    await page.goto("/");
+    await page.goto("/give");
     await expect(page.getByRole("button", { name: "Account" })).toBeVisible();
     const slot = page.locator("[data-top-bar-row] > div");
     expect(await slot.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
@@ -181,7 +181,7 @@ test.describe("at 320 px, the narrowest phone", { tag: "@layout" }, () => {
 
   test("the tabs are big enough to press", async ({ page }) => {
     await signIn(page, await createFreshUser());
-    await page.goto("/");
+    await page.goto("/give");
     for (const name of ["Get", "Give"]) {
       const box = await page.getByRole("link", { name }).boundingBox();
       expect(box!.height).toBeGreaterThanOrEqual(44);

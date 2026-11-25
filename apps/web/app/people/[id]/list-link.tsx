@@ -18,6 +18,7 @@ export function ListLink({
   name,
   personId,
   keepsList,
+  heldGiftNotice,
   linkAction,
   unlinkAction,
 }: {
@@ -25,6 +26,8 @@ export function ListLink({
   name: string;
   personId: string;
   keepsList: boolean;
+  /** Say where a gift held for an address would ship. Off only for someone surely without the concierge. */
+  heldGiftNotice: boolean;
   /** `linkUnlinkedListAction` for the prompt (never replaces a link), `linkListAction` for the page */
   linkAction: Action;
   /** `unlinkListAction`; the prompt only shows while nothing is linked, so it has none */
@@ -60,7 +63,7 @@ export function ListLink({
       </h2>
       {keepsList && unlinkAction ? (
         <>
-          <p className="text-[13px] text-muted-foreground">Linked. Their ideas come from their own list.</p>
+          <p className="text-[13px] text-muted-foreground">Their list is linked.</p>
           <Button type="button" variant="outline" className="self-start" disabled={busy} onClick={() => void run(unlinkAction)}>
             Unlink
           </Button>
@@ -79,7 +82,7 @@ export function ListLink({
         >
           <p className="text-[13px] text-muted-foreground">
             {prompt
-              ? "Paste the link they sent you, and their gift ideas will come from their own list."
+              ? "Paste the link they sent you to link their list."
               : "You don't need their list to buy for them."}
           </p>
           <Label htmlFor="list-link">Their list link</Label>
@@ -97,7 +100,9 @@ export function ListLink({
             </Button>
           </div>
           {/* Decision 53: what spends money says so. It goes at the next tick, leaving time to unlink. */}
-          <p className="text-[13px] text-muted-foreground">If a gift for them is waiting on an address, it will ship to this list&apos;s owner.</p>
+          {heldGiftNotice && (
+            <p className="text-[13px] text-muted-foreground">If a gift for them is waiting on an address, it will ship to this list&apos;s owner.</p>
+          )}
         </form>
       )}
       {error && (

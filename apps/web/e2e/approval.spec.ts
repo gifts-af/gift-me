@@ -205,7 +205,8 @@ test("None of these saves the reason, the next tick brings new ideas and a secon
 
   // The next tick finds new ideas (the fake Gateway's) and sends their own heads-up.
   await tick(page);
-  expect((await roundOf(roundId)).status).toBe("awaiting_approval");
+  // Another test's tick can hold this round's lease and be the one to finish it.
+  await expect.poll(async () => (await roundOf(roundId)).status, { timeout: 30_000 }).toBe("awaiting_approval");
   const ideas = await ideasOf(roundId);
   expect(ideas.filter((i) => i.status === "proposed").map((i) => i.title)).toEqual(
     expect.arrayContaining(["Streamside Rotary Fly Tying Vise", "Streamside Waterproof Fly Box"]),
@@ -275,7 +276,8 @@ test("ideas that came back after None of these get their own heads-up, and the p
   await setSetting("round_engine_enabled", 1);
 
   await tick(page);
-  expect((await roundOf(roundId)).status).toBe("awaiting_approval");
+  // Another test's tick can hold this round's lease and be the one to finish it.
+  await expect.poll(async () => (await roundOf(roundId)).status, { timeout: 30_000 }).toBe("awaiting_approval");
   expect((await notificationsOf(roundId)).map((n) => n.kind)).toEqual(["heads_up"]);
   expect(await rest(`idea_runs?select=outcome&round_id=eq.${roundId}`)).toEqual([{ outcome: "none" }]);
 
@@ -318,7 +320,8 @@ test("a linked list's gifts come first, priced by the fake Zinc, with no AI call
   const { roundId } = await seedRound(b.id, person, { status: "generating" });
 
   await tick(page);
-  expect((await roundOf(roundId)).status).toBe("awaiting_approval");
+  // Another test's tick can hold this round's lease and be the one to finish it.
+  await expect.poll(async () => (await roundOf(roundId)).status, { timeout: 30_000 }).toBe("awaiting_approval");
   const ideas = await ideasOf(roundId);
   expect(ideas.map((i) => [i.title, i.source])).toEqual([
     [listAmazon.title, "list"],

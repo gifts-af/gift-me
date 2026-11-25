@@ -19,13 +19,14 @@ import { HomeScreenTip } from "../home-screen-tip";
 import { PeopleSection } from "../people-section";
 
 const COULD_NOT_LOAD = /We couldn&#x27;t load your people\. Refresh to try again\./;
+const IMPORT_OFF = /Google import is off for now\./;
 const NOTHING = /^$/;
 
 const sections = [
   { name: "GiftsSection", section: GiftsSection, event: "gifts_in_progress_failed", shows: NOTHING },
   { name: "PeopleSection", section: PeopleSection, event: "people_load_failed", shows: COULD_NOT_LOAD },
   { name: "HomeScreenTip", section: HomeScreenTip, event: "install_tip_failed", shows: NOTHING },
-  { name: "ImportSection", section: ImportSection, event: "imported_contacts_load_failed", shows: COULD_NOT_LOAD },
+  { name: "ImportSection", section: ImportSection, event: "google_import_check_failed", shows: IMPORT_OFF },
 ];
 
 beforeEach(() => {

@@ -361,7 +361,7 @@ function DatedField({
       </p>
       {kind === "birthday" && (
         <p className="text-[13px] text-muted-foreground">
-          We&apos;ll suggest gifts before it. The year is just for age-right ideas.
+          The year is just for age-right ideas.
         </p>
       )}
       {hasDate && (
@@ -446,8 +446,8 @@ function RemoveDate({
           </DialogTitle>
           <DialogDescription>
             {kind === "birthday"
-              ? "Their birth year goes too. We won't suggest gifts for it."
-              : "We won't suggest gifts for it."}
+              ? "Their birth year goes too. It won't be used for gift ideas."
+              : "It won't be used for gift ideas."}
           </DialogDescription>
         </DialogHeader>
         <ErrorLine error={error} />

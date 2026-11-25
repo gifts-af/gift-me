@@ -13,14 +13,20 @@ function orderByLine(row: Row): string | null {
   return `Order by ${chooseBy(row.orderBy.date)}${row.orderBy.fast ? " with fast shipping" : ""}`;
 }
 
-/** Each occasion with a switch, its next date and when to order by. */
+/** Each occasion with a switch, its next date and, with the concierge, when to order by. */
 export function Occasions({
   personId,
   occasions,
+  hasAccess,
+  remindersNote,
   action,
 }: {
   personId: string;
   occasions: Row[];
+  /** To the concierge, which does the ordering. */
+  hasAccess: boolean;
+  /** Says reminders come with the concierge. Not when the access check failed. */
+  remindersNote: boolean;
   /** `setOccasionEnabledAction` */
   action: (previous: null, formData: FormData) => Promise<SaveResult>;
 }) {
@@ -61,7 +67,7 @@ export function Occasions({
         {occasions.map((row) => {
           const enabled = chosen[row.kind] ?? row.enabled;
           // The server's order-by is only right for the server's switch position.
-          const line = enabled === row.enabled ? orderByLine(row) : null;
+          const line = hasAccess && enabled === row.enabled ? orderByLine(row) : null;
           return (
             <li key={row.kind} className="flex min-h-11 items-center gap-3 px-4 py-2.5">
               <div className="min-w-0 flex-1">
@@ -78,6 +84,7 @@ export function Occasions({
           );
         })}
       </ul>
+      {remindersNote && <p className="text-[13px] text-muted-foreground">Reminders come with the concierge.</p>}
       {error && (
         <p role="alert" className="text-[13px] text-destructive">
           {error}

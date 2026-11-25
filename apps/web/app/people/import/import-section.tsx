@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { unstable_rethrow } from "next/navigation";
+import { googleImportEnabled } from "@/lib/google-import";
 import { logEvent } from "@/lib/log";
 import { listImportedContactIds } from "@/modules/concierge";
 import { importContactsAction } from "../actions";
@@ -6,6 +8,19 @@ import { ImportFromGoogle } from "./import-from-google";
 
 // The checklist, loaded on its own so the page's frame shows first.
 export async function ImportSection() {
+  if (!(await googleImportEnabled())) {
+    return (
+      <p className="text-[15px] text-muted-foreground">
+        Google import is off for now.{" "}
+        <Link
+          href="/people/new"
+          className="inline-flex min-h-11 items-center font-semibold text-foreground underline underline-offset-[3px]"
+        >
+          Add people by hand.
+        </Link>
+      </p>
+    );
+  }
   // The OAuth client Supabase's Google sign-in uses; public, set per environment.
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
   if (!clientId) {

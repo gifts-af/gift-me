@@ -1738,6 +1738,7 @@ export type Database = {
         Args: { p_order_id: string };
         Returns: Database["concierge"]["Enums"]["round_status"];
       };
+      may_store_file: { Args: { p_bucket: string }; Returns: boolean };
       order_by_reference: {
         Args: { p_order_id: string; p_user_id: string };
         Returns: {

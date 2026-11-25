@@ -30,11 +30,26 @@ async function apiUp(s: LocalSupabase): Promise<boolean> {
   }
 }
 
+const STORAGE_WAIT_MS = 5000;
+
+/** Storage can come up after the rest of the stack, so this gives it a moment. */
+async function storageUp(s: LocalSupabase): Promise<boolean> {
+  for (const until = Date.now() + STORAGE_WAIT_MS; Date.now() < until; await new Promise((r) => setTimeout(r, 250))) {
+    try {
+      const res = await fetch(`${s.url}/storage/v1/status`, { signal: AbortSignal.timeout(2000) });
+      if (res.ok) return true;
+    } catch {
+      // Not up yet.
+    }
+  }
+  return false;
+}
+
 /**
- * The local stack, or null to skip. `api: false` for tests that only use Postgres.
- * Throws in CI when it isn't reachable.
+ * The local stack, or null to skip. `api: false` for tests that only use Postgres, `storage: true`
+ * for tests that upload files. Throws in CI when it isn't reachable.
  */
-export async function localStack(opts: { api: boolean }): Promise<{ supabase: LocalSupabase | null } | null> {
+export async function localStack(opts: { api: boolean; storage?: boolean }): Promise<{ supabase: LocalSupabase | null } | null> {
   let missing: string | null = null;
   let supabase: LocalSupabase | null = null;
   if (!(await postgresUp())) missing = "Postgres";
@@ -45,6 +60,7 @@ export async function localStack(opts: { api: boolean }): Promise<{ supabase: Lo
       supabase = null;
     }
     if (!supabase || !(await apiUp(supabase))) missing = "the Supabase API";
+    else if (opts.storage && !(await storageUp(supabase))) missing = "Supabase storage";
   }
   if (missing === null) return { supabase };
   if (process.env.CI) throw new Error(`Local-db tests need ${missing} running (pnpm supabase start), and CI must start it.`);

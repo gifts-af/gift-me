@@ -221,7 +221,7 @@ export type TemplateLinks = {
   delivered: { open: string };
   check_your_address: { open: string };
   notes_tip: Record<string, never>;
-  // `choice{i}` files the note to `choices[i]`; `someoneElse` is the plain people page.
+  // `choice{i}` files the note to `choices[i]`; `someoneElse` is the Give page.
   who_is_this: { [choice: `choice${number}`]: string; someoneElse: string };
   notes_not_read: Record<string, never>;
   notes_cant_cancel: Record<string, never>;
@@ -1133,7 +1133,7 @@ export const SAMPLE_DATA: {
     links: {
       choice0: "https://example.com/a/choice0-token",
       choice1: "https://example.com/a/choice1-token",
-      someoneElse: "https://example.com/people",
+      someoneElse: "https://example.com/give",
     },
   },
   notes_not_read: { data: {}, links: {} },

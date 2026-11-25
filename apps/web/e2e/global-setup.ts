@@ -1,12 +1,14 @@
 import { startFakeGateway } from "./fake-gateway";
 import { startFakeZinc } from "./fake-zinc";
+import { giveAccess } from "./fresh-user";
 import { localSupabase } from "./local-supabase";
+import { session } from "./sign-in";
 import { SECOND_USER, TEST_USER } from "./test-user";
 
 type User = { email: string; password: string; displayName: string };
 
-// Creates the test accounts, confirmed, so tests can sign in with email and
-// password (local Supabase has no Google). Safe to run again.
+// Creates the test accounts, confirmed and let into the concierge, so tests can sign in
+// with email and password (local Supabase has no Google). Safe to run again.
 export default async function globalSetup() {
   for (const user of [TEST_USER, SECOND_USER]) await createUser(user);
   // Zinc's stand-in for paying-for-gifts.spec.ts (ALL-32), and the AI Gateway's for the idea
@@ -22,13 +24,15 @@ export default async function globalSetup() {
   };
 }
 
-// Settings the round specs need for the whole run, set once here because specs run at the same
+// Settings specs need for the whole run, set once here because specs run at the same
 // time and one spec putting a value back would pull it from under another (ALL-29):
 // - buying on, for approval.spec.ts's purchases, which go to the fake Zinc;
+// - Google import on, for contacts-import.spec.ts;
 // - room in the tick's idea pass, which is global: every spec's rounds want a turn, and every run
 //   of the day counts (ALL-125). The fakes answer at once, so a high limit stays well inside the tick.
 const RUN_SETTINGS: Record<string, number> = {
   zinc_ordering_enabled: 1,
+  google_import_enabled: 1,
   idea_rounds_per_tick: 100,
   idea_round_runs_per_day: 100,
 };
@@ -86,4 +90,6 @@ async function createUser(user: User) {
   if (!res.ok && !alreadyThere) {
     throw new Error(`Couldn't create the test user ${user.email}: ${res.status} ${await res.text()}`);
   }
+  // An account that was already there comes back with no id, so ask with its session.
+  await giveAccess((await session(user)).user.id);
 }

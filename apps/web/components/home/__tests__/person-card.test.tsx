@@ -25,12 +25,12 @@ describe("PersonCard", () => {
     expect(screen.getByText("Mother's Day · Sun, May 9")).toBeInTheDocument();
   });
 
-  it("says 'Their own list' when they keep one, 'We suggest ideas' when not", () => {
+  it("says 'Their own list' when they keep one, 'No list linked' when not", () => {
     const { rerender } = render(<PersonCard person={base} />);
-    expect(screen.getByText("Their own list")).toBeInTheDocument();
-    expect(screen.queryByText("We suggest ideas")).toBeNull();
+    expect(screen.getByText("Their own list").querySelector("svg")).not.toBeNull();
+    expect(screen.queryByText("No list linked")).toBeNull();
     rerender(<PersonCard person={{ ...base, keepsList: false }} />);
-    expect(screen.getByText("We suggest ideas")).toBeInTheDocument();
+    expect(screen.getByText("No list linked").querySelector("svg")).toBeNull();
     expect(screen.queryByText("Their own list")).toBeNull();
   });
 

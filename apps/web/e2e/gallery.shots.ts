@@ -54,7 +54,7 @@ const SIGNED_OUT: [name: string, url: string][] = [
 // plus a round awaiting approval and another with a gift to fix (ALL-29).
 type Seeded = { user: Credentials; personId: string; linkedId: string; dadId: string; heldId: string; shareToken: string; round: { id: string; ideaIds: string[] }; fix: { roundId: string; orderId: string }; past: PastGiftsSeed };
 const SIGNED_IN: [name: string, url: (s: Seeded) => string][] = [
-  ["home", () => "/"],
+  ["home", () => "/give"],
   ["my-list", () => "/lists"],
   ["person", (s) => `/people/${s.personId}`],
   ["person-linked-list", (s) => `/people/${s.linkedId}`],

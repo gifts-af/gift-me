@@ -72,6 +72,7 @@ export function WhatWeKnow({
   name,
   knowledge,
   questionsHref,
+  hasAccess,
   editAction,
   setActiveAction,
   deleteAction,
@@ -82,6 +83,8 @@ export function WhatWeKnow({
   knowledge: Knowledge;
   /** Where the empty state points; null when questions are off or none are open. */
   questionsHref: string | null;
+  /** To the concierge, which is what learns from captures. */
+  hasAccess: boolean;
 } & Actions) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -128,7 +131,7 @@ export function WhatWeKnow({
               or capture a page about {name} with <ExtensionLink>the extension</ExtensionLink>.
             </>
           ) : (
-            <>Capture a page about {name} with <ExtensionLink>the extension</ExtensionLink> and we&apos;ll learn from it.</>
+            <>Capture a page about {name} with <ExtensionLink>the extension</ExtensionLink>{hasAccess && " and we'll learn from it"}.</>
           )}
         </p>
       )}

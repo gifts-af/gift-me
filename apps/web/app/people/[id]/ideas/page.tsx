@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { AppNav } from "@/components/app-shell/app-nav";
 import { BackLink, PageFrame, PageTitle } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
+import { ConciergeGate } from "@/components/concierge-gate";
 import { createClient } from "@/lib/supabase/server";
 import { todayForRequest } from "@/lib/today";
 import { getPerson, ideaRunOffer, onDemandIdeas, savedProductIds, type Db } from "@/modules/concierge";
@@ -22,11 +23,19 @@ export default function IdeasPage({ params }: { params: Promise<{ id: string }> 
       </TopBar>
       <PageFrame>
         <Suspense fallback={<p className="text-[15px] text-muted-foreground">Loading…</p>}>
-          <Loaded params={params} />
+          <ConciergeGate back={<Back params={params} />}>
+            <Loaded params={params} />
+          </ConciergeGate>
         </Suspense>
       </PageFrame>
     </>
   );
+}
+
+// Without access nothing is read, so there's no name to go back to.
+async function Back({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return <BackLink href={`/people/${encodeURIComponent(id)}`} label="Back" />;
 }
 
 async function Loaded({ params }: { params: Promise<{ id: string }> }) {

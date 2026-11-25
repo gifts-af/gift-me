@@ -360,7 +360,7 @@ describe("handleInbound: asking", () => {
     ]);
     expect(sent[0].text).toContain("Dad");
     expect(sent[0].text).toContain("Uncle Bob");
-    expect(sent[0].text).toContain("https://giftsaf.test/people");
+    expect(sent[0].text).toContain("https://giftsaf.test/give");
     expect(store.events).toEqual([USER, USER]);
   });
 
@@ -376,7 +376,7 @@ describe("handleInbound: asking", () => {
     expect(notifyStore.links).toEqual([]);
     expect(sent).toHaveLength(1);
     expect(sent[0].text).toContain("Someone else");
-    expect(sent[0].text).toContain("https://giftsaf.test/people");
+    expect(sent[0].text).toContain("https://giftsaf.test/give");
     expect(sent[0].text).not.toContain("/a/");
   });
 

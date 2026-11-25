@@ -373,7 +373,7 @@ export function createSupabasePeopleStore(): PeopleStore {
     async photoSettings() {
       const [px, maxBytes, timeoutMs, concurrency] = await Promise.all([
         appSettingInt("person_photo_px"),
-        appSettingInt("person_photo_max_upload_bytes"),
+        appSettingInt("person_photo_stored_max_bytes"),
         appSettingInt("contact_photo_timeout_ms"),
         appSettingInt("contact_photo_concurrency"),
       ]);

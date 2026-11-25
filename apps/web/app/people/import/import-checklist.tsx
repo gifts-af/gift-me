@@ -245,7 +245,7 @@ function Finished({ result, onAgain }: { result: Extract<ImportResult, { ok: tru
       <p className="text-[18px] font-bold">Added {plural(result.added, "person", "people")}.</p>
       {notes.length > 0 && <p className="text-[15px]">{notes.join(". ")}.</p>}
       <p className="text-[15px]">Their birthdays and holidays are set up. Check each one&apos;s page to fine-tune.</p>
-      <Link href="/" className="self-start font-semibold underline underline-offset-[3px]">
+      <Link href="/give" className="self-start font-semibold underline underline-offset-[3px]">
         See them on Give
       </Link>
       {onAgain && (

@@ -72,7 +72,7 @@ test("import Grandma and a friend from Google Contacts, then see them as already
   });
 
   await signIn(page);
-  await page.goto("/");
+  await page.goto("/give");
   await page.getByRole("link", { name: "Import from Google" }).click();
   await expect(page.getByRole("heading", { name: "Who do you buy gifts for?" })).toBeVisible();
   await page.getByRole("button", { name: "Connect Google Contacts" }).click();

@@ -24,6 +24,8 @@ vi.mock("@/modules/concierge", () => ({ getPerson }));
 const getPersonShareToken = vi.hoisted(() => vi.fn());
 vi.mock("@/modules/lists", () => ({ getPersonShareToken }));
 const appSettingInt = vi.hoisted(() => vi.fn());
+const readAccess = vi.hoisted(() => vi.fn());
+vi.mock("@/components/concierge-gate", () => ({ readAccess }));
 vi.mock("@/lib/app-settings", () => ({ appSettingInt }));
 
 const listPage = await import("../list/page");
@@ -65,6 +67,7 @@ describe("a person's Their list page", () => {
     getPerson.mockResolvedValue({ id: "p1", name: "Sam", keepsList: true });
     getPersonShareToken.mockResolvedValue(null);
     appSettingInt.mockResolvedValue(1);
+    readAccess.mockResolvedValue({ access: true, requested: false });
   });
 
   it("redirects to the share page when the person has a linked list and the card is on", async () => {
@@ -82,7 +85,17 @@ describe("a person's Their list page", () => {
     getPerson.mockResolvedValue({ id: "p1", name: "Sam", keepsList: false });
     const page = await open();
     expect(redirect).not.toHaveBeenCalled();
-    expect(findListLink(page as ReactNode)).toMatchObject({ variant: "page", keepsList: false });
+    expect(findListLink(page as ReactNode)).toMatchObject({ variant: "page", keepsList: false, heldGiftNotice: true });
+  });
+
+  // Money: where a held gift would ship is hidden only when there's surely none.
+  it.each([
+    ["hides where held gifts ship without access", { access: false, requested: false }, false],
+    ["shows it when the check fails", null, true],
+  ])("%s", async (_, access, heldGiftNotice) => {
+    readAccess.mockResolvedValue(access);
+    appSettingInt.mockResolvedValue(0);
+    expect(findListLink((await open()) as ReactNode)).toMatchObject({ heldGiftNotice });
   });
 
   it("keeps a linked person on the old screen, with Unlink, when the card is off", async () => {

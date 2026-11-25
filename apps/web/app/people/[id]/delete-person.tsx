@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import type { SaveResult } from "@/modules/concierge";
 
-/** Delete sits at the very bottom, behind a confirm. Afterwards: Home. */
+/** Delete sits at the very bottom, behind a confirm. Afterwards: Give. */
 export function DeletePerson({
   personId,
   name,
@@ -31,7 +31,7 @@ export function DeletePerson({
     try {
       result = await action(null, form);
     } catch (e) {
-      // A successful delete redirects Home from the server, which reaches us as
+      // A successful delete redirects to Give from the server, which reaches us as
       // a thrown redirect that Next handles itself. Stay busy, show nothing.
       try {
         unstable_rethrow(e);

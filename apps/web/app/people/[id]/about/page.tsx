@@ -19,9 +19,9 @@ import {
 import { PhotoPicker } from "../../photo-picker";
 import { AboutForm } from "./about-form";
 
-// About a person (ALL-127, T71): photo, name, who they are to you and their
+// About a person (T71): photo, name, who they are to you and their
 // dates, each saving on its own. Opened from the About row on their page and
-// from Home's "Add birthday". Signed-out visitors are sent to sign in by proxy.ts.
+// from Give's "Add birthday". Signed-out visitors are sent to sign in by proxy.ts.
 export default function AboutPage({ params }: { params: Promise<{ id: string }> }) {
   return (
     <>

@@ -5,7 +5,7 @@ export type ProductTab = "get" | "give";
 
 const TABS = [
   { key: "get", href: "/lists", label: "Get", Icon: Gift },
-  { key: "give", href: "/", label: "Give", Icon: HeartHandshake },
+  { key: "give", href: "/give", label: "Give", Icon: HeartHandshake },
 ] as const;
 
 // Get (your list) and Give (your people), the same at every width (ALL-95).

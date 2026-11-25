@@ -2,6 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { headers } from "next/headers";
+import { unstable_rethrow } from "next/navigation";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "@gifts-af/core";
 import { createClient } from "@/lib/supabase/server";
 import { isTimeZone } from "@/lib/time-zones";
 import { errorFields, logEvent } from "@/lib/log";
@@ -11,6 +14,7 @@ import {
   createSupabaseNotifyStore,
   defaultChannels,
   disconnectZinc,
+  hasConciergeAccess,
   pollConnect,
   saveConciergeSettings,
   savePhone,
@@ -77,13 +81,17 @@ export async function saveOverBudget(value: string): Promise<SaveResult> {
 // Sends the signed-in user a real notification email, so they can see what
 // reminders will look like and that the links work.
 export async function sendTestEmail(): Promise<{ ok: true } | { ok: false; error: string }> {
-  const supabase = await createClient();
-  const { data: auth } = await supabase.auth.getClaims();
-  const userId = auth?.claims?.sub;
-  if (!userId) return { ok: false, error: "Your session ended. Sign in again." };
-
   const failed = { ok: false, error: "We couldn't send it. Try again in a minute." } as const;
+  let userId: string | null = null;
   try {
+    const supabase = (await createClient()) as unknown as SupabaseClient<Database>;
+    const { data: auth, error } = await supabase.auth.getClaims();
+    if (error) throw error;
+    userId = auth?.claims?.sub ?? null;
+    if (!userId) return { ok: false, error: "Your session ended. Sign in again." };
+    if (!(await hasConciergeAccess(supabase, userId))) {
+      return { ok: false, error: "This is part of the concierge, which you don't have yet." };
+    }
     const requestHeaders = await headers();
     const baseUrl = baseUrlFrom(requestHeaders);
     if (!baseUrl) return failed;
@@ -95,6 +103,7 @@ export async function sendTestEmail(): Promise<{ ok: true } | { ok: false; error
     });
     return result.ok ? { ok: true } : failed;
   } catch (error) {
+    unstable_rethrow(error);
     logEvent("settings.test_email_failed", { user_id: userId, ...errorFields(error) });
     return failed;
   }

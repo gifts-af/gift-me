@@ -53,7 +53,7 @@ export function ReactionForm({ gifts, noteMaxChars, opened, personName, personId
               Back to {personName}
             </Link>
           ) : (
-            <Link href="/">Go to your people</Link>
+            <Link href="/give">Go to your people</Link>
           )}
         </Button>
       )}

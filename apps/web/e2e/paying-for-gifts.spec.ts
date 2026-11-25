@@ -2,7 +2,7 @@ import { mkdirSync } from "node:fs";
 import path from "node:path";
 import { devices, expect, test, type Browser, type Page } from "@playwright/test";
 import { FAKE_ZINC_URL } from "./fake-zinc";
-import { createFreshUser } from "./fresh-user";
+import { createFreshUser, giveAccess } from "./fresh-user";
 import { localSupabase } from "./local-supabase";
 import { phoneLayoutProblems } from "./phone-layout";
 import { signIn, type Credentials } from "./sign-in";
@@ -50,7 +50,9 @@ async function ensureUser(): Promise<string> {
     body: JSON.stringify({ ...USER, email_confirm: true, user_metadata: { display_name: "Zinc E2E" } }),
   });
   if (!res.ok && res.status !== 422) throw new Error(`Couldn't create ${USER.email}: ${res.status}`);
-  return userIdOf(USER);
+  const userId = await userIdOf(USER);
+  await giveAccess(userId);
+  return userId;
 }
 
 async function setPaid(userId: string, paid: boolean) {

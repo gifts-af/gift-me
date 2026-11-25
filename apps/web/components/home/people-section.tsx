@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { unstable_rethrow } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { googleImportEnabled } from "@/lib/google-import";
 import { logEvent } from "@/lib/log";
 import { todayForRequest } from "@/lib/today";
 import { listPeople } from "@/modules/concierge";
@@ -17,22 +18,25 @@ export async function PeopleSection() {
     logEvent("people_load_failed", { error: error instanceof Error ? error.name : "unknown" });
     return <p className="col-span-full text-[15px] text-muted-foreground">We couldn&apos;t load your people. Refresh to try again.</p>;
   }
-  // Adding by hand, or bringing them in from Google Contacts (ALL-24).
+  // Adding by hand, or bringing them in from Google Contacts while that's on.
+  const canImport = await googleImportEnabled();
   const add = (
     <div className="col-span-full flex flex-wrap gap-2">
       <Button asChild variant="outline">
         <Link href="/people/new">Add someone you buy for</Link>
       </Button>
-      <Button asChild variant="outline">
-        <Link href="/people/import">Import from Google</Link>
-      </Button>
+      {canImport && (
+        <Button asChild variant="outline">
+          <Link href="/people/import">Import from Google</Link>
+        </Button>
+      )}
     </div>
   );
   if (people.length === 0) {
     return (
       <>
         <p className="col-span-full text-[15px] text-muted-foreground">
-          Add the people you buy for, and we&apos;ll suggest gifts before each birthday and holiday.
+          Add the people you buy for, and keep their lists in one place.
         </p>
         {add}
       </>

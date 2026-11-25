@@ -70,7 +70,7 @@ pnpm supabase start    # first run downloads images (a few minutes); applies sup
 pnpm supabase status   # local URLs and keys; Studio (the database UI) is at http://127.0.0.1:54323
 pnpm supabase db reset # rebuild the local database from the migrations, e.g. after pulling new ones (not needed for leftover test data: see db:clean)
 pnpm supabase stop     # stop the containers; your local data is kept
-pnpm db:start:tests    # start only the services the tests need (no Studio or Mailpit); what CI runs
+pnpm db:start:tests    # start only the services the tests need (storage included; no Studio or Mailpit); what CI runs
 pnpm db:clean          # delete the test accounts and put app_settings back as seeded; waits for any test run in progress (see Sharing the local database)
 pnpm db:test           # run the database tests in supabase/tests/ (privacy rules, keys, cascades); one run at a time, after db:clean
 pnpm test:changed      # quick local loop: only the unit tests your changes since origin/main affect (a change to a Vitest config reruns everything). CI always runs the full `pnpm test`
@@ -149,12 +149,122 @@ So leftovers from a killed run, a switch a test left flipped, or another session
 
   ```sql
   insert into concierge.accounts (user_id, paid_features, concierge_access)
-  select id, true, true from auth.users where email = 'PERSON_EMAIL'
-  on conflict (user_id) do update set paid_features = excluded.paid_features, concierge_access = true;
+  select id, true, true from auth.users where email = 'PERSON_EMAIL' and email_confirmed_at is not null
+  on conflict (user_id) do update set paid_features = excluded.paid_features, concierge_access = true
+  returning user_id;
   ```
 
-  `concierge_access` is set too because a paid user without access would start rounds whose links show the request page once the access gate ships. To turn paid features off, run the same statement with `false` in the `paid_features` slot only (`select id, false, true`), so access stays on. Check it with `select email, paid_features from concierge.accounts a join auth.users u on u.id = a.user_id where paid_features;`. Without the flag, captures still save but aren't read, and the person page and extension say why. To stop reading for everyone instead, set `capture_extraction_enabled` to 0.
+  No row back means the email is mistyped or not confirmed, and nothing changed.
+
+  `concierge_access` is set too because a paid user without access would start rounds whose links show the request page. **Before turning it on, count their people and near occasions** (Concierge access, below), because it can start rounds for all of them. Check it with `select email, paid_features from concierge.accounts a join auth.users u on u.id = a.user_id where paid_features;`. Without the flag, captures still save but aren't read, and the person page and extension say why. To stop reading for everyone instead, set `capture_extraction_enabled` to 0.
+
+  **Turning it off** needs no confirmed email. Set `paid_features` to false only, so `concierge_access` stays on:
+
+  ```sql
+  update concierge.accounts set paid_features = false
+  where user_id = (select id from auth.users where email = 'PERSON_EMAIL')
+  returning user_id;
+  ```
+
+  No row back means the email is mistyped or the person has no account row, and nothing changed. The person can sign in as before, and can come back on later by running the turn-on statement.
 - `pg_cron` and `pg_net` are on in `dev` only and aren't used: Vercel Cron runs the round tick (T49).
+
+## Concierge access (ALL-179)
+
+Anyone can sign up, keep a list and add people. Gift ideas and the concierge settings need `concierge.accounts.concierge_access`, which an admin turns on one account at a time. It spends nothing by itself: anything that costs money also needs `paid_features` (Environments, above). Everything here is run in the prod Supabase SQL editor, signed in as allensforever711.
+
+### Letting someone in
+
+The request arrives as an email to the owner, with their account email in it. Who is waiting:
+
+```sql
+select u.email, u.email_confirmed_at is not null as confirmed, a.access_requested_at
+from concierge.accounts a join auth.users u on u.id = a.user_id
+where a.access_requested_at is not null and not a.concierge_access
+order by 2;
+```
+
+1. Turn it on, and check that one row came back. None means the email doesn't match an account, or they haven't confirmed it (someone could sign up with an address that isn't theirs). Ask them to confirm first:
+
+   ```sql
+   insert into concierge.accounts (user_id, concierge_access)
+   select id, true from auth.users where email = 'PERSON_EMAIL' and email_confirmed_at is not null
+   on conflict (user_id) do update set concierge_access = true
+   returning user_id;
+   ```
+
+2. Reply to their request email to say they're in. Nothing else tells them.
+
+**Paid features are a separate step,** and can start gift rounds, with their emails, for everyone they've already added. Count first, and tell them if there are many:
+
+```sql
+select p.name, o.kind, o.month, o.day
+from auth.users u
+join public.people p on p.user_id = u.id and p.deleted_at is null
+left join concierge.occasions o on o.person_id = p.id and o.enabled and o.deleted_at is null
+where u.email = 'PERSON_EMAIL'
+order by 1, 2;
+```
+
+Near means within about `round_lead_days` + `planning_delivery_days` + `safety_buffer_days` (28 + 7 + 2 days). Holidays have no month or day here: check the calendar. Then use the statement in Environments > Paid features.
+
+### Turning access off
+
+```sql
+select concierge.turn_off_concierge_access(id) from auth.users where email = 'PERSON_EMAIL';
+```
+
+A mistyped email returns no rows and changes nothing. The right one returns one empty row. Check it's off:
+
+```sql
+select u.email, a.concierge_access from auth.users u join concierge.accounts a on a.user_id = u.id where u.email = 'PERSON_EMAIL';
+```
+
+It refuses when they have paid features, a saved Zinc key or a gift round in progress, so nobody loses the pages they need to finish a purchase. It also clears their request date, so they can ask again. Their people and lists stay. No record is kept of it.
+
+### Accounts the second backfill lets in
+
+`20261129120000_concierge_access_backfill.sql` turns access on for every account made from just before the first backfill until it runs. Run this just before merging it, to see who:
+
+```sql
+select id, email, email_confirmed_at is not null as confirmed, created_at
+from auth.users where created_at >= '2026-11-25 16:30:00+00' order by created_at;
+```
+
+### Off switches
+
+None needs a deploy. Settings are rows in `concierge.app_settings`.
+
+| Switch | Effect |
+|---|---|
+| Supabase > Authentication > Sign In / Providers > "Allow new users to sign up", off | No new accounts. Existing ones still sign in |
+| `concierge_requests_per_day` = 0 (10) | No access requests taken: the card says to try again tomorrow |
+| `google_import_enabled` = 0 (as shipped) | Google import isn't offered, and Import says to add people by hand. On only when exactly 1; if it can't be read, it counts as off (`google_import_check_failed` in the logs) |
+| `amazon_paste_lookup_enabled` = 0 (1) | No Amazon lookups |
+| `store_page_read_enabled` = 0 (1) | Pasted links' store pages aren't read |
+| `storage_files_per_account` = 0 (100) | Accounts without access can't upload photos or captures |
+
+**Storage limits.** The `person-photos` bucket takes JPEG, PNG and WebP up to 1 MB, and `captures` takes those and GIF up to 3 MB, whoever uploads. No signed upload link is given for either bucket, because using one skips every check. Keep `person_photo_stored_max_bytes` (1,000,000) and `capture_screenshot_max_bytes` (2,500,000) below those. An account without access may keep `storage_files_per_account` files in each bucket. At the cap its uploads fail with the usual message, replacing a photo included, until access is turned on or the setting is raised. It's a soft cap: uploads at the same moment can go over it. Who stores the most:
+
+```sql
+select u.email, o.bucket_id, count(*) as files, pg_size_pretty(sum((o.metadata->>'size')::bigint)) as size
+from storage.objects o join auth.users u on u.id::text = split_part(o.name, '/', 1)
+where o.bucket_id in ('person-photos', 'captures')
+group by 1, 2 order by count(*) desc limit 20;
+```
+
+**Turning Google import back on:** once Google has approved the app, set `google_import_enabled` to 1. Then change the live check: `apps/web/e2e-live/google-import-off.spec.ts` expects the off text, so replace it with the Connect button's check it took the place of (`all-104-connect-button.spec.ts` in that folder's history: `git log --diff-filter=D -- apps/web/e2e-live/all-104-connect-button.spec.ts` finds the commit that removed it).
+
+**How we see it working:** `concierge_access.requested` is logged for each request the owner was emailed about, and `concierge_access.busy` when the day is used up (user ids only). `concierge_access.request_failed`, `request_email_failed` and `check_failed` are the failures.
+
+### After a rollback
+
+Vercel's instant rollback past the gate shows Give and all its pages to every account again, and offers Google import whatever its setting says. Nobody can spend more: paid features and the lookup caps are still checked. In this order:
+
+1. Turn off new sign-ups in Supabase (above).
+2. Roll back.
+3. Leave the database alone. The access fields, the storage limits and the file cap keep working under older code; an imported photo over 1 MB is skipped.
+4. Accounts made while rolled back have no access. When the gate is back, let in anyone who should have it, then turn sign-ups on again.
 
 ## Zinc wallet ordering (ALL-32, ALL-30)
 

@@ -126,12 +126,12 @@ One responsive website, designed phone-first and installable to the home screen 
 
 The gift list and the concierge each **work on their own**, and are linked lightly so together they're better than either alone (owner, 2026-10-26; T19).
 
-- **Get and Give** are the two sections, in the top bar on every signed-in page (T58). **Get** (`/lists`) is your list. **Give** (`/`) is where you land after sign-in: a **"You"** card first, then your **people** (the concierge).
+- **Get and Give** are the two sections, in the top bar on every signed-in page (T58). **Get** (`/lists`) is your list. **Give** (`/give`) has a **"You"** card first, then your **people**. With concierge access you land there after sign-in; without it you land on your list, and Give also has a Request access card.
 - **Each product stands alone.** Someone who only uses lists never has to set up the concierge: "People" shows a quiet one-line "Add someone you buy for" empty state, not a setup wizard. Someone who only uses the concierge sees one small "You" card inviting them to start a wish list.
 - **Links between them are low-key** and appear only where they help, never as prompts or pop-ups. For example, a person's profile can later show their own shared list when they've linked their account (T19's `people.linked_user_id`). These come with the screens that need them, not in the MVP mock-ups.
-- **People cards** show an avatar (their photo, or their initials on a tinted circle), their name, the next occasion, and where ideas come from: "Their own list" when you've linked their shared list, otherwise "We suggest ideas". Without a birthday the card offers "Add birthday" (ALL-21, T41).
+- **People cards** show an avatar (their photo, or their initials on a tinted circle), their name, the next occasion, and where ideas come from: "Their own list" when you've linked their shared list, otherwise "No list linked". Without a birthday the card offers "Add birthday" (ALL-21, T41).
 - **Products keep their own paths** (`/lists`, `/concierge`, design §2.2). Share links (`/share/…`) work signed out; signed-in viewers get Get and Give, signed-out visitors don't (T78).
-- A list-only user who signs in later lands on Give, one press from their list on the "You" card or the Get tab.
+- A list-only user who signs in later lands on their list, one press from Give.
 
 ## UI kit
 

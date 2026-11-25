@@ -6,6 +6,7 @@ import { GUIDED_QUESTIONS, IDEA_RUN_OFF, ideaRunWorstMs, parseDate, type Occasio
 import { createExtractor } from "@/lib/ai/extract";
 import { AI_MODELS } from "@/lib/ai/models";
 import { appSettingInt } from "@/lib/app-settings";
+import { googleImportEnabled } from "@/lib/google-import";
 import { errorFields, logEvent } from "@/lib/log";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -118,9 +119,9 @@ async function tipAfterAdd(person: { id: string; name: string }): Promise<void> 
 const DATED: DatedKind[] = ["birthday", "anniversary"];
 const isText = (...values: unknown[]) => values.every((v) => typeof v === "string");
 
-/** Like refresh, plus Home, whose cards show the name and next date. */
+/** Like refresh, plus Give, whose cards show the name and next date. */
 function refreshPerson(result: SaveResult, id: string): SaveResult {
-  if (result.ok) revalidatePath("/");
+  if (result.ok) revalidatePath("/give");
   return refresh(result, id);
 }
 
@@ -227,21 +228,22 @@ export async function deletePersonAction(_previous: SaveResult | null, formData:
   const result = await deletePerson(text(formData, "id"));
   if (!result.ok) return result;
   // Not the person's own path: revalidating it while the user is still on it
-  // would flash a 404. Go straight Home instead.
-  revalidatePath("/");
+  // would flash a 404. Go straight to Give instead.
+  revalidatePath("/give");
   revalidatePath("/people");
-  redirect("/");
+  redirect("/give");
 }
 
 // The Google Contacts import (ALL-24): the checklist sends only the ticked
 // contacts, as JSON in `rows`. Rows the checks refuse count as failed.
 export async function importContactsAction(_previous: ImportResult | null, formData: FormData): Promise<ImportResult> {
+  if (!(await googleImportEnabled())) return { ok: false, error: "Google import is off for now. Add people by hand." };
   const currentYear = parseDate(await todayForRequest()).year;
   const parsed = parseImportRows(text(formData, "rows"), currentYear);
   if (!parsed.ok) return parsed;
   const result = await importPeople(parsed.rows);
   if (!result.ok) return result;
-  revalidatePath("/");
+  revalidatePath("/give");
   revalidatePath("/people");
   const { firstAdded, ...counts } = result;
   if (firstAdded) await tipAfterAdd(firstAdded);

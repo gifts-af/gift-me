@@ -3,8 +3,8 @@ import { InstallTip } from "@/components/app-shell/install-tip";
 import { appSettingInt } from "@/lib/app-settings";
 import { logEvent } from "@/lib/log";
 
-// Phones only, and only outside the installed app (ALL-57). A tip never
-// breaks Home: if its setting can't be read, it just isn't shown.
+// Phones only, and only outside the installed app. A tip never
+// breaks Give: if its setting can't be read, it just isn't shown.
 export async function HomeScreenTip() {
   try {
     return <InstallTip snoozeDays={await appSettingInt("install_tip_snooze_days")} />;

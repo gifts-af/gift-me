@@ -12,7 +12,7 @@ const photo = new File(["x".repeat(100)], "me.png", { type: "image/png" });
 
 type Result = { ok: true; id: string } | { ok: false; error: string; existingId?: string };
 
-function setup(addResult: Result = { ok: true, id: "new1" }, extra: { initialName?: string; shareToken?: string } = {}) {
+function setup(addResult: Result = { ok: true, id: "new1" }, extra: { initialName?: string; shareToken?: string; heldGiftNotice?: boolean } = {}) {
   const calls: string[] = [];
   const action = vi.fn(async (...args: [unknown, FormData]) => {
     void args;
@@ -36,9 +36,10 @@ function setup(addResult: Result = { ok: true, id: "new1" }, extra: { initialNam
       userId="u1"
       maxUploadBytes={1000}
       px={512}
-      doneHref="/"
+      doneHref="/give"
       storage={storage}
       resize={resize}
+      heldGiftNotice
       {...extra}
     />,
   );
@@ -63,7 +64,7 @@ describe("PersonForm", () => {
     const t = setup();
     await fill();
     await save();
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/"));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/give"));
     const form = sent(t);
     expect(form.get("name")).toBe("Mom");
     expect(form.get("relationship")).toBe("mother");
@@ -116,7 +117,7 @@ describe("PersonForm", () => {
     expect(screen.getByLabelText("Birthday day")).toBeInTheDocument();
     expect(screen.getByLabelText("Birth year (optional)")).toHaveAttribute("name", "birthYear");
     expect(screen.getByText("Optional")).toBeInTheDocument();
-    expect(screen.getByText(/The year is just for age-right ideas/)).toBeInTheDocument();
+    expect(screen.getByText("The year is just for age-right ideas.")).toBeInTheDocument();
   });
 
   it("labels the submit button with the typed name", async () => {
@@ -179,7 +180,7 @@ describe("PersonForm", () => {
     await userEvent.upload(screen.getByLabelText("Choose a photo"), photo);
     expect(t.upload).not.toHaveBeenCalled();
     await save();
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/"));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/give"));
     expect(t.calls).toEqual(["add", "upload", "setPhoto"]);
     expect(t.upload.mock.calls[0][0]).toMatch(/^u1\/new1\/[^/]+\.jpg$/);
     const photoForm = (t.photoAction.mock.calls[0] as unknown as [unknown, FormData])[1];
@@ -252,9 +253,18 @@ describe("PersonForm", () => {
     const NOTICE = "If a gift for them is waiting on an address, it will ship to this list's owner.";
 
     it("starts with the owner's name, says where held gifts ship, and sends the token", async () => {
-      const t = setup(undefined, { initialName: "Sam", shareToken: TOKEN });
+      const t = setup(undefined, { initialName: "Sam", shareToken: TOKEN, heldGiftNotice: true });
       expect(screen.getByLabelText("Name")).toHaveValue("Sam");
       expect(screen.getByText(NOTICE)).toBeInTheDocument();
+      await userEvent.selectOptions(relationship(), "Friend");
+      await save();
+      await waitFor(() => expect(push).toHaveBeenCalledWith("/people/new1"));
+      expect(sent(t).get("list")).toBe(TOKEN);
+    });
+
+    it("without access, says nothing of held gifts and still sends the token", async () => {
+      const t = setup(undefined, { initialName: "Sam", shareToken: TOKEN, heldGiftNotice: false });
+      expect(screen.queryByText(NOTICE)).toBeNull();
       await userEvent.selectOptions(relationship(), "Friend");
       await save();
       await waitFor(() => expect(push).toHaveBeenCalledWith("/people/new1"));
@@ -266,7 +276,7 @@ describe("PersonForm", () => {
       expect(screen.queryByText(NOTICE)).toBeNull();
       await fill();
       await save();
-      await waitFor(() => expect(push).toHaveBeenCalledWith("/"));
+      await waitFor(() => expect(push).toHaveBeenCalledWith("/give"));
       expect(sent(t).has("list")).toBe(false);
     });
 

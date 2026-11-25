@@ -26,7 +26,7 @@ export default function PersonPage({
         <AppNav current="give" />
       </TopBar>
       <PageFrame>
-        <BackLink href="/" label="People" />
+        <BackLink href="/give" label="People" />
         <Suspense fallback={<p className="text-[15px] text-muted-foreground">Loading…</p>}>
           <Loaded params={params} searchParams={searchParams} />
         </Suspense>
