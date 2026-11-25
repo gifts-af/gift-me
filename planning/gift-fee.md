@@ -1,8 +1,8 @@
-# The GiftsAF fee: proposed amount
+# The GiftsAF fee: the amount
 
-**Status:** proposed, 2026-11-25. Waiting for Aaron and Jim ([ALL-76](https://linear.app/allens-forever/issue/ALL-76)).
+**Status:** approved by the owner, 2026-11-25 (decision 61). Waiting for Jim ([ALL-76](https://linear.app/allens-forever/issue/ALL-76)).
 
-**Proposal: keep the fixed part at $2.00, plus the actual card fee** (2.9% + 30¢ of the whole charge). It's a setting, so it can change without a deploy.
+**The fixed part starts at $2.00, plus the actual card fee** (2.9% + 30¢ of the whole charge). It's a setting, so it can change without a deploy.
 
 ## The parts
 
@@ -43,7 +43,7 @@ So $2.00 covers up to 3 runs per gift. The 1¢ between $0.64 and $0.65 above is 
 
 The second and third rows come from T24, ALL-75 and the technical design; prices weren't rechecked. Nothing is chosen yet.
 
-**[Claude's call]** We absorb the rest at launch. Dividing $37 by 10 gifts would add $3.70 to each, and free lists use the service too.
+**Decided (owner):** we absorb the rest at launch. Dividing $37 by 10 gifts would add $3.70 to each, and free lists use the service too.
 
 ## What the buyer sees
 
@@ -68,4 +68,4 @@ Example: a $22.59 gift, charged $25.64.
 
 ## When to look again
 
-After 20 bought gifts, or a month after friends join, whichever is first **[Claude's call]**. Change it if the average number of runs per gift is above 3.
+After 20 bought gifts, or a month after friends join, whichever is first (owner). Change it if the average number of runs per gift is above 3.
