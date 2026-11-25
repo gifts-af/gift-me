@@ -54,7 +54,7 @@ const REJECT_ERRORS: Record<Exclude<Extract<RejectResult, { ok: false }>["error"
   busy: "This round is busy right now. Try again in a minute.",
   not_open: "This round can't be changed now. Reload to see what happened.",
   too_long: `Keep it under ${FACT_VALUE_MAX} characters.`,
-  sensitive: "We don't keep notes about health, religion, politics or similar. Try wording it another way.",
+  sensitive: "We don't keep notes about health, religion, politics or similar. Try wording it another way, or leave it blank.",
   session: "Your session ended. Sign in again.",
   bad_form: "That didn't go through. Reload and try again.",
 };

@@ -113,6 +113,8 @@ See something you like in a shop or at a friend's? Take a photo, then tap Share 
 
 One line each (CLAUDE.md > Scope freeze). Reviewed when the freeze lifts.
 
+- Let a buyer delete a capture's raw text and screenshot (D51, left by ALL-37).
+- Sensitive-trait filter refuses ordinary words ("expecting", "can't afford", "lent") and misses curly apostrophes (ALL-37).
 - Sensitive-trait word list misses HIV, epilepsy, asthma, PTSD, celiac and others (ALL-37).
 - Facts aren't re-checked for sensitive traits before the AI prompt (ALL-37).
 - Past orders keep a deleted list owner's name and address; nothing prunes them after delivery (ALL-37).
