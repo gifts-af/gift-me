@@ -30,7 +30,7 @@ test("save a birthday after sharing, and someone adding you gets it, until you r
   const path = await sharePath(sam);
   await signIn(page, sam);
 
-  // Settings has it as not added; Share mentions it only once used (AC-1, AC-13).
+  // Settings has it as not added; Share mentions it only once used.
   await page.goto("/settings");
   await expect(page.getByRole("link", { name: /Birthday/ })).toContainText("Not added");
   await page.goto("/lists");
@@ -38,7 +38,7 @@ test("save a birthday after sharing, and someone adding you gets it, until you r
   await page.getByRole("button", { name: /^(Share|Copied!)$/ }).click();
   await page.getByRole("link", { name: "No birthday saved. Add it (optional)" }).click();
 
-  // The Birthday screen saves it (AC-2).
+  // The Birthday screen saves it.
   await expect(page).toHaveURL(/\/settings\/birthday$/);
   await page.getByLabel("Birthday month").selectOption("March");
   await page.getByLabel("Birthday day").fill("14");
@@ -50,7 +50,7 @@ test("save a birthday after sharing, and someone adding you gets it, until you r
   await page.getByRole("button", { name: /^(Share|Copied!)$/ }).click();
   await expect(page.getByText("No birthday saved.")).toHaveCount(0);
 
-  // Someone adding Sam finds it, and what's on the form is saved (AC-5).
+  // Someone adding Sam finds it, and what's on the form is saved.
   const buyer = await createFreshUser();
   await openAddForm(page, path, buyer);
   await expect(page.getByLabel("Birthday month")).toHaveValue("3");
@@ -67,7 +67,7 @@ test("save a birthday after sharing, and someone adding you gets it, until you r
   await page.getByRole("button", { name: "Add Sam" }).click();
   await expect(page).toHaveURL(/\/people\/[0-9a-f-]{36}$/);
 
-  // Removed, it fills in for nobody new, and the buyer keeps theirs (AC-4, AC-7).
+  // Removed, it fills in for nobody new, and the buyer keeps theirs.
   await page.context().clearCookies();
   await signIn(page, sam);
   await page.goto("/settings/birthday");

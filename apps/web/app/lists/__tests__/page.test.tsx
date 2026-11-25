@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BirthdayHint } from "@/components/birthday-hint";
 import type { MyBirthday } from "@/lib/account-birthday";
 
-// Who gets the note under Share (ALL-182 AC-13). What it looks like and when it
+// Who gets the note under Share. What it looks like and when it
 // shows is in gift-app.test.tsx; the browser journey covers the real thing.
 const t = vi.hoisted(() => ({ birthday: { kind: "none" } as unknown, on: true, list: {} as unknown }));
 vi.mock("@/app/settings/address-actions", () => ({ saveMyAddressAction: vi.fn(), setSharingAction: vi.fn() }));

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } fr
 import { birthdaySharingOn, getMyBirthday, removeMyBirthday, saveMyBirthday, type BirthdayDb } from "../account-birthday";
 
 // The real table and its rules are in account_birthdays.test.sql; these check
-// what each result turns into, and that events never hold the date (AC-11).
+// what each result turns into, and that events never hold the date.
 let log: MockInstance;
 beforeEach(() => {
   log = vi.spyOn(console, "log").mockImplementation(() => {});
