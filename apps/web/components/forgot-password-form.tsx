@@ -1,6 +1,7 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
+import { authFormError } from "@/lib/auth-form-errors";
 import { withNext } from "@/lib/safe-next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -32,7 +33,7 @@ export function ForgotPasswordForm({ next }: { next?: string }) {
     });
     setIsLoading(false);
     human.reset();
-    if (error) setError(error.message);
+    if (error) setError(authFormError(error));
     else setSuccess(true);
   };
 

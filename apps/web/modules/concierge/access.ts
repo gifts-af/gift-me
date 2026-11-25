@@ -89,7 +89,7 @@ export function buildAccessRequest(user: AccessRequester): RenderedEmail & { to:
   const who = name || user.email;
   const { html, text } = renderEmail({
     heading: `${who} wants the concierge`,
-    paragraphs: ["To let them in, run the statement in design/operations.md, then reply to this email."],
+    paragraphs: ["Follow Concierge access > Letting someone in, in design/operations.md, and reply here."],
     rows: [name ? { title: name, detail: user.email } : { title: user.email }],
   });
   return { to: inboxFor("access"), replyTo: user.email, subject: `${APP_NAME} concierge request: ${who}`, html, text };

@@ -11,6 +11,7 @@ async function Form({ searchParams }: PageProps<"/auth/sign-up">) {
 export default function Page(props: PageProps<"/auth/sign-up">) {
   return (
     <AuthFrame subtitle="Free. Make a wish list, share one link, and keep your family's lists in one place.">
+      <h2 className="text-center text-[17px] font-semibold">Create an account</h2>
       <Suspense>
         <Form {...props} />
       </Suspense>

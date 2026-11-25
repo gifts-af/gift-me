@@ -143,7 +143,7 @@ describe("sign-in and sign-up errors are in our words", () => {
   const alert = async () => (await screen.findByRole("alert")).textContent;
 
   it.each([
-    ["over_email_send_rate_limit", "We can't send more sign-up emails right now. Use Continue with Google above, or try again in an hour."],
+    ["over_email_send_rate_limit", "We can't send another email right now. Try again a bit later, or sign in with Google."],
     ["user_already_exists", "You already have an account with this email. Sign in instead."],
     ["email_exists", "You already have an account with this email. Sign in instead."],
     ["weak_password", "That password is too easy to guess. Try a longer one, with letters, numbers and symbols."],
@@ -170,6 +170,26 @@ describe("sign-in and sign-up errors are in our words", () => {
     prefill("Email", "sam@example.com");
     prefill("Password", "pw-123456");
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(await alert()).toBe(words);
+  });
+
+  it("forgot password", async () => {
+    auth.resetPasswordForEmail.mockResolvedValue({ error: { code: "over_email_send_rate_limit", message: RAW } });
+    render(<ForgotPasswordForm />);
+    prefill("Email", "sam@example.com");
+    fireEvent.click(screen.getByRole("button", { name: "Send reset link" }));
+    expect(await alert()).toBe("We can't send another email right now. Try again a bit later, or sign in with Google.");
+  });
+
+  it.each([
+    ["same_password", "That's your current password. Choose a different one."],
+    ["weak_password", "That password is too easy to guess. Try a longer one, with letters, numbers and symbols."],
+    [undefined, "Something went wrong. Please try again in a minute."],
+  ])("update password, %s", async (code, words) => {
+    auth.updateUser.mockResolvedValue({ error: { code, message: RAW } });
+    render(<UpdatePasswordForm />);
+    prefill("New password", "pw-123456");
+    fireEvent.click(screen.getByRole("button", { name: "Save new password" }));
     expect(await alert()).toBe(words);
   });
 

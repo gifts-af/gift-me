@@ -70,6 +70,7 @@ describe("sign-in and sign-up pages (AC-2)", () => {
     expect(await show(SignUpPage)).toHaveTextContent(
       "Free. Make a wish list, share one link, and keep your family's lists in one place.",
     );
+    expect(screen.getByRole("heading", { name: "Create an account" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /GiftsAF/ })).toHaveAttribute("href", "/");
     expect(screen.getByRole("link", { name: "Privacy" })).toHaveAttribute("href", "/privacy");
   });
