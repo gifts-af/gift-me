@@ -64,6 +64,7 @@ select set_eq(
     'gift_progress_days', 'restore_rejected_ideas_enabled',
     'amazon_free_shipping_from_cents', 'amazon_shipping_estimate_cents',
     'google_import_enabled', 'concierge_requests_per_day',
+    'person_photo_stored_max_bytes', 'storage_files_per_account',
     'idea_busy_retry_seconds', 'idea_busy_retries_max'
   ],
   'every fee, limit, default and schedule setting is seeded'
