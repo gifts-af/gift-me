@@ -126,6 +126,8 @@ One line each (CLAUDE.md > Scope freeze). Reviewed when the freeze lifts.
 - Wider secret check on client bundles; constant-time cron secret compare (ALL-37).
 - A claimer's name stays on a shared list after their account is deleted (ALL-37).
 - Tell the buyer when a note or capture was read but nothing was learned from it (ALL-144's live check).
+- On the fix page, "Yes, pick it" in the over-budget pop-up looks like it bought the gift; it only unlocks "Buy anyway" (ALL-29's real order).
+- List gifts from stores we can't price, and Amazon ones with no product code, assume free shipping, so an order can be refused on price (ALL-29's real order).
 
 ## A common thread
 
