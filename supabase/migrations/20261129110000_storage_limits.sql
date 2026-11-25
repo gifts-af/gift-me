@@ -12,13 +12,19 @@ update storage.buckets
 
 insert into concierge.app_settings (key, value, description) values
   ('person_photo_stored_max_bytes', '1000000', 'Largest profile photo copied in from Google Contacts, in bytes. Keep it under the person-photos bucket''s limit.'),
-  ('storage_files_per_account', '500', 'Most files an account without concierge access may keep in each of the person-photos and captures buckets.');
+  ('storage_files_per_account', '100', 'Most files an account without concierge access may keep in each of the person-photos and captures buckets.');
 
 -- Whether the signed-in user may add a file to a bucket: they have concierge
 -- access, or their own folder there is under the cap. A missing setting says
 -- no. Definer, because a policy on storage.objects that read storage.objects
 -- itself would recurse. It's a soft cap: uploads at the same moment can each
 -- see room.
+-- Never for signing an upload link, access or not: storage checks these rules
+-- when it signs, and not when the link is used, so a pile of links signed under
+-- the cap would go past it. The operation's name has had a "storage." prefix in
+-- some versions only, hence the suffix match.
+-- The folder is matched as a range of names, from '<id>/' up to '<id>0' ('0'
+-- is the character after '/'), so the index on (bucket_id, name) serves it.
 create function concierge.may_store_file(p_bucket text)
 returns boolean
 language sql
@@ -26,14 +32,18 @@ stable
 security definer
 set search_path = ''
 as $$
-  select concierge.has_concierge_access(auth.uid())
+  select coalesce(current_setting('storage.operation', true), '') not like '%object.sign_upload_url'
+    and (
+      concierge.has_concierge_access(auth.uid())
       or coalesce(
         (select count(*) from storage.objects o
           where o.bucket_id = p_bucket
-            and (storage.foldername(o.name))[1] = auth.uid()::text)
+            and o.name collate "C" >= auth.uid()::text || '/'
+            and o.name collate "C" < auth.uid()::text || '0')
         < concierge.setting_int('storage_files_per_account'),
         false
-      );
+      )
+    );
 $$;
 
 revoke execute on function concierge.may_store_file(text) from public, anon, service_role;

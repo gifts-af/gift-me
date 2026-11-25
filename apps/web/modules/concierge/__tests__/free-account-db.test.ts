@@ -1,6 +1,7 @@
 // People are free, and the concierge spends only on accounts with paid features. The real tick,
-// candidates query and idea-run rules against the local database (E5); only the AI and the email
-// channel are faked. Skipped when the stack isn't running.
+// candidates query and idea-run and cost records against the local database (E5). Generating ideas
+// is a stand-in that saves one gift, and the email channel is faked. Skipped when the stack isn't
+// running.
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { Client } from "pg";

@@ -25,6 +25,8 @@ const noSession = { auth: { persistSession: false, autoRefreshToken: false } };
 
 type Db = SupabaseClient<Database>;
 
+const refusal = (error: unknown) => (error ? (error as { statusCode?: string }).statusCode : null);
+
 describe.skipIf(!stack)("storage limits (real local storage)", () => {
   let pg: Client;
   let admin: Db;
@@ -49,7 +51,14 @@ describe.skipIf(!stack)("storage limits (real local storage)", () => {
       .from(bucket)
       .upload(path, new Blob([new Uint8Array(bytes)], { type: contentType }), { contentType, upsert: opts.upsert ?? false });
     if (!error) stored.push({ bucket, path });
-    return error && (error as { statusCode?: string }).statusCode;
+    return refusal(error);
+  }
+
+  /** A copy or move within a bucket or into another; null when done, else the refusing status. */
+  async function carry(how: "copy" | "move", from: string, to: string, path: string, newPath: string) {
+    const { error } = await user.db.storage.from(from)[how](path, newPath, { destinationBucket: to });
+    if (!error) stored.push({ bucket: to, path: newPath });
+    return refusal(error);
   }
 
   async function newUser() {
@@ -70,13 +79,17 @@ describe.skipIf(!stack)("storage limits (real local storage)", () => {
     capBefore = (await pg.query("select value::text as value from concierge.app_settings where key = 'storage_files_per_account'")).rows[0].value;
   });
   afterAll(async () => {
+    // Everything is cleaned up before a failure to is thrown.
+    const failed: Error[] = [];
     if (capBefore) await setCap(capBefore);
     for (const bucket of ["person-photos", "captures"]) {
       const paths = stored.filter((f) => f.bucket === bucket).map((f) => f.path);
-      if (paths.length) await admin.storage.from(bucket).remove(paths);
+      const removed = paths.length ? await admin.storage.from(bucket).remove(paths) : null;
+      if (removed?.error) failed.push(removed.error);
     }
     if (users.length) await pg.query("delete from auth.users where id = any($1::uuid[])", [users]);
     await pg.end();
+    if (failed.length) throw new AggregateError(failed, "Couldn't remove the uploaded files");
   });
   beforeEach(async () => {
     await setCap(capBefore);
@@ -108,12 +121,12 @@ describe.skipIf(!stack)("storage limits (real local storage)", () => {
       expect(await upload(bucket, 1000, "image/jpeg", { upsert: true })).toBe("403");
       // Replacing one in place is refused too.
       expect(await upload(bucket, 1000, "image/jpeg", { path: first, upsert: true })).toBe("403");
-      const copy = `${user.id}/copy`;
-      const copied = await user.db.storage.from(bucket).copy(first, copy);
-      if (!copied.error) stored.push({ bucket, path: copy });
-      expect(copied.error).not.toBeNull();
+      expect(await carry("copy", bucket, bucket, first, `${user.id}/copy`)).toBe("403");
+      // With room for one more, the same copy works.
+      await setCap("3");
+      expect(await carry("copy", bucket, bucket, first, `${user.id}/copy`)).toBeNull();
       // Removing one makes room for one.
-      await user.db.storage.from(bucket).remove([first]);
+      expect((await user.db.storage.from(bucket).remove([first])).error).toBeNull();
       expect(await upload(bucket, 1000, "image/jpeg")).toBeNull();
       expect(await upload(bucket, 1000, "image/jpeg")).toBe("403");
 
@@ -127,9 +140,19 @@ describe.skipIf(!stack)("storage limits (real local storage)", () => {
       expect(await upload(bucket, 1000, "image/jpeg")).toBeNull();
       const path = `${user.id}/mover`;
       expect(await upload(other, 1000, "image/jpeg", { path })).toBeNull();
-      const { error } = await user.db.storage.from(other).move(path, path, { destinationBucket: bucket });
-      if (!error) stored.push({ bucket, path });
-      expect(error).not.toBeNull();
+      expect(await carry("move", other, bucket, path, path)).toBe("403");
+      // With room, the same move works.
+      await setCap("2");
+      expect(await carry("move", other, bucket, path, path)).toBeNull();
+    });
+
+    it("gives no signed upload links, which would skip the cap when used, with access or without", async () => {
+      const sign = async () => refusal((await user.db.storage.from(bucket).createSignedUploadUrl(`${user.id}/${randomUUID()}`)).error);
+      expect(await sign()).toBe("403");
+      expect(await upload(bucket, 1000, "image/jpeg")).toBeNull();
+      await giveAccess();
+      expect(await sign()).toBe("403");
+      expect(await upload(bucket, 1000, "image/jpeg")).toBeNull();
     });
 
     it("keeps to your own folder, with access or without", async () => {

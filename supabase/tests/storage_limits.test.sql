@@ -3,7 +3,7 @@
 -- storage-limits-db.test.ts.
 begin;
 \ir _helpers.psql
-select plan(27);
+select plan(30);
 
 select tests.create_user('a@example.com') as a \gset
 select tests.create_user('b@example.com') as b \gset
@@ -21,7 +21,7 @@ select set_eq(
   array['image/jpeg', 'image/png', 'image/webp', 'image/gif'], 'captures: JPEG, PNG, WebP and GIF'
 );
 select is(concierge.setting_int('person_photo_stored_max_bytes'), 1000000, 'the stored photo setting');
-select is(concierge.setting_int('storage_files_per_account'), 500, '500 files per account');
+select is(concierge.setting_int('storage_files_per_account'), 100, '100 files per account');
 select cmp_ok(
   (select file_size_limit from storage.buckets where id = 'person-photos'), '>',
   concierge.setting_int('person_photo_stored_max_bytes')::bigint, 'the photo ceiling is above its setting'
@@ -85,6 +85,16 @@ select throws_ok(
   format($q$select tests.add_file('person-photos', %L, 'p/9.jpg')$q$, :'b'),
   '42501', null, 'in either bucket'
 );
+
+-- A signed upload link is used later with no check at all, so none is given,
+-- with access or without.
+select set_config('storage.operation', 'storage.object.sign_upload_url', true);
+select is(concierge.may_store_file('captures'), false, 'no signed upload link, with access');
+select tests.act_as(:'b');
+select is(concierge.may_store_file('captures'), false, 'or without');
+select set_config('storage.operation', 'storage.object.upload', true);
+select tests.act_as(:'a');
+select is(concierge.may_store_file('captures'), true, 'an ordinary upload still passes');
 
 -- The server (emailed notes) isn't held by the cap.
 select tests.reset_role();
