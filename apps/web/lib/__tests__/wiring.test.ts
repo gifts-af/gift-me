@@ -100,6 +100,63 @@ describe.skipIf(!supabase)("Zinc and engine wiring (real local database and engi
     log.mockRestore();
   });
 
+  // What a round message's job gets: the wallet side for the heads-up, and nothing that places.
+  it("AC-12: gives a round message the wallet side only", async () => {
+    const deps = await wiring.roundWiring(new Date("2030-01-01T00:00:00Z"), { ...base, EMAIL_OUTBOX: "log" }, 2);
+    expect(Object.keys(deps.zinc!).sort()).toEqual(["lookahead", "wallet", "walletUrl"]);
+    expect(deps.zinc!.walletUrl).toBe("https://app.zinc.test/wallet");
+    expect(deps.now).toEqual(new Date("2030-01-01T00:00:00Z"));
+  });
+
+  /** Every request for this setting fails; everything else reaches the real database. */
+  function unreadable(key: string) {
+    const real = globalThis.fetch;
+    vi.stubGlobal("fetch", (async (input, init) => {
+      if (String(input).includes("/rpc/setting_int") && String(init?.body).includes(`"${key}"`)) {
+        return new Response('{"message":"down"}', { status: 500 });
+      }
+      return real(input, init);
+    }) satisfies typeof fetch);
+  }
+
+  it("AC-12: a round message doesn't read the order margin, which the buying side needs", async () => {
+    unreadable("order_price_margin_pct");
+    try {
+      await expect(wiring.roundWiring(new Date(), { ...base, EMAIL_OUTBOX: "log" }, 1)).resolves.toMatchObject({
+        zinc: { walletUrl: "https://app.zinc.test/wallet" },
+      });
+      await expect(wiring.buyingWiring(new Date(), { ...base, EMAIL_OUTBOX: "log" })).rejects.toThrow("order_price_margin_pct");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("a round message's wiring throws when zinc_timeout_ms can't be read, so nothing is claimed", async () => {
+    unreadable("zinc_timeout_ms");
+    try {
+      await expect(wiring.roundWiring(new Date(), { ...base, EMAIL_OUTBOX: "log" }, 1)).rejects.toThrow("zinc_timeout_ms");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("AC-12, AC-14: with Zinc off a round message has none and logs nothing; a buyer message says so", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      expect((await wiring.roundWiring(new Date(), { EMAIL_OUTBOX: "log" }, 1)).zinc).toBeNull();
+      expect(events(log).filter((e) => e.event === "zinc.wiring_missing")).toEqual([]);
+      await wiring.buyingWiring(new Date(), { EMAIL_OUTBOX: "log" }, {}, { zincShare: 1 });
+      expect(events(log).filter((e) => e.event === "zinc.wiring_missing")).toHaveLength(1);
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it.each([0, 1.5])("refuses a zincShare of %s, for both kinds of message", async (zincShare) => {
+    await expect(wiring.roundWiring(new Date(), { EMAIL_OUTBOX: "log" }, zincShare)).rejects.toThrow("zincShare must be at least 1.");
+    await expect(wiring.buyingWiring(new Date(), { EMAIL_OUTBOX: "log" }, {}, { zincShare })).rejects.toThrow("zincShare must be at least 1.");
+  });
+
   /** A needs_attention/funds round whose notice hasn't gone, as approval leaves it. */
   async function heldRound(): Promise<string> {
     const userId = randomUUID();

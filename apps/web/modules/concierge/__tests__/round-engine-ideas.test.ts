@@ -1,7 +1,7 @@
 import type { StepKey } from "@gifts-af/core";
 import { describe, expect, it, vi } from "vitest";
 import type { IdeaOutcome } from "../ideas/run";
-import { runRoundJob, runTick, type EngineZinc } from "../rounds/engine";
+import { runRoundMessage, runTick, type EngineZinc } from "../rounds/engine";
 import { USER, PERSON, OCCASION, NAME, EMAIL, at, harness, events, named, captureLog } from "./round-engine-fakes";
 
 vi.mock("server-only", () => ({}));
@@ -484,8 +484,9 @@ describe("the idea pass (ALL-27)", () => {
       const alertsBefore = named("ideas.no_credit").length;
 
       h.store.settings.set("round_fanout_enabled", 1);
+      const sendJobs = async () => ({ sent: 0, failed: 0 });
       for (const r of h.store.rounds) {
-        expect(await runRoundJob({ kind: "round", roundId: r.id }, h.deps(at("2027-02-12")))).toBe("waiting");
+        expect(await runRoundMessage({ kind: "round", roundId: r.id }, { ...h.deps(at("2027-02-12")), sendJobs })).toBe("waiting");
       }
 
       expect(h.generateIdeas).toHaveBeenCalledTimes(3);

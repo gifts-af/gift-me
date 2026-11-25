@@ -22,7 +22,7 @@ type Env = { vercelEnv?: string; cronSecret?: string };
  * whose signature (made by the tick with CRON_SECRET) doesn't verify: the queue SDK checks nothing,
  * so this is the route's own guard. A refused message is never run and never throws. The message's
  * `now` is a test clock, used only outside production (AC-13). If `run` throws, the job failed
- * before it claimed any round (the wiring, or a setting runRoundJob reads first, the fan-out
+ * before it claimed any round (the wiring, or a setting the message reads first, the fan-out
  * switch among them), so no lease is held: log an alert and rethrow, so the queue redelivers, up
  * to the trigger's maxDeliveries. A failure after a claim comes back as "failed" and is
  * acknowledged; the next tick picks the round up, and `onFailed` adds it to the day's heartbeat

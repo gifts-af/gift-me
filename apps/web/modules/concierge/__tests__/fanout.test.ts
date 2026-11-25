@@ -2,7 +2,7 @@ import type { ScheduleSettings } from "@gifts-af/core";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { planJobs, type QueuedJob, type SendJobs } from "../rounds/fanout";
 import type { IdeaOutcome } from "../ideas/run";
-import { runRoundJob, runTick, type EngineDeps, type EngineZinc, type GenerateIdeas, type JobResult } from "../rounds/engine";
+import { runBuyerMessage, runRoundMessage, runTick, type EngineDeps, type EngineZinc, type GenerateIdeas, type JobResult, type StepDeps } from "../rounds/engine";
 import type { DueRound } from "../rounds/store";
 import { FakeRoundStore, type FakeRound } from "./fake-round-store";
 import { FakeStore } from "./fake-store";
@@ -211,7 +211,15 @@ describe("runTick with fan-out", () => {
   });
 });
 
-describe("runRoundJob", () => {
+// Checked by the type checker, never run: a round message can't reach the placing side.
+void ((zinc: NonNullable<StepDeps["zinc"]>) => {
+  // @ts-expect-error a round message never places a gift
+  void zinc.placeRound;
+  // @ts-expect-error nor settles orders left placing
+  void zinc.sweep;
+});
+
+describe("runRoundMessage and runBuyerMessage", () => {
   let log: MockInstance;
   let store: FakeRoundStore;
   let emails: { subject: string }[];
@@ -248,6 +256,10 @@ describe("runRoundJob", () => {
     },
     ...over,
   });
+
+  const runRound = (roundId: string, over: Partial<EngineDeps> = {}) =>
+    runRoundMessage({ kind: "round", roundId }, { ...deps(over), sendJobs: async (jobs) => ({ sent: jobs.length, failed: 0 }) });
+  const runBuyer = (userId: string, roundIds: string[]) => runBuyerMessage({ kind: "buyer", userId, roundIds }, deps());
 
   /** A round due now; held ones wait on a retry (placeable, no email first). */
   function addRound(id: string, over: Partial<FakeRound> = {}): FakeRound {
@@ -312,8 +324,8 @@ describe("runRoundJob", () => {
     addRound("r1", { status: "awaiting_approval", attentionReason: null, headsUpOn: "2027-02-06" });
     const claim = vi.spyOn(store, "claim");
     store.settings.set("round_fanout_enabled", 0);
-    expect(await runRoundJob({ kind: "round", roundId: "r1" }, deps())).toBe("off");
-    expect(await runRoundJob({ kind: "buyer", userId: "U1", roundIds: ["h1"] }, deps())).toBe("off");
+    expect(await runRound("r1")).toBe("off");
+    expect(await runBuyer("U1", ["h1"])).toBe("off");
     expect(claim).not.toHaveBeenCalled();
     expect(placeRound).not.toHaveBeenCalled();
   });
@@ -322,8 +334,8 @@ describe("runRoundJob", () => {
     addRound("h1");
     const claim = vi.spyOn(store, "claim");
     store.settings.delete("round_fanout_enabled");
-    await expect(runRoundJob({ kind: "buyer", userId: "U1", roundIds: ["h1"] }, deps())).rejects.toThrow();
-    await expect(runRoundJob({ kind: "round", roundId: "h1" }, deps())).rejects.toThrow();
+    await expect(runBuyer("U1", ["h1"])).rejects.toThrow();
+    await expect(runRound("h1")).rejects.toThrow();
     expect(claim).not.toHaveBeenCalled();
     expect(placeRound).not.toHaveBeenCalled();
   });
@@ -333,16 +345,16 @@ describe("runRoundJob", () => {
     addRound("r1", { status: "awaiting_approval", attentionReason: null, headsUpOn: "2027-02-06" });
     const claim = vi.spyOn(store, "claim");
     const schedule = vi.spyOn(store, "scheduleSettings").mockRejectedValue(new Error("db down"));
-    await expect(runRoundJob({ kind: "round", roundId: "r1" }, deps())).rejects.toThrow("db down");
-    await expect(runRoundJob({ kind: "buyer", userId: "U1", roundIds: ["h1"] }, deps())).rejects.toThrow("db down");
+    await expect(runRound("r1")).rejects.toThrow("db down");
+    await expect(runBuyer("U1", ["h1"])).rejects.toThrow("db down");
     schedule.mockRestore();
     // The engine switch and the placing deadline, read before the buyer's claims too.
     store.settings.delete("zinc_place_budget_ms");
-    await expect(runRoundJob({ kind: "buyer", userId: "U1", roundIds: ["h1"] }, deps())).rejects.toThrow();
+    await expect(runBuyer("U1", ["h1"])).rejects.toThrow();
     store.settings.set("zinc_place_budget_ms", 45_000);
     store.settings.delete("round_engine_enabled");
-    await expect(runRoundJob({ kind: "round", roundId: "r1" }, deps())).rejects.toThrow();
-    await expect(runRoundJob({ kind: "buyer", userId: "U1", roundIds: ["h1"] }, deps())).rejects.toThrow();
+    await expect(runRound("r1")).rejects.toThrow();
+    await expect(runBuyer("U1", ["h1"])).rejects.toThrow();
     expect(claim).not.toHaveBeenCalled();
     expect(store.round("r1").lockedUntil).toBeNull();
     expect(store.round("h1").lockedUntil).toBeNull();
@@ -356,7 +368,7 @@ describe("runRoundJob", () => {
     addRound("h2");
     vi.spyOn(store, "roundsWithRejectedAddresses").mockResolvedValue(["h1", "someone-elses"]);
     const asked = vi.spyOn(store, "sharedAddressOwnerToTell");
-    await runRoundJob({ kind: "buyer", userId: "U1", roundIds: ["h1", "h2"] }, deps());
+    await runBuyer("U1", ["h1", "h2"]);
     expect(asked.mock.calls.map((c) => c[0])).toEqual(["h1"]);
   });
 
@@ -364,7 +376,7 @@ describe("runRoundJob", () => {
     addRound("h1");
     addRound("h2");
     vi.spyOn(store, "claim").mockRejectedValue(new Error("connection reset"));
-    await expect(runRoundJob({ kind: "buyer", userId: "U1", roundIds: ["h1", "h2"] }, deps())).rejects.toThrow(
+    await expect(runBuyer("U1", ["h1", "h2"])).rejects.toThrow(
       "connection reset",
     );
     expect(placeRound).not.toHaveBeenCalled();
@@ -374,7 +386,7 @@ describe("runRoundJob", () => {
   it("is failed, not thrown, when something fails after a round was claimed (the next tick picks it up)", async () => {
     addRound("r1", { status: "scheduled", attentionReason: null, headsUpOn: null });
     vi.spyOn(store, "roundContext").mockRejectedValue(new Error("database down"));
-    await expect(runRoundJob({ kind: "round", roundId: "r1" }, deps())).resolves.toBe("failed");
+    await expect(runRound("r1")).resolves.toBe("failed");
     expect(jobEvents()).toEqual([expect.objectContaining({ kind: "round", result: "failed", round_id: "r1" })]);
   });
 
@@ -382,9 +394,9 @@ describe("runRoundJob", () => {
     addRound("h1");
     addRound("r1", { status: "awaiting_approval", attentionReason: null, headsUpOn: "2027-02-06" });
     store.settings.set("round_engine_enabled", 0);
-    expect(await runRoundJob({ kind: "round", roundId: "r1" }, deps())).toBe("off");
+    expect(await runRound("r1")).toBe("off");
     expect(store.round("r1").attempts).toBe(0);
-    expect(await runRoundJob({ kind: "buyer", userId: "U1", roundIds: ["h1"] }, deps())).toBe("advanced");
+    expect(await runBuyer("U1", ["h1"])).toBe("advanced");
     expect(placeRound).toHaveBeenCalledTimes(1);
     expect(placeRound.mock.calls[0]![2]).toBe(1_000 + 45_000);
     expect(store.round("h1").lockedUntil).toBeNull();
@@ -398,20 +410,20 @@ describe("runRoundJob", () => {
       headsUpOn: "2027-02-06",
       lockedUntil: new Date(NOW.getTime() + 60_000),
     });
-    expect(await runRoundJob({ kind: "round", roundId: "r1" }, deps())).toBe("busy");
+    expect(await runRound("r1")).toBe("busy");
     expect(emails).toEqual([]);
     expect(jobEvents()).toEqual([expect.objectContaining({ kind: "round", result: "busy", round_id: "r1", rounds: 0 })]);
   });
 
   it.each(["ordered", "skipped"] as const)("is busy for a held round %s since the tick, and places nothing (review focus 1)", async (status) => {
     addRound("h1", { status, nextActionAt: null, attentionReason: null });
-    expect(await runRoundJob({ kind: "buyer", userId: "U1", roundIds: ["h1"] }, deps())).toBe("busy");
+    expect(await runBuyer("U1", ["h1"])).toBe("busy");
     expect(placeRound).not.toHaveBeenCalled();
   });
 
   it("gives back a round message's round that became held since the tick, for the buyer message", async () => {
     addRound("h1");
-    expect(await runRoundJob({ kind: "round", roundId: "h1" }, deps())).toBe("busy");
+    expect(await runRound("h1")).toBe("busy");
     expect(placeRound).not.toHaveBeenCalled();
     expect(store.writes).toContain("release:h1");
     expect(store.round("h1")).toMatchObject({ lockedUntil: null, status: "needs_attention" });
@@ -419,7 +431,7 @@ describe("runRoundJob", () => {
 
   it("runs the step of a buyer message's round that left the money path (a reminder due)", async () => {
     addRound("h1", { status: "awaiting_approval", attentionReason: null, headsUpOn: "2027-02-06" });
-    expect(await runRoundJob({ kind: "buyer", userId: "U1", roundIds: ["h1"] }, deps())).toBe("advanced");
+    expect(await runBuyer("U1", ["h1"])).toBe("advanced");
     expect(emails).toHaveLength(1);
     expect([...store.sends.get("h1")!]).toEqual(["reminder_1"]);
   });
@@ -427,22 +439,22 @@ describe("runRoundJob", () => {
   it("gives back a buyer message's round that left the money path when the engine is off", async () => {
     addRound("h1", { status: "awaiting_approval", attentionReason: null, headsUpOn: "2027-02-06" });
     store.settings.set("round_engine_enabled", 0);
-    expect(await runRoundJob({ kind: "buyer", userId: "U1", roundIds: ["h1"] }, deps())).toBe("busy");
+    expect(await runBuyer("U1", ["h1"])).toBe("busy");
     expect(emails).toEqual([]);
     expect(store.round("h1").lockedUntil).toBeNull();
   });
 
   it("gives back a buyer message's round whose step is an idea run, for the next round message", async () => {
     addRound("h1", { status: "scheduled", attentionReason: null, headsUpOn: null });
-    expect(await runRoundJob({ kind: "buyer", userId: "U1", roundIds: ["h1"] }, deps())).toBe("busy");
+    expect(await runBuyer("U1", ["h1"])).toBe("busy");
     expect(generateIdeas).not.toHaveBeenCalled();
     expect(store.round("h1")).toMatchObject({ status: "scheduled", lockedUntil: null });
   });
 
   it("sends a due reminder once and finishes the round with its next date", async () => {
     addRound("r1", { status: "awaiting_approval", attentionReason: null, headsUpOn: "2027-02-06" });
-    expect(await runRoundJob({ kind: "round", roundId: "r1" }, deps())).toBe("advanced");
-    expect(await runRoundJob({ kind: "round", roundId: "r1" }, deps())).toBe("busy");
+    expect(await runRound("r1")).toBe("advanced");
+    expect(await runRound("r1")).toBe("busy");
     expect(emails).toHaveLength(1);
     // Reminder 2 is 7 days before the 03-11 deadline.
     expect(store.round("r1")).toMatchObject({
@@ -460,16 +472,42 @@ describe("runRoundJob", () => {
     // The job starts at 1 000 ms; everything after reads 6 000 ms.
     let first = true;
     const clock = () => (first ? ((first = false), 1_000) : 6_000);
-    expect(await runRoundJob({ kind: "round", roundId: "r1" }, deps({ clock }))).toBe("advanced");
+    expect(await runRound("r1", { clock })).toBe("advanced");
     expect(generateIdeas).toHaveBeenCalledTimes(1);
     expect(timeout).toHaveBeenCalledWith(1_000 + 270_000 - 6_000);
     expect(store.round("r1").status).toBe("awaiting_approval");
     expect([...store.sends.get("r1")!]).toEqual(["heads_up"]);
   });
 
+  it("warns of a low wallet balance in a round message's heads-up (AC-13)", async () => {
+    addRound("r1", { status: "scheduled", attentionReason: null, headsUpOn: null });
+    store.settings.set("funding_lookahead_days", 21);
+    store.settings.set("zinc_order_fee_cents", 100);
+    vi.spyOn(store, "canBuy").mockResolvedValue(true);
+    const bodies: string[] = [];
+    const { notify } = deps();
+    const round: StepDeps & { sendJobs: SendJobs } = {
+      store,
+      notify: { ...notify, channels: [{ name: "email", send: async (e) => (bodies.push(e.text), { ok: true as const, id: "m" }) }] },
+      now: NOW,
+      generateIdeas,
+      zinc: {
+        wallet: async () => ({ balanceCents: 1000, autoTopUp: false }),
+        lookahead: async () => ({ cents: 5000, atLeast: false }),
+        walletUrl: "https://zinc.test/wallet",
+      },
+      clock: () => clockMs,
+      sendJobs: async () => ({ sent: 0, failed: 0 }),
+    };
+    expect(await runRoundMessage({ kind: "round", roundId: "r1" }, round)).toBe("advanced");
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).toContain("Your Zinc balance is low. $50 in gifts are due in the next 3 weeks, and you have $10.");
+    expect(bodies[0]).toContain("https://zinc.test/wallet");
+  });
+
   it("runs the step as the tick would when the person was deleted since the tick (review focus 2)", async () => {
     addRound("r1", { status: "awaiting_approval", attentionReason: null, headsUpOn: "2027-02-06", personId: "gone" });
-    await expect(runRoundJob({ kind: "round", roundId: "r1" }, deps())).resolves.toBe("failed");
+    await expect(runRound("r1")).resolves.toBe("failed");
     expect(events()).toContainEqual(expect.objectContaining({ event: "round_failed", round_id: "r1" }));
     expect(jobEvents()).toEqual([expect.objectContaining({ result: "failed", rounds: 0 })]);
   });
@@ -478,8 +516,8 @@ describe("runRoundJob", () => {
     addRound("h1", { userId: "A" });
     addRound("h2", { userId: "B", personId: "P2" });
     placeRound.mockImplementation(async () => void (clockMs += 40_000));
-    expect(await runRoundJob({ kind: "buyer", userId: "A", roundIds: ["h1"] }, deps())).toBe("advanced");
-    expect(await runRoundJob({ kind: "buyer", userId: "B", roundIds: ["h2"] }, deps())).toBe("advanced");
+    expect(await runBuyer("A", ["h1"])).toBe("advanced");
+    expect(await runBuyer("B", ["h2"])).toBe("advanced");
     expect(placeRound.mock.calls.map((c) => c[0])).toEqual(["h1", "h2"]);
     expect(events().some((e) => e.event === "order.place_budget_spent")).toBe(false);
   });
@@ -492,7 +530,7 @@ describe("runRoundJob", () => {
       if (id === "h2") throw new Error("database down");
       return real(id);
     });
-    expect(await runRoundJob({ kind: "buyer", userId: "U1", roundIds: ["h1", "h2"] }, deps())).toBe("failed");
+    expect(await runBuyer("U1", ["h1", "h2"])).toBe("failed");
     expect(jobEvents()).toEqual([expect.objectContaining({ kind: "buyer", result: "failed", user_id: "U1", rounds: 1 })]);
   });
 
@@ -501,17 +539,17 @@ describe("runRoundJob", () => {
     addRound("h2");
     addRound("r1", { status: "scheduled", attentionReason: null, headsUpOn: null });
     addRound("r2", { status: "scheduled", attentionReason: null, headsUpOn: null });
-    await runRoundJob({ kind: "round", roundId: "r1" }, deps());
-    await runRoundJob({ kind: "buyer", userId: "U1", roundIds: ["h1"] }, deps());
+    await runRound("r1");
+    await runBuyer("U1", ["h1"]);
     // The daily limit.
     generateIdeas.mockResolvedValueOnce({ status: "refused", reason: "daily_limit" });
-    await runRoundJob({ kind: "round", roundId: "r2" }, deps());
+    await runRound("r2");
     // A failure carries the error's fields, never its message.
     vi.spyOn(store, "roundContext").mockRejectedValue(Object.assign(new Error("Zelda at 1 Main St"), { code: "57P01" }));
-    await runRoundJob({ kind: "buyer", userId: "U1", roundIds: ["h2"] }, deps());
+    await runBuyer("U1", ["h2"]);
     // Off.
     store.settings.set("round_fanout_enabled", 0);
-    await runRoundJob({ kind: "round", roundId: "r1" }, deps());
+    await runRound("r1");
     const mine = events().filter((e) => e.event === "round_job" || e.event === "ideas.daily_limit_reached");
     expect(mine.map((e) => e.event)).toContain("ideas.daily_limit_reached");
     expect(mine.filter((e) => e.result === "failed")).toHaveLength(1);
@@ -520,7 +558,7 @@ describe("runRoundJob", () => {
   });
 
   describe("what the idea pass came to (AC-10)", () => {
-    const run = (over: Partial<EngineDeps> = {}) => runRoundJob({ kind: "round", roundId: "r1" }, deps(over));
+    const run = (over: Partial<EngineDeps> = {}) => runRound("r1", over);
     const addIdeaRound = () => addRound("r1", { status: "scheduled", attentionReason: null, headsUpOn: null });
     const ends = (outcome: IdeaOutcome) => generateIdeas.mockImplementation(async () => outcome);
     /** The whole round_job event: `ideas` is absent unless given. */

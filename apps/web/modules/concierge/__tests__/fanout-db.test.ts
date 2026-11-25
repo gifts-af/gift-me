@@ -13,7 +13,7 @@ import { createSupabaseNotifyStore } from "../notify/store";
 import { createSupabaseIdeaStore } from "../ideas/store";
 import { placeRound } from "../purchase/place";
 import type { PurchaseDeps } from "../purchase/store";
-import { advanceRound, runRoundJob, runTick, type EngineDeps, type GenerateIdeas } from "../rounds/engine";
+import { advanceRound, runBuyerMessage, runRoundMessage, runTick, type EngineDeps, type GenerateIdeas } from "../rounds/engine";
 import { planJobs, type JobMessage, type SendJobs } from "../rounds/fanout";
 import { createSupabaseRoundStore, type RoundStore } from "../rounds/store";
 import { FakeZinc } from "./fake-zinc";
@@ -92,6 +92,12 @@ describe.skipIf(!stack)("fan-out jobs (real local database, fake Zinc; ALL-125)"
     };
     return deps;
   }
+
+  /** Each message to its own function, as the job route does. */
+  const runJob = (message: JobMessage, deps: EngineDeps) =>
+    message.kind === "round"
+      ? runRoundMessage(message, { ...deps, sendJobs: async (jobs) => ({ sent: jobs.length, failed: 0 }) })
+      : runBuyerMessage(message, deps);
 
   async function newUser(): Promise<string> {
     const userId = randomUUID();
@@ -192,7 +198,7 @@ describe.skipIf(!stack)("fan-out jobs (real local database, fake Zinc; ALL-125)"
     // The first POST waits, so the other job runs while the first still holds the lease.
     let open!: () => void;
     zinc.gate = new Promise<void>((resolve) => (open = resolve));
-    const jobs = [runRoundJob(message, engine(now)), runRoundJob(message, engine(now))];
+    const jobs = [runJob(message, engine(now)), runJob(message, engine(now))];
     await Promise.race([Promise.race(jobs), pause(3000)]);
     open();
     const results = await Promise.all(jobs);
@@ -214,7 +220,7 @@ describe.skipIf(!stack)("fan-out jobs (real local database, fake Zinc; ALL-125)"
     const jobs = planJobs(await onlyOurs(deps.store, new Set([earlier, later])).dueRounds(now), true, now, false);
     expect(jobs.map((j) => j.message)).toEqual([{ kind: "buyer", userId, roundIds: [earlier, later] }]);
 
-    expect(await runRoundJob(jobs[0]!.message, deps)).toBe("advanced");
+    expect(await runJob(jobs[0]!.message, deps)).toBe("advanced");
 
     expect(zinc.posts).toHaveLength(1);
     expect((await orderRows(earlier))[0].status).not.toBe("held");
@@ -266,7 +272,7 @@ describe.skipIf(!stack)("fan-out jobs (real local database, fake Zinc; ALL-125)"
     const results: string[] = [];
     // Every message's job starts at once, each with its own client.
     const sendJobs: SendJobs = async (jobs) => {
-      results.push(...(await Promise.all(jobs.map((j) => runRoundJob(j.message, engine(now, generateIdeas))))));
+      results.push(...(await Promise.all(jobs.map((j) => runJob(j.message, engine(now, generateIdeas))))));
       return { sent: jobs.length, failed: 0 };
     };
     const tick = engine(now, generateIdeas);

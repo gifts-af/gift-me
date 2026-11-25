@@ -8,6 +8,8 @@ import type { DueRound } from "./store";
 export type JobMessage =
   | { kind: "round"; roundId: string; now?: string }
   | { kind: "buyer"; userId: string; roundIds: string[]; now?: string };
+export type RoundMessage = Extract<JobMessage, { kind: "round" }>;
+export type BuyerMessage = Extract<JobMessage, { kind: "buyer" }>;
 
 /**
  * A message and its idempotency key, so two identical sends the same day make one delivery. A

@@ -3,7 +3,7 @@ import { chooseBy, OCCASION_NAMES, shortDate } from "@/lib/occasion-format";
 import { storeLabel } from "@/lib/store-label";
 import { notify, type NotifyDeps, type NotifyResult } from "../notify/notify";
 import type { ClaimedRound, RoundContext, RoundOrder } from "./store";
-import type { EngineDeps } from "./engine";
+import type { StepDeps } from "./engine";
 import type { Extra } from "./steps";
 
 // The round engine's emails: turns a step and the round's context into a notify() call.
@@ -50,7 +50,7 @@ function emailStep(step: StepKey): EmailStep {
 export const LIVE_HELD = (o: RoundOrder) => o.status === "held";
 const ON_ITS_WAY = (o: RoundOrder) => ["placing", "placed", "shipped", "delivered"].includes(o.status);
 
-export async function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundContext, deps: EngineDeps, extra: Extra): Promise<NotifyResult> {
+export async function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundContext, deps: StepDeps, extra: Extra): Promise<NotifyResult> {
   const notifyDeps: NotifyDeps = deps.notify;
   const base = { userId: round.userId, roundId: round.id };
   const occasion = {

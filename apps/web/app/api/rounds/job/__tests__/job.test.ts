@@ -102,7 +102,7 @@ describe("handleJob", () => {
 
   it("rethrows a failure before any claim (a setting read) with the error's fields, never its message", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
-    // runRoundJob throws only before it claims a round, e.g. when round_fanout_enabled can't be read.
+    // A message throws only before it claims a round, e.g. when round_fanout_enabled can't be read.
     // An error's own kind (a ZincError's) never overwrites the message's kind.
     const err = Object.assign(new Error("Zelda at 1 Main St"), { code: "57P01", kind: "unavailable" });
     const run = vi.fn().mockRejectedValue(err);
