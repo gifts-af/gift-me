@@ -124,7 +124,15 @@ export { handleZincWebhook } from "./zinc/events";
 export { readWebhookBody } from "./zinc/guard";
 export { hasPaidFeatures } from "./paid-features";
 // Who has been let into the concierge, which is by request.
-export { getAccessState, hasConciergeAccess } from "./access";
+export {
+  buildAccessConfirmation,
+  buildAccessRequest,
+  claimAccessRequest,
+  getAccessState,
+  hasConciergeAccess,
+  releaseAccessRequest,
+  requestConciergeAccess,
+} from "./access";
 // Approving and buying from the user's own Zinc wallet (ALL-30, ALL-32 Task 6). The tick, the
 // webhook route, Settings and the people actions bind these in lib/wiring.ts.
 export { approveAndBuy } from "./purchase/approve";

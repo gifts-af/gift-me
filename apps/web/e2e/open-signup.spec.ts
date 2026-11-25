@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
-import { createFreshUser } from "./fresh-user";
+import { createFreshUser, giveAccess } from "./fresh-user";
 import { phoneLayoutProblems } from "./phone-layout";
-import { rest } from "./rounds";
+import { rest, rpcAs } from "./rounds";
 import { session, signIn, type Credentials } from "./sign-in";
 
 // The concierge is by request: without access, its pages show the pitch and
@@ -153,6 +153,13 @@ test("without access, Back after / sent you to My list leaves it", async ({ page
   await logo.click();
   await expect(page).toHaveURL(/\/lists$/);
   await expect(list).toBeVisible();
+  // The press from the list added a second /lists, so Back shows the first.
+  await page.goBack();
+  await expect(page).toHaveURL(/\/lists$/);
+  await expect(list).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/settings$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
 });
 
 test("with access, / and the logo land on Give, with your people (AC-9)", async ({ page }) => {
@@ -172,4 +179,91 @@ test("with access, / and the logo land on Give, with your people (AC-9)", async 
 test("signed out, /give goes to sign-in and back", async ({ page }) => {
   await page.goto("/give");
   await expect(page).toHaveURL(/\/auth\/login\?next=%2Fgive$/);
+  const user = await createFreshUser();
+  await page.getByLabel("Email").fill(user.email);
+  // eslint-disable-next-line no-restricted-syntax -- this tests where the sign-in form takes you
+  await page.getByLabel("Password").fill(user.password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(/\/give$/);
+  await expect(page.getByRole("heading", { level: 1, name: "People" })).toBeVisible();
+});
+
+const account = async (userId: string) =>
+  (
+    await rest<{ concierge_access: boolean; access_requested_at: string | null }[]>(
+      `accounts?user_id=eq.${userId}&select=concierge_access,access_requested_at`,
+    )
+  )[0];
+
+test("one tap asks for access, and asking again changes nothing (AC-6)", async ({ page }) => {
+  const user = await createFreshUser("Jordan", { access: false });
+  const { id } = (await session(user)).user;
+  await signIn(page, user);
+  await page.goto("/give");
+  await expect(pitch(page)).toBeVisible();
+  // A second tab, still showing the button after the first one is used.
+  const other = await page.context().newPage();
+  await other.goto("/people/new");
+  await expect(other.getByRole("button", { name: "Request access" })).toBeVisible();
+
+  await page.getByRole("button", { name: "Request access" }).click();
+  // No reload needed: the whole page becomes the sent one.
+  await expect(page.getByRole("heading", { level: 1, name: "You asked for access" })).toBeVisible();
+  await expect(page.getByText("Request sent", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Request access" })).toHaveCount(0);
+  const asked = await account(id);
+  expect(asked.concierge_access).toBe(false);
+  expect(Math.abs(Date.now() - Date.parse(asked.access_requested_at!))).toBeLessThan(60_000);
+
+  await page.reload();
+  await expect(page.getByText("Request sent", { exact: true })).toBeVisible();
+  await other.getByRole("button", { name: "Request access" }).click();
+  await expect(other.getByRole("heading", { level: 1, name: "You asked for access" })).toBeVisible();
+  expect(await account(id)).toEqual(asked);
+});
+
+/** Saves a one-gift list. */
+async function saveList(owner: Credentials): Promise<void> {
+  await rpcAs(owner, "lists", "save_list_checked", {
+    p_list_id: null,
+    p_title: null,
+    p_items: [{ id: null, name: "Wool socks", price_cents: 1500, image_url: null, product_url: null, asin: null, source: "manual", added_at: null }],
+    p_expected: null,
+  });
+}
+
+test("Settings without access shows your own settings and none of the concierge's (AC-7)", async ({ page }) => {
+  const user = await createFreshUser("Jordan", { access: false });
+  await signIn(page, user);
+  await page.goto("/settings");
+  const row = (name: RegExp) => page.getByRole("main").getByRole("link", { name });
+  const groups = ["Reminders", "Gift ideas", "Paying for gifts"];
+  await expect(row(/^Name/)).toBeVisible();
+  await expect(page.getByLabel("Time zone")).toBeVisible();
+  for (const name of groups) await expect(page.getByRole("heading", { name })).toHaveCount(0);
+  expect(await (await page.request.get("/settings")).text()).not.toContain("/settings/paying");
+
+  // With a list, My address shows here too.
+  await saveList(user);
+  await page.reload();
+  await expect(row(/^My address/)).toBeVisible();
+  for (const name of groups) await expect(page.getByRole("heading", { name })).toHaveCount(0);
+
+  // Let in, the groups are there, so "not shown" above means something.
+  await giveAccess((await session(user)).user.id);
+  await page.reload();
+  for (const name of groups) await expect(page.getByRole("heading", { name })).toBeVisible();
+});
+
+test("once access is off, the test email refuses and sends nothing (AC-16)", async ({ page }) => {
+  const user = await createFreshUser();
+  const { id } = (await session(user)).user;
+  await signIn(page, user);
+  await page.goto("/settings/reminders");
+  const send = page.getByRole("button", { name: "Send me a test email" });
+  await expect(send).toBeVisible();
+  await rest(`accounts?user_id=eq.${id}`, { method: "PATCH", body: { concierge_access: false } });
+  await send.click();
+  await expect(page.getByRole("main").getByRole("alert")).toBeVisible();
+  expect(await rest(`notifications?user_id=eq.${id}`)).toEqual([]);
 });

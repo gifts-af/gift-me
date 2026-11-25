@@ -2,6 +2,8 @@ import { redirect, unstable_rethrow } from "next/navigation";
 import type { ReactNode } from "react";
 import type { Database } from "@gifts-af/core";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { requestAccessAction } from "@/app/give/actions";
+import { RequestAccessButton } from "@/app/give/request-access-button";
 import { ConciergePitch } from "@/components/home/concierge-pitch";
 import { errorFields, logEvent } from "@/lib/log";
 import { createClient } from "@/lib/supabase/server";
@@ -54,5 +56,8 @@ export async function ConciergeGate({
 }) {
   const state = await readAccess();
   if (!state) return frame(<AccessCheckFailed />);
-  return state.access ? children : frame(<ConciergePitch requested={state.requested} />);
+  if (state.access) return children;
+  return frame(
+    <ConciergePitch requested={state.requested} requestButton={<RequestAccessButton action={requestAccessAction} />} />,
+  );
 }
