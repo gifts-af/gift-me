@@ -31,7 +31,7 @@ Every signed-in account, with or without concierge access. Lists, claiming, shar
 | AC-4 | the added person | it is created | there are no occasions, person or occasion budgets, birthday or address, and no round or gift email. The owner's `friend` budget default applies as usual once they add an occasion |
 | AC-5 | Sam already has a live person linked to the sharer's account, through any list | they share back | nothing is added; the sharer sees the same answer as for a new add (so it can't be used to probe Sam's people) |
 | AC-6 | Sam has an unlinked person who may be the sharer | they share back | no name matching: a separate person is added. Sam (with concierge access) can move the link to one of their own people; it shows the shared city first, and refuses while that person has an open round or a held order |
-| AC-7 | someone was added | Sam opens Get or Give | Sam sees "<name> shared their list with you", with Keep and Remove. **Until Keep, the link never supplies a shipping address.** Keep is stored on the link |
+| AC-7 | someone was added | Sam opens Get or Give | Sam sees "<name> shared their list with you", with Keep and Remove. **A link made by share back never supplies a shipping address until Keep, and not before ALL-98 is live (T61).** Keep is stored on the link |
 | AC-8 | Sam removed someone | they share back again | they are added again (the toggle is the way to stop it) |
 | AC-9 | Sam's "added" toggle off, or an old or reset token, or Sam's own list | someone offers or calls it directly | it isn't offered, and the database refuses |
 | AC-10 | the sharer has no list, or no display name | they share back | they're asked for it first; the email is never used as a name |
@@ -71,13 +71,11 @@ Matching: the server compares the emails and discards them. Hashing was rejected
 
 ### Open questions
 
-- **[Owner]** Exception to the scope freeze.
-- **[Owner]** Any holder of Sam's link can be added to Sam's people while Sam's toggle is on (Jim chose this; a forwarded link lets in a stranger). It bends principle 6 and needs a decision number.
-- **[Owner]** Revise T45: contact emails reach our server when the user taps Check.
+Answered 2026-11-25 in Jim's session, **pending the owner's confirmation**: an exception to the scope freeze (how far, before Christmas, is open; proposed: Friends' lists only); any holder of Sam's link can be added while Sam's toggle is on, which is on by default; links made by share back wait for ALL-98 as well as Keep before supplying an address.
+
+- **[Owner]** Story 4 only: may contact emails reach our server for the check (revises T45)? Undecided, so story 4 stays parked. It doesn't hold up stories 1 to 3.
 - **[Verify]** Contacts access needs Google's review before story 4 can open; `google_import_enabled` is 0.
 - **[Verify]** Which existing emails are really verified. Google sign-ins are; password accounts made while confirmation wasn't required aren't proof.
-- **[Owner]** Links made by share back stay out of shared addresses until Keep. Should they wait for ALL-98 as well (T61)?
-- **[Owner]** Automatic add, or pending until Sam accepts (the reviewer's pick)?
 - **[Verify]** T45 and ALL-179 tell Google only ticked contacts are saved, so story 4 needs new review text and a privacy page change.
 
 ## Principles check
