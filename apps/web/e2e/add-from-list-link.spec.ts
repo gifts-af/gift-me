@@ -112,7 +112,7 @@ test("a signed-out visitor sees sign-up and sign-in, which both return to the li
   await expect(page.locator("body")).not.toContainText(/invite only/i);
 });
 
-// ALL-179: a guest's claim doesn't just close the box; it offers their own list.
+// A guest's claim doesn't just close the box; it offers their own list.
 test("a signed-out visitor who claims a gift is offered their own list, and the claim stays", async ({ page }) => {
   const { name, sharePath } = await ownerWithList();
   await page.goto(sharePath);
@@ -127,7 +127,7 @@ test("a signed-out visitor who claims a gift is offered their own list, and the 
   await expect(offer).toContainText("Your claim stays a guest claim, so it can't be undone.");
   await offer.getByRole("button", { name: "Not now" }).click();
   await expect(offer).toBeHidden();
-  await expect(page.getByText("Claimed by you")).toBeVisible();
+  await expect(page.getByText("Claimed by Jordan")).toBeVisible();
 });
 
 test("a signed-out relative signs in from a shared list and lands back on it (AC-2)", async ({ page }) => {

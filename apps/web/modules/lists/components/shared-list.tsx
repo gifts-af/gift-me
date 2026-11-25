@@ -43,7 +43,7 @@ export default function SharedList({ list, token, nav, top }: SharedListProps) {
   const [unclaimingId, setUnclaimingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
   const [announcement, setAnnouncement] = useState("");
-  // "Not now" on the own-list offer holds for the rest of this visit (ALL-179).
+  // "Not now" on the own-list offer holds for the rest of this visit.
   const [offerWavedOff, setOfferWavedOff] = useState(false);
   const offerOwnList = !list.viewer.signedIn && !list.isOwner && !offerWavedOff;
 
