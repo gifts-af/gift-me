@@ -37,7 +37,7 @@ import { personAddressHref } from "../ship-to";
 
 export type RejectResult =
   | { ok: true; more: boolean; saved: boolean }
-  | { ok: false; error: "not_found" | "busy" | "not_open" | "changed" | "too_long" | "session" | "bad_form" };
+  | { ok: false; error: "not_found" | "busy" | "not_open" | "changed" | "too_long" | "sensitive" | "session" | "bad_form" };
 export type BudgetResult = { ok: true } | { ok: false; error: string };
 export type ArrivedAction = (roundId: string, orderId: string) => Promise<{ ok: boolean }>;
 type OutlookInput = { code: RejectionCode; ownedIdeaId: string | null; text: string | null };
@@ -54,6 +54,7 @@ const REJECT_ERRORS: Record<Exclude<Extract<RejectResult, { ok: false }>["error"
   busy: "This round is busy right now. Try again in a minute.",
   not_open: "This round can't be changed now. Reload to see what happened.",
   too_long: `Keep it under ${FACT_VALUE_MAX} characters.`,
+  sensitive: "We don't keep notes about health, religion, politics or similar. Try wording it another way, or leave it blank.",
   session: "Your session ended. Sign in again.",
   bad_form: "That didn't go through. Reload and try again.",
 };
