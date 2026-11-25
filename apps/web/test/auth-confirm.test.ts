@@ -39,10 +39,20 @@ describe("GET /auth/confirm, from production's email templates", () => {
     });
   });
 
-  it("a refused link goes to the error page, not to next", async () => {
+  it("a refused link goes to the error page, which keeps next", async () => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     verifyOtp.mockResolvedValue({ error: { message: "expired" } });
-    await expect(GET(new NextRequest(links("email", `${SITE}${SHARE}`)[0]))).rejects.toThrow("redirect /auth/error?error=failed");
+    await expect(GET(new NextRequest(links("email", `${SITE}${SHARE}`)[0]))).rejects.toThrow(
+      `redirect /auth/error?error=failed&next=${encodeURIComponent(SHARE)}`,
+    );
+    // Signing in shouldn't lead to choosing a new password.
+    await expect(GET(new NextRequest(links("recovery", `${SITE}/auth/update-password`)[0]))).rejects.toThrow(/error=failed$/);
     log.mockRestore();
+  });
+
+  it("a link missing its token keeps where to go back to", async () => {
+    await expect(GET(new NextRequest(`${SITE}/auth/confirm?next=${SHARE}`))).rejects.toThrow(
+      `redirect /auth/error?error=incomplete&next=${encodeURIComponent(SHARE)}`,
+    );
   });
 });

@@ -14,7 +14,7 @@ export function Hook() {
         <p className="max-w-prose text-[16px] text-muted-foreground md:text-[18px]">
           Where we&apos;re heading: we remember the dates, find the gift, and ship it. You just tap yes.
         </p>
-        <div className="flex flex-col gap-3 md:flex-row">
+        <div className="flex flex-col gap-3 md:flex-row md:flex-wrap">
           <Button asChild>
             <Link href="/tour">Take the tour</Link>
           </Button>

@@ -5,10 +5,11 @@ vi.mock("@/app/request-access/actions", () => ({ submitAccessRequest: vi.fn() })
 const { RequestAccessForm } = await import("@/app/request-access/request-access-form");
 const { default: RequestAccessPage, metadata } = await import("@/app/request-access/page");
 
-describe("request access form (ALL-47)", () => {
+describe("request access form", () => {
   it("asks for the concierge, says nothing of invites, and has no alpha banner", () => {
     const { container } = render(<RequestAccessPage />);
     expect(container).toHaveTextContent("Gift ideas, reminders and buying come with the concierge.");
+    expect(container).toHaveTextContent("Leave your name and email. You'll need a free account with the same email so we can let you in.");
     expect(container).not.toHaveTextContent(/invite/i);
     expect(`${metadata.title} ${metadata.description}`).not.toMatch(/invite/i);
     expect(screen.getByRole("heading", { level: 1, name: "Request concierge access" })).toBeInTheDocument();

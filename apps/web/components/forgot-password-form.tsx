@@ -1,6 +1,7 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
+import { withNext } from "@/lib/safe-next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -9,7 +10,7 @@ import { useState } from "react";
 import { useHumanCheck } from "./human-check";
 import { FormError } from "./auth-frame";
 
-export function ForgotPasswordForm() {
+export function ForgotPasswordForm({ next }: { next?: string }) {
   const human = useHumanCheck();
   // Kept for the "on its way to …" message after sending.
   const [email, setEmail] = useState("");
@@ -55,7 +56,7 @@ export function ForgotPasswordForm() {
         {isLoading ? "Sending…" : "Send reset link"}
       </Button>
       <Button asChild variant="link" size="sm" className="self-center">
-        <Link href="/auth/login">Back to sign in</Link>
+        <Link href={withNext("/auth/login", next)}>Back to sign in</Link>
       </Button>
     </form>
   );

@@ -45,7 +45,7 @@ export function buildAccessRequestEmail(req: AccessRequest): OutgoingEmail {
   const { html, text } = renderEmail({
     heading: `${req.name} wants the concierge`,
     paragraphs: [
-      "They may not have an account yet, and need one to be let in. To let them in, run the statement in design/operations.md, then reply to this email.",
+      "Check they have a confirmed account with this email, then follow Concierge access > Letting someone in, in design/operations.md, and reply here.",
     ],
     rows: [
       { title: req.name, detail: req.email },

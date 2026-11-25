@@ -143,7 +143,7 @@ test("a guest's list is still there after signing up", async ({ page }) => {
   await page.getByLabel("Repeat password").fill("e2e-local-only-password");
   await page.getByRole("button", { name: "Create account" }).click();
   // The local stack needs no confirmation, so this browser is signed in from here.
-  await expect(page).toHaveURL(/\/auth\/sign-up-success$/);
+  await expect(page).toHaveURL(/\/auth\/sign-up-success\?next=%2Flists$/);
   await page.goto("/lists");
   await expect(page.getByText("We brought over 1 gift from before you signed in.")).toBeVisible();
   await expect(gift(page, "Kettle")).toBeVisible();

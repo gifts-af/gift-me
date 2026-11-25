@@ -44,6 +44,13 @@ describe("GET /auth/callback", () => {
     expect(exchangeCodeForSession).not.toHaveBeenCalled();
   });
 
+  it("keeps where to go back to when it fails, and never off the site", async () => {
+    const next = async (q: string) => new URL((await call(q)).headers.get("location")!).searchParams.get("next");
+    expect(await next("?error=access_denied&next=%2Fshare%2Fx")).toBe("/share/x");
+    expect(await next("?next=%2Fshare%2Fx")).toBe("/share/x");
+    expect(await next("?next=%2F%2Fevil.com")).toBeNull();
+  });
+
   // The error page only shows our own words, so a crafted link can't put
   // "Your account is locked, call 555…" on a GiftsAF page.
   it("never passes the provider's text on to the error page", async () => {

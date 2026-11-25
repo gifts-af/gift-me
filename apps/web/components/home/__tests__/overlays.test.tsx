@@ -58,7 +58,7 @@ describe("request concierge access overlay", () => {
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "jo@example.com" } });
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Request concierge access" }));
     expect(await screen.findByText("Thanks! We'll email you when you're in.")).toBeInTheDocument();
-    expect(screen.getByText("Your list and your people are free, so there's no need to wait.")).toBeInTheDocument();
+    expect(screen.getByText("Create a free account with this email so we can let you in. You can start your list straight away.")).toBeInTheDocument();
     await act(async () => {});
     await act(async () => {
       vi.advanceTimersByTime(60_000);

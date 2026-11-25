@@ -19,6 +19,12 @@ export function safeNext(value: string | null | undefined, origin?: string): str
   }
 }
 
+/** The path, carrying where to go afterwards, for links between the sign-in pages. */
+export function withNext(path: string, next: string | null | undefined): string {
+  const to = safeNext(next);
+  return to === "/" ? path : `${path}${path.includes("?") ? "&" : "?"}next=${encodeURIComponent(to)}`;
+}
+
 /**
  * Where an address form goes back to once saved (ALL-29): only a gift's own page under
  * /rounds/, checked like safeNext; undefined for anything else, which saves and stays.

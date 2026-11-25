@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import type { AuthErrorCode } from "@/lib/auth-errors";
-import { safeNext } from "@/lib/safe-next";
+import { safeNext, withNext } from "@/lib/safe-next";
 import { NextResponse, type NextRequest } from "next/server";
 import { errorFields, logEvent } from "@/lib/log";
 
@@ -9,7 +9,8 @@ import { errorFields, logEvent } from "@/lib/log";
 // when GoogleButton started the sign-in.
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
-  const fail = (reason: AuthErrorCode) => NextResponse.redirect(`${origin}/auth/error?error=${reason}`);
+  const fail = (reason: AuthErrorCode) =>
+    NextResponse.redirect(`${origin}${withNext(`/auth/error?error=${reason}`, searchParams.get("next"))}`);
 
   // Google's own refusal, e.g. the user pressed Cancel.
   const providerError = searchParams.get("error_description") ?? searchParams.get("error");

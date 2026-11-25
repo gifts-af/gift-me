@@ -27,7 +27,7 @@ GiftsAF is built for both sides: getting gifts you'll love, and giving them with
 
 **Never miss a date again.** You'll tell it about the people you buy for. It'll remember the dates that matter, learn what each person is into, and suggest gifts that can arrive on time. Tap yes and it's ordered. Nothing gets bought without your OK.
 
-*In the works, and we're letting people in a few at a time. [Request concierge access](https://giftsaf.com/request-access).*
+*We're letting people in a few at a time. [Request concierge access](https://giftsaf.com/request-access).*
 
 ## Later: scan-to-gift
 

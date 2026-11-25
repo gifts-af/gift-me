@@ -52,7 +52,6 @@ export default function SharedList({ list, token, nav, top }: SharedListProps) {
     }
   }, []);
 
-  const loginHref = `/auth/login?next=${encodeURIComponent(`/share/${token}`)}`;
 
   // The owner sees their own title; everyone else sees whose list it is, with
   // a custom title as a smaller line (ALL-123). With the switch off it names
@@ -200,7 +199,7 @@ export default function SharedList({ list, token, nav, top }: SharedListProps) {
         <ClaimDialog
           gift={claiming}
           viewer={list.viewer}
-          loginHref={loginHref}
+          next={`/share/${token}`}
           onConfirm={(name) => handleClaim(claiming, name)}
           onClose={() => setClaiming(null)}
         />

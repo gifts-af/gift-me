@@ -175,7 +175,7 @@ Anyone can sign up, keep a list and add people. Gift ideas and the concierge set
 
 ### Letting someone in
 
-The request arrives as an email to the owner, with their account email in it. Who is waiting:
+The request arrives as an email to the owner, with their account email in it. Requests from the public form (the home page, the tour and /request-access) arrive by email only, with the `+waitlist` tag, and aren't in this query; check that person has a confirmed account with that email first. Who is waiting, from signed-in accounts:
 
 ```sql
 select u.email, u.email_confirmed_at is not null as confirmed, a.access_requested_at

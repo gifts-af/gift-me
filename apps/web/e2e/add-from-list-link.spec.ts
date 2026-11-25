@@ -147,8 +147,8 @@ test("a signed-out relative signs up by email, confirms in another browser, and 
   // eslint-disable-next-line no-restricted-syntax -- as above
   await page.getByLabel("Repeat password").fill(password);
   await page.getByRole("button", { name: "Create account" }).click();
-  await expect(page).toHaveURL(/\/auth\/sign-up-success$/);
-  await expect(page.getByText("Open it to finish signing up.")).toBeVisible();
+  await expect(page).toHaveURL(/\/auth\/sign-up-success\?next=/);
+  await expect(page.getByText("Check your email for a link to confirm your account.")).toBeVisible();
   expect(redirectTo).toBe(new URL(sharePath, baseURL).href);
 
   const made = await fetch(`${supabase.url}/auth/v1/admin/generate_link`, {

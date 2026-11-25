@@ -25,7 +25,7 @@ export function RequestAccessForm() {
     return (
       <div role="status" className="flex flex-col gap-2 rounded-2xl border bg-card p-5 text-center text-card-foreground">
         <p className="text-[18px] font-bold">Thanks! We&apos;ll email you when you&apos;re in.</p>
-        <p className="text-[15px] text-muted-foreground">Your list and your people are free, so there&apos;s no need to wait.</p>
+        <p className="text-[15px] text-muted-foreground">Create a free account with this email so we can let you in. You can start your list straight away.</p>
         <Link
           href="/auth/sign-up"
           className="inline-flex min-h-11 items-center justify-center text-[15px] text-muted-foreground underline underline-offset-[3px] hover:text-foreground"

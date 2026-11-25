@@ -7,7 +7,7 @@ function link(name: string | RegExp) {
   return screen.getByRole("link", { name });
 }
 
-describe("home page (ALL-46)", () => {
+describe("home page", () => {
   // ALL-71: the list (works today) leads; the concierge hook follows.
   const listHero = () => screen.getByRole("heading", { level: 1 }).closest("section")!;
   const conciergeHero = () => screen.getByRole("heading", { level: 2, name: "Gifting, handled AF." }).closest("section")!;
@@ -64,6 +64,11 @@ describe("home page (ALL-46)", () => {
     // Opens over the page, so it's a button, not a link to /request-access.
     expect(hero.getByRole("button", { name: "Request concierge access" })).not.toHaveAttribute("href");
     expect(hero.getByRole("link", { name: "Already have an account? Sign in" })).toHaveAttribute("href", "/auth/login");
+  });
+
+  it("the footer links to Privacy", () => {
+    render(<WelcomePage />);
+    expect(within(screen.getByRole("contentinfo")).getByRole("link", { name: "Privacy" })).toHaveAttribute("href", "/privacy");
   });
 
   it("the bar has Sign in and How it works, and nothing says invite only (AC-1, AC-2)", () => {

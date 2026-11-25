@@ -83,7 +83,7 @@ test("take the tour, then sign in", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
 });
 
-test("take the list tour from the home page (ALL-71)", async ({ page }) => {
+test("take the list tour from the home page", async ({ page }) => {
   await page.goto("/");
   await listHero(page).getByRole("link", { name: "Take the tour" }).click();
   await expect(page).toHaveURL(/\/tour\/list$/);

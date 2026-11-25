@@ -14,7 +14,7 @@ function goTo(id: (typeof TOUR_STEPS)[number]["id"]) {
 
 afterEach(() => vi.restoreAllMocks());
 
-describe("guided tour (ALL-46)", () => {
+describe("guided tour", () => {
   it("has no alpha banner above the top bar (ALL-50)", () => {
     render(<Tour />);
     expect(screen.queryByText(/Lots is broken/)).not.toBeInTheDocument();
@@ -86,7 +86,7 @@ describe("guided tour (ALL-46)", () => {
       screen.getByText("We're letting people into the concierge a few at a time. Your list and your people are free."),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Request concierge access" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Just want the list? Start it, free" })).toHaveAttribute("href", "/auth/sign-up");
+    expect(screen.getByRole("link", { name: "Just want the list? Start it free" })).toHaveAttribute("href", "/auth/sign-up");
     expect(container).not.toHaveTextContent(/invite|waitlist/i);
     expect(screen.getByRole("link", { name: "Already have an account? Sign in" })).toHaveAttribute("href", "/auth/login");
     expect(screen.getByRole("link", { name: "Back to home" })).toHaveAttribute("href", "/");

@@ -11,7 +11,7 @@ const goTo = (id: (typeof LIST_TOUR_STEPS)[number]["id"]) => {
 
 afterEach(() => vi.restoreAllMocks());
 
-describe("list tour (ALL-71)", () => {
+describe("list tour", () => {
   it("walks through the five steps in order", () => {
     render(<ListTour />);
     expect(LIST_TOUR_STEPS.map((s) => s.caption)).toEqual([

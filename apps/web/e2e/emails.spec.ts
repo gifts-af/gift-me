@@ -20,7 +20,7 @@ function renderSamples(): { name: string; html: string }[] {
 
 const samples = renderSamples();
 
-test("every email sample was rendered: 51 concierge, five forms and requests (ALL-71, ALL-32, ALL-116, ALL-31, ALL-27, ALL-33)", () => {
+test("every email sample was rendered: 51 concierge, five forms and requests", () => {
   expect(samples.map((s) => s.name).sort()).toEqual(
     [
       "final_notice",

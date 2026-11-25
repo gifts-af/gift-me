@@ -1,7 +1,8 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
-import { safeNext } from "@/lib/safe-next";
+import { authFormError } from "@/lib/auth-form-errors";
+import { safeNext, withNext } from "@/lib/safe-next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,11 +48,11 @@ export function SignUpForm({ next: rawNext }: { next?: string }) {
     });
     if (error) {
       human.reset();
-      setError(error.message);
+      setError(authFormError(error));
       setIsLoading(false);
       return;
     }
-    router.push("/auth/sign-up-success");
+    router.push(withNext("/auth/sign-up-success", next));
   };
 
   return (
@@ -101,7 +102,7 @@ export function SignUpForm({ next: rawNext }: { next?: string }) {
       </form>
       <p className="text-center text-[15px] text-muted-foreground">
         Already have an account?{" "}
-        <Link href={next === "/" ? "/auth/login" : `/auth/login?next=${encodeURIComponent(next)}`} className="text-foreground underline underline-offset-[3px]">
+        <Link href={withNext("/auth/login", next)} className="text-foreground underline underline-offset-[3px]">
           Sign in
         </Link>
       </p>

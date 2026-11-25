@@ -63,7 +63,9 @@ describe("buildAccessRequestEmail", () => {
     expect(email.text).toContain("Friend of Jim");
     expect(email.text).toContain("jo@example.com");
     // Access is given to an account, and this form doesn't make one.
-    expect(email.text).toContain("They may not have an account yet, and need one to be let in.");
+    expect(email.text).toContain(
+      "Check they have a confirmed account with this email, then follow Concierge access > Letting someone in, in design/operations.md, and reply here.",
+    );
     expect(email.text).not.toContain("Test users");
     expect(email.html).toContain(EMAIL_LOGO_URL);
     expect(EMAIL_FROM).toBe("GiftsAF <hello@giftsaf.com>");
@@ -77,7 +79,7 @@ describe("buildAccessRequestEmail", () => {
   });
 });
 
-describe("buildRequestConfirmation (ALL-71)", () => {
+describe("buildRequestConfirmation", () => {
   it("carries nothing the visitor typed, so it can't be used to message strangers", () => {
     const sneaky: AccessRequest = { ...jordan, name: "Claim your refund at evil.example", note: "visit evil.example" };
     const email = buildRequestConfirmation(sneaky);
@@ -109,7 +111,7 @@ describe("requestAccess", () => {
     expect(JSON.parse(String(init.body))).toMatchObject({ reply_to: "jo@example.com", to: ["allensforever711+waitlist@gmail.com"] });
   });
 
-  it("sends to the owner first, then confirms to the person (ALL-71)", async () => {
+  it("sends to the owner first, then confirms to the person", async () => {
     const send = vi.fn(async () => ok());
     await requestAccess(form({ name: "Jordan", email: "jo@example.com" }), { isHuman: human, apiKey: "re_test", fetch: send });
     const to = send.mock.calls.map((c) => JSON.parse(String((c as unknown as [string, RequestInit])[1].body)).to[0]);

@@ -53,6 +53,14 @@ describe("SharedList", () => {
     }
   });
 
+  it("the claim box offers sign-in and sign-up, both coming back to this list", async () => {
+    render(<SharedList token="t" list={{ title: "t", ...unnamed, isOwner: false, viewer: guest, items: [item("a", "Kettle")] }} />);
+    await userEvent.click(screen.getByRole("button", { name: /claim/i }));
+    const dialog = within(screen.getByRole("dialog"));
+    expect(dialog.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/auth/login?next=%2Fshare%2Ft");
+    expect(dialog.getByRole("link", { name: "create an account" })).toHaveAttribute("href", "/auth/sign-up?next=%2Fshare%2Ft");
+  });
+
   it("lets a friend claim and shows who claimed what", () => {
     render(
       <SharedList

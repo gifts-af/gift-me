@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { authFormError } from "@/lib/auth-form-errors";
 import { createClient } from "@/lib/supabase/client";
 import { useState } from "react";
 import { FormError } from "./auth-frame";
@@ -24,7 +25,7 @@ export function GoogleButton({ next = "/", loginHint }: { next?: string; loginHi
     });
     // On success the browser is already on its way to Google.
     if (error) {
-      setError(error.message);
+      setError(authFormError(error));
       setPending(false);
     }
   }

@@ -1,7 +1,8 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
-import { safeNext } from "@/lib/safe-next";
+import { authFormError } from "@/lib/auth-form-errors";
+import { safeNext, withNext } from "@/lib/safe-next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,8 +19,6 @@ export function LoginForm({ next: rawNext }: { next?: string }) {
   const human = useHumanCheck({ wayOut: "google" });
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const withNext = (path: string) =>
-    next === "/" ? path : `${path}?next=${encodeURIComponent(next)}`;
 
   // Fields are read on submit, not tracked as you type, so anything typed or
   // autofilled before the page loaded is kept (ALL-60).
@@ -37,7 +36,7 @@ export function LoginForm({ next: rawNext }: { next?: string }) {
     });
     if (error) {
       human.reset();
-      setError(error.message);
+      setError(authFormError(error));
       setIsLoading(false);
       return;
     }
@@ -79,10 +78,10 @@ export function LoginForm({ next: rawNext }: { next?: string }) {
       </form>
       <div className="flex justify-between">
         <Button asChild variant="link" size="sm" className="px-1">
-          <Link href="/auth/forgot-password">Forgot password?</Link>
+          <Link href={withNext("/auth/forgot-password", next)}>Forgot password?</Link>
         </Button>
         <Button asChild variant="link" size="sm" className="px-1">
-          <Link href={withNext("/auth/sign-up")}>Create an account</Link>
+          <Link href={withNext("/auth/sign-up", next)}>Create an account</Link>
         </Button>
       </div>
     </div>

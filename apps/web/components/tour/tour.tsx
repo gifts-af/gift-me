@@ -56,7 +56,7 @@ export function Tour() {
           primary={<RequestAccessButton variant="default" />}
           secondary={
             <Link href="/auth/sign-up" className={END_LINK}>
-              Just want the list? Start it, free
+              Just want the list? Start it free
             </Link>
           }
         />

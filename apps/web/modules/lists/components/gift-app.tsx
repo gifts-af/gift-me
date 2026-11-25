@@ -346,6 +346,10 @@ export default function GiftApp({ initial, footer = null, needsName = false, sav
             <Link href="/auth/login?next=%2Flists" className="underline underline-offset-[3px]">
               Sign in
             </Link>{" "}
+            or{" "}
+            <Link href="/auth/sign-up?next=%2Flists" className="underline underline-offset-[3px]">
+              create an account
+            </Link>{" "}
             to save and share your list.
           </Banner>
         )}

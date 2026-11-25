@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
-import { safeNext } from "@/lib/safe-next";
+import { safeNext, withNext } from "@/lib/safe-next";
 import { type EmailOtpType } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 import { type NextRequest } from "next/server";
@@ -10,6 +10,9 @@ export async function GET(request: NextRequest) {
   const token_hash = searchParams.get("token_hash");
   const type = searchParams.get("type") as EmailOtpType | null;
   const next = safeNext(searchParams.get("next"), new URL(request.url).origin);
+
+  // After a failed reset link, signing in shouldn't lead to choosing a new password.
+  const retryNext = type === "recovery" ? "/" : next;
 
   if (token_hash && type) {
     const supabase = await createClient();
@@ -23,9 +26,9 @@ export async function GET(request: NextRequest) {
       redirect(next);
     } else {
       logEvent("auth.email_link_failed", errorFields(error));
-      redirect("/auth/error?error=failed");
+      redirect(withNext("/auth/error?error=failed", retryNext));
     }
   }
 
-  redirect("/auth/error?error=incomplete");
+  redirect(withNext("/auth/error?error=incomplete", retryNext));
 }
