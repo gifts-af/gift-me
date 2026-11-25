@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { ThemeProvider } from "next-themes";
 import "./globals.css";
 import { BackHistory } from "@/components/app-shell/back-history";
+import { FeedbackCorner } from "@/components/feedback-corner";
 import { APP_HOOK, APP_NAME, APP_PITCH, APP_TAGLINE } from "@/lib/brand";
 import { holidayLogoNow } from "@/lib/holiday";
 import { siteUrl } from "@/lib/site-url";
@@ -50,6 +51,7 @@ export default async function RootLayout({
           disableTransitionOnChange
         >
           <BackHistory>{children}</BackHistory>
+          <FeedbackCorner />
         </ThemeProvider>
       </body>
     </html>
