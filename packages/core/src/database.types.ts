@@ -2515,6 +2515,7 @@ export type Database = {
         Returns: Json;
       };
       match_key: { Args: { p_asin: string; p_url: string }; Returns: string };
+      owner_birthday: { Args: { p_token: string }; Returns: Json };
       person_list: { Args: { p_person_id: string }; Returns: Json };
       person_share_token: { Args: { p_person_id: string }; Returns: string };
       queue_photo: { Args: { p_item_id: string }; Returns: undefined };
@@ -2610,6 +2611,31 @@ export type Database = {
           updated_at?: string;
           user_id?: string;
           zip?: string;
+        };
+        Relationships: [];
+      };
+      account_birthdays: {
+        Row: {
+          created_at: string;
+          day: number;
+          month: number;
+          updated_at: string;
+          user_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          day: number;
+          month: number;
+          updated_at?: string;
+          user_id?: string;
+        };
+        Update: {
+          created_at?: string;
+          day?: number;
+          month?: number;
+          updated_at?: string;
+          user_id?: string;
         };
         Relationships: [];
       };

@@ -2,7 +2,7 @@
   "_about": "The hand-written part of the database map (pnpm db:map). Each lane lists its tables top to bottom; strip is the bottom row. notes is the one line shown under each table's name. A table the database has but this file doesn't goes in the strip with no note, and db:map says so: add it to a lane and give it a note.",
   "lanes": {
     "lists": ["lists.lists", "lists.list_items", "lists.gift_claims", "lists.person_links"],
-    "public": ["public.profiles", "public.people", "public.account_addresses"],
+    "public": ["public.profiles", "public.people", "public.account_addresses", "public.account_birthdays"],
     "person": ["concierge.occasions", "concierge.budgets", "concierge.profile_facts", "concierge.questions",
                "concierge.captures", "concierge.inbound_messages", "concierge.saved_gifts"],
     "round": ["concierge.gift_rounds", "concierge.gift_ideas", "concierge.orders", "concierge.order_addresses",
@@ -34,6 +34,7 @@
     "public.profiles": "your display name",
     "public.people": "the people you give to",
     "public.account_addresses": "your own address",
+    "public.account_birthdays": "your own birthday",
     "lists.lists": "a wish list, share token",
     "lists.list_items": "a gift on a list",
     "lists.gift_claims": "who's buying it",
