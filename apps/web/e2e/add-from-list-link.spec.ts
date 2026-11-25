@@ -112,6 +112,24 @@ test("a signed-out visitor sees sign-up and sign-in, which both return to the li
   await expect(page.locator("body")).not.toContainText(/invite only/i);
 });
 
+// A guest's claim doesn't just close the box; it offers their own list.
+test("a signed-out visitor who claims a gift is offered their own list, and the claim stays", async ({ page }) => {
+  const { name, sharePath } = await ownerWithList();
+  await page.goto(sharePath);
+  await page.getByRole("button", { name: "Claim Wool socks" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("Your name").fill("Jordan");
+  await dialog.getByRole("button", { name: "Claim gift" }).click();
+
+  const offer = page.getByRole("dialog", { name: `Claimed. ${name} won't see it.` });
+  await expect(offer).toBeVisible();
+  await expect(offer.getByRole("link", { name: "Start yours, free" })).toHaveAttribute("href", "/auth/sign-up?next=%2Flists");
+  await expect(offer).toContainText("Your claim stays a guest claim, so it can't be undone.");
+  await offer.getByRole("button", { name: "Not now" }).click();
+  await expect(offer).toBeHidden();
+  await expect(page.getByText("Claimed by Jordan")).toBeVisible();
+});
+
 test("a signed-out relative signs in from a shared list and lands back on it (AC-2)", async ({ page }) => {
   const { name, sharePath } = await ownerWithList();
   const user = await createFreshUser(undefined, { access: false });

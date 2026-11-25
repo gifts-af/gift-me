@@ -43,6 +43,9 @@ export default function SharedList({ list, token, nav, top }: SharedListProps) {
   const [unclaimingId, setUnclaimingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
   const [announcement, setAnnouncement] = useState("");
+  // "Not now" on the own-list offer holds for the rest of this visit.
+  const [offerWavedOff, setOfferWavedOff] = useState(false);
+  const offerOwnList = !list.viewer.signedIn && !list.isOwner && !offerWavedOff;
 
   // A link to one gift. The list streams in after the page does, too late for the browser's own
   // jump to it.
@@ -67,7 +70,8 @@ export default function SharedList({ list, token, nav, top }: SharedListProps) {
     const result = await claimGift({ token, itemId: gift.id, name });
     if (result.ok) {
       setClaim(gift.id, result.claim);
-      setClaiming(null);
+      // A guest is offered their own list first; the dialog closes itself.
+      if (!offerOwnList) setClaiming(null);
       setActionError("");
       setAnnouncement(`You claimed ${gift.name}.`);
     } else if (result.alreadyClaimed) {
@@ -210,6 +214,7 @@ export default function SharedList({ list, token, nav, top }: SharedListProps) {
           next={`/share/${token}`}
           onConfirm={(name) => handleClaim(claiming, name)}
           onClose={() => setClaiming(null)}
+          offer={offerOwnList ? { ownerName: name, onNotNow: () => setOfferWavedOff(true) } : undefined}
         />
       )}
 
