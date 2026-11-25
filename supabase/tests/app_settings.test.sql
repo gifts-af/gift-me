@@ -62,7 +62,8 @@ select set_eq(
     'cost_tracking_enabled', 'cost_window_days', 'cost_record_timeout_ms', 'cost_tracking_since',
     'reactions_enabled', 'reaction_prompt_after_days', 'reaction_close_days', 'reaction_note_max_chars',
     'gift_progress_days', 'restore_rejected_ideas_enabled',
-    'amazon_free_shipping_from_cents', 'amazon_shipping_estimate_cents'
+    'amazon_free_shipping_from_cents', 'amazon_shipping_estimate_cents',
+    'google_import_enabled', 'concierge_requests_per_day'
   ],
   'every fee, limit, default and schedule setting is seeded'
 );

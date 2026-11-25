@@ -148,12 +148,12 @@ So leftovers from a killed run, a switch a test left flipped, or another session
 - **Paid features on/off for a user (ALL-94, decision 53):** anything that spends money runs only for users with `concierge.accounts.paid_features` on. Until premium is scoped, that means test and admin users. Users can't set it themselves. An admin sets it in the Supabase SQL editor (signed in as allensforever711), using the person's email from `auth.users`:
 
   ```sql
-  insert into concierge.accounts (user_id, paid_features)
-  select id, true from auth.users where email = 'PERSON_EMAIL'
-  on conflict (user_id) do update set paid_features = excluded.paid_features;
+  insert into concierge.accounts (user_id, paid_features, concierge_access)
+  select id, true, true from auth.users where email = 'PERSON_EMAIL'
+  on conflict (user_id) do update set paid_features = excluded.paid_features, concierge_access = true;
   ```
 
-  To turn it off, run the same statement with `false`. Check it with `select email, paid_features from concierge.accounts a join auth.users u on u.id = a.user_id where paid_features;`. Without the flag, captures still save but aren't read, and the person page and extension say why. To stop reading for everyone instead, set `capture_extraction_enabled` to 0.
+  `concierge_access` is set too because a paid user without access would start rounds whose links show the request page once the access gate ships. To turn paid features off, run the same statement with `false` in the `paid_features` slot only (`select id, false, true`), so access stays on. Check it with `select email, paid_features from concierge.accounts a join auth.users u on u.id = a.user_id where paid_features;`. Without the flag, captures still save but aren't read, and the person page and extension say why. To stop reading for everyone instead, set `capture_extraction_enabled` to 0.
 - `pg_cron` and `pg_net` are on in `dev` only and aren't used: Vercel Cron runs the round tick (T49).
 
 ## Zinc wallet ordering (ALL-32, ALL-30)
@@ -645,8 +645,8 @@ When a signed-in person pastes an Amazon link on My list, the server asks Zinc f
 | Key | Default | What it does |
 |---|---|---|
 | `amazon_paste_lookup_enabled` | 1 | 1 on, 0 off (above) |
-| `amazon_paste_lookups_per_user_per_day` | 30 | Most lookups one person can make in any 24 hours. `lists.take_amazon_lookup()` counts them in `lists.amazon_lookups` and reads the limit itself. Past it, the paste works as when switched off |
-| `amazon_paste_lookups_per_day_total` | 2000 | Most lookups across everyone in any 24 hours, a ceiling on the day's spend (2000 × `zinc_lookup_cents`). Past it, every paste works as when switched off and logs `over_limit` (owner decision 2026-11-21) |
+| `amazon_paste_lookups_per_user_per_day` | 10 | Most lookups one person can make in any 24 hours. `lists.take_amazon_lookup()` counts them in `lists.amazon_lookups` and reads the limit itself. Past it, the paste works as when switched off |
+| `amazon_paste_lookups_per_day_total` | 200 | Most lookups across everyone in any 24 hours, a ceiling on the day's spend (200 × `zinc_lookup_cents`, $2 at most). Past it, every paste works as when switched off and logs `over_limit` (owner decision 2026-11-21) |
 | `amazon_paste_lookup_timeout_ms` | 10000 | How long a lookup waits for Zinc before the paste goes on without it |
 
 **Seeing it work on production (E9):** event `list.amazon_lookup`, one per paste, ids only (no ASIN, no product name):
