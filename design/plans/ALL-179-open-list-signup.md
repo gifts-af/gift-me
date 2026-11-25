@@ -242,7 +242,8 @@ Facts to check during the admin steps. The first doesn't change the code.
 - [ ] **Step 1:** Failing component tests: at 0, Give has no "Import from Google" and Import says "Google import is off for now. Add people by hand." with a link to `/people/new`, and never loads Google's script; at 1 both are as today; if the setting can't be read, it counts as off; `importContactsAction` refuses at 0. `e2e-live/all-104-connect-button.spec.ts` opens Import on production: expect the off text.
 - [ ] **Step 2:** Implement with `appSettingInt("google_import_enabled")`. Run → pass.
 - [ ] **Step 3:** `operations.md`: letting someone in (the `insert … on conflict` statement setting `concierge_access`, then reply to their email), changing the paid-features statement to set `concierge_access` too, since paid without access would start rounds whose address links show the pitch, turning it off (`select concierge.turn_off_concierge_access(id)`), the off switches, and after-rollback steps.
-- [ ] **Step 4:** `pnpm gallery`; commit `feat: Google import behind a setting (ALL-179)`; adversarial review; open PR 2. Before merging, the owner has recorded the import video. After: live check with the QA account: check it has no paid features, Zinc key or open round, turn access off, check, then turn it on again; republish the screens page.
+- [ ] **Step 4: Backfill again.** A data-only migration repeats Task 1's backfill, so accounts made between PR 1 and PR 2 (still invitees) keep Give. It changes no tables, so no `db:map`. List the accounts it adds.
+- [ ] **Step 5:** `pnpm gallery`; commit `feat: Google import behind a setting (ALL-179)`; adversarial review; open PR 2. Before merging, the owner has recorded the import video. After: live check with the QA account: check it has no paid features, Zinc key or open round, turn access off, check, then turn it on again; republish the screens page.
 
 ### Between PR 2 and PR 3: admin steps (owner, as allensforever711)
 
