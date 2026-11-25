@@ -2,13 +2,14 @@
 -- the settings that go with it. Only the server claims, releases or turns off.
 begin;
 \ir _helpers.psql
-select plan(42);
+select plan(52);
 
 select tests.create_user('a@example.com') as a \gset
 select tests.create_user('b@example.com') as b \gset
 select tests.create_user('c@example.com') as c \gset
 select tests.create_user('d@example.com') as d \gset
 select tests.create_user('t@example.com') as t \gset
+select tests.create_user('x@example.com') as x \gset
 
 -- ─── Reading ─────────────────────────────────────────────────────────────────
 
@@ -70,9 +71,25 @@ select throws_ok(
   '42501', null, 'a user cannot turn access off'
 );
 
+select tests.act_as_anon();
+select throws_ok(
+  format($q$select concierge.claim_access_request(%L)$q$, :'b'),
+  '42501', null, 'anon cannot claim a request'
+);
+select throws_ok(
+  format($q$select concierge.release_access_request(%L)$q$, :'b'),
+  '42501', null, 'anon cannot release a request'
+);
+select throws_ok(
+  format($q$select concierge.turn_off_concierge_access(%L)$q$, :'b'),
+  '42501', null, 'anon cannot turn access off'
+);
+
 -- ─── Claiming a request ──────────────────────────────────────────────────────
 
+-- Other request dates in the database would count toward the cap, so start clean.
 select tests.reset_role();
+update concierge.accounts set access_requested_at = null;
 set local role service_role;
 select is(concierge.claim_access_request(:'b'), 'claimed', 'the first claim works');
 select is(concierge.claim_access_request(:'b'), 'already', 'a second claim finds the date set');
@@ -87,12 +104,33 @@ select is(
   'the claim sets the date'
 );
 
+-- Release leaves the date alone once access is on.
+select tests.reset_role();
+update concierge.accounts set access_requested_at = now() where user_id = :'a';
+set local role service_role;
+select concierge.release_access_request(:'a');
+select is(
+  (select access_requested_at is not null from concierge.accounts where user_id = :'a'), true,
+  'a release with access on leaves the date'
+);
+select tests.reset_role();
+update concierge.accounts set access_requested_at = null where user_id = :'a';
+set local role service_role;
+
 select concierge.release_access_request(:'c');
 select is(
   (select access_requested_at is null from concierge.accounts where user_id = :'c'), true,
   'a release clears the date'
 );
 select is(concierge.claim_access_request(:'c'), 'claimed', 'after a release the user can claim again');
+
+-- Another user can't read b's flag or date straight from the table.
+select tests.act_as(:'c');
+select is(
+  (select count(*) from concierge.accounts where user_id = :'b'), 0::bigint,
+  'another user reads none of the flag or date from the table'
+);
+select tests.reset_role();
 
 -- b and c hold dates now; a cap of 2 is full, so another user waits.
 select tests.reset_role();
@@ -165,6 +203,25 @@ select is(
   (select concierge_access from concierge.accounts where user_id = :'t'), true,
   'a refused turn-off leaves access on'
 );
+select is(
+  (select access_requested_at is not null from concierge.accounts where user_id = :'t'), true,
+  'a refused turn-off leaves the date'
+);
+
+-- A skipped round is finished too.
+select tests.reset_role();
+update concierge.gift_rounds set status = 'skipped' where id = :'rnd';
+set local role service_role;
+select lives_ok(
+  format($q$select concierge.turn_off_concierge_access(%L)$q$, :'t'),
+  'turn-off works with only a skipped round'
+);
+select is(
+  (select concierge_access from concierge.accounts where user_id = :'t'), false,
+  'turn-off with a skipped round clears the flag'
+);
+select tests.reset_role();
+update concierge.accounts set concierge_access = true, access_requested_at = now() where user_id = :'t';
 
 select tests.reset_role();
 update concierge.gift_rounds set status = 'complete' where id = :'rnd';
@@ -180,6 +237,16 @@ select is(
 select is(
   (select access_requested_at from concierge.accounts where user_id = :'t'), null,
   'turn-off clears the date'
+);
+
+-- An account with no row has nothing to turn off, and gets none made.
+select lives_ok(
+  format($q$select concierge.turn_off_concierge_access(%L)$q$, :'x'),
+  'turn-off with no account row does nothing'
+);
+select is(
+  (select count(*) from concierge.accounts where user_id = :'x'), 0::bigint,
+  'turn-off with no account row makes none'
 );
 select tests.reset_role();
 

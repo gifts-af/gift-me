@@ -67,9 +67,14 @@ begin
     return 'busy';
   end if;
 
+  -- Access may have been turned on since the read above; then no row changes.
   insert into concierge.accounts (user_id, access_requested_at)
   values (p_user_id, now())
-  on conflict (user_id) do update set access_requested_at = now();
+  on conflict (user_id) do update set access_requested_at = now()
+  where not concierge.accounts.concierge_access;
+  if not found then
+    return 'already';
+  end if;
   return 'claimed';
 end;
 $$;
