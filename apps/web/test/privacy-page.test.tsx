@@ -13,7 +13,8 @@ describe("the privacy page", () => {
   it("covers Google sign-in and contacts, with Google's Limited Use statement", () => {
     render(<PrivacyPage />);
     const google = section("Google sign-in and contacts");
-    expect(google).toHaveTextContent(/off for now/);
+    expect(google).not.toHaveTextContent(/off for now/);
+    expect(google).toHaveTextContent(/runs only when you start it/);
     expect(google).toHaveTextContent(/only the ones you tick/);
     expect(google).toHaveTextContent(/never used for ads/);
     expect(google).toHaveTextContent(
