@@ -27,7 +27,7 @@ describe("ProductTabs", () => {
     render(<ProductTabs />);
     expect(screen.getByRole("navigation", { name: "Main" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Get" })).toHaveAttribute("href", "/lists");
-    expect(screen.getByRole("link", { name: "Give" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "Give" })).toHaveAttribute("href", "/give");
   });
 
   it.each([

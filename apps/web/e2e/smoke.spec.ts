@@ -16,7 +16,7 @@ test("sign in, see Home, stay signed in, sign out", async ({ page }) => {
   await page.getByLabel("Password").fill(TEST_USER.password);
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/give$/);
   await expect(page.getByRole("link", { name: "GiftsAF" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
   await expect(page.getByRole("link", { name: /^You/ })).toBeVisible();

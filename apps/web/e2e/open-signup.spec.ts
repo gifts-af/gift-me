@@ -31,6 +31,7 @@ async function markRequested(user: Credentials) {
 // Each gated page, and its own title. With the list card on, a person's list
 // screen sends you back to the person, so its title is theirs.
 const pages = (id: string): [path: string, ownTitle: string][] => [
+  ["/give", "People"],
   ["/people/new", "Add someone you buy for"],
   ["/people/import", "Who do you buy gifts for?"],
   [`/people/${id}`, NAME],
@@ -104,4 +105,71 @@ test("the pitch fits the screen, before and after asking", { tag: "@layout" }, a
   await expect(page.getByText("Request sent", { exact: true })).toBeVisible();
   expect(await phoneLayoutProblems(page)).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath("pitch-requested.png") });
+});
+
+test("without access, signing in and / land on My list, and Give shows the pitch (AC-3, AC-4)", async ({ page }) => {
+  const user = await createFreshUser(undefined, { access: false });
+  await page.goto("/auth/login");
+  await page.getByLabel("Email").fill(user.email);
+  // eslint-disable-next-line no-restricted-syntax -- this tests where the sign-in form takes you
+  await page.getByLabel("Password").fill(user.password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(/\/lists$/);
+  await expect(page.getByRole("region", { name: "My list" })).toBeVisible();
+
+  await page.getByRole("link", { name: "Give", exact: true }).click();
+  await expect(page).toHaveURL(/\/give$/);
+  await expect(pitch(page)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "People" })).toHaveCount(0);
+  for (const path of ["/people/new", "/settings/paying"]) {
+    await page.goto(path);
+    await expect(pitch(page)).toBeVisible();
+  }
+});
+
+test("without access, Back after / sent you to My list leaves it", async ({ page }) => {
+  await signIn(page, await createFreshUser(undefined, { access: false }));
+  const list = page.getByRole("region", { name: "My list" });
+
+  // Opened by its address, as the home-screen app does.
+  await page.goto("/settings");
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/lists$/);
+  await expect(list).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/settings$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
+
+  // Inside the app, by the logo, and again from the list itself.
+  const logo = page.getByRole("link", { name: "GiftsAF", exact: true });
+  await logo.click();
+  await expect(page).toHaveURL(/\/lists$/);
+  await expect(list).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/settings$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
+  await logo.click();
+  await expect(list).toBeVisible();
+  await logo.click();
+  await expect(page).toHaveURL(/\/lists$/);
+  await expect(list).toBeVisible();
+});
+
+test("with access, / and the logo land on Give, with your people (AC-9)", async ({ page }) => {
+  await signIn(page, await createFreshUser());
+  await page.goto("/settings");
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/give$/);
+  await expect(page.getByRole("heading", { level: 1, name: "People" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Give", exact: true })).toHaveAttribute("aria-current", "page");
+  await page.goBack();
+  await expect(page).toHaveURL(/\/settings$/);
+  await page.getByRole("link", { name: "GiftsAF", exact: true }).click();
+  await expect(page).toHaveURL(/\/give$/);
+  await expect(page.getByRole("heading", { level: 1, name: "People" })).toBeVisible();
+});
+
+test("signed out, /give goes to sign-in and back", async ({ page }) => {
+  await page.goto("/give");
+  await expect(page).toHaveURL(/\/auth\/login\?next=%2Fgive$/);
 });

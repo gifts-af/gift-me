@@ -12,7 +12,7 @@ test("save a gift for someone, then remove it", async ({ page }) => {
   await page.getByLabel("Name").fill(person);
   await page.getByLabel("Who are they to you?").selectOption({ label: "Mother" });
   await page.getByRole("button", { name: `Add ${person}` }).click();
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/give$/);
   await page.getByRole("link", { name: person, exact: true }).click();
   await expect(page).toHaveURL(/\/people\/[0-9a-f-]{36}$/);
 
@@ -42,6 +42,6 @@ test("save a gift for someone, then remove it", async ({ page }) => {
     await page.goto(personPage);
     await page.getByRole("button", { name: `Delete ${person}` }).click();
     await page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click();
-    await expect(page).toHaveURL(/\/$/);
+    await expect(page).toHaveURL(/\/give$/);
   }
 });

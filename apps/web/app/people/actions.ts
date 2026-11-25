@@ -118,9 +118,9 @@ async function tipAfterAdd(person: { id: string; name: string }): Promise<void> 
 const DATED: DatedKind[] = ["birthday", "anniversary"];
 const isText = (...values: unknown[]) => values.every((v) => typeof v === "string");
 
-/** Like refresh, plus Home, whose cards show the name and next date. */
+/** Like refresh, plus Give, whose cards show the name and next date. */
 function refreshPerson(result: SaveResult, id: string): SaveResult {
-  if (result.ok) revalidatePath("/");
+  if (result.ok) revalidatePath("/give");
   return refresh(result, id);
 }
 
@@ -227,10 +227,10 @@ export async function deletePersonAction(_previous: SaveResult | null, formData:
   const result = await deletePerson(text(formData, "id"));
   if (!result.ok) return result;
   // Not the person's own path: revalidating it while the user is still on it
-  // would flash a 404. Go straight Home instead.
-  revalidatePath("/");
+  // would flash a 404. Go straight to Give instead.
+  revalidatePath("/give");
   revalidatePath("/people");
-  redirect("/");
+  redirect("/give");
 }
 
 // The Google Contacts import (ALL-24): the checklist sends only the ticked
@@ -241,7 +241,7 @@ export async function importContactsAction(_previous: ImportResult | null, formD
   if (!parsed.ok) return parsed;
   const result = await importPeople(parsed.rows);
   if (!result.ok) return result;
-  revalidatePath("/");
+  revalidatePath("/give");
   revalidatePath("/people");
   const { firstAdded, ...counts } = result;
   if (firstAdded) await tipAfterAdd(firstAdded);

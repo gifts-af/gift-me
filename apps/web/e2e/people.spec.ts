@@ -121,7 +121,7 @@ test("the Add form, Home, a person's page, About and the moved screens fit the s
   const problems: string[] = [];
   const screens: [string, string, () => Promise<void>][] = [
     ["Add form", "/people/new", () => expect(page.getByRole("textbox", { name: "Name" })).toBeVisible()],
-    ["Home", "/", () => expect(page.getByRole("link", { name: "Mom", exact: true })).toBeVisible()],
+    ["Give", "/give", () => expect(page.getByRole("link", { name: "Mom", exact: true })).toBeVisible()],
     ["Person page", `/people/${personId}`, async () => {
       await expect(page.getByRole("link", { name: /^Budget/ })).toContainText("$75 · Christmas $125 · Mother's Day $50.50");
       await expect(page.getByRole("link", { name: /^About Mom/ })).toContainText("Mother · Birthday Mar 14");
@@ -207,7 +207,7 @@ test("About Mom: each field saves on its own", async ({ page }) => {
   await expect(page).toHaveURL(new RegExp(`/people/${personId}$`));
   await expect(page.getByRole("heading", { level: 1, name: "Mama" })).toBeVisible();
   await expect(page.getByRole("link", { name: /^About Mama/ })).toContainText("Aunt · Birthday Nov 30");
-  await page.goto("/");
+  await page.goto("/give");
   await expect(page.getByRole("link", { name: "Mama", exact: true })).toBeVisible();
 
   // AC-7: with a birth year saved, Remove birthday asks first, then removes the birthday and the year.
@@ -279,7 +279,7 @@ test("add Mom, set her occasions and budget, link her list, delete her", async (
   const mom = "Mom Journey";
   await deleteLeftovers(mom);
   await signIn(page);
-  await page.goto("/");
+  await page.goto("/give");
 
   // 1. Add her with only a name and Mother.
   await page.getByRole("link", { name: "Add someone you buy for" }).first().click();
@@ -288,7 +288,7 @@ test("add Mom, set her occasions and budget, link her list, delete her", async (
   await page.getByRole("button", { name: `Add ${mom}` }).click();
 
   // 2. Her card: Add birthday, a next occasion, and "We suggest ideas".
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/give$/);
   const momLink = page.getByRole("link", { name: mom, exact: true });
   await expect(momLink).toBeVisible();
   const card = page.locator("div", { has: momLink }).last();
@@ -344,14 +344,14 @@ test("add Mom, set her occasions and budget, link her list, delete her", async (
   await page.getByRole("button", { name: "Link", exact: true }).click();
   await expect(page.getByRole("link", { name: /^Their list/ })).toContainText("Linked");
   await expect(page.getByRole("heading", { name: `Does ${mom} have a GiftsAF list?` })).toHaveCount(0);
-  await page.goto("/");
+  await page.goto("/give");
   await expect(page.locator("div", { has: momLink }).last()).toContainText("Their own list");
 
   // 5. Delete her, behind the confirm. She's gone from Home.
   await momLink.click();
   await page.getByRole("button", { name: `Delete ${mom}` }).click();
   await page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click();
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/give$/);
   await expect(page.getByRole("link", { name: mom, exact: true })).toHaveCount(0);
 });
 
@@ -365,7 +365,7 @@ test("add a mother-in-law", async ({ page }) => {
   await page.getByLabel("Name").fill("Linda");
   await page.getByLabel("Who are they to you?").selectOption({ label: "Mother-in-law" });
   await page.getByRole("button", { name: "Add Linda" }).click();
-  await expect(page).toHaveURL(/\/$/);
+  await expect(page).toHaveURL(/\/give$/);
   await page.getByRole("link", { name: "Linda", exact: true }).click();
   // The line under her name: "Mother-in-law · Christmas, …".
   await expect(page.getByText(/^Mother-in-law ·/)).toBeVisible();

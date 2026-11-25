@@ -10,7 +10,7 @@ export function OtherAccount() {
       <PageTitle>This gift belongs to another account</PageTitle>
       <p className="text-[15px] text-muted-foreground">Sign in with the account the email was sent to.</p>
       <Button asChild variant="outline" className="self-start">
-        <Link href="/">Go to your people</Link>
+        <Link href="/give">Go to your people</Link>
       </Button>
     </>
   );

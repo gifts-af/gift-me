@@ -152,7 +152,8 @@ you see it and can clear the field first.
 
 ```
 app/layout.tsx                   Root layout, theme provider, iOS home-screen tags
-app/page.tsx                     Home (signed in)
+app/page.tsx                     Sends you home: Give, or My list
+app/give/page.tsx                Give: the people you buy for
 app/settings/                    Settings page, form and server action
 app/lists/page.tsx               The gift list
 app/share/[token]/page.tsx       Public share link (unchanged URL)

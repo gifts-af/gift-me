@@ -18,7 +18,7 @@ async function signedInHome(browser: Browser, options: { userAgent?: string; ins
   }
   const page = await context.newPage();
   await signIn(page);
-  await page.goto("/");
+  await page.goto("/give");
   await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
   return { context, page };
 }

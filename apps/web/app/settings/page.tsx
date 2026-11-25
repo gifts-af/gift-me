@@ -89,7 +89,7 @@ export default function SettingsPage() {
         <AppNav />
       </TopBar>
       <PageFrame>
-        <BackLink href="/" label="Give" />
+        <BackLink href="/give" label="Give" />
         <PageTitle>Settings</PageTitle>
         <Suspense fallback={<p className="text-[15px] text-muted-foreground">Loading your settings…</p>}>
           <LoadedList />

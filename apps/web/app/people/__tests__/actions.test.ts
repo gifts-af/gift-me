@@ -58,12 +58,12 @@ describe("deletePersonAction", () => {
     redirect.mockClear();
   });
 
-  it("revalidates Home, never the deleted person's page, and redirects Home", async () => {
+  it("revalidates Give, never the deleted person's page, and redirects to Give", async () => {
     deletePerson.mockResolvedValue({ ok: true });
     await expect(deletePersonAction(null, form("p1"))).rejects.toThrow("NEXT_REDIRECT");
-    expect(redirect).toHaveBeenCalledWith("/");
+    expect(redirect).toHaveBeenCalledWith("/give");
     const paths = revalidatePath.mock.calls.map((c) => c[0]);
-    expect(paths).toContain("/");
+    expect(paths).toContain("/give");
     expect(paths).not.toContain("/people/p1");
   });
 
@@ -139,7 +139,7 @@ describe("one field at a time", () => {
     expect(await renamePersonAction(ID, "Mama")).toEqual({ ok: true });
     expect(renamePerson).toHaveBeenCalledWith(ID, "Mama");
     const paths = revalidatePath.mock.calls.map((c) => c[0]);
-    expect(paths).toEqual(expect.arrayContaining(["/", "/people", `/people/${ID}`]));
+    expect(paths).toEqual(expect.arrayContaining(["/give", "/people", `/people/${ID}`]));
   });
 
   it("sets the relationship", async () => {

@@ -29,7 +29,7 @@ const section = (page: Page) => page.getByRole("region", { name: "Gifts in progr
 test("Home lists the gifts in progress, and each opens its round; the person's page has theirs", async ({ page }) => {
   const b = await readyBuyer(await createFreshUser());
   await signIn(page, b.creds);
-  await page.goto("/");
+  await page.goto("/give");
   await expect(page.getByRole("link", { name: "Add someone you buy for" })).toBeVisible();
   await expect(section(page)).toHaveCount(0);
 
@@ -78,7 +78,7 @@ test("the gifts in progress fit Home and the person's page in light and dark", {
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     for (const [path, rows] of [
-      ["/", 3],
+      ["/give", 3],
       [`/people/${jenn.personId}`, 1],
     ] as const) {
       await page.goto(path);

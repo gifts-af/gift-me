@@ -36,7 +36,7 @@ function setup(addResult: Result = { ok: true, id: "new1" }, extra: { initialNam
       userId="u1"
       maxUploadBytes={1000}
       px={512}
-      doneHref="/"
+      doneHref="/give"
       storage={storage}
       resize={resize}
       {...extra}
@@ -63,7 +63,7 @@ describe("PersonForm", () => {
     const t = setup();
     await fill();
     await save();
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/"));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/give"));
     const form = sent(t);
     expect(form.get("name")).toBe("Mom");
     expect(form.get("relationship")).toBe("mother");
@@ -179,7 +179,7 @@ describe("PersonForm", () => {
     await userEvent.upload(screen.getByLabelText("Choose a photo"), photo);
     expect(t.upload).not.toHaveBeenCalled();
     await save();
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/"));
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/give"));
     expect(t.calls).toEqual(["add", "upload", "setPhoto"]);
     expect(t.upload.mock.calls[0][0]).toMatch(/^u1\/new1\/[^/]+\.jpg$/);
     const photoForm = (t.photoAction.mock.calls[0] as unknown as [unknown, FormData])[1];
@@ -266,7 +266,7 @@ describe("PersonForm", () => {
       expect(screen.queryByText(NOTICE)).toBeNull();
       await fill();
       await save();
-      await waitFor(() => expect(push).toHaveBeenCalledWith("/"));
+      await waitFor(() => expect(push).toHaveBeenCalledWith("/give"));
       expect(sent(t).has("list")).toBe(false);
     });
 

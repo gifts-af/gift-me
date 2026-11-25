@@ -95,7 +95,7 @@ test.describe("a remove held for Undo is sent when the page goes (AC-17)", () =>
       throw new Error(`Asked before leaving: ${dialog.message()}`);
     });
     await page.getByRole("link", { name: "Give" }).click();
-    await expect(page).toHaveURL(/\/$/);
+    await expect(page).toHaveURL(/\/give$/);
     await expectGone(page);
   });
 

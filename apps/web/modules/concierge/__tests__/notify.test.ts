@@ -185,12 +185,12 @@ describe("notify for the notes emails (ALL-31)", () => {
         links: {
           choice0: { action: "file_note", expiresAt },
           choice1: { action: "file_note", expiresAt },
-          someoneElse: { path: "/people" },
+          someoneElse: { path: "/give" },
         },
       },
       deps(store, [channel]),
     );
-    expect(sent[0].text).toContain(`Someone else: ${BASE}/people`);
+    expect(sent[0].text).toContain(`Someone else: ${BASE}/give`);
     expect(sent[0].text).toMatch(new RegExp(`Dad: ${BASE}/a/[A-Za-z0-9_-]{43}`));
     expect(store.links.map((l) => l.action)).toEqual(["file_note", "file_note"]);
   });

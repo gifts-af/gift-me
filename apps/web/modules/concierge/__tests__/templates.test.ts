@@ -581,15 +581,15 @@ describe("notes emails (ALL-31)", () => {
   });
 
   it("who_is_this has one link per choice, in order, plus Someone else (AC-3)", () => {
-    const links = { choice0: "https://x.test/a/t0", choice1: "https://x.test/a/t1", someoneElse: "https://x.test/people" };
+    const links = { choice0: "https://x.test/a/t0", choice1: "https://x.test/a/t1", someoneElse: "https://x.test/give" };
     const mail = TEMPLATES.who_is_this({ subject: "Fly rod", choices: [{ name: "Dad" }, { name: "Uncle Bob" }] }, links);
     expect(mail.subject).toBe("Who is your note about?");
     expect(mail.text).toContain("Dad: https://x.test/a/t0");
     expect(mail.text).toContain("Uncle Bob: https://x.test/a/t1");
-    expect(mail.text).toContain("Someone else: https://x.test/people");
+    expect(mail.text).toContain("Someone else: https://x.test/give");
     expect(mail.text.indexOf("Dad:")).toBeLessThan(mail.text.indexOf("Uncle Bob:"));
     for (const out of both(mail)) expect(out).toMatch(/Fly rod/);
-    expect(mail.html).toContain('href="https://x.test/people"');
+    expect(mail.html).toContain('href="https://x.test/give"');
   });
 
   it("who_is_this refuses a choice with no link, rather than sending href=undefined", () => {

@@ -124,9 +124,9 @@ test("the logo stays put across pages", { tag: "@layout" }, async ({ page }) => 
   expect(await spot("/request-access")).toEqual(home);
 
   await signIn(page);
-  await page.goto("/");
+  await page.goto("/give");
   await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
-  expect(await spot("/")).toEqual(home);
+  expect(await spot("/give")).toEqual(home);
 
   // The list: the logo is in the same spot at every width (ALL-95).
   await page.goto("/lists");

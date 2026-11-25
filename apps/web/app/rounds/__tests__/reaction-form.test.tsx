@@ -188,6 +188,6 @@ describe("ReactionForm", () => {
 
   it("goes back to the people when this person was removed", () => {
     setup({ gifts: [gift({ rating: "meh" })], personName: null });
-    expect(screen.getByRole("link", { name: "Go to your people" })).toHaveAttribute("href", "/");
+    expect(screen.getByRole("link", { name: "Go to your people" })).toHaveAttribute("href", "/give");
   });
 });

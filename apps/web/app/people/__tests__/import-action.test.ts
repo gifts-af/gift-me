@@ -38,7 +38,7 @@ describe("importContactsAction", () => {
     importPeople.mockResolvedValue({ ok: true, added: 1, skipped: 0, failed: 0, photosMissed: 0 });
     expect(await importContactsAction(null, form([good]))).toEqual({ ok: true, added: 1, skipped: 0, failed: 0, photosMissed: 0 });
     expect(importPeople).toHaveBeenCalledWith([expect.objectContaining({ googleId: "people/c1", name: "Sam" })]);
-    expect(revalidatePath).toHaveBeenCalledWith("/");
+    expect(revalidatePath).toHaveBeenCalledWith("/give");
   });
 
   it("counts rows the checks refused as failed (AC-10)", async () => {

@@ -229,7 +229,7 @@ async function ask(
   logEvent("inbound.asking", { email_id: emailId, user_id: userId, inbound_message_id: messageId, choices: choices.length });
 
   const expiresAt = new Date(deps.notify.now.getTime() + settings.linkHours * HOUR_MS);
-  const links: Record<string, LinkSpec> = { someoneElse: { path: "/people" } };
+  const links: Record<string, LinkSpec> = { someoneElse: { path: "/give" } };
   choices.forEach((c, i) => {
     links[`choice${i}`] = { action: "file_note", expiresAt, personId: c.id, inboundMessageId: messageId };
   });

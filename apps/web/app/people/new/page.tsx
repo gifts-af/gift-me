@@ -67,7 +67,7 @@ async function Form({ searchParams }: { searchParams: Promise<{ list?: string | 
       userId={userId}
       maxUploadBytes={maxUploadBytes}
       px={px}
-      doneHref="/"
+      doneHref="/give"
       initialName={link?.ownerName}
       shareToken={link?.token}
     />
