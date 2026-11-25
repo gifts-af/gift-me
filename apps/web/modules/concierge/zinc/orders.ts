@@ -62,7 +62,7 @@ const list = z.object({
       id: z.string(),
       status: z.string(),
       job_result: z
-        .object({ success: z.boolean().optional(), error_type: z.string().optional(), price_components: z.unknown().optional() })
+        .object({ success: z.boolean().optional(), error_type: z.string().nullish(), price_components: z.unknown().optional() })
         .nullish(),
     }),
   ),
