@@ -11,8 +11,10 @@ export type Database = {
     Tables: {
       accounts: {
         Row: {
+          access_requested_at: string | null;
           auto_topup_on: boolean | null;
           buyer_phone: string | null;
+          concierge_access: boolean;
           costs_excluded: boolean;
           created_at: string;
           funding_mode: string;
@@ -32,8 +34,10 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
+          access_requested_at?: string | null;
           auto_topup_on?: boolean | null;
           buyer_phone?: string | null;
+          concierge_access?: boolean;
           costs_excluded?: boolean;
           created_at?: string;
           funding_mode?: string;
@@ -52,8 +56,10 @@ export type Database = {
           zinc_webhook_secret_id?: string | null;
         };
         Update: {
+          access_requested_at?: string | null;
           auto_topup_on?: boolean | null;
           buyer_phone?: string | null;
+          concierge_access?: boolean;
           costs_excluded?: boolean;
           created_at?: string;
           funding_mode?: string;
@@ -1431,6 +1437,7 @@ export type Database = {
         Args: { p_context: string; p_round_id: string };
         Returns: Database["concierge"]["Enums"]["round_status"];
       };
+      claim_access_request: { Args: { p_user_id: string }; Returns: string };
       claim_due_money_rounds: {
         Args: { p_now: string };
         Returns: {
@@ -1666,6 +1673,7 @@ export type Database = {
         Args: { p_reason: string; p_round_id: string };
         Returns: Database["concierge"]["Enums"]["round_status"];
       };
+      has_concierge_access: { Args: { p_user_id: string }; Returns: boolean };
       has_paid_features: { Args: { p_user_id: string }; Returns: boolean };
       has_unanswered_gift: { Args: { p_round_id: string }; Returns: boolean };
       health_snapshot: { Args: { p_now: string }; Returns: Json };
@@ -1900,6 +1908,10 @@ export type Database = {
           p_round_id: string;
           p_user_id: string;
         };
+        Returns: undefined;
+      };
+      release_access_request: {
+        Args: { p_user_id: string };
         Returns: undefined;
       };
       release_failure_notices: {
@@ -2166,6 +2178,10 @@ export type Database = {
           title: string;
           user_id: string;
         }[];
+      };
+      turn_off_concierge_access: {
+        Args: { p_user_id: string };
+        Returns: undefined;
       };
       untold_failures: { Args: { p_round_id: string }; Returns: string[] };
       zinc_claim_poll: {
