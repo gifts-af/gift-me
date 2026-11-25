@@ -58,7 +58,7 @@ select throws_ok(
   '42501', null, 'the owner cannot claim'
 );
 
--- Signed-in claimers are named by their profile's display name, or email.
+-- Signed-in claimers are named by their profile's display name, or "Someone".
 select tests.act_as(:'b');
 select is(
   lists.claim_gift(:'token', 'aaaaaaaa-0000-4000-8000-000000000002', null) ->> 'name',
@@ -69,8 +69,8 @@ select is(lists.unclaim_gift(:'token', 'aaaaaaaa-0000-4000-8000-000000000002'), 
 select tests.act_as(:'c');
 select is(
   lists.claim_gift(:'token', 'aaaaaaaa-0000-4000-8000-000000000002', null) ->> 'name',
-  'c@example.com',
-  'without a display name, the claimer is named by their email'
+  'Someone',
+  'without a display name, the claimer is Someone, never their email'
 );
 
 -- Re-saving the list keeps existing claims (item ids stay the same).

@@ -129,7 +129,7 @@ describe("sign up's name hint", () => {
   it("says where the name is shown", () => {
     render(<SignUpForm />);
     expect(screen.getByLabelText(/^Name/)).toHaveAccessibleDescription(
-      "Shown on your shared list and when you claim a gift. Leave it blank to show your email to people you claim with.",
+      "Shown on your shared list, and to anyone who opens a list you claim from.",
     );
   });
 });

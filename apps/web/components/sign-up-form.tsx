@@ -35,7 +35,7 @@ export function SignUpForm({ next: rawNext }: { next?: string }) {
       return;
     }
     setIsLoading(true);
-    // Optional; claim_gift falls back to the email when it's missing.
+    // Optional; without one, claims say "Someone" (claim_gift).
     const displayName = name.trim();
     const { error } = await createClient().auth.signUp({
       email,
@@ -73,7 +73,7 @@ export function SignUpForm({ next: rawNext }: { next?: string }) {
             aria-describedby="name-hint"
           />
           <p id="name-hint" className="text-[13px] text-muted-foreground">
-            Shown on your shared list and when you claim a gift. Leave it blank to show your email to people you claim with.
+            Shown on your shared list, and to anyone who opens a list you claim from.
           </p>
         </div>
         <div className="grid gap-1.5">

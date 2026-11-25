@@ -100,7 +100,7 @@ export default function ClaimDialog({ gift, viewer, next, onConfirm, onClose }: 
 
             {viewer.signedIn ? (
               <p className="text-[13px] text-muted-foreground">
-                Claiming as <strong className="text-foreground">{viewer.name ?? viewer.email ?? "your account"}</strong>.
+                Claiming as <strong className="text-foreground">{viewer.name ?? "your account"}</strong>.
               </p>
             ) : (
               <>

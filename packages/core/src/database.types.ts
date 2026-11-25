@@ -2496,6 +2496,10 @@ export type Database = {
         Returns: undefined;
       };
       get_shared_list: { Args: { p_token: string }; Returns: Json };
+      hide_claim_emails: {
+        Args: Record<PropertyKey, never>;
+        Returns: undefined;
+      };
       is_allowed_image_url: { Args: { p_url: string }; Returns: boolean };
       is_amazon_host: { Args: { p_host: string }; Returns: boolean };
       item_shared: {
@@ -2721,6 +2725,10 @@ export type Database = {
       [_ in never]: never;
     };
     Functions: {
+      backfill_profile_names: {
+        Args: Record<PropertyKey, never>;
+        Returns: undefined;
+      };
       backfill_profiles: {
         Args: Record<PropertyKey, never>;
         Returns: undefined;
@@ -2732,6 +2740,8 @@ export type Database = {
         Returns: Json;
       };
       shared_city_for_person: { Args: { p_person_id: string }; Returns: Json };
+      shown_name: { Args: { p_name: string }; Returns: string };
+      sign_up_name: { Args: { p_meta: Json }; Returns: string };
     };
     Enums: {
       [_ in never]: never;

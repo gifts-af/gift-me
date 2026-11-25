@@ -27,7 +27,7 @@ const item = (id: string, name: string, claim: GiftClaim | null = null): SharedG
   claim,
 });
 
-const guest: SharedListData["viewer"] = { signedIn: false, email: null, name: null };
+const guest: SharedListData["viewer"] = { signedIn: false, name: null };
 
 // The heading fields, for tests that aren't about the heading.
 const unnamed = { cardEnabled: false, ownerName: null, linkedPerson: null };
@@ -51,6 +51,13 @@ describe("SharedList", () => {
     } finally {
       window.location.hash = "";
     }
+  });
+
+  it("the claim box shows the name friends will see", async () => {
+    const viewer = { signedIn: true, name: "Someone" };
+    render(<SharedList token="t" list={{ title: "t", ...unnamed, isOwner: false, viewer, items: [item("a", "Kettle")] }} />);
+    await userEvent.click(screen.getByRole("button", { name: /claim/i }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("Claiming as Someone.");
   });
 
   it("the claim box offers sign-in and sign-up, both coming back to this list", async () => {
