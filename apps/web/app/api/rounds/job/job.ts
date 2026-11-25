@@ -11,7 +11,7 @@ const id = z.string().uuid();
 const now = z.string().datetime();
 const sig = z.string().optional();
 const messageSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("round"), roundId: id, now: now.optional(), sig }),
+  z.object({ kind: z.literal("round"), roundId: id, retry: z.number().int().min(1).optional(), now: now.optional(), sig }),
   z.object({ kind: z.literal("buyer"), userId: id, roundIds: z.array(id).min(1), now: now.optional(), sig }),
 ]);
 
@@ -19,7 +19,7 @@ type Env = { vercelEnv?: string; cronSecret?: string };
 
 /**
  * Runs one message. An invalid one is logged and acknowledged (a retry can't fix it), and so is one
- * whose signature (made by the tick with CRON_SECRET) doesn't verify: the queue SDK checks nothing,
+ * whose signature (made with CRON_SECRET) doesn't verify: the queue SDK checks nothing,
  * so this is the route's own guard. A refused message is never run and never throws. The message's
  * `now` is a test clock, used only outside production (AC-13). If `run` throws, the job failed
  * before it claimed any round (the wiring, or a setting the message reads first, the fan-out

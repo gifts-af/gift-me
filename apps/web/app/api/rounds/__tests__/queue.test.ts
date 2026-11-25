@@ -86,4 +86,15 @@ describe("sendJobsWith", () => {
     expect(strayKeys([JSON.parse(line)])).toEqual([]);
     log.mockRestore();
   });
+
+  it("passes a delay on, and again on the resend; a job without one has no such key", async () => {
+    const sendBatch = vi.fn().mockResolvedValueOnce([fail(true), fail(true)]).mockResolvedValueOnce([ok, ok]);
+    const [late, plain] = jobs(2);
+    expect(await sendJobsWith(sendBatch as never)([{ ...late!, delaySeconds: 300 }, plain!])).toEqual({ sent: 2, failed: 0 });
+    expect(sendBatch).toHaveBeenCalledTimes(2);
+    for (const call of sendBatch.mock.calls) {
+      expect(call[1][0]).toMatchObject({ idempotencyKey: "k0", delaySeconds: 300 });
+      expect(call[1][1]).not.toHaveProperty("delaySeconds");
+    }
+  });
 });

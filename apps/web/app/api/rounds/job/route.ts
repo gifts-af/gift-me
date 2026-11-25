@@ -19,7 +19,7 @@ export const POST = handleCallback(async (message, metadata) => {
       const zincShare = jobMaxConcurrency(vercelJson);
       if (m.kind === "buyer") return runBuyerMessage(m, (await buyingWiring(now, process.env, {}, { zincShare })).engine);
       const cronSecret = process.env.CRON_SECRET;
-      // handleJob refuses the message when the secret is unset; it also signs the queue messages.
+      // handleJob refuses the message when the secret is unset; it also signs the follow-up.
       if (!cronSecret) throw new Error("CRON_SECRET is unset");
       return runRoundMessage(m, { ...(await roundWiring(now, process.env, zincShare)), sendJobs: queueSendJobs(cronSecret) });
     },

@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-// Queue messages are signed by the tick and checked by the job (ALL-125). @vercel/queue's
+// Queue messages are signed by the tick, or by the job that sends a follow-up, and checked by the
+// job that gets them. @vercel/queue's
 // handleCallback verifies nothing itself, so this is the app's own guard on the job route: only
 // something that knows CRON_SECRET can make a message the job will run. The secret is an argument (E3).
 

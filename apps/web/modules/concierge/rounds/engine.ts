@@ -2,7 +2,7 @@ import { nextAction, roundToCreate, toldBefore, type ScheduleSettings } from "@g
 import { errorFields, logEvent } from "@/lib/log";
 import type { IdeaOutcome } from "../ideas/run";
 import type { NotifyDeps } from "../notify/notify";
-import { planJobs, type BuyerMessage, type JobMessage, type RoundMessage, type SendJobs } from "./fanout";
+import { planJobs, retryJob, type BuyerMessage, type JobMessage, type RoundMessage, type SendJobs } from "./fanout";
 import type { ClaimedRound, RoundStore } from "./store";
 import { retryDeliveredEmails } from "../tracking/delivered";
 import { runHeld, retryOrderedEmails, tellOwnerOfRejection, tellOwnersOfRejections } from "./money-path";
@@ -276,17 +276,44 @@ export async function runTick(deps: EngineDeps): Promise<TickSummary> {
 export type JobResult = "off" | "busy" | "advanced" | "waiting" | "failed";
 
 /**
- * Runs one round message: the round's step, and its idea run when that's the step. Its
- * deps can't place a gift.
+ * Runs one round message: the round's step, and its idea run when that's the step, then the
+ * follow-up when that run was refused busy. Its deps can't place a gift.
  */
 export async function runRoundMessage(message: RoundMessage, deps: StepDeps & { sendJobs: SendJobs }): Promise<JobResult> {
   const jobStartMs = (deps.clock ?? Date.now)();
-  return runJob(message, deps, (progress) => roundJob(message.roundId, deps, jobStartMs, progress));
+  const outcome = await runJob(message, deps, (progress) => roundJob(message.roundId, deps, jobStartMs, progress));
+  await sendRetry(message, outcome, deps);
+  return outcome.result;
+}
+
+/**
+ * The person has another idea run under way, so the round's turn comes again today: one delayed
+ * message, up to idea_busy_retries_max. Only once the round was given back, as the message has to
+ * claim it. Never throws: a round with no follow-up is still due for the next tick.
+ */
+async function sendRetry(message: RoundMessage, outcome: JobOutcome, deps: StepDeps & { sendJobs: SendJobs }): Promise<void> {
+  if (outcome.result !== "waiting" || outcome.ideas !== "refused:busy" || outcome.release !== "released") return;
+  const notSent = (reason: "settings" | "send_failed") =>
+    logEvent("round_retry_not_sent", { round_id: message.roundId, ...(outcome.userId === undefined ? {} : { user_id: outcome.userId }), reason });
+  let delaySeconds: number;
+  let retriesMax: number;
+  try {
+    [delaySeconds, retriesMax] = await Promise.all([deps.store.setting("idea_busy_retry_seconds"), deps.store.setting("idea_busy_retries_max")]);
+  } catch {
+    return notSent("settings");
+  }
+  if (delaySeconds <= 0 || (message.retry ?? 0) >= retriesMax) return;
+  try {
+    const { failed } = await deps.sendJobs([retryJob(message, dayOf(deps.now), delaySeconds)]);
+    if (failed > 0) notSent("send_failed");
+  } catch {
+    notSent("send_failed");
+  }
 }
 
 /** Runs one buyer message: the buyer's held gifts. */
 export async function runBuyerMessage(message: BuyerMessage, deps: EngineDeps): Promise<JobResult> {
-  return runJob(message, deps, (progress) => buyerJob(message.roundIds, deps, progress));
+  return (await runJob(message, deps, (progress) => buyerJob(message.roundIds, deps, progress))).result;
 }
 
 /**
@@ -295,13 +322,13 @@ export async function runBuyerMessage(message: BuyerMessage, deps: EngineDeps): 
  * fails before claiming any round (a setting it reads first, the fan-out switch among them,
  * couldn't be read): no lease is held, so handleJob rethrows and the queue redelivers, which a
  * deadline-day held gift can't wait a day for. A failure once a round is claimed is logged and
- * returns "failed": the lease stands, and the next tick (and round_stuck) picks the round up.
+ * comes back as "failed": the lease stands, and the next tick (and round_stuck) picks the round up.
  */
 async function runJob(
   message: JobMessage,
   { store }: StepDeps,
   job: (progress: JobProgress) => Promise<JobOutcome>,
-): Promise<JobResult> {
+): Promise<JobOutcome> {
   const id: Record<string, string> = message.kind === "round" ? { round_id: message.roundId } : { user_id: message.userId };
   const progress: JobProgress = { claimed: false };
   let outcome: JobOutcome;
@@ -312,15 +339,15 @@ async function runJob(
     // Before any claim, handleJob logs it (with the alert) as it rethrows.
     if (!progress.claimed) throw err;
     logEvent("round_job", { ...errorFields(err), kind: message.kind, result: "failed", ...id, rounds: 0 });
-    return "failed";
+    return { result: "failed", rounds: 0 };
   }
   const { result, rounds, ideas } = outcome;
   logEvent("round_job", { kind: message.kind, result, ...id, rounds, ...(ideas === undefined ? {} : { ideas }) });
-  return result;
+  return outcome;
 }
 
-/** `ideas` and `release` are the idea turn's, when a round message's job had one (IdeaTurn). */
-type JobOutcome = { result: JobResult; rounds: number; ideas?: string; release?: Release };
+/** `ideas` and `release` are the idea turn's, when a round message's job had one (IdeaTurn); `userId` is that round's. */
+type JobOutcome = { result: JobResult; rounds: number; ideas?: string; release?: Release; userId?: string };
 /** Set once the job holds a round's lease: from then on a failure is acknowledged, not redelivered. */
 type JobProgress = { claimed: boolean };
 
@@ -352,7 +379,7 @@ async function roundJob(roundId: string, deps: StepDeps, jobStartMs: number, pro
   }
   // One round in, so one turn out.
   const [turn] = await ideaPass([step.generate], deps, s, jobStartMs + deadlineMs, 1);
-  return { ...turn!, rounds: turn!.result === "advanced" ? 1 : 0 };
+  return { ...turn!, rounds: turn!.result === "advanced" ? 1 : 0, userId: round.userId };
 }
 
 /**

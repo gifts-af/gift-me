@@ -31,13 +31,17 @@ describe("handleJob", () => {
     ["a bad uuid", { kind: "round", roundId: "nope" }],
     ["empty roundIds", { kind: "buyer", userId: U, roundIds: [] }],
     ["a bad now", { kind: "round", roundId: U, now: "soon" }],
+    ["retry 0", { kind: "round", roundId: U, retry: 0 }],
+    ["retry -1", { kind: "round", roundId: U, retry: -1 }],
+    ["retry 1.5", { kind: "round", roundId: U, retry: 1.5 }],
+    ['retry "1"', { kind: "round", roundId: U, retry: "1" }],
     ["null", null],
   ])("acknowledges %s as invalid and logs it", async (_n, raw) => {
     const log = vi.spyOn(console, "log").mockImplementation(() => {});
     const run = vi.fn();
     expect(await handleJob(raw && sign(raw), { deliveryCount: 1 }, ENV, run)).toBe("invalid");
     expect(run).not.toHaveBeenCalled();
-    expect(events(log)).toContainEqual(expect.objectContaining({ event: "round_job", result: "invalid" }));
+    expect(events(log)).toContainEqual({ event: "round_job", at: expect.any(String), result: "invalid", delivery_count: 1 });
   });
 
   describe("signature", () => {
@@ -55,6 +59,9 @@ describe("handleJob", () => {
     it("refuses a tampered body", async () => {
       const signed = sign({ kind: "buyer", userId: U, roundIds: [U] });
       await refused({ ...signed, roundIds: [V] }, ENV);
+    });
+    it("refuses a changed retry", async () => {
+      await refused({ ...sign({ kind: "round", roundId: U, retry: 1 }), retry: 2 }, ENV);
     });
     it("refuses a missing or malformed sig", async () => {
       await refused({ kind: "round", roundId: U }, ENV);
@@ -76,6 +83,18 @@ describe("handleJob", () => {
     expect(run.mock.calls[0][1].getTime()).toBeGreaterThanOrEqual(before);
     await handleJob(msg, { deliveryCount: 1 }, { ...ENV, vercelEnv: "preview" }, run);
     expect(run.mock.calls[1][1]).toEqual(new Date("2027-03-20T12:00:00.000Z"));
+  });
+
+  it("runs a signed follow-up, its retry count included, with its now only off production", async () => {
+    const run = vi.fn().mockResolvedValue("waiting");
+    const at = "2027-03-20T12:00:00.000Z";
+    const msg = sign({ kind: "round", roundId: U, retry: 1, now: at });
+    const before = Date.now();
+    await handleJob(msg, { deliveryCount: 1 }, { ...ENV, vercelEnv: "preview" }, run);
+    expect(run.mock.calls[0]).toEqual([{ kind: "round", roundId: U, retry: 1, now: at }, new Date(at)]);
+    await handleJob(msg, { deliveryCount: 1 }, { ...ENV, vercelEnv: "production" }, run);
+    expect(run.mock.calls[1][1].getTime()).toBeGreaterThanOrEqual(before);
+    expect(run.mock.calls[1][1].getTime()).toBeLessThanOrEqual(Date.now());
   });
 
   it("logs only ids, counts, flags and enums (AC-17, E6)", async () => {
