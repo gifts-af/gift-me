@@ -333,7 +333,7 @@ test("a linked buyer sees only the city, and nothing once sharing stops (AC-13, 
   await linkField.fill(`${new URL(page.url()).origin}/share/${share_token}`);
   await expect.poll(() => linkField.evaluate((el) => Object.keys(el).some((k) => k.startsWith("__reactProps")))).toBe(true);
   await linkField.press("Enter");
-  await expect(buyerPage.getByRole("link", { name: /^Their list/ })).toContainText("Linked");
+  await expect(buyerPage.getByRole("link", { name: "See their list" })).toBeVisible();
 
   const line = "Gifts ship to Sam's own address in Columbus, OH. They keep it up to date.";
   await buyerPage.goto(`/people/${personId}/address`);

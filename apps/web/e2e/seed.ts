@@ -41,6 +41,24 @@ export async function saveOneGiftList(user: Credentials): Promise<void> {
   });
 }
 
+/** Links the buyer's person to a list `owner` has just made, with one gift per photo (null: a gift without one). */
+export async function linkListWithPhotos(owner: Credentials, buyer: Credentials, personId: string, photos: (string | null)[]): Promise<void> {
+  await rpc(owner, "lists", "save_list_checked", {
+    p_list_id: null,
+    p_title: null,
+    p_items: photos.map((image_url, i) => ({ id: null, name: `Gift ${i + 1}`, price_cents: 1200, image_url, product_url: null, asin: null, source: "manual", added_at: null })),
+    p_expected: null,
+  });
+  const { url, publishableKey } = localSupabase();
+  const { access_token, user } = await session(owner);
+  const res = await fetch(`${url}/rest/v1/lists?select=share_token&owner_id=eq.${user.id}`, {
+    headers: { apikey: publishableKey, Authorization: `Bearer ${access_token}`, "Accept-Profile": "lists" },
+  });
+  if (!res.ok) throw new Error(`Couldn't read the share token: ${res.status} ${await res.text()}`);
+  const [list] = (await res.json()) as { share_token: string }[];
+  await rpc(buyer, "lists", "link_unlinked_person", { p_token: list.share_token, p_person_id: personId });
+}
+
 /** Saves a gift for one of the user's people, as the Saved gifts form does (ALL-93). */
 export async function addSavedGift(user: Credentials, personId: string, name: string): Promise<void> {
   const { url, publishableKey } = localSupabase();

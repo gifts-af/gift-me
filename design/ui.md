@@ -222,6 +222,7 @@ A line is never false. With several gifts, the one that most needs the buyer win
 | On Mom's page (`/people/[id]`), top to bottom | Shows | Opens |
 |---|---|---|
 | Header | Photo, name, "Mother · next occasion", where ideas come from, the readiness banner. A failed photo from the Add form says so here | — |
+| Their list | At the top, for someone with a linked list: "Mom's GiftsAF list", a "See their list" button and photos of up to 3 unclaimed gifts, each opening the list at that gift. Unlinked, the paste-a-link prompt | Their list |
 | Gifts in progress | Only when there are some: one row per open round (see Gifts in progress) | The round |
 | What we know | The facts, as before | Facts are changed in place |
 | About Mom | "Mother · Birthday Mar 14" (no birthday: just "Mother") | About Mom |
@@ -229,7 +230,7 @@ A line is never false. With several gifts, the one that most needs the buyer win
 | Gifts: Budget | The base and occasion amounts (ALL-120) | Budget |
 | Gifts: Saved gifts | How many, or "None" | Saved gifts |
 | Gifts: Past gifts | Only when there are some; no value | Past gifts |
-| Gifts: Their list | "Linked" or "Not linked" | Their list |
+| Gifts: Their list | Only with `list_link_card_enabled` off: "Linked" or "Not linked" | Their list |
 | Gifts: Shipping address | The street, "Something's missing", a shared list's city, or "Not added" | Shipping address |
 | Gifts: Gift ideas | How many ideas the last on-demand run saved, or "None" (ALL-27) | Gift ideas |
 | Delete Mom | Behind a confirm, as before | — |
