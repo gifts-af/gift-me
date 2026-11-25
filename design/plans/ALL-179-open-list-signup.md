@@ -8,6 +8,36 @@
 
 **Scope freeze:** built as the owner's exception (2026-11-25).
 
+## Change: people are free (option B)
+
+**Status:** draft, not approved. The owner chose B on 2026-11-25, after Tasks 1 to 4 were built for A. Where this section and the rest of the file disagree, this section wins once the owner approves it.
+
+**Why:** family needs everyone's lists in one place for Christmas. People costs us nothing: AI, rounds, reading captures and buying each check `paid_features` already.
+
+**What changes:** anyone signed in can add people, link their lists and see them on Give. Access is asked for where the concierge starts: gift ideas, and the concierge settings.
+
+| # | Replaces | Now |
+|---|---|---|
+| AC-4 | Give shows the pitch | `/give` shows People to everyone, plus a Request access card for someone without access (their request state: ask, sent, busy, error). The card says ideas, reminders and buying come with the concierge |
+| AC-5 | People and settings show the pitch | Without access, only `people/[id]/ideas` and the settings pages reminders, over-budget and paying show the pitch, and none of their own content. Every other people page works |
+| AC-8 | The card about their people is hidden | Claiming and the card work for every signed-in account, as today |
+| AC-9 | With access, as today | Unchanged, and the back link and title on the ungated pages show straight away again |
+| AC-13 | A failed check | On `/give`, People still shows and the card shows the retry line. On a gated page, the retry line |
+| AC-14 | Why access can't be turned off mid-purchase | Unchanged |
+| AC-19 | new | Without access, nothing on the people pages promises gift suggestions or reminders. The lines that do today (no people yet, the birthday hints on the add and About forms, "We suggest ideas" on a person's card and page) say what works instead |
+| AC-20 | new | Someone without access adds a person with a birthday today: no round starts, no reminder is sent, and nothing is spent |
+| AC-21 | new | A file too big for `person-photos` or `captures` is refused by storage itself, for every account |
+
+AC-3 stays: without access you land on My list, and Give is one tap away. AC-6, 7, 10, 11, 12, 15, 16, 17 and 18 stay.
+
+**Storage, found while writing this:** `person-photos` and `captures` have no size limit in production, so any signed-in account can upload files as large as Supabase's own limit. This matters under A too. A migration in PR 2 sets both, from today's settings (`person_photo_max_upload_bytes`, `capture_screenshot_max_bytes`); CI and the app's own checks stay.
+
+**Accepted:** strangers can store other people's names, birthdays, photos and addresses, private to their account. No cap on how many people an account adds. The privacy page (PR 3) says what we keep about other people and how to have it erased. **[Claude's call]** on no cap.
+
+**Left out, as before:** the extension needs no change: people added there now show on the site, which closes the gap above. Server actions and database rules aren't gated (approach 1).
+
+**Work:** Task 2's gate stays in the code but wraps four pages, not fourteen. Task 3 stays, with People outside the gate. Task 4 loses its shared-list part. A new **Task 4b** does this section, with its own review, before Task 5. Task 5 adds the storage migration and keeps the second backfill, which now only decides who sees the request card.
+
 ## Spec: what it does
 
 ### Why
