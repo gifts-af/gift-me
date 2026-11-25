@@ -150,7 +150,7 @@ describe("handleJob's onFailed", () => {
     expect(onFailed).toHaveBeenCalledWith({ kind: "round", roundId: U, now: at }, new Date(at));
   });
 
-  it.each(["advanced", "busy", "off"])("a %s result doesn't", async (r) => {
+  it.each(["advanced", "waiting", "busy", "off"])("a %s result doesn't", async (r) => {
     const onFailed = vi.fn(async () => {});
     expect(await handleJob(msg(), { deliveryCount: 1 }, ENV, vi.fn().mockResolvedValue(r), onFailed)).toBe(r);
     expect(onFailed).not.toHaveBeenCalled();

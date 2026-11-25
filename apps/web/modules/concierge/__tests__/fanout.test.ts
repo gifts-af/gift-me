@@ -1,7 +1,8 @@
 import type { ScheduleSettings } from "@gifts-af/core";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { planJobs, type QueuedJob, type SendJobs } from "../rounds/fanout";
-import { runRoundJob, runTick, type EngineDeps, type EngineZinc, type GenerateIdeas } from "../rounds/engine";
+import type { IdeaOutcome } from "../ideas/run";
+import { runRoundJob, runTick, type EngineDeps, type EngineZinc, type GenerateIdeas, type JobResult } from "../rounds/engine";
 import type { DueRound } from "../rounds/store";
 import { FakeRoundStore, type FakeRound } from "./fake-round-store";
 import { FakeStore } from "./fake-store";
@@ -516,5 +517,210 @@ describe("runRoundJob", () => {
     expect(mine.filter((e) => e.result === "failed")).toHaveLength(1);
     expect(strayKeys(mine)).toEqual([]);
     expect(JSON.stringify(mine)).not.toMatch(/Zelda|Main St/);
+  });
+
+  describe("what the idea pass came to (AC-10)", () => {
+    const run = (over: Partial<EngineDeps> = {}) => runRoundJob({ kind: "round", roundId: "r1" }, deps(over));
+    const addIdeaRound = () => addRound("r1", { status: "scheduled", attentionReason: null, headsUpOn: null });
+    const ends = (outcome: IdeaOutcome) => generateIdeas.mockImplementation(async () => outcome);
+    /** The whole round_job event: `ideas` is absent unless given. */
+    const logged = (result: JobResult, ideas?: string) => ({
+      event: "round_job",
+      at: expect.any(String),
+      kind: "round",
+      result,
+      round_id: "r1",
+      rounds: result === "advanced" ? 1 : 0,
+      ...(ideas === undefined ? {} : { ideas }),
+    });
+    async function expectJob(result: JobResult, ideas?: string, over?: Partial<EngineDeps>) {
+      expect(await run(over)).toBe(result);
+      expect(jobEvents()).toEqual([logged(result, ideas)]);
+      expect(strayKeys(jobEvents())).toEqual([]);
+    }
+    const refusing = () => {
+      const d = deps();
+      return { notify: { ...d.notify, channels: [{ name: "email" as const, send: async () => ({ ok: false as const, error: "Refused" }) }] } };
+    };
+    /** Ends the round by a date change just before the engine's next call to `method`. */
+    function moveBefore(method: "finish" | "release" | "holdsLease") {
+      const real = store[method].bind(store) as (...args: unknown[]) => Promise<unknown>;
+      vi.spyOn(store, method).mockImplementationOnce((async (...args: unknown[]) => {
+        store.endByMove("r1");
+        return real(...args);
+      }) as never);
+    }
+
+    beforeEach(() => void addIdeaRound());
+
+    it.each<[IdeaOutcome, string]>([
+      [{ status: "refused", reason: "busy" }, "refused:busy"],
+      [{ status: "refused", reason: "daily_limit" }, "refused:daily_limit"],
+      [{ status: "off" }, "off"],
+      [{ status: "no_credit" }, "no_credit"],
+    ])("%o waits: released, still due", async (outcome, ideas) => {
+      ends(outcome);
+      await expectJob("waiting", ideas);
+      expect(store.writes).toContain("release:r1");
+      expect(store.round("r1")).toMatchObject({ status: "generating", lockedUntil: null });
+      expect(await store.dueRounds(NOW)).toHaveLength(1);
+    });
+
+    it("not enough time left waits, with no run", async () => {
+      store.settings.set("tick_deadline_ms", 100_000);
+      await expectJob("waiting", "no_time");
+      expect(generateIdeas).not.toHaveBeenCalled();
+      expect(store.round("r1")).toMatchObject({ status: "scheduled", lockedUntil: null });
+    });
+
+    it("refused done sends the heads-up of the ideas already there", async () => {
+      generateIdeas.mockImplementation(async (round) => {
+        store.ideas.set(round.id, [{ title: "Mug", totalCents: 4200 }]);
+        return { status: "refused", reason: "done" };
+      });
+      await expectJob("advanced", "refused:done");
+      expect([...store.sends.get("r1")!]).toEqual(["heads_up"]);
+    });
+
+    it.each<[IdeaOutcome, string]>([
+      [{ status: "refused", reason: "limit" }, "refused:limit"],
+      [{ status: "refused", reason: "not_paid" }, "refused:not_paid"],
+      [{ status: "refused", reason: "not_found" }, "refused:not_found"],
+      [{ status: "no_facts" }, "no_facts"],
+      [{ status: "saved", count: 0 }, "saved"],
+      [{ status: "none" }, "none"],
+      [{ status: "failed" }, "failed"],
+      [{ status: "deadline" }, "deadline"],
+      [{ status: "cost_cap" }, "cost_cap"],
+    ])("%o moves on", async (outcome, ideas) => {
+      ends(outcome);
+      await expectJob("advanced", ideas);
+      expect(store.writes.filter((w) => w === "finish:r1:generating")).toHaveLength(2);
+      expect(store.writes).not.toContain("release:r1");
+      expect(store.round("r1").lockedUntil).toBeNull();
+    });
+
+    it("saved ideas move on with the heads-up", async () => {
+      await expectJob("advanced", "saved");
+      expect(store.round("r1").status).toBe("awaiting_approval");
+    });
+
+    it("ideas brought back keep the run's outcome", async () => {
+      ends({ status: "none" });
+      vi.spyOn(store, "restoreRejected").mockImplementation((async () => {
+        store.ideas.set("r1", [{ title: "Mug", totalCents: 4200 }]);
+        return { count: 1, outcome: null };
+      }) as never);
+      await expectJob("advanced", "none");
+      expect([...store.sends.get("r1")!]).toEqual(["heads_up"]);
+    });
+
+    it("the too-late email keeps the run's outcome", async () => {
+      ends({ status: "none" });
+      const now = new Date("2027-03-10T12:00:00Z");
+      await expectJob("advanced", "none", { now, notify: { ...deps().notify, now } });
+      expect([...store.sends.get("r1")!]).toEqual(["no_ideas_late"]);
+    });
+
+    it("a refused heads-up after the run fails, and keeps what the run came to", async () => {
+      await expectJob("failed", "saved", refusing());
+      expect(store.round("r1").lockedUntil).not.toBeNull();
+    });
+
+    it("another run took the round in between: busy", async () => {
+      const real = store.claim.bind(store);
+      vi.spyOn(store, "claim").mockImplementationOnce(real).mockResolvedValueOnce(null);
+      await expectJob("busy");
+      expect(generateIdeas).not.toHaveBeenCalled();
+    });
+
+    it("another run already sent the too-late email: released, busy", async () => {
+      vi.spyOn(store, "sentSteps").mockResolvedValueOnce(new Set()).mockResolvedValueOnce(new Set(["no_ideas_late"]));
+      await expectJob("busy");
+      expect(generateIdeas).not.toHaveBeenCalled();
+      expect(store.writes).toContain("release:r1");
+    });
+
+    it.each(["not_paid", "busy", "closed"] as const)("a date change during a run refused %s: busy, with the refusal", async (reason) => {
+      generateIdeas.mockImplementation(async (round) => {
+        store.endByMove(round.id);
+        return { status: "refused", reason };
+      });
+      await expectJob("busy", `refused:${reason}`);
+      expect(events().filter((e) => e.event === "round_ended_by_move")).toHaveLength(1);
+    });
+
+    it("a date change after the run, before its heads-up: busy, with the outcome", async () => {
+      moveBefore("holdsLease");
+      await expectJob("busy", "saved");
+      expect(emails).toEqual([]);
+    });
+
+    it("a date change before the run: busy, no outcome", async () => {
+      moveBefore("finish");
+      await expectJob("busy");
+      expect(generateIdeas).not.toHaveBeenCalled();
+    });
+
+    it("a date change seen releasing a round with no time left: busy, no outcome", async () => {
+      store.settings.set("tick_deadline_ms", 100_000);
+      moveBefore("release");
+      await expectJob("busy");
+    });
+
+    it("refused closed with no date change fails: the lease was lost", async () => {
+      ends({ status: "refused", reason: "closed" });
+      await expectJob("failed", "refused:closed");
+    });
+
+    it("a run that throws fails, with no outcome and the lease kept", async () => {
+      generateIdeas.mockRejectedValue(new Error("database down"));
+      await expectJob("failed");
+      expect(store.round("r1").lockedUntil).not.toBeNull();
+    });
+
+    it.each(["tick_deadline_ms", "idea_ai_timeout_ms"])("%s unreadable fails, released", async (key) => {
+      store.settings.delete(key);
+      await expectJob("failed");
+      expect(generateIdeas).not.toHaveBeenCalled();
+      expect(store.round("r1")).toMatchObject({ status: "scheduled", lockedUntil: null });
+    });
+
+    it("AC-6b: a release that fails still waits, and says it failed", async () => {
+      ends({ status: "refused", reason: "busy" });
+      vi.spyOn(store, "release").mockRejectedValue(new Error("database down"));
+      await expectJob("waiting", "refused:busy");
+      expect(events().filter((e) => e.event === "round_release_failed")).toHaveLength(1);
+    });
+
+    it("AC-6b: a date change seen by the release is busy, not waiting", async () => {
+      ends({ status: "refused", reason: "busy" });
+      moveBefore("release");
+      await expectJob("busy", "refused:busy");
+      expect(events().some((e) => e.event === "round_release_failed")).toBe(false);
+    });
+
+    describe("before the pass, as it always was", () => {
+      it("a round that already has ideas sends its heads-up", async () => {
+        store.ideas.set("r1", [{ title: "Mug", totalCents: 4200 }]);
+        await expectJob("advanced");
+        expect([...store.sends.get("r1")!]).toEqual(["heads_up"]);
+        expect(generateIdeas).not.toHaveBeenCalled();
+      });
+
+      it("a date change in that step stays advanced", async () => {
+        store.ideas.set("r1", [{ title: "Mug", totalCents: 4200 }]);
+        moveBefore("holdsLease");
+        await expectJob("advanced");
+        expect(events().some((e) => e.event === "round_ended_by_move")).toBe(true);
+        expect(emails).toEqual([]);
+      });
+
+      it("a round without paid features waits for its deadline", async () => {
+        store.ideaState.set("r1", { paid: false });
+        await expectJob("advanced");
+        expect(generateIdeas).not.toHaveBeenCalled();
+      });
+    });
   });
 });
