@@ -52,6 +52,18 @@ describe("ListCard signed out", () => {
     expect(screen.getAllByRole("link")).toHaveLength(2);
   });
 
+  it("leads with what the box is for, above the button (ALL-179)", () => {
+    setup({ state: "signed-out" });
+    const line = screen.getByText("Keep Sam's list, and make your own. Free.");
+    const button = screen.getByRole("link", { name: "Add Sam to your people" });
+    expect(line.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("says this list when the owner has no name (ALL-179)", () => {
+    setup({ state: "signed-out", displayName: null });
+    expect(screen.getByText("Keep this list, and make your own. Free.")).toBeInTheDocument();
+  });
+
   it("says them when the owner has no name", () => {
     setup({ state: "signed-out", displayName: null });
     expect(screen.getByRole("link", { name: "Add them to your people" })).toBeInTheDocument();

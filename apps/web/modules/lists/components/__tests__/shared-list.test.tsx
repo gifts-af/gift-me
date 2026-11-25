@@ -53,6 +53,33 @@ describe("SharedList", () => {
     }
   });
 
+  describe("where the card goes (ALL-179)", () => {
+    const card = <section aria-label="Card">card</section>;
+    const listFor = (viewer: SharedListData["viewer"]): SharedListData => ({
+      title: "t",
+      ...unnamed,
+      isOwner: false,
+      viewer,
+      items: [item("a", "Kettle")],
+    });
+    const follows = (a: HTMLElement, b: HTMLElement) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+    it("signed out, the heading and claim sentence come first and the card sits above the gifts", () => {
+      render(<SharedList token="t" list={listFor(guest)} top={card} />);
+      const heading = screen.getByRole("heading", { level: 1 });
+      const claimLine = screen.getByText(/Planning to buy something/);
+      const cardEl = screen.getByRole("region", { name: "Card" });
+      expect(follows(heading, cardEl)).toBe(true);
+      expect(follows(claimLine, cardEl)).toBe(true);
+      expect(follows(cardEl, screen.getByRole("button", { name: "Claim Kettle" }))).toBe(true);
+    });
+
+    it("signed in, the card stays above the heading", () => {
+      render(<SharedList token="t" list={listFor({ signedIn: true, name: "Pat" })} top={card} />);
+      expect(follows(screen.getByRole("region", { name: "Card" }), screen.getByRole("heading", { level: 1 }))).toBe(true);
+    });
+  });
+
   it("the claim box shows the name friends will see", async () => {
     const viewer = { signedIn: true, name: "Someone" };
     render(<SharedList token="t" list={{ title: "t", ...unnamed, isOwner: false, viewer, items: [item("a", "Kettle")] }} />);
@@ -203,9 +230,9 @@ describe("SharedList", () => {
       expect(screen.queryByText("My list")).not.toBeInTheDocument();
     });
 
-    it("renders top before the heading", () => {
+    it("renders top before the heading when signed in", () => {
       render(
-        <SharedList token="t" top={<p>Top card</p>} list={{ ...base, title: "My list", ownerName: "Sam", linkedPerson: null }} />,
+        <SharedList token="t" top={<p>Top card</p>} list={{ ...base, viewer: { signedIn: true, name: "Pat" }, title: "My list", ownerName: "Sam", linkedPerson: null }} />,
       );
       expect(screen.getByText("Top card").compareDocumentPosition(heading()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
