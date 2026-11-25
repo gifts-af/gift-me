@@ -1,4 +1,4 @@
-# ALL-98 Pay by card through Zinc Connect: Spec (draft, not approved)
+# ALL-98 Pay by card through Zinc Connect: Spec (approved by the owner, 2026-11-25; the sandbox test comes before any plan)
 
 **Goal:** a buyer saves a card once, and each gift is one charge from GiftsAF: the gift plus one "GiftsAF fee" line.
 
