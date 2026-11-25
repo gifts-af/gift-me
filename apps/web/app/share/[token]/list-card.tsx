@@ -25,7 +25,8 @@ async function attempt(action: Action, token: string, personId: string): Promise
 /**
  * The card above a shared list for anyone but its owner (ALL-123): add the
  * owner to your people, link someone you already have, or see who it's linked
- * to and remove that link. Signed out, it points to sign-up or sign-in, and back here.
+ * to and remove that link. Signed out, it sits below the list's heading and says
+ * what it's for (ALL-179), then points to sign-up or sign-in, and back here.
  */
 export function ListCard({
   state,
@@ -51,18 +52,21 @@ export function ListCard({
   const addLabel = `Add ${displayName ?? "them"} to your people`;
 
   return (
-    <section aria-label="This list and your people" className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
-      {state === "signed-out" && <SignedOut token={token} addLabel={addLabel} />}
+    <section aria-label="This list and your people" className={`flex flex-col rounded-xl border border-border bg-card ${state === "signed-out" ? "gap-1 p-3 sm:gap-3 sm:p-4" : "gap-3 p-4"}`}>
+      {state === "signed-out" && <SignedOut token={token} addLabel={addLabel} displayName={displayName} />}
       {state === "add" && <Add token={token} addLabel={addLabel} candidates={candidates} linkAction={linkAction} />}
       {state === "linked" && linked && <Linked token={token} linked={linked} unlinkAction={unlinkAction} />}
     </section>
   );
 }
 
-function SignedOut({ token, addLabel }: { token: string; addLabel: string }) {
+function SignedOut({ token, addLabel, displayName }: { token: string; addLabel: string; displayName: string | null }) {
   const next = `next=${encodeURIComponent(`/share/${token}`)}`;
   return (
     <>
+      <p className="text-[15px] font-semibold [overflow-wrap:anywhere]">
+        Keep {displayName ? `${displayName}'s` : "this"} list, and make your own. Free.
+      </p>
       <Button asChild className="max-w-full self-start whitespace-normal py-2 [overflow-wrap:anywhere]">
         <Link href={`/auth/sign-up?${next}`}>{addLabel}</Link>
       </Button>

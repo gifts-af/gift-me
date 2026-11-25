@@ -390,7 +390,7 @@ The public front door at `giftsaf.com` for signed-out visitors, plus the guided 
 
 **Sign-up page:** under Continue with Google a quiet 13 px line says where the Google name shows, and under Name a hint says the same for a typed one. Privacy is linked below the form.
 
-**Shared list, signed out** (ALL-179): "Add Sam to your people" leads to sign-up, with "Sign in" under it, and both come back to that list. A claim with no name says "Someone"; a list with none is headed "Their list". Neither shows an email.
+**Shared list, signed out** (ALL-179): the list leads. The title, summary and claim sentence come first, then a compact card above the gifts: "Keep Sam's list, and make your own. Free." (no name: "Keep this list, and make your own. Free."), then "Add Sam to your people", which leads to sign-up, with "Sign in" under it; both come back to that list. Signed in, the card stays above the heading, unchanged. A claim with no name says "Someone"; a list with none is headed "Their list". Neither shows an email.
 
 ## Logo (ALL-48)
 

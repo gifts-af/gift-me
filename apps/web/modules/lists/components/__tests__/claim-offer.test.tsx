@@ -60,7 +60,7 @@ beforeEach(() => {
   window.localStorage.clear();
 });
 
-describe("claim offer (ALL-179)", () => {
+describe("claim offer", () => {
   it("after a guest claim, offers their own list and keeps the gift claimed", async () => {
     vi.mocked(claimGift).mockResolvedValue({ ok: true, claim: mine });
     renderList();

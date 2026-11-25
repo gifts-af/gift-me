@@ -41,7 +41,7 @@ export type ClaimDialogProps = {
   onConfirm: (name: string | undefined) => Promise<ClaimResult>;
   onClose: () => void;
   // Set for a guest who hasn't waved it off: after a claim the box stays open
-  // and offers their own list (ALL-179). The parent must then keep us mounted
+  // and offers their own list. The parent must then keep us mounted
   // on success. `ownerName` is the shown name, or null.
   offer?: { ownerName: string | null; onNotNow: () => void };
 };

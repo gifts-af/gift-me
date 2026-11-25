@@ -17,7 +17,8 @@ import ViewDialog from "./view-dialog";
 
 /**
  * `nav` fills the top bar (the page builds it; this is a client component), and
- * `top` renders above the heading.
+ * `top` is the card: above the heading when signed in, below the heading and
+ * above the gifts when signed out, so a visitor sees the list first (ALL-179).
  */
 export type SharedListProps = {
   list: SharedListData;
@@ -146,7 +147,7 @@ export default function SharedList({ list, token, nav, top }: SharedListProps) {
     <>
       <TopBar>{nav}</TopBar>
       <PageFrame wide className="gap-4">
-        {top}
+        {list.viewer.signedIn && top}
         {list.isOwner && (
           <Banner tone="accent">This is your list. Claims are hidden from you, so your gifts stay a surprise.</Banner>
         )}
@@ -162,6 +163,7 @@ export default function SharedList({ list, token, nav, top }: SharedListProps) {
             </p>
           )}
         </div>
+        {!list.viewer.signedIn && top}
         {actionError && (
           <Banner tone="error" role="alert">
             {actionError}
