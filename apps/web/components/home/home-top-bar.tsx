@@ -3,8 +3,8 @@ import { Logo } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { TopBarRow } from "@/components/top-bar-row";
 
-// The home page's own bar: the name with an ALPHA tag, and the invite-only
-// way in. "How it works" shows from computer width up.
+// The home page's own bar: the name with an ALPHA tag, and Sign in.
+// "How it works" shows from computer width up.
 export function HomeTopBar({ howItWorks = false }: { howItWorks?: boolean }) {
   return (
     <header>
@@ -25,7 +25,7 @@ export function HomeTopBar({ howItWorks = false }: { howItWorks?: boolean }) {
           </a>
         )}
         <Link href="/auth/login" className="inline-flex min-h-11 items-center text-primary">
-          🔒 Invite only
+          Sign in
         </Link>
         <ThemeToggle />
       </nav>

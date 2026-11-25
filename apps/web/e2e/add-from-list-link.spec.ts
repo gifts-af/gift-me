@@ -101,15 +101,74 @@ test("the owner opening their own link sees their list title and no card", async
   await expect(card(page)).toHaveCount(0);
 });
 
-test("a signed-out visitor sees Sign in, which returns to the list, and Request access", async ({ page }) => {
+test("a signed-out visitor sees sign-up and sign-in, which both return to the list (AC-2)", async ({ page }) => {
   const { name, sharePath } = await ownerWithList();
   await page.goto(sharePath);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(`${name}'s list`);
-  // AC-13, AC-24: sign in returns to this page; Request access never carries the token.
   const next = `next=${encodeURIComponent(sharePath)}`;
-  await expect(card(page).getByRole("link", { name: `Add ${name} to your people` })).toHaveAttribute("href", `/auth/login?${next}`);
+  await expect(card(page).getByRole("link", { name: `Add ${name} to your people` })).toHaveAttribute("href", `/auth/sign-up?${next}`);
   await expect(card(page).getByRole("link", { name: "Sign in" })).toHaveAttribute("href", `/auth/login?${next}`);
-  await expect(card(page).getByRole("link", { name: "Request access" })).toHaveAttribute("href", "/request-access");
+  await expect(card(page).getByRole("link")).toHaveCount(2);
+  await expect(page.locator("body")).not.toContainText(/invite only/i);
+});
+
+test("a signed-out relative signs in from a shared list and lands back on it (AC-2)", async ({ page }) => {
+  const { name, sharePath } = await ownerWithList();
+  const user = await createFreshUser(undefined, { access: false });
+  await page.goto(sharePath);
+  await card(page).getByRole("link", { name: "Sign in" }).click();
+  await page.getByLabel("Email").fill(user.email);
+  // eslint-disable-next-line no-restricted-syntax -- this tests where the sign-in form takes you
+  await page.getByLabel("Password").fill(user.password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+  await expect(page).toHaveURL(new RegExp(`${sharePath}$`));
+  await expect(card(page).getByRole("link", { name: `Add ${name} to your people` })).toHaveAttribute("href", /^\/people\/new\?list=/);
+});
+
+test("a signed-out relative signs up by email, confirms in another browser, and lands signed in on the list (AC-2)", async ({ page, browser, baseURL }) => {
+  const { name, sharePath } = await ownerWithList();
+  const email = `e2e-${randomUUID()}@example.test`;
+  const password = "e2e-local-only-password";
+
+  // The local stack confirms accounts itself, so the sign-up request is held here, and the link
+  // production's email would carry is made below from what it asked for.
+  let redirectTo = null as string | null;
+  await page.route("**/auth/v1/signup*", async (route) => {
+    if (route.request().method() !== "POST") return route.continue();
+    redirectTo = new URL(route.request().url()).searchParams.get("redirect_to");
+    await route.fulfill({ headers: { "access-control-allow-origin": "*" }, json: { id: randomUUID(), aud: "authenticated", email, identities: [] } });
+  });
+  await page.goto(sharePath);
+  await card(page).getByRole("link", { name: `Add ${name} to your people` }).click();
+  await expect(page).toHaveURL(/\/auth\/sign-up\?next=/);
+  await page.getByLabel("Email").fill(email);
+  // eslint-disable-next-line no-restricted-syntax -- this tests the sign-up form
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  // eslint-disable-next-line no-restricted-syntax -- as above
+  await page.getByLabel("Repeat password").fill(password);
+  await page.getByRole("button", { name: "Create account" }).click();
+  await expect(page).toHaveURL(/\/auth\/sign-up-success$/);
+  await expect(page.getByText("Open it to finish signing up.")).toBeVisible();
+  expect(redirectTo).toBe(new URL(sharePath, baseURL).href);
+
+  const made = await fetch(`${supabase.url}/auth/v1/admin/generate_link`, {
+    method: "POST",
+    headers: { apikey: supabase.serviceRoleKey, Authorization: `Bearer ${supabase.serviceRoleKey}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ type: "signup", email, password }),
+  });
+  expect(made.ok).toBe(true);
+  const { hashed_token } = (await made.json()) as { hashed_token: string };
+
+  // {{ .SiteURL }}/auth/confirm?token_hash=...&type=email&next={{ .RedirectTo }}
+  const elsewhere = await browser.newContext({ baseURL });
+  try {
+    const other = await elsewhere.newPage();
+    await other.goto(`/auth/confirm?token_hash=${hashed_token}&type=email&next=${redirectTo}`);
+    await expect(other).toHaveURL(new RegExp(`${sharePath}$`));
+    await expect(card(other).getByRole("link", { name: `Add ${name} to your people` })).toHaveAttribute("href", /^\/people\/new\?list=/);
+  } finally {
+    await elsewhere.close();
+  }
 });
 
 // AC-18: the card fits a phone and desktop, light and dark (T62). A long name,

@@ -30,7 +30,7 @@ describe("the bot check on public forms", () => {
     ["sign in", () => <LoginForm />, "Sign in"],
     ["sign up", () => <SignUpForm />, "Create account"],
     ["forgot password", () => <ForgotPasswordForm />, "Send reset link"],
-    ["request access", () => <RequestAccessForm />, "Request access"],
+    ["request access", () => <RequestAccessForm />, "Request concierge access"],
   ])("%s can't be sent until the check hands over a token", async (_name, form, button) => {
     turnstileMock.autoToken = false;
     render(form());
@@ -69,8 +69,8 @@ describe("the bot check on public forms", () => {
     render(<RequestAccessForm />);
     const before = turnstileMock.renders;
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Jordan" } });
-    await waitFor(() => expect(screen.getByRole("button", { name: "Request access" })).toBeEnabled());
-    await act(async () => fireEvent.submit(screen.getByRole("button", { name: "Request access" }).closest("form")!));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Request concierge access" })).toBeEnabled());
+    await act(async () => fireEvent.submit(screen.getByRole("button", { name: "Request concierge access" }).closest("form")!));
     await screen.findByText("Try again");
     expect(turnstileMock.renders).toBeGreaterThan(before);
   });
@@ -109,7 +109,7 @@ describe("the bot check on public forms", () => {
 
   it("doesn't show our email until the check has failed", async () => {
     render(<RequestAccessForm />);
-    await waitFor(() => expect(screen.getByRole("button", { name: "Request access" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Request concierge access" })).toBeEnabled());
     expect(screen.queryByText(FEEDBACK_EMAIL)).not.toBeInTheDocument();
   });
 

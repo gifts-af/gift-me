@@ -15,8 +15,7 @@ const { Switch } = await import("@/components/ui/switch");
 // ready until then, and is ready once the page has hydrated.
 const cases: [string, ReactElement, string][] = [
   ["the tour's Next", <Tour key="tour" />, "Next"],
-  ["the home page's Request access", <RequestAccessButton key="ra" variant="secondary" />, "Request access"],
-  ["the login page's Request access link", <RequestAccessButton key="ral" />, "Request access"],
+  ["the home page's Request concierge access", <RequestAccessButton key="ra" variant="secondary" />, "Request concierge access"],
   ["the home page's Send feedback", <FeedbackButton key="fb" />, "Send feedback"],
   // Occasions on a person's page, and sharing my address on /lists.
   ["a switch", <Switch key="sw" aria-label="Remind me" />, "Remind me"],

@@ -66,7 +66,7 @@ for (const tour of ["/tour", "/tour/list"]) {
   });
 }
 
-test("take the tour, then sign in with an invite", async ({ page }) => {
+test("take the tour, then sign in", async ({ page }) => {
   await page.goto("/");
   await conciergeHero(page).getByRole("link", { name: "Take the tour" }).click();
   await expect(page).toHaveURL(/\/tour$/);
@@ -75,9 +75,9 @@ test("take the tour, then sign in with an invite", async ({ page }) => {
     await page.getByRole("button", { name: "Next", exact: true }).click();
   }
   await expect(page.getByText("Step 7 of 7")).toBeVisible();
-  await page.getByRole("link", { name: "Have an invite? Sign in" }).click();
+  await page.getByRole("link", { name: "Already have an account? Sign in" }).click();
   await page.getByLabel("Email").fill(TEST_USER.email);
-  // eslint-disable-next-line no-restricted-syntax -- this tests the tour's "Have an invite? Sign in" form
+  // eslint-disable-next-line no-restricted-syntax -- this tests the tour's "Already have an account? Sign in" form
   await page.getByLabel("Password").fill(TEST_USER.password);
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "People" })).toBeVisible();
@@ -91,23 +91,37 @@ test("take the list tour from the home page (ALL-71)", async ({ page }) => {
     await page.getByRole("button", { name: "Next", exact: true }).click();
   }
   await expect(page.getByText("Step 5 of 5")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Request access" })).toBeVisible();
+  await page.getByRole("link", { name: "Start your list, free" }).click();
+  await expect(page).toHaveURL(/\/auth\/sign-up$/);
+  await expect(page.getByRole("button", { name: "Continue with Google" })).toBeVisible();
 });
 
-test("request access opens over the page and checks its fields (ALL-47, ALL-53)", async ({ page }) => {
+test("signed out, the list half leads to sign-up, and nothing says invite only (AC-1, AC-2)", async ({ page }) => {
+  for (const path of ["/", "/tour", "/tour/list", "/request-access", "/auth/login", "/auth/sign-up"]) {
+    await page.goto(path);
+    await expect(page.getByRole("main")).toBeVisible();
+    await expect(page.locator("body")).not.toContainText(/invite only/i);
+  }
   await page.goto("/");
-  await listHero(page).getByRole("button", { name: "Request access" }).click();
-  const dialog = page.getByRole("dialog", { name: "Want in?" });
+  await expect(page.getByRole("banner").getByRole("link", { name: "Sign in", exact: true })).toHaveAttribute("href", "/auth/login");
+  await listHero(page).getByRole("link", { name: "Start your list, free" }).click();
+  await expect(page).toHaveURL(/\/auth\/sign-up$/);
+});
+
+test("request concierge access opens over the page and checks its fields (AC-1)", async ({ page }) => {
+  await page.goto("/");
+  await conciergeHero(page).getByRole("button", { name: "Request concierge access" }).click();
+  const dialog = page.getByRole("dialog", { name: "Request concierge access" });
   await expect(dialog).toBeVisible();
   await expect(page).toHaveURL(/\/$/);
-  await dialog.getByRole("button", { name: "Request access" }).click();
+  await dialog.getByRole("button", { name: "Request concierge access" }).click();
   await expect(page.getByText("Tell us your name.")).toBeVisible();
   await expect(page.getByText("Enter an email address like you@example.com.")).toBeVisible();
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
   expect(overflow).toBeLessThanOrEqual(0);
 });
 
-// The waitlist and feedback boxes opening, and Esc closing them, are
+// The request and feedback boxes opening, and Esc closing them, are
 // component tests in components/home/__tests__/overlays.test.tsx (ALL-118).
 
 // ALL-54: the logo stays exactly where it is on the home page, at each

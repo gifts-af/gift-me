@@ -15,62 +15,55 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("request access overlay", () => {
-  it("opens the access form over the page", () => {
-    render(<RequestAccessButton />);
-    fireEvent.click(screen.getByRole("button", { name: "Request access" }));
-    const dialog = screen.getByRole("dialog", { name: "Want in?" });
+describe("request concierge access overlay", () => {
+  const open = () => {
+    render(<RequestAccessButton variant="secondary" />);
+    const button = screen.getByRole("button", { name: "Request concierge access" });
+    fireEvent.click(button);
+    return button;
+  };
+
+  it("opens the form over the page, saying what the concierge is (AC-1)", () => {
+    open();
+    const dialog = screen.getByRole("dialog", { name: "Request concierge access" });
+    expect(dialog).toHaveTextContent(
+      "Gift ideas, reminders and buying come with the concierge. We're letting people in a few at a time.",
+    );
     expect(within(dialog).getByLabelText("Name")).toBeInTheDocument();
     expect(within(dialog).getByLabelText("Email")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Request concierge access" })).toHaveAttribute("type", "submit");
+    // The concierge request is the form's only kind.
+    expect(dialog.querySelector('input[name="kind"]')).toBeNull();
+    expect(dialog).not.toHaveTextContent(/invite/i);
   });
 
   it("closes on Esc and puts focus back on the button", async () => {
-    render(<RequestAccessButton />);
-    const open = screen.getByRole("button", { name: "Request access" });
-    fireEvent.click(open);
+    const button = open();
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(open).toHaveFocus();
+    expect(button).toHaveFocus();
   });
 
   it("has a close button", async () => {
-    render(<RequestAccessButton />);
-    fireEvent.click(screen.getByRole("button", { name: "Request access" }));
+    open();
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
-});
 
-// ALL-71: the concierge hero's "Join the waitlist" uses the same form, tagged.
-describe("waitlist overlay", () => {
-  const hidden = (dialog: HTMLElement) => dialog.querySelector<HTMLInputElement>('input[name="kind"]')?.value;
-
-  it("Join the waitlist opens the waitlist form", () => {
-    render(<RequestAccessButton kind="waitlist" />);
-    fireEvent.click(screen.getByRole("button", { name: "Join the waitlist" }));
-    const dialog = screen.getByRole("dialog", { name: "Join the waitlist" });
-    expect(dialog).toHaveTextContent("The concierge is still being built.");
-    expect(hidden(dialog)).toBe("waitlist");
-    expect(within(dialog).getByRole("button", { name: "Join the waitlist" })).toHaveAttribute("type", "submit");
-  });
-
-  it("Request access posts kind=access", () => {
-    render(<RequestAccessButton />);
-    fireEvent.click(screen.getByRole("button", { name: "Request access" }));
-    expect(hidden(screen.getByRole("dialog"))).toBe("access");
-  });
-
-  it("thanks them for joining, and offers the list now", async () => {
+  it("thanks them, with a way to start a list, and stays open so it can be used", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
     submitAccessRequest.mockResolvedValue({ status: "sent" });
-    render(<RequestAccessButton kind="waitlist" />);
-    fireEvent.click(screen.getByRole("button", { name: "Join the waitlist" }));
+    open();
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Jo" } });
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "jo@example.com" } });
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Join the waitlist" }));
-    expect(await screen.findByText("You're on the list. We'll email you when the concierge is ready.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Want your wish list now? Request access" }));
-    const dialog = screen.getByRole("dialog", { name: "Want in?" });
-    expect(hidden(dialog)).toBe("access");
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Request concierge access" }));
+    expect(await screen.findByText("Thanks! We'll email you when you're in.")).toBeInTheDocument();
+    expect(screen.getByText("Your list and your people are free, so there's no need to wait.")).toBeInTheDocument();
+    await act(async () => {});
+    await act(async () => {
+      vi.advanceTimersByTime(60_000);
+    });
+    expect(screen.getByRole("link", { name: "Start your list, free" })).toHaveAttribute("href", "/auth/sign-up");
   });
 });
 

@@ -20,14 +20,20 @@ describe("home page (ALL-46)", () => {
     expect(screen.queryByText(/Lots is broken/)).not.toBeInTheDocument();
   });
 
-  it("the list hero offers its own tour and Request access (ALL-71)", () => {
+  it("the list hero leads to sign-up, then its tour (AC-1)", () => {
     render(<WelcomePage />);
     const hero = within(listHero());
     expect(hero.getByText(/What do you want for your birthday\?/)).toBeInTheDocument();
-    expect(hero.getByRole("link", { name: "Take the tour" })).toHaveAttribute("href", "/tour/list");
-    // Opens over the page (ALL-53), so it's a button, not a link to /request-access.
-    expect(hero.getByRole("button", { name: "Request access" })).not.toHaveAttribute("href");
-    expect(hero.getByRole("link", { name: "Have an invite? Sign in" })).toHaveAttribute("href", "/auth/login");
+    const start = hero.getByRole("link", { name: "Start your list, free" });
+    expect(start).toHaveAttribute("href", "/auth/sign-up");
+    // The main button: first, and the filled one.
+    expect(start).toHaveClass("bg-primary");
+    const tour = hero.getByRole("link", { name: "Take the tour" });
+    expect(tour).toHaveAttribute("href", "/tour/list");
+    expect(tour).toHaveClass("bg-secondary");
+    expect(start.compareDocumentPosition(tour)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(hero.queryByRole("button")).not.toBeInTheDocument();
+    expect(hero.getByRole("link", { name: "Already have an account? Sign in" })).toHaveAttribute("href", "/auth/login");
   });
 
   it("the list hero's card shows the list as the asker sees it (ALL-71)", () => {
@@ -51,17 +57,20 @@ describe("home page (ALL-46)", () => {
     expect(hero.querySelector(".-rotate-3")).toBeNull();
   });
 
-  it("the concierge hero offers its tour and the waitlist (ALL-71)", () => {
+  it("the concierge hero offers its tour and a request (AC-1)", () => {
     render(<WelcomePage />);
     const hero = within(conciergeHero());
     expect(hero.getByRole("link", { name: "Take the tour" })).toHaveAttribute("href", "/tour");
-    expect(hero.getByRole("button", { name: "Join the waitlist" })).toBeInTheDocument();
-    expect(hero.queryByRole("button", { name: "Request access" })).not.toBeInTheDocument();
+    // Opens over the page, so it's a button, not a link to /request-access.
+    expect(hero.getByRole("button", { name: "Request concierge access" })).not.toHaveAttribute("href");
+    expect(hero.getByRole("link", { name: "Already have an account? Sign in" })).toHaveAttribute("href", "/auth/login");
   });
 
-  it("keeps the invite-only way in and How it works", () => {
-    render(<WelcomePage />);
-    expect(link("🔒 Invite only")).toHaveAttribute("href", "/auth/login");
+  it("the bar has Sign in and How it works, and nothing says invite only (AC-1, AC-2)", () => {
+    const { container } = render(<WelcomePage />);
+    expect(link("Sign in")).toHaveAttribute("href", "/auth/login");
+    expect(screen.getByText("ALPHA")).toBeInTheDocument();
+    expect(container).not.toHaveTextContent(/invite/i);
     expect(link("How it works")).toHaveAttribute("href", "#how-it-works");
   });
 

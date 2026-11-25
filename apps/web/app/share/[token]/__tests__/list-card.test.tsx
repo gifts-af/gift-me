@@ -39,17 +39,17 @@ function setup(
 }
 
 describe("ListCard signed out", () => {
-  it("sends Add and Sign in to the login page, coming back to this list (AC-13)", () => {
+  it("sends Add to sign-up and Sign in to the login page, both coming back to this list (AC-2)", () => {
     setup({ state: "signed-out" });
-    const back = `/auth/login?next=${encodeURIComponent(`/share/${TOKEN}`)}`;
-    expect(screen.getByRole("link", { name: "Add Sam to your people" })).toHaveAttribute("href", back);
-    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", back);
+    const next = `next=${encodeURIComponent(`/share/${TOKEN}`)}`;
+    expect(screen.getByRole("link", { name: "Add Sam to your people" })).toHaveAttribute("href", `/auth/sign-up?${next}`);
+    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", `/auth/login?${next}`);
   });
 
-  it("links to Request access plainly, never carrying the token (AC-24)", () => {
+  it("asks nobody to request access, or for an invite (AC-2)", () => {
     setup({ state: "signed-out" });
-    const href = screen.getByRole("link", { name: "Request access" }).getAttribute("href");
-    expect(href).toBe("/request-access");
+    expect(screen.queryByText(/request access|invite/i)).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link")).toHaveLength(2);
   });
 
   it("says them when the owner has no name", () => {

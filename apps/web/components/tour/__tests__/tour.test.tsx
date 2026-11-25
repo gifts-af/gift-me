@@ -78,15 +78,17 @@ describe("guided tour (ALL-46)", () => {
     expect(screen.getByText("Ordered. (Not really, this is the tour.)")).toBeInTheDocument();
   });
 
-  it("can be left at any step, and ends with a way in", () => {
-    render(<Tour />);
+  it("can be left at any step, and ends with a way in (AC-2)", () => {
+    const { container } = render(<Tour />);
     expect(screen.getByRole("link", { name: "Skip tour" })).toHaveAttribute("href", "/");
     goTo("end");
-    // The concierge is still being built, so its tour ends at the waitlist (ALL-71).
-    expect(screen.getByText("The concierge is still being built. Join the waitlist and we'll email you when it's ready.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Join the waitlist" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Just want the list? Request access" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Have an invite? Sign in" })).toHaveAttribute("href", "/auth/login");
+    expect(
+      screen.getByText("We're letting people into the concierge a few at a time. Your list and your people are free."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Request concierge access" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Just want the list? Start it, free" })).toHaveAttribute("href", "/auth/sign-up");
+    expect(container).not.toHaveTextContent(/invite|waitlist/i);
+    expect(screen.getByRole("link", { name: "Already have an account? Sign in" })).toHaveAttribute("href", "/auth/login");
     expect(screen.getByRole("link", { name: "Back to home" })).toHaveAttribute("href", "/");
   });
 

@@ -18,13 +18,13 @@ export function Hook() {
           <Button asChild>
             <Link href="/tour">Take the tour</Link>
           </Button>
-          <RequestAccessButton kind="waitlist" variant="secondary" />
+          <RequestAccessButton variant="secondary" />
         </div>
         <Link
           href="/auth/login"
           className="inline-flex min-h-11 items-center self-center text-[14px] text-muted-foreground underline underline-offset-[3px] hover:text-foreground md:self-start"
         >
-          Have an invite? Sign in
+          Already have an account? Sign in
         </Link>
       </div>
       <div className="hidden md:block">

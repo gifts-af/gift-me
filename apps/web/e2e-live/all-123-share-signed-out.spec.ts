@@ -36,7 +36,7 @@ async function previewTags(page: Page, html: string) {
   }, html);
 }
 
-test("signed out: whose list it is, and Sign in or Request access", async ({ page, browser, baseURL }) => {
+test("signed out: whose list it is, and sign-up or sign-in", async ({ page, browser, baseURL }) => {
   const url = await qaShareUrl(page);
   const visitor = await browser.newContext({ storageState: undefined, baseURL, viewport: page.viewportSize() ?? undefined });
   const p = await visitor.newPage();
@@ -45,7 +45,9 @@ test("signed out: whose list it is, and Sign in or Request access", async ({ pag
     await expect(p.getByRole("heading", { level: 1, name: `${OWNER}'s list`, exact: true })).toBeVisible();
     const card = p.getByRole("region", { name: "This list and your people" });
     await expect(card.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", /^\/auth\/login\?next=/);
-    await expect(card.getByRole("link", { name: "Request access" })).toHaveAttribute("href", "/request-access");
+    await expect(card.getByRole("link", { name: `Add ${OWNER} to your people` })).toHaveAttribute("href", /^\/auth\/sign-up\?next=/);
+    await expect(card.getByRole("link", { name: "Request access" })).toHaveCount(0);
+    await expect(p.locator("body")).not.toContainText(/invite only/i);
     // The Get and Give bar is for signed-in people.
     await expect(p.getByRole("navigation", { name: "Main" })).toHaveCount(0);
     await p.screenshot({ path: test.info().outputPath("signed-out.png"), fullPage: true });

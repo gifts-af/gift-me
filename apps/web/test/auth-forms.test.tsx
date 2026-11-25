@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { safeNext } from "@/lib/safe-next";
 
 // Typing or autofill can land before the page's JavaScript loads (slow phones,
 // iPhone Keychain). Found by the iPhone e2e run (ALL-60): the email was wiped,
@@ -68,6 +69,47 @@ describe("auth forms keep what was typed before the page loaded", () => {
     prefill("New password", "pw-123456");
     fireEvent.click(screen.getByRole("button", { name: "Save new password" }));
     await waitFor(() => expect(auth.updateUser).toHaveBeenCalledWith({ password: "pw-123456" }));
+  });
+});
+
+// From a shared list, sign-up comes back to it: through Google's return address,
+// and through the emailed link, whose template passes this address to
+// /auth/confirm. Both are full addresses on this site, which Supabase's list of
+// allowed redirects takes.
+describe("sign up from a shared list", () => {
+  const SHARE = "/share/11111111-2222-4333-8444-555555555555";
+  const signUp = () => {
+    prefill("Email", "sam@example.com");
+    prefill("Password", "pw-123456");
+    prefill("Repeat password", "pw-123456");
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+  };
+  beforeEach(() => {
+    for (const fn of Object.values(auth)) fn.mockReset().mockResolvedValue({ error: { message: "stop here" } });
+  });
+
+  it.each([
+    [SHARE, SHARE],
+    [undefined, "/"],
+    ["https://evil.example/share/x", "/"],
+    ["//evil.example", "/"],
+  ])("by email, next %s comes back to %s", async (next, back) => {
+    render(<SignUpForm next={next} />);
+    signUp();
+    await waitFor(() => expect(auth.signUp).toHaveBeenCalled());
+    const { emailRedirectTo } = auth.signUp.mock.calls[0][0].options;
+    expect(emailRedirectTo).toBe(`${window.location.origin}${back}`);
+    // What /auth/confirm makes of it.
+    expect(safeNext(emailRedirectTo, window.location.origin)).toBe(back);
+  });
+
+  it("by Google, comes back to the list", async () => {
+    render(<SignUpForm next={SHARE} />);
+    fireEvent.click(screen.getByRole("button", { name: "Continue with Google" }));
+    await waitFor(() => expect(auth.signInWithOAuth).toHaveBeenCalled());
+    const back = new URL(auth.signInWithOAuth.mock.calls[0][0].options.redirectTo);
+    expect(back.origin + back.pathname).toBe(`${window.location.origin}/auth/callback`);
+    expect(back.searchParams.get("next")).toBe(SHARE);
   });
 });
 

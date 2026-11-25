@@ -1,83 +1,27 @@
 "use client";
 
-import { useState } from "react";
 import { RequestAccessForm } from "@/app/request-access/request-access-form";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-  useSelfClosingDialog,
-} from "@/components/ui/dialog";
-import type { RequestKind } from "@/lib/access-request";
-import { APP_NAME } from "@/lib/brand";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { CONCIERGE_REQUEST } from "@/lib/access-request-copy";
 
-const COPY: Record<RequestKind, { button: string; title: string; description: string }> = {
-  access: {
-    button: "Request access",
-    title: "Want in?",
-    description: `${APP_NAME} is invite only while it's in early alpha. Leave your name and email and we'll let you in.`,
-  },
-  waitlist: {
-    button: "Join the waitlist",
-    title: "Join the waitlist",
-    description: "The concierge is still being built. Leave your name and email and we'll tell you when it's ready.",
-  },
-};
-
-// "Request access" opens the ALL-47 form over the page (ALL-53), so asking
-// doesn't feel like leaving for a separate "email me" page. With
-// kind="waitlist" it's the concierge waitlist (ALL-71), whose thank-you can
-// switch the same box to Request access for the list.
-export function RequestAccessButton({
-  variant,
-  className,
-  children,
-  kind = "access",
-}: {
-  /** Which Button it is; without it, className alone styles it (a text link). */
-  variant?: "default" | "secondary";
-  className?: string;
-  children?: React.ReactNode;
-  kind?: RequestKind;
-}) {
-  const { open, onOpenChange, closeSoon } = useSelfClosingDialog();
-  const [shown, setShown] = useState<RequestKind>(kind);
-  const copy = COPY[shown];
-  const label = children ?? COPY[kind].button;
-
+// Opens the form over the page, so asking doesn't feel like leaving for a
+// separate "email me" page. It stays open after the thank-you, whose link
+// starts a list.
+export function RequestAccessButton({ variant }: { variant: "default" | "secondary" }) {
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (next) setShown(kind);
-        onOpenChange(next);
-      }}
-    >
-      {variant ? (
-        <DialogTrigger asChild>
-          <Button type="button" variant={variant} className={className}>
-            {label}
-          </Button>
-        </DialogTrigger>
-      ) : (
-        <DialogTrigger className={className}>{label}</DialogTrigger>
-      )}
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button type="button" variant={variant}>
+          {CONCIERGE_REQUEST.title}
+        </Button>
+      </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{copy.title}</DialogTitle>
-          <DialogDescription>{copy.description}</DialogDescription>
+          <DialogTitle>{CONCIERGE_REQUEST.title}</DialogTitle>
+          <DialogDescription>{CONCIERGE_REQUEST.description}</DialogDescription>
         </DialogHeader>
-        {/* The waitlist's thank-you stays open, so its Request access link can be used. */}
-        <RequestAccessForm
-          key={shown}
-          kind={shown}
-          onSent={shown === "access" ? closeSoon : undefined}
-          onWantAccess={() => setShown("access")}
-        />
+        <RequestAccessForm />
       </DialogContent>
     </Dialog>
   );
