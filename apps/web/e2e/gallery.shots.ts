@@ -45,6 +45,8 @@ const SIGNED_OUT: [name: string, url: string][] = [
   ["tour", "/tour"],
   ["tour-list", "/tour/list"],
   ["request-access", "/request-access"],
+  ["feedback", "/feedback"],
+  ["privacy", "/privacy"],
   ["login", "/auth/login"],
   ["sign-up", "/auth/sign-up"],
   ["forgot-password", "/auth/forgot-password"],

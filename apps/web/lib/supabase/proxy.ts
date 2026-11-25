@@ -44,6 +44,8 @@ export function isPublicPath(pathname: string) {
     pathname === "/tour" ||
     pathname === "/tour/list" ||
     pathname === "/request-access" ||
+    // Anyone can ask us to erase data, with or without an account.
+    pathname === "/feedback" ||
     // The privacy policy the Chrome Web Store listing links to (ALL-65).
     pathname === "/privacy" ||
     // The link-preview image: crawlers like LinkedIn's are never signed in (ALL-55).

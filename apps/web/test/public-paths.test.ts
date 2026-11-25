@@ -43,13 +43,15 @@ describe("isPublicPath", () => {
     // The logo image at the top of every email (ALL-71).
     "/email-logo.png",
     "/request-access",
+    // Anyone can ask us to erase data, signed in or not.
+    "/feedback",
     // Link-preview crawlers (LinkedIn, Slack…) are never signed in (ALL-55).
     "/opengraph-image",
     // One-time email action links show their own sign-in page (ALL-23).
     "/a/abc",
   ])("lets signed-out visitors reach %s", (path) => expect(isPublicPath(path)).toBe(true));
 
-  it.each(["/", "/settings", "/api/other", "/api/keepalive", "/lists/123", "/api/captures/x/other", "/api/captures/a/b/extract", "/api/lists/items/x", "/api/zinc/webhook", "/api/zinc/webhook/", "/api/zinc/webhook/a/b", "/api/zinc/other"])(
+  it.each(["/", "/settings", "/feedback/x", "/api/other", "/api/keepalive", "/lists/123", "/api/captures/x/other", "/api/captures/a/b/extract", "/api/lists/items/x", "/api/zinc/webhook", "/api/zinc/webhook/", "/api/zinc/webhook/a/b", "/api/zinc/other"])(
     "sends signed-out visitors on %s to sign in",
     (path) => expect(isPublicPath(path)).toBe(false),
   );
