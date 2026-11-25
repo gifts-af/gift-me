@@ -1,6 +1,6 @@
 # The GiftsAF fee: the amount
 
-**Status:** approved by the owner, 2026-11-25 (decision 61). Waiting for Jim ([ALL-76](https://linear.app/allens-forever/issue/ALL-76)).
+**Status:** approved by Aaron and Jim, 2026-11-25 (decision 61; [ALL-76](https://linear.app/allens-forever/issue/ALL-76)).
 
 **The fixed part starts at $2.00, plus the actual card fee** (2.9% + 30¢ of the whole charge). It's a setting, so it can change without a deploy.
 

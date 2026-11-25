@@ -101,7 +101,7 @@ How the concierge's intelligence works (matches design §3.1):
 
 ## 6. Money model (D34, D58)
 - **Free:** managing and sharing gift lists.
-- **A transparent fee per gift (D58, D59):** each gift bought through GiftsAF shows one "GiftsAF fee" line at checkout. The fee is a fixed part (Zinc's $1 plus our average AI, lookup and running costs per completed gift, from cost tracking, ALL-144) plus the actual card fee (2.9% + 30¢), so it's at cost on every gift. Its name links to a breakdown of each part. At launch it covers our costs only and says so ("launch pricing"); a margin is added as adoption grows. This replaces the premium subscription idea for the concierge. The fixed part starts at $2.00 (D61, Jim to confirm; [gift-fee.md](gift-fee.md)).
+- **A transparent fee per gift (D58, D59):** each gift bought through GiftsAF shows one "GiftsAF fee" line at checkout. The fee is a fixed part (Zinc's $1 plus our average AI, lookup and running costs per completed gift, from cost tracking, ALL-144) plus the actual card fee (2.9% + 30¢), so it's at cost on every gift. Its name links to a breakdown of each part. At launch it covers our costs only and says so ("launch pricing"); a margin is added as adoption grows. This replaces the premium subscription idea for the concierge. The fixed part starts at $2.00 (D61; [gift-fee.md](gift-fee.md)).
 - **Paying by card, no balance (D59, owner 2026-11-24):** the buyer saves a card in GiftsAF once. Each gift is one charge from GiftsAF through Zinc Connect (our Stripe account): the gift, the fee, nothing parked in advance. Store cancels refund everything; returns go through us and keep the fee. This ships before friends join (ALL-98).
 - **Per run (option):** concierge runs people schedule for their own list could carry a small fee that covers our AI cost, instead of or alongside limits (idea 7).
 - **Affiliate links (option):** commission on purchases made through GiftsAF, never used to rank or pick gifts (PRD G-5; idea 10, ALL-84).
@@ -118,7 +118,7 @@ How the concierge's intelligence works (matches design §3.1):
 
 Rough yearly cost per buyer: about 40¢ per occasion, so 5 people with one birthday each is about $2, plus captures and taps.
 
-The fee amount is set in D61 (ALL-76), which Jim still has to confirm. Because rounds that find nothing still cost us, the at-cost fee is cost per completed purchase, not per order. Until then, anything that costs us money (AI calls, Zinc lookups, rounds) is only for test and admin users (decision 53), so pricing also gates opening the concierge beyond us, friends included (owner, 2026-11-06). Taking money also means moving off free hosting plans and making the repo private (ALL-75).
+The fee amount is set in D61 (ALL-76). Because rounds that find nothing still cost us, the at-cost fee is cost per completed purchase, not per order. Until then, anything that costs us money (AI calls, Zinc lookups, rounds) is only for test and admin users (decision 53), so pricing also gates opening the concierge beyond us, friends included (owner, 2026-11-06). Taking money also means moving off free hosting plans and making the repo private (ALL-75).
 
 Charging by card (ALL-98, with the fee from ALL-146) is part of the MVP, before friends join (D59).
 
