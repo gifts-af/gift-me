@@ -70,7 +70,7 @@ What each ending **of the idea pass** logs (`ideas` is left out where the table 
 | AC-15 | Any new or changed event | Logged | Ids, counts and enums only (E6) |
 | AC-16 | Dev, through a preview, with no spending (below) | One signed message for a seeded round runs | The first job logs `waiting` / `refused:busy`; the delayed message arrives and logs `waiting` / `refused:daily_limit` |
 
-**AC-16's recipe.** No tick is called: a dev tick also creates rounds, sweeps and sends other dev accounts' emails. On dev: a paid test user, a fresh due round (a reused one is deduplicated that day), one fact, `round_engine_enabled`, `round_fanout_enabled` and `idea_engine_enabled` = 1, `idea_round_runs_per_day` = 0, and an unfinished `idea_runs` row for the person started now (younger than `idea_run_lease_ms`; `start_idea_run` uses the real clock). Then send one message with the SDK from a throwaway script, signed with dev's `CRON_SECRET`, with an explicit `deploymentId` (the preview's) and token. `busy` is checked before `daily_limit`, so the first job is refused `busy`. Finish the row, and the follow-up is refused `daily_limit`. Put the settings back and remove the rows. With the daily limit at 0 no run can start, so nothing is bought even with real vendor keys; if the preview has none, it needs dummy ones and a redeploy (allensforever711). **[Verify]** that a script can send to a preview's queue; if not, AC-16 is Still open until Jim agrees to a full dev tick.
+**AC-16's recipe.** No tick is called: a dev tick also creates rounds, sweeps and sends other dev accounts' emails. On dev: a paid test user, a fresh due round (a reused one is deduplicated that day), one fact, `round_engine_enabled`, `round_fanout_enabled` and `idea_engine_enabled` = 1, `idea_round_runs_per_day` = 0, and an unfinished `idea_runs` row for the person started now (younger than `idea_run_lease_ms`; `start_idea_run` uses the real clock). Then send one message with the SDK from a throwaway script, signed with dev's `CRON_SECRET`, with an explicit `deploymentId` (the preview's) and token. `busy` is checked before `daily_limit`, so the first job is refused `busy`. Finish the row, and the follow-up is refused `daily_limit`. Put the settings back and remove the rows. With the daily limit at 0 no run can start, so nothing is bought even with real vendor keys; if the preview has none, it needs dummy ones and a redeploy (allensforever711). **[Verify]** that a script can send to a preview's queue; if not, the production tick is the live check and this is noted on the ticket.
 
 ### Out of scope
 
@@ -119,7 +119,9 @@ What each ending **of the idea pass** logs (`ideas` is left out where the table 
 
 **Tech stack:** one settings migration; `rounds/{steps,engine,fanout,emails}.ts`, `app/api/rounds/{queue,job/job,job/route}.ts`, `lib/wiring.ts`; Vitest (units and the real local database), pgTAP; docs.
 
-**Order:** start after PR #135 (ALL-129) merges, from a fresh `main`; it edits the same catch blocks. ALL-167's `afterIdeaRun` work is planned, not built: whoever merges second keeps both, and every new ending there returns a turn.
+**Order:** PR #135 (ALL-129) and ALL-167 (#137, #138) have merged; this builds on both. ALL-167 added, inside the idea pass: ideas brought back (`restoreIdeas`) and the too-late email. Both keep the outcome's row in the table. A round released because another run already sent `no_ideas_late` is `busy`, with no `ideas`. Those behaviours don't change.
+
+**Scope freeze (owner, 2026-11-25):** the owner left this ticket with Jim after the freeze (comment on ALL-125). Nothing is added to the plan; follow-ups go to `planning/ideas.md`; a natural `busy` on production doesn't hold the ticket open.
 
 ### Global constraints
 
@@ -208,7 +210,7 @@ In `runRoundMessage`, only for `waiting` with `refused:busy`, and only when its 
 - [ ] The new T#, "revised by" on T68 and T76, technical design §5.1. `design/operations.md`: the settings and both off switches, `round_job`'s `waiting` and `ideas`, `round_retry_not_sent`, `round_fanout_send_threw` (a job can log it now), the bad-signature entry. "Signed by the tick" in `sign.ts` and `job.ts` comments. Round engine page, republished to its own URL after the merge.
 - [ ] `pnpm lint && pnpm typecheck && pnpm test && pnpm test:db && pnpm db:test && pnpm db:map:check && pnpm build`; PR titled `fix: two rounds for one person get ideas the same day, and the job log says what happened (ALL-169)`, body `Part of ALL-169`; an adversarial review; evidence on the ticket.
 - [ ] AC-16 by its recipe. Settle its **[Verify]** first.
-- [ ] After the merge: the next 12:00 UTC tick on production (E9), then ALL-125's first criterion. A natural `busy` may not happen that day; if so it's **Still open**.
+- [ ] After the merge: one production 12:00 UTC tick (E9): `round_job` lines have the new fields and no `zinc.wiring_missing`. Then ALL-125's first criterion.
 
 ## Before coding: consistency check
 
