@@ -1,6 +1,6 @@
 # ALL-180 Friends' lists: Spec (first part, before Christmas)
 
-> **Status: draft, not approved.** Rewritten after two adversarial reviews; this version isn't reviewed yet. Sharing back is a later part (`ALL-180-share-back-later.md`, not ready to plan). Blocked by ALL-179's gate (its second PR).
+> **Status: draft, not approved.** Rewritten after two adversarial reviews; this version isn't reviewed yet. Direction approved by Jim, 2026-11-25. Sharing back is a later part (`ALL-180-share-back-later.md`). Blocked by ALL-179's gate (its second PR).
 
 **Goal:** any signed-in account can keep the lists people send them and open them again from Get.
 
