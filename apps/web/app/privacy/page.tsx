@@ -78,8 +78,8 @@ export default function PrivacyPage() {
             give us your contacts.
           </p>
           <p>
-            <strong>Importing from Google Contacts</strong> is off for now. When it&apos;s on, it runs only when you start
-            it and agree on Google&apos;s screen. Your browser reads your contacts&apos; names, nicknames, birthdays,
+            <strong>Importing from Google Contacts</strong> runs only when you start it and agree on Google&apos;s
+            screen. Your browser reads your contacts&apos; names, nicknames, birthdays,
             addresses and photos, and shows you a list. We save only the ones you tick: their name, birthday, address and
             photo, and Google&apos;s id for the contact, so nobody is added twice. Our server copies the ticked
             contacts&apos; photos from Google; the rest of your contacts never reach it. As soon as your browser has read
