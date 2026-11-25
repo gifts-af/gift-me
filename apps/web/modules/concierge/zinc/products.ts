@@ -42,7 +42,7 @@ const offer = z.object({
   condition: z.string(),
   buy_box_winner: z.boolean().nullish(),
   seller: z.object({ name: z.string().nullish(), first_party: z.boolean().nullish() }),
-  handling_days: z.object({ max: days }),
+  handling_days: z.object({ min: days.nullish().catch(null), max: days }),
   shipping_options: z
     .array(z.object({ price: z.number().int(), delivery_days: z.object({ min: days, max: days }) }))
     .min(1),
@@ -75,6 +75,11 @@ export async function productOffers(
     const o = p.data;
     // Orders don't choose a shipping method, so judge the worst case: the slowest delivery and the highest shipping price.
     const slowest = o.shipping_options.reduce((a, b) => (b.delivery_days.max > a.delivery_days.max ? b : a));
+    // Amazon's one order-to-door estimate comes back in both fields (design/spikes/checkout.md), so adding them would double it.
+    const repeated =
+      retailer === "amazon" &&
+      o.handling_days.min === slowest.delivery_days.min &&
+      o.handling_days.max === slowest.delivery_days.max;
     const shippingCents = Math.max(...o.shipping_options.map((s) => s.price));
     out.push({
       offerId: o.offer_id ?? null,
@@ -85,7 +90,7 @@ export async function productOffers(
       buyBox: o.buy_box_winner === true,
       firstParty: o.seller.first_party === true,
       sellerName: o.seller.name ?? null,
-      handlingDaysMax: o.handling_days.max,
+      handlingDaysMax: repeated ? 0 : o.handling_days.max,
       deliveryDaysMin: slowest.delivery_days.min,
       deliveryDaysMax: slowest.delivery_days.max,
     });

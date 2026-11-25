@@ -189,6 +189,26 @@ describe("productOffers", () => {
     expect(calls[0].auth).toBe(`Bearer ${KEY}`);
   });
 
+  // The spike's real offers: 5 days fetched Nov 1 is Amazon's own "Friday, November 6" (ALL-29).
+  it.each([
+    ["a fixed estimate", { min: 5, max: 5 }],
+    ["a range", { min: 8, max: 11 }],
+  ])("an Amazon estimate repeated as handling and delivery counts once: %s", async (_, range) => {
+    const { h } = fake([offersReply([offer({ handling_days: range, shipping_options: [{ price: 0, delivery_days: range }] })])]);
+    expect(await productOffers(h, KEY, "amazon", "B0TEST", signal())).toMatchObject([
+      { handlingDaysMax: 0, deliveryDaysMin: range.min, deliveryDaysMax: range.max },
+    ]);
+  });
+
+  it.each([
+    ["different ranges", "amazon", { min: 2, max: 6 }, { min: 6, max: 6 }, 6],
+    ["no handling minimum", "amazon", { max: 6 }, { min: 6, max: 6 }, 6],
+    ["another store", "walmart", { min: 3, max: 3 }, { min: 3, max: 3 }, 3],
+  ])("handling days still add up: %s", async (_, retailer, handling, delivery, expected) => {
+    const { h } = fake([offersReply([offer({ handling_days: handling, shipping_options: [{ price: 0, delivery_days: delivery }] })])]);
+    expect(await productOffers(h, KEY, retailer, "B0TEST", signal())).toMatchObject([{ handlingDaysMax: expected }]);
+  });
+
   it("buyBox and firstParty are only true when exactly true", async () => {
     const { h } = fake([
       offersReply([offer({ buy_box_winner: null, seller: { name: null, first_party: true } }), offer({ buy_box_winner: null, seller: { first_party: null } })]),
