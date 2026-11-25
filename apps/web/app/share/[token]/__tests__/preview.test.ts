@@ -12,6 +12,8 @@ const ImageResponse = vi.fn(function (this: { element: unknown }, element: unkno
   this.element = element;
 });
 vi.mock("next/og", () => ({ ImageResponse }));
+const holidayLogoNow = vi.fn(async () => false);
+vi.mock("@/lib/holiday", () => ({ holidayLogoNow }));
 vi.mock("server-only", () => ({}));
 vi.mock("@/modules/concierge", () => ({ getPerson: vi.fn(), listPeople: vi.fn() }));
 vi.mock("@/lib/today", () => ({ todayForRequest: vi.fn() }));
@@ -67,6 +69,39 @@ describe("share link image", () => {
     expect(getSharePreview).toHaveBeenCalledWith(TOKEN);
     expect(getSharedList).not.toHaveBeenCalled();
     expect(genericCard).not.toHaveBeenCalled();
+  });
+
+  const draw = async (ownerName: string, itemCount = 5) => {
+    getSharePreview.mockResolvedValue({ ownerName, itemCount });
+    const { default: Image } = await import("../opengraph-image");
+    await Image({ params });
+    return ImageResponse.mock.calls[0]![0];
+  };
+
+  it("reads as the owner's wish list", async () => {
+    expect(textOf(await draw("Sam Lee"))).toContain("Sam Lee’swish list5 wishes");
+  });
+
+  it.each([
+    [false, false],
+    [true, true],
+  ])("draws the yellow tag, with the hat only in season (%s)", async (holiday, hat) => {
+    holidayLogoNow.mockResolvedValueOnce(holiday);
+    const drawn = JSON.stringify(await draw("Sam Lee"));
+    expect(drawn).toContain(encodeURIComponent("#facc15"));
+    expect(drawn.includes(encodeURIComponent("rotate(14 32 26)"))).toBe(hat);
+  });
+
+  it("doesn't say '0 wishes' for an empty list", async () => {
+    const text = textOf(await draw("Sam Lee", 0));
+    expect(text).toContain("No wishes yet");
+    expect(text).not.toContain("0 wishes");
+  });
+
+  it("cuts a very long name, never through a character, and keeps it a possessive", async () => {
+    const text = textOf(await draw("🎁".repeat(40)));
+    expect(text).toContain(`${"🎁".repeat(31)}…’s`);
+    expect(text).toContain("wish list");
   });
 
   it("says '1 wish' for one", async () => {
