@@ -74,6 +74,8 @@ export function progressLine(
     const ready = { unknown: by, some: `Ideas ready · ${by}`, 1: `1 idea ready · ${by}` }[o.readyIdeas] ?? `${o.readyIdeas} ideas ready · ${by}`;
     return { text: ready, tone: "ready", needsBuyer: true };
   }
+  // Nothing more is tried or can be done: as a round closed as too late.
+  if (o.waiting === "too_late") return null;
   if (o.waiting !== null) return WAITING[o.waiting];
   return r.status === "needs_attention" ? yours("Needs a look") : null;
 }

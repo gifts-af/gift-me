@@ -92,6 +92,10 @@ type Tally = {
   keepMin: number | null;
   refusal: IdeaRefusal | null;
   error: { name: string; kind: string | null; status: number | null } | null;
+  /** The first candidate or list gift lookup a vendor error ended, if any. */
+  vendorError: ZincError | null;
+  /** Zinc refused the app's own key on some lookup. */
+  unauthorized: boolean;
   /** An AI call was cut off, dropped or its reply couldn't be priced, so what it used was never reported. */
   costUnknown: boolean;
   /** An AI reply's cost was added: a later out-of-credit error ends the run as a counted failure. */
@@ -119,6 +123,8 @@ export async function runIdeas(req: IdeaRequest, deps: IdeaDeps): Promise<IdeaOu
     keepMin: null,
     refusal: null,
     error: null,
+    vendorError: null,
+    unauthorized: false,
     costUnknown: false,
     aiPaid: false,
   };
@@ -150,6 +156,7 @@ export async function runIdeas(req: IdeaRequest, deps: IdeaDeps): Promise<IdeaOu
       ...(t.error ? { error: t.error.name, error_kind: t.error.kind, error_status: t.error.status } : {}),
       ...(t.costUnknown ? { costUnknown: true } : {}),
     });
+    if (t.unauthorized) logEvent("ideas.zinc_unauthorized", { ...ids(req, t.runId), alert: true });
     await recordRun(req, deps.recordCost, t);
   }
   return outcome;
@@ -216,7 +223,11 @@ async function attempt(req: IdeaRequest, deps: IdeaDeps, t: Tally): Promise<Idea
   t.keepMin = s.keepMin;
   logEvent("ideas.run_started", ids(req, runId));
 
-  const end = async (outcome: RunEnd): Promise<IdeaOutcome> => {
+  const end = async (ended: RunEnd): Promise<IdeaOutcome> => {
+    // "none" says we looked and found nothing. With a lookup lost to a vendor error we can't say
+    // that, and a failed run may try again (T68).
+    const outcome = ended === "none" && t.vendorError !== null ? "failed" : ended;
+    if (outcome !== ended) t.error = errorNote(t.vendorError);
     await store.finish(runId, outcome, cents(t.spent));
     return { status: outcome } as IdeaOutcome;
   };
@@ -239,7 +250,12 @@ async function attempt(req: IdeaRequest, deps: IdeaDeps, t: Tally): Promise<Idea
     }
     t.spent += s.zincLookupCents;
     t.lookups += s.zincLookupCents;
-    return call();
+    try {
+      return await call();
+    } catch (e) {
+      if (e instanceof ZincError && e.kind === "unauthorized") t.unauthorized = true;
+      throw e;
+    }
   };
   const ctx: JudgeContext = {
     budgetCents: plan.budgetCents,
@@ -256,7 +272,7 @@ async function attempt(req: IdeaRequest, deps: IdeaDeps, t: Tally): Promise<Idea
   const halt = () => {
     stopping = true;
   };
-  const listed = await listPass(inputs.listGifts, { req, deps, s, ctx, runId, lookup, stopped: () => capped || stopping, halt });
+  const listed = await listPass(inputs.listGifts, { req, deps, s, ctx, runId, t, lookup, stopped: () => capped || stopping, halt });
   t.listKept = listed.length;
 
   // ─── the brainstorm, only with too few list gifts and some facts (AC-28) ──
@@ -302,7 +318,11 @@ async function attempt(req: IdeaRequest, deps: IdeaDeps, t: Tally): Promise<Idea
     kept.map((k, i) => ({ ...k.idea, imageUrl: photos[i], rank: i + 1 })),
   );
   // The round ended during the run (its date changed, or the occasion was switched off). What it spent still counts.
-  if (count < 0) return end("none");
+  // Nothing failed, so a lookup lost to a vendor error doesn't make it a failed run.
+  if (count < 0) {
+    await store.finish(runId, "none", cents(t.spent));
+    return { status: "none" };
+  }
   await store.finish(runId, "saved", cents(t.spent));
   return { status: "saved", count };
 }
@@ -322,8 +342,8 @@ const ON_THEIR_LIST = "On their list";
  * idea_list_lookups_max lookups, or once idea_keep_max qualify. Every lookup is charged through
  * the run's `lookup`. Events carry the route and outcome only (E6): never the title or link.
  */
-async function listPass(gifts: ListGift[], p: PassDeps & { stopped: () => boolean; halt: () => void }): Promise<Kept[]> {
-  const { req, deps, s, ctx, runId, lookup } = p;
+async function listPass(gifts: ListGift[], p: PassDeps & { t: Tally; stopped: () => boolean; halt: () => void }): Promise<Kept[]> {
+  const { req, deps, s, ctx, runId, t, lookup } = p;
   let lookups = 0;
   let qualified = 0;
   const enough = () => qualified >= s.keepMax;
@@ -416,6 +436,7 @@ async function listPass(gifts: ListGift[], p: PassDeps & { stopped: () => boolea
       if (e instanceof ZincError) {
         // The kind only: a Shopify path holds the product handle (E6).
         note("vendor_error", e.kind);
+        t.vendorError ??= e;
         return null;
       }
       p.halt();
@@ -529,7 +550,10 @@ async function brainstormPass(
       if (!v.keep) return { drop: v.reason };
       return { found: { c, hit, offer, totalCents: v.totalCents, fit: v.fit, arriveBy: v.arriveBy } };
     } catch (e) {
-      if (e instanceof ZincError) return { drop: "vendor_error", error: e };
+      if (e instanceof ZincError) {
+        t.vendorError ??= e;
+        return { drop: "vendor_error", error: e };
+      }
       p.halt();
       throw e;
     }
@@ -564,9 +588,6 @@ async function brainstormPass(
   if (req.signal.aborted) return { end: "deadline" };
   if (p.capped()) return { end: "cost_cap" };
   if (found.length === 0 && drops.length > 0 && drops.every((d) => d.drop === "vendor_error")) {
-    if (drops.some((d) => d.error?.kind === "unauthorized")) {
-      logEvent("ideas.zinc_unauthorized", { ...ids(req, runId), alert: true });
-    }
     t.error = errorNote(drops[0].error);
     return { end: "failed" };
   }

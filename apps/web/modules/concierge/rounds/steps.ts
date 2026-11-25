@@ -1,7 +1,8 @@
-import { ideaRunWorstMs, nextAction, type CalendarDate, type RoundStatus, type RoundView, type ScheduleSettings, type StepKey } from "@gifts-af/core";
+import { ideaRunWorstMs, isLastTick, nextAction, type CalendarDate, type RoundStatus, type RoundView, type ScheduleSettings, type StepKey } from "@gifts-af/core";
 import { errorFields, logEvent } from "@/lib/log";
 import type { IdeaOutcome } from "../ideas/run";
 import type { Funding } from "../notify/templates";
+import { LeaseLost } from "./lease-lost";
 import type { ClaimedRound, RoundContext, RoundFinish } from "./store";
 import { money, sendEmail } from "./emails";
 import type { EngineDeps } from "./engine";
@@ -16,13 +17,6 @@ export const dayOf = (now: Date): CalendarDate => now.toISOString().slice(0, 10)
 
 /** A round due on a day is due from its first moment, so that day's tick picks it up. */
 const startOf = (day: CalendarDate) => new Date(`${day}T00:00:00Z`);
-
-export class LeaseLost extends Error {
-  constructor() {
-    super("Lost the lease on the round");
-    this.name = "LeaseLost";
-  }
-}
 
 /**
  * Whether a step stopped because the buyer changed the occasion's date, which ended the round:
@@ -102,6 +96,29 @@ export function view(round: ClaimedRound, ctx: RoundContext, sent: Set<StepKey>,
   };
 }
 
+/**
+ * "None of these" brought nothing new and no search is left: the rejected ideas come back on offer
+ * (T85). True when any did; the round stays generating, for sendHeadsUp. A failure (a database
+ * without the function, say) never silences the round: the no-ideas email goes as if none came back.
+ */
+export async function restoreIdeas(round: ClaimedRound, { store, now }: EngineDeps): Promise<boolean> {
+  const ids = { round_id: round.id, user_id: round.userId };
+  let back: { count: number; outcome: string | null };
+  try {
+    back = await store.restoreRejected(round.id, round.lockedUntil, now);
+  } catch (err) {
+    if (err instanceof LeaseLost) throw err;
+    logEvent("round.ideas_restore_failed", { ...ids, ...errorFields(err), alert: true });
+    // It may have worked and only its answer been lost.
+    return (await store.roundContext(round.id)).ideas.length > 0;
+  }
+  if (back.count === 0) return false;
+  logEvent("round.ideas_restored", { ...ids, ...back });
+  return true;
+}
+
+export const isNoIdeas = (step: StepKey) => step === "no_ideas" || step === "no_ideas_again" || step === "no_ideas_late";
+
 /** Sends the heads-up with the round's saved ideas and moves it to awaiting approval. */
 export async function sendHeadsUp(round: ClaimedRound, deps: EngineDeps, s: ScheduleSettings): Promise<void> {
   const ctx = await deps.store.roundContext(round.id);
@@ -169,6 +186,11 @@ export async function ideaPass(
         if (!regained) continue; // another run took it in between; it carries on
         round = regained;
       }
+      // moveToGenerating let go of the lease for a moment, and another run may have told the buyer it's too late.
+      if ((await store.sentSteps(round.id)).has("no_ideas_late")) {
+        await releaseQuietly(round, deps);
+        continue;
+      }
       const outcome = await deps.generateIdeas(
         { id: round.id, userId: round.userId, personId: round.personId },
         AbortSignal.timeout(Math.max(0, tickDeadline - clock())),
@@ -184,6 +206,17 @@ export async function ideaPass(
     }
   }
   return { advanced, failed };
+}
+
+/**
+ * The too-late email, once. A refusal keeps the record, so no duplicate tick or job can run or tell
+ * again before the ship-by day; the close then emails the buyer instead (lateEmailSent).
+ */
+export async function sendTooLate(round: ClaimedRound, ctx: RoundContext, sent: Set<StepKey>, deps: EngineDeps): Promise<void> {
+  if (await trySend(round, ctx, "no_ideas_late", sent, deps)) return;
+  logEvent("round_too_late_email_failed", { round_id: round.id, user_id: round.userId });
+  await deps.store.recordSend(round.id, round.userId, "no_ideas_late");
+  sent.add("no_ideas_late");
 }
 
 /** What a round does after its idea run (S1); `round` is generating, with its lease. */
@@ -233,9 +266,21 @@ async function afterIdeaRun(round: ClaimedRound, outcome: IdeaOutcome, deps: Eng
     case "no_facts":
       break; // the plan decides: the next tick runs again, sends no_ideas, or waits
   }
+  // Now, not on the next tick: that one may be the ship-by day, which closes the round.
+  if (await restoreIdeas(round, deps)) return sendHeadsUp(round, deps, s);
   // Read again: the run used up a run, or found the facts gone.
   const ctx = await store.roundContext(round.id);
   const sent = await store.sentSteps(round.id);
+  if (isLastTick(dayOf(deps.now), round.shipByDeadline) && ctx.ideas.length === 0) {
+    // No later tick can run or tell, so a run still allowed doesn't count, and the email goes now.
+    // The round isn't due again before the ship-by day, so a duplicate tick or job can't run or tell twice.
+    const action = nextAction({ ...view(round, ctx, sent), ideaRunsLeft: false }, dayOf(deps.now), s);
+    if (action.do === "send" && isNoIdeas(action.send)) {
+      await sendTooLate(round, ctx, sent, deps);
+      return atDeadline();
+    }
+    if (action.do === "wait") return atDeadline();
+  }
   return finishStep(round, ctx, sent, { status: "generating" }, deps, s, `ideas:${ended}`);
 }
 

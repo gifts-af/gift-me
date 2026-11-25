@@ -30,6 +30,8 @@ export function sampleEmails(link: string): SampleEmail[] {
       add("heads_up-funding", kind, { ...base, funding }, links);
       const overBudget = [...base.ideas.slice(0, 2), { title: "Espresso machine", price: "$95", overBudget: true, arriveBy: "Mar 6", store: "Amazon", reason: "Mentioned wanting good coffee." }];
       add("heads_up-over_budget", kind, { ...base, ideas: overBudget }, links);
+      add("heads_up-restored", kind, { ...base, restored: "none" }, links);
+      add("heads_up-restored_failed", kind, { ...base, restored: "failed" }, links);
       continue;
     }
     add(kind, kind, data, links);
@@ -54,7 +56,11 @@ export function sampleEmails(link: string): SampleEmail[] {
       const third = { loved2: link, liked2: link, meh2: link, returned2: link };
       add("reaction_prompt-several", kind, { rounds: [first, dad] }, { ...links, ...third });
     }
-    if (kind === "no_ideas") add("no_ideas-again", kind, { ...SAMPLE_DATA.no_ideas.data, again: true }, links);
+    if (kind === "no_ideas") {
+      add("no_ideas-again", kind, { ...SAMPLE_DATA.no_ideas.data, again: true }, links);
+      add("no_ideas-spent", kind, { ...SAMPLE_DATA.no_ideas.data, spent: true }, links);
+      add("no_ideas-too_late", kind, { ...SAMPLE_DATA.no_ideas.data, tooLate: true }, {});
+    }
     if (kind === "hold_funds") {
       add("hold_funds-still", kind, { ...SAMPLE_DATA.hold_funds.data, still: true, placedTitle: "Linen apron" }, links);
     }

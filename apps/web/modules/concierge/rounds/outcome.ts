@@ -1,4 +1,4 @@
-import type { CalendarDate } from "@gifts-af/core";
+import { isLastTick, type CalendarDate } from "@gifts-af/core";
 import type { HoldGate } from "./hold-gate";
 
 // What a round has come to, from its own columns and its orders: the one set of rules behind the
@@ -126,7 +126,8 @@ export const beforeIdeas = (status: string) => NO_IDEAS_YET.has(status);
 
 /**
  * What an open round with no ideas yet is doing: looking for them; told that none were found (the
- * no-ideas email, and no idea since); or needing the person's address. Null otherwise, and without
+ * no-ideas email, and no idea since); told that it's too late (that email, on the last tick before
+ * ship-by: the engine's rule for which of its two texts goes); or needing the person's address. Null otherwise, and without
  * paid features, when nothing is looked for.
  */
 export function waitingOn(o: {
@@ -135,9 +136,11 @@ export function waitingOn(o: {
   hasAddress: boolean;
   toldAt: string | null;
   ideasFoundAt: string[];
-}): "looking" | "told" | "address" | null {
+  shipBy: CalendarDate;
+}): "looking" | "told" | "too_late" | "address" | null {
   if (!beforeIdeas(o.status) || !o.paid) return null;
   const { toldAt } = o;
+  if (toldAt !== null && isLastTick(toldAt.slice(0, 10), o.shipBy)) return "too_late";
   // The round itself only moves at the next daily tick, so its status can lag a saved address.
   const addressed = o.status === "generating" || o.hasAddress;
   if (!addressed && (o.status === "needs_address" || toldAt === null)) return "address";

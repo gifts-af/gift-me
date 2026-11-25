@@ -48,13 +48,29 @@ describe("a round still looking for ideas", () => {
     }
   });
 
+  it("told it's too late, it has left, like a round closed as too late", () => {
+    expect(line(round({ status: "generating" }), [], { waiting: "too_late", today: "2026-12-15" })).toBeNull();
+  });
+
   it("shows nothing when there's nothing to say (no paid features)", () => {
     expect(line(round({ status: "generating" }))).toBeNull();
   });
 });
 
 describe("what it waits on", () => {
-  const base = { status: "needs_address", paid: true, hasAddress: true, toldAt: null, ideasFoundAt: [] as string[] };
+  const base = { status: "needs_address", paid: true, hasAddress: true, toldAt: null, ideasFoundAt: [] as string[], shipBy: "2026-12-16" };
+
+  it("told on the last tick before ship-by is told it's too late, whatever the address", () => {
+    for (const status of ["scheduled", "needs_address", "generating"]) {
+      for (const hasAddress of [true, false]) {
+        expect(waitingOn({ ...base, status, hasAddress, toldAt: "2026-12-15T12:00:00Z" })).toBe("too_late");
+      }
+    }
+    expect(waitingOn({ ...base, toldAt: "2026-12-14T23:59:00Z" })).toBe("told");
+    expect(waitingOn({ ...base, toldAt: "2026-12-15T12:00:00Z", paid: false })).toBeNull();
+    expect(waitingOn({ ...base, status: "awaiting_approval", toldAt: "2026-12-15T12:00:00Z" })).toBeNull();
+  });
+
   it.each([
     [{}, "looking"],
     [{ paid: false }, null],

@@ -196,6 +196,11 @@ export class FakeRoundStore implements RoundStore {
     r.nextActionAt = now;
   }
 
+  /** Like restore_rejected_ideas in a round that was never rejected: none come back (no-new-ideas-db.test.ts has the real one). */
+  async restoreRejected() {
+    return { count: 0, outcome: null };
+  }
+
   /** What the database does when the occasion's date moves (handle_occasion_moved). */
   moved = new Set<string>();
   endByMove(roundId: string) {
@@ -211,6 +216,11 @@ export class FakeRoundStore implements RoundStore {
   }
   async endedByMove(roundId: string) {
     return this.moved.has(roundId);
+  }
+
+  /** The fake records a send only with its email, so the key stands for both. */
+  async lateEmailSent(roundId: string) {
+    return this.sends.get(roundId)?.has("no_ideas_late") ?? false;
   }
 
   async sentSteps(roundId: string) {
@@ -268,7 +278,10 @@ export class FakeRoundStore implements RoundStore {
       })),
       hasFacts: true,
       hasListGifts: false,
+      restored: null,
       ideaRunsLeft: true,
+      ideaRunsSpent: false,
+      ranIdeas: false,
       ranSinceNoIdeas: false,
       waitingOnCredit: false,
       paid: true,

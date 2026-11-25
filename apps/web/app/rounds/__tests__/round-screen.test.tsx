@@ -59,6 +59,7 @@ function view(o: Partial<RoundPageView> = {}, round: Partial<RoundPageView["roun
     closedText: null,
     waiting: null,
     hold: null,
+    restored: null,
     nextBestIdeaId: null,
     buyYourself: [],
     ...o,
@@ -592,6 +593,23 @@ describe("RoundScreen: dates and what's happening", () => {
     setup(view({ waiting: "address" }, { status: "needs_address" }));
     expect(screen.getByText("We need Mom's address before we can look for gifts.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Add address" })).toHaveAttribute("href", `/people/p1/address?open=1&next=${encodeURIComponent("/rounds/r1")}`);
+  });
+
+  it.each([
+    ["none", "We didn't find anything new. These are still here if you want one."],
+    ["failed", "We couldn't finish looking. These are still here if you want one."],
+  ] as const)("AC-20: ideas that came back after %s say so above the list and the ideas", (restored, line) => {
+    setup(view({ restored, ideas: [idea({ source: "list", listItemId: "li1" }), idea()] }));
+    const shown = screen.getByText(line);
+    const heading = screen.getByRole("heading", { name: "On their list" });
+    expect(shown.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("AC-20: no such line otherwise, once the round can't be bought from, or with no idea shown", () => {
+    for (const v of [view({ ideas: [idea()] }), view({ restored: "none", closedText: "This occasion has passed", ideas: [idea()] }), view({ restored: "none" })]) {
+      setup(v);
+    }
+    expect(screen.queryByText(/still here if you want one/)).toBeNull();
   });
 
   it("says nothing when nothing is being looked for", () => {

@@ -11,6 +11,8 @@ describe("sampleEmails", () => {
       "heads_up-auto_buy",
       "heads_up-funding",
       "heads_up-over_budget",
+      "heads_up-restored",
+      "heads_up-restored_failed",
       "reminder",
       "reminder-questions",
       "final_notice",
@@ -49,6 +51,8 @@ describe("sampleEmails", () => {
       "notes_cant_cancel",
       "no_ideas",
       "no_ideas-again",
+      "no_ideas-spent",
+      "no_ideas-too_late",
       "health-problems",
       "health-weekly-all-clear",
       "health-check-failed",
@@ -57,8 +61,8 @@ describe("sampleEmails", () => {
 
   it("points every button at the given link, so tapping a sample is harmless", () => {
     // These are answered by replying, or need nothing back, so they have no links; the all-clear lists no problem to link,
-    // and a late store cancel has nothing left to do in the app.
-    const noLinks = ["notes_tip", "notes_not_read", "notes_cant_cancel", "health-weekly-all-clear", "store_cancelled_late"];
+    // and a late store cancel or a too-late no-ideas email has nothing left to do in the app.
+    const noLinks = ["notes_tip", "notes_not_read", "notes_cant_cancel", "health-weekly-all-clear", "store_cancelled_late", "no_ideas-too_late"];
     for (const { name, email } of samples.filter((s) => !noLinks.includes(s.name))) {
       const hrefs = [...email.html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
       expect(hrefs.length, name).toBeGreaterThan(0);

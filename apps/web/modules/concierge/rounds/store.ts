@@ -12,10 +12,12 @@ import type {
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { isShippableAddress } from "@gifts-af/core";
 import { logEvent } from "@/lib/log";
+import { restoredFrom, type Restored } from "@/lib/restored-ideas";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { hasPaidFeatures } from "../paid-features";
 import { listGiftCandidates } from "../ideas/store";
 import { getOpenQuestions } from "../profile/profile";
+import { LeaseLost } from "./lease-lost";
 
 // Everything the round engine needs from the database (ALL-28). The interface
 // keeps engine.ts testable with an in-memory store; the Supabase version below
@@ -159,6 +161,11 @@ export type RoundContext = {
     fromList: boolean;
   }[];
   /**
+   * The ideas came back after "None of these" (restore_rejected_ideas), and how the search ended;
+   * null when they're new. Only read while generating, for the heads-up's words.
+   */
+  restored: Restored | null;
+  /**
    * The idea checks (ALL-27, round_idea_state): the person has an active fact, and the round may
    * start another run. Only read before ideas are found (scheduled, needs_address, generating);
    * true otherwise, so a failed read can't hold up the money path.
@@ -170,6 +177,10 @@ export type RoundContext = {
    */
   hasListGifts: boolean;
   ideaRunsLeft: boolean;
+  /** Every run is used, the extra one included: no new fact can earn another. False when not read. */
+  ideaRunsSpent: boolean;
+  /** An idea run that counts has started for the round; false when not read. */
+  ranIdeas: boolean;
   /** A run started after the `no_ideas` email went (round-plan, ranSinceNoIdeas). */
   ranSinceNoIdeas: boolean;
   /**
@@ -243,10 +254,19 @@ export interface RoundStore {
   claimNow(roundId: string, now: Date): Promise<ClaimedRound | null>;
   /** Writes the result and releases the lease; false if the lease was lost. */
   finish(roundId: string, lock: Date, next: RoundFinish): Promise<boolean>;
+  /**
+   * restore_rejected_ideas: puts the round's latest rejected set back on offer, when the last
+   * search brought nothing and no other can run. How many, and how that search ended (idea_runs.outcome);
+   * 0 and null when nothing came back. The function is only called while restore_rejected_ideas_enabled
+   * is 1 and the round has rejected ideas. Throws LeaseLost when the lease is lost.
+   */
+  restoreRejected(roundId: string, lock: Date, now: Date): Promise<{ count: number; outcome: string | null }>;
   /** Whether this lease still holds the round. */
   holdsLease(roundId: string, lock: Date): Promise<boolean>;
   /** The round ended because its occasion's date changed (skipped, with no year). */
   endedByMove(roundId: string): Promise<boolean>;
+  /** The too-late email (no_ideas_late) really went: a no-ideas email sent after that key was recorded. */
+  lateEmailSent(roundId: string): Promise<boolean>;
   sentSteps(roundId: string): Promise<Set<StepKey>>;
   /** false = already recorded, so the email must not go out again. */
   recordSend(roundId: string, userId: string, step: StepKey): Promise<boolean>;
@@ -362,6 +382,31 @@ function fail(what: string, error: { message: string }): never {
 }
 
 
+/**
+ * Whether these ideas on offer came back after "None of these", and how the search that brought
+ * them back ended. An idea on offer with a rejection of its own can only have come back, except one
+ * noted as already theirs (`owned`), which stays on offer and never comes back once rejected. It
+ * would break if anything else put a rejected idea back on offer, or wrote a rejection that isn't
+ * `owned` for an idea that stays on offer.
+ */
+export async function readRestored(db: SupabaseClient<Database>, roundId: string, ideaIds: string[]): Promise<Restored | null> {
+  if (ideaIds.length === 0) return null;
+  const concierge = db.schema("concierge");
+  const rejected = await concierge.from("rejections").select("id").eq("round_id", roundId).eq("owned", false).in("idea_id", ideaIds).limit(1);
+  if (rejected.error) fail("Reading the round's rejections failed", rejected.error);
+  if (rejected.data.length === 0) return null;
+  const last = await concierge
+    .from("idea_runs")
+    .select("outcome")
+    .eq("round_id", roundId)
+    .or("outcome.is.null,outcome.neq.no_credit")
+    .order("started_at", { ascending: false })
+    .order("id", { ascending: false })
+    .limit(1);
+  if (last.error) fail("Reading the round's last idea run failed", last.error);
+  return restoredFrom(last.data[0]?.outcome);
+}
+
 /** The service-role client; tests pass one for the local database (E3). */
 export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAdminClient()): RoundStore {
   const concierge = db.schema("concierge");
@@ -376,14 +421,14 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
   async function readIdeaState(
     roundId: string,
     personId: string,
-  ): Promise<Pick<RoundContext, "hasFacts" | "hasListGifts" | "ideaRunsLeft" | "ranSinceNoIdeas" | "waitingOnCredit" | "paid" | "ideaEngineOn">> {
-    const [state, told, lastRun, latest, engineOn, listGifts] = await Promise.all([
+  ): Promise<Pick<RoundContext, "hasFacts" | "hasListGifts" | "ideaRunsLeft" | "ideaRunsSpent" | "ranIdeas" | "ranSinceNoIdeas" | "waitingOnCredit" | "paid" | "ideaEngineOn">> {
+    const [state, told, lastRun, latest, engineOn, listGifts, runsMax] = await Promise.all([
       concierge.rpc("round_idea_state", { p_round_id: roundId }),
       concierge.from("round_sends").select("created_at").eq("round_id", roundId).eq("step", "no_ideas").maybeSingle(),
       // A no_credit run bought nothing, so it isn't the run after a no_ideas email (T68).
       concierge
         .from("idea_runs")
-        .select("started_at")
+        .select("started_at", { count: "exact" })
         .eq("round_id", roundId)
         .or("outcome.is.null,outcome.neq.no_credit")
         .order("started_at", { ascending: false })
@@ -391,6 +436,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
       concierge.from("idea_runs").select("outcome").eq("round_id", roundId).order("started_at", { ascending: false }).limit(1),
       setting("idea_engine_enabled"),
       listGiftCandidates(db, personId, roundId),
+      setting("idea_round_runs_max"),
     ]);
     if (state.error) fail("Reading the round's idea state failed", state.error);
     if (told.error) fail("Reading the round's no_ideas email failed", told.error);
@@ -403,6 +449,9 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
       hasFacts: row.has_facts,
       hasListGifts: listGifts.length > 0,
       ideaRunsLeft: row.runs_left,
+      // round_idea_state's limit: idea_round_runs_max and one extra.
+      ideaRunsSpent: (lastRun.count ?? 0) > runsMax,
+      ranIdeas: started !== undefined,
       ranSinceNoIdeas: told.data !== null && started !== undefined && Date.parse(started) > Date.parse(told.data.created_at),
       waitingOnCredit: latest.data[0]?.outcome === "no_credit",
       paid: row.paid,
@@ -509,6 +558,22 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
       return data === true;
     },
 
+    async restoreRejected(roundId, lock, now) {
+      const rejected = await concierge.from("gift_ideas").select("id").eq("round_id", roundId).eq("status", "rejected").limit(1);
+      if (rejected.error) fail("Reading the round's rejected ideas failed", rejected.error);
+      if (rejected.data.length === 0 || (await setting("restore_rejected_ideas_enabled")) !== 1) return { count: 0, outcome: null };
+      const { data, error } = await concierge.rpc("restore_rejected_ideas", {
+        p_round_id: roundId,
+        p_lock: lock.toISOString(),
+        p_now: now.toISOString(),
+      });
+      if (error?.code === "P0001" && error.message.endsWith("lease not held")) throw new LeaseLost();
+      if (error) fail("Bringing the rejected ideas back failed", error);
+      const row = data[0];
+      if (!row) throw new Error("Bringing the rejected ideas back returned nothing.");
+      return { count: row.restored, outcome: row.outcome };
+    },
+
     async holdsLease(roundId, lock) {
       const { data, error } = await concierge.from("gift_rounds").select("id").eq("id", roundId).eq("locked_until", lock.toISOString());
       if (error) fail("Checking the round's lease failed", error);
@@ -524,6 +589,23 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
         .is("occasion_year", null);
       if (error) fail("Checking whether the round's date changed failed", error);
       return data.length > 0;
+    },
+
+    async lateEmailSent(roundId) {
+      const key = await concierge.from("round_sends").select("created_at").eq("round_id", roundId).eq("step", "no_ideas_late").maybeSingle();
+      if (key.error) fail("Reading the too-late record failed", key.error);
+      if (!key.data) return false;
+      // created_at, not sent_at: the engine's clock sets sent_at, and the database's sets the key's.
+      const sent = await concierge
+        .from("notifications")
+        .select("id")
+        .eq("round_id", roundId)
+        .eq("kind", "no_ideas")
+        .not("sent_at", "is", null)
+        .gte("created_at", key.data.created_at)
+        .limit(1);
+      if (sent.error) fail("Reading the too-late email failed", sent.error);
+      return sent.data.length > 0;
     },
 
     async sentSteps(roundId) {
@@ -617,7 +699,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
       const a: AddressColumns = shared ?? p;
       const ideaState = round.status === "scheduled" || round.status === "needs_address" || round.status === "generating"
         ? await readIdeaState(roundId, round.person_id)
-        : { hasFacts: true, hasListGifts: false, ideaRunsLeft: true, ranSinceNoIdeas: false, waitingOnCredit: false, paid: true, ideaEngineOn: true };
+        : { hasFacts: true, hasListGifts: false, ideaRunsLeft: true, ideaRunsSpent: false, ranIdeas: false, ranSinceNoIdeas: false, waitingOnCredit: false, paid: true, ideaEngineOn: true };
       const draftOf = (x: AddressColumns) => ({
         firstName: x.recipient_first_name,
         lastName: x.recipient_last_name,
@@ -628,6 +710,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
         zip: x.zip,
         country: x.country,
       });
+      const restored = round.status === "generating" ? await readRestored(db, roundId, ideas.data.map((i) => i.id)) : null;
       return {
         userId: round.user_id,
         personId: round.person_id,
@@ -649,6 +732,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
           store: i.retailer,
           fromList: i.source === "list",
         })),
+        restored,
         ...ideaState,
         orders: orders.data.map((o) => ({
           id: o.id,

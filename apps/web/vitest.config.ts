@@ -23,6 +23,7 @@ const LOCAL_DB_TESTS = [
   "modules/concierge/__tests__/mark-arrived.test.ts",
   "modules/concierge/__tests__/moved-dates-db.test.ts",
   "modules/concierge/__tests__/no-credit-db.test.ts",
+  "modules/concierge/__tests__/no-new-ideas-db.test.ts",
   "modules/concierge/__tests__/notify-store.test.ts",
   "modules/concierge/__tests__/placing-race.test.ts",
   "modules/concierge/__tests__/purchase.test.ts",

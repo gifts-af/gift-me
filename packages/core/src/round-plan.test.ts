@@ -262,6 +262,22 @@ describe("nextAction: no ideas (ALL-27 AC-9, AC-13)", () => {
     expect(nextAction(round({ hasInputs: false }), "2027-03-22", s)).toEqual({ do: "skip", send: "skipped" });
   });
 
+  it("on the last tick before ship-by the too-late email takes the place of either, once, then nothing more is tried", () => {
+    const eve = "2027-03-21";
+    const late = { do: "send", send: "no_ideas_late" };
+    expect(nextAction(round({ hasInputs: false }), eve, s)).toEqual(late);
+    expect(nextAction(round({ ideaRunsLeft: false, ranSinceNoIdeas: true, sent: sent("no_ideas") }), eve, s)).toEqual(late);
+    // Told before, with nothing new tried since.
+    expect(nextAction(round({ ideaRunsLeft: false, sent: sent("no_ideas") }), eve, s)).toEqual({ do: "wait", until: "2027-03-22" });
+    // Told too late: no run, email or address request, whatever the checks say now.
+    for (const status of ["scheduled", "needs_address", "generating"] as const) {
+      expect(nextAction(round({ status, sent: sent("no_ideas_late") }), eve, s)).toEqual({ do: "wait", until: "2027-03-22" });
+    }
+    expect(nextAction(round({ sent: sent("no_ideas_late") }), "2027-03-22", s)).toEqual({ do: "skip", send: "skipped" });
+    // A run still allowed goes on as usual.
+    expect(nextAction(round({}), eve, s)).toEqual({ do: "generate" });
+  });
+
   it("no_ideas_again after the runs are spent", () => {
     // The extra run a new fact allowed also found nothing.
     const spent = { status: "generating" as const, ideaRunsLeft: false, ranSinceNoIdeas: true };

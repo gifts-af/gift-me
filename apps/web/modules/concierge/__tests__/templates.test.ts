@@ -652,14 +652,57 @@ describe("no_ideas (ALL-27 AC-9)", () => {
     expect(mail.subject).toBe("Sorry, we couldn't get gift ideas for Mom yet");
     expect(mail.text).toContain("We tried again and still couldn't find a good fit for Mom.");
     expect(mail.text).toContain("haven't been charged");
-    // It promises no retry: the extra run may already be spent.
-    expect(mail.text).toContain(
-      "What happens next: we'll skip this occasion. Telling us more about Mom helps us next time.",
-    );
+    // It promises neither a retry nor a skip: a newer fact may still earn a run.
+    expect(mail.text).toContain("Unless you tell us something new and we find a gift, we'll skip this occasion.");
     expect(mail.text).not.toMatch(/try (one last time|once more|again after)/);
     expect(mail.text).toContain("Tell us more about Mom");
     expect(mail.html).toContain('href="https://x.test/a/questions"');
     expect(mail.text).not.toContain("try once more");
+  });
+});
+
+describe("no_ideas with every run spent", () => {
+  it.each([false, true])("promises no run and no change of mind (again: %s)", (again) => {
+    const mail = TEMPLATES.no_ideas({ personName: "Mom", again, spent: true }, { questions: "https://x.test/a/q" });
+    expect(mail.text).toContain("What happens next: we'll skip this occasion. Telling us more about Mom helps us next time.");
+    expect(mail.text).not.toMatch(/try once more|unless you/i);
+  });
+});
+
+describe("AC-10: no_ideas when it's too late", () => {
+  const mail = TEMPLATES.no_ideas({ personName: "Mom", again: false, tooLate: true }, {});
+
+  it("says no gift can arrive in time, suggests something local, and asks for nothing", () => {
+    expect(mail.subject).toBe("Sorry, no gift can arrive in time for Mom");
+    expect(mail.text).toContain("We don't have a gift idea for Mom, and nothing ordered now can arrive in time. You haven't been charged.");
+    expect(mail.text).toContain("flowers or a gift from a local shop");
+    expect(mail.text).not.toMatch(/tell(ing)? us more|question|fact/i);
+    expect(mail.html).not.toContain("background:#0f766e");
+  });
+
+  it("the again version is the same", () => {
+    expect(TEMPLATES.no_ideas({ personName: "Mom", again: true, tooLate: true }, {})).toEqual(mail);
+  });
+});
+
+describe("heads_up for ideas that came back", () => {
+  const s = SAMPLE_DATA.heads_up;
+  const back = (restored: "none" | "failed") => TEMPLATES.heads_up({ ...s.data, mode: "reminder", allFromList: true, restored }, s.links);
+
+  it.each([
+    ["none", "We didn't find anything new. These are still here if you want one."],
+    ["failed", "We couldn't finish looking. These are still here if you want one."],
+  ] as const)("AC-1, AC-2: after %s the subject and the first line say so", (restored, line) => {
+    const mail = back(restored);
+    expect(mail.subject).toBe("Mom's birthday: your earlier ideas are still here");
+    expect(mail.text).toContain(line);
+    expect(mail.text.indexOf(line)).toBeLessThan(mail.text.indexOf("Mom's birthday is Saturday, March 14."));
+    expect(mail.html.match(/Buy this/g)).toHaveLength(3);
+  });
+
+  it("a plain heads-up says neither", () => {
+    const mail = TEMPLATES.heads_up(s.data, s.links);
+    expect(mail.text).not.toContain("still here if you want one");
   });
 });
 

@@ -242,7 +242,8 @@ update concierge.app_settings set value = '0' where key = 'zinc_ordering_enabled
 | `order.ordered_email_failed` | The "your gift is ordered" email failed. | Check Resend. It is retried on the next tick. |
 | `order.failed_late_email_failed` | The "we couldn't buy it" email failed. It tells every failure the buyer hasn't heard about once a round has closed, in one email: a gift still placing at the deadline that failed, an unconfirmed one settled as failed, or a failure untold when the round closed (the deadline, the cancel link, the person removed or the occasion turned off). | Check Resend. It is retried on the next tick until it goes. |
 | `ideas.not_configured` | A round's idea run couldn't start because the AI Gateway or Zinc isn't set up on this environment. No run is counted and nothing is spent, so without this the round would wait silently until it skips at its deadline. The event carries `round_id`, `user_id` and `person_id`. | Ideas can't run on this environment: set `AI_GATEWAY_BASE`, `AI_GATEWAY_API_KEY`, `ZINC_API_KEY` and `ZINC_API_BASE` on it (Vercel environment variables, then redeploy), or turn `idea_engine_enabled` off (**Gift idea engine** below). |
-| `ideas.zinc_unauthorized` | Zinc refused the app's own key on every product lookup in an idea run, so the run failed. Buyers stop getting ideas until it's fixed. | Check `ZINC_API_KEY` on that environment (it must be the app's key, T17, not a user's) and the app account's balance in Zinc's dashboard. The round tries again on a later tick. |
+| `ideas.zinc_unauthorized` | Zinc refused the app's own key on at least one product lookup in an idea run. A run that kept nothing because of it ends `failed`. Buyers get fewer ideas, or none, until it's fixed. | Check `ZINC_API_KEY` on that environment (it must be the app's key, T17, not a user's) and the app account's balance in Zinc's dashboard. The round tries again on a later tick. |
+| `round.ideas_restore_failed` | Bringing a round's rejected ideas back failed, so its buyer gets the no-ideas email instead. | Check that migration 20261127140000 is applied on that environment and that the database is up. The ideas aren't lost: until the no-ideas email goes, the next tick tries again. To stop the attempts, set `restore_rejected_ideas_enabled` to 0. |
 | `round_fanout_send_failed` | The tick couldn't hand some due rounds to the queue (`count` of them), even after one retry. They stay due, so the next tick tries again. | **Round fan-out** below, "Sends are failing". |
 | `round_job` with `alert: true` and `result: "failed"` | **This is the alert.** A job failed before it claimed any round: the wiring (Zinc or email setup, an environment variable) or a setting it reads first (`round_fanout_enabled`, `round_engine_enabled`, the schedule settings, `zinc_place_budget_ms`). It is redelivered, up to `maxDeliveries` (3); `delivery_count` says which try, and the error's `name`/`code` say what threw. A `round_job` with `result: "failed"` and no `alert` is a step failing after the claim: a log, not an alert (see the runbook). | **Round fan-out** below, "A job failed before it claimed". |
 | `round_job` with `reason: "bad_signature"` | The job route got a message whose signature doesn't check. It ran nothing and acknowledged the message. | **Round fan-out** below, "Bad signature". |
@@ -370,12 +371,14 @@ Spec and plan: [design/plans/ALL-29-approval.md](plans/ALL-29-approval.md). Deci
 | `order.requote` | A price re-check on the fix page or at buy time: outcome and lookups made (`link_mismatch` and `other_marketplace` as below, with no lookup) |
 | `round.ideas_rejected` | "None of these" with a new search to come: reason code, ideas rejected |
 | `round.rejection_noted` | "None of these" with no search left: only the reason was saved, the ideas stay buyable |
+| `round.ideas_restored` | A search after "None of these" brought nothing and none is left, so the rejected ideas came back: `count`, and how the search ended in `outcome` (`none`, `failed`, `cost_cap` or `deadline`). Nothing to do, unless `outcome` is often `failed`: then look at `ideas.run` for that round to see which vendor failed |
+| `round_restored_unreadable` | The round screen couldn't read whether its ideas came back, so it left out the line above them. Nothing else changes. Check the database if it repeats |
 | `round.budget_set` | A budget typed on an open round with none (cents) |
 | `ideas.list_gift` | One list gift looked up in an idea run: store route and outcome (qualified, unsupported, over budget, stopped, `link_mismatch` for an Amazon link whose ASIN is unreadable or isn't the saved one, `other_marketplace` for an Amazon link outside amazon.com, ...) |
 
 None of these is an alert. Rejected-then-regenerated rounds show up as `ideas.run_started` on the next tick.
 
-**Turning it off:** `zinc_ordering_enabled` = 0 stops all buying (the pages still open and say so); `round_engine_enabled` = 0 stops new rounds and emails; `idea_engine_enabled` = 0 stops idea runs, list lookups included; or roll back in Vercel. The fix page's **Check today's price** (a paid lookup on the app's key) is off wherever buying is off: `zinc_ordering_enabled` = 0 stops it, and so does Zinc not being set up in that environment (`ZINC_ENV`, `ZINC_API_BASE` or `ZINC_WALLET_URL` missing). Either way it looks nothing up and says "Buying is switched off right now, so we didn't check the price." (`zinc_off`). It also refuses, with no lookup, once the round no longer needs attention, is closed, or reaches its ship-by day (`not_open`). The migration only adds things and tightens guards, so the old code runs on it (E7).
+**Turning it off:** `zinc_ordering_enabled` = 0 stops all buying (the pages still open and say so); `round_engine_enabled` = 0 stops new rounds and emails; `idea_engine_enabled` = 0 stops idea runs, list lookups included; `restore_rejected_ideas_enabled` = 0 stops rejected ideas coming back (the no-ideas email goes instead; ideas already back stay on offer); or roll back in Vercel. The fix page's **Check today's price** (a paid lookup on the app's key) is off wherever buying is off: `zinc_ordering_enabled` = 0 stops it, and so does Zinc not being set up in that environment (`ZINC_ENV`, `ZINC_API_BASE` or `ZINC_WALLET_URL` missing). Either way it looks nothing up and says "Buying is switched off right now, so we didn't check the price." (`zinc_off`). It also refuses, with no lookup, once the round no longer needs attention, is closed, or reaches its ship-by day (`not_open`). The migration only adds things and tightens guards, so the old code runs on it (E7).
 
 **Unused until a later contract migration:** the database function `reapprove_order` (replaced by `replace_failed_order`, T81) and the `excluded_products` helper (replaced by `concierge.order_is_given` and `excluded_offers`). Both stay so a Vercel rollback still works.
 
@@ -410,7 +413,8 @@ The engine finds gift ideas for a round and on demand (a person's Gift ideas scr
 | `idea_list_lookups_max` | 10 | The most Zinc lookups of a person's list gifts in one run (ALL-29, T82). The list pass also stops once `idea_keep_max` qualify |
 | `idea_list_min` | 3 | With this many list gifts qualifying the AI brainstorm doesn't run; fewer and it adds ideas up to `idea_keep_max` (ALL-29, T82) |
 | `idea_run_max_cents` | 100 | The most one run may spend (AI plus Zinc), shown in the notice. A run stops resolving at this figure and skips ranking if its worst case wouldn't fit (`stopped: cost_cap`) |
-| `idea_round_runs_max` | 2 | Runs a round may use before it stops and emails the buyer. A new fact allows one more |
+| `idea_round_runs_max` | 2 | Runs a round may use before it stops and emails the buyer. A new fact allows one more. A run that found nothing (`none`) is never repeated without a newer fact, even with runs left |
+| `restore_rejected_ideas_enabled` | 1 | 1 = when "None of these" brings nothing new and no search is left, the rejected ideas come back. 0 = the no-ideas email goes instead. Set it with SQL on that environment's database, no deploy needed |
 | `idea_rounds_per_tick` | 1 | Most rounds that make ideas in one tick. Raise it only with timings from `ideas.run` events (AC-28) |
 | `idea_run_lease_ms` | 600000 | How long an unfinished on-demand run blocks another for the same person |
 | `tick_deadline_ms` | 270000 | The idea pass starts no run after this, and runs are cut off at it, leaving 30 s of Vercel's 300 s. It never holds up placing orders or any other step |
@@ -421,7 +425,29 @@ The engine finds gift ideas for a round and on demand (a person's Gift ideas scr
 
 **The tick and ideas.** Each tick does the money pass first (placing orders, the stale-order sweep, rejection notices). Then the idea pass runs, bounded by `tick_deadline_ms` and `idea_rounds_per_tick`. The deadline bounds only the idea pass: held (`needs_attention`) rounds and every other step run first with no deadline, as before. Rounds that don't get an idea turn before the deadline are released for the next tick. If `tick_deadline_ms` can't be read, the idea pass is skipped.
 
-**Emails.** When a round gets no ideas, the buyer gets one "We don't have gift ideas for {name} yet" email (`no_ideas`), then a second after a new fact brings one more run, and the second promises no retry. Nothing is sent while the engine is off or the buyer isn't paid; the round skips silently at its deadline.
+**Emails.** When a round gets no ideas, the buyer gets one "We don't have gift ideas for {name} yet" email (`no_ideas`), then a second after a new fact brings one more run, and the second promises neither a retry nor a skip. With every run spent, either says we'll skip. On the last tick before ship-by the email instead says no gift can arrive in time, suggests something local and asks for nothing (`no_ideas_late`); the close the next day then sends no email. If that email is refused, or the process dies before it goes, `round_too_late_email_failed` (a refusal only) is logged, nothing more is tried that day, and the close sends the "skipped" email instead. After "None of these", earlier ideas that can come back go out in a heads-up ("your earlier ideas are still here") in place of these. Nothing is sent while the engine is off or the buyer isn't paid; the round skips silently at its deadline.
+
+**Deploying and rolling back ALL-167.** The database ships first: the new code reads `rejections.owned` (`readRestored`, on the round screen and in the heads-up) and records `no_ideas_late`, which the old step check refuses. The old code runs on the new database. After a rollback of the code, rows with `no_ideas_late` stay valid and the old code ignores them: a round told too late that day may run once more and be told "no ideas" again, and a round told only by `no_ideas_late` closes without the "skipped" email, since the old code doesn't count that key. Ideas already back stay on offer. Never put the old step check back while `no_ideas_late` rows exist.
+
+**Once, after the code is live:** rounds that were told there were no ideas before it are not due until their ship-by day, so wake them for the next tick, which brings their earlier ideas back where it can and otherwise sends nothing. First list them (read-only), and stop if the list isn't what you expect:
+
+```sql
+select r.id, r.user_id, r.ship_by_deadline, r.next_action_at
+  from concierge.gift_rounds r
+ where r.status = 'generating' and r.closed_at is null
+   and r.ship_by_deadline > (now() at time zone 'utc')::date
+   and exists (select 1 from concierge.gift_ideas i where i.round_id = r.id and i.status = 'rejected')
+ order by r.ship_by_deadline;
+```
+
+Then, once, the same rounds:
+
+```sql
+update concierge.gift_rounds r set next_action_at = now()
+ where r.status = 'generating' and r.closed_at is null
+   and r.ship_by_deadline > (now() at time zone 'utc')::date
+   and exists (select 1 from concierge.gift_ideas i where i.round_id = r.id and i.status = 'rejected');
+```
 
 **Zinc offers are judged on the worst case:** orders don't choose a shipping method, so each offer is judged on its slowest delivery and its highest shipping price.
 

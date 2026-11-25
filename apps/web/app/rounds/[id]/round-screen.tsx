@@ -16,6 +16,7 @@ import {
 } from "@gifts-af/core";
 import { IdeaPhoto } from "@/components/idea-photo";
 import { chooseBy, OCCASION_NAMES, shortDate } from "@/lib/occasion-format";
+import { RESTORED_LINE } from "@/lib/restored-ideas";
 import { storeLabel } from "@/lib/store-label";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -815,6 +816,10 @@ export function RoundScreen({
       )}
 
       {canBuy && budget === null && <BudgetField roundId={round.id} action={setBudgetAction} />}
+
+      {canBuy && view.restored !== null && order.length > 0 && (
+        <p className="text-[15px] text-muted-foreground">{RESTORED_LINE[view.restored]}</p>
+      )}
 
       {view.closedText === null && listIdeas.length > 0 && (
         <section className="flex flex-col gap-2" aria-labelledby="round-list">
