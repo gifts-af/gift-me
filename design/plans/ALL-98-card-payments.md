@@ -1,4 +1,4 @@
-# ALL-98 Pay by card through Zinc Connect: Spec (approved by the owner, 2026-11-25; the sandbox test comes before any plan)
+# ALL-98 Pay by card through Zinc Connect: Spec (approved by the owner, 2026-11-25; no build until one real card order passes)
 
 **Goal:** a buyer saves a card once, and each gift is one charge from GiftsAF: the gift plus one "GiftsAF fee" line.
 
@@ -20,7 +20,7 @@ A typical buyer won't keep $100 parked in a Zinc account (owner). Friends join o
 | Store cancels | We refund everything and absorb Stripe's fee | Owner, 2026-11-25 |
 | A decline Zinc doesn't tell apart | Today's "couldn't buy it" page | Owner, 2026-11-25 |
 | Cards | US only at launch if card fees vary | Owner, 2026-11-25 |
-| Sandbox test first | Yes, once the real order is settled. **No plan is written until it passes** (list below) | Owner, 2026-11-25; the gate is Claude's call |
+| Proof before building | Zinc Connect can't use a Stripe sandbox (tested 2026-11-25). The plan may be written now, with unproven parts marked as assumptions. **No build until one real card order (under $25, the owner's card) on a live Stripe account passes** | Owner, 2026-11-25 |
 | Returns, disputes | By hand, with a runbook (59) | Owner, 2026-11-24 |
 
 ## Approaches considered
@@ -76,7 +76,7 @@ Most you'll pay              $25.64
 
 ## How it fits (builder's starting points)
 
-- **Fee math (`packages/core`), one function each way.** `charge(goods) = ceil((goods + fixed + 30) / (1 - pct))`; `cap(maxCharge) = floor(maxCharge * (1 - pct)) - fixed - 30`. Subtracting a fee worked out at the lower price is wrong: the fee grows with the price ($22.59 could have charged $27.71 against $27.63 shown). Property-tested across cents. $50 + $2.50 + $1 gives Zinc's $55.41; its exact rounding is checked in the sandbox.
+- **Fee math (`packages/core`), one function each way.** `charge(goods) = ceil((goods + fixed + 30) / (1 - pct))`; `cap(maxCharge) = floor(maxCharge * (1 - pct)) - fixed - 30`. Subtracting a fee worked out at the lower price is wrong: the fee grows with the price ($22.59 could have charged $27.71 against $27.63 shown). Property-tested across cents. $50 + $2.50 + $1 gives Zinc's $55.41; the sandbox hold rounds to the nearest cent, so ours is the same or 1 cent more.
 - **`max_price` excludes margin and fees** (Zinc docs). Every total comes from the idea's price, shipping and tax plus the buyer's fee, because `est_total_cents` already contains the wallet's $1.
 - **Saved on the order at approval:** margin, Zinc fee, percent, fixed cents and the approved maximum.
 - **Placing.** `placeRound` and `begin_placing` gate on a saved card instead of a wallet when `funding_mode` is `connect`. One app Zinc key places these; wallet orders keep the buyer's key. Dev, previews and production each need their own Zinc account and Stripe mode, with today's environment check.
@@ -95,14 +95,16 @@ Moving wallet accounts; a spending page (ALL-145); a returns flow; tax; digital 
 
 ## Open questions
 
-**Zinc (asked 2026-11-24, no reply):** hold length; returns to the card; chargebacks; whether $0 margin is supported; how bank approval is reported; whether Connect works in the sandbox. Their docs show the Stripe fee added on top, but not which account pays it at settlement.
+**Zinc (asked 2026-11-24, no reply):** hold length; returns to the card; chargebacks; whether $0 margin is supported; how bank approval is reported. Their docs show the Stripe fee added on top, but not which account pays it at settlement.
 
-**Sandbox test: pass or fail, before any plan**
-1. A Stripe sandbox connects and a `zn_test_` connect order places.
-2. What a decline and a bank-approval request return: sync or later, and which code.
-3. What makes the charge: whether the total includes our fees, how Zinc rounds, who pays Stripe's fee, whether the card fee is a fixed rate.
-4. Whether events come to one app webhook, and what a hold looks like.
+**Sandbox test, 2026-11-25 (details on ALL-98).** Stripe refuses to link a sandbox to Zinc. Zinc's test API simulates connect orders (`connect.simulated`) and checks no card or customer.
 
+| To prove | So far | Left for the real card order |
+|---|---|---|
+| 1. A connect order places | Simulated only | A live Stripe account connects and the order places |
+| 2. What a decline and a bank-approval request return | Not testable | Only if Stripe and Zinc allow it; otherwise stays an assumption |
+| 3. What makes the charge | The hold matches our formula to 1 cent or less; $0 margin accepted | The final charge, its rounding, who pays Stripe's fee, whether the rate is fixed |
+| 4. Events and the hold | `connect.state` is `secured` on create | Capture, release, and events at one app webhook |
 
 ## Principles check
 
