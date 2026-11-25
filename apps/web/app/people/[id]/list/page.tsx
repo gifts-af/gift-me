@@ -3,6 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { AppNav } from "@/components/app-shell/app-nav";
 import { BackLink, PageFrame, PageTitle } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
+import { readAccess } from "@/components/concierge-gate";
 import { appSettingInt } from "@/lib/app-settings";
 import { todayForRequest } from "@/lib/today";
 import { getPerson } from "@/modules/concierge";
@@ -37,6 +38,7 @@ async function Loaded({ params }: { params: Promise<{ id: string }> }) {
     redirect(token ? `/share/${token}` : `/people/${person.id}`);
   }
 
+  const access = await readAccess();
   return (
     <>
       <TopBar>
@@ -45,7 +47,7 @@ async function Loaded({ params }: { params: Promise<{ id: string }> }) {
       <PageFrame>
         <BackLink href={`/people/${person.id}`} label={person.name} />
         <PageTitle>{person.name}&apos;s list</PageTitle>
-        <ListLink variant="page" name={person.name} personId={person.id} keepsList={person.keepsList} linkAction={linkListAction} unlinkAction={unlinkListAction} />
+        <ListLink variant="page" name={person.name} personId={person.id} keepsList={person.keepsList} hasAccess={access?.access ?? false} linkAction={linkListAction} unlinkAction={unlinkListAction} />
       </PageFrame>
     </>
   );

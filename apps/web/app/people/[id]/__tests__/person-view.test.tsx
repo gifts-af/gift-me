@@ -69,7 +69,7 @@ describe("PersonView", () => {
     getPerson.mockResolvedValue(dad);
     await show();
     expect(screen.getByRole("heading", { level: 1, name: "Dad" })).toBeInTheDocument();
-    expect(screen.getByText("No list linked")).toBeInTheDocument();
+    expect(screen.getByText("No list linked").querySelector("svg")).toBeNull();
     const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
     expect(headings).toEqual(["Does Dad have a GiftsAF list?", "What we know", "Occasions", "Gifts"]);
     expect(getProfile.mock.calls[0].slice(1)).toEqual(["p1", false]);
@@ -101,7 +101,7 @@ describe("PersonView", () => {
       await show();
       const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
       expect(headings[0]).toBe("Does Dad have a GiftsAF list?");
-      expect(screen.getByText("Paste the link they sent you, and their own list is linked.")).toBeInTheDocument();
+      expect(screen.getByText("Paste the link they sent you to link their list.")).toBeInTheDocument();
       expect(screen.getByRole("textbox", { name: "Their list link" })).toBeInTheDocument();
       expect(screen.getByText("If a gift for them is waiting on an address, it will ship to this list's owner.")).toBeInTheDocument();
       expect(screen.queryByRole("link", { name: /^Their list/ })).toBeNull();
@@ -184,7 +184,7 @@ describe("PersonView", () => {
     getPerson.mockResolvedValue({ ...dad, keepsList: true });
     countSavedGifts.mockResolvedValueOnce(2);
     await show();
-    expect(screen.getByText("Their own list")).toBeInTheDocument();
+    expect(screen.getByText("Their own list").querySelector("svg")).not.toBeNull();
     expect(screen.getByRole("link", { name: /^Saved gifts/ })).toHaveTextContent("2");
     expect(screen.getByRole("link", { name: /^Their list/ })).toHaveTextContent("Linked");
   });
@@ -212,6 +212,7 @@ describe("PersonView", () => {
   });
 
   describe("the concierge's parts", () => {
+    const REMINDERS = "Reminders come with the concierge.";
     const readiness = { score: 40, label: "Ideas could be better", step: { kind: "answer", count: 3 } };
     const late = { ...dad, occasions: [...dad.occasions, { kind: "christmas", enabled: true, date: "2026-12-25", orderBy: null, budgetCents: null }] };
     const parts = () => ({
@@ -219,6 +220,7 @@ describe("PersonView", () => {
       ideas: screen.queryByRole("link", { name: /^Gift ideas/ }) !== null,
       orderBy: screen.queryByText(/^Order by/) !== null,
       tooLate: screen.queryByText("Too late to ship") !== null,
+      heldGifts: screen.queryByText(/waiting on an address/) !== null,
       learn: screen.queryByText(/we'll learn from it/) !== null,
     });
     const profile = () => getProfile.mockResolvedValueOnce({ groups: [], off: [], unread: 0, openCount: 0, readiness });
@@ -227,18 +229,20 @@ describe("PersonView", () => {
       getPerson.mockResolvedValue(late);
       profile();
       await show();
-      expect(parts()).toEqual({ readiness: true, ideas: true, orderBy: true, tooLate: true, learn: true });
+      expect(parts()).toEqual({ readiness: true, ideas: true, orderBy: true, tooLate: true, heldGifts: true, learn: true });
+      expect(screen.queryByText(REMINDERS)).toBeNull();
     });
 
     it.each([
-      ["without access", { access: false, requested: false }],
-      ["when the check fails", null],
-    ])("hides them, and shows the rest, %s (AC-19)", async (_, access) => {
+      ["without access", { access: false, requested: false }, true],
+      ["when the check fails", null, false],
+    ])("hides them, and shows the rest, %s (AC-19)", async (_, access, note) => {
       readAccess.mockResolvedValue(access);
       getPerson.mockResolvedValue(late);
       profile();
       await show();
-      expect(parts()).toEqual({ readiness: false, ideas: false, orderBy: false, tooLate: false, learn: false });
+      expect(parts()).toEqual({ readiness: false, ideas: false, orderBy: false, tooLate: false, heldGifts: false, learn: false });
+      expect(screen.queryByText(REMINDERS) !== null).toBe(note);
       expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual([
         "Does Dad have a GiftsAF list?",
         "What we know",

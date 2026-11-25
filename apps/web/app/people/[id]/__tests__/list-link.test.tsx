@@ -5,10 +5,10 @@ import { ListLink } from "../list-link";
 
 const ok = { ok: true } as const;
 
-function setup(keepsList: boolean, linkResult: { ok: true } | { ok: false; error: string } = ok) {
+function setup(keepsList: boolean, linkResult: { ok: true } | { ok: false; error: string } = ok, hasAccess = true) {
   const link = vi.fn(async (...a: [unknown, FormData]) => (void a, linkResult));
   const unlink = vi.fn(async (...a: [unknown, FormData]) => (void a, ok));
-  render(<ListLink variant="page" name="Dad" personId="p1" keepsList={keepsList} linkAction={link} unlinkAction={unlink} />);
+  render(<ListLink variant="page" name="Dad" personId="p1" keepsList={keepsList} hasAccess={hasAccess} linkAction={link} unlinkAction={unlink} />);
   return { link, unlink };
 }
 
@@ -25,6 +25,12 @@ describe("ListLink", () => {
   it("says where a waiting gift will go, next to the field (decision 53)", () => {
     setup(false);
     expect(screen.getByText("If a gift for them is waiting on an address, it will ship to this list's owner.")).toBeInTheDocument();
+  });
+
+  it("says nothing of waiting gifts without access, as nothing ships", () => {
+    setup(false, ok, false);
+    expect(screen.queryByText(/waiting on an address/)).toBeNull();
+    expect(screen.getByRole("button", { name: "Link" })).toBeInTheDocument();
   });
 
   it("sends a link pasted before the page was ready, which React never saw typed", async () => {
@@ -54,6 +60,7 @@ describe("ListLink", () => {
 
   it("offers Unlink, not the paste field, once linked", async () => {
     const { unlink } = setup(true);
+    expect(screen.getByText("Their list is linked.")).toBeInTheDocument();
     expect(screen.queryByLabelText("Their list link")).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Unlink" }));
     await waitFor(() => expect(unlink).toHaveBeenCalled());
@@ -63,14 +70,14 @@ describe("ListLink", () => {
   describe("prompt variant", () => {
     function prompt(linkResult: { ok: true } | { ok: false; error: string } = ok) {
       const link = vi.fn(async (...a: [unknown, FormData]) => (void a, linkResult));
-      render(<ListLink variant="prompt" name="Dad" personId="p1" keepsList={false} linkAction={link} />);
+      render(<ListLink variant="prompt" name="Dad" personId="p1" keepsList={false} hasAccess linkAction={link} />);
       return { link };
     }
 
     it("asks about the person, with the copy, and no page-only line", () => {
       prompt();
       expect(screen.getByRole("heading", { level: 2, name: "Does Dad have a GiftsAF list?" })).toBeInTheDocument();
-      expect(screen.getByText("Paste the link they sent you, and their own list is linked.")).toBeInTheDocument();
+      expect(screen.getByText("Paste the link they sent you to link their list.")).toBeInTheDocument();
       expect(screen.getByText("If a gift for them is waiting on an address, it will ship to this list's owner.")).toBeInTheDocument();
       expect(screen.queryByText("You don't need their list to buy for them.")).toBeNull();
     });

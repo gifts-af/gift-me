@@ -12,7 +12,7 @@ const christmas: Row = {
 
 function setup(rows: Row[], result: { ok: true } | { ok: false; error: string } = { ok: true }, hasAccess = true) {
   const action = vi.fn(async (...a: [unknown, FormData]) => (void a, result));
-  render(<Occasions personId="p1" occasions={rows} hasAccess={hasAccess} action={action} />);
+  render(<Occasions personId="p1" occasions={rows} hasAccess={hasAccess} remindersNote={!hasAccess} action={action} />);
   return action;
 }
 

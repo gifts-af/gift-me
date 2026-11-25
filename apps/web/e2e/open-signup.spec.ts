@@ -137,8 +137,10 @@ test("without access, you can add people, from scratch or a shared list, and use
     page.getByRole("link", { name: /^Gift ideas/ }),
     page.getByRole("region", { name: "How ready their ideas are" }),
     page.getByText(/^(Order by|Too late to ship)/),
+    page.getByRole("main").getByText(/waiting on an address/),
   ];
   for (const part of concierge) await expect(part).toHaveCount(0);
+  await expect(page.getByText("Reminders come with the concierge.")).toBeVisible();
 
   // Someone's list, from the link they shared.
   const owner = await createFreshUser("Odalys");
@@ -147,6 +149,7 @@ test("without access, you can add people, from scratch or a shared list, and use
   await page.goto(`/share/${list.share_token}`);
   await page.getByRole("link", { name: "Add Odalys to your people" }).click();
   await expect(page.getByLabel("Name")).toHaveValue("Odalys");
+  await expect(page.getByRole("main").getByText(/waiting on an address/)).toHaveCount(0);
   await page.getByLabel("Who are they to you?").selectOption({ label: "Mother" });
   await page.getByRole("button", { name: "Add Odalys" }).click();
   await expect(page).toHaveURL(/\/people\/[0-9a-f-]{36}$/);
@@ -164,6 +167,8 @@ test("with access, a person's page has the concierge's parts (AC-9)", async ({ p
   await expect(page.getByRole("link", { name: /^Gift ideas/ })).toBeVisible();
   await expect(page.getByRole("region", { name: "How ready their ideas are" })).toBeVisible();
   await expect(page.getByText(/^Order by/)).toBeVisible();
+  await expect(page.getByRole("main").getByText(/waiting on an address/)).toBeVisible();
+  await expect(page.getByText("Reminders come with the concierge.")).toHaveCount(0);
 });
 
 test("the pitch and the request card fit the screen, before and after asking", { tag: "@layout" }, async ({ page }, testInfo) => {

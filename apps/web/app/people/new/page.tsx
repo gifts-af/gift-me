@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { AppNav } from "@/components/app-shell/app-nav";
 import { PageFrame, PageTitle } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
+import { readAccess } from "@/components/concierge-gate";
 import { appSettingInt } from "@/lib/app-settings";
 import { errorFields, logEvent } from "@/lib/log";
 import { createClient } from "@/lib/supabase/server";
@@ -50,10 +51,11 @@ async function Form({ searchParams }: { searchParams: Promise<{ list?: string | 
   const supabase = await createClient();
   const userId = (await supabase.auth.getClaims()).data?.claims?.sub;
   if (!userId) redirect("/");
-  const [maxUploadBytes, px, link] = await Promise.all([
+  const [maxUploadBytes, px, link, access] = await Promise.all([
     appSettingInt("person_photo_max_upload_bytes"),
     appSettingInt("person_photo_px"),
     searchParams.then((p) => fromList(p.list)),
+    searchParams.then((p) => (p.list ? readAccess() : null)),
   ]);
   return (
     <PersonForm
@@ -65,6 +67,7 @@ async function Form({ searchParams }: { searchParams: Promise<{ list?: string | 
       doneHref="/give"
       initialName={link?.ownerName}
       shareToken={link?.token}
+      hasAccess={access?.access ?? false}
     />
   );
 }

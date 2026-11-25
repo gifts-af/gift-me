@@ -1,4 +1,4 @@
-import { ListChecks, Sparkles } from "lucide-react";
+import { ListChecks } from "lucide-react";
 import { notFound, redirect } from "next/navigation";
 import { relationshipLabel } from "@gifts-af/core";
 import { OCCASION_NAMES, monthDay, shortDate } from "@/lib/occasion-format";
@@ -96,18 +96,14 @@ export async function PersonView({
             {person.next && ` · ${OCCASION_NAMES[person.next.kind]}, ${shortDate(person.next.date)}`}
           </p>
           <p className="mt-0.5 flex items-center gap-1.5 text-[13px] text-muted-foreground">
-            {person.keepsList ? (
-              <ListChecks className="size-3.5" aria-hidden="true" />
-            ) : (
-              <Sparkles className="size-3.5" aria-hidden="true" />
-            )}
+            {person.keepsList && <ListChecks className="size-3.5" aria-hidden="true" />}
             {person.keepsList ? "Their own list" : "No list linked"}
           </p>
         </div>
       </header>
 
       {askForList && (
-        <ListLink variant="prompt" name={person.name} personId={person.id} keepsList={false} linkAction={linkUnlinkedListAction} />
+        <ListLink variant="prompt" name={person.name} personId={person.id} keepsList={false} hasAccess={hasAccess} linkAction={linkUnlinkedListAction} />
       )}
 
       {gifts}
@@ -136,7 +132,13 @@ export async function PersonView({
         <SettingsRow href={`${base}/about`} label={`About ${person.name}`} value={aboutSummary(person)} />
       </RowGroup>
 
-      <Occasions personId={person.id} occasions={person.occasions} hasAccess={hasAccess} action={setOccasionEnabledAction} />
+      <Occasions
+        personId={person.id}
+        occasions={person.occasions}
+        hasAccess={hasAccess}
+        remindersNote={access?.access === false}
+        action={setOccasionEnabledAction}
+      />
 
       <RowGroup title="Gifts">
         <BudgetRow

@@ -27,10 +27,10 @@ describe("PersonCard", () => {
 
   it("says 'Their own list' when they keep one, 'No list linked' when not", () => {
     const { rerender } = render(<PersonCard person={base} />);
-    expect(screen.getByText("Their own list")).toBeInTheDocument();
+    expect(screen.getByText("Their own list").querySelector("svg")).not.toBeNull();
     expect(screen.queryByText("No list linked")).toBeNull();
     rerender(<PersonCard person={{ ...base, keepsList: false }} />);
-    expect(screen.getByText("No list linked")).toBeInTheDocument();
+    expect(screen.getByText("No list linked").querySelector("svg")).toBeNull();
     expect(screen.queryByText("Their own list")).toBeNull();
   });
 

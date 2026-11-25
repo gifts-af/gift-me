@@ -24,6 +24,8 @@ vi.mock("@/modules/concierge", () => ({ getPerson }));
 const getPersonShareToken = vi.hoisted(() => vi.fn());
 vi.mock("@/modules/lists", () => ({ getPersonShareToken }));
 const appSettingInt = vi.hoisted(() => vi.fn());
+const readAccess = vi.hoisted(() => vi.fn());
+vi.mock("@/components/concierge-gate", () => ({ readAccess }));
 vi.mock("@/lib/app-settings", () => ({ appSettingInt }));
 
 const listPage = await import("../list/page");
@@ -65,6 +67,7 @@ describe("a person's Their list page", () => {
     getPerson.mockResolvedValue({ id: "p1", name: "Sam", keepsList: true });
     getPersonShareToken.mockResolvedValue(null);
     appSettingInt.mockResolvedValue(1);
+    readAccess.mockResolvedValue({ access: true, requested: false });
   });
 
   it("redirects to the share page when the person has a linked list and the card is on", async () => {
@@ -82,7 +85,13 @@ describe("a person's Their list page", () => {
     getPerson.mockResolvedValue({ id: "p1", name: "Sam", keepsList: false });
     const page = await open();
     expect(redirect).not.toHaveBeenCalled();
-    expect(findListLink(page as ReactNode)).toMatchObject({ variant: "page", keepsList: false });
+    expect(findListLink(page as ReactNode)).toMatchObject({ variant: "page", keepsList: false, hasAccess: true });
+  });
+
+  it.each([{ access: false, requested: false }, null])("tells the form there's no access without it, or when the check fails (%#)", async (access) => {
+    readAccess.mockResolvedValue(access);
+    appSettingInt.mockResolvedValue(0);
+    expect(findListLink((await open()) as ReactNode)).toMatchObject({ hasAccess: false });
   });
 
   it("keeps a linked person on the old screen, with Unlink, when the card is off", async () => {

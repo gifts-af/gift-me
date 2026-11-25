@@ -18,12 +18,15 @@ export function Occasions({
   personId,
   occasions,
   hasAccess,
+  remindersNote,
   action,
 }: {
   personId: string;
   occasions: Row[];
   /** To the concierge, which does the ordering. */
   hasAccess: boolean;
+  /** Says reminders come with the concierge. Not when the access check failed. */
+  remindersNote: boolean;
   /** `setOccasionEnabledAction` */
   action: (previous: null, formData: FormData) => Promise<SaveResult>;
 }) {
@@ -81,6 +84,7 @@ export function Occasions({
           );
         })}
       </ul>
+      {remindersNote && <p className="text-[13px] text-muted-foreground">Reminders come with the concierge.</p>}
       {error && (
         <p role="alert" className="text-[13px] text-destructive">
           {error}

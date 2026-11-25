@@ -12,7 +12,7 @@ const photo = new File(["x".repeat(100)], "me.png", { type: "image/png" });
 
 type Result = { ok: true; id: string } | { ok: false; error: string; existingId?: string };
 
-function setup(addResult: Result = { ok: true, id: "new1" }, extra: { initialName?: string; shareToken?: string } = {}) {
+function setup(addResult: Result = { ok: true, id: "new1" }, extra: { initialName?: string; shareToken?: string; hasAccess?: boolean } = {}) {
   const calls: string[] = [];
   const action = vi.fn(async (...args: [unknown, FormData]) => {
     void args;
@@ -252,9 +252,18 @@ describe("PersonForm", () => {
     const NOTICE = "If a gift for them is waiting on an address, it will ship to this list's owner.";
 
     it("starts with the owner's name, says where held gifts ship, and sends the token", async () => {
-      const t = setup(undefined, { initialName: "Sam", shareToken: TOKEN });
+      const t = setup(undefined, { initialName: "Sam", shareToken: TOKEN, hasAccess: true });
       expect(screen.getByLabelText("Name")).toHaveValue("Sam");
       expect(screen.getByText(NOTICE)).toBeInTheDocument();
+      await userEvent.selectOptions(relationship(), "Friend");
+      await save();
+      await waitFor(() => expect(push).toHaveBeenCalledWith("/people/new1"));
+      expect(sent(t).get("list")).toBe(TOKEN);
+    });
+
+    it("without access, says nothing of held gifts and still sends the token", async () => {
+      const t = setup(undefined, { initialName: "Sam", shareToken: TOKEN, hasAccess: false });
+      expect(screen.queryByText(NOTICE)).toBeNull();
       await userEvent.selectOptions(relationship(), "Friend");
       await save();
       await waitFor(() => expect(push).toHaveBeenCalledWith("/people/new1"));

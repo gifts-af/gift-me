@@ -57,6 +57,7 @@ test("add a list's owner from their link, open their list from their page, and r
   // 2. The form starts with their name; the relationship is asked as usual (AC-7).
   await expect(page).toHaveURL(/\/people\/new\?list=/);
   await expect(page.getByLabel("Name")).toHaveValue(name);
+  await expect(page.getByRole("main").getByText("If a gift for them is waiting on an address, it will ship to this list's owner.")).toBeVisible();
   await page.getByLabel("Who are they to you?").selectOption({ label: "Mother" });
   await page.getByRole("button", { name: `Add ${name}` }).click();
 
