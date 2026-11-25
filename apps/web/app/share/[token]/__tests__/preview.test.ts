@@ -98,11 +98,15 @@ describe("share link image", () => {
     expect(text).not.toContain("0 wishes");
   });
 
-  it("cuts a very long name, never through a character, and keeps it a possessive", async () => {
-    const text = textOf(await draw("🎁".repeat(40)));
-    expect(text).toContain(`${"🎁".repeat(31)}…’s`);
-    expect(text).toContain("wish list");
-  });
+  // One code point, a family joined from five, and a letter with a separate accent.
+  it.each(["🎁", "\u{1F468}\u200D\u{1F469}\u200D\u{1F467}", "e\u0301"])(
+    "cuts a very long name, never through a character, and keeps it a possessive (%s)",
+    async (char) => {
+      const text = textOf(await draw(char.repeat(40)));
+      expect(text).toContain(`${char.repeat(31)}…’s`);
+      expect(text).toContain("wish list");
+    },
+  );
 
   it("says '1 wish' for one", async () => {
     getSharePreview.mockResolvedValue({ ownerName: "Sam Lee", itemCount: 1 });
