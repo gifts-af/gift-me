@@ -1,6 +1,6 @@
 # ALL-179 Open list sign-up, and the concierge by request: Spec and Plan
 
-**Status:** spec approved by the owner, 2026-11-25. The plan is a draft; no code until the owner approves it.
+**Status:** spec approved by the owner, 2026-11-25. The plan has had its adversarial review, with fixes worked in; no code until the owner approves it.
 
 **Goal:** anyone can sign up at giftsaf.com, build a wish list and share it, free; the concierge (Give) is something they request and we approve.
 
@@ -44,6 +44,7 @@ The owner's family is asking for Christmas ideas now. Building and sharing a lis
 | AC-15 | `google_import_enabled` is 0, as shipped | anyone opens Import or Give | import isn't offered, and Import says to add people by hand. At 1 it works as today |
 | AC-16 | signed in, no access | they call the test-email action directly | it refuses and sends nothing |
 | AC-17 | any link that says Give or "your people" (settings, extension connect, rounds, reactions, emails) | someone follows it | it goes to `/give`. The logo and the home-screen app open `/` |
+| AC-18 | `concierge_requests_per_day` requests were made in the last 24 hours (10; 0 = off) | someone taps Request access | nothing is saved or sent, and the page says to try again tomorrow, never "Request sent" |
 
 ### Getting it live, in order
 
@@ -51,7 +52,7 @@ Nothing on the public pages opens until steps 1 to 4 are done.
 
 1. **Database change** (first PR): the two fields, the backfill, the settings and lookup caps. Alone, because Vercel deploys alongside the migration, and code arriving first would break Give.
 2. **Gate and request flow** (second PR): AC-3 to AC-17.
-3. **Sign-up emails reach strangers.** Supabase's built-in sender only delivers to the project's team ([SMTP](https://supabase.com/docs/guides/auth/auth-smtp), [rate limits](https://supabase.com/docs/guides/auth/rate-limits)). Connect Resend if production doesn't use it, require email confirmation, and set the limit to **3 an hour**. We stay on Resend's free plan (owner), which allows 100 emails a day, sent and received together (`spikes/email.md`): 3 an hour is at most 72 a day, leaving 28 for everything else. Google sign-up sends no email, and stays the first button. Proof: AC-3 on a phone, at an address outside the team.
+3. **Sign-up emails reach strangers.** Supabase's built-in sender only delivers to the project's team ([SMTP](https://supabase.com/docs/guides/auth/auth-smtp), [rate limits](https://supabase.com/docs/guides/auth/rate-limits)). Connect Resend if production doesn't use it, require email confirmation, and set the limit to **3 an hour**. We stay on Resend's free plan (owner), which allows 100 emails a day, sent and received together (`spikes/email.md`): 3 an hour is at most 72 a day, leaving 28 for everything else, of which access requests can take 20 (10 a day, two emails each; AC-18). Google sign-up sends no email, and stays the first button. Proof: AC-3 on a phone, at an address outside the team.
 4. **Google sign-in for everyone.** Publish the Google app. Proof: a Google account that isn't a test user signs in with no warning, with import off.
 5. **Home page, sign-in and tour wording** (third PR): AC-1 and AC-2.
 
@@ -76,7 +77,7 @@ Google says review usually takes 3 to 5 business days. **[Verify]** that a pendi
 ### How we see it working, and turn it off (E9, E7)
 
 - **Working:** a logged event for each access request (user id only), and a live check with the QA account with access off, then on.
-- **Off:** Supabase's "allow new sign-ups" stops new accounts; `amazon_paste_lookup_enabled` = 0 stops lookups; `google_import_enabled` stops import. None needs a deploy.
+- **Off:** Supabase's "allow new sign-ups" stops new accounts; `amazon_paste_lookup_enabled` = 0 stops lookups; `google_import_enabled` hides import; `concierge_requests_per_day` = 0 stops requests. None needs a deploy.
 - **After a Vercel rollback:** every account sees Give again, as today. They still can't spend beyond the lookup cap. Turn off new sign-ups first.
 
 ### Out of scope
@@ -111,6 +112,8 @@ For what Give shows: the owner picked **A, the pitch with Request access**, over
 | Paid Resend plan | No, stay on free; sign-up mail capped at 3 an hour (the number is Claude's call) | Owner |
 | Google import | Off for everyone for now, and start Google's approval | Owner |
 | "We got it" email | Yes | Owner |
+| Cap on access requests | 10 a day across everyone | **[Claude's call]** |
+| Mail scanners can open, and so use up, a confirmation link | Accepted for now; Google is the first button | **[Claude's call]** |
 | Extension asks for access? | **No. Changed from what the owner was shown**: parked, it needs a store submission | **[Claude's call]** |
 | How is someone let in? | The owner runs one SQL statement (`operations.md`, beside paid features) and replies to the request email, which goes to the person | **[Claude's call]** |
 | Signed-out concierge requests? | The waitlist form stays, reworded "Request concierge access"; it emails the owner as today, and stores nothing | **[Claude's call]** |
@@ -126,7 +129,7 @@ Facts to check during the admin steps. The first doesn't change the code.
 ## Principles check
 
 - **Simplest version?** Cut: approval screen, automatic email, database enforcement, extension change.
-- **Hard-coded values?** New setting `google_import_enabled`; changed `amazon_paste_lookups_per_user_per_day` and `amazon_paste_lookups_per_day_total`. The sign-up email limit is a Supabase setting.
+- **Hard-coded values?** New settings `google_import_enabled` and `concierge_requests_per_day`; changed `amazon_paste_lookups_per_user_per_day` and `amazon_paste_lookups_per_day_total`. The sign-up email limit is a Supabase setting.
 - **Product boundaries?** The check lives in the concierge module and is read through its `index.ts`. My list doesn't depend on it.
 - **New personal data?** The request date, needed to show "Request sent" and send one email only. The owner's email carries the person's name and address (as today's form does); logged events carry the user id only.
 - **Docs and decisions:** new T# revising T34 and T58 (number taken at merge); a planning decision for open lists; `technical-design.md` (accounts, navigation), `operations.md` (letting someone in, sign-up emails, Google), `strategy.md`, `README.md`, the privacy page, and the freeze exception in `CLAUDE.md`. The roadmap and screens pages, and the database map.
@@ -155,24 +158,24 @@ Facts to check during the admin steps. The first doesn't change the code.
 
 **Files:**
 - Create: `supabase/migrations/<next timestamp after the newest on main>_concierge_access.sql`, `supabase/tests/concierge_access.test.sql`
-- Modify: `supabase/tests/amazon_paste_lookups.test.sql` (30 → 10, 2000 → 200 in the two setting checks; line 85's own override stays), `packages/core/src/database.types.ts` (`pnpm db:types`), `design/database-map.html` (`pnpm db:map`)
+- Modify: `supabase/tests/app_settings.test.sql` (its list of every setting gains the two new keys), `supabase/tests/amazon_paste_lookups.test.sql` (30 → 10, 2000 → 200 in the two setting checks; line 85's own override stays), `packages/core/src/database.types.ts` (`pnpm db:types`), `design/database-map.html` (`pnpm db:map`)
 
 **Produces:**
-- `concierge.accounts.concierge_access boolean not null default false`, `concierge.accounts.access_requested_at timestamptz`; neither is added to any grant to `authenticated`.
+- `concierge.accounts.concierge_access boolean not null default false`, `concierge.accounts.access_requested_at timestamptz`; `grant select (concierge_access, access_requested_at)` to `authenticated`, because `20261109100000_zinc_wallet.sql` made select per column; no insert or update grant.
 - `concierge.has_concierge_access(p_user_id uuid) returns boolean`: same shape, `stable`, `search_path` and grants as `has_paid_features`.
-- `concierge.claim_access_request(p_user_id uuid) returns boolean`: service_role only. Inserts the row, or sets `access_requested_at = now()` where it is null and `concierge_access` is false; true only for the caller that set it.
+- `concierge.claim_access_request(p_user_id uuid) returns text`: service_role only. `'already'` if a date is set or access is on; `'busy'` if `concierge_requests_per_day` dates fall in the last 24 hours; otherwise inserts the row or sets the date to now, and returns `'claimed'`. One transaction-level advisory lock makes the count safe. A missing setting raises.
 - `concierge.release_access_request(p_user_id uuid) returns void`: service_role only. Sets `access_requested_at` to null where access is still false.
 - `concierge.turn_off_concierge_access(p_user_id uuid) returns void`: service_role only. Raises `P0001` if `paid_features`, or `zinc_api_key_secret_id is not null`, or the user has a `concierge.gift_rounds` row whose status isn't `complete` or `skipped`; otherwise sets access false and the date null. It locks the account row first.
 - Backfill: `insert into concierge.accounts (user_id, concierge_access) select id, true from auth.users on conflict (user_id) do update set concierge_access = true`. A new row takes today's default over-budget %.
-- Settings: `google_import_enabled` = `'0'`; update the two Amazon lookup settings to `'10'` and `'200'`.
+- Settings: `google_import_enabled` = `'0'`; `concierge_requests_per_day` = `'10'`; update the two Amazon lookup settings to `'10'` and `'200'`.
 
 - [ ] **Step 1: Write `concierge_access.test.sql`**, following `paid_features.test.sql`, with these checks:
   - no row means no access; a new row defaults to none; a user reads their own flag and date; another user's reads as none; anon gets `42501`
   - a user setting either field, by insert or update, gets `42501`; a user calling claim, release or turn-off gets `42501`
-  - claim returns true then false; with access on it returns false; release then claim returns true
+  - claim returns `claimed` then `already`; with access on, `already`; release then claim returns `claimed`; at the cap, and at 0, another user gets `busy` and no date
   - turn-off raises with paid features, with a saved Zinc key, and with an `awaiting_approval` round; with none of those it clears both fields
   - the backfill statement, run again in the test, gives access to a user with no row and to one with a row, leaving that row's `over_budget_pct` alone
-  - the three settings' values
+  - the four settings' values
 - [ ] **Step 2:** `pnpm db:test` → the new file fails (column doesn't exist).
 - [ ] **Step 3:** Write the migration.
 - [ ] **Step 4:** `pnpm supabase migration up --local`, then `pnpm db:test` → all pass. `pnpm db:types`, `pnpm db:map`.
@@ -189,19 +192,19 @@ Facts to check during the admin steps. The first doesn't change the code.
 - `getAccessState(db, userId): Promise<{ access: boolean; requested: boolean }>` (one read of the user's own row; no row means both false; throws on error)
 - `<ConciergeGate>{children}</ConciergeGate>`: async server component. Access: children. No access: `<ConciergePitch requested={requested} />`. Failed check: logs `concierge_access.check_failed` with `user_id` and shows "We couldn't load this. Refresh to try again." Signed out: `redirect("/auth/login")`.
 - `<ConciergePitch requested>`: mock-up A's two states. Copy: heading "Gifting, handled AF." / "You asked for access"; button "Request access"; sent text "We're letting people in a few at a time. We'll email you when you're in."; links "Take the tour" (`/tour`), "Go to my list" (`/lists`). The button's action is passed in by Task 3; until then the pitch renders without it.
-- `createFreshUser(displayName?: string, opts?: { access?: boolean })`: access on by default, off with `{ access: false }`. Global setup gives both shared users access.
+- `createFreshUser(displayName?: string, opts?: { access?: boolean })`: access on by default, off with `{ access: false }`. Global setup gives both shared users access, and works when they already exist (the create call then returns 422 with no id): take the id from a password session, then upsert `concierge.accounts` with the service role.
 
 - [ ] **Step 1: Write failing component tests:** access renders children; none renders the pitch and not the children; `requested: true` renders "Request sent" and no button; a thrown check renders the retry text, with neither children nor "Request access".
 - [ ] **Step 2:** `pnpm --filter @gifts-af/web test concierge-gate` → fails.
-- [ ] **Step 3:** Implement, then wrap each listed page's content (the part inside `PageFrame`, under its `Suspense`) in the gate. `/rounds` and `/a/` pages aren't wrapped.
-- [ ] **Step 4:** Add a test that reads the file list: every `page.tsx` under `app/people` contains `<ConciergeGate`, so a new one can't be missed. Run → pass.
+- [ ] **Step 3:** Implement, then apply one rule to each listed page: `<PageFrame><Suspense><ConciergeGate>…everything, title and back link included…</ConciergeGate></Suspense></PageFrame>`, with the top bar outside. `people/[id]/list/page.tsx` has no outer frame: give its no-access case the top bar and frame. `/rounds` and `/a/` pages aren't wrapped.
+- [ ] **Step 4:** Add `e2e/open-signup.spec.ts` with a journey: a fresh user without access opens every listed route (people routes with a made-up id) and sees "Gifting, handled AF." and none of that page's own title. Run → pass. (`/give` joins the list in Task 3.)
 - [ ] **Step 5:** Commit `feat: people and concierge settings need concierge access (ALL-179)`.
 
 ### Task 3: `/give`, home and links (AC-3, AC-4, AC-9, AC-17)
 
 **Files:**
-- Create: `apps/web/app/give/page.tsx` (today's `app/page.tsx`, its content inside `ConciergeGate`), `apps/web/e2e/open-signup.spec.ts`
-- Modify: `apps/web/app/page.tsx`; `components/app-shell/product-tabs.tsx` (Give → `/give`); links to `/give` in `app/settings/page.tsx`, `app/extension/connect/page.tsx`, `app/rounds/access.tsx`, `app/rounds/[id]/reaction/reaction-form.tsx`, `app/people/[id]/page.tsx`, `app/people/import/import-checklist.tsx`, `app/people/new/page.tsx` (`doneHref`), `app/people/actions.ts` (`redirect("/")` after a delete), `modules/concierge/inbound/handle.ts` (`/people` → `/give`; `/people` has no page today). Every `revalidatePath("/")` also revalidates `/give`.
+- Create: `apps/web/app/give/page.tsx` (today's `app/page.tsx`, under Task 2's rule)
+- Modify: `apps/web/e2e/open-signup.spec.ts`; `apps/web/app/page.tsx` (the check runs inside `Suspense`); `components/app-shell/product-tabs.tsx` (Give → `/give`); links to `/give` in `app/settings/page.tsx`, `app/extension/connect/page.tsx`, `app/rounds/access.tsx`, `app/rounds/[id]/reaction/reaction-form.tsx`, `app/people/[id]/page.tsx`, `app/people/import/import-checklist.tsx`, `app/people/new/page.tsx` (`doneHref`), `app/people/actions.ts` (`redirect("/")` after a delete), `modules/concierge/inbound/handle.ts` (`/people` → `/give`; `/people` has no page today). Every `revalidatePath("/")` becomes `/give`. Tests: `app/people/__tests__/actions.test.ts`, and a check in the inbound tests that the "someone else" link is `/give` (nothing checks it today).
 - Unchanged, on purpose: the logo, `manifest.ts`, `/a/` "Go to GiftsAF", "What is GiftsAF?", `safeNext`, `update-password-form.tsx`; all go to `/`, which sends people to the right home.
 
 **Produces:** `app/page.tsx` signed in: access → `redirect("/give")`, none → `redirect("/lists")`, failed check → the gate's retry text. Signed out it stays `/welcome` (the proxy).
@@ -222,39 +225,39 @@ Facts to check during the admin steps. The first doesn't change the code.
 - Modify: `apps/web/modules/concierge/access.ts`, `lib/form-email-samples.ts`, `app/settings/page.tsx`, `app/settings/actions.ts`, `app/share/[token]/page.tsx`, `components/home/concierge-pitch.tsx`
 
 **Produces:**
-- `requestConciergeAccess(user: { id: string; email: string; name: string | null }, deps: { claim(id: string): Promise<boolean>; release(id: string): Promise<void>; sendOwner(u): Promise<SendResult>; sendPerson(u): Promise<SendResult>; log: typeof logEvent }): Promise<{ status: "sent" } | { status: "error" }>`
+- `requestConciergeAccess(user: { id: string; email: string; name: string | null }, deps: { claim(id: string): Promise<"claimed" | "already" | "busy">; release(id: string): Promise<void>; sendOwner(u): Promise<SendResult>; sendPerson(u): Promise<SendResult>; log: typeof logEvent }): Promise<{ status: "sent" | "busy" | "error" }>`
 - Emails through `renderEmail`: owner to `inboxFor("access")`, reply-to the person, subject `GiftsAF concierge request: <name or email, one line>`, body pointing to `operations.md` for the statement; person's copy heading "Got it.", text "Thanks, we got your request. We'll email you when you're in.", nothing they typed.
-- `requestAccessAction(): Promise<{ status: "sent" } | { status: "error" }>`: takes no input; id from claims, name and email from `profiles`.
+- `requestAccessAction(): Promise<{ status: "sent" | "busy" | "error" }>`: sends through `defaultChannels(process.env)[0]`, which honours `EMAIL_OUTBOX=log`, so local runs never email anyone. Busy text: "We've had a lot of requests today. Please try again tomorrow." Takes no input; id from claims, name and email from `profiles`.
 
-- [ ] **Step 1: Write failing unit tests** for `requestConciergeAccess`: first call claims, sends owner then person, returns sent; claim false sends nothing and returns sent; owner failure releases, sends no copy, returns error; person-copy failure still returns sent and logs `concierge_access.confirmation_failed`; a name with `\r\n` gives a one-line subject; logged events contain only `user_id`.
+- [ ] **Step 1: Write failing unit tests** for `requestConciergeAccess`: first call claims, sends owner then person, returns sent; `already` sends nothing and returns sent; `busy` sends nothing and returns busy; owner failure releases, sends no copy, returns error; person-copy failure still returns sent and logs `concierge_access.confirmation_failed`; a name with `\r\n` gives a one-line subject; logged events contain only `user_id`.
 - [ ] **Step 2:** Run → fails. **Step 3:** Implement. Run → pass.
-- [ ] **Step 4: Write failing journeys** in `open-signup.spec.ts`: no access, tap Request access → "Request sent", still there after reload, and one owner email in the local outbox log; Settings shows Name and time zone but not Reminders, Gift ideas or Paying for gifts; someone else's shared list has Claim and no "to your people". And a test that `sendTestEmail` for a user without access returns an error and sends nothing.
-- [ ] **Step 5:** Implement: Settings shows the three groups only with access, and loads their data only then; the share `Card` returns null for a signed-in viewer without access, and also if the check fails (logged), so a claim never breaks; `sendTestEmail` checks `hasConciergeAccess` first. Run → pass.
+- [ ] **Step 4: Write failing journeys** in `open-signup.spec.ts`: no access, tap Request access → "Request sent", still there after reload, and the date is in the database (the unit tests count emails); at `concierge_requests_per_day` = 0 in a unit test only, so parallel specs aren't affected; Settings shows Name and time zone but not Reminders, Gift ideas or Paying for gifts; someone else's shared list has Claim and no "to your people". And a test that `sendTestEmail` for a user without access returns an error and sends nothing.
+- [ ] **Step 5:** Implement: Settings shows the three groups only with access, and loads their data only then; the share `Card` returns null for a signed-in viewer without access, and also if the check fails (logged, after `unstable_rethrow`), so a claim never breaks; `sendTestEmail` checks `hasConciergeAccess` first, inside its `try`. Run → pass.
 - [ ] **Step 6:** Commit `feat: request concierge access in one tap (ALL-179)`.
 
 ### Task 5: Import off, and the runbook (AC-15, AC-14)
 
 **Files:** Modify `app/people/import/import-section.tsx`, `components/home/people-section.tsx`, `e2e/contacts-import.spec.ts`, `e2e/global-setup.ts` (`google_import_enabled: 1` in `RUN_SETTINGS`), `design/operations.md`, `design/technical-design.md`.
 
-- [ ] **Step 1:** Failing component tests: at 0, Give has no "Import from Google" and Import says "Google import is off for now. Add people by hand." with a link to `/people/new`, and never loads Google's script; at 1 both are as today; if the setting can't be read, it counts as off.
+- [ ] **Step 1:** Failing component tests: at 0, Give has no "Import from Google" and Import says "Google import is off for now. Add people by hand." with a link to `/people/new`, and never loads Google's script; at 1 both are as today; if the setting can't be read, it counts as off; `importContactsAction` refuses at 0. `e2e-live/all-104-connect-button.spec.ts` opens Import on production: expect the off text.
 - [ ] **Step 2:** Implement with `appSettingInt("google_import_enabled")`. Run → pass.
-- [ ] **Step 3:** `operations.md`: letting someone in (the `insert … on conflict` statement setting `concierge_access`, then reply to their email), turning it off (`select concierge.turn_off_concierge_access(id)`), the off switches, and after-rollback steps.
-- [ ] **Step 4:** `pnpm gallery`; commit `feat: Google import behind a setting (ALL-179)`; adversarial review; open PR 2. Before merging, the owner has recorded the import video. After: live check with the QA account with access off, then on again; republish the screens page.
+- [ ] **Step 3:** `operations.md`: letting someone in (the `insert … on conflict` statement setting `concierge_access`, then reply to their email), changing the paid-features statement to set `concierge_access` too, since paid without access would start rounds whose address links show the pitch, turning it off (`select concierge.turn_off_concierge_access(id)`), the off switches, and after-rollback steps.
+- [ ] **Step 4:** `pnpm gallery`; commit `feat: Google import behind a setting (ALL-179)`; adversarial review; open PR 2. Before merging, the owner has recorded the import video. After: live check with the QA account: check it has no paid features, Zinc key or open round, turn access off, check, then turn it on again; republish the screens page.
 
 ### Between PR 2 and PR 3: admin steps (owner, as allensforever711)
 
-- [ ] **Sign-up email:** Supabase production > Auth: sender (Resend SMTP), confirmation required, 3 emails an hour. The confirm and reset templates use `/auth/confirm?token_hash={{ .TokenHash }}&type=<email or recovery>&next={{ .RedirectTo }}`, which works in any browser; the default link needs the one that signed up. Proof: AC-3 on a phone outside the team, and a password reset.
+- [ ] **Sign-up email:** Supabase production > Auth: sender (Resend SMTP), confirmation required, 3 emails an hour. The confirm and reset templates use `{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=<email or recovery>&next={{ .RedirectTo }}`, which works in any browser; the default link needs the one that signed up. Proof: AC-3 on a phone outside the team, and a password reset.
 - [ ] **Existing accounts (before opening):** list them, so a stray one is seen.
 - [ ] **Google:** publish the app. Proof: a Google account that isn't a test user signs in, with no warning.
 - [ ] **Limits:** the `person-photos` bucket has a size limit set; Supabase sign-up rate limits are on.
 
 ### Task 6: Public pages (AC-1, AC-2)
 
-**Files:** `components/home/{list-hook,hook,home-top-bar,request-access-dialog}.tsx`, `components/tour/{tour,list-tour,end-screen}.tsx`, `app/request-access/{page,request-access-form}.tsx`, `lib/access-request.ts`, `lib/form-email-samples.ts`, `app/auth/login/page.tsx`, `components/sign-up-form.tsx`, `app/share/[token]/list-card.tsx`, their tests, `e2e/home.spec.ts`, `README.md`.
+**Files:** `components/home/{list-hook,hook,home-top-bar,request-access-dialog}.tsx`, `components/tour/{tour,list-tour,end-screen}.tsx`, `app/request-access/{page,request-access-form}.tsx`, `lib/access-request.ts`, `lib/form-email-samples.ts`, `app/auth/login/page.tsx`, `components/sign-up-form.tsx`, `app/share/[token]/list-card.tsx`, `app/auth/sign-up-success/page.tsx` (drop "Open it on this device"), `README.md`. Tests that change: `e2e/{home,smoke,add-from-list-link,emails}.spec.ts`, `e2e-live/all-123-share-signed-out.spec.ts`, `test/{login-page,access-request,request-access-page,human-check,early-tap,auth-forms}`, and the home and tour component tests.
 
-**Copy:** list button "Start your list, free" → `/auth/sign-up`; bar "Sign in" → `/auth/login`; concierge button "Request concierge access"; "Have an invite? Sign in" → "Already have an account? Sign in"; list tour end "Your list is free. Start it now."; concierge tour end "We're letting people into the concierge a few at a time." The form's only kind is the concierge request; its thank-you links to sign-up for a list. Shared list, signed out: "Sign up" and "Sign in", both with `next=/share/<token>`; "Request access" goes.
+**Copy:** list button "Start your list, free" → `/auth/sign-up`; bar "Sign in" → `/auth/login`; concierge button "Request concierge access"; "Have an invite? Sign in" → "Already have an account? Sign in"; list tour end "Your list is free. Start it now."; concierge tour end "We're letting people into the concierge a few at a time." The form's only kind is the concierge request; its thank-you links to sign-up for a list. The form keeps emailing `inboxFor("waitlist")`; signed-in requests use `access`. Shared list, signed out: "Add … to your people" and "Request access" go; "Sign up" and "Sign in" stay, both with `next=/share/<token>`.
 
-- [ ] **Step 1:** Update the component tests to that copy and those links, plus: no signed-out page contains "invite only" (home, login, sign-up, both tours' ends, shared list); sign-up from a share passes `next` through Google and email. Run → fail.
+- [ ] **Step 1:** Update the component tests to that copy and those links, plus: no signed-out page contains "invite only" (home, login, sign-up, both tours' ends, shared list); sign-up from a share passes `next` through Google and email; a route test for `/auth/confirm` with a full-URL `next` of `/`, `/share/<token>` and `/auth/update-password`, for types `email` and `recovery`, redirecting to each, and to `/` for another site. Run → fail (the route test may already pass).
 - [ ] **Step 2:** Implement; remove `RequestKind`. Run → pass.
 - [ ] **Step 3:** `pnpm e2e`; commit `feat: anyone can start a list (ALL-179)`.
 
@@ -271,8 +274,8 @@ Facts to check during the admin steps. The first doesn't change the code.
 - **Access check fails during a claim on a shared list:** the claim still works, the card is hidden. Task 4, step 5; test in `share` page tests.
 - **A signed-out relative taps a share link, signs up by email in an in-app browser, and confirms in another:** lands signed in on that list. Task 6 tests `next`; the template is proved in the admin steps.
 - **Double tap on Request access:** one owner email. Task 1 claim test and Task 4 unit test.
-- **A guest builds a list at `/lists`, then signs up:** the guest list is kept, as today. Add a journey to Task 6: guest list, sign up, item still there.
+- **A guest builds a list at `/lists`, then signs up:** kept in the same browser, as today; confirming in a different browser loses it (accepted). Add a journey to Task 6: guest list, sign up, item still there.
 
 ### Consistency check
 
-Every AC has a task: AC-1, 2 → 6; 3, 4, 9, 17 → 3 (AC-3's email half → admin steps); 5, 13 → 2; 6, 7, 8, 16 → 4; 10, 11, 14 → 1; 12 → 1 and existing paid-features tests; 15 → 5.
+Every AC has a task: AC-1, 2 → 6; 3, 4, 9, 17 → 3 (AC-3's email half → admin steps); 5, 13 → 2; 6, 7, 8, 16, 18 → 4 (18's cap → 1); 10, 11, 14 → 1; 12 → 1 and existing paid-features tests; 15 → 5.
