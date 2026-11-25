@@ -128,7 +128,7 @@ One line each (CLAUDE.md > Scope freeze). Reviewed when the freeze lifts.
 - Tell the buyer when a note or capture was read but nothing was learned from it (ALL-144's live check).
 - On the fix page, "Yes, pick it" in the over-budget pop-up looks like it bought the gift; it only unlocks "Buy anyway" (ALL-29's real order).
 - List gifts from stores we can't price, and Amazon ones with no product code, assume free shipping, so an order can be refused on price (ALL-29's real order).
-- Find friends and their lists: (1) after linking someone's list, offer to share yours back, which adds you to their people if you aren't there already, for anyone holding the link; (2) Google Contacts email matching, where a match sends a request and never opens a list, with verified emails only, lookup caps, and contact emails discarded after the check (would revise T45). Two visible toggles for new users: findable (off by default) and can be added back (on by default). Friends' lists show under Get for every user, without concierge access. Draft spec: `design/plans/find-friends.md` (Jim, 2026-11-25).
+- Check all Google contacts by email for who's on GiftsAF: undecided (would revise T45); exact-email search is ALL-122, friends' lists and share back are ALL-180.
 
 ## A common thread
 

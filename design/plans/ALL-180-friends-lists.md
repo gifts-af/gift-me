@@ -1,6 +1,6 @@
-# Find friends and share lists back: Spec
+# ALL-180 Friends' lists and share back: Spec
 
-> **Status: draft, reviewed once (T55) and revised, not approved, parked under the scope freeze.** No ticket yet; renamed to `ALL-<n>-find-friends.md` when the owner makes an exception or lifts the freeze. Direction from Jim, 2026-11-25. No plan or code yet.
+> **Status: draft, reviewed once (T55) and revised; not re-reviewed or approved.** Scope-freeze exception by Jim, 2026-11-25. Before Christmas: story 1 only, then stories 2 and 3. No plan or code yet.
 
 **Goal:** people can find friends who are already on GiftsAF and see each other's lists without passing links back and forth.
 
@@ -19,7 +19,7 @@ Every signed-in account, with or without concierge access. Lists, claiming, shar
 1. **Friends' lists:** as any user, I can see the lists of people I'm connected to, under Get.
 2. **Share back:** after opening Sam's list, I can share mine with Sam, and I'm added to Sam's people.
 3. **Control it:** I can turn off being added, or turn on being found, in Settings > Friends.
-4. **Find friends (its own ticket; AC-16 to AC-19 and its toggle ship there, T42):** I can see which Google contacts are on GiftsAF and findable, and ask for their list.
+4. **Find friends (not this ticket; AC-16 to AC-19 are parked):** exact-email search with the owner's approval is ALL-122, whose decisions are made. Checking all Google contacts is undecided (T45).
 
 ### Acceptance criteria
 
@@ -71,7 +71,7 @@ Matching: the server compares the emails and discards them. Hashing was rejected
 
 ### Open questions
 
-Answered 2026-11-25 in Jim's session, **pending the owner's confirmation**: an exception to the scope freeze (how far, before Christmas, is open; proposed: Friends' lists only); any holder of Sam's link can be added while Sam's toggle is on, which is on by default; links made by share back wait for ALL-98 as well as Keep before supplying an address.
+Decided by Jim, 2026-11-25 (planning decision 62): an exception to the scope freeze; any holder of Sam's link can be added while Sam's toggle is on, which is on by default; links made by share back wait for ALL-98 as well as Keep before supplying an address.
 
 - **[Owner]** Story 4 only: may contact emails reach our server for the check (revises T45)? Undecided, so story 4 stays parked. It doesn't hold up stories 1 to 3.
 - **[Verify]** Contacts access needs Google's review before story 4 can open; `google_import_enabled` is 0.
