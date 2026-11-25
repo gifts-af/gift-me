@@ -116,6 +116,7 @@ describe.skipIf(!dbUp)("createSupabaseIdeaStore", () => {
       expect(Number.isInteger(value), key).toBe(true);
     }
     expect(Number.isInteger(got.schedule.safetyBufferDays)).toBe(true);
+    expect(got).toMatchObject({ amazonFreeShippingFromCents: 3500, amazonShippingCents: 699 });
   });
 
   it("inputs reads only active facts of a live person", async () => {

@@ -180,6 +180,21 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
     expect(offerCalls()).toHaveLength(2);
   });
 
+  // Production order 4d03aee7 (2026-11-25): the lookup said free shipping, and the total was $23.49.
+  it("a cheap Amazon re-buy counts shipping, so its cap covers it", async () => {
+    const userId = await newUser();
+    const r = await newRound(userId, { budget: 2200, totals: [1773] });
+    const [failed] = await boughtAndFailed(userId, r, { 0: "max_price_exceeded" });
+    expect((await orders(r.roundId))[0].max_price_cents).toBe(1850);
+    zinc.catalog.set(`amazon:${r.productIds[0]}`, { priceCents: 1549 });
+    zinc.products.set(urlOf(r.ideaIds[0]), { priceCents: 2349 });
+    expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps())).toEqual({ oldCents: 1773, newCents: 2472 });
+    const input = { userId, roundId: r.roundId, failedOrderId: failed, ideaId: r.ideaIds[0], shownTotalCents: 2472 };
+    expect(await replaceFailedOrder(input, deps())).toEqual({ ok: false, error: "needs_confirmation" });
+    expect(await replaceFailedOrder({ ...input, overBudgetConfirmed: true }, deps())).toEqual({ ok: true, status: "ordered", reason: null });
+    expect((await orders(r.roundId))[1]).toMatchObject({ status: "placing", max_price_cents: 2372 });
+  });
+
   it("Check today's price records one estimated price-check cost for the failed order and its buyer", async () => {
     const userId = await newUser();
     const r = await newRound(userId);

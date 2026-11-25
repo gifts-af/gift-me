@@ -89,7 +89,7 @@ export async function productOffers(
       o.handling_days.min === slowest.delivery_days.min &&
       o.handling_days.max === slowest.delivery_days.max;
     const quotedCents = Math.max(...o.shipping_options.map((s) => s.price));
-    // The order ships alone, so Amazon's free shipping on a bigger basket isn't free here.
+    // Seen once (design/spikes/checkout.md): free per the lookup, $6.99 at checkout. Likely Amazon's free-shipping minimum.
     const estimated = retailer === "amazon" && quotedCents === 0 && o.price < ship.amazonFreeShippingFromCents;
     const shippingCents = estimated ? ship.amazonShippingCents : quotedCents;
     out.push({
