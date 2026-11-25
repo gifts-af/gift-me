@@ -1,9 +1,12 @@
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { AccessCheckFailed, readAccess } from "@/components/concierge-gate";
+import { HOME_TAB_COOKIE, homePath } from "@/lib/home-tab";
 
-/** Sends you to Give with concierge access, or My list without. A failed check is neither. */
+/** Sends you to My list, or to Give if this browser last used it and you have concierge access. A failed check is neither. */
 export async function SendHome() {
   const state = await readAccess();
   if (!state) return <AccessCheckFailed />;
-  redirect(state.access ? "/give" : "/lists");
+  const lastTab = (await cookies()).get(HOME_TAB_COOKIE)?.value;
+  redirect(homePath(lastTab, state.access));
 }

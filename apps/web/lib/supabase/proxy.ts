@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { HOME_TAB_COOKIE, HOME_TAB_MAX_AGE_SECONDS, tabToRemember } from "../home-tab";
 import { hasEnvVars } from "../utils";
 import { supabaseKey, supabaseUrl } from "./env";
 
@@ -127,6 +128,18 @@ export async function updateSession(request: NextRequest) {
 
   if (!user && !isPublicPath(request.nextUrl.pathname)) {
     return NextResponse.redirect(signInRedirect(request.nextUrl));
+  }
+
+  // Remember Get or Give in this browser, so "/" reopens the last one (lib/home-tab.ts).
+  const tab = user ? tabToRemember(request.nextUrl.pathname, request.cookies.get(HOME_TAB_COOKIE)?.value) : null;
+  if (tab) {
+    supabaseResponse.cookies.set(HOME_TAB_COOKIE, tab, {
+      path: "/",
+      maxAge: HOME_TAB_MAX_AGE_SECONDS,
+      sameSite: "lax",
+      httpOnly: true,
+      secure: request.nextUrl.protocol === "https:",
+    });
   }
 
   // IMPORTANT: You *must* return the supabaseResponse object as it is.

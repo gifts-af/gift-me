@@ -6,6 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const createClient = vi.hoisted(() => vi.fn());
 vi.mock("@/lib/supabase/server", () => ({ createClient }));
 vi.mock("server-only", () => ({}));
+const lastTab = vi.hoisted(() => ({ value: undefined as string | undefined }));
+vi.mock("next/headers", () => ({
+  cookies: async () => ({ get: (name: string) => (name === "home_tab" && lastTab.value ? { value: lastTab.value } : undefined) }),
+}));
 
 import { SendHome } from "../home/send-home";
 
@@ -21,6 +25,7 @@ function client(userId: string | null, reply: Reply, claimsError: { message: str
 const row = (access: boolean): Reply => ({ data: { concierge_access: access, access_requested_at: null }, error: null });
 
 beforeEach(() => {
+  lastTab.value = undefined;
   vi.spyOn(console, "log").mockImplementation(() => {});
 });
 afterEach(() => {
@@ -29,12 +34,15 @@ afterEach(() => {
 });
 
 describe("SendHome", () => {
-  it.each<[string, string | null, Reply, string]>([
-    ["Give with access (AC-9)", "u1", row(true), "/give"],
-    ["My list without (AC-3)", "u1", row(false), "/lists"],
-    ["My list with no account row (AC-3)", "u1", { data: null, error: null }, "/lists"],
-    ["sign-in with no session", null, row(true), "/auth/login"],
-  ])("goes to %s", async (_, userId, reply, to) => {
+  it.each<[string, string | null, Reply, string | undefined, string]>([
+    ["My list on a new browser, even with access", "u1", row(true), undefined, "/lists"],
+    ["Give when it was the last tab used, with access", "u1", row(true), "give", "/give"],
+    ["My list when Give was last used but there's no access", "u1", row(false), "give", "/lists"],
+    ["My list without (AC-3)", "u1", row(false), undefined, "/lists"],
+    ["My list with no account row (AC-3)", "u1", { data: null, error: null }, undefined, "/lists"],
+    ["sign-in with no session", null, row(true), undefined, "/auth/login"],
+  ])("goes to %s", async (_, userId, reply, tab, to) => {
+    lastTab.value = tab;
     client(userId, reply);
     await expect(SendHome()).rejects.toMatchObject({ digest: expect.stringContaining(`;${to};`) });
     expect(console.log).not.toHaveBeenCalled();

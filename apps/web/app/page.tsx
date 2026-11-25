@@ -4,7 +4,8 @@ import { PageFrame } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
 import { SendHome } from "@/components/home/send-home";
 
-// Signed in, / sends you home: Give with concierge access, My list without.
+// Signed in, / sends you home: My list, or Give if this browser last used it
+// and you have concierge access (lib/home-tab.ts).
 // proxy.ts shows signed-out visitors the public home page here instead.
 export default function Home() {
   return (
