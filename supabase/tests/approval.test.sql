@@ -797,13 +797,13 @@ select throws_ok(format($q$select concierge.set_round_budget(%L, %L, %L, 9000)$q
 select tests.reset_role();
 
 select ok(
-  not has_function_privilege('anon', 'concierge.reject_round_ideas(uuid, uuid, timestamptz, text, text, jsonb, boolean, boolean)', 'execute')
-  and not has_function_privilege('authenticated', 'concierge.reject_round_ideas(uuid, uuid, timestamptz, text, text, jsonb, boolean, boolean)', 'execute')
+  not has_function_privilege('anon', 'concierge.reject_round_ideas(uuid, uuid, timestamptz, text, text, jsonb, boolean, boolean, uuid)', 'execute')
+  and not has_function_privilege('authenticated', 'concierge.reject_round_ideas(uuid, uuid, timestamptz, text, text, jsonb, boolean, boolean, uuid)', 'execute')
   and not has_function_privilege('anon', 'concierge.runs_after_rejection(uuid, jsonb, timestamptz, boolean)', 'execute')
   and not has_function_privilege('authenticated', 'concierge.runs_after_rejection(uuid, jsonb, timestamptz, boolean)', 'execute')
   and not has_function_privilege('anon', 'concierge.set_round_budget(uuid, uuid, timestamptz, integer)', 'execute')
   and not has_function_privilege('authenticated', 'concierge.set_round_budget(uuid, uuid, timestamptz, integer)', 'execute')
-  and has_function_privilege('service_role', 'concierge.reject_round_ideas(uuid, uuid, timestamptz, text, text, jsonb, boolean, boolean)', 'execute')
+  and has_function_privilege('service_role', 'concierge.reject_round_ideas(uuid, uuid, timestamptz, text, text, jsonb, boolean, boolean, uuid)', 'execute')
   and has_function_privilege('service_role', 'concierge.runs_after_rejection(uuid, jsonb, timestamptz, boolean)', 'execute')
   and has_function_privilege('service_role', 'concierge.set_round_budget(uuid, uuid, timestamptz, integer)', 'execute'),
   'anon and authenticated can''t execute them');
