@@ -7,10 +7,10 @@ const { FeedbackCorner } = await import("@/components/feedback-corner");
 
 // A quiet "Feedback" link in the bottom-left corner on a computer, on every page.
 describe("feedback corner", () => {
-  it("sits in the bottom-left corner and only shows on a computer", () => {
+  it("sits in the bottom-left corner and only shows on a wide screen", () => {
     const { container } = render(<FeedbackCorner />);
     const corner = container.firstElementChild!;
-    expect(corner).toHaveClass("fixed", "bottom-4", "left-4", "hidden", "md:block");
+    expect(corner).toHaveClass("fixed", "bottom-4", "left-4", "hidden", "xl:block");
   });
 
   it("opens the feedback box", () => {
