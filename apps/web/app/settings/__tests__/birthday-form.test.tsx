@@ -1,3 +1,4 @@
+import { Activity } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -12,8 +13,9 @@ const NOTE =
 function setup(props: Partial<Parameters<typeof BirthdayForm>[0]> = {}) {
   const save = vi.fn<(form: FormData) => Promise<SaveResult>>(async () => ({ ok: true }));
   const remove = vi.fn<() => Promise<SaveResult>>(async () => ({ ok: true }));
-  render(<BirthdayForm saved={null} on saveAction={save} removeAction={remove} {...props} />);
-  return { save, remove };
+  const ui = (p: typeof props) => <BirthdayForm saved={null} on saveAction={save} removeAction={remove} {...props} {...p} />;
+  const { rerender } = render(ui({}));
+  return { save, remove, update: (p: typeof props) => rerender(ui(p)) };
 }
 const button = (name: string) => screen.queryByRole("button", { name });
 
@@ -47,18 +49,60 @@ describe("BirthdayForm", () => {
 
   it("removes it and empties the fields (AC-4)", async () => {
     const t = setup({ saved: { month: 3, day: 14 } });
+    t.remove.mockImplementationOnce(async () => {
+      t.update({ saved: null }); // the action's revalidation
+      return { ok: true };
+    });
     expect(screen.getByLabelText("Birthday month")).toHaveValue("3");
     await userEvent.click(button("Remove")!);
     expect(t.remove).toHaveBeenCalledOnce();
     expect(await screen.findByText("Removed")).toBeVisible();
     expect(screen.getByLabelText("Birthday month")).toHaveValue("");
     expect(button("Remove")).toBeNull();
+    expect(screen.getByText("Removed")).toHaveFocus();
+  });
+
+  it("keeps the birthday and says so when a remove fails (AC-4)", async () => {
+    const t = setup({ saved: { month: 3, day: 14 } });
+    t.remove.mockResolvedValueOnce({ ok: false, error: "That didn't work. Try again." });
+    await userEvent.click(button("Remove")!);
+    expect(await screen.findByRole("alert")).toHaveTextContent("That didn't work. Try again.");
+    expect(screen.getByLabelText("Birthday month")).toHaveValue("3");
+    expect(button("Remove")).toBeVisible();
+  });
+
+  it("can't be edited while saving", async () => {
+    const t = setup({ saved: { month: 3, day: 14 } });
+    let finish!: (r: SaveResult) => void;
+    t.save.mockReturnValueOnce(new Promise((r) => (finish = r)));
+    await userEvent.click(button("Save")!);
+    expect(screen.getByLabelText("Birthday day")).toBeDisabled();
+    finish({ ok: true });
+    expect(await screen.findByText("Saved")).toBeVisible();
+    expect(screen.getByLabelText("Birthday day")).toBeEnabled();
+  });
+
+  it("shows what's saved, not an abandoned edit, when the page is shown again", async () => {
+    const ui = (mode: "visible" | "hidden") => (
+      <Activity mode={mode}>
+        <BirthdayForm saved={{ month: 3, day: 14 }} on saveAction={vi.fn(async () => ({ ok: true as const }))} removeAction={vi.fn()} />
+      </Activity>
+    );
+    const { rerender } = render(ui("visible"));
+    await userEvent.click(button("Save")!);
+    await screen.findByText("Saved");
+    await userEvent.selectOptions(screen.getByLabelText("Birthday month"), "April");
+    rerender(ui("hidden"));
+    rerender(ui("visible"));
+    expect(screen.getByLabelText("Birthday month")).toHaveValue("3");
+    expect(screen.getByRole("status")).toBeEmptyDOMElement();
   });
 
   it("offers only Remove when the feature is off (AC-10)", () => {
     setup({ saved: { month: 3, day: 14 }, on: false });
     expect(button("Remove")).toBeVisible();
     expect(button("Save")).toBeNull();
+    expect(screen.queryByText(NOTE)).toBeNull();
   });
 });
 

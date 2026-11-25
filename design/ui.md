@@ -217,6 +217,8 @@ A line is never false. With several gifts, the one that most needs the buyer win
 
 ## A person's page (ALL-127)
 
+**Birthday (ALL-182)** is a row under You for someone with a list. Its screen has month, day, Save and Remove. After Share on My list, someone with none saved sees a small "No birthday saved. Add it (optional)" on the save-status row. It never moves the list; phones drop "(optional)" and hide "Saved" while it shows.
+
 **A person's page is what we know about them, then a short list of rows.** Each row shows its value and opens its own screen, like Settings (T71). There's no Edit form on the page any more. On a computer it's the same centred column. Plan: [`plans/ALL-127-save-as-you-go.md`](plans/ALL-127-save-as-you-go.md).
 
 | On Mom's page (`/people/[id]`), top to bottom | Shows | Opens |

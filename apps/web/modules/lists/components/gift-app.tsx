@@ -1,7 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { onBeforeLeaving } from "@/lib/leaving-page";
 import { saveList } from "@/modules/lists/actions/lists";
 import { lookUpAmazon } from "@/modules/lists/actions/amazon-lookup";
@@ -302,6 +302,8 @@ export default function GiftApp({ initial, footer = null, shareHint = null, need
   const [named, setNamed] = useState(!needsName);
   const [askingName, setAskingName] = useState(false);
   const [shared, setShared] = useState(false);
+  // Next keeps this page's state when it's left: the note waits for the next Share.
+  useLayoutEffect(() => () => setShared(false), []);
   // Bumped when the prompt copies the link, so Share shows "Copied!" then too.
   const [copiedAfterPrompt, setCopiedAfterPrompt] = useState(0);
 
@@ -331,8 +333,8 @@ export default function GiftApp({ initial, footer = null, shareHint = null, need
     return true;
   }
 
-  // A failed save needs the row for itself.
-  const hintShown = shared && shareHint !== null && list.status !== "error";
+  // "Saving…" and a failed save need the row for themselves.
+  const hintShown = shared && shareHint !== null && list.status === "idle";
 
   return (
     <>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { DateFields } from "@/app/people/person-form";
 import { Button } from "@/components/ui/button";
 import type { Birthday } from "@/lib/account-birthday";
@@ -21,12 +21,24 @@ export function BirthdayForm({
   saveAction: (form: FormData) => Promise<SaveResult>;
   removeAction: () => Promise<SaveResult>;
 }) {
-  const [month, setMonth] = useState(saved ? String(saved.month) : "");
-  const [day, setDay] = useState(saved ? String(saved.day) : "");
-  const [has, setHas] = useState(saved !== null);
+  // What's been typed; null shows what's saved.
+  const [edit, setEdit] = useState<{ month: string; day: string } | null>(null);
+  const { month, day } = edit ?? { month: String(saved?.month ?? ""), day: String(saved?.day ?? "") };
+  const statusRef = useRef<HTMLParagraphElement>(null);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+
+  // Next keeps visited routes in the page, hidden, with their state: start
+  // from what's saved on coming back.
+  useLayoutEffect(
+    () => () => {
+      setEdit(null);
+      setStatus("");
+      setError("");
+    },
+    [],
+  );
 
   async function run(action: () => Promise<SaveResult>, failed: string, done: () => void) {
     setBusy(true);
@@ -43,11 +55,9 @@ export function BirthdayForm({
     else setError(result.error);
   }
 
-  function change(set: (value: string) => void) {
-    return (value: string) => {
-      set(value);
-      setStatus("");
-    };
+  function change(part: { month?: string; day?: string }) {
+    setEdit({ month, day, ...part });
+    setStatus("");
   }
 
   return (
@@ -60,19 +70,27 @@ export function BirthdayForm({
         void run(
           () => saveAction(form),
           "That didn't save. Try again.",
-          () => {
-            setHas(true);
-            setStatus("Saved");
-          },
+          () => setStatus("Saved"),
         );
       }}
     >
-      <p className="text-[13px] text-muted-foreground">
-        Optional. Anyone signed in with your list link can see this when they add you. People who already added it keep
-        it.
-      </p>
       {on && (
-        <DateFields name="birthday" label="Birthday" month={month} day={day} onMonth={change(setMonth)} onDay={change(setDay)} />
+        <>
+          <p className="text-[13px] text-muted-foreground">
+            Optional. Anyone signed in with your list link can see this when they add you. People who already added it
+            keep it.
+          </p>
+          <fieldset disabled={busy} className="min-w-0">
+            <DateFields
+              name="birthday"
+              label="Birthday"
+              month={month}
+              day={day}
+              onMonth={(value) => change({ month: value })}
+              onDay={(value) => change({ day: value })}
+            />
+          </fieldset>
+        </>
       )}
       <div className="flex gap-2">
         {on && (
@@ -80,17 +98,16 @@ export function BirthdayForm({
             Save
           </Button>
         )}
-        {has && (
+        {saved && (
           <Button
             type="button"
             variant="ghost"
             disabled={busy}
             onClick={() =>
               void run(removeAction, "That didn't work. Try again.", () => {
-                setHas(false);
-                setMonth("");
-                setDay("");
+                setEdit({ month: "", day: "" });
                 setStatus("Removed");
+                statusRef.current?.focus(); // the focused button goes
               })
             }
           >
@@ -98,7 +115,7 @@ export function BirthdayForm({
           </Button>
         )}
       </div>
-      <p role="status" className="text-[13px] text-success">
+      <p role="status" ref={statusRef} tabIndex={-1} className="text-[13px] text-success">
         {status}
       </p>
       {error && (

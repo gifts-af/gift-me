@@ -59,6 +59,9 @@ async function Form({ searchParams }: { searchParams: Promise<{ list?: string | 
   ]);
   return (
     <PersonForm
+      // Next keeps this page's state when it's left, whatever its ?list= is:
+      // a new form for a new list, so nobody's name or birthday carries over.
+      key={`${link?.token}:${link?.birthday?.month}-${link?.birthday?.day}`}
       action={addPersonAction}
       photoAction={setPhotoAction}
       userId={userId}

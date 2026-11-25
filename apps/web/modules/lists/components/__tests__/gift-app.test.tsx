@@ -127,6 +127,31 @@ describe("GiftApp", () => {
       }
     });
 
+    it("gives way while a save is on its way", async () => {
+      const answer = deferred<SaveListResult>();
+      vi.mocked(saveList).mockReturnValueOnce(answer.promise);
+      render(<GiftApp initial={member} shareHint={HINT} />);
+      await share();
+      await addByHand("Lamp");
+      await vi.waitFor(() => expect(screen.getByRole("status", { name: "Save status" })).toHaveTextContent("Saving…"));
+      expect(screen.queryByText("No birthday saved")).toBeNull();
+      answer.resolve({ ok: true, listId: "list-1", shareToken: "tok", version: "v2", items: whole([]) });
+      expect(await screen.findByText("No birthday saved")).toBeVisible();
+    });
+
+    it("is gone when My list is shown again", async () => {
+      const ui = (mode: "visible" | "hidden") => (
+        <Activity mode={mode}>
+          <GiftApp initial={member} shareHint={HINT} />
+        </Activity>
+      );
+      const { rerender } = render(ui("visible"));
+      await share();
+      rerender(ui("hidden"));
+      rerender(ui("visible"));
+      expect(screen.queryByText("No birthday saved")).toBeNull();
+    });
+
     it("gives way when a save fails, and the status still reads Couldn't save", async () => {
       vi.mocked(saveList).mockResolvedValue({ ok: false, error: "No." });
       render(<GiftApp initial={member} shareHint={HINT} />);
@@ -141,8 +166,9 @@ describe("GiftApp", () => {
       expect(await screen.findByText("No birthday saved")).toBeVisible();
     });
 
-    it("never shows to a guest", () => {
+    it("never shows to a guest, whose Share is blocked or missing", async () => {
       render(<GiftApp initial={null} shareHint={HINT} />);
+      for (const b of screen.queryAllByRole("button", { name: /Share/ })) await user.click(b);
       expect(screen.queryByText("No birthday saved")).toBeNull();
     });
 

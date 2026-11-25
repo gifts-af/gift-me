@@ -52,7 +52,7 @@ describe("adding someone from a shared list", () => {
     expect(screen.getByLabelText("Birthday day")).toHaveValue(14);
   });
 
-  it("starts empty with none, and for your own list (ALL-182 AC-6)", async () => {
+  it("starts empty with none (ALL-182 AC-6)", async () => {
     await show("a-token");
     expect(screen.getByLabelText("Birthday month")).toHaveValue("");
   });

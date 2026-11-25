@@ -266,7 +266,8 @@ export async function getOwnerBirthday(token: string): Promise<{ month: number; 
     logEvent("lists.owner_birthday_failed", { code: typeof error.code === "string" ? error.code : null });
     return null;
   }
-  return data as { month: number; day: number } | null;
+  const { month, day } = (data ?? {}) as { month?: unknown; day?: unknown };
+  return typeof month === "number" && typeof day === "number" ? { month, day } : null;
 }
 
 /**

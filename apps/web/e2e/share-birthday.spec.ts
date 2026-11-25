@@ -55,6 +55,14 @@ test("save a birthday after sharing, and someone adding you gets it, until you r
   await openAddForm(page, path, buyer);
   await expect(page.getByLabel("Birthday month")).toHaveValue("3");
   await expect(page.getByLabel("Birthday day")).toHaveValue("14");
+  // Leaving for someone else must not carry Sam's name or birthday along.
+  await page.getByRole("link", { name: "Give", exact: true }).first().click();
+  await expect(page).toHaveURL(/\/give$/);
+  await page.locator('a[href="/people/new"]:visible').first().click();
+  await expect(page).toHaveURL(/\/people\/new$/);
+  await expect(page.locator("#person-name:visible")).toHaveValue("");
+  await expect(page.locator('[name="birthdayMonth"]:visible')).toHaveValue("");
+  await page.goto(`/people/new?list=${path.split("/").pop()}`);
   await page.getByLabel("Who are they to you?").selectOption({ label: "Friend" });
   await page.getByRole("button", { name: "Add Sam" }).click();
   await expect(page).toHaveURL(/\/people\/[0-9a-f-]{36}$/);

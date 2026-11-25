@@ -30,6 +30,13 @@ describe("getOwnerBirthday (ALL-182 AC-5, AC-6)", () => {
     expect(rpc).not.toHaveBeenCalled();
   });
 
+  it("gives none for an answer that isn't a month and day", async () => {
+    for (const data of [{}, { month: "3", day: 14 }, [3, 14]]) {
+      rpc.mockResolvedValue({ data, error: null });
+      expect(await getOwnerBirthday(TOKEN)).toBeNull();
+    }
+  });
+
   it("gives none when the read fails, and logs the code without the token", async () => {
     rpc.mockResolvedValue({ data: null, error: { code: "42501", message: TOKEN } });
     expect(await getOwnerBirthday(TOKEN)).toBeNull();
