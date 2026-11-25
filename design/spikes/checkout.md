@@ -109,6 +109,7 @@ Taken from the spike's recorded raw replies (`spikes/ai/out/resolve.json`). No n
   - `seller.{name, first_party}`
   - `handling_days.{min,max}`. On Amazon it repeats `delivery_days` (all 6 saved offers), and those days already run from the order to the door: fetched 2026-11-01, they land on the date in Amazon's own `greytext` (5 days is "Friday, November 6", 8 to 11 is "November 9 - 12"). So the adapter counts an identical pair once. Zinc's docs don't define either field
   - `shipping_options[].{price, delivery_days.{min,max}}`, where price is in cents
+    A 0 on Amazon isn't what Zinc pays on a cheap item: a $15.49 gift quoted at 0 was refused over $6.99 of shipping (2026-11-25), so the adapter estimates it below a minimum
   - an `optimistic` block for Prime, which we ignore
 - **Search** (`GET /products/search?retailer=amazon&query=…`): no raw reply was kept. The spike read the list as `results` or `products`. Each hit has `product_id`, `title` and `price` in cents, and there's no brand field, so the brand is matched against the title. Built as: each hit carries `image` (the photo, T83), so photos cost no extra call. **[Verify]** at the first paid check: which list key it is, and that `image` is present on real hits.
 - **Cost:** $0.01 per search or offers call (Answers, above).

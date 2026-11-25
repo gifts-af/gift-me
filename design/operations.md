@@ -409,6 +409,8 @@ The engine finds gift ideas for a round and on demand (a person's Gift ideas scr
 | `idea_zinc_timeout_ms` | 15000 | Per Zinc call |
 | `idea_ai_max_tokens` | 6000 | Output limit per AI call, which bounds the cost of the call in flight |
 | `idea_tax_estimate_pct` | 8 | Flat tax estimate (needs no address) |
+| `amazon_free_shipping_from_cents` | 3500 | Below this price, an Amazon lookup's free shipping isn't believed (ALL-29). `0` switches the estimate off |
+| `amazon_shipping_estimate_cents` | 699 | What's counted instead; shows as `gift_ideas.est_shipping_cents` on new ideas |
 | `idea_run_estimate_cents` | 40 | The usual cost shown in the money notice |
 | `idea_list_lookups_max` | 10 | The most Zinc lookups of a person's list gifts in one run (ALL-29, T82). The list pass also stops once `idea_keep_max` qualify |
 | `idea_list_min` | 3 | With this many list gifts qualifying the AI brainstorm doesn't run; fewer and it adds ideas up to `idea_keep_max` (ALL-29, T82) |

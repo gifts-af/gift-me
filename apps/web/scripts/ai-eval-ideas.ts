@@ -42,6 +42,8 @@ const SETTINGS: IdeaSettings = {
   zincLookupCents: 1,
   zincRequestsPerSecond: 10,
   orderFeeCents: 100,
+  amazonFreeShippingFromCents: 3500,
+  amazonShippingCents: 699,
   listLookupsMax: 10,
   listMin: 3,
   schedule: {

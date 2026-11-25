@@ -58,7 +58,7 @@ const PRODUCTS: FakeProduct[] = Object.values(FAKE_PRODUCTS);
 /** The one store link Zinc only checks and says it will try (GET /retailers/check). It says no to any other. */
 export const FAKE_CHECKABLE_URL = "https://www.rei.com/product/220011/e2e-camp-mug";
 
-/** One new, in-stock offer from Amazon itself: free shipping, here within a week. */
+/** One new, in-stock offer from Amazon itself: free shipping (an estimate under the minimum), here within a week. */
 function offerFor(priceCents: number) {
   return {
     offer_id: "e2e-offer",

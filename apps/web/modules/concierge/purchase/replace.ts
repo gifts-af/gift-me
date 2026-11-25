@@ -14,7 +14,7 @@ import { logEvent } from "@/lib/log";
 import type { Cost, RecordCost } from "../costs/record";
 import { hasPaidFeatures } from "../paid-features";
 import { ZincError, type ZincHttp } from "../zinc/client";
-import { listGiftRoute, productDetails, productOffers, type ListGiftRoute, type ZincStep } from "../zinc/products";
+import { listGiftRoute, productDetails, productOffers, type AmazonShipping, type ListGiftRoute, type ZincStep } from "../zinc/products";
 import type { DbDeps } from "../zinc/types";
 import { capsFor, destinationFor, refusalOf, saveDestination, tellCustomer, type ApproveError, type ApproveResult, type Destination, type ShipTo } from "./approve";
 import { asCommitted, placeRound } from "./place";
@@ -103,7 +103,12 @@ function isCurrentFailure(o: FailedOrderRow | null, userId: string, roundId: str
  * whenever a call was made, whatever way it ends.
  */
 async function requote(deps: QuoteDeps, idea: IdeaRow, feeCents: number, ids: Record<string, string>, bill: { userId: string; orderId: string }): Promise<number | null> {
-  const [taxPct, lookupCents] = await Promise.all([setting(deps, "idea_tax_estimate_pct"), setting(deps, "zinc_lookup_cents")]);
+  const [taxPct, lookupCents, amazonFreeShippingFromCents, amazonShippingCents] = await Promise.all([
+    setting(deps, "idea_tax_estimate_pct"),
+    setting(deps, "zinc_lookup_cents"),
+    setting(deps, "amazon_free_shipping_from_cents"),
+    setting(deps, "amazon_shipping_estimate_cents"),
+  ]);
   let calls = 0;
   // Every Zinc call is charged (counted at zinc_lookup_cents); there's one at most here.
   const step: ZincStep = async (call) => {
@@ -117,7 +122,7 @@ async function requote(deps: QuoteDeps, idea: IdeaRow, feeCents: number, ids: Re
     if (typeof route === "string") {
       outcome = route;
     } else {
-      offer = await lookUp(deps.lookup, idea, route, step);
+      offer = await lookUp(deps.lookup, idea, route, { amazonFreeShippingFromCents, amazonShippingCents }, step);
       if (!offer) outcome = "unavailable";
     }
   } catch (e) {
@@ -178,11 +183,11 @@ function routeOf(idea: IdeaRow): Route | "no_live_price" | "link_mismatch" | "ot
 }
 
 /** The idea's product at its store today (R1); null when it's gone or has no usable price. */
-async function lookUp(lookup: QuoteDeps["lookup"], idea: IdeaRow, route: Route, step: ZincStep): Promise<ZincOffer | null> {
+async function lookUp(lookup: QuoteDeps["lookup"], idea: IdeaRow, route: Route, ship: AmazonShipping, step: ZincStep): Promise<ZincOffer | null> {
   const { productId } = route;
   const signal = new AbortController().signal;
   if (route.kind === "offers") {
-    const offers = await step(() => productOffers(lookup.http, lookup.key, route.retailer, productId, signal));
+    const offers = await step(() => productOffers(lookup.http, lookup.key, route.retailer, productId, ship, signal));
     if (offers === "stop") return null;
     const own = idea.offer_id === null ? undefined : offers.find((o) => o.offerId === idea.offer_id);
     // The idea's own seller when it still sells it new; otherwise the best offer, as the run picks.

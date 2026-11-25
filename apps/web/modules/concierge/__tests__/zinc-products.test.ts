@@ -13,6 +13,7 @@ import {
 import { FakeZinc } from "./fake-zinc";
 
 const KEY = "zn_test_SECRETKEY123";
+const SHIP = { amazonFreeShippingFromCents: 3500, amazonShippingCents: 699 };
 type Reply = { status: number; body?: unknown; raw?: string } | Error;
 type Call = { method: string; url: string; auth: string | null; body: unknown };
 
@@ -168,7 +169,7 @@ describe("searchProducts", () => {
 describe("productOffers", () => {
   it("offers map price, the highest shipping and the slowest delivery", async () => {
     const { h, calls } = fake([offersReply([offer()])]);
-    expect(await productOffers(h, KEY, "amazon", "B0TEST", signal())).toEqual([
+    expect(await productOffers(h, KEY, "amazon", "B0TEST", SHIP, signal())).toEqual([
       {
         offerId: "off_1",
         priceCents: 2499,
@@ -195,7 +196,7 @@ describe("productOffers", () => {
     ["a range", { min: 8, max: 11 }],
   ])("an Amazon estimate repeated as handling and delivery counts once: %s", async (_, range) => {
     const { h } = fake([offersReply([offer({ handling_days: range, shipping_options: [{ price: 0, delivery_days: range }] })])]);
-    expect(await productOffers(h, KEY, "amazon", "B0TEST", signal())).toMatchObject([
+    expect(await productOffers(h, KEY, "amazon", "B0TEST", SHIP, signal())).toMatchObject([
       { handlingDaysMax: 0, deliveryDaysMin: range.min, deliveryDaysMax: range.max },
     ]);
   });
@@ -206,14 +207,33 @@ describe("productOffers", () => {
     ["another store", "walmart", { min: 3, max: 3 }, { min: 3, max: 3 }, 3],
   ])("handling days still add up: %s", async (_, retailer, handling, delivery, expected) => {
     const { h } = fake([offersReply([offer({ handling_days: handling, shipping_options: [{ price: 0, delivery_days: delivery }] })])]);
-    expect(await productOffers(h, KEY, retailer, "B0TEST", signal())).toMatchObject([{ handlingDaysMax: expected }]);
+    expect(await productOffers(h, KEY, retailer, "B0TEST", SHIP, signal())).toMatchObject([{ handlingDaysMax: expected }]);
+  });
+
+  // Zinc charged $6.99 on a $15.49 gift its lookup called free (production order 4d03aee7, 2026-11-25).
+  it.each([
+    ["under the free-shipping minimum", "amazon", 1549, 0, 699],
+    ["a cent under it", "amazon", 3499, 0, 699],
+    ["at it", "amazon", 3500, 0, 0],
+    ["a shipping price is kept", "amazon", 1549, 399, 399],
+    ["another store", "walmart", 1549, 0, 0],
+  ])("free Amazon shipping is an estimate below the minimum: %s", async (_, retailer, price, shipping, expected) => {
+    const { h } = fake([offersReply([offer({ price, shipping_options: [{ price: shipping, delivery_days: { min: 5, max: 5 } }] })])]);
+    expect(await productOffers(h, KEY, retailer, "B0TEST", SHIP, signal())).toMatchObject([{ shippingCents: expected }]);
+  });
+
+  it("a minimum of 0 switches the estimate off", async () => {
+    const { h } = fake([offersReply([offer({ price: 1549, shipping_options: [{ price: 0, delivery_days: { min: 5, max: 5 } }] })])]);
+    expect(await productOffers(h, KEY, "amazon", "B0TEST", { ...SHIP, amazonFreeShippingFromCents: 0 }, signal())).toMatchObject([
+      { shippingCents: 0 },
+    ]);
   });
 
   it("buyBox and firstParty are only true when exactly true", async () => {
     const { h } = fake([
       offersReply([offer({ buy_box_winner: null, seller: { name: null, first_party: true } }), offer({ buy_box_winner: null, seller: { first_party: null } })]),
     ]);
-    const r = await productOffers(h, KEY, "amazon", "B0TEST", signal());
+    const r = await productOffers(h, KEY, "amazon", "B0TEST", SHIP, signal());
     expect(r.map((o) => [o.buyBox, o.firstParty, o.sellerName])).toEqual([[false, true, null], [false, false, null]]);
   });
 
@@ -227,18 +247,18 @@ describe("productOffers", () => {
         offer({ offer_id: "good" }),
       ]),
     ]);
-    const r = await productOffers(h, KEY, "amazon", "B0TEST", signal());
+    const r = await productOffers(h, KEY, "amazon", "B0TEST", SHIP, signal());
     expect(r.map((o) => o.offerId)).toEqual(["good"]);
   });
 
   it("a reply with the wrong top-level shape throws rejected", async () => {
     const { h } = fake([{ status: 200, body: { offers: "nope" } }]);
-    await expect(productOffers(h, KEY, "amazon", "B0TEST", signal())).rejects.toMatchObject({ kind: "rejected" });
+    await expect(productOffers(h, KEY, "amazon", "B0TEST", SHIP, signal())).rejects.toMatchObject({ kind: "rejected" });
   });
 
   it("a 429 throws unavailable with status 429", async () => {
     const { h } = fake([{ status: 429, body: { error: { code: "rate_limited" } } }]);
-    await expect(productOffers(h, KEY, "amazon", "B0TEST", signal())).rejects.toMatchObject({ kind: "unavailable", status: 429 });
+    await expect(productOffers(h, KEY, "amazon", "B0TEST", SHIP, signal())).rejects.toMatchObject({ kind: "unavailable", status: 429 });
   });
 });
 
@@ -437,7 +457,7 @@ describe("listGiftQuote (ALL-29)", () => {
 
   it("an Amazon list gift is priced through offers with its ASIN", async () => {
     const { h, calls } = fake([offersReply([offer()])]);
-    const q = await listGiftQuote(h, KEY, item(), run, signal());
+    const q = await listGiftQuote(h, KEY, item(), run, SHIP, signal());
     expect(q).toMatchObject({ kind: "offer", productId: "B0TEST1234", imageUrl: null, offer: { priceCents: 2499 } });
     expect(calls).toHaveLength(1);
     const u = new URL(calls[0].url);
@@ -447,13 +467,13 @@ describe("listGiftQuote (ALL-29)", () => {
 
   it("an Amazon link naming another product than its ASIN is unsupported, with no call", async () => {
     const { h, calls } = fake([]);
-    expect(await listGiftQuote(h, KEY, item({ url: "https://www.amazon.com/dp/B0OTHERONE" }), run, signal())).toEqual({ kind: "unsupported" });
+    expect(await listGiftQuote(h, KEY, item({ url: "https://www.amazon.com/dp/B0OTHERONE" }), run, SHIP, signal())).toEqual({ kind: "unsupported" });
     expect(calls).toEqual([]);
   });
 
   it("a Walmart link uses offers with the walmart retailer", async () => {
     const { h, calls } = fake([offersReply([offer()])]);
-    const q = await listGiftQuote(h, KEY, item({ url: "https://www.walmart.com/ip/Kettle/123456789", asin: null }), run, signal());
+    const q = await listGiftQuote(h, KEY, item({ url: "https://www.walmart.com/ip/Kettle/123456789", asin: null }), run, SHIP, signal());
     expect(q).toMatchObject({ kind: "offer", productId: "123456789" });
     const u = new URL(calls[0].url);
     expect(u.pathname).toBe("/products/123456789/offers");
@@ -464,7 +484,7 @@ describe("listGiftQuote (ALL-29)", () => {
     const { h, calls } = fake([
       { status: 200, body: { status: "completed", product_id: "6525410", title: "TV", price: 49999, main_image: "https://img.test/a.jpg" } },
     ]);
-    const q = await listGiftQuote(h, KEY, item({ url: "https://www.etsy.com/listing/6525410/tv", asin: null }), run, signal());
+    const q = await listGiftQuote(h, KEY, item({ url: "https://www.etsy.com/listing/6525410/tv", asin: null }), run, SHIP, signal());
     expect(q).toMatchObject({
       kind: "offer",
       productId: "6525410",
@@ -482,13 +502,13 @@ describe("listGiftQuote (ALL-29)", () => {
     const { h } = fake([
       { status: 200, body: { status: "completed", product_id: "6525410", price: 100, ship_price: 250, delivery_days: { max: 6 } } },
     ]);
-    const q = await listGiftQuote(h, KEY, item({ url: "https://www.etsy.com/listing/6525410/tv", asin: null }), run, signal());
+    const q = await listGiftQuote(h, KEY, item({ url: "https://www.etsy.com/listing/6525410/tv", asin: null }), run, SHIP, signal());
     expect(q).toMatchObject({ kind: "offer", deliveryKnown: true, shippingKnown: true, offer: { shippingCents: 250, deliveryDaysMax: 6 } });
   });
 
   it("a Best Buy link goes straight to the check without a details call", async () => {
     const { h, calls } = fake([{ status: 200, body: { orderable: true } }]);
-    const q = await listGiftQuote(h, KEY, item({ url: "https://www.bestbuy.com/site/tv/6525410.p?skuId=6525410", asin: null }), run, signal());
+    const q = await listGiftQuote(h, KEY, item({ url: "https://www.bestbuy.com/site/tv/6525410.p?skuId=6525410", asin: null }), run, SHIP, signal());
     expect(q).toEqual({ kind: "listed", priceCents: 3000 });
     expect(calls.map((c) => new URL(c.url).pathname)).toEqual(["/retailers/check"]);
   });
@@ -498,7 +518,7 @@ describe("listGiftQuote (ALL-29)", () => {
       { status: 200, body: { status: "completed", product_id: "999", price: 100 } },
       { status: 200, body: { orderable: true } },
     ]);
-    const q = await listGiftQuote(h, KEY, item({ url: "https://www.etsy.com/listing/6525410/tv", asin: null }), run, signal());
+    const q = await listGiftQuote(h, KEY, item({ url: "https://www.etsy.com/listing/6525410/tv", asin: null }), run, SHIP, signal());
     expect(q).toEqual({ kind: "listed", priceCents: 3000 });
     expect(calls).toHaveLength(2);
   });
@@ -513,7 +533,7 @@ describe("listGiftQuote (ALL-29)", () => {
       spy();
       return run(c);
     };
-    await listGiftQuote(h, KEY, item({ url: "https://www.etsy.com/listing/6525410/tv", asin: null }), step, signal());
+    await listGiftQuote(h, KEY, item({ url: "https://www.etsy.com/listing/6525410/tv", asin: null }), step, SHIP, signal());
     expect(spy).toHaveBeenCalledTimes(2);
   });
 
@@ -521,19 +541,19 @@ describe("listGiftQuote (ALL-29)", () => {
     const { h, calls } = fake([{ status: 400, body: { error: { code: "invalid_request" } } }, { status: 200, body: { orderable: true } }]);
     let n = 0;
     const step = async <T,>(c: () => Promise<T>): Promise<T | "stop"> => (++n > 1 ? "stop" : c());
-    const q = await listGiftQuote(h, KEY, item({ url: "https://www.etsy.com/listing/6525410/tv", asin: null }), step, signal());
+    const q = await listGiftQuote(h, KEY, item({ url: "https://www.etsy.com/listing/6525410/tv", asin: null }), step, SHIP, signal());
     expect(q).toEqual({ kind: "stopped" });
     expect(calls).toHaveLength(1);
     // And a stop on the very first call makes none.
     const none = fake([]);
-    const first = await listGiftQuote(none.h, KEY, item(), async () => "stop" as const, signal());
+    const first = await listGiftQuote(none.h, KEY, item(), async () => "stop" as const, SHIP, signal());
     expect(first).toEqual({ kind: "stopped" });
     expect(none.calls).toHaveLength(0);
   });
 
   it("a Shopify /products/ link uses product details", async () => {
     const { h, calls } = fake([{ status: 200, body: { status: "completed", product_id: "blue-mug", price: 2200, available: true } }]);
-    const q = await listGiftQuote(h, KEY, item({ url: "https://yetch.store/products/blue-mug", asin: null }), run, signal());
+    const q = await listGiftQuote(h, KEY, item({ url: "https://yetch.store/products/blue-mug", asin: null }), run, SHIP, signal());
     expect(q).toMatchObject({ kind: "offer", offer: { priceCents: 2200 } });
     const u = new URL(calls[0].url);
     expect(u.pathname).toBe("/products/blue-mug");
@@ -542,38 +562,38 @@ describe("listGiftQuote (ALL-29)", () => {
 
   it("details that say unavailable make an unavailable offer", async () => {
     const { h } = fake([{ status: 200, body: { status: "completed", product_id: "blue-mug", price: 2200, available: false } }]);
-    const q = await listGiftQuote(h, KEY, item({ url: "https://yetch.store/products/blue-mug", asin: null }), run, signal());
+    const q = await listGiftQuote(h, KEY, item({ url: "https://yetch.store/products/blue-mug", asin: null }), run, SHIP, signal());
     expect(q).toMatchObject({ kind: "offer", offer: { available: false } });
   });
 
   it("another store passes the check and is listed at its list price", async () => {
     const { h, calls } = fake([{ status: 200, body: { orderable: true } }]);
-    const q = await listGiftQuote(h, KEY, item({ url: "https://www.target.com/p/x", asin: null }), run, signal());
+    const q = await listGiftQuote(h, KEY, item({ url: "https://www.target.com/p/x", asin: null }), run, SHIP, signal());
     expect(q).toEqual({ kind: "listed", priceCents: 3000 });
     expect(new URL(calls[0].url).pathname).toBe("/retailers/check");
   });
 
   it("a store the check refuses is unsupported", async () => {
     const { h } = fake([{ status: 200, body: { orderable: false } }]);
-    expect(await listGiftQuote(h, KEY, item({ url: "https://www.target.com/p/x", asin: null }), run, signal())).toEqual({ kind: "unsupported" });
+    expect(await listGiftQuote(h, KEY, item({ url: "https://www.target.com/p/x", asin: null }), run, SHIP, signal())).toEqual({ kind: "unsupported" });
   });
 
   it("no list price is unsupported, and the check is not paid for", async () => {
     const { h, calls } = fake([]);
-    const q = await listGiftQuote(h, KEY, item({ url: "https://www.target.com/p/x", asin: null, listPriceCents: null }), run, signal());
+    const q = await listGiftQuote(h, KEY, item({ url: "https://www.target.com/p/x", asin: null, listPriceCents: null }), run, SHIP, signal());
     expect(q).toEqual({ kind: "unsupported" });
     expect(calls).toHaveLength(0);
   });
 
   it("an http photo is dropped", async () => {
     const { h } = fake([{ status: 200, body: { status: "completed", product_id: "6525410", price: 100, main_image: "http://img.test/a.jpg" } }]);
-    const q = await listGiftQuote(h, KEY, item({ url: "https://www.etsy.com/listing/6525410/tv", asin: null }), run, signal());
+    const q = await listGiftQuote(h, KEY, item({ url: "https://www.etsy.com/listing/6525410/tv", asin: null }), run, SHIP, signal());
     expect(q).toMatchObject({ kind: "offer", imageUrl: null });
   });
 
   it("no usable offer is unsupported", async () => {
     const { h } = fake([offersReply([offer({ available: false })])]);
-    expect(await listGiftQuote(h, KEY, item(), run, signal())).toEqual({ kind: "unsupported" });
+    expect(await listGiftQuote(h, KEY, item(), run, SHIP, signal())).toEqual({ kind: "unsupported" });
   });
 
   it("details Zinc rejects fall back to the check", async () => {
@@ -581,7 +601,7 @@ describe("listGiftQuote (ALL-29)", () => {
       { status: 400, body: { error: { code: "invalid_request" } } },
       { status: 200, body: { orderable: true } },
     ]);
-    const q = await listGiftQuote(h, KEY, item({ url: "https://www.etsy.com/listing/6525410/tv", asin: null }), run, signal());
+    const q = await listGiftQuote(h, KEY, item({ url: "https://www.etsy.com/listing/6525410/tv", asin: null }), run, SHIP, signal());
     expect(q).toEqual({ kind: "listed", priceCents: 3000 });
     expect(calls).toHaveLength(2);
   });

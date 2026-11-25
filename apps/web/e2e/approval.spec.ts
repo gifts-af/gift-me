@@ -430,8 +430,8 @@ test("a price_up gift is bought at the new price after Check today's price, and 
   await page.getByRole("link", { name: "Fix this" }).click();
   await expect(page.getByRole("heading", { name: "The price went up" })).toBeVisible();
   await page.getByRole("button", { name: "Check today's price" }).click();
-  await expect(page.getByText(/^Now \$3\d/)).toBeVisible();
-  await page.getByRole("button", { name: /^Buy at about \$3\d/ }).click();
+  await expect(page.getByText(/^Now \$40/)).toBeVisible();
+  await page.getByRole("button", { name: /^Buy at about \$40/ }).click();
   await expect(page.getByRole("status").filter({ hasText: "Ordered" })).toBeVisible();
 
   const after = await ordersOf(roundId);

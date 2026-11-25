@@ -61,7 +61,8 @@ select set_eq(
     'order_tracking_enabled', 'zinc_tracking_fetch_enabled', 'late_check_enabled', 'tracking_prune_days',
     'cost_tracking_enabled', 'cost_window_days', 'cost_record_timeout_ms', 'cost_tracking_since',
     'reactions_enabled', 'reaction_prompt_after_days', 'reaction_close_days', 'reaction_note_max_chars',
-    'gift_progress_days', 'restore_rejected_ideas_enabled'
+    'gift_progress_days', 'restore_rejected_ideas_enabled',
+    'amazon_free_shipping_from_cents', 'amazon_shipping_estimate_cents'
   ],
   'every fee, limit, default and schedule setting is seeded'
 );
