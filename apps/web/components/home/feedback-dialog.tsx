@@ -1,7 +1,7 @@
 "use client";
 
 import { FeedbackForm } from "@/app/feedback/feedback-form";
-import { Button } from "@/components/ui/button";
+import { Button, type ButtonProps } from "@/components/ui/button";
 import {
   Dialog,
   DialogContent,
@@ -14,13 +14,23 @@ import {
 
 // "Send feedback" opens a "sad story" box over the page that emails us
 // directly, instead of opening the visitor's email app.
-export function FeedbackButton({ className }: { className?: string }) {
+export function FeedbackButton({
+  className,
+  variant = "secondary",
+  size,
+  label = "Send feedback",
+}: {
+  className?: string;
+  variant?: ButtonProps["variant"];
+  size?: ButtonProps["size"];
+  label?: string;
+}) {
   const { open, onOpenChange, closeSoon } = useSelfClosingDialog();
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button type="button" variant="secondary" className={className}>
-          Send feedback
+        <Button type="button" variant={variant} size={size} className={className}>
+          {label}
         </Button>
       </DialogTrigger>
       <DialogContent>
