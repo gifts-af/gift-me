@@ -234,8 +234,9 @@ export type ListPhoto = { giftId: string; name: string; url: string };
 
 /**
  * The first few photos on the list the signed-in user's person is linked to,
- * in list order, leaving out claimed gifts: a photo of one would sell a gift that's taken. None when unlinked or unreadable: the page only decorates
- * its link to the list with them.
+ * in list order, leaving out claimed gifts: a photo of one would sell a gift
+ * that's taken. None when unlinked or unreadable: the page only decorates its
+ * link to the list with them.
  */
 export async function getPersonListPhotos(personId: string): Promise<ListPhoto[]> {
   if (!UUID_PATTERN.test(personId)) return [];

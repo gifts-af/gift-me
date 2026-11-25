@@ -21,8 +21,8 @@ export function LinkedList({ name, href, photos }: { name: string; href: string;
       aria-labelledby="linked-list-heading"
       className="relative flex flex-wrap items-center justify-between gap-x-2 gap-y-4 rounded-xl border border-border bg-card p-4"
     >
-      {/* Wide enough for the button; where the photos don't fit beside that, they go underneath. */}
-      <div className="flex min-w-0 flex-1 basis-[120px] flex-col gap-2.5">
+      {/* Never narrower than the button, in any font; where the photos don't fit beside that, they go underneath. */}
+      <div className="flex min-w-min flex-1 basis-0 flex-col gap-2.5">
         <h2 id="linked-list-heading" className="text-lg font-semibold [overflow-wrap:anywhere]">
           {name}&apos;s GiftsAF list
         </h2>
