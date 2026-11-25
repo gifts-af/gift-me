@@ -1,7 +1,8 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
-import { safeNext } from "@/lib/safe-next";
+import { authFormError } from "@/lib/auth-form-errors";
+import { safeNext, withNext } from "@/lib/safe-next";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -34,7 +35,7 @@ export function SignUpForm({ next: rawNext }: { next?: string }) {
       return;
     }
     setIsLoading(true);
-    // Optional; claim_gift falls back to the email when it's missing.
+    // Optional; without one, claims say "Someone" (claim_gift).
     const displayName = name.trim();
     const { error } = await createClient().auth.signUp({
       email,
@@ -47,16 +48,19 @@ export function SignUpForm({ next: rawNext }: { next?: string }) {
     });
     if (error) {
       human.reset();
-      setError(error.message);
+      setError(authFormError(error));
       setIsLoading(false);
       return;
     }
-    router.push("/auth/sign-up-success");
+    router.push(withNext("/auth/sign-up-success", next));
   };
 
   return (
     <div className="flex flex-col gap-7">
-      <GoogleButton next={next} />
+      <GoogleButton
+        next={next}
+        note="Your Google name shows on lists you share and gifts you claim. Change it in Settings."
+      />
       <Divider>or</Divider>
       <form method="post" onSubmit={handleSignUp} className="flex flex-col gap-3">
         <div className="grid gap-1.5">
@@ -72,7 +76,7 @@ export function SignUpForm({ next: rawNext }: { next?: string }) {
             aria-describedby="name-hint"
           />
           <p id="name-hint" className="text-[13px] text-muted-foreground">
-            Shown on your shared list and when you claim a gift. Leave it blank to show your email to people you claim with.
+            Shown on your shared list, and to anyone who opens a list you claim from.
           </p>
         </div>
         <div className="grid gap-1.5">
@@ -101,7 +105,7 @@ export function SignUpForm({ next: rawNext }: { next?: string }) {
       </form>
       <p className="text-center text-[15px] text-muted-foreground">
         Already have an account?{" "}
-        <Link href={next === "/" ? "/auth/login" : `/auth/login?next=${encodeURIComponent(next)}`} className="text-foreground underline underline-offset-[3px]">
+        <Link href={withNext("/auth/login", next)} className="text-foreground underline underline-offset-[3px]">
           Sign in
         </Link>
       </p>

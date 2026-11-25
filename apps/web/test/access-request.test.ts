@@ -22,7 +22,7 @@ describe("validateAccessRequest", () => {
   it("accepts a name and email, trimmed, with an optional note", () => {
     expect(validateAccessRequest(form({ name: "  Jordan ", email: " jo@example.com ", note: " hi " }))).toEqual({
       ok: true,
-      value: { name: "Jordan", email: "jo@example.com", note: "hi", kind: "access" },
+      value: { name: "Jordan", email: "jo@example.com", note: "hi" },
       spam: false,
     });
   });
@@ -35,20 +35,13 @@ describe("validateAccessRequest", () => {
     });
   });
 
-  it("reads the waitlist kind, and counts anything else as access (ALL-71)", () => {
-    const base = { name: "Jordan", email: "jo@example.com" };
-    expect(validateAccessRequest(form({ ...base, kind: "waitlist" }))).toMatchObject({ value: { kind: "waitlist" } });
-    expect(validateAccessRequest(form({ ...base, kind: "admin" }))).toMatchObject({ value: { kind: "access" } });
-    expect(validateAccessRequest(form(base))).toMatchObject({ value: { kind: "access" } });
-  });
-
   it("flags bots that fill the hidden field", () => {
     const result = validateAccessRequest(form({ name: "Bot", email: "bot@example.com", website: "http://spam" }));
     expect(result).toMatchObject({ ok: true, spam: true });
   });
 });
 
-const jordan: AccessRequest = { name: "Jordan", email: "jo@example.com", note: "Friend of Jim", kind: "access" };
+const jordan: AccessRequest = { name: "Jordan", email: "jo@example.com", note: "Friend of Jim" };
 
 describe("inboxFor (ALL-71)", () => {
   it("tags the team inbox so Gmail filters can sort it", () => {
@@ -59,29 +52,23 @@ describe("inboxFor (ALL-71)", () => {
 });
 
 describe("buildAccessRequestEmail", () => {
-  it("access requests go to +access, from GiftsAF, and reply to the requester", () => {
+  it("goes to +waitlist, from GiftsAF, and replies go to the requester", () => {
     const email = buildAccessRequestEmail(jordan);
     expect(email).toMatchObject({
-      to: "allensforever711+access@gmail.com",
+      to: "allensforever711+waitlist@gmail.com",
       replyTo: "jo@example.com",
-      subject: "GiftsAF access request: Jordan",
+      subject: "GiftsAF waitlist: Jordan",
     });
+    expect(email.text).toContain("Jordan wants the concierge");
     expect(email.text).toContain("Friend of Jim");
     expect(email.text).toContain("jo@example.com");
-    expect(email.text).toContain("Test users");
-    expect(EMAIL_FROM).toBe("GiftsAF <hello@giftsaf.com>");
-  });
-
-  it("waitlist goes to +waitlist and asks to email them at launch", () => {
-    const email = buildAccessRequestEmail({ ...jordan, kind: "waitlist" });
-    expect(email).toMatchObject({ to: "allensforever711+waitlist@gmail.com", subject: "GiftsAF waitlist: Jordan" });
-    expect(email.text).toContain("wants the concierge");
+    // Access is given to an account, and this form doesn't make one.
+    expect(email.text).toContain(
+      "Check they have a confirmed account with this email, then follow Concierge access > Letting someone in, in design/operations.md, and reply here.",
+    );
     expect(email.text).not.toContain("Test users");
-  });
-
-  it("owner emails are branded", () => {
-    expect(buildAccessRequestEmail(jordan).html).toContain(EMAIL_LOGO_URL);
-    expect(buildAccessRequestEmail({ ...jordan, kind: "waitlist" }).html).toContain(EMAIL_LOGO_URL);
+    expect(email.html).toContain(EMAIL_LOGO_URL);
+    expect(EMAIL_FROM).toBe("GiftsAF <hello@giftsaf.com>");
   });
 
   it("a name can't break the email", () => {
@@ -92,38 +79,19 @@ describe("buildAccessRequestEmail", () => {
   });
 });
 
-describe("buildRequestConfirmation (ALL-71)", () => {
+describe("buildRequestConfirmation", () => {
   it("carries nothing the visitor typed, so it can't be used to message strangers", () => {
     const sneaky: AccessRequest = { ...jordan, name: "Claim your refund at evil.example", note: "visit evil.example" };
-    for (const kind of ["access", "waitlist"] as const) {
-      const email = buildRequestConfirmation({ ...sneaky, kind });
-      expect(email.subject + email.text + email.html).not.toContain("evil.example");
-    }
+    const email = buildRequestConfirmation(sneaky);
+    expect(email.subject + email.text + email.html).not.toContain("evil.example");
   });
 
-  it("says exactly what the spec says, and nothing that turns into a link", () => {
-    const access = buildRequestConfirmation(jordan);
-    expect(access.text).toContain("Thanks, we got your request. We'll email you when you're in.");
-    const waitlist = buildRequestConfirmation({ ...jordan, kind: "waitlist" });
-    expect(waitlist.text).toContain("You're on the concierge waitlist. We'll email you when it's ready.");
-    for (const email of [access, waitlist]) {
-      expect(email.text).not.toMatch(/day or two|giftsaf\.com|https?:/);
-    }
-  });
-
-  it("the person gets a branded confirmation for access", () => {
+  it("says what happens next, is branded, and has nothing that turns into a link", () => {
     const email = buildRequestConfirmation(jordan);
-    expect(email.to).toBe("jo@example.com");
+    expect(email).toMatchObject({ to: "jo@example.com", subject: "We got your GiftsAF request" });
     expect(email.replyTo).toBeUndefined();
-    expect(email.text).toContain("We'll email you when you're in.");
-    expect(email.html).toContain(EMAIL_LOGO_URL);
-  });
-
-  it("and for the waitlist", () => {
-    const email = buildRequestConfirmation({ ...jordan, kind: "waitlist" });
-    expect(email.to).toBe("jo@example.com");
-    expect(email.text).toContain("You're on the concierge waitlist.");
-    expect(email.text).toContain("We'll email you when it's ready.");
+    expect(email.text).toContain("Thanks, we got your request. We'll email you when you're in.");
+    expect(email.text).not.toMatch(/day or two|giftsaf\.com|https?:/);
     expect(email.html).toContain(EMAIL_LOGO_URL);
   });
 });
@@ -140,12 +108,12 @@ describe("requestAccess", () => {
     expect(url).toBe("https://api.resend.com/emails");
     expect(init.method).toBe("POST");
     expect((init.headers as Record<string, string>).Authorization).toBe("Bearer re_test");
-    expect(JSON.parse(String(init.body))).toMatchObject({ reply_to: "jo@example.com", to: ["allensforever711+access@gmail.com"] });
+    expect(JSON.parse(String(init.body))).toMatchObject({ reply_to: "jo@example.com", to: ["allensforever711+waitlist@gmail.com"] });
   });
 
-  it("sends to the owner first, then confirms to the person (ALL-71)", async () => {
+  it("sends to the owner first, then confirms to the person", async () => {
     const send = vi.fn(async () => ok());
-    await requestAccess(form({ name: "Jordan", email: "jo@example.com", kind: "waitlist" }), { isHuman: human, apiKey: "re_test", fetch: send });
+    await requestAccess(form({ name: "Jordan", email: "jo@example.com" }), { isHuman: human, apiKey: "re_test", fetch: send });
     const to = send.mock.calls.map((c) => JSON.parse(String((c as unknown as [string, RequestInit])[1].body)).to[0]);
     expect(to).toEqual(["allensforever711+waitlist@gmail.com", "jo@example.com"]);
   });

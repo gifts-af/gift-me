@@ -12,7 +12,7 @@ export function EndScreen({ line, primary, secondary }: { line: string; primary:
       {primary}
       {secondary}
       <Link href="/auth/login" className={END_LINK}>
-        Have an invite? Sign in
+        Already have an account? Sign in
       </Link>
       <Link href="/" className="inline-flex min-h-11 items-center justify-center text-[15px] font-semibold">
         Back to home

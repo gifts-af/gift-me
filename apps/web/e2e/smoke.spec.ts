@@ -3,11 +3,11 @@ import { TEST_USER } from "./test-user";
 
 // ALL-20 acceptance: sign in, see the app shell, the session survives a
 // refresh, sign out. Runs on both phones and desktop Chrome (ALL-60). Since ALL-46 a signed-out "/" is the home page,
-// and sign-in starts from its invite-only link.
+// and sign-in starts from its Sign in link.
 test("sign in, see Home, stay signed in, sign out", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Gifting, handled AF." })).toBeVisible();
-  await page.getByRole("link", { name: "🔒 Invite only" }).click();
+  await page.getByRole("link", { name: "Sign in", exact: true }).click();
   await expect(page).toHaveURL(/\/auth\/login$/);
   await expect(page.getByRole("button", { name: "Continue with Google" })).toBeVisible();
 

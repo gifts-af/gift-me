@@ -14,17 +14,17 @@ export function Hook() {
         <p className="max-w-prose text-[16px] text-muted-foreground md:text-[18px]">
           Where we&apos;re heading: we remember the dates, find the gift, and ship it. You just tap yes.
         </p>
-        <div className="flex flex-col gap-3 md:flex-row">
+        <div className="flex flex-col gap-3 md:flex-row md:flex-wrap">
           <Button asChild>
             <Link href="/tour">Take the tour</Link>
           </Button>
-          <RequestAccessButton kind="waitlist" variant="secondary" />
+          <RequestAccessButton variant="secondary" />
         </div>
         <Link
           href="/auth/login"
           className="inline-flex min-h-11 items-center self-center text-[14px] text-muted-foreground underline underline-offset-[3px] hover:text-foreground md:self-start"
         >
-          Have an invite? Sign in
+          Already have an account? Sign in
         </Link>
       </div>
       <div className="hidden md:block">

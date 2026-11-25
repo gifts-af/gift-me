@@ -4,20 +4,17 @@ import { NOT_HUMAN, TURNSTILE_FIELD } from "@/lib/turnstile";
 import { sendEmail, type OutgoingEmail } from "@/lib/resend";
 import { logEvent } from "@/lib/log";
 
-// Access requests (ALL-47) and the concierge waitlist (ALL-71): a short form
-// emails the owner through Resend, then sends the person a branded
-// confirmation. Nothing is stored: the Gmail label on +access or +waitlist is
-// the list. A hidden "website" field catches bots: they get the same
-// thank-you, but nothing is sent. The Turnstile check (ALL-68) catches the rest.
+// Public requests for the concierge: a short form emails the owner through
+// Resend, then sends the person a branded confirmation. Nothing is stored: the
+// Gmail label on +waitlist is the list (requests from signed-in accounts go to
+// +access). A hidden "website" field catches bots: they get the same thank-you,
+// but nothing is sent. The Turnstile check catches the rest.
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_NAME = 100;
 const MAX_NOTE = 2000;
 
-// "access" lets someone in now; "waitlist" means "tell me when the concierge
-// is ready", so the owner doesn't invite them yet.
-export type RequestKind = "access" | "waitlist";
-export type AccessRequest = { name: string; email: string; note: string; kind: RequestKind };
+export type AccessRequest = { name: string; email: string; note: string };
 
 export type Validation =
   | { ok: true; value: AccessRequest; spam: boolean }
@@ -38,47 +35,43 @@ export function validateAccessRequest(data: FormData): Validation {
   if (!name) errors.name = "Tell us your name.";
   if (!EMAIL_PATTERN.test(email)) errors.email = "Enter an email address like you@example.com.";
   if (Object.keys(errors).length) return { ok: false, errors };
-  const kind: RequestKind = field(data, "kind") === "waitlist" ? "waitlist" : "access";
-  return { ok: true, value: { name, email, note, kind }, spam: field(data, "website") !== "" };
+  return { ok: true, value: { name, email, note }, spam: field(data, "website") !== "" };
 }
 
 // A name goes into the subject, so line breaks are dropped there.
 const oneLine = (s: string) => s.replace(/[\r\n]+/g, " ");
 
 export function buildAccessRequestEmail(req: AccessRequest): OutgoingEmail {
-  const waitlist = req.kind === "waitlist";
   const { html, text } = renderEmail({
-    heading: waitlist ? `${req.name} wants the concierge` : `${req.name} would like to try ${APP_NAME}`,
-    paragraphs: waitlist
-      ? [`${req.name} joined the concierge waitlist. Email them when it launches.`]
-      : ["To let them in, add their email under Google Auth Platform > Audience > Test users, then reply to this email."],
+    heading: `${req.name} wants the concierge`,
+    paragraphs: [
+      "Check they have a confirmed account with this email, then follow Concierge access > Letting someone in, in design/operations.md, and reply here.",
+    ],
     rows: [
       { title: req.name, detail: req.email },
       ...(req.note ? [{ title: "They said", detail: req.note }] : []),
     ],
   });
   return {
-    to: inboxFor(req.kind),
+    to: inboxFor("waitlist"),
     replyTo: req.email,
-    subject: waitlist ? `${APP_NAME} waitlist: ${oneLine(req.name)}` : `${APP_NAME} access request: ${oneLine(req.name)}`,
+    subject: `${APP_NAME} waitlist: ${oneLine(req.name)}`,
     html,
     text,
   };
 }
 
-// The person's own copy (ALL-71), sent only after the bot check. It carries
+// The person's own copy, sent only after the bot check. It carries
 // nothing they typed (not even their name) and no links, so the form can't be
 // used to send strangers a GiftsAF email with someone else's words in it.
 export function buildRequestConfirmation(req: AccessRequest): OutgoingEmail {
-  const waitlist = req.kind === "waitlist";
-  const { html, text } = renderEmail(
-    waitlist
-      ? { heading: "Thanks!", paragraphs: ["You're on the concierge waitlist. We'll email you when it's ready."] }
-      : { heading: "Got it.", paragraphs: ["Thanks, we got your request. We'll email you when you're in."] },
-  );
+  const { html, text } = renderEmail({
+    heading: "Got it.",
+    paragraphs: ["Thanks, we got your request. We'll email you when you're in."],
+  });
   return {
     to: req.email,
-    subject: waitlist ? `You're on the ${APP_NAME} waitlist` : `We got your ${APP_NAME} request`,
+    subject: `We got your ${APP_NAME} request`,
     html,
     text,
   };

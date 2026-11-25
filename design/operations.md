@@ -175,7 +175,7 @@ Anyone can sign up, keep a list and add people. Gift ideas and the concierge set
 
 ### Letting someone in
 
-The request arrives as an email to the owner, with their account email in it. Who is waiting:
+The request arrives as an email to the owner, with their account email in it. Requests from the public form (the home page, the tour and /request-access) arrive by email only, with the `+waitlist` tag, and aren't in this query; check that person has a confirmed account with that email first. Who is waiting, from signed-in accounts:
 
 ```sql
 select u.email, u.email_confirmed_at is not null as confirmed, a.access_requested_at
@@ -265,6 +265,318 @@ Vercel's instant rollback past the gate shows Give and all its pages to every ac
 2. Roll back.
 3. Leave the database alone. The access fields, the storage limits and the file cap keep working under older code; an imported photo over 1 MB is skipped.
 4. Accounts made while rolled back have no access. When the gate is back, let in anyone who should have it, then turn sign-ups on again.
+
+## Erasing data
+
+How to do what the privacy page promises (`apps/web/app/privacy/page.tsx`): erase an account, a person from an account, or what's kept about someone with no account. Deleting in the app only hides a person (T27). If a step here changes, change the page too.
+
+**Tried on dev: not yet.** Until it has been, don't run this on production. Record here the date and anything that went wrong; row ids go on the ticket only, because this repo is public.
+
+**Tried on a local stack, 2026-11-25,** on made-up rows. The search for someone with no account failed (an ambiguous column) and is fixed. Every SQL block below is now run as written, in a transaction that's rolled back, by `apps/web/test/erase-runbook-db.test.ts` (`pnpm test:db`); a new block fails that test until it's tested too.
+
+Run SQL in the project's Supabase SQL editor and delete files in its dashboard, signed in as allensforever711. **Nothing here can be undone.** Keep away from 12:00 UTC, when the tick runs.
+
+### Before erasing anything
+
+Requests come from `/feedback`, which proves nothing about who wrote them.
+
+| They ask to erase | Check first |
+|---|---|
+| Their account, or a person in it | Email **the account's own address** (from `auth.users`), not the one on the form, and wait for a yes. An unconfirmed account needs the same yes |
+| What's kept about them in someone else's account | They must be able to tell us at least two matching details beyond a name, such as the birthday and the street. The owner decides. Never tell them whose account it is, or what else is in it |
+
+The account's id:
+
+```sql
+select id, email, email_confirmed_at from auth.users where email = lower('ACCOUNT_EMAIL');
+```
+
+### Erase an account
+
+1. **Stop it buying.** Ask them to disconnect Zinc in Settings and revoke the key in Zinc, if they connected it (that clears our webhook there). Then run this. Hiding the people cancels held gifts and frees the list gifts they claimed; it buys nothing.
+
+   ```sql
+   do $$
+   declare v_user uuid := 'ACCOUNT_ID';
+   begin
+     update concierge.accounts set paid_features = false, concierge_access = false where user_id = v_user;
+     update public.account_addresses set share_for_gifts = false where user_id = v_user;
+     update public.people set deleted_at = now() where user_id = v_user and deleted_at is null;
+   end $$;
+   ```
+
+2. **Wait for gifts on their way**, theirs and other people's being sent to their shared address. This must come back empty. A held gift to a shared address ends at the next tick. For `placed` or `shipped`, look in Zinc's dashboard, because one whose news was lost stays here; don't skip this step.
+
+   ```sql
+   select o.id, o.status, o.user_id = 'ACCOUNT_ID' as theirs, o.updated_at
+   from concierge.orders o
+   where (o.user_id = 'ACCOUNT_ID' or o.address_owner_id = 'ACCOUNT_ID')
+     and o.status in ('held', 'placing', 'unconfirmed', 'placed', 'shipped');
+   ```
+
+   **If Zinc's dashboard says it was delivered** (check the order there first), the owner may mark it arrived. This is the function behind Zinc's delivered event and the "It arrived" tap; `zinc` means Zinc said so, and it also takes a gift whose shipped news was lost, which the tap doesn't. It must answer `applied = true`. The next tick sends the buyer the delivered email, unless their account has been erased by then.
+
+   ```sql
+   select * from concierge.mark_delivered(
+     (select user_id from concierge.orders where id = 'ORDER_ID'), 'ORDER_ID', 'zinc');
+   ```
+
+   If Zinc says it was cancelled, or nothing at all, stop and ask the owner. `placing` and `unconfirmed` follow **Unconfirmed orders**.
+
+3. **Save the list of files** (copy the result; it's needed in step 5, after the rows that name them are gone). Read only: never delete from `storage.objects`, which leaves the files behind.
+
+   ```sql
+   select bucket_id, name from storage.objects
+   where (bucket_id in ('person-photos', 'captures') and name like 'ACCOUNT_ID/%')
+      or (bucket_id = 'list-photos' and name in (
+            select i.id::text || '.jpg'
+            from lists.list_items i join lists.lists l on l.id = i.list_id
+            where l.owner_id = 'ACCOUNT_ID'))
+   order by 1, 2;
+   ```
+
+4. **Erase the rows.** It stops, changing nothing, if a gift is still live or a round is being worked on. The name on gifts they claimed becomes "Someone", so nobody buys that gift twice. Their address goes from other people's finished orders. The reason holds no names or emails, because the log is kept.
+
+   ```sql
+   do $$
+   declare
+     v_user uuid := 'ACCOUNT_ID';
+     v_email text := lower('ACCOUNT_EMAIL');
+   begin
+     if not exists (select 1 from auth.users where id = v_user and lower(email) = v_email) then
+       raise exception 'That id and email are not the same account.';
+     end if;
+     perform 1 from concierge.gift_rounds where user_id = v_user order by id for update;
+     if exists (select 1 from concierge.gift_rounds where user_id = v_user and locked_until > now()) then
+       raise exception 'A round is being worked on. Wait and run this again.';
+     end if;
+     if exists (select 1 from concierge.orders
+                 where (user_id = v_user or address_owner_id = v_user)
+                   and status in ('held', 'placing', 'unconfirmed', 'placed', 'shipped')) then
+       raise exception 'A gift is still being ordered or on its way. See step 2.';
+     end if;
+
+     -- Other people's orders that shipped to this account's shared address. Orders from
+     -- before address_owner_id existed are found by the address itself.
+     create temp table erase_orders on commit drop as
+       select o.id
+         from concierge.orders o
+         join concierge.order_addresses x on x.order_id = o.id
+         left join public.account_addresses a on a.user_id = v_user
+        where o.user_id <> v_user
+          and o.status in ('delivered', 'failed', 'cancelled', 'refunded')
+          and (o.address_owner_id = v_user
+               or (o.address_source = 'shared'
+                   and lower(x.address_line1) = lower(a.address_line1) and x.zip = a.zip
+                   and lower(x.recipient_last_name) = lower(a.recipient_last_name)));
+     delete from concierge.order_addresses where order_id in (select id from erase_orders);
+     update concierge.orders set ship_city = '', ship_state = '' where id in (select id from erase_orders);
+
+     update lists.gift_claims set claimer_name = 'Someone' where claimer_id = v_user;
+     perform admin.hard_delete_account(v_user, 'account holder', 'erasure request');
+
+     -- Supabase's own sign-in records, which don't go with the account: part-way sign-ins
+     -- (these can hold a Google token) and the sign-in log, which holds the email. If the
+     -- role may not, the erasure still stands, and step 6 shows what's left.
+     begin
+       delete from auth.flow_state where user_id = v_user or linking_target_id = v_user;
+     exception when insufficient_privilege then raise notice 'auth.flow_state was not cleared';
+     end;
+     begin
+       delete from auth.audit_log_entries
+        where payload ->> 'actor_id' = v_user::text
+           or payload -> 'traits' ->> 'user_id' = v_user::text
+           or lower(payload ->> 'actor_username') = v_email
+           or lower(payload -> 'traits' ->> 'user_email') = v_email;
+     exception when insufficient_privilege then raise notice 'auth.audit_log_entries was not cleared';
+     end;
+   end $$;
+   ```
+
+5. **Delete the files:** Dashboard > Storage. Delete the folder named `ACCOUNT_ID` in **person-photos** and in **captures**, then each file saved in step 3 from **list-photos**. The dashboard goes through the Storage API, which is what removes the file itself. Erasing the rows also queued the list photos for the next tick, so any you miss go within a day.
+
+6. **Check, then check again an hour later,** because a tab still signed in can upload until its token expires. No files may come back (put the list photos' names from step 3 in place of `SAVED_NAME.jpg`):
+
+   ```sql
+   select bucket_id, name from storage.objects
+   where (bucket_id in ('person-photos', 'captures') and name like 'ACCOUNT_ID/%')
+      or (bucket_id = 'list-photos' and name in ('SAVED_NAME.jpg'))
+   order by 1, 2;
+   ```
+
+   This gives `0, 0, 0, 0, 0, 1`. If one of the sign-in counts isn't 0, the database role couldn't clear it: say so in the reply.
+
+   ```sql
+   select (select count(*) from auth.users where id = 'ACCOUNT_ID') as accounts,
+          (select count(*) from public.people where user_id = 'ACCOUNT_ID') as people,
+          (select count(*) from lists.lists where owner_id = 'ACCOUNT_ID') as lists,
+          (select count(*) from auth.flow_state where user_id = 'ACCOUNT_ID' or linking_target_id = 'ACCOUNT_ID') as sign_in_flows,
+          (select count(*) from auth.audit_log_entries
+            where payload ->> 'actor_id' = 'ACCOUNT_ID'
+               or payload -> 'traits' ->> 'user_id' = 'ACCOUNT_ID'
+               or lower(payload ->> 'actor_username') = lower('ACCOUNT_EMAIL')
+               or lower(payload -> 'traits' ->> 'user_email') = lower('ACCOUNT_EMAIL')) as sign_in_log,
+          (select count(*) from admin.deletion_log where target_id = 'ACCOUNT_ID') as logged;
+   ```
+
+7. **Mail.** In the allensforever711 inbox, delete their requests and feedback (search their address). Reply that it's done, with the list of what we can't erase (below), then delete that thread too.
+
+**What `admin.hard_delete_account` removes.** Deleting the `auth.users` row cascades to their sign-ins, profile, own address, lists (gifts, the claims on them, links to them), people (hidden ones too), and everything the concierge keeps: settings, budgets, occasions, captures, facts, questions, saved gifts, ideas, rounds, orders and their addresses, reactions, messages and emailed buttons. Their Zinc secrets leave Vault with their settings row. `admin.deletion_log` keeps ids, who asked and why. Step 4 clears what doesn't cascade: names on claims, shared addresses on other people's finished orders, and Supabase's sign-in records.
+
+**What stays with other accounts:** what they typed or copied about this person. That's their entry for the person, facts, and ideas and saved gifts copied from the list. If the person asks for that too, follow **Erase what's kept about someone with no account**. Gift messages other people wrote are kept (owner, 2026-11-25).
+
+### Erase a person from an account
+
+Get the person's id, hidden ones included:
+
+```sql
+select id, name, deleted_at, created_at from public.people where user_id = 'ACCOUNT_ID' order by name;
+```
+
+1. **Hide them**, if they aren't yet, which cancels held gifts:
+
+   ```sql
+   update public.people set deleted_at = now() where id = 'PERSON_ID' and deleted_at is null;
+   ```
+
+2. **Wait for gifts on their way** (must be empty; a delivered gift whose news was lost is marked as in step 2 above):
+
+   ```sql
+   select o.id, o.status, o.updated_at
+   from concierge.orders o join concierge.gift_rounds r on r.id = o.round_id
+   where r.person_id = 'PERSON_ID' and o.status in ('held', 'placing', 'unconfirmed', 'placed', 'shipped');
+   ```
+
+3. **Save the list of files.** Captures are named after the capture, not the person, so afterwards nothing says which were theirs:
+
+   ```sql
+   select 'person-photos' as bucket, name from storage.objects
+    where bucket_id = 'person-photos' and name like '%/PERSON_ID/%'
+   union
+   select 'person-photos', photo_path from public.people where id = 'PERSON_ID' and photo_path is not null
+   union
+   select 'captures', screenshot_path from concierge.captures where person_id = 'PERSON_ID' and screenshot_path is not null
+   union
+   select 'captures', m.image_path from concierge.inbound_messages m
+    join concierge.captures c on c.id = m.capture_id
+    where c.person_id = 'PERSON_ID' and m.image_path is not null;
+   ```
+
+4. **Erase the rows.** `requested_by` is `account holder`, or `the person` for a request from outside.
+
+   ```sql
+   do $$
+   declare v_person uuid := 'PERSON_ID';
+   begin
+     perform 1 from concierge.gift_rounds where person_id = v_person order by id for update;
+     if exists (select 1 from concierge.gift_rounds where person_id = v_person and locked_until > now()) then
+       raise exception 'A round is being worked on. Wait and run this again.';
+     end if;
+     if exists (select 1 from concierge.orders o join concierge.gift_rounds r on r.id = o.round_id
+                 where r.person_id = v_person
+                   and o.status in ('held', 'placing', 'unconfirmed', 'placed', 'shipped')) then
+       raise exception 'A gift is still being ordered or on its way.';
+     end if;
+     -- These only lose their link when the person goes, so they're deleted here.
+     delete from concierge.inbound_messages m
+      where m.matched_person_id = v_person
+         or m.capture_id in (select id from concierge.captures where person_id = v_person);
+     delete from concierge.notifications where person_id = v_person;
+     perform admin.hard_delete_person(v_person, 'account holder', 'erasure request');
+   end $$;
+   ```
+
+   The rest cascades: occasions, budgets, captures, facts, questions, saved gifts, ideas, rounds, orders, order addresses, reactions and the link to their list. `cost_events` keep the cost without its idea run or order.
+
+5. **Delete the files** in Dashboard > Storage, as in step 5 above: in **person-photos** the folder `ACCOUNT_ID/PERSON_ID`, and in **captures** each saved name.
+
+6. **Check:** the saved names no longer come back from `storage.objects`, and this gives `0, 1`:
+
+   ```sql
+   select (select count(*) from public.people where id = 'PERSON_ID') as people,
+          (select count(*) from admin.deletion_log where target_id = 'PERSON_ID') as logged;
+   ```
+
+7. Delete the mail, as in step 7 above. An emailed note that hasn't been filed to anyone isn't linked to a person; it's cleared once its buttons expire (`inbound_link_hours`, three days) and the next tick runs, so within four days.
+
+### Erase what's kept about someone with no account
+
+People are saved under any name ("Mom"), so we can only look for what we're told, and we say so. Put what they gave us in place of `THEIR_NAME`, `THEIR_STREET` and `THEIR_PHONE`, leave the rest as `none-given` (never empty, which matches everyone), and set the birthday's month and day if given. A phone can be saved with or without punctuation: try both. Double any apostrophe (`O'Brien` becomes `O''Brien`). It reads every account, so run it only for a request.
+
+```sql
+with asked as (
+  select '%' || 'THEIR_NAME' || '%' as who, '%' || 'THEIR_STREET' || '%' as street,
+         '%' || 'THEIR_PHONE' || '%' as tel, 0 as birth_month, 0 as birth_day
+), kept (found_in, id, user_id, words) as (
+  select 'person', id, user_id, concat_ws(' ', name, recipient_first_name, recipient_last_name,
+         address_line1, address_line2, city, zip, phone, notes) from public.people
+  union all select 'account', u.id, u.id, concat_ws(' ', u.email, u.raw_user_meta_data ->> 'full_name', u.raw_user_meta_data ->> 'name',
+         p.display_name, p.phone, c.buyer_phone)
+    from auth.users u left join public.profiles p on p.id = u.id left join concierge.accounts c on c.user_id = u.id
+  union all select 'account address', user_id, user_id, concat_ws(' ', recipient_first_name, recipient_last_name,
+         address_line1, address_line2, city, zip, phone) from public.account_addresses
+  union all select 'order address', order_id, user_id, concat_ws(' ', recipient_first_name, recipient_last_name,
+         address_line1, address_line2, city, zip, phone) from concierge.order_addresses
+  union all select 'gift message', id, user_id, gift_message from concierge.orders
+  union all select 'capture', id, user_id, concat_ws(' ', source_url, page_title, text_excerpt, note) from concierge.captures
+  union all select 'emailed note', id, user_id, concat_ws(' ', subject, body) from concierge.inbound_messages
+  union all select 'fact', id, user_id, value from concierge.profile_facts
+  union all select 'answer', id, user_id, concat_ws(' ', prompt, answer) from concierge.questions
+  union all select 'saved gift', id, user_id, name from concierge.saved_gifts
+  union all select 'gift idea', id, user_id, concat_ws(' ', title, reason) from concierge.gift_ideas
+  union all select 'reaction', id, user_id, concat_ws(' ', note, fact_value) from concierge.reactions
+  union all select 'rejection', id, user_id, reason_text from concierge.rejections
+  union all select 'list title', id, owner_id, title from lists.lists
+  union all select 'list gift', i.id, l.owner_id, i.name from lists.list_items i join lists.lists l on l.id = i.list_id
+  union all select 'claim', item_id, claimer_id, claimer_name from lists.gift_claims
+)
+select k.found_in, k.id, k.user_id, left(k.words, 200) as words
+from kept k, asked
+where k.words ilike asked.who or k.words ilike asked.street or k.words ilike asked.tel
+   or (k.found_in = 'person' and exists (
+         select 1 from concierge.occasions o
+         where o.person_id = k.id and o.kind = 'birthday'
+           and o.month = asked.birth_month and o.day = asked.birth_day))
+order by 1, 2;
+```
+
+It can't look inside pictures (photos, screenshots), and doesn't look at product links, tracking details, or a birth year.
+
+1. Show the owner the matches. A name alone is never enough. If it isn't clearly them, erase nothing and say we couldn't find them.
+2. **A whole person:** follow **Erase a person from an account**, with `'the person'` as who asked. That account loses its gift history for them, and its owner is told (step 4; owner, 2026-11-25).
+3. **Only mentioned:** a capture, fact, saved gift or emailed note is its own row, so delete that row (and a capture's or note's file, as above). Clear the text of an answer, rejection, or idea's reason; on a reaction, clear `fact_category` and `fact_value` together. A claim's name becomes `'Someone'`. A gift message stays (owner, 2026-11-25): it goes only with the person or account it belongs to. Ask the account's owner to change a list's title or gifts, or their own address. An order address goes only once its order is finished: delete the `order_addresses` row and set the order's `ship_city` and `ship_state` to `''`. `admin.deletion_log` has no kind for these, so note the date and row ids on the ticket.
+4. Email the account holder that the person (or detail) was erased because that person asked, and that no more gifts will be bought for them.
+5. Tell the person who asked that it's done, or that we found nothing, without saying whose account it was.
+6. If they also have an account, that's **Erase an account**. Claims made signed out carry only the name they typed, with no account, so they're found here.
+
+### What these steps can't reach
+
+| Copy | What happens to it |
+|---|---|
+| Emails already delivered | In the recipient's inbox; nothing we can do |
+| Resend | Sent mail and received notes stay in its logs: 30 days on the free plan (`design/spikes/email.md`). **[Verify]** that bodies go then too, and whether support deletes sooner |
+| Vercel logs | Ids only (E6); expire on Vercel's schedule |
+| Supabase's platform logs | Sign-in events can hold the email and internet address, and the SQL above is logged with the ids and search words in it. **[Verify]** how long they're kept |
+| `auth.audit_log_entries` | Step 4 deletes this account's rows, as the local `postgres` role may. **[Verify]** on dev that the hosted role may too; nothing expires them otherwise |
+| Supabase backups | **[Verify]** whether the plan keeps any and for how long. Restoring one brings the data back: erase it again from `admin.deletion_log` |
+| Zinc and the store | Keep orders they filled. The account holder asks them; a shared address may show in the buyer's own Zinc account (T61) |
+| AI Gateway and Anthropic, Cloudflare | Keep what their own terms say |
+| A list photo at its public address | Can stay in the network's cache for a while after the file is deleted. **[Verify]** for how long |
+| Google | The contacts token is never stored. Signing in with Google can leave its token in `auth.flow_state`, which step 4 clears. Google keeps its own record of the sign-in; they can remove GiftsAF in their Google account |
+| Browsers | The extension's session and any list draft, until they sign out or clear it |
+| What other accounts typed or copied about them | Stays theirs: their entry for the person, facts, ideas and saved gifts. Erased only on a separate request, for what we're told to look for. Gift messages are kept |
+
+## Google verification
+
+**Why we ask for `https://www.googleapis.com/auth/contacts.readonly`** (draft for Google's form; off until `google_import_enabled` is 1, and the demo video must show it working):
+
+> GiftsAF reminds people of birthdays and helps them choose and ship gifts. "Import from Google Contacts" lets a signed-in user pick the people they buy for instead of typing them in. It needs the names, nicknames, birthdays, postal addresses and photos of the user's own saved contacts, to list them for the user to tick, set up birthday reminders, and have an address for a gift.
+>
+> Reading saved contacts uses the People API's `people.connections.list`, which accepts only `contacts` and `contacts.readonly`. We use the read-only one. `contacts.other.readonly` covers "other contacts" instead of saved ones, and the `user.*` and `profile.*` scopes cover the user's own profile. Without this scope the import can't work; people would type everyone in by hand.
+>
+> Contacts are read in the user's browser, only after they press the button and agree on Google's screen. The access token never reaches our server and is never stored, and the browser revokes it as soon as the read ends, whether or not it worked. The user ticks contacts; only those are sent to our server and saved, privately to their account. Unticked contacts never leave the browser. Our server then copies the ticked contacts' photos from Google's photo host, without the token. We don't sell the data or use it for ads.
+
+Checked against `apps/web/app/people/import/google-contacts.ts` on 2026-11-25: it asks for `names,nicknames,birthdays,addresses,photos`, and revokes the token in a `finally`. Google's [People API reference](https://developers.google.com/people/api/rest/v1/people.connections/list) lists the two scopes. The Limited Use sentence on the privacy page is the example in Google's [verification FAQ](https://support.google.com/cloud/answer/13463817), with our name in it.
 
 ## Zinc wallet ordering (ALL-32, ALL-30)
 

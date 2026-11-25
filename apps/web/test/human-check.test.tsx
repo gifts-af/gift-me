@@ -30,7 +30,7 @@ describe("the bot check on public forms", () => {
     ["sign in", () => <LoginForm />, "Sign in"],
     ["sign up", () => <SignUpForm />, "Create account"],
     ["forgot password", () => <ForgotPasswordForm />, "Send reset link"],
-    ["request access", () => <RequestAccessForm />, "Request access"],
+    ["request access", () => <RequestAccessForm />, "Request concierge access"],
   ])("%s can't be sent until the check hands over a token", async (_name, form, button) => {
     turnstileMock.autoToken = false;
     render(form());
@@ -54,14 +54,14 @@ describe("the bot check on public forms", () => {
   });
 
   it("gets a fresh token after a failed sign in, since each one works once", async () => {
-    auth.signInWithPassword.mockResolvedValue({ error: { message: "Invalid login credentials" } });
+    auth.signInWithPassword.mockResolvedValue({ error: { code: "invalid_credentials", message: "Invalid login credentials" } });
     render(<LoginForm />);
     fireEvent.change(screen.getByLabelText("Email"), { target: { value: "sam@example.com" } });
     fireEvent.change(screen.getByLabelText("Password"), { target: { value: "pw-123456" } });
     const before = turnstileMock.renders;
     await waitFor(() => expect(screen.getByRole("button", { name: "Sign in" })).toBeEnabled());
     await act(async () => fireEvent.click(screen.getByRole("button", { name: "Sign in" })));
-    await screen.findByText("Invalid login credentials");
+    await screen.findByText(/That email and password don't match/);
     expect(turnstileMock.renders).toBeGreaterThan(before);
   });
 
@@ -69,8 +69,8 @@ describe("the bot check on public forms", () => {
     render(<RequestAccessForm />);
     const before = turnstileMock.renders;
     fireEvent.change(screen.getByLabelText("Name"), { target: { value: "Jordan" } });
-    await waitFor(() => expect(screen.getByRole("button", { name: "Request access" })).toBeEnabled());
-    await act(async () => fireEvent.submit(screen.getByRole("button", { name: "Request access" }).closest("form")!));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Request concierge access" })).toBeEnabled());
+    await act(async () => fireEvent.submit(screen.getByRole("button", { name: "Request concierge access" }).closest("form")!));
     await screen.findByText("Try again");
     expect(turnstileMock.renders).toBeGreaterThan(before);
   });
@@ -109,7 +109,7 @@ describe("the bot check on public forms", () => {
 
   it("doesn't show our email until the check has failed", async () => {
     render(<RequestAccessForm />);
-    await waitFor(() => expect(screen.getByRole("button", { name: "Request access" })).toBeEnabled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Request concierge access" })).toBeEnabled());
     expect(screen.queryByText(FEEDBACK_EMAIL)).not.toBeInTheDocument();
   });
 

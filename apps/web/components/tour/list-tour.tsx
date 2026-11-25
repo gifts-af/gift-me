@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
-import { RequestAccessButton } from "@/components/home/request-access-dialog";
+import { Button } from "@/components/ui/button";
 import { EndScreen } from "./end-screen";
 import { ClaimScreen, MyListScreen, ShareScreen } from "./list-tour-screens";
 import { TourFrame } from "./tour-frame";
@@ -28,8 +29,12 @@ export function ListTour() {
       {current.id === "surprise" && <MyListScreen />}
       {current.id === "end" && (
         <EndScreen
-          line="Your list works today. GiftsAF is invite only for now. Want in?"
-          primary={<RequestAccessButton variant="default" />}
+          line="Your list is free. Start it now."
+          primary={
+            <Button asChild>
+              <Link href="/auth/sign-up">Start your list, free</Link>
+            </Button>
+          }
         />
       )}
     </TourFrame>

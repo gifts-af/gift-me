@@ -46,12 +46,14 @@ export async function saveTimezone(zone: string): Promise<SaveResult> {
   return { ok: true };
 }
 
-// Saves the name a shared list shows (ALL-136). Only ever what the person
-// typed: never filled in from Google or their email (T42). Empty clears it.
+// Saves the name a shared list shows. Empty clears it. The database shows no
+// name with an @ in it (public.shown_name), so one isn't saved.
 const MAX_DISPLAY_NAME = 80; // public.profiles.display_name's check
 export async function saveDisplayName(name: string): Promise<SaveResult> {
   const value = String(name ?? "").trim();
   if (value.length > MAX_DISPLAY_NAME) return { ok: false, error: `Keep your name to ${MAX_DISPLAY_NAME} characters.` };
+
+  if (value.includes("@")) return { ok: false, error: "Use a name without an @, not an email address." };
 
   const supabase = await createClient();
   const { data: auth } = await supabase.auth.getClaims();

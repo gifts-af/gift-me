@@ -18,7 +18,7 @@ export function DisplayNameField({ initial, action }: { initial: string | null; 
     <div className="flex flex-col gap-1.5">
       <Label htmlFor={id}>Your name</Label>
       <p id={`${id}-hint`} className="text-[13px] text-muted-foreground">
-        Shown at the top of your list when you share it.
+        Shown on your shared list, and to anyone who opens a list you claim from.
       </p>
       <Input
         id={id}

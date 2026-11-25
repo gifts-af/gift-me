@@ -720,6 +720,7 @@ describe("GiftApp", () => {
     it("is told to sign in to keep their list", () => {
       render(<GiftApp initial={null} />);
       expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/auth/login?next=%2Flists");
+      expect(screen.getByRole("link", { name: "create an account" })).toHaveAttribute("href", "/auth/sign-up?next=%2Flists");
       expect(screen.queryByRole("button", { name: /Share/ })).not.toBeInTheDocument();
     });
   });

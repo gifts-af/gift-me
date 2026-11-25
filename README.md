@@ -21,13 +21,13 @@ GiftsAF is built for both sides: getting gifts you'll love, and giving them with
 
 **Ask for what you actually want.** Add gifts from any store, then share your list with one link. Friends claim what they're buying, so nobody doubles up, and you never see what's been claimed, so the surprise stays a surprise.
 
-*Live now, by invitation.*
+*Live now, and free. [Start your list](https://giftsaf.com/auth/sign-up).*
 
 ## Give: Gift Concierge
 
 **Never miss a date again.** You'll tell it about the people you buy for. It'll remember the dates that matter, learn what each person is into, and suggest gifts that can arrive on time. Tap yes and it's ordered. Nothing gets bought without your OK.
 
-*In the works. Join the waitlist at [giftsaf.com](https://giftsaf.com).*
+*We're letting people in a few at a time. [Request concierge access](https://giftsaf.com/request-access).*
 
 ## Later: scan-to-gift
 
@@ -37,7 +37,7 @@ GiftsAF is built for both sides: getting gifts you'll love, and giving them with
 
 ## Want in?
 
-We're early and opening up to friends and family first. [Request access](https://giftsaf.com/request-access) to try it.
+We're early. Your list and the people you buy for are free: [start here](https://giftsaf.com/auth/sign-up).
 
 ---
 

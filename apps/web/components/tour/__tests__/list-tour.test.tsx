@@ -11,7 +11,7 @@ const goTo = (id: (typeof LIST_TOUR_STEPS)[number]["id"]) => {
 
 afterEach(() => vi.restoreAllMocks());
 
-describe("list tour (ALL-71)", () => {
+describe("list tour", () => {
   it("walks through the five steps in order", () => {
     render(<ListTour />);
     expect(LIST_TOUR_STEPS.map((s) => s.caption)).toEqual([
@@ -62,12 +62,14 @@ describe("list tour (ALL-71)", () => {
     expect(within(screenBox).getAllByTestId("gift-thumb")).toHaveLength(3);
   });
 
-  it("ends with Request access, sign in and back to home", () => {
-    render(<ListTour />);
+  it("ends with sign-up, sign in and back to home (AC-2)", () => {
+    const { container } = render(<ListTour />);
     expect(screen.getByRole("link", { name: "Skip tour" })).toHaveAttribute("href", "/");
     goTo("end");
-    expect(screen.getByRole("button", { name: "Request access" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Have an invite? Sign in" })).toHaveAttribute("href", "/auth/login");
+    expect(screen.getByText("Your list is free. Start it now.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Start your list, free" })).toHaveAttribute("href", "/auth/sign-up");
+    expect(container).not.toHaveTextContent(/invite/i);
+    expect(screen.getByRole("link", { name: "Already have an account? Sign in" })).toHaveAttribute("href", "/auth/login");
     expect(screen.getByRole("link", { name: "Back to home" })).toHaveAttribute("href", "/");
   });
 

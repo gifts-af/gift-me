@@ -139,7 +139,7 @@ export async function getMyListSummary(): Promise<{ count: number } | null> {
 
 export type GiftClaim = {
   // Shown to everyone with the link: a guest's own name, or a user's
-  // display name (their email if they didn't set one).
+  // display name ("Someone" if they have none, never an email).
   name: string;
   // The viewer made this claim while signed in, so they may take it back.
   mine: boolean;
@@ -160,7 +160,7 @@ export type SharedList = {
   // True when the viewer owns the list; the share page asks before showing it.
   isOwner: boolean;
   // `name` is what a claim by this viewer would show; null for guests.
-  viewer: { signedIn: boolean; email: string | null; name: string | null };
+  viewer: { signedIn: boolean; name: string | null };
   items: SharedGift[];
 };
 
@@ -189,7 +189,7 @@ export async function getSharedList(token: string): Promise<SharedList | null> {
     card_enabled?: boolean;
     owner_name?: string | null;
     linked_person?: { id: string; name: string } | null;
-    viewer?: { signed_in?: boolean; email?: string | null; name?: string | null };
+    viewer?: { signed_in?: boolean; name?: string | null };
     items: (ListItemRow & { claim?: GiftClaim | null })[];
   };
   return {
@@ -200,7 +200,6 @@ export async function getSharedList(token: string): Promise<SharedList | null> {
     isOwner: shared.is_owner === true,
     viewer: {
       signedIn: shared.viewer?.signed_in === true,
-      email: shared.viewer?.email ?? null,
       name: shared.viewer?.name ?? null,
     },
     items: (shared.items ?? []).map((row) => ({

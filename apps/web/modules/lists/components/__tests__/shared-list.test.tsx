@@ -27,7 +27,7 @@ const item = (id: string, name: string, claim: GiftClaim | null = null): SharedG
   claim,
 });
 
-const guest: SharedListData["viewer"] = { signedIn: false, email: null, name: null };
+const guest: SharedListData["viewer"] = { signedIn: false, name: null };
 
 // The heading fields, for tests that aren't about the heading.
 const unnamed = { cardEnabled: false, ownerName: null, linkedPerson: null };
@@ -51,6 +51,21 @@ describe("SharedList", () => {
     } finally {
       window.location.hash = "";
     }
+  });
+
+  it("the claim box shows the name friends will see", async () => {
+    const viewer = { signedIn: true, name: "Someone" };
+    render(<SharedList token="t" list={{ title: "t", ...unnamed, isOwner: false, viewer, items: [item("a", "Kettle")] }} />);
+    await userEvent.click(screen.getByRole("button", { name: /claim/i }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("Claiming as Someone.");
+  });
+
+  it("the claim box offers sign-in and sign-up, both coming back to this list", async () => {
+    render(<SharedList token="t" list={{ title: "t", ...unnamed, isOwner: false, viewer: guest, items: [item("a", "Kettle")] }} />);
+    await userEvent.click(screen.getByRole("button", { name: /claim/i }));
+    const dialog = within(screen.getByRole("dialog"));
+    expect(dialog.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/auth/login?next=%2Fshare%2Ft");
+    expect(dialog.getByRole("link", { name: "create an account" })).toHaveAttribute("href", "/auth/sign-up?next=%2Fshare%2Ft");
   });
 
   it("lets a friend claim and shows who claimed what", () => {
@@ -81,6 +96,8 @@ describe("SharedList", () => {
       />,
     );
     const about = screen.getByRole("link", { name: "What is GiftsAF?" });
+    expect(screen.getByRole("link", { name: "Privacy" })).toHaveAttribute("href", "/privacy");
+    expect(screen.getByRole("link", { name: "Feedback" })).toHaveAttribute("href", "/feedback");
     expect(about).toHaveAttribute("href", "/");
     const claim = screen.getByRole("button", { name: "Claim Board game" });
     expect(claim.compareDocumentPosition(about) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();

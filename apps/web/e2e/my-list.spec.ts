@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import { createFreshUser } from "./fresh-user";
 import { phoneLayoutProblems } from "./phone-layout";
@@ -126,4 +127,27 @@ test.describe("at 320 px, the narrowest phone", { tag: "@layout" }, () => {
     await expect(page.getByText(/^Removed Hand-thrown.*cups$/)).toBeVisible();
     expect(await phoneLayoutProblems(page)).toEqual([]);
   });
+});
+
+// The same browser: the gifts travel in its storage. Confirming in another browser loses them (accepted).
+test("a guest's list is still there after signing up", async ({ page }) => {
+  await page.goto("/lists");
+  await addGiftByHand(page, "Kettle");
+  await page.getByRole("link", { name: "Sign in", exact: true }).click();
+  await page.getByRole("link", { name: "Create an account", exact: true }).click();
+  await expect(page).toHaveURL(/\/auth\/sign-up\?next=%2Flists$/);
+  await page.getByLabel("Email").fill(`e2e-${randomUUID()}@example.test`);
+  // eslint-disable-next-line no-restricted-syntax -- this tests the sign-up form
+  await page.getByLabel("Password", { exact: true }).fill("e2e-local-only-password");
+  // eslint-disable-next-line no-restricted-syntax -- as above
+  await page.getByLabel("Repeat password").fill("e2e-local-only-password");
+  await page.getByRole("button", { name: "Create account" }).click();
+  // The local stack needs no confirmation, so this browser is signed in from here.
+  await expect(page).toHaveURL(/\/auth\/sign-up-success\?next=%2Flists$/);
+  await page.goto("/lists");
+  await expect(page.getByText("We brought over 1 gift from before you signed in.")).toBeVisible();
+  await expect(gift(page, "Kettle")).toBeVisible();
+  await expect(saveStatus(page)).toHaveText("Saved");
+  await page.reload();
+  await expect(gift(page, "Kettle")).toBeVisible();
 });

@@ -1,6 +1,7 @@
 "use client";
 
 import { createClient } from "@/lib/supabase/client";
+import { authFormError } from "@/lib/auth-form-errors";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,7 +21,7 @@ export function UpdatePasswordForm() {
     // The reset link already signed the user in.
     const { error } = await createClient().auth.updateUser({ password });
     if (error) {
-      setError(error.message);
+      setError(authFormError(error));
       setIsLoading(false);
       return;
     }

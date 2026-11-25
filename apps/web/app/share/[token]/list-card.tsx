@@ -25,7 +25,7 @@ async function attempt(action: Action, token: string, personId: string): Promise
 /**
  * The card above a shared list for anyone but its owner (ALL-123): add the
  * owner to your people, link someone you already have, or see who it's linked
- * to and remove that link. Signed out, it points to sign in or request access.
+ * to and remove that link. Signed out, it points to sign-up or sign-in, and back here.
  */
 export function ListCard({
   state,
@@ -60,19 +60,15 @@ export function ListCard({
 }
 
 function SignedOut({ token, addLabel }: { token: string; addLabel: string }) {
-  const loginHref = `/auth/login?next=${encodeURIComponent(`/share/${token}`)}`;
+  const next = `next=${encodeURIComponent(`/share/${token}`)}`;
   return (
     <>
       <Button asChild className="max-w-full self-start whitespace-normal py-2 [overflow-wrap:anywhere]">
-        <Link href={loginHref}>{addLabel}</Link>
+        <Link href={`/auth/sign-up?${next}`}>{addLabel}</Link>
       </Button>
-      <p className="flex flex-wrap gap-x-4 text-[13px]">
-        <Link href={loginHref} className="inline-flex min-h-11 items-center underline underline-offset-[3px]">
+      <p className="text-[13px]">
+        <Link href={`/auth/login?${next}`} className="inline-flex min-h-11 items-center underline underline-offset-[3px]">
           Sign in
-        </Link>
-        {/* Never carries the share token or a return path (T42, AC-24). */}
-        <Link href="/request-access" className="inline-flex min-h-11 items-center underline underline-offset-[3px]">
-          Request access
         </Link>
       </p>
     </>

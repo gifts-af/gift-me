@@ -45,6 +45,11 @@ describe("saveDisplayName", () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it("refuses an email address, which a shared list wouldn't show", async () => {
+    expect(await saveDisplayName("sam@example.com")).toEqual({ ok: false, error: "Use a name without an @, not an email address." });
+    expect(update).not.toHaveBeenCalled();
+  });
+
   it("asks to sign in again without a session", async () => {
     getClaims.mockResolvedValue({ data: null });
     expect(await saveDisplayName("Aaron")).toEqual({ ok: false, error: "Your session ended. Sign in again." });

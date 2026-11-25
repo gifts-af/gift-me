@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import { RequestAccessButton } from "@/components/home/request-access-dialog";
 import { DoneScreen } from "./done-screen";
@@ -49,12 +50,15 @@ export function Tour() {
         />
       )}
       {current.id === "list" && <ListScreen />}
-      {/* The concierge is still being built, so its tour ends at the waitlist (ALL-71). */}
       {current.id === "end" && (
         <EndScreen
-          line="The concierge is still being built. Join the waitlist and we'll email you when it's ready."
-          primary={<RequestAccessButton kind="waitlist" variant="default" />}
-          secondary={<RequestAccessButton className={END_LINK}>Just want the list? Request access</RequestAccessButton>}
+          line="We're letting people into the concierge a few at a time. Your list and your people are free."
+          primary={<RequestAccessButton variant="default" />}
+          secondary={
+            <Link href="/auth/sign-up" className={END_LINK}>
+              Just want the list? Start it free
+            </Link>
+          }
         />
       )}
     </TourFrame>

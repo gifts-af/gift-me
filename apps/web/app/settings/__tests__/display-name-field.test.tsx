@@ -19,7 +19,7 @@ describe("DisplayNameField", () => {
   it("starts empty with no name, and says what it's for", () => {
     render(<DisplayNameField initial={null} action={vi.fn()} />);
     expect(field()).toHaveValue("");
-    expect(screen.getByText(/top of your list when you share it/)).toBeInTheDocument();
+    expect(field()).toHaveAccessibleDescription("Shown on your shared list, and to anyone who opens a list you claim from.");
   });
 
   it("shows the error when it can't save", async () => {

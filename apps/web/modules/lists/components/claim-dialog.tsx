@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
+import { withNext } from "@/lib/safe-next";
 import type { ClaimResult } from "@/modules/lists/actions/claims";
 import type { Gift, SharedList } from "@/modules/lists/lib/lists";
 import Modal from "./modal";
@@ -34,13 +35,14 @@ function saveName(name: string) {
 export type ClaimDialogProps = {
   gift: Pick<Gift, "name">;
   viewer: SharedList["viewer"];
-  loginHref: string;
+  // Where signing in comes back to.
+  next: string;
   // `name` is undefined for a signed-in viewer: the database names them.
   onConfirm: (name: string | undefined) => Promise<ClaimResult>;
   onClose: () => void;
 };
 
-export default function ClaimDialog({ gift, viewer, loginHref, onConfirm, onClose }: ClaimDialogProps) {
+export default function ClaimDialog({ gift, viewer, next, onConfirm, onClose }: ClaimDialogProps) {
   const [name, setName] = useState(() => (viewer.signedIn ? "" : readSavedName()));
   const [nameError, setNameError] = useState("");
   const [error, setError] = useState("");
@@ -98,7 +100,7 @@ export default function ClaimDialog({ gift, viewer, loginHref, onConfirm, onClos
 
             {viewer.signedIn ? (
               <p className="text-[13px] text-muted-foreground">
-                Claiming as <strong className="text-foreground">{viewer.name ?? viewer.email ?? "your account"}</strong>.
+                Claiming as <strong className="text-foreground">{viewer.name ?? "your account"}</strong>.
               </p>
             ) : (
               <>
@@ -127,8 +129,12 @@ export default function ClaimDialog({ gift, viewer, loginHref, onConfirm, onClos
                 </div>
                 <p className="text-[13px] text-muted-foreground">
                   A guest claim can’t be undone.{" "}
-                  <Link href={loginHref} className="text-foreground underline underline-offset-[3px]">
+                  <Link href={withNext("/auth/login", next)} className="text-foreground underline underline-offset-[3px]">
                     Sign in
+                  </Link>{" "}
+                  or{" "}
+                  <Link href={withNext("/auth/sign-up", next)} className="text-foreground underline underline-offset-[3px]">
+                    create an account
                   </Link>{" "}
                   to be able to unclaim it if plans change.
                 </p>

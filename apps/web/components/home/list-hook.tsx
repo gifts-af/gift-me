@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { HeroCallout } from "@/components/home/hero-callout";
-import { RequestAccessButton } from "@/components/home/request-access-dialog";
 import { Button } from "@/components/ui/button";
 import { ListPreview } from "./list-preview";
 
@@ -19,15 +18,17 @@ export function ListHook() {
         </p>
         <div className="flex flex-col gap-3 md:flex-row">
           <Button asChild>
+            <Link href="/auth/sign-up">Start your list, free</Link>
+          </Button>
+          <Button asChild variant="secondary">
             <Link href="/tour/list">Take the tour</Link>
           </Button>
-          <RequestAccessButton variant="secondary" />
         </div>
         <Link
           href="/auth/login"
           className="inline-flex min-h-11 items-center self-center text-[14px] text-muted-foreground underline underline-offset-[3px] hover:text-foreground md:self-start"
         >
-          Have an invite? Sign in
+          Already have an account? Sign in
         </Link>
       </div>
       <div className="hidden md:block">
