@@ -248,6 +248,16 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
     expect(await ideaStatuses(r.roundId)).toEqual(["proposed", "proposed"]);
   });
 
+  it("a reason about health, religion or politics is refused, and nothing is saved", async () => {
+    const u = await newUser();
+    const r = await newRound(u);
+    expect(await reject(u, r, { text: "she's diabetic" })).toEqual({ ok: false, error: "sensitive" });
+    expect(await ideaStatuses(r.roundId)).toEqual(["proposed", "proposed"]);
+    expect(await rejections(r.roundId)).toEqual([]);
+    expect(await facts(r.personId)).toEqual([]);
+    expect(await roundRow(r.roundId)).toMatchObject({ status: "awaiting_approval", locked_until: null });
+  });
+
   it("the saved reason shows in activeFacts for the person", async () => {
     const u = await newUser();
     const r = await newRound(u);

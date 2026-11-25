@@ -18,6 +18,7 @@ import {
 } from "@gifts-af/core";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { z } from "zod";
+import { isSensitive } from "@/lib/ai/sensitive";
 import { errorFields, logEvent } from "@/lib/log";
 import type { Restored } from "@/lib/restored-ideas";
 import { storeName } from "@gifts-af/core/store-page/link";
@@ -129,7 +130,7 @@ export type RejectInput = {
   /** What the sheet showed: true for new ideas, false for "No more new ideas this time". */
   expectMore: boolean;
 };
-export type RejectResult = { ok: true; more: boolean; saved: boolean } | { ok: false; error: "not_found" | "busy" | "not_open" | "changed" | "too_long" };
+export type RejectResult = { ok: true; more: boolean; saved: boolean } | { ok: false; error: "not_found" | "busy" | "not_open" | "changed" | "too_long" | "sensitive" };
 
 type OwnedRound = { id: string; user_id: string; person_id: string; occasion_id: string; status: string; budget_cents: number | null; closed_at: string | null };
 
@@ -160,6 +161,8 @@ export async function rejectRoundIdeas(input: RejectInput, deps: DbDeps): Promis
   const { userId, roundId, code } = input;
   const text = input.text?.trim() || null;
   if (text && text.length > FACT_VALUE_MAX) return { ok: false, error: "too_long" };
+  // The reason becomes a fact the next ideas use, so it gets the same check as any typed fact.
+  if (text && isSensitive(text)) return { ok: false, error: "sensitive" };
 
   const round = await ownRound(deps, roundId, userId);
   if (!round) return { ok: false, error: "not_found" };

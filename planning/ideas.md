@@ -113,7 +113,16 @@ See something you like in a shop or at a friend's? Take a photo, then tap Share 
 
 One line each (CLAUDE.md > Scope freeze). Reviewed when the freeze lifts.
 
-- Nothing parked yet.
+- Sensitive-trait word list misses HIV, epilepsy, asthma, PTSD, celiac and others (ALL-37).
+- Facts aren't re-checked for sensitive traits before the AI prompt (ALL-37).
+- Past orders keep a deleted list owner's name and address; nothing prunes them after delivery (ALL-37).
+- An admin hard delete doesn't check for an order being placed (ALL-37).
+- A catalog-wide test that every table has RLS and no definer function is public (ALL-37).
+- Prompt-injection fixtures for captures (ALL-37).
+- Zinc webhooks: refuse an empty secret, add a replay window (ALL-37).
+- Uncaught errors may put database messages in server logs (ALL-37).
+- Wider secret check on client bundles; constant-time cron secret compare (ALL-37).
+- A claimer's name stays on a shared list after their account is deleted (ALL-37).
 
 ## A common thread
 
