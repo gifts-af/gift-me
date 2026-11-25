@@ -964,6 +964,7 @@ export type Database = {
         Row: {
           active: boolean;
           category: string;
+          changed_at: string;
           confirmed: boolean;
           created_at: string;
           id: string;
@@ -979,6 +980,7 @@ export type Database = {
         Insert: {
           active?: boolean;
           category: string;
+          changed_at?: string;
           confirmed?: boolean;
           created_at?: string;
           id?: string;
@@ -993,6 +995,7 @@ export type Database = {
         Update: {
           active?: boolean;
           category?: string;
+          changed_at?: string;
           confirmed?: boolean;
           created_at?: string;
           id?: string;

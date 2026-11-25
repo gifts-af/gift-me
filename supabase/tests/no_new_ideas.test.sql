@@ -3,7 +3,7 @@
 -- (restore_rejected_ideas and what reject_round_ideas saves for it).
 begin;
 \ir _helpers.psql
-select plan(84);
+select plan(96);
 
 update concierge.app_settings set value = '1000' where key = 'idea_round_runs_per_day';
 update concierge.app_settings set value = '1'
@@ -130,21 +130,48 @@ select is(tests.nn_left('runs'), true, 'AC-12: with a newer fact, a run is left 
 select ok((select s.run_id is not null from tests.nn n, concierge.start_idea_run(n.user_id, n.person_id, n.round_id, now()) s where n.label = 'runs'),
   'AC-12: start_idea_run starts it');
 
+-- What counts as a newer fact after none: new, changed or turned back on. Not one merely touched:
+-- saved again by a rejection or a question, or confirmed.
+create function tests.nn_touched(p_label text, p_user uuid, p_change text) returns boolean language plpgsql as $$
+begin
+  perform tests.nn_make(p_label, p_user);
+  perform tests.nn_runs(p_label, array['none']);
+  perform tests.nn_do(p_label, p_change);
+  return tests.nn_left(p_label);
+end $$;
+select is(tests.nn_touched('t confirm', :'a', $$update concierge.profile_facts set confirmed = true where person_id = $person$$), false, 'AC-11: confirming a fact earns no run');
+select is(tests.nn_touched('t same', :'a', $$update concierge.profile_facts set category = category, value = value, active = true where person_id = $person$$), false, 'AC-11: saving a fact as it was earns none');
+select is(tests.nn_touched('t question', :'a', $$insert into concierge.profile_facts (user_id, person_id, category, value, source) values ($user, $person, 'interest', 'fishing', 'question')
+  on conflict (person_id, category, value_key) do update set active = true, confirmed = true$$), false, 'AC-11: answering a question with a fact already there earns none');
+select is(tests.nn_touched('t own clock', :'a', $$update concierge.profile_facts set changed_at = now() where person_id = $person$$), false, 'AC-11: nor does setting the time itself');
+select is(tests.nn_touched('t off', :'a', $$update concierge.profile_facts set active = false where person_id = $person$$), false, 'AC-11: nor turning one off');
+select is(tests.nn_touched('t edit', :'a', $$update concierge.profile_facts set value = 'Fly fishing' where person_id = $person$$), true, 'AC-12: changing a fact''s words earns one');
+select is(tests.nn_touched('t category', :'a', $$update concierge.profile_facts set category = 'brand' where person_id = $person$$), true, 'AC-12: ... or its category');
+select is(tests.nn_touched('t on', :'a', $$update concierge.profile_facts set active = false where person_id = $person; update concierge.profile_facts set active = true where person_id = $person$$), true, 'AC-12: turning one back on earns one');
+-- For any other outcome the extra run goes by updated_at, as before.
+select tests.nn_make('t other', :'a');
+select tests.nn_runs('t other', array['saved', 'failed']);
+select is(tests.nn_left('t other'), false, 'AC-13: the runs used, no run is left');
+select tests.nn_do('t other', $$update concierge.profile_facts set confirmed = true where person_id = $person$$);
+select is(tests.nn_left('t other'), true, 'AC-13: after failed, a fact touched again still earns the extra run, as before');
+
 -- ─── The sheet's answer (AC-15) ─────────────────────────────────────────────
 
 create function tests.nn_sheet(p_label text, p_facts jsonb) returns boolean language sql as $$
   select concierge.runs_after_rejection(n.round_id, p_facts, now(), true) from tests.nn n where n.label = p_label;
 $$;
--- Every idea_round_runs_max, number of runs and last outcome: without a fact the sheet says what
+-- Every idea_round_runs_max, number of runs, last outcome, and whether the reason's fact is new, there
+-- already or there but turned off: without a fact the sheet says what
 -- round_idea_state says now; with a new one, the rejection does what the sheet said.
 create function tests.nn_agree(p_user uuid) returns setof text language plpgsql as $$
-declare v_max int; v_runs int; v_last text; v_label text; v_new boolean; v_done text;
+declare v_max int; v_runs int; v_last text; v_label text; v_new boolean; v_done text; v_fact text;
 begin
   for v_max in 0..3 loop
     update concierge.app_settings set value = to_jsonb(v_max) where key = 'idea_round_runs_max';
     for v_runs in 0..5 loop
       foreach v_last in array array['none', 'failed', 'saved'] loop
-        v_label := format('agree %s %s %s', v_max, v_runs, v_last);
+       foreach v_fact in array array['new', 'there', 'off'] loop
+        v_label := format('agree %s %s %s %s', v_max, v_runs, v_last, v_fact);
         perform tests.nn_make(v_label, p_user);
         if v_runs = 0 then
           perform tests.nn_do(v_label, 'delete from concierge.idea_runs where round_id = $round');
@@ -153,6 +180,10 @@ begin
         end if;
         perform tests.nn_do(v_label, $q$update concierge.gift_rounds set status = 'awaiting_approval' where id = $round$q$);
         perform tests.nn_do(v_label, $q$update concierge.gift_ideas set status = 'proposed' where id in ($a, $b)$q$);
+        if v_fact <> 'new' then
+          perform tests.nn_do(v_label, format($q$insert into concierge.profile_facts (user_id, person_id, category, value, source, active, updated_at)
+            values ($user, $person, 'avoid', 'plastic', 'note', %L, now() - interval '1 day')$q$, v_fact = 'there'));
+        end if;
         v_new := tests.nn_sheet(v_label, '[{"category": "avoid", "value": "Plastic"}]');
         if tests.nn_sheet(v_label, '[]') is distinct from tests.nn_left(v_label) then
           return next v_label || ' without a fact';
@@ -166,6 +197,8 @@ begin
           v_done := sqlerrm;
         end;
         if v_done <> 'ok' then return next v_label || ' ' || v_done; end if;
+        if v_last = 'none' and v_runs > 0 and v_fact <> 'new' and v_new then return next v_label || ' earned a run'; end if;
+       end loop;
       end loop;
     end loop;
   end loop;
@@ -177,6 +210,10 @@ select tests.nn_make('sheet', :'a');
 select tests.nn_runs('sheet', array['none']);
 select is(array[tests.nn_sheet('sheet', '[{"category": "avoid", "value": "Plastic"}]'), tests.nn_sheet('sheet', '[]')],
   array[true, false], 'AC-15: one run of two ended none: a search only with a new fact');
+select tests.nn_do('sheet', $$insert into concierge.profile_facts (user_id, person_id, category, value, source, updated_at) values ($user, $person, 'avoid', 'PLASTIC ', 'rejection', now() - interval '1 day')$$);
+select is(tests.nn_sheet('sheet', '[{"category": "avoid", "value": "Plastic"}]'), false, 'AC-15: the same reason again is no new search');
+select is(tests.nn_sheet('sheet', '[{"category": "avoid", "value": "Plastic"}, {"category": "avoid", "value": "Wool"}]'), true, 'AC-15: ... but another one with it is');
+select tests.nn_do('sheet', $$delete from concierge.profile_facts where person_id = $person and category = 'avoid'$$);
 select tests.nn_runs('sheet', array['none', 'none']);
 select is(array[tests.nn_sheet('sheet', '[{"category": "avoid", "value": "Plastic"}]'), tests.nn_sheet('sheet', '[]')],
   array[true, false], 'AC-15: both runs used: the extra one, only with a new fact');

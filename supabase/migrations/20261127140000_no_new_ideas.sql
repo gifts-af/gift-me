@@ -33,10 +33,43 @@ alter table concierge.round_sends
     or step ~ '^(late|ontime):([2-9]|[1-9][0-9]+):[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
   );
 
+-- ─── profile_facts.changed_at ────────────────────────────────────────────────
+-- When a fact was added, last reworded, or turned back on. updated_at also moves when a fact is only
+-- touched (confirmed, or saved again as it was), and the search would read the same facts.
+alter table concierge.profile_facts add column changed_at timestamptz not null default now();
+-- Not a change to any fact, so it mustn't look like one to updated_at.
+alter table concierge.profile_facts disable trigger set_updated_at;
+update concierge.profile_facts set changed_at = updated_at;
+alter table concierge.profile_facts enable trigger set_updated_at;
+
+create function concierge.keep_fact_changed_at()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if tg_op = 'INSERT' then
+    new.changed_at := new.updated_at;
+  elsif new.category is distinct from old.category or new.value is distinct from old.value
+        or (new.active and not old.active) then
+    new.changed_at := now();
+  else
+    new.changed_at := old.changed_at;
+  end if;
+  return new;
+end;
+$$;
+
+revoke all on function concierge.keep_fact_changed_at() from public, anon, authenticated;
+
+create trigger keep_fact_changed_at before insert or update on concierge.profile_facts
+  for each row execute function concierge.keep_fact_changed_at();
+
 -- ─── round_idea_state ────────────────────────────────────────────────────────
 -- As before (20261123120000_health.sql), except after a search that found nothing ('none', the last
--- counted run) another one is left only with an active fact newer than its start, however many runs
--- remain: the same inputs would be paid for twice. A failed, capped or cut-off run still retries.
+-- counted run) another one is left only with an active fact added, changed or turned on since its
+-- start (changed_at), however many runs remain: the same inputs would be paid for twice. A failed,
+-- capped or cut-off run still retries, and its extra run goes by updated_at as before.
 create or replace function concierge.round_idea_state(p_round_id uuid)
 returns table (has_facts boolean, runs_left boolean, paid boolean)
 language sql
@@ -54,7 +87,7 @@ as $$
       when n.runs >= concierge.setting_int('idea_round_runs_max') or n.last_outcome = 'none' then exists (
         select 1 from concierge.profile_facts f
          where f.person_id = r.person_id and f.user_id = r.user_id and f.active
-           and f.updated_at > n.last_started)
+           and case when n.last_outcome = 'none' then f.changed_at else f.updated_at end > n.last_started)
       else true
     end,
     concierge.has_paid_features(r.user_id)
@@ -71,7 +104,8 @@ $$;
 -- ─── runs_after_rejection ────────────────────────────────────────────────────
 -- As before (20261123120000_health.sql), except a fact this choice would save can earn a search
 -- while runs remain too (<=, was =): after a search that found nothing, the runs rule above says no
--- until that fact is saved. So the sheet and reject_round_ideas give the same answer.
+-- until that fact is saved. It must then be one the person doesn't have, as saving one they have
+-- changes nothing. So the sheet and reject_round_ideas give the same answer.
 create or replace function concierge.runs_after_rejection(p_round_id uuid, p_facts jsonb, p_now timestamptz, p_list_gifts boolean)
 returns boolean
 language sql
@@ -88,34 +122,34 @@ as $$
        and (s.runs_left
             or (n.runs <= concierge.setting_int('idea_round_runs_max')
                 and n.last_started < p_now
-                and nf.any_new))
+                and case when n.last_outcome = 'none' then nf.any_added else nf.any_new end))
       from concierge.gift_rounds r
       cross join lateral concierge.round_idea_state(r.id) s
       cross join lateral (
-        select count(*) as runs, max(u.started_at) as last_started
+        select count(*) as runs, max(u.started_at) as last_started,
+               (array_agg(u.outcome order by u.started_at desc, u.id desc))[1] as last_outcome
           from concierge.idea_runs u
          where u.round_id = r.id and u.outcome is distinct from 'no_credit'
       ) n
-      -- A fact in p_facts that would end up active.
+      -- A fact in p_facts that would end up active, and one the person doesn't have yet.
       cross join lateral (
-        select exists (
-          select 1
-            from jsonb_array_elements(coalesce(p_facts, '[]'::jsonb)) e
-           where not exists (
-             select 1 from concierge.profile_facts f
-              where f.person_id = r.person_id
-                and f.category = e ->> 'category'
-                -- profile_facts.value_key's expression.
-                and f.value_key = lower(regexp_replace(btrim(e ->> 'value'), '\s+', ' ', 'g'))
-                and not f.active)) as any_new
+        select coalesce(bool_or(k.active is distinct from false), false) as any_new,
+               coalesce(bool_or(k.active is null), false) as any_added
+          from jsonb_array_elements(coalesce(p_facts, '[]'::jsonb)) e
+          left join concierge.profile_facts k
+            on k.person_id = r.person_id
+           and k.category = e ->> 'category'
+           -- profile_facts.value_key's expression.
+           and k.value_key = lower(regexp_replace(btrim(e ->> 'value'), '\s+', ' ', 'g'))
       ) nf
      where r.id = p_round_id), false);
 $$;
 
 -- ─── reject_round_ideas ──────────────────────────────────────────────────────
 -- As before (20261122160000_approval.sql), except p_owned_idea_id marks the rejection of the gift
--- they already have, also when only the reason is noted. Dropped and created in this transaction rather than overloaded: with two, a
--- call naming the eight old arguments would be ambiguous. The default keeps that call working.
+-- they already have. That holds when the reason is only noted too.
+--   Dropped and created in one transaction, not overloaded: two versions would make a call with the
+-- eight old arguments ambiguous. The default keeps that call working.
 drop function concierge.reject_round_ideas(uuid, uuid, timestamptz, text, text, jsonb, boolean, boolean);
 
 create function concierge.reject_round_ideas(p_round_id uuid, p_user_id uuid, p_lock timestamptz, p_reason_code text,
