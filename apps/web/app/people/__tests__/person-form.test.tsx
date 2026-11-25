@@ -12,7 +12,7 @@ const photo = new File(["x".repeat(100)], "me.png", { type: "image/png" });
 
 type Result = { ok: true; id: string } | { ok: false; error: string; existingId?: string };
 
-function setup(addResult: Result = { ok: true, id: "new1" }, extra: { initialName?: string; shareToken?: string; hasAccess?: boolean } = {}) {
+function setup(addResult: Result = { ok: true, id: "new1" }, extra: { initialName?: string; shareToken?: string; heldGiftNotice?: boolean } = {}) {
   const calls: string[] = [];
   const action = vi.fn(async (...args: [unknown, FormData]) => {
     void args;
@@ -39,6 +39,7 @@ function setup(addResult: Result = { ok: true, id: "new1" }, extra: { initialNam
       doneHref="/give"
       storage={storage}
       resize={resize}
+      heldGiftNotice
       {...extra}
     />,
   );
@@ -252,7 +253,7 @@ describe("PersonForm", () => {
     const NOTICE = "If a gift for them is waiting on an address, it will ship to this list's owner.";
 
     it("starts with the owner's name, says where held gifts ship, and sends the token", async () => {
-      const t = setup(undefined, { initialName: "Sam", shareToken: TOKEN, hasAccess: true });
+      const t = setup(undefined, { initialName: "Sam", shareToken: TOKEN, heldGiftNotice: true });
       expect(screen.getByLabelText("Name")).toHaveValue("Sam");
       expect(screen.getByText(NOTICE)).toBeInTheDocument();
       await userEvent.selectOptions(relationship(), "Friend");
@@ -262,7 +263,7 @@ describe("PersonForm", () => {
     });
 
     it("without access, says nothing of held gifts and still sends the token", async () => {
-      const t = setup(undefined, { initialName: "Sam", shareToken: TOKEN, hasAccess: false });
+      const t = setup(undefined, { initialName: "Sam", shareToken: TOKEN, heldGiftNotice: false });
       expect(screen.queryByText(NOTICE)).toBeNull();
       await userEvent.selectOptions(relationship(), "Friend");
       await save();

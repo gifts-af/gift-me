@@ -18,7 +18,7 @@ export function ListLink({
   name,
   personId,
   keepsList,
-  hasAccess,
+  heldGiftNotice,
   linkAction,
   unlinkAction,
 }: {
@@ -26,8 +26,8 @@ export function ListLink({
   name: string;
   personId: string;
   keepsList: boolean;
-  /** To the concierge: without it no gift is waiting to ship. */
-  hasAccess: boolean;
+  /** Say where a gift held for an address would ship. Off only for someone surely without the concierge. */
+  heldGiftNotice: boolean;
   /** `linkUnlinkedListAction` for the prompt (never replaces a link), `linkListAction` for the page */
   linkAction: Action;
   /** `unlinkListAction`; the prompt only shows while nothing is linked, so it has none */
@@ -100,7 +100,7 @@ export function ListLink({
             </Button>
           </div>
           {/* Decision 53: what spends money says so. It goes at the next tick, leaving time to unlink. */}
-          {hasAccess && (
+          {heldGiftNotice && (
             <p className="text-[13px] text-muted-foreground">If a gift for them is waiting on an address, it will ship to this list&apos;s owner.</p>
           )}
         </form>

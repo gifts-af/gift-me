@@ -47,7 +47,7 @@ async function Loaded({ params }: { params: Promise<{ id: string }> }) {
       <PageFrame>
         <BackLink href={`/people/${person.id}`} label={person.name} />
         <PageTitle>{person.name}&apos;s list</PageTitle>
-        <ListLink variant="page" name={person.name} personId={person.id} keepsList={person.keepsList} hasAccess={access?.access ?? false} linkAction={linkListAction} unlinkAction={unlinkListAction} />
+        <ListLink variant="page" name={person.name} personId={person.id} keepsList={person.keepsList} heldGiftNotice={access?.access !== false} linkAction={linkListAction} unlinkAction={unlinkListAction} />
       </PageFrame>
     </>
   );

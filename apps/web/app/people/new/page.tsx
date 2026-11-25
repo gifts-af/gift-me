@@ -67,7 +67,7 @@ async function Form({ searchParams }: { searchParams: Promise<{ list?: string | 
       doneHref="/give"
       initialName={link?.ownerName}
       shareToken={link?.token}
-      hasAccess={access?.access ?? false}
+      heldGiftNotice={access?.access !== false}
     />
   );
 }

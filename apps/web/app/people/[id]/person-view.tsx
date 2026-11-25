@@ -51,7 +51,7 @@ function RowGroup({ title, children }: { title?: string; children: React.ReactNo
 }
 
 /**
- * A person's page (ALL-127, T71): who they are, what we know, then a short
+ * A person's page (T71): who they are, what we know, then a short
  * list of rows. Each row shows its value and opens its own screen, where it
  * changes. Without concierge access, what only the concierge does is left out.
  * An unknown, deleted or someone else's id is a 404.
@@ -79,7 +79,8 @@ export async function PersonView({
     hasPastGifts(person.id, supabase as unknown as Db, new Date()),
     readAccess(),
   ]);
-  // A failed check hides the concierge's parts, as no access does.
+  // A failed check hides the concierge's parts, as no access does. Not where a
+  // held gift would ship: that's money, so it's said unless there's surely none.
   const hasAccess = access?.access ?? false;
   // With the card on, an unlinked person gets the prompt at the top instead of the Their list row.
   const askForList = cardSetting === 1 && !person.keepsList;
@@ -103,7 +104,7 @@ export async function PersonView({
       </header>
 
       {askForList && (
-        <ListLink variant="prompt" name={person.name} personId={person.id} keepsList={false} hasAccess={hasAccess} linkAction={linkUnlinkedListAction} />
+        <ListLink variant="prompt" name={person.name} personId={person.id} keepsList={false} heldGiftNotice={access?.access !== false} linkAction={linkUnlinkedListAction} />
       )}
 
       {gifts}

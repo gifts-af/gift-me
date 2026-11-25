@@ -55,9 +55,11 @@ export function ConciergePitch({ requested }: { requested: boolean }) {
           </div>
         }
       />
-      <Button asChild variant="outline">
-        <Link href="/tour">Take the tour</Link>
-      </Button>
+      {!requested && (
+        <Button asChild variant="outline">
+          <Link href="/tour">Take the tour</Link>
+        </Button>
+      )}
     </div>
   );
 }

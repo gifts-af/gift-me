@@ -49,8 +49,8 @@ type Props = {
   initialName?: string;
   /** A shared list's token (ALL-123): sent as `list`, so the save also links that list. */
   shareToken?: string;
-  /** To the concierge: without it no gift is waiting to ship. */
-  hasAccess?: boolean;
+  /** Say where a gift held for an address would ship. Off only for someone surely without the concierge. */
+  heldGiftNotice: boolean;
   /** Test seams, same as PhotoPicker. */
   storage?: PhotoStorage;
   resize?: (file: File, px: number) => Promise<Blob>;
@@ -244,7 +244,7 @@ export function PersonForm(props: Props) {
       {props.shareToken && (
         <>
           <input type="hidden" name="list" value={props.shareToken} />
-          {props.hasAccess && (
+          {props.heldGiftNotice && (
             <p className="rounded-xl bg-muted px-4 py-3 text-[13px] text-muted-foreground">
               If a gift for them is waiting on an address, it will ship to this list&apos;s owner.
             </p>

@@ -68,7 +68,7 @@ describe("ConciergeGate", () => {
     expect(screen.getByText("We're letting people in a few at a time. We'll email you when you're in.")).toBeInTheDocument();
     expect(screen.getByText("Your list is ready to share in the meantime.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Go to my list" })).toHaveAttribute("href", "/lists");
-    expect(screen.getByRole("link", { name: "Take the tour" })).toHaveAttribute("href", "/tour");
+    expect(screen.queryByRole("link", { name: "Take the tour" })).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();
     expect(child).not.toHaveBeenCalled();
   });

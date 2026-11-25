@@ -5,10 +5,10 @@ import { ListLink } from "../list-link";
 
 const ok = { ok: true } as const;
 
-function setup(keepsList: boolean, linkResult: { ok: true } | { ok: false; error: string } = ok, hasAccess = true) {
+function setup(keepsList: boolean, linkResult: { ok: true } | { ok: false; error: string } = ok, heldGiftNotice = true) {
   const link = vi.fn(async (...a: [unknown, FormData]) => (void a, linkResult));
   const unlink = vi.fn(async (...a: [unknown, FormData]) => (void a, ok));
-  render(<ListLink variant="page" name="Dad" personId="p1" keepsList={keepsList} hasAccess={hasAccess} linkAction={link} unlinkAction={unlink} />);
+  render(<ListLink variant="page" name="Dad" personId="p1" keepsList={keepsList} heldGiftNotice={heldGiftNotice} linkAction={link} unlinkAction={unlink} />);
   return { link, unlink };
 }
 
@@ -70,7 +70,7 @@ describe("ListLink", () => {
   describe("prompt variant", () => {
     function prompt(linkResult: { ok: true } | { ok: false; error: string } = ok) {
       const link = vi.fn(async (...a: [unknown, FormData]) => (void a, linkResult));
-      render(<ListLink variant="prompt" name="Dad" personId="p1" keepsList={false} hasAccess linkAction={link} />);
+      render(<ListLink variant="prompt" name="Dad" personId="p1" keepsList={false} heldGiftNotice linkAction={link} />);
       return { link };
     }
 

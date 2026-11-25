@@ -234,14 +234,15 @@ describe("PersonView", () => {
     });
 
     it.each([
-      ["without access", { access: false, requested: false }, true],
-      ["when the check fails", null, false],
-    ])("hides them, and shows the rest, %s (AC-19)", async (_, access, note) => {
+      ["without access", { access: false, requested: false }, true, false],
+      // Money: where a held gift would ship is hidden only when there's surely none.
+      ["when the check fails, but for where held gifts ship", null, false, true],
+    ])("hides them, and shows the rest, %s (AC-19)", async (_, access, note, heldGifts) => {
       readAccess.mockResolvedValue(access);
       getPerson.mockResolvedValue(late);
       profile();
       await show();
-      expect(parts()).toEqual({ readiness: false, ideas: false, orderBy: false, tooLate: false, heldGifts: false, learn: false });
+      expect(parts()).toEqual({ readiness: false, ideas: false, orderBy: false, tooLate: false, heldGifts, learn: false });
       expect(screen.queryByText(REMINDERS) !== null).toBe(note);
       expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual([
         "Does Dad have a GiftsAF list?",

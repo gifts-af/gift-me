@@ -20,7 +20,7 @@ const cases: [string, ReactElement, string][] = [
   ["the home page's Send feedback", <FeedbackButton key="fb" />, "Send feedback"],
   // Occasions on a person's page, and sharing my address on /lists.
   ["a switch", <Switch key="sw" aria-label="Remind me" />, "Remind me"],
-  ["the person form's photo button", <PersonForm key="pf" action={vi.fn()} photoAction={vi.fn()} userId="u1" maxUploadBytes={1000} px={512} doneHref="/give" />, "Add a photo"],
+  ["the person form's photo button", <PersonForm heldGiftNotice key="pf" action={vi.fn()} photoAction={vi.fn()} userId="u1" maxUploadBytes={1000} px={512} doneHref="/give" />, "Add a photo"],
 ];
 
 describe("buttons before the page can respond", () => {

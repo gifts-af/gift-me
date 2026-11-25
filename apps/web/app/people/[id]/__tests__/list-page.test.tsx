@@ -85,13 +85,17 @@ describe("a person's Their list page", () => {
     getPerson.mockResolvedValue({ id: "p1", name: "Sam", keepsList: false });
     const page = await open();
     expect(redirect).not.toHaveBeenCalled();
-    expect(findListLink(page as ReactNode)).toMatchObject({ variant: "page", keepsList: false, hasAccess: true });
+    expect(findListLink(page as ReactNode)).toMatchObject({ variant: "page", keepsList: false, heldGiftNotice: true });
   });
 
-  it.each([{ access: false, requested: false }, null])("tells the form there's no access without it, or when the check fails (%#)", async (access) => {
+  // Money: where a held gift would ship is hidden only when there's surely none.
+  it.each([
+    ["hides where held gifts ship without access", { access: false, requested: false }, false],
+    ["shows it when the check fails", null, true],
+  ])("%s", async (_, access, heldGiftNotice) => {
     readAccess.mockResolvedValue(access);
     appSettingInt.mockResolvedValue(0);
-    expect(findListLink((await open()) as ReactNode)).toMatchObject({ hasAccess: false });
+    expect(findListLink((await open()) as ReactNode)).toMatchObject({ heldGiftNotice });
   });
 
   it("keeps a linked person on the old screen, with Unlink, when the card is off", async () => {
