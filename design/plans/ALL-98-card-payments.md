@@ -20,9 +20,9 @@ A typical buyer won't keep $100 parked in a Zinc account (owner). Friends join o
 | Wallet buyers and shared addresses | Not blocked: the only wallet buyers are the owner and Jim | Owner, 2026-11-25 |
 | Store cancels | We refund everything and absorb Stripe's fee | Owner, 2026-11-25 |
 | A decline Zinc doesn't tell apart | Today's "couldn't buy it" page | Owner, 2026-11-25 |
-| Which Zinc account | The current one, for the test and for launch. The risk that a bug could spend its wallet is accepted | Owner, 2026-11-25 |
+| Which Zinc account | The current one, for the test and for launch. The risk that a bug could spend its wallet is accepted. A Zinc account has one webhook, so at launch the owner pays by card too and their wallet connection is removed | Owner, 2026-11-25 |
 | Cards | US only at launch if card fees vary | Owner, 2026-11-25 |
-| Proof before building | Zinc Connect can't use a Stripe sandbox (tested 2026-11-25). The plan may be written now, with unproven parts marked as assumptions. **No build until one real card order (under $25, the owner's card) on a live Stripe account passes** | Owner, 2026-11-25 |
+| Proof before building | Zinc Connect can't use a Stripe sandbox (tested 2026-11-25). The plan may be written now, with unproven parts marked as assumptions. **No build until one real card order (under $25) on a live Stripe account passes**. Jim's card and a gift Jim wants to give, if Jim agrees and Stripe says it's fine | Owner, 2026-11-25 |
 | Returns, disputes | By hand, with a runbook (59) | Owner, 2026-11-24 |
 
 ## Approaches considered
@@ -72,7 +72,7 @@ Most you'll pay              $25.64
 | AC-15 | Fee settings change | Next approval | New amounts, no deploy; approved orders, held ones included, keep theirs |
 | AC-16 | A wallet buyer | Anything above | As today, proved by the existing wallet tests |
 | AC-17 | A buyer with no phone | They add a card | The phone is asked for there, so a gift never waits for a wallet setup |
-| AC-18 | Who pays by card | An account is created or an order approved | Read in SQL under the lock, never from the caller: from `accounts.funding_mode`, never worked out from `zinc_connected_at` (disconnecting clears it). The migration leaves accounts connected when it runs, or with an unfinished wallet order, on wallet, and sets everyone else, and the column default, to `connect`; a held order keeps its own |
+| AC-18 | Who pays by card | An account is created or an order approved | Read in SQL under the lock, never from the caller: from `accounts.funding_mode`, never worked out from `zinc_connected_at` (disconnecting clears it). A `connect` account can't start a Zinc connection (it would replace the app's webhook on the owner's account). The migration leaves accounts connected when it runs, or with an unfinished wallet order, on wallet, and sets everyone else, and the column default, to `connect`; a held order keeps its own |
 | AC-19 | A key or account problem on our side | Placing | Held as `paused` with the owner alerted; never tells buyers to fix their setup |
 | AC-20 | A card buyer | Any ordered, failed, cancelled, held or deadline email | Shows gift, fee and total, and never mentions a Zinc balance |
 
@@ -298,7 +298,7 @@ export async function connectWiring(db: SupabaseClient<Database>, env?: Env): Pr
 
 **Produces:** `handleAppZincWebhook(rawBody: string, signature: string | null, deps: Deps & { secret: string; connectKey: string }): Promise<{ status: 200 | 401 }>`; `findConnectOrder(zincOrderId: string, deps): Promise<{ orderId: string; userId: string } | null>`, which throws on a failed lookup. `findOurOrder` and the per-buyer handlers only match `zinc_wallet` rows. Before any connect order settles as placed, from `order.placed` or a tracking event, the Zinc order is fetched for `placedPrice`, so Zinc's charge is saved and checked; a failed fetch throws and Zinc retries.
 
-- [ ] Tests, failing first: bad signature 401; a wallet order's id on the app webhook, or a connect order's on a buyer's, changes nothing and doesn't alert (the owner's account sends every event to both); definite unknown is 200 and `zinc.unknown_order` with `alert: true`; a lookup 500 throws; the same event twice is one settlement; a charge over the maximum alerts from `order.placed` and from a tracking event; `order.cancelled` after the charge tells the buyer; wallet events here are ignored; the path needs no session. Implement; pass; commit.
+- [ ] Tests, failing first: bad signature 401; a wallet order's id on the app webhook, or a connect order's on a buyer's, changes nothing and doesn't alert; definite unknown is 200 and `zinc.unknown_order` with `alert: true`; a lookup 500 throws; the same event twice is one settlement; a charge over the maximum alerts from `order.placed` and from a tracking event; `order.cancelled` after the charge tells the buyer; wallet events here are ignored; the path needs no session; starting a Zinc connection from a `connect` account is refused before any Zinc call. Implement; pass; commit.
 
 ### Task 8: Screens (AC-1, AC-4, AC-5, AC-6, AC-12, AC-13, AC-17)
 
@@ -322,6 +322,7 @@ export async function connectWiring(db: SupabaseClient<Database>, env?: Env): Pr
 
 **Files:** `supabase/migrations/<date>_card_payments_launch.sql`, its pgTAP.
 
+- First, in this order: the owner's wallet orders are delivered or closed, the owner disconnects Zinc in Settings (which clears the account's webhook), and the app webhook is set on that Zinc account. Check it with `GET /webhooks/endpoint`.
 - Sets `accounts.funding_mode` and the column default to `connect`, except accounts with `zinc_connected_at` set, a wallet order `held`, `placing` or `unconfirmed`, or an unresolved wallet failure.
 - [ ] pgTAP for each exception. **PR 4**, merged after ALL-75 and the app webhook on the Zinc account.
 - [ ] The owner turns `connect_enabled` on. One gift under $25, bought by a person on a connect account, agreed with the owner first (the QA account never buys). Check the charge against the maximum shown, the Stripe settlement, one `card_fee` and one `zinc_order_fee` row, the email, tracking on the app webhook, and that no street shows for a shared address. Evidence on ALL-98.
