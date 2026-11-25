@@ -63,7 +63,8 @@ select set_eq(
     'reactions_enabled', 'reaction_prompt_after_days', 'reaction_close_days', 'reaction_note_max_chars',
     'gift_progress_days', 'restore_rejected_ideas_enabled',
     'amazon_free_shipping_from_cents', 'amazon_shipping_estimate_cents',
-    'google_import_enabled', 'concierge_requests_per_day'
+    'google_import_enabled', 'concierge_requests_per_day',
+    'idea_busy_retry_seconds', 'idea_busy_retries_max'
   ],
   'every fee, limit, default and schedule setting is seeded'
 );

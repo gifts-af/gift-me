@@ -3,7 +3,7 @@
 -- other test uses.
 begin;
 \ir _helpers.psql
-select plan(16);
+select plan(18);
 
 select tests.create_user('fan-a@example.com') as a \gset
 insert into concierge.accounts (user_id, paid_features) values (:'a', true);
@@ -46,6 +46,8 @@ select pg_temp.mk_round(:'p_l6', 'scheduled', '2031-06-15 06:00+00', null) as r_
 -- ─── settings ────────────────────────────────────────────────────────────────
 select is(concierge.setting_int('round_fanout_enabled'), 0, 'round_fanout_enabled ships off');
 select ok(concierge.setting_int('idea_round_runs_per_day') > 0, 'idea_round_runs_per_day exists and is a positive integer');
+select is(concierge.setting_int('idea_busy_retry_seconds'), 300, 'idea_busy_retry_seconds is 300');
+select is(concierge.setting_int('idea_busy_retries_max'), 3, 'idea_busy_retries_max is 3');
 
 -- ─── due_rounds ──────────────────────────────────────────────────────────────
 select tests.act_as_server();
