@@ -10,9 +10,9 @@
 
 ## Change: people are free (option B)
 
-**Status:** draft, not approved. The owner chose B on 2026-11-25, after Tasks 1 to 4 were built for A. Where this section and the rest of the file disagree, this section wins once the owner approves it.
+**Status:** draft, reviewed, not approved. The owner chose B on 2026-11-25, after Tasks 1 to 4 were built for A. Once approved, the rest of the file is edited to match and this section is folded in. Where this section and the rest of the file disagree, this section wins once the owner approves it.
 
-**Why:** family needs everyone's lists in one place for Christmas. People costs us nothing: AI, rounds, reading captures and buying each check `paid_features` already.
+**Why:** family needs everyone's lists in one place for Christmas. It adds no new spending: AI, rounds, reading captures and buying each check `paid_features`, which the review confirmed in the code. Small existing costs stay: Amazon lookups (capped), one "not read" reply ever to an unpaid account's emailed note (it counts toward Resend's 100 a day), and store pages read for pasted links (no per-person limit; `store_page_read_enabled` turns it off).
 
 **What changes:** anyone signed in can add people, link their lists and see them on Give. Access is asked for where the concierge starts: gift ideas, and the concierge settings.
 
@@ -22,21 +22,25 @@
 | AC-5 | People and settings show the pitch | Without access, only `people/[id]/ideas` and the settings pages reminders, over-budget and paying show the pitch, and none of their own content. Every other people page works |
 | AC-8 | The card about their people is hidden | Claiming and the card work for every signed-in account, as today |
 | AC-9 | With access, as today | Unchanged, and the back link and title on the ungated pages show straight away again |
-| AC-13 | A failed check | On `/give`, People still shows and the card shows the retry line. On a gated page, the retry line |
+| AC-13 | A failed check | On `/give`, People still shows, and the card says "We couldn't check your access. Refresh to try again." On a gated page, the retry line |
 | AC-14 | Why access can't be turned off mid-purchase | Unchanged |
-| AC-19 | new | Without access, nothing on the people pages promises gift suggestions or reminders. The lines that do today (no people yet, the birthday hints on the add and About forms, "We suggest ideas" on a person's card and page) say what works instead |
-| AC-20 | new | Someone without access adds a person with a birthday today: no round starts, no reminder is sent, and nothing is spent |
-| AC-21 | new | A file too big for `person-photos` or `captures` is refused by storage itself, for every account |
+| AC-19 | new | These lines change for everyone, because they promise something only the concierge does: no people yet ("Add the people you buy for, and keep their lists in one place."); the birthday hint on the add and About forms ("The year is just for age-right ideas.", no "We'll suggest gifts before it"); "We won't suggest gifts for it" ("It won't be used for gift ideas."); "We suggest ideas" and "so we suggest ideas" ("No list linked"). Without access, a person's page also hides the readiness banner, the Gift ideas row and the "Order by" lines. Other lines stay: they describe what facts are for, or what happens when a gift ships |
+| AC-20 | new | An account without paid features has a person with an occasion inside its lead time, and so does a paid one. After a real tick, the paid one has a round; the unpaid one has no round, idea run, cost event or notification |
+| AC-21 | new | Storage refuses a file over the bucket's ceiling or of the wrong type, and an account's files past the cap, for `person-photos` and `captures`, proved by real uploads. Today's uploads, imports included, still work |
 
 AC-3 stays: without access you land on My list, and Give is one tap away. AC-6, 7, 10, 11, 12, 15, 16, 17 and 18 stay.
 
-**Storage, found while writing this:** `person-photos` and `captures` have no size limit in production, so any signed-in account can upload files as large as Supabase's own limit. This matters under A too. A migration in PR 2 sets both, from today's settings (`person_photo_max_upload_bytes`, `capture_screenshot_max_bytes`); CI and the app's own checks stay.
+**Storage, found while writing this:** `person-photos` and `captures` have no size or type limit in production, and any account can upload straight to them. This matters under A too. A migration in PR 2 sets, like `list-photos`: photos 1 MB, JPEG, PNG or WebP (the app stores a 512 px copy; import compares against a new stored-size setting, not the 10 MB picker one); captures 3 MB, the types `IMAGE_EXTENSIONS` allows. pgTAP checks each ceiling is above its setting. A new setting, `storage_files_per_account`, caps files per account in each bucket (500), checked by the insert policies.
 
-**Accepted:** strangers can store other people's names, birthdays, photos and addresses, private to their account. No cap on how many people an account adds. The privacy page (PR 3) says what we keep about other people and how to have it erased. **[Claude's call]** on no cap.
+**Accepted:** strangers can store other people's names, birthdays, photos and addresses, private to their account, with no cap on people. T61's shared city and state can be seen by any account holding a list's link, as its switch already says. Both need the owner's yes (below).
+
+**Erasing what we hold (AC-22, PR 3):** the privacy page points to `/feedback`, which has no page today, so nobody can use it. PR 3 adds a public way to reach us (the existing feedback form on its own page), and `operations.md` gets steps to erase an account or a person, photos included, tried once on dev. The page promises nothing those steps don't do.
+
+**Approving someone later:** turning on `paid_features` can start rounds for everyone they've added. The runbook says to count their people and near occasions first.
 
 **Left out, as before:** the extension needs no change: people added there now show on the site, which closes the gap above. Server actions and database rules aren't gated (approach 1).
 
-**Work:** Task 2's gate stays in the code but wraps four pages, not fourteen. Task 3 stays, with People outside the gate. Task 4 loses its shared-list part. A new **Task 4b** does this section, with its own review, before Task 5. Task 5 adds the storage migration and keeps the second backfill, which now only decides who sees the request card.
+**Work:** Task 2's gate stays in the code but wraps four pages, not fourteen. On the ideas page the back link stays outside it. Task 3 stays, with People outside the gate. Task 4 loses its shared-list part. A new **Task 4b** does this section, with its own review, before Task 5. Task 6 keeps "Add … to your people" for signed-out visitors, leading to sign-up and back to that list. Task 5 adds the storage migration and keeps the second backfill, which now only decides who sees the request card.
 
 ## Spec: what it does
 
