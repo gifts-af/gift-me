@@ -7,7 +7,7 @@ import type { ClaimedRound, RoundStore } from "./store";
 import { retryDeliveredEmails } from "../tracking/delivered";
 import { runHeld, retryOrderedEmails, tellOwnerOfRejection, tellOwnersOfRejections } from "./money-path";
 import { LeaseLost } from "./lease-lost";
-import { dayOf, endedByMove, releaseQuietly, view, sendHeadsUp, ideaPass, isNoIdeas, type Release, moveToGenerating, restoreIdeas, sendStep, sendTooLate, trySend, finishStep } from "./steps";
+import { dayOf, endedByMove, releaseQuietly, view, sendHeadsUp, ideaPass, isNoIdeas, type IdeaTurn, moveToGenerating, restoreIdeas, sendStep, sendTooLate, trySend, finishStep } from "./steps";
 
 // The round engine (ALL-28, design §5.1). The daily tick creates rounds that
 // are due, then claims each due round with a lease and runs its next step:
@@ -292,9 +292,10 @@ export async function runRoundMessage(message: RoundMessage, deps: StepDeps & { 
  * claim it. Never throws: a round with no follow-up is still due for the next tick.
  */
 async function sendRetry(message: RoundMessage, outcome: JobOutcome, deps: StepDeps & { sendJobs: SendJobs }): Promise<void> {
-  if (outcome.result !== "waiting" || outcome.ideas !== "refused:busy" || outcome.release !== "released") return;
+  const { turn } = outcome;
+  if (turn?.result !== "waiting" || turn.ideas !== "refused:busy" || turn.release !== "released") return;
   const notSent = (reason: "settings" | "send_failed") =>
-    logEvent("round_retry_not_sent", { round_id: message.roundId, ...(outcome.userId === undefined ? {} : { user_id: outcome.userId }), reason });
+    logEvent("round_retry_not_sent", { round_id: message.roundId, user_id: turn.userId, reason });
   let delaySeconds: number;
   let retriesMax: number;
   try {
@@ -341,13 +342,13 @@ async function runJob(
     logEvent("round_job", { ...errorFields(err), kind: message.kind, result: "failed", ...id, rounds: 0 });
     return { result: "failed", rounds: 0 };
   }
-  const { result, rounds, ideas } = outcome;
-  logEvent("round_job", { kind: message.kind, result, ...id, rounds, ...(ideas === undefined ? {} : { ideas }) });
+  const { result, rounds, turn } = outcome;
+  logEvent("round_job", { kind: message.kind, result, ...id, rounds, ...(turn?.ideas === undefined ? {} : { ideas: turn.ideas }) });
   return outcome;
 }
 
-/** `ideas` and `release` are the idea turn's, when a round message's job had one (IdeaTurn); `userId` is that round's. */
-type JobOutcome = { result: JobResult; rounds: number; ideas?: string; release?: Release; userId?: string };
+/** `turn` is the idea turn, when a round message's job had one; its `userId` is the round's. */
+type JobOutcome = { result: JobResult; rounds: number; turn?: IdeaTurn & { userId: string } };
 /** Set once the job holds a round's lease: from then on a failure is acknowledged, not redelivered. */
 type JobProgress = { claimed: boolean };
 
@@ -379,7 +380,7 @@ async function roundJob(roundId: string, deps: StepDeps, jobStartMs: number, pro
   }
   // One round in, so one turn out.
   const [turn] = await ideaPass([step.generate], deps, s, jobStartMs + deadlineMs, 1);
-  return { ...turn!, rounds: turn!.result === "advanced" ? 1 : 0, userId: round.userId };
+  return { result: turn!.result, rounds: turn!.result === "advanced" ? 1 : 0, turn: { ...turn!, userId: round.userId } };
 }
 
 /**

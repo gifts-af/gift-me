@@ -460,13 +460,28 @@ describe.skipIf(!stack)("fan-out jobs (real local database, fake Zinc; ALL-125)"
       expect(sent).toHaveLength(1);
 
       await pg.query("begin");
-      await pg.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: p.userId, role: "authenticated" })]);
-      await pg.query("select public.delete_person($1)", [p.personId]);
-      await pg.query("commit");
+      try {
+        await pg.query("select set_config('request.jwt.claims', $1, true)", [JSON.stringify({ sub: p.userId, role: "authenticated" })]);
+        await pg.query("select public.delete_person($1)", [p.personId]);
+        await pg.query("commit");
+      } catch (err) {
+        await pg.query("rollback");
+        throw err;
+      }
+      // The app's delete is soft: the round stays, ended.
+      expect((await roundRow(roundId)).status).toBe("skipped");
       // The other run is over, so only the deletion stops this one.
       await pg.query("update concierge.idea_runs set finished_at = now() where person_id = $1", [p.personId]);
 
+      const followUp = sent[0]!;
       expect(await runFollowUps()).toEqual(["busy"]);
+
+      // An erasure removes the rows themselves.
+      await pg.query("delete from public.people where id = $1", [p.personId]);
+      expect(await roundRow(roundId)).toBeUndefined();
+      sent.push(followUp);
+      expect(await runFollowUps()).toEqual(["busy"]);
+
       expect(await runsOf(roundId)).toBe(0);
       expect(sent).toEqual([]);
     }, 30_000);
