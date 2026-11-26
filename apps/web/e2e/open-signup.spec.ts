@@ -53,6 +53,14 @@ const open = (id: string, name: string): [path: string, title: string][] => [
 const pitch = (page: Page) => page.getByRole("heading", { level: 1, name: "Gifting, handled AF." });
 const card = (page: Page) => page.getByRole("region", { name: "Want gifts found and shipped for you?" });
 
+// "/" redirects from inside its loading state, so the browser navigates a second
+// time and Playwright can report the first as interrupted. The URL checks after wait for the landing.
+async function openSite(page: Page) {
+  await page.goto("/").catch((error: Error) => {
+    if (!error.message.includes("is interrupted by another navigation")) throw error;
+  });
+}
+
 test("without access, the concierge's pages show the pitch and none of their own content (AC-5)", async ({ page }) => {
   const user = await createFreshUser(undefined, { access: false });
   const id = await seedPerson(user);
@@ -249,17 +257,22 @@ test("without access, Back after / sent you to My list leaves it", async ({ page
   await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
 });
 
-test("with access, / and the logo land on Give, with your people (AC-9)", async ({ page }) => {
+// T98 revises AC-9: "/" and the logo open My list, or Give once this browser has used it.
+test("/ and the logo open My list, then Give once you've used it, with your people (AC-9)", async ({ page }) => {
   await signIn(page, await createFreshUser());
   await page.goto("/settings");
-  await page.goto("/");
+  await openSite(page);
+  await expect(page).toHaveURL(/\/lists$/);
+
+  await page.getByRole("link", { name: "Give", exact: true }).click();
   await expect(page).toHaveURL(/\/give$/);
   await expect(page.getByRole("heading", { level: 1, name: "People" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Give", exact: true })).toHaveAttribute("aria-current", "page");
   // Once the page has finished, so the card has had its chance.
   expect(await (await page.request.get("/give")).text()).not.toContain("Want gifts found and shipped for you?");
-  await page.goBack();
-  await expect(page).toHaveURL(/\/settings$/);
+  await page.goto("/settings");
+  // Its Get link prefetches /lists; only a page you open counts.
+  await page.waitForLoadState("networkidle");
   await page.getByRole("link", { name: "GiftsAF", exact: true }).click();
   await expect(page).toHaveURL(/\/give$/);
   await expect(page.getByRole("heading", { level: 1, name: "People" })).toBeVisible();
