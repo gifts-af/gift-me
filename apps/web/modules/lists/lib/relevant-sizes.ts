@@ -66,7 +66,7 @@ export function relevantSizes(giftName: string, shared: SharedSize[]): SharedSiz
       if (isAny(words[i + 1], DRESS_MODIFIED)) return;
     }
     // "High Top" sneakers are shoes, and a "Cap Toe" oxford is a shoe, not a hat.
-    if (words[i] === "top" && isAny(words[i - 1], SHOE_HEIGHT)) {
+    if (kind === "top" && isAny(words[i - 1], SHOE_HEIGHT)) {
       matched.add("shoe");
       return;
     }

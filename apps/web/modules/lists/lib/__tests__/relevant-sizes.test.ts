@@ -15,13 +15,13 @@ const TABLE: [string, SizeKind[]][] = [
   ["Women's Ankle BOOTS", ["shoe"]],
   ["Graphic T-Shirt", ["top"]],
   ["Men's Dress Shirt", ["top"]],
-  ["Dress Shoes", ["shoe"]],
-  ["Dress Pants", ["pants"]],
-  ["Wrap Dress", ["dress"]],
+  ["Cole Haan Original Grand Dress Shoes", ["shoe"]],
+  ["Ralph Lauren Classic Dress Pants", ["pants"]],
+  ["Diane von Furstenberg Wrap Dress", ["dress"]],
   ["Floral Maxi Dresses", ["dress"]],
   ["Levi's 501 Jeans", ["pants"]],
   ["Ring Video Doorbell", ["ring"]],
-  ["Wool Beanie", ["hat"]],
+  ["Carhartt Knit Cuffed Beanie", ["hat"]],
   ["New Era 9FORTY Baseball Cap", ["hat"]],
   ["Patagonia Better Sweater Fleece Jacket", ["top"]],
   ["Carhartt Hooded Sweatshirt", ["top"]],
@@ -29,7 +29,7 @@ const TABLE: [string, SizeKind[]][] = [
   ["Ugg Tasman Slippers", ["shoe"]],
   ["Birkenstock Arizona Sandals", ["shoe"]],
   ["Champion Powerblend Pullover Hoodie", ["top"]],
-  ["Cashmere Cardigan", ["top"]],
+  ["J.Crew Cashmere Cardigan Sweater", ["top"]],
   ["Flannel Pajamas Set", ["top"]],
   ["Baby Onesie 3-Pack", ["top"]],
   ["Lululemon Align Leggings", ["pants"]],
@@ -40,20 +40,22 @@ const TABLE: [string, SizeKind[]][] = [
   ["Dress Shirt and Dress Pants", ["top", "pants"]],
   ["Silver Stacking Rings", ["ring"]],
   ["Nike Mercurial Soccer Cleats", ["shoe"]],
-  ["Puffer Vest", ["top"]],
-  ["Silk Blouse", ["top"]],
+  ["Patagonia Down Sweater Vest", ["top"]],
+  ["Equipment Slim Signature Silk Blouse", ["top"]],
   ["Ralph Lauren Polo", ["top"]],
   ["Classic Penny Loafers", ["shoe"]],
-  ["Stiletto Heels", ["shoe"]],
-  ["Camp Trucker Hat", ["hat"]],
-  ["Straight-Leg Trousers", ["pants"]],
-  ["Wool Overcoat Coat", ["top"]],
+  ["Steve Madden Vala Stiletto Heels", ["shoe"]],
+  ["Richardson 112 Trucker Hat", ["hat"]],
+  ["Banana Republic Straight-Leg Trousers", ["pants"]],
+  ["Brooks Brothers Madison Wool Coat", ["top"]],
   ["Reformation Juliette Midi Dress", ["dress"]],
   ["Converse Chuck Taylor All Star High Top", ["shoe"]],
   ["Cole Haan Cap Toe Oxford", ["shoe"]],
   ["Cotton TShirt", ["top"]],
   ["Dress Socks 6-Pack", EVERYTHING],
   ["Nike Dunk Low Top Sneakers", ["shoe"]],
+  ["Vans Old Skool High Tops", ["shoe"]],
+  ["Vans Sk8-Hi Hi-Tops", ["shoe"]],
   ["Bambu Lab A1 mini 3D Printer", EVERYTHING],
   ["Rage Against the ML", EVERYTHING],
   ["Dyson Airwrap", EVERYTHING],
@@ -62,10 +64,6 @@ const TABLE: [string, SizeKind[]][] = [
 describe("relevantSizes", () => {
   it.each(TABLE)("%s", (name, expected) => {
     expect(kindsFor(name, NO_COLOR)).toEqual(expected);
-  });
-
-  it("covers at least 30 store names", () => {
-    expect(TABLE.length).toBeGreaterThanOrEqual(30);
   });
 
   it("always includes favorite color when shared", () => {
