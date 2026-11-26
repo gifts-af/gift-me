@@ -3,7 +3,7 @@
 -- lists.owner_sizes; the list itself never has them.
 begin;
 \ir _helpers.psql
-select plan(28);
+select plan(33);
 
 select tests.create_user('sam@example.com', 'Sam') as sam \gset
 select tests.create_user('buyer@example.com') as buyer \gset
@@ -14,6 +14,17 @@ select share_token as token from lists.lists where id = :'list' \gset
 
 select tests.act_as(:'buyer');
 select is(lists.owner_sizes(:'token'), null, 'nothing before Sam saves any');
+
+-- ─── who can call what ──────────────────────────────────────────────────────
+select table_privs_are('public', 'account_sizes', 'anon', array[]::text[], 'anon has no rights on the table');
+select function_privs_are('lists', 'owner_sizes', array['uuid'], 'anon', array['EXECUTE'], 'anon can ask with a link');
+select function_privs_are('lists', 'owner_sizes', array['uuid'], 'authenticated', array['EXECUTE'], 'signed-in people can');
+select is(
+  (select count(*)::int from pg_proc p, aclexplode(p.proacl) a
+    where p.oid = 'lists.owner_sizes(uuid)'::regprocedure and a.grantee = 0),
+  0, 'public has no execute'
+);
+select is((select prosecdef from pg_proc where oid = 'lists.owner_sizes(uuid)'::regprocedure), true, 'it runs as its owner');
 
 -- ─── the row ────────────────────────────────────────────────────────────────
 select tests.act_as(:'sam');
