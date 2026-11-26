@@ -12,6 +12,8 @@ async function addByHand(page: Page, name: string) {
   await page.getByLabel("Price").fill("20");
   await page.getByRole("button", { name: "Add to list" }).click();
   await expect(page.getByRole("heading", { name })).toBeVisible();
+  // My list saves as you go; leaving before it's saved would leave no list behind.
+  await expect(page.getByRole("status", { name: "Save status" })).toHaveText("Saved");
 }
 
 const card = (page: Page) => page.getByRole("region", { name: /Add your .* size\?/ });
