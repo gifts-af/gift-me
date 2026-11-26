@@ -57,7 +57,7 @@ select set_eq(
     'idea_list_lookups_max', 'idea_list_min', 'list_max_items',
     'moved_dates_close_rounds',
     'health_email_enabled', 'health_all_clear_weekday', 'ai_credit_low_cents', 'zinc_app_balance_low_cents',
-    'health_vendor_timeout_ms',
+    'health_vendor_timeout_ms', 'health_launch_numbers',
     'order_tracking_enabled', 'zinc_tracking_fetch_enabled', 'late_check_enabled', 'tracking_prune_days',
     'cost_tracking_enabled', 'cost_window_days', 'cost_record_timeout_ms', 'cost_tracking_since',
     'reactions_enabled', 'reaction_prompt_after_days', 'reaction_close_days', 'reaction_note_max_chars',

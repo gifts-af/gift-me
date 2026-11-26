@@ -104,6 +104,22 @@ function costRows(costs: HealthReport["costs"]): EmailRow[] {
   return costLines(costs);
 }
 
+const LAUNCH_LINES: [keyof Exclude<NonNullable<HealthReport["launch"]>, string>, string][] = [
+  ["signups", "New signups"],
+  ["listsStarted", "Started a list"],
+  ["giftsAdded", "Gifts added"],
+  ["listsFollowed", "Friends' lists saved"],
+  ["giftsClaimed", "Gifts claimed"],
+  ["peopleAdded", "People added"],
+];
+
+/** Last 24 hours, with the all-time count in brackets. Team and test accounts are left out (metrics_excluded). */
+function launchRows(launch: HealthReport["launch"]): EmailRow[] {
+  if (!launch) return [];
+  if (launch === "unreadable") return [{ title: "Launch numbers", detail: "The numbers couldn't be read" }];
+  return LAUNCH_LINES.map(([key, title]) => ({ title, detail: `${launch[key].day} in the last day (${launch[key].total} all time)` }));
+}
+
 /** One email to the owner inbox: each problem with its runbook link, and on the weekly day the counts and costs. */
 export function buildHealthEmail(r: HealthReport, runbookBase: string): OutgoingEmail {
   const rows: EmailRow[] = r.problems.map((p) => ({
@@ -112,6 +128,7 @@ export function buildHealthEmail(r: HealthReport, runbookBase: string): Outgoing
     link: { label: "What to do", url: `${runbookBase}#${RUNBOOK_ANCHORS[p.kind]}` },
   }));
   rows.push(...costRows(r.costs));
+  rows.push(...launchRows(r.launch));
   const paragraphs: string[] = [];
   if (r.problems.length === 0) paragraphs.push("Nothing needs you.");
   if (r.isWeekly && r.weekly) paragraphs.push(`This week: ${weeklyLine(r.weekly)}.`);

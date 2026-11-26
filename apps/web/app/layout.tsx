@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { ThemeProvider } from "next-themes";
 import "./globals.css";
 import { BackHistory } from "@/components/app-shell/back-history";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 import { FeedbackCorner } from "@/components/feedback-corner";
 import { WebAnalytics } from "@/components/web-analytics";
 import { APP_HOOK, APP_NAME, APP_PITCH, APP_TAGLINE } from "@/lib/brand";
@@ -54,6 +55,7 @@ export default async function RootLayout({
           <BackHistory>{children}</BackHistory>
           <FeedbackCorner />
           <WebAnalytics />
+          <SpeedInsights />
         </ThemeProvider>
       </body>
     </html>

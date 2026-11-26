@@ -51,6 +51,7 @@ const SETTINGS: Record<string, number> = {
   capture_extraction_enabled: 0,
   amazon_paste_lookup_enabled: 1,
   health_vendor_timeout_ms: 10000,
+  health_launch_numbers: 0,
 };
 
 const SNAPSHOT = {
@@ -69,6 +70,16 @@ const SNAPSHOT = {
   weekly: { waiting_address: 0, waiting_funds: 0, waiting_setup: 0, waiting_approval: 0, no_ideas: 0, rounds_failed: 0, failed_captures: 0 },
 };
 
+const pair = (day: number, total: number) => ({ day, total });
+const LAUNCH = {
+  signups: pair(2, 5),
+  lists_started: pair(1, 3),
+  gifts_added: pair(9, 40),
+  lists_followed: pair(0, 1),
+  gifts_claimed: pair(0, 2),
+  people_added: pair(1, 4),
+};
+
 /** How cost_per_gift answers. */
 type CostReply = (signal: AbortSignal) => Promise<{ data: unknown; error: unknown }>;
 
@@ -76,11 +87,14 @@ type CostReply = (signal: AbortSignal) => Promise<{ data: unknown; error: unknow
  * A client that answers the ping, setting_int from SETTINGS and health_snapshot with SNAPSHOT,
  * or with an error whose text must never reach the email or the logs.
  */
-function upDb(snapshotFails = false, costReply: CostReply | null = null) {
+function upDb(snapshotFails = false, costReply: CostReply | null = null, launchFails = false) {
   const snapshotError = { message: "column r.updated_at does not exist near jordan@example.com", code: "42703" };
   const concierge = {
     from: () => ({ select: () => ({ limit: async () => ({ data: [], error: null }) }) }),
     rpc: (fn: string, args: { p_key?: string }) => {
+      if (fn === "launch_numbers") {
+        return Promise.resolve(launchFails ? { data: null, error: { message: "launch numbers failed for jordan@example.com" } } : { data: LAUNCH, error: null });
+      }
       if (fn === "cost_per_gift") {
         if (!costReply) throw new Error("no cost reply for jordan@example.com");
         return { abortSignal: costReply };
@@ -336,5 +350,51 @@ describe("runHealthCheck", () => {
         SETTINGS.health_vendor_timeout_ms = was;
       }
     });
+  });
+
+  describe("the launch numbers", () => {
+    const quietSnapshot = { ...SNAPSHOT, stuck_rounds: [] };
+    const withLaunch = async (run: () => Promise<void>) => {
+      const was = { launch: SETTINGS.health_launch_numbers, stuck: SNAPSHOT.stuck_rounds };
+      SETTINGS.health_launch_numbers = 1;
+      SNAPSHOT.stuck_rounds = quietSnapshot.stuck_rounds;
+      try {
+        await run();
+      } finally {
+        SETTINGS.health_launch_numbers = was.launch;
+        SNAPSHOT.stuck_rounds = was.stuck;
+      }
+    };
+
+    it("off, a quiet day sends nothing and never reads them", async () => {
+      const d = deps();
+      SNAPSHOT.stuck_rounds = [];
+      try {
+        expect(await runHealthCheck(d)).toEqual({ result: "quiet", problems: 0 });
+      } finally {
+        SNAPSHOT.stuck_rounds = [{ round_id: "r1", user_id: "u1", attempts: 3 }];
+      }
+      expect(d.sent).toHaveLength(0);
+    });
+
+    it("on, a quiet day still sends All clear with each number for the day and all time", () =>
+      withLaunch(async () => {
+        const d = deps();
+        expect(await runHealthCheck(d)).toEqual({ result: "sent", problems: 0 });
+        expect(d.sent).toHaveLength(1);
+        expect(d.sent[0].subject).toContain("All clear");
+        expect(d.sent[0].text).toContain("New signups");
+        expect(d.sent[0].text).toContain("2 in the last day (5 all time)");
+        expect(d.sent[0].text).toContain("9 in the last day (40 all time)");
+      }));
+
+    it("numbers that can't be read are one line, the email still goes, and the error text stays out", () =>
+      withLaunch(async () => {
+        const d = deps({ db: upDb(false, null, true) });
+        expect(await runHealthCheck(d)).toEqual({ result: "sent", problems: 0 });
+        expect(d.sent[0].text).toContain("The numbers couldn't be read");
+        expect(d.sent[0].text).not.toContain("jordan@example.com");
+        expect(events().some((e) => e.event === "health.launch_numbers_failed")).toBe(true);
+      }));
   });
 });

@@ -18,6 +18,7 @@ export type Database = {
           costs_excluded: boolean;
           created_at: string;
           funding_mode: string;
+          metrics_excluded: boolean;
           notes_tip_sent_at: string | null;
           notes_unpaid_reply_sent_at: string | null;
           notification_prefs: NonNullable<Json>;
@@ -41,6 +42,7 @@ export type Database = {
           costs_excluded?: boolean;
           created_at?: string;
           funding_mode?: string;
+          metrics_excluded?: boolean;
           notes_tip_sent_at?: string | null;
           notes_unpaid_reply_sent_at?: string | null;
           notification_prefs?: NonNullable<Json>;
@@ -63,6 +65,7 @@ export type Database = {
           costs_excluded?: boolean;
           created_at?: string;
           funding_mode?: string;
+          metrics_excluded?: boolean;
           notes_tip_sent_at?: string | null;
           notes_unpaid_reply_sent_at?: string | null;
           notification_prefs?: NonNullable<Json>;
@@ -1717,6 +1720,7 @@ export type Database = {
         Returns: Database["concierge"]["Enums"]["round_status"];
       };
       inbound_count_today: { Args: { p_user_id: string }; Returns: number };
+      launch_numbers: { Args: { p_now: string }; Returns: Json };
       lookahead_rounds: {
         Args: { p_until: string; p_user_id: string };
         Returns: {
