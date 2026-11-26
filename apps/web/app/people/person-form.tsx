@@ -2,7 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { Camera } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { RELATIONSHIPS, relationshipLabel } from "@gifts-af/core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -154,6 +154,33 @@ export function PersonForm(props: Props) {
   const [busy, setBusy] = useState(false);
   const [preparing, setPreparing] = useState(false);
 
+  // Next keeps this page alive, hidden, when you leave it (Cache Components),
+  // so once a person is saved the form clears as it's hidden: coming back to
+  // add someone else starts empty, not with the last person and a stuck
+  // "Saving…". A draft that wasn't saved is kept.
+  const saved = useRef(false);
+  useLayoutEffect(() => {
+    const fileInput = input.current;
+    return () => {
+      if (!saved.current) return;
+      saved.current = false;
+      setName(props.initialName ?? "");
+      setRelationship("");
+      setBMonth(firstMonth);
+      setBDay(firstDay);
+      setBYear("");
+      setAMonth("");
+      setADay("");
+      setPhoto(null);
+      setPhotoError(null);
+      setError(null);
+      setBusy(false);
+      if (fileInput) fileInput.value = "";
+    };
+    // Only the hide matters; the starting values come from a keyed mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // The photo preview is an object URL; revoke it when the photo changes or the form goes away.
   useEffect(() => {
     if (!photo) {
@@ -206,6 +233,7 @@ export function PersonForm(props: Props) {
       // Already added from this list (ALL-123): open them, and stay busy so
       // a second tap can't try again on the way.
       if (result.existingId) {
+        saved.current = true;
         router.push(`/people/${result.existingId}`);
         return;
       }
@@ -213,7 +241,8 @@ export function PersonForm(props: Props) {
       return;
     }
     // Saved. Stay busy from here on so a second tap can't add a duplicate
-    // while we upload the photo and navigate.
+    // while we upload the photo and navigate; the form clears once hidden.
+    saved.current = true;
     const newId = result.id;
     let photoFailed = false;
     if (photo) {

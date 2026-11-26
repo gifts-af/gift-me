@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { Activity } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { PersonForm } from "../person-form";
@@ -313,5 +314,50 @@ describe("PersonForm", () => {
       expect(screen.getByRole("button", { name: "Saving…" })).toBeDisabled();
       expect(t.action).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+// Next keeps a page alive in a hidden <Activity> when you leave it, so a
+// saved form came back still filled in and stuck on "Saving…".
+describe("PersonForm after a save, when Next brings the page back", () => {
+  beforeEach(() => {
+    push.mockClear();
+    useRouterMock.mockReturnValue({ push });
+  });
+
+  function renderIn(mode: "visible" | "hidden") {
+    return (
+      <Activity mode={mode}>
+        <PersonForm
+          action={async () => ({ ok: true, id: "new1" })}
+          photoAction={async () => ({ ok: true })}
+          userId="u1"
+          maxUploadBytes={1000}
+          px={512}
+          doneHref="/give"
+          heldGiftNotice
+        />
+      </Activity>
+    );
+  }
+
+  it("starts empty with a working button", async () => {
+    const view = render(renderIn("visible"));
+    await fill();
+    await save();
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/give"));
+    view.rerender(renderIn("hidden"));
+    view.rerender(renderIn("visible"));
+    expect(screen.getByLabelText("Name")).toHaveValue("");
+    expect(relationship()).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Add someone" })).toBeEnabled();
+  });
+
+  it("keeps a draft that wasn't saved", async () => {
+    const view = render(renderIn("visible"));
+    await userEvent.type(screen.getByLabelText("Name"), "Dad");
+    view.rerender(renderIn("hidden"));
+    view.rerender(renderIn("visible"));
+    expect(screen.getByLabelText("Name")).toHaveValue("Dad");
   });
 });
