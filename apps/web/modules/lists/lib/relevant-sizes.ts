@@ -1,7 +1,8 @@
 import { SIZE_KINDS, type SharedSize, type SizeKind } from "@/lib/size-kinds";
 
-// Whole-word lists per kind. A wrong hit only adds a line (a "Ring Light" shows
-// ring size), so these favour catching the common store words over precision.
+// Whole-word lists per kind. A wrong hit narrows the list to that kind (plus
+// color), so a "Ring Light" shows only ring size. The phrase rules below exist
+// to keep wrong hits from hiding a size the claimer needs.
 const WORDS: Record<Exclude<SizeKind, "color">, string[]> = {
   shoe: ["shoe", "sneaker", "boot", "slipper", "sandal", "loafer", "heel", "cleat"],
   top: [
@@ -25,16 +26,27 @@ const KIND_BY_WORD = new Map<string, SizeKind>(
 
 // Names are plural or singular ("Boots", "Dresses"), so try the word as it is
 // and without a trailing "s" or "es". "pants" and "jeans" match as they are.
+function forms(word: string): string[] {
+  const out = [word];
+  if (word.endsWith("s")) out.push(word.slice(0, -1));
+  if (word.endsWith("es")) out.push(word.slice(0, -2));
+  return out;
+}
+
 function kindOfWord(word: string): SizeKind | undefined {
-  const candidates = [word];
-  if (word.endsWith("s")) candidates.push(word.slice(0, -1));
-  if (word.endsWith("es")) candidates.push(word.slice(0, -2));
-  for (const c of candidates) {
-    const kind = KIND_BY_WORD.get(c);
+  for (const f of forms(word)) {
+    const kind = KIND_BY_WORD.get(f);
     if (kind) return kind;
   }
   return undefined;
 }
+
+const isAny = (word: string | undefined, list: string[]) =>
+  word !== undefined && forms(word).some((f) => list.includes(f));
+
+// "Dress" in front of these describes the item; it isn't a dress size.
+const DRESS_MODIFIED = ["sock", "belt", "tie", "watch"];
+const SHOE_HEIGHT = ["high", "hi", "low", "mid"];
 
 export function relevantSizes(giftName: string, shared: SharedSize[]): SharedSize[] {
   const words = giftName
@@ -46,11 +58,21 @@ export function relevantSizes(giftName: string, shared: SharedSize[]): SharedSiz
   const matched = new Set<SizeKind>();
   kinds.forEach((kind, i) => {
     if (!kind) return;
-    // "Dress Shirt" / "Dress Shoes" / "Dress Pants" are not dresses; the next
-    // word counts on its own.
     if (kind === "dress") {
+      // "Dress Shirt" / "Dress Shoes" / "Dress Pants" are not dresses; the next
+      // word counts on its own. "Dress Socks" and the like match nothing.
       const next = kinds[i + 1];
       if (next === "top" || next === "shoe" || next === "pants") return;
+      if (isAny(words[i + 1], DRESS_MODIFIED)) return;
+    }
+    // "High Top" sneakers are shoes, and a "Cap Toe" oxford is a shoe, not a hat.
+    if (words[i] === "top" && isAny(words[i - 1], SHOE_HEIGHT)) {
+      matched.add("shoe");
+      return;
+    }
+    if (words[i] === "cap" && words[i + 1] === "toe") {
+      matched.add("shoe");
+      return;
     }
     matched.add(kind);
   });
