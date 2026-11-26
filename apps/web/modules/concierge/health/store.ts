@@ -75,3 +75,31 @@ export async function readSnapshot(db: AdminDb, now: Date): Promise<HealthSnapsh
   if (error) throw new Error(`Reading the health snapshot failed: ${error.message}`);
   return snapshotSchema.parse(data);
 }
+
+// What `concierge.launch_numbers` returns: counts only, for the last day and all time (T42).
+const pair = z.object({ day: z.number(), total: z.number() });
+const launchSchema = z
+  .object({
+    signups: pair,
+    lists_started: pair,
+    gifts_added: pair,
+    lists_followed: pair,
+    gifts_claimed: pair,
+    people_added: pair,
+  })
+  .transform((n) => ({
+    signups: n.signups,
+    listsStarted: n.lists_started,
+    giftsAdded: n.gifts_added,
+    listsFollowed: n.lists_followed,
+    giftsClaimed: n.gifts_claimed,
+    peopleAdded: n.people_added,
+  }));
+
+export type LaunchNumbers = z.output<typeof launchSchema>;
+
+export async function readLaunchNumbers(db: AdminDb, now: Date): Promise<LaunchNumbers> {
+  const { data, error } = await db.schema("concierge").rpc("launch_numbers", { p_now: now.toISOString() });
+  if (error) throw new Error(`Reading the launch numbers failed: ${error.message}`);
+  return launchSchema.parse(data);
+}

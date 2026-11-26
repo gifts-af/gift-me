@@ -5,7 +5,7 @@ import type { OutgoingEmail, SendResult } from "@/lib/resend";
 import { readCostPerGift } from "./costs";
 import { buildHealthEmail } from "./email";
 import { checkFailedReport, healthReport, type HealthReport, type HealthSettings, type HealthStage } from "./report";
-import { readSnapshot } from "./store";
+import { readLaunchNumbers, readSnapshot } from "./store";
 
 // The owner's daily health check (T87): the database ping that keeps the free Supabase project
 // awake (T22), then the snapshot and vendor balances, then one email when something needs the
@@ -45,8 +45,8 @@ async function setting(db: Db, key: string): Promise<number> {
 }
 
 /** The report's settings, and how long each vendor call and the costs read may take (both must fit the route's 60 s). */
-async function settings(db: Db): Promise<{ report: HealthSettings; vendorTimeoutMs: number }> {
-  const [allClearWeekday, aiCreditLowCents, zincAppBalanceLowCents, ideas, capture, pasteLookup, vendorTimeoutMs] = await Promise.all(
+async function settings(db: Db): Promise<{ report: HealthSettings; vendorTimeoutMs: number; launchNumbers: boolean }> {
+  const [allClearWeekday, aiCreditLowCents, zincAppBalanceLowCents, ideas, capture, pasteLookup, vendorTimeoutMs, launch] = await Promise.all(
     [
       "health_all_clear_weekday",
       "ai_credit_low_cents",
@@ -55,6 +55,7 @@ async function settings(db: Db): Promise<{ report: HealthSettings; vendorTimeout
       "capture_extraction_enabled",
       "amazon_paste_lookup_enabled",
       "health_vendor_timeout_ms",
+      "health_launch_numbers",
     ].map((k) => setting(db, k)),
   );
   return {
@@ -67,6 +68,7 @@ async function settings(db: Db): Promise<{ report: HealthSettings; vendorTimeout
       amazonPasteLookupEnabled: pasteLookup === 1,
     },
     vendorTimeoutMs,
+    launchNumbers: launch === 1,
   };
 }
 
@@ -93,6 +95,16 @@ async function costs(db: Db, now: Date, timeoutMs: number): Promise<HealthReport
     return await readCostPerGift(db, now, timeoutMs);
   } catch (e) {
     logEvent("health.costs_failed", errorFields(e));
+    return "unreadable";
+  }
+}
+
+/** The launch numbers. Never throws: numbers that can't be read are one line in the email, not a problem. */
+async function launchNumbers(db: Db, now: Date): Promise<NonNullable<HealthReport["launch"]>> {
+  try {
+    return await readLaunchNumbers(db, now);
+  } catch (e) {
+    logEvent("health.launch_numbers_failed", errorFields(e));
     return "unreadable";
   }
 }
@@ -168,10 +180,12 @@ export async function runHealthCheck(deps: HealthDeps): Promise<{ result: Health
     };
     const report = healthReport(snapshot, vendors, s.report, now);
     const problems = report.problems.length;
-    if (problems === 0 && !report.isWeekly) return done("quiet", 0, false, false);
+    // With launch numbers on, the email goes every day so the numbers arrive even when all is well.
+    if (problems === 0 && !report.isWeekly && !s.launchNumbers) return done("quiet", 0, false, false);
     // Read after the report, so nothing about them can change its problems. Bounded like a vendor
     // call, so a hung read can't stop the email; the two limits together fit the route's 60 s.
     if (report.isWeekly) report.costs = await costs(db, now, s.vendorTimeoutMs);
+    if (s.launchNumbers) report.launch = await launchNumbers(db, now);
     const sent = await send(deps, report);
     return done(sent ? "sent" : "send_failed", problems, sent, report.isWeekly);
   } catch (e) {
