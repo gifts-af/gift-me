@@ -43,14 +43,20 @@ export type ParsedSizes = { ok: true; row: SizesRow } | { ok: false; errors: Par
 
 // Counted in code points, as Postgres char_length counts them; .length would
 // count an emoji as two and refuse a value the database accepts.
+function valueError(value: string): string | null {
+  if ([...value].length > MAX_LENGTH) return `Use ${MAX_LENGTH} characters or fewer.`;
+  if (/[\u0000-\u001f\u007f]/.test(value)) return "Take out line breaks and tabs.";
+  return null;
+}
+
 export function parseSizesForm(form: FormData): ParsedSizes {
   const row: Record<string, string | null | boolean> = {};
   const errors: Partial<Record<SizeKind, string>> = {};
   for (const { kind } of SIZE_KINDS) {
     const raw = form.get(kind);
     const value = typeof raw === "string" ? raw.trim() : "";
-    if ([...value].length > MAX_LENGTH) errors[kind] = `Use ${MAX_LENGTH} characters or fewer.`;
-    else if (/[\u0000-\u001f\u007f]/.test(value)) errors[kind] = "Take out line breaks and tabs.";
+    const error = valueError(value);
+    if (error) errors[kind] = error;
     row[kind] = value || null;
     // Sharing an empty box means nothing, so it's dropped rather than refused.
     row[`${kind}_shared`] = value !== "" && form.get(`${kind}_shared`) === "on";
@@ -68,6 +74,43 @@ export async function saveMySizes(db: SizesDb, userId: string, row: SizesRow): P
   }
   logEvent("account_sizes.saved", { user_id: userId });
   return true;
+}
+
+/** One size typed on My list (T100): the same rules as a Settings box, but empty is refused. */
+export function parseOneSize(raw: string): { ok: true; value: string } | { ok: false; error: string } {
+  const value = raw.trim();
+  if (!value) return { ok: false, error: "Type a size, or pick Not now." };
+  const error = valueError(value);
+  return error ? { ok: false, error } : { ok: true, value };
+}
+
+export type OneSizeSave = "saved" | "already" | "failed";
+
+/**
+ * Saves one size, shared, only while that size is still empty (T100): a size
+ * saved meanwhile in Settings or another tab, shared or not, is never
+ * overwritten. Only that column and its switch are written, so every other
+ * size and switch stays as it was. "already" means it was filled meanwhile.
+ */
+export async function saveOneSize(db: SizesDb, userId: string, kind: SizeKind, value: string): Promise<OneSizeSave> {
+  // A computed key widens to an index signature, which the row type refuses.
+  const fields = { [kind]: value, [`${kind}_shared`]: true } as Partial<SizesRow>;
+  const updated = await db.from(TABLE).update(fields).eq("user_id", userId).is(kind, null).select("user_id");
+  if (updated.error) {
+    failed(userId, "save_one", updated.error);
+    return "failed";
+  }
+  if (updated.data.length === 0) {
+    // No row with that size empty: either no row yet, or the size is filled.
+    const inserted = await db.from(TABLE).insert({ ...fields, user_id: userId } as SizesRow & { user_id: string });
+    if (inserted.error?.code === "23505") return "already";
+    if (inserted.error) {
+      failed(userId, "save_one", inserted.error);
+      return "failed";
+    }
+  }
+  logEvent("account_sizes.saved", { user_id: userId, kind, source: "my_list" });
+  return "saved";
 }
 
 export async function removeMySizes(db: SizesDb, userId: string): Promise<boolean> {

@@ -142,6 +142,24 @@ test.describe("signed in", () => {
     await expect(page.getByText("No birthday saved.")).toBeVisible();
     await shoot(page, "my-list-shared");
   });
+
+  // Adding a shirt with no shirt size saved asks for one. The shirt comes off
+  // again, so the other shots keep their list.
+  test("my-list-size-ask", async ({ page }) => {
+    await signIn(page, seeded.user);
+    await page.goto("/lists");
+    await page.getByRole("button", { name: "Add by hand" }).click();
+    await page.getByLabel("Gift name").fill("Flannel Shirt");
+    await page.getByLabel("Price").fill("34");
+    await page.getByRole("button", { name: "Add to list" }).click();
+    await expect(page.getByRole("region", { name: "Add your shirt or top size?" })).toBeVisible();
+    await shoot(page, "my-list-size-ask");
+    await page.getByRole("button", { name: /Remove Flannel Shirt/ }).click();
+    // Undo waits while it has focus, and it takes focus as it appears.
+    await page.getByRole("heading", { level: 1, name: "My list" }).focus();
+    await expect(page.getByRole("button", { name: "Undo" })).toHaveCount(0, { timeout: 15_000 });
+    await expect(page.getByRole("status", { name: "Save status" })).toHaveText("Saved");
+  });
 });
 
 // Emails are read on phones, and their colors don't follow dark mode, so only the light phone.

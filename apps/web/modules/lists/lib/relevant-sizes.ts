@@ -48,7 +48,11 @@ const isAny = (word: string | undefined, list: string[]) =>
 const DRESS_MODIFIED = ["sock", "belt", "tie", "watch"];
 const SHOE_HEIGHT = ["high", "hi", "low", "mid"];
 
-export function relevantSizes(giftName: string, shared: SharedSize[]): SharedSize[] {
+/**
+ * The sizes a gift's name points at, in Settings order: none when it could be
+ * anything. Favorite color never shows here; it goes with every kind.
+ */
+export function sizeKindsFor(giftName: string): SizeKind[] {
   const words = giftName
     .toLowerCase()
     .split(/[^\p{L}\p{N}]+/u)
@@ -76,6 +80,11 @@ export function relevantSizes(giftName: string, shared: SharedSize[]): SharedSiz
     }
     matched.add(kind);
   });
+  return SIZE_KINDS.map((k) => k.kind).filter((kind) => matched.has(kind));
+}
+
+export function relevantSizes(giftName: string, shared: SharedSize[]): SharedSize[] {
+  const matched = new Set(sizeKindsFor(giftName));
 
   // A name that matches no kind could be anything, so show everything shared.
   // A name that matches shows only its sizes (and color), even if that is none:

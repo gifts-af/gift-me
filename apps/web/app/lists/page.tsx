@@ -8,8 +8,11 @@ import { TopBar } from "@/components/app-shell/top-bar";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { getSharing, type Sharing } from "@/lib/account-address";
 import { birthdaySharingOn, getMyBirthday, type MyBirthday } from "@/lib/account-birthday";
+import { getMySizes, sizesSharingOn, type MySizes } from "@/lib/account-sizes";
 import { appSettingInt } from "@/lib/app-settings";
+import type { SizeKind } from "@/lib/size-kinds";
 import { createClient } from "@/lib/supabase/server";
+import { saveOneSizeAction } from "@/app/settings/sizes-actions";
 import { GiftApp, GiftAppSkeleton, getMyList } from "@/modules/lists";
 
 // Reads the session cookie, so it has to render inside <Suspense> under
@@ -20,19 +23,29 @@ async function ListLoader() {
   const supabase = await createClient();
   const { data } = await supabase.auth.getClaims();
   const userId = data?.claims?.sub;
-  const [sharing, birthday, birthdayOn, profile] = await Promise.all([
+  const [sharing, birthday, birthdayOn, profile, sizes, sizesOn] = await Promise.all([
     userId ? getSharing(supabase, userId) : Promise.resolve<Sharing>({ kind: "unavailable" }),
     userId ? getMyBirthday(supabase, userId) : Promise.resolve<MyBirthday>({ kind: "unavailable" }),
     userId ? birthdaySharingOn(appSettingInt) : false,
     // ALL-136: no name yet means Share asks for one. A failed read doesn't ask.
     supabase.from("profiles").select("display_name").maybeSingle(),
+    userId ? getMySizes(supabase, userId) : Promise.resolve<MySizes>({ status: "unavailable" }),
+    userId ? sizesSharingOn(appSettingInt) : false,
   ]);
+  // Sizes not saved yet, which adding a gift may ask for. Unread sizes ask for none.
+  const missingSizes =
+    sizesOn && sizes.status === "loaded"
+      ? (Object.entries(sizes.items) as [SizeKind, unknown][])
+          .filter(([kind, item]) => item === null && kind !== "color")
+          .map(([kind]) => kind)
+      : null;
   const needsName = !profile.error && profile.data != null && !profile.data.display_name;
   return (
     <GiftApp
       initial={initial}
       needsName={needsName}
       saveName={saveDisplayName}
+      sizeAsk={missingSizes && userId ? { missing: missingSizes, save: saveOneSizeAction, userId } : null}
       shareHint={birthdayOn && birthday.kind === "none" ? <BirthdayHint /> : null}
       footer={<ShareAddressSwitch sharing={sharing} saveAction={saveMyAddressAction} setSharingAction={setSharingAction} />}
     />
