@@ -22,3 +22,24 @@ jobs:
             echo "::error::PR title \"$TITLE\" should look like \"feat: what changed (ALL-19)\". See CLAUDE.md > Git."
             exit 1
           fi
+
+  # A PR that changes how a gift round moves updates the round engine page, or
+  # says why not in its body (CLAUDE.md > The round engine page). It lives here,
+  # not in ci.yml, because editing the PR body should re-run only this.
+  round-page:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - run: pnpm round-page:check
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BODY: ${{ github.event.pull_request.body }}

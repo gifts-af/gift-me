@@ -40,7 +40,7 @@ Don't change hosted systems during install: no `pnpm db:push:*`, no Supabase CLI
 | Folder | Purpose | Status |
 |---|---|---|
 | `planning/` | Product discovery: [PRD](../planning/PRD.md) (approved 2026-10-17), [decisions log](../planning/decisions.md), [research](../planning/research/), [platform strategy](../planning/strategy.md) (roadmap and go-to-market), [longer-term ideas](../planning/ideas.md) | Complete |
-| `design/` | This file, [technical design](technical-design.md) (approved 2026-10-17), [decisions log](decisions.md). Spike write-ups go in `design/spikes/`, look and feel in `design/ui.md` (mock-ups in `design/mockups/`), and ticket specs and build plans in `design/plans/` (start from [the template](plans/TEMPLATE.md)), such as [Zinc wallet connection and buying, ALL-32](plans/ALL-32-zinc-connection.md). | Complete |
+| `design/` | This file, [technical design](technical-design.md) (approved 2026-10-17), [decisions log](decisions.md). Spike write-ups go in `design/spikes/`, look and feel in `design/ui.md` (mock-ups in `design/mockups/`), and ticket specs and build plans in `design/plans/` (start from [the template](plans/TEMPLATE.md)). The round engine page's source is `design/round-engine.html` and the database map's is `design/database-map.html` (CLAUDE.md), such as [Zinc wallet connection and buying, ALL-32](plans/ALL-32-zinc-connection.md). | Complete |
 | `.claude/` | Shared Claude Code settings (turns on the Superpowers plugin; runs the local setup check at session start) | Done |
 | `apps/web/` | The one web app (Next.js). Products live in `modules/lists` and `modules/concierge`; see its [README](../apps/web/README.md) | Lists live; concierge from Wave 2 |
 | `apps/extension/` | Chrome capture extension: add gifts to your list or save what's on screen to a person. How to build and load it is in its [README](../apps/extension/README.md) | On the Chrome Web Store, unlisted (ALL-65) |
@@ -80,6 +80,7 @@ pnpm db:types          # regenerate packages/core/src/database.types.ts after ch
 pnpm db:types:check    # fail if that file doesn't match the local database (CI runs it)
 pnpm db:map            # redraw the database map into design/database-map.html after a schema change, and commit it (CLAUDE.md > The database map page)
 pnpm db:map:check      # fail if the committed map doesn't match the local database (CI runs it)
+pnpm round-page:check  # fail if this branch changes how a gift round moves (round code, the tick and job routes, schedule math, a round migration, or technical-design §4.1/§5/§5.1) without changing design/round-engine.html or a "Round engine page: no change, <why>" line in the PR body. Compares with origin/main and reads the PR body through gh; CI passes BASE_SHA, HEAD_SHA and PR_BODY (CLAUDE.md > The round engine page)
 pnpm e2e               # the browser tests: build the app against the local database, then test it (see Browser tests below). One run at a time, after db:clean
 pnpm e2e:browsers      # install Playwright's Chromium and WebKit; e2e:browsers:deps installs only their Linux system packages (CI, when the browsers are cached)
 pnpm db:push:dev       # apply new migrations to dev (CI does this on every merge to main; by hand only to recover)
