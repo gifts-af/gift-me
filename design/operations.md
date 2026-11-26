@@ -293,7 +293,7 @@ select id, email, email_confirmed_at from auth.users where email = lower('ACCOUN
 
 ### Erase an account
 
-1. **Stop it buying.** Ask them to disconnect Zinc in Settings and revoke the key in Zinc, if they connected it (that clears our webhook there). Then run this. Hiding the people cancels held gifts and frees the list gifts they claimed; it buys nothing.
+1. **Stop it buying.** Ask them to disconnect Zinc in Settings and revoke the key in Zinc, if they connected it (that clears our webhook there). Then run this. Hiding the people cancels held gifts and frees the list gifts they claimed; it buys nothing. Their shared sizes go now, so no link holder can read them while the rest waits.
 
    ```sql
    do $$
@@ -301,6 +301,7 @@ select id, email, email_confirmed_at from auth.users where email = lower('ACCOUN
    begin
      update concierge.accounts set paid_features = false, concierge_access = false where user_id = v_user;
      update public.account_addresses set share_for_gifts = false where user_id = v_user;
+     delete from public.account_sizes where user_id = v_user;
      update public.people set deleted_at = now() where user_id = v_user and deleted_at is null;
    end $$;
    ```
@@ -1040,6 +1041,7 @@ A signed-in buyer who opens someone's share link sees whose list it is and a car
 |---|---|---|
 | `list_link_card_enabled` | 1 | Off switch. On only when the value is exactly 1; any other value is off. |
 | `list_birthday_enabled` | 1 | Off switch for shared birthdays (T97). On only at exactly 1, with the card on too. Set to 0: the Add form starts empty, and Settings only offers Remove. Events: `account_birthday.saved`, `.removed`, `.failed`. |
+| `list_sizes_enabled` | 1 | Off switch for shared sizes and favorite color. On only at exactly 1, with the card on too. Set to 0: no one sees them when claiming, and Settings only offers Remove all. |
 
 **What off looks like:** no add/link card on a shared list, no "Does … have a GiftsAF list?" prompt or "See their list" card on a person's page, and no owner name anywhere: the shared list's heading reads "Their list" (even for a buyer whose own person is linked to it; the owner still sees their own title), and link previews show the generic card. A person's **Their list** row opens the old screen instead of the share page, for linked and unlinked people alike: paste a link when there isn't one, **Unlink** when there is.
 
