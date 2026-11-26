@@ -5,7 +5,7 @@ import userEvent from "@testing-library/user-event";
 import type { AccountAddressResult, Sharing } from "@/lib/account-address";
 import { ShareAddressSwitch } from "../share-address-switch";
 
-const ZINC = "The person ordering may be able to see your full address in their Zinc account.";
+const ZINC = "If someone orders you a gift through GiftsAF, the service that ships it may show them your full address.";
 
 function setup(sharing: Sharing, results: { save?: AccountAddressResult; set?: AccountAddressResult } = {}) {
   const saveAction = vi.fn(async (f: FormData) => {

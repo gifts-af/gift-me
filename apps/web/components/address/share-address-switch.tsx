@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import type { AccountAddressResult, Sharing } from "@/lib/account-address";
 
 const EMPTY: AddressValues = { firstName: "", lastName: "", line1: "", line2: "", city: "", state: "", zip: "" };
-const ZINC = "The person ordering may be able to see your full address in their Zinc account.";
+const SHIPPING_NOTE = "If someone orders you a gift through GiftsAF, the service that ships it may show them your full address.";
 const TRY_AGAIN = "That didn't save. Try again.";
 
 /**
@@ -73,14 +73,14 @@ export function ShareAddressSwitch({
         </Label>
         {sharing.kind === "on" ? (
           <p className="text-[13px] text-muted-foreground">
-            They see {sharing.city}, {sharing.state} in GiftsAF. {ZINC}{" "}
+            They see {sharing.city}, {sharing.state} in GiftsAF. {SHIPPING_NOTE}{" "}
             <Link href="/settings/address" className="inline-flex min-h-11 items-center text-primary underline underline-offset-[3px]">
               Change my address
             </Link>
           </p>
         ) : (
           <p className="text-[13px] text-muted-foreground">
-            Anyone with your list link can see your city and state in GiftsAF. {ZINC}
+            Anyone with your list link can see your city and state in GiftsAF. {SHIPPING_NOTE}
           </p>
         )}
         {error && (
