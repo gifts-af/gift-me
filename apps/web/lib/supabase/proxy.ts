@@ -13,6 +13,7 @@ export function isPublicPath(pathname: string) {
   return (
     pathname === "/lists" ||
     pathname === "/manifest.webmanifest" ||
+    pathname === "/robots.txt" ||
     pathname.startsWith("/icon") ||
     pathname.startsWith("/apple-icon") ||
     pathname.startsWith("/pwa-icon/") ||
