@@ -36,6 +36,13 @@ describe("the privacy page", () => {
     );
   });
 
+  it("says sizes you share can be seen by anyone with your list link", () => {
+    render(<PrivacyPage />);
+    expect(section("What your account keeps")).toHaveTextContent(
+      "Shared ones can be seen by anyone who has your list link, signed in or not, when they go to claim a gift",
+    );
+  });
+
   it("says how to ask for erasing, by the page anyone can open (AC-22)", () => {
     render(<PrivacyPage />);
     const asking = section("Asking us to erase data");

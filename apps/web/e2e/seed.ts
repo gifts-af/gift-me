@@ -59,6 +59,18 @@ export async function saveSneakerList(user: Credentials): Promise<string> {
   return `/share/${list.share_token}`;
 }
 
+/** Saves a user's sizes, as the Sizes screen does; the shoe and favorite color are shared, the hat isn't. */
+export async function saveSharedShoeAndColor(user: Credentials): Promise<void> {
+  const { url, publishableKey } = localSupabase();
+  const { access_token } = await session(user);
+  const res = await fetch(`${url}/rest/v1/account_sizes`, {
+    method: "POST",
+    headers: { apikey: publishableKey, Authorization: `Bearer ${access_token}`, "Content-Type": "application/json" },
+    body: JSON.stringify({ shoe: "10.5", shoe_shared: true, color: "Green", color_shared: true, hat: "7 1/4" }),
+  });
+  if (!res.ok) throw new Error(`saving sizes failed: ${res.status} ${await res.text()}`);
+}
+
 /** Links the buyer's person to a list `owner` has just made, with one gift per photo (null: a gift without one). */
 export async function linkListWithPhotos(owner: Credentials, buyer: Credentials, personId: string, photos: (string | null)[]): Promise<void> {
   await rpc(owner, "lists", "save_list_checked", {
