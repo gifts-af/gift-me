@@ -123,6 +123,7 @@ One line each (CLAUDE.md > Scope freeze). Reviewed when the freeze lifts.
 - Prompt-injection fixtures for captures (ALL-37).
 - Zinc webhooks: refuse an empty secret, add a replay window (ALL-37).
 - Uncaught errors may put database messages in server logs (ALL-37).
+- Sizes panel: a wrong keyword hit ("Ring Light", "Top Gun", "Coat Hanger") narrows the panel to one size and can hide the one needed; consider showing all shared sizes when a match is uncertain (ALL-183).
 - Wider secret check on client bundles; constant-time cron secret compare (ALL-37).
 - A claimer's name stays on a shared list after their account is deleted (ALL-37).
 - Tell the buyer when a note or capture was read but nothing was learned from it (ALL-144's live check).
