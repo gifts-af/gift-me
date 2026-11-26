@@ -33,7 +33,7 @@ import { personAddressHref } from "../ship-to";
 // to the confirm page; an over-budget pick only on purpose; "Your budget" when the round has
 // none; and "None of these" with a reason. Nothing here buys: "Buy n gifts" is a link to the
 // confirm page, whose button does (AC-4a). Bought gifts show where they are under "Your gifts",
-// with "It arrived" on a shipped one (design/plans/ALL-33-tracking.md).
+// with "Mark as arrived" on a shipped one (design/plans/ALL-33-tracking.md).
 
 export type RejectResult =
   | { ok: true; more: boolean; saved: boolean }
@@ -310,7 +310,7 @@ function ArrivedButton({ roundId, orderId, action }: { roundId: string; orderId:
   return (
     <>
       <Button type="button" variant="outline" size="sm" className="mt-1 self-start" disabled={pending} onClick={tap}>
-        It arrived
+        Mark as arrived
       </Button>
       {error && (
         <p role="alert" className="text-[13px] text-destructive">
@@ -622,7 +622,7 @@ export function RoundScreen({
   setBudgetAction: (roundId: string, form: FormData) => Promise<BudgetResult>;
   /** `rejectionOutlookAction`: what this reason will do; null when it couldn't be read. */
   outlookAction: (roundId: string, input: OutlookInput) => Promise<RejectionOutlook | null>;
-  /** `markArrived`; null while order tracking is switched off, which hides "It arrived". */
+  /** `markArrived`; null while order tracking is switched off, which hides "Mark as arrived". */
   arrivedAction: ArrivedAction | null;
   /** Whether a delivered gift asks how it went: the switch is on and the occasion has come. */
   reactionsOpen: boolean;

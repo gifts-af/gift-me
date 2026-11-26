@@ -314,7 +314,7 @@ select id, email, email_confirmed_at from auth.users where email = lower('ACCOUN
      and o.status in ('held', 'placing', 'unconfirmed', 'placed', 'shipped');
    ```
 
-   **If Zinc's dashboard says it was delivered** (check the order there first), the owner may mark it arrived. This is the function behind Zinc's delivered event and the "It arrived" tap; `zinc` means Zinc said so, and it also takes a gift whose shipped news was lost, which the tap doesn't. It must answer `applied = true`. The next tick sends the buyer the delivered email, unless their account has been erased by then.
+   **If Zinc's dashboard says it was delivered** (check the order there first), the owner may mark it arrived. This is the function behind Zinc's delivered event and the "Mark as arrived" tap; `zinc` means Zinc said so, and it also takes a gift whose shipped news was lost, which the tap doesn't. It must answer `applied = true`. The next tick sends the buyer the delivered email, unless their account has been erased by then.
 
    ```sql
    select * from concierge.mark_delivered(
@@ -655,7 +655,7 @@ update concierge.app_settings set value = '0' where key = 'zinc_ordering_enabled
 | `tracking.news_failed` | The daily tracking summary (late, back-on-time or store-cancelled news) for one buyer couldn't be sent: the email was refused, or claiming or sending it threw. The keys are given back, so nothing is lost. (A failed gift lookup is `tracking.news_run_failed` instead.) | **Order tracking** below, "News isn't going out". |
 | `tracking.news_release_failed` | The summary failed and then giving the claimed keys back failed too, so those gifts won't be told on the next run. | **Order tracking** below, "News isn't going out", step 4. |
 | `tracking.news_run_failed` | The whole daily news step threw before it could look at buyers (a setting or the database). No news went out that day. | **Order tracking** below, "News isn't going out". |
-| `tracking.delivered_email_failed` | The "your gifts arrived" email was refused or couldn't be built, from a Zinc `delivered` event, the buyer's "It arrived" tap, or the daily retry. | **Order tracking** below, "Delivered email isn't going out". |
+| `tracking.delivered_email_failed` | The "your gifts arrived" email was refused or couldn't be built, from a Zinc `delivered` event, the buyer's "Mark as arrived" tap, or the daily retry. | **Order tracking** below, "Delivered email isn't going out". |
 | `tracking.delivered_retry_failed` | The tick's retry of unsent delivered emails threw before it could try any. | **Order tracking** below, "Delivered email isn't going out". |
 | `round_skip_email_failed` | A held gift's round closed at its deadline and the "skipped" email that followed was refused. It is sent once, best effort: the round is already closed, so nothing retries it. Since ALL-116 it goes only when no gift failed: a failure found at closing gets the "we couldn't buy it" email instead. | Check Resend. Then tell the buyer by hand that the gift wasn't bought and nothing was charged for it (`round_id` and `user_id` are in the event). |
 | `round_deadline_email_held_open` | The same, and the deadline has already passed, so the round stays open to keep retrying. | Fix the email problem (Resend status, key). It closes itself once the email goes. |
@@ -707,13 +707,13 @@ Vercel's instant rollback brings back the old budget section, which can't show o
 
 ## Order tracking (ALL-33)
 
-**What it does:** Zinc's tracking webhooks fill in where each bought gift is. The daily tick sends one summary email per buyer for late, back-on-time and store-cancelled-after-ship-by news. The buyer can tap "It arrived" on a shipped gift. Design: [technical design §6.6](technical-design.md), decision T89.
+**What it does:** Zinc's tracking webhooks fill in where each bought gift is. The daily tick sends one summary email per buyer for late, back-on-time and store-cancelled-after-ship-by news. The buyer can tap "Mark as arrived" on a shipped gift. Design: [technical design §6.6](technical-design.md), decision T89.
 
 **Settings** (`concierge.app_settings`)
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `order_tracking_enabled` | 1 | Off switch for tracking, shipped, estimate and delivered events and the "It arrived" button. Events are logged and ignored. Store cancels are always handled |
+| `order_tracking_enabled` | 1 | Off switch for tracking, shipped, estimate and delivered events and the "Mark as arrived" button. Events are logged and ignored. Store cancels are always handled |
 | `zinc_tracking_fetch_enabled` | 1 | Off stops the one `GET /orders/{id}` per tracking event (it fetches the carrier estimate). Packages are still saved; the late check then uses the store's own range |
 | `late_check_enabled` | 1 | Off switch for the late check and its emails. Store cancels are still told |
 | `tracking_prune_days` | 30 | Days after an order is delivered (or failed, or its occasion passed without a delivery) before the daily tick clears its tracking numbers; 0 turns the clear-out off. A missing row fails the step loudly (`housekeeping.tracking_prune_failed`) |
@@ -1249,7 +1249,7 @@ For `reactions.run_failed` or `reactions.ask_failed`:
 
 ### A round never closes
 
-A round that stays `ordered` or `needs_attention` is not asked and not closed: the gift's delivered event was lost and the buyer never tapped "It arrived" (known gap, ALL-33). Check the order in Zinc's dashboard. If it never confirmed, follow **Unconfirmed orders**; if it shipped, the buyer can tap "It arrived" on the round screen, and the round is then asked about as normal.
+A round that stays `ordered` or `needs_attention` is not asked and not closed: the gift's delivered event was lost and the buyer never tapped "Mark as arrived" (known gap, ALL-33). Check the order in Zinc's dashboard. If it never confirmed, follow **Unconfirmed orders**; if it shipped, the buyer can tap "Mark as arrived" on the round screen, and the round is then asked about as normal.
 
 Two things look like bugs and aren't: an answer is refused before the occasion date, and an unanswered round closes silently on its close date.
 

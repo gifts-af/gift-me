@@ -626,7 +626,7 @@ describe("RoundScreen: your gifts", () => {
     return { i, o: order({ ideaId: i.id, title: "Cozy throw", ...o }) };
   };
 
-  it("shipped shows Shipped · due <date> · Track it, opening the carrier page in a new tab, and It arrived", () => {
+  it("shipped shows Shipped · due <date> · Track it, opening the carrier page in a new tab, and Mark as arrived", () => {
     const { i, o } = ordered({
       estDeliveryDate: "2026-12-14",
       packages: [{ carrier: "UPS", trackingNumber: "1Z 999", status: null, estimatedDeliveryDate: "2026-12-14", trackingUrl: null }],
@@ -640,7 +640,7 @@ describe("RoundScreen: your gifts", () => {
     expect(link).toHaveAttribute("href", "https://www.ups.com/track?tracknum=1Z%20999");
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
-    expect(within(item).getByRole("button", { name: "It arrived" })).toBeInTheDocument();
+    expect(within(item).getByRole("button", { name: "Mark as arrived" })).toBeInTheDocument();
   });
 
   it("shipped with no public tracking page (Amazon) has no Track it link", () => {
@@ -659,7 +659,7 @@ describe("RoundScreen: your gifts", () => {
     setup(view({ ideas: [i], liveOrders: [o] }, { status: "ordered" }));
     const chip = gifts().getByText("May arrive Sun, Dec 20 · 2 days late");
     expect(chip).toHaveClass("bg-warning-soft", "text-warning");
-    expect(gifts().getByRole("button", { name: "It arrived" })).toBeInTheDocument();
+    expect(gifts().getByRole("button", { name: "Mark as arrived" })).toBeInTheDocument();
   });
 
   it("placed shows Ordered · usually arrives by the end of the store's range", () => {
@@ -669,10 +669,10 @@ describe("RoundScreen: your gifts", () => {
     expect(gifts().getByRole("listitem")).toHaveTextContent("Ordered · usually arrives by Tue, Dec 8");
   });
 
-  it("no It arrived on a placed gift", () => {
+  it("no Mark as arrived on a placed gift", () => {
     const { i, o } = ordered({ status: "placed", estDeliveryDate: "2026-12-10" });
     setup(view({ ideas: [i], liveOrders: [o] }, { status: "ordered" }));
-    expect(gifts().queryByRole("button", { name: "It arrived" })).toBeNull();
+    expect(gifts().queryByRole("button", { name: "Mark as arrived" })).toBeNull();
   });
 
   it("delivered shows Delivered <date>", () => {
@@ -738,20 +738,20 @@ describe("RoundScreen: your gifts", () => {
     expect(ideas.queryByText("Orchid")).toBeNull();
   });
 
-  it("It arrived sends the order and, refused, says so", async () => {
+  it("Mark as arrived sends the order and, refused, says so", async () => {
     const { i, o } = ordered({});
     const arrived = vi.fn<ArrivedAction>(async () => ({ ok: false }));
     setup(view({ ideas: [i], liveOrders: [o] }, { status: "ordered" }), { arrived });
-    await userEvent.click(gifts().getByRole("button", { name: "It arrived" }));
+    await userEvent.click(gifts().getByRole("button", { name: "Mark as arrived" }));
     await waitFor(() => expect(arrived).toHaveBeenCalledWith("r1", o.id));
     expect(await screen.findByRole("alert")).toHaveTextContent("That didn't go through. Reload and try again.");
   });
 
-  it("with tracking switched off there's no It arrived", () => {
+  it("with tracking switched off there's no Mark as arrived", () => {
     const { i, o } = ordered({});
     setup(view({ ideas: [i], liveOrders: [o] }, { status: "ordered" }), { arrived: null });
     expect(gifts().getByRole("listitem")).toHaveTextContent("Shipped");
-    expect(gifts().queryByRole("button", { name: "It arrived" })).toBeNull();
+    expect(gifts().queryByRole("button", { name: "Mark as arrived" })).toBeNull();
   });
 
   it("no Your gifts list before anything is bought", () => {

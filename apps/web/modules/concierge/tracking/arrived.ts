@@ -3,7 +3,7 @@ import { isId } from "../profile/rules";
 import { concierge, fail } from "../purchase/store";
 import type { DbDeps } from "../zinc/types";
 
-// The buyer's "It arrived" tap on the round screen, because Zinc's delivered event can be late or
+// The buyer's "Mark as arrived" tap on the round screen, because Zinc's delivered event can be late or
 // missing. Only a shipped gift can be marked (mark_delivered with 'buyer'): on a placed one a
 // mistaken tap could hide a later store cancel. Behind order_tracking_enabled, like Zinc's
 // delivered event (E7). Logs carry ids only (E6).

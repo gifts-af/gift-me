@@ -248,7 +248,7 @@ export async function replaceAction(roundId: string, orderId: string, form: Form
 // ─── tracking ────────────────────────────────────────────────────────────────
 
 /**
- * "It arrived" on a shipped gift. The module refuses it while
+ * "Mark as arrived" on a shipped gift. The module refuses it while
  * order_tracking_enabled is off, and checks the order is the user's and this round's; the
  * delivered email goes once the round's last gift has arrived.
  */
