@@ -187,6 +187,12 @@ My list saves as you go too, with no Save button and no "Unsaved changes" bar. W
 - **Gifts carried over from before signing in** save themselves when the list opens.
 - **Guests** are unchanged: there's nowhere to save to, a remove is immediate, and they're warned before leaving with gifts on the list.
 
+### Sizes and favorites (T99)
+
+This is a row under You for someone with a list: "Not added", "3 saved, 1 shared", "3 shared" or "Couldn't load". Its screen has seven boxes in a fixed order (Shirt or top, Pants, Dress, Shoe, Ring, Hat, Favorite color), each with a Share switch that stays off until the box has something in it, then Save and Remove all. Under the title it says: "Optional. Shared ones are shown to anyone with your list link when they go to claim a gift."
+
+**The sizes panel** is a muted rounded box under the gift name in "Going to buy it?" and in the claim box on someone else's list: "Sam's sizes" (or "Their sizes") and the items that fit the gift, such as "Shoe: 10.5 · Favorite color: Green". It shows only what its box had when it opened, so sizes that arrive late never push the buttons down under a thumb; with none, the box looks as it always did. A name that matches a kind shows only that kind and favorite color; with no match it shows everything shared (T99).
+
 ## Gifts in progress
 
 **Every gift round that can still change, or has a gift on its way, is one row that opens its round page** (`/rounds/<id>`). Nothing shows when there are none, or when they can't be read.
@@ -219,6 +225,7 @@ A line is never false. With several gifts, the one that most needs the buyer win
 ## A person's page (ALL-127)
 
 **Birthday (ALL-182)** is a row under You for someone with a list. Its screen has month, day, Save and Remove. After Share on My list, someone with none saved sees a small "No birthday saved. Add it (optional)" on the save-status row. It never moves the list; phones drop "(optional)" and hide "Saved" while it shows.
+
 
 **A person's page is what we know about them, then a short list of rows.** Each row shows its value and opens its own screen, like Settings (T71). There's no Edit form on the page any more. On a computer it's the same centred column. Plan: [`plans/ALL-127-save-as-you-go.md`](plans/ALL-127-save-as-you-go.md).
 

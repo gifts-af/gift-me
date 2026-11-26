@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { unstable_rethrow } from "next/navigation";
 import { errorFields, logEvent } from "@/lib/log";
 import { createClient } from "@/lib/supabase/server";
+import { SIZE_KINDS, type SharedSize, type SizeKind } from "@/lib/size-kinds";
 
 export { DEFAULT_LIST_TITLE } from "./list-title";
 
@@ -268,6 +270,42 @@ export async function getOwnerBirthday(token: string): Promise<{ month: number; 
   }
   const { month, day } = (data ?? {}) as { month?: unknown; day?: unknown };
   return typeof month === "number" && typeof day === "number" ? { month, day } : null;
+}
+
+/**
+ * The sizes the owner of a current link shares with people who claim from it, in kind order.
+ * Empty when there are none, the token is bad, or the read failed: the boxes then show no panel.
+ */
+export async function getOwnerSizes(token: string): Promise<SharedSize[]> {
+  if (!UUID_PATTERN.test(token)) return [];
+  // The panel is a courtesy: whatever goes wrong, the boxes must work as they did.
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase.schema("lists").rpc("owner_sizes", { p_token: token });
+    if (error) {
+      logEvent("lists.owner_sizes_failed", { code: errorCode(error) });
+      return [];
+    }
+    if (!Array.isArray(data)) return [];
+    // The database is ours, but the boundary is checked: a stray entry must not reach the page.
+    const kinds = new Set<string>(SIZE_KINDS.map((size) => size.kind));
+    return data.flatMap((entry: unknown) => {
+      const { kind, value } = (entry ?? {}) as { kind?: unknown; value?: unknown };
+      return typeof kind === "string" && kinds.has(kind) && typeof value === "string"
+        ? [{ kind: kind as SizeKind, value }]
+        : [];
+    });
+  } catch (error) {
+    unstable_rethrow(error);
+    // The code alone: a thrown error's message can carry the token.
+    logEvent("lists.owner_sizes_failed", { code: errorCode(error) });
+    return [];
+  }
+}
+
+function errorCode(error: unknown): string | null {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === "string" ? code : null;
 }
 
 /**

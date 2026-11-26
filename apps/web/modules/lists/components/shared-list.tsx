@@ -7,6 +7,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { claimGift, unclaimGift, type UnclaimResult } from "@/modules/lists/actions/claims";
 import { PageFrame } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
+import type { SharedSize } from "@/lib/size-kinds";
 import { DEFAULT_LIST_TITLE } from "@/modules/lists/lib/list-title";
 import type { GiftClaim, SharedGift, SharedList as SharedListData } from "@/modules/lists/lib/lists";
 import ClaimDialog from "./claim-dialog";
@@ -47,6 +48,21 @@ export default function SharedList({ list, token, nav, top }: SharedListProps) {
   // "Not now" on the own-list offer holds for the rest of this visit.
   const [offerWavedOff, setOfferWavedOff] = useState(false);
   const offerOwnList = !list.viewer.signedIn && !list.isOwner && !offerWavedOff;
+
+  // The owner's shared sizes, fetched once after mount from their own address so the page, its
+  // preview and get_shared_list never carry them. Any failure leaves null: no panel, no message.
+  const [sizes, setSizes] = useState<SharedSize[] | null>(null);
+  useEffect(() => {
+    if (list.isOwner) return;
+    const controller = new AbortController();
+    fetch(`/share/${token}/sizes`, { signal: controller.signal })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: unknown) => {
+        if (Array.isArray(data)) setSizes(data as SharedSize[]);
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [list.isOwner, token]);
 
   // A link to one gift. The list streams in after the page does, too late for the browser's own
   // jump to it.
@@ -208,11 +224,13 @@ export default function SharedList({ list, token, nav, top }: SharedListProps) {
         </div>
       </PageFrame>
 
-      {viewing && <ViewDialog gift={viewing} onClose={() => setViewing(null)} />}
+      {viewing && <ViewDialog gift={viewing} sizes={sizes} ownerName={name} onClose={() => setViewing(null)} />}
       {claiming && (
         <ClaimDialog
           gift={claiming}
           viewer={list.viewer}
+          sizes={sizes}
+          ownerName={name}
           next={`/share/${token}`}
           onConfirm={(name) => handleClaim(claiming, name)}
           onClose={() => setClaiming(null)}

@@ -7,6 +7,7 @@ export {
   getMyList,
   getMyListSummary,
   getOwnerBirthday,
+  getOwnerSizes,
   getPersonListPhotos,
   getPersonShareToken,
   getSharedList,

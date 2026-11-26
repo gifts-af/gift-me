@@ -6,7 +6,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { createFreshUser } from "./fresh-user";
 import { localSupabase } from "./local-supabase";
 import { personFor, readyBuyer, rest, seedFailedOrder, seedOrder, seedPastGifts, seedRound, type PastGiftsSeed } from "./rounds";
-import { addMother, addSavedGift, linkListWithPhotos, saveBudgets, saveOneGiftList } from "./seed";
+import { addMother, addSavedGift, linkListWithPhotos, saveBudgets, saveOneGiftList, saveSharedShoeAndColor } from "./seed";
 import { signIn, session, type Credentials } from "./sign-in";
 
 // Screenshots for the gallery (ALL-000, see playwright.gallery.config.ts).
@@ -75,6 +75,7 @@ const SIGNED_IN: [name: string, url: (s: Seeded) => string][] = [
   ["settings-reminders", () => "/settings/reminders"],
   ["settings-address", () => "/settings/address"],
   ["settings-birthday", () => "/settings/birthday"],
+  ["settings-sizes", () => "/settings/sizes"],
   ["settings-paying", () => "/settings/paying"],
   ["shared-list", (s) => `/share/${s.shareToken}`],
   ["round", (s) => `/rounds/${s.round.id}`],
@@ -103,6 +104,7 @@ test.describe("signed in", () => {
     await saveBudgets(user, personId, { any: 7500, mothers_day: 5000 });
     await addOnDemandIdeas(user, personId);
     await saveOneGiftList(user);
+    await saveSharedShoeAndColor(user);
     const linkedId = await addMother(user, "Grandma Rose");
     const photo = (n: number) => `${testInfo.project.use.baseURL}/pwa-icon/192?v=${n}`;
     await linkListWithPhotos(await createFreshUser(), user, linkedId, [1, 2, 3].map(photo));
@@ -116,6 +118,16 @@ test.describe("signed in", () => {
       await shoot(page, name);
     });
   }
+
+  // A visitor's claim box, with the owner's shared sizes under the gift name.
+  test("claim-box-sizes", async ({ page }) => {
+    const sizes = page.waitForResponse((r) => r.url().endsWith("/sizes"));
+    await page.goto(`/share/${seeded.shareToken}`);
+    await sizes;
+    await page.getByRole("button", { name: "Claim Wool socks" }).click();
+    await expect(page.getByRole("dialog").getByText("Shoe: 10.5 · Favorite color: Green")).toBeVisible();
+    await shoot(page, "claim-box-sizes");
+  });
 
   // The note about a birthday shows only once Share has been used.
   test("my-list-shared", async ({ page }) => {

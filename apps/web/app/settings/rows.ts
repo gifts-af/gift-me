@@ -1,5 +1,6 @@
 import type { MyAddress } from "@/lib/account-address";
 import type { MyBirthday } from "@/lib/account-birthday";
+import type { MySizes } from "@/lib/account-sizes";
 import { monthDay } from "@/lib/occasion-format";
 import type { PaymentSummary } from "@/modules/concierge";
 import type { MyList } from "@/modules/lists";
@@ -38,4 +39,20 @@ export function birthdayRowText(b: MyBirthday): string {
  */
 export function showBirthdayRow(b: MyBirthday, myList: MyList | null, on: boolean): boolean {
   return b.kind === "saved" || (on && (myList?.list != null || myList?.loadError != null));
+}
+
+/** The right-hand text of Settings' "Sizes and favorites" row. */
+export function sizesRowText(s: MySizes): string {
+  if (s.status === "unavailable") return "Couldn't load";
+  const saved = Object.values(s.items).filter((item) => item !== null);
+  if (saved.length === 0) return "Not added";
+  const shared = saved.filter((item) => item.shared).length;
+  if (shared === saved.length) return `${shared} shared`;
+  return `${saved.length} saved, ${shared === 0 ? "none" : shared} shared`;
+}
+
+/** Shown once you have a list, like Birthday; anything saved always shows, so it can be removed. */
+export function showSizesRow(s: MySizes, myList: MyList | null, on: boolean): boolean {
+  const hasSaved = s.status === "loaded" && Object.values(s.items).some((item) => item !== null);
+  return hasSaved || (on && (myList?.list != null || myList?.loadError != null));
 }
