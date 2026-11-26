@@ -47,8 +47,8 @@ test("a signed-out visitor sees the shared shoe size, not the hat, before buying
   const html = await (await request.get(path)).text();
   // A bare "10.5" turns up in the logo's SVG path, so look for it as a value.
   // The page's data is escaped inside a script, so the quotes may come with backslashes.
-  expect(html).not.toMatch(/\?"10\.5\?"|>10\.5<|Shoe: 10\.5|10\.5\?"/);
-  expect(html).not.toMatch(/\?"kind\?":\?"shoe/);
+  expect(html).not.toMatch(/\\?"10\.5\\?"|>10\.5<|Shoe: 10\.5/);
+  expect(html).not.toMatch(/\\?"kind\\?":\\?"shoe/);
   expect(html).not.toMatch(/Sam.s sizes|Their sizes/);
   expect(html).not.toContain("7 1/4");
 
