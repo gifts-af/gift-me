@@ -1,3 +1,4 @@
+import { Activity } from "react";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { renderToString } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -241,5 +242,32 @@ describe("before the page loads, the forms can't be sent", () => {
     const form = new DOMParser().parseFromString(html, "text/html").querySelector("form")!;
     expect(form.getAttribute("method")).toBe("post");
     expect(form.querySelector('button[type="submit"]')!.hasAttribute("disabled")).toBe(true);
+  });
+});
+
+// Next keeps a page alive in a hidden <Activity> when you leave it. After a
+// sign-up, someone else signing up on the same phone found the last person's
+// email in the form and the button stuck on "Creating your account…".
+describe("sign up after a sign-up, when Next brings the page back", () => {
+  beforeEach(() => {
+    for (const fn of Object.values(auth)) fn.mockReset().mockResolvedValue({ error: null });
+  });
+  const inMode = (mode: "visible" | "hidden") => (
+    <Activity mode={mode}>
+      <SignUpForm />
+    </Activity>
+  );
+
+  it("starts empty with a working button", async () => {
+    const view = render(inMode("visible"));
+    prefill("Email", "sam@example.com");
+    prefill("Password", "pw-123456");
+    prefill("Repeat password", "pw-123456");
+    fireEvent.click(screen.getByRole("button", { name: "Create account" }));
+    await waitFor(() => expect(push).toHaveBeenCalled());
+    view.rerender(inMode("hidden"));
+    view.rerender(inMode("visible"));
+    expect(screen.getByLabelText("Email")).toHaveValue("");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Create account" })).toBeEnabled());
   });
 });

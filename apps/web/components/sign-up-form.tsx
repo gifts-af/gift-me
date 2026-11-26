@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useHumanCheck } from "./human-check";
 import { Divider, FormError } from "./auth-frame";
 import { GoogleButton } from "./google-button";
@@ -19,6 +19,26 @@ export function SignUpForm({ next: rawNext }: { next?: string }) {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const form = useRef<HTMLFormElement>(null);
+
+  // Next keeps this page alive, hidden, when you leave it (Cache Components).
+  // Once an account is made, the form clears as it's hidden, so someone else
+  // signing up on the same phone starts empty with a working button and a
+  // fresh human check (a check works once). A draft that wasn't sent is kept.
+  const sent = useRef(false);
+  const resetHuman = useRef(human.reset);
+  resetHuman.current = human.reset;
+  useLayoutEffect(() => {
+    const element = form.current;
+    return () => {
+      if (!sent.current) return;
+      sent.current = false;
+      element?.reset();
+      setError(null);
+      setIsLoading(false);
+      resetHuman.current();
+    };
+  }, []);
 
   // Fields are read on submit, so anything typed or autofilled before the
   // page loaded is kept (ALL-60).
@@ -52,6 +72,7 @@ export function SignUpForm({ next: rawNext }: { next?: string }) {
       setIsLoading(false);
       return;
     }
+    sent.current = true;
     router.push(withNext("/auth/sign-up-success", next));
   };
 
@@ -62,7 +83,7 @@ export function SignUpForm({ next: rawNext }: { next?: string }) {
         note="Your Google name shows on lists you share and gifts you claim. Change it in Settings."
       />
       <Divider>or</Divider>
-      <form method="post" onSubmit={handleSignUp} className="flex flex-col gap-3">
+      <form ref={form} method="post" onSubmit={handleSignUp} className="flex flex-col gap-3">
         <div className="grid gap-1.5">
           <Label htmlFor="name">
             Name <span className="font-normal text-muted-foreground">Optional</span>
