@@ -160,7 +160,7 @@ test.describe("paying for gifts, in order on one account", () => {
       "Each gift costs its price plus Zinc's $1 order fee, taken from your Zinc balance.",
     );
     // No teal main button on this page (the Save button moved off it): Zinc's buttons are outline buttons (owner, 2026-11-06).
-    await expect(page.getByRole("button", { name: "Connect Zinc" })).toHaveClass(/border-input/);
+    await expect(page.getByRole("button", { name: "Connect Zinc" })).toHaveClass(/border-foreground/);
     await expect(page.locator("button.bg-primary")).toHaveCount(0);
     await shoot(page, browser, "2-ready-to-connect");
 

@@ -338,7 +338,7 @@ Each screen ticket links to the screens it builds. To open one screen directly, 
 **Round screen, "Your gifts":** each bought gift has one status line.
 - **Held:** the same words as in Gifts in progress, with the way to act: **Add address**, **Change address** (the store refused it) or **Open the address**, **Finish setup** (Paying for gifts) or **Top up your Zinc balance**. "Waiting to order" needs nothing. One refused for an address that isn't the person's can only be cancelled, from its email, and says so on its own row; the round's other held gifts say "Waiting to order".
 - **Ordered:** "Ordered · usually arrives by <date>" (the store's own range), or just "Ordered".
-- **Shipped:** "Shipped · due <date>" ("was due" once it has passed, and no late chip) with a "Track it" link to the carrier's page (none for Amazon), and an **It arrived** button.
+- **Shipped:** "Shipped · due <date>" ("was due" once it has passed, and no late chip) with a "Track it" link to the carrier's page (none for Amazon), and an **Mark as arrived** button.
 - **May be late:** a chip above the line, "May arrive <date> · n days late".
 - **Delivered:** "Delivered". Switching `order_tracking_enabled` off hides the button.
 - **Store cancelled:** an amber chip, "The store cancelled it · $<Zinc's refund amount> back in Zinc", or "the money is back in Zinc" when Zinc didn't say how much.
