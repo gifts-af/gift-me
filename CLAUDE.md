@@ -28,7 +28,7 @@ In force until the Gift Concierge MVP is finished; the owner lifts it. Where it 
 3. **Done** means merged, tests passing and one live check. A check that waits on a date or an unlikely event doesn't keep a ticket open.
 4. **At most 3 tickets in progress**, original-plan (wave) tickets first. Card payments (ALL-98) come last.
 
-**Exceptions (owner):** ALL-179, opening list sign-up before Christmas (2026-11-25); ALL-183, sharing your sizes with people who claim from your list (2026-11-26).
+**Exceptions (owner):** ALL-179, opening list sign-up before Christmas (2026-11-25); ALL-183, sharing your sizes with people who claim from your list (2026-11-26); ALL-58, launch numbers in the health email and Vercel Web Analytics and Speed Insights, for the launch announcement (2026-11-26).
 **Exceptions (Jim):** ALL-180, friends' lists, then sharing a list back (2026-11-25); ALL-182, sharing your birthday from Settings (2026-11-25); fast-tracked as ALL-000: the Feedback corner link (#154) and opening on your own list (#156) (2026-11-25).
 
 ### How we build
