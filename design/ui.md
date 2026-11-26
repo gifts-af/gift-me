@@ -28,6 +28,7 @@ This doc is the source every screen ticket builds from (ALL-20 onward). The PRD 
 4. **Plain words.** Short labels that say what happens ("Send 1 gift · $42", not "Submit"). Numbers the user cares about (price, date, budget) are always visible on the screen where they decide.
 5. **Thumb-friendly.** Tap targets are at least 44 × 44 px. On a phone, the main button sits at the bottom of the screen, within thumb reach.
 6. **Accessible by default.** Text meets WCAG AA contrast (4.5:1) in light and dark. Every control works with a keyboard and shows a teal focus outline. Screen-reader labels and live announcements carry over from the list app.
+7. **Clickable things look clickable** (owner, 2026-11-26). Every button and link shows it can be tapped, even subtly: a button has a fill or an edge you can see (about 3:1 against the page, WCAG 1.4.11), and a link is underlined or in the teal link colour. A label on a button names the action ("Mark as arrived"), so it can't be read as a status.
 
 ## Style guide
 
