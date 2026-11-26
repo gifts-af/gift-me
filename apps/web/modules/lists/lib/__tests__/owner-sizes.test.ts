@@ -38,6 +38,15 @@ describe("getOwnerSizes (ALL-183 AC-5, AC-7, AC-11)", () => {
     expect(logEvent).toHaveBeenCalledWith("lists.owner_sizes_failed", { code: "42501" });
   });
 
+  it("gives none and logs a code when the read throws", async () => {
+    rpc.mockRejectedValue(Object.assign(new Error(`${TOKEN} 10.5`), { code: "ECONNRESET" }));
+    expect(await getOwnerSizes(TOKEN)).toEqual([]);
+    expect(logEvent).toHaveBeenCalledWith("lists.owner_sizes_failed", { code: "ECONNRESET" });
+    rpc.mockRejectedValue("boom");
+    expect(await getOwnerSizes(TOKEN)).toEqual([]);
+    expect(logEvent).toHaveBeenLastCalledWith("lists.owner_sizes_failed", { code: null });
+  });
+
   it("gives none for a result that isn't a list, and keeps only well-formed entries", async () => {
     for (const data of [{}, "x", 3]) {
       rpc.mockResolvedValue({ data, error: null });

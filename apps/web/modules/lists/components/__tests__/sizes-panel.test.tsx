@@ -68,4 +68,11 @@ describe("the boxes show it", () => {
     rerender(<ViewDialog gift={gift} sizes={sizes} ownerName="Aaron" onClose={() => {}} />);
     expect(screen.queryByText("Aaron's sizes")).toBeNull();
   });
+
+  it("a claim box opened before the sizes arrived stays without a panel", () => {
+    const props = { gift, viewer: { signedIn: false, name: null }, next: "/share/t", onConfirm: vi.fn(), onClose: () => {}, ownerName: "Aaron" };
+    const { rerender } = render(<ClaimDialog {...props} sizes={null} />);
+    rerender(<ClaimDialog {...props} sizes={sizes} />);
+    expect(screen.queryByText("Aaron's sizes")).toBeNull();
+  });
 });

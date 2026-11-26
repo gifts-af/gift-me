@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { unstable_rethrow } from "next/navigation";
 import { errorFields, logEvent } from "@/lib/log";
 import { createClient } from "@/lib/supabase/server";
 import { SIZE_KINDS, type SharedSize, type SizeKind } from "@/lib/size-kinds";
@@ -277,21 +278,34 @@ export async function getOwnerBirthday(token: string): Promise<{ month: number; 
  */
 export async function getOwnerSizes(token: string): Promise<SharedSize[]> {
   if (!UUID_PATTERN.test(token)) return [];
-  const supabase = await createClient();
-  const { data, error } = await supabase.schema("lists").rpc("owner_sizes", { p_token: token });
-  if (error) {
-    logEvent("lists.owner_sizes_failed", { code: typeof error.code === "string" ? error.code : null });
+  // The panel is a courtesy: whatever goes wrong, the boxes must work as they did.
+  try {
+    const supabase = await createClient();
+    const { data, error } = await supabase.schema("lists").rpc("owner_sizes", { p_token: token });
+    if (error) {
+      logEvent("lists.owner_sizes_failed", { code: errorCode(error) });
+      return [];
+    }
+    if (!Array.isArray(data)) return [];
+    // The database is ours, but the boundary is checked: a stray entry must not reach the page.
+    const kinds = new Set<string>(SIZE_KINDS.map((size) => size.kind));
+    return data.flatMap((entry: unknown) => {
+      const { kind, value } = (entry ?? {}) as { kind?: unknown; value?: unknown };
+      return typeof kind === "string" && kinds.has(kind) && typeof value === "string"
+        ? [{ kind: kind as SizeKind, value }]
+        : [];
+    });
+  } catch (error) {
+    unstable_rethrow(error);
+    // The code alone: a thrown error's message can carry the token.
+    logEvent("lists.owner_sizes_failed", { code: errorCode(error) });
     return [];
   }
-  if (!Array.isArray(data)) return [];
-  // The database is ours, but the boundary is checked: a stray entry must not reach the page.
-  const kinds = new Set<string>(SIZE_KINDS.map((size) => size.kind));
-  return data.flatMap((entry: unknown) => {
-    const { kind, value } = (entry ?? {}) as { kind?: unknown; value?: unknown };
-    return typeof kind === "string" && kinds.has(kind) && typeof value === "string"
-      ? [{ kind: kind as SizeKind, value }]
-      : [];
-  });
+}
+
+function errorCode(error: unknown): string | null {
+  const code = (error as { code?: unknown } | null)?.code;
+  return typeof code === "string" ? code : null;
 }
 
 /**
