@@ -3,8 +3,10 @@
 // can't be generated; this only makes sure someone decided whether it needed a change.
 //
 // The round flow counts as changed when the PR touches round code, the tick and job routes,
-// the schedule math in packages/core, a migration about rounds, or design/technical-design.md
-// §4.1, §5 or §5.1 (the sections the page draws). Tests alone don't count.
+// the code that moves an order's status, the schedule math in packages/core, the tick's
+// schedule in vercel.json, a migration about rounds, or design/technical-design.md §4.1, §5 or
+// §5.1 (the sections the page draws). Tests alone don't count. The doc's sections are found by
+// heading, so renaming "### 4.1" or "## 5." means updating SECTIONS.
 //
 // Passes when design/round-engine.html changed too, or the PR body has a line like
 // "Round engine page: no change, <why>".
@@ -16,7 +18,19 @@ import { execFileSync } from "node:child_process";
 const PAGE_FILE = "design/round-engine.html";
 const DOC_FILE = "design/technical-design.md";
 const CODE_PREFIXES = ["apps/web/modules/concierge/rounds/", "apps/web/app/api/rounds/"];
-const CORE_FILES = ["packages/core/src/rounds.ts", "packages/core/src/round-plan.ts", "packages/core/src/schedule.ts"];
+const FILES = [
+  "packages/core/src/rounds.ts",
+  "packages/core/src/round-plan.ts",
+  "packages/core/src/schedule.ts",
+  // An order's status moves its round.
+  "apps/web/modules/concierge/tracking/arrived.ts",
+  "apps/web/modules/concierge/purchase/store.ts",
+  "apps/web/modules/concierge/zinc/events.ts",
+  "apps/web/modules/concierge/zinc/tracking-events.ts",
+];
+// Counts only when its added lines mention the round routes (the tick's schedule).
+const VERCEL_JSON = "apps/web/vercel.json";
+const ROUND_ROUTE = /\/api\/rounds\//;
 const ROUND_SQL = /\b(gift_rounds|round_sends|reconcile_round|claim_round|tick_heartbeats|round_idea_state)\b/;
 // The page draws §4.1 and §5 (which holds §5.1); each runs to the next heading at its level or above.
 const SECTIONS = [/^### 4\.1 /, /^## 5\. /];
@@ -51,20 +65,25 @@ export function touchedSections(doc, changedLines) {
 }
 
 /** The changes that count as the round flow changing, each named for the message. */
-export function flowReasons({ files, addedSql = {}, docTouched = false }) {
+export function flowReasons({ files, added = {}, docTouched = false }) {
   const reasons = [];
   for (const f of files) {
     if (isTest(f)) continue;
-    if (CODE_PREFIXES.some((p) => f.startsWith(p)) || CORE_FILES.includes(f)) reasons.push(f);
-    else if (f.startsWith("supabase/migrations/") && ROUND_SQL.test(addedSql[f] ?? "")) reasons.push(f);
+    if (CODE_PREFIXES.some((p) => f.startsWith(p)) || FILES.includes(f)) reasons.push(f);
+    else if (f.startsWith("supabase/migrations/") && ROUND_SQL.test(added[f] ?? "")) reasons.push(f);
+    else if (f === VERCEL_JSON && ROUND_ROUTE.test(added[f] ?? "")) reasons.push(f);
     else if (f === DOC_FILE && docTouched) reasons.push(`${DOC_FILE} (§4.1, §5, §5.1)`);
   }
   return reasons;
 }
 
-/** The PR body's opt-out: the phrase plus a reason after it. */
+/** The PR body's opt-out: the phrase plus a reason on the same line, not the template's "<why>". */
 export function hasNoChangeLine(body) {
-  return /round engine page:\s*no change\b[\s,.;:(—-]+\S/i.test(body ?? "");
+  return (body ?? "").split(/\r?\n/).some((line) => {
+    const m = /round engine page:[ \t]*no change\b[ \t,.;:(—-]*(.*)$/i.exec(line);
+    const why = (m?.[1] ?? "").replace(/[`)\s]+$/, "");
+    return why.length > 0 && why !== "<why>";
+  });
 }
 
 function git(args) {
@@ -102,9 +121,9 @@ function main() {
     console.log(`Round engine page: ${PAGE_FILE} changed in this PR.`);
     return;
   }
-  const addedSql = {};
-  for (const f of files.filter((x) => x.startsWith("supabase/migrations/"))) {
-    addedSql[f] = git(["diff", "-U0", range, "--", f])
+  const added = {};
+  for (const f of files.filter((x) => x.startsWith("supabase/migrations/") || x === VERCEL_JSON)) {
+    added[f] = git(["diff", "-U0", range, "--", f])
       .split("\n")
       .filter((l) => l.startsWith("+") && !l.startsWith("+++"))
       .join("\n");
@@ -114,7 +133,7 @@ function main() {
     const doc = git(["show", `${head}:${DOC_FILE}`]);
     docTouched = touchedSections(doc, changedLineNumbers(git(["diff", "-U0", range, "--", DOC_FILE])));
   }
-  const reasons = flowReasons({ files, addedSql, docTouched });
+  const reasons = flowReasons({ files, added, docTouched });
   if (reasons.length === 0) {
     console.log("Round engine page: this PR doesn't change the round flow.");
     return;

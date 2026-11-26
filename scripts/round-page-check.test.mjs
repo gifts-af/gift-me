@@ -50,11 +50,11 @@ test("round code, routes and core schedule files count; tests don't", () => {
 
 test("a migration counts only when its added lines touch rounds", () => {
   const files = ["supabase/migrations/1_a.sql", "supabase/migrations/2_b.sql"];
-  const addedSql = {
+  const added = {
     "supabase/migrations/1_a.sql": "create or replace function concierge.reconcile_round(p uuid)",
     "supabase/migrations/2_b.sql": "alter table lists.items add column note text;",
   };
-  assert.deepEqual(flowReasons({ files, addedSql }), ["supabase/migrations/1_a.sql"]);
+  assert.deepEqual(flowReasons({ files, added }), ["supabase/migrations/1_a.sql"]);
 });
 
 test("the design doc counts when its round sections changed", () => {
@@ -63,10 +63,30 @@ test("the design doc counts when its round sections changed", () => {
   assert.deepEqual(flowReasons({ files, docTouched: false }), []);
 });
 
+test("code that moves an order's status counts too", () => {
+  const files = [
+    "apps/web/modules/concierge/tracking/arrived.ts",
+    "apps/web/modules/concierge/purchase/store.ts",
+    "apps/web/modules/concierge/zinc/events.ts",
+    "apps/web/modules/concierge/zinc/tracking-events.ts",
+  ];
+  assert.deepEqual(flowReasons({ files }), files);
+});
+
+test("vercel.json counts only when its round lines changed", () => {
+  const files = ["apps/web/vercel.json"];
+  const added = { "apps/web/vercel.json": '    { "path": "/api/rounds/tick", "schedule": "0 11 * * *" }' };
+  assert.deepEqual(flowReasons({ files, added }), ["apps/web/vercel.json"]);
+  assert.deepEqual(flowReasons({ files, added: { "apps/web/vercel.json": '"framework": "nextjs"' } }), []);
+});
+
 test("hasNoChangeLine needs the phrase and a reason", () => {
   assert.equal(hasNoChangeLine("Round engine page: no change, only a log field renamed"), true);
   assert.equal(hasNoChangeLine("Summary\n\nround engine page: no change (test-only refactor)\n"), true);
   assert.equal(hasNoChangeLine("Round engine page: no change"), false);
   assert.equal(hasNoChangeLine(""), false);
   assert.equal(hasNoChangeLine(null), false);
+  // The reason must be on the same line, and the template's placeholder isn't one.
+  assert.equal(hasNoChangeLine("Round engine page: no change\nNext paragraph"), false);
+  assert.equal(hasNoChangeLine("Round engine page: no change, <why>"), false);
 });
