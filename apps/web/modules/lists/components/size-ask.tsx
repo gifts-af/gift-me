@@ -10,10 +10,11 @@ import { inputClass, labelClass } from "./ui";
 // that size isn't saved yet (T100). Saving shares it, like its switch in
 // Settings > Sizes and favorites; the card and its button say so before Save.
 
+/** `already`: the size was saved meanwhile, so it mustn't be asked for again. */
 export type SaveSize = (
   kind: SizeKind,
   value: string,
-) => Promise<{ ok: true } | { ok: false; error: string }>;
+) => Promise<{ ok: true } | { ok: false; error: string; already?: true }>;
 
 // Per account, so one person's Not now on a shared device doesn't silence the next.
 const dismissedKey = (userId: string) => `giftsaf:size-ask-dismissed:${userId}`;
@@ -100,7 +101,7 @@ export default function SizeAsk({
     if (result.ok) {
       setSaved(true);
     } else {
-      onFailed(kind);
+      if (!result.already) onFailed(kind);
       setError(result.error);
       inputRef.current?.focus();
     }

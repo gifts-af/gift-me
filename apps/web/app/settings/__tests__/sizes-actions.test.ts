@@ -95,7 +95,7 @@ describe("sizes actions", () => {
 
     it("points to Settings when the size was saved meanwhile", async () => {
       t.saveOne.mockResolvedValue("already");
-      expect(await saveOneSizeAction("top", "M")).toEqual({ ok: false, error: "That size is already saved. Change it in Settings." });
+      expect(await saveOneSizeAction("top", "M")).toEqual({ ok: false, error: "That size is already saved. Change it in Settings.", already: true });
       expect(t.revalidate).not.toHaveBeenCalled();
     });
   });

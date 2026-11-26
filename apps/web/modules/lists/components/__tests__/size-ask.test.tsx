@@ -23,7 +23,7 @@ const member: MyList = {
 let version = 1;
 let userId = "u1";
 let user: ReturnType<typeof userEvent.setup>;
-let save: ReturnType<typeof vi.fn<(kind: SizeKind, value: string) => Promise<{ ok: true } | { ok: false; error: string }>>>;
+let save: ReturnType<typeof vi.fn<(kind: SizeKind, value: string) => Promise<{ ok: true } | { ok: false; error: string; already?: true }>>>;
 
 async function addByHand(name: string) {
   await user.click(screen.getByRole("button", { name: "Add by hand" }));

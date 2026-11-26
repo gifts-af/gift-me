@@ -42,7 +42,7 @@ export async function removeSizesAction(): Promise<SizesResult> {
 // The kinds My list may ask for: every size, never favorite color (T100).
 const ASKABLE = new Set<string>(SIZE_KINDS.map(({ kind }) => kind).filter((kind) => kind !== "color"));
 
-export type OneSizeResult = { ok: true } | { ok: false; error: string };
+export type OneSizeResult = { ok: true } | { ok: false; error: string; already?: true };
 
 /** One size typed into My list's card, saved and shared. The kind comes from the browser, so it's checked. */
 export async function saveOneSizeAction(kind: SizeKind, value: string): Promise<OneSizeResult> {
@@ -55,7 +55,7 @@ export async function saveOneSizeAction(kind: SizeKind, value: string): Promise<
   if (!s) return SIGN_IN_AGAIN;
   if (!(await sizesSharingOn(appSettingInt))) return { ok: false, error: "This is switched off right now." };
   const saved = await saveOneSize(s.db, s.userId, kind, parsed.value);
-  if (saved === "already") return { ok: false, error: "That size is already saved. Change it in Settings." };
+  if (saved === "already") return { ok: false, error: "That size is already saved. Change it in Settings.", already: true };
   if (saved === "failed") return { ok: false, error: "That didn't save. Try again." };
   refresh();
   return { ok: true };
