@@ -568,7 +568,7 @@ It can't look inside pictures (photos, screenshots), and doesn't look at product
 
 ## Google verification
 
-**Why we ask for `https://www.googleapis.com/auth/contacts.readonly`** (Google's form: the scope and a shorter version of this were saved under Data Access on 2026-11-25, not yet submitted; still needed: the demo video, then submit in Verification Center):
+**Why we ask for `https://www.googleapis.com/auth/contacts.readonly`** (**submitted for Google's review on 2026-11-25**, a trimmed version of this, with the demo video https://youtu.be/0SwsB4HAJnE, unlisted on the GiftsAF YouTube channel of allensforever711; Verification Center says "under review"):
 
 > GiftsAF reminds people of birthdays and helps them choose and ship gifts. "Import from Google Contacts" lets a signed-in user pick the people they buy for instead of typing them in. It needs the names, nicknames, birthdays, postal addresses and photos of the user's own saved contacts, to list them for the user to tick, set up birthday reminders, and have an address for a gift.
 >
