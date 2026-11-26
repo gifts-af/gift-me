@@ -12,7 +12,7 @@ import { captureLog } from "./round-engine-fakes";
 
 vi.mock("server-only", () => ({}));
 
-// "It arrived" and the round screen's store-cancelled gifts (ALL-33 AC-11, AC-12, AC-14, AC-15,
+// "Mark as arrived" and the round screen's store-cancelled gifts (ALL-33 AC-11, AC-12, AC-14, AC-15,
 // AC-16): the real markGiftArrived, mark_delivered, tellDelivered and roundView on the real local
 // database (E5); only Zinc and the email service are faked. The tracking switch is read from the
 // database, except in the one test that sees it off, which hands markGiftArrived a 0 so the shared
@@ -22,7 +22,7 @@ captureLog();
 
 const stack = await localStack({ api: true });
 
-describe.skipIf(!stack)("It arrived (real local database)", () => {
+describe.skipIf(!stack)("Mark as arrived (real local database)", () => {
   const held = heldRounds(stack?.supabase ?? null);
   const { mail, dayAt, wiring, approve, newRound, sends } = held;
   const password = "local-only-password";

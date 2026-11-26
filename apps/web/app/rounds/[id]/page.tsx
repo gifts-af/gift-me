@@ -56,7 +56,7 @@ async function Loaded({ params }: { params: Promise<{ id: string }> }) {
   const view = await roundView(id, supabase as unknown as SupabaseClient<Database>, new Date(), holdGateFor(supabase, userId));
   if (!view) notFound();
   const name = view.round.personName;
-  // "It arrived" shows only while order tracking is on (E7); markArrived checks again.
+  // "Mark as arrived" shows only while order tracking is on (E7); markArrived checks again.
   const tracking = (await settingInt(createAdminClient(), "order_tracking_enabled")) === 1;
 
   // The same page the emails send a short balance to; Paying for gifts where Zinc is off or unreadable.

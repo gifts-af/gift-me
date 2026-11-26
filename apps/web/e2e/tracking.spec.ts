@@ -17,9 +17,9 @@ const orderOf = async (id: string) =>
 const roundOf = async (id: string) => (await rest<{ status: string }[]>(`gift_rounds?select=status&id=eq.${id}`))[0];
 const notificationsOf = (roundId: string) => rest<{ kind: string }[]>(`notifications?select=kind&round_id=eq.${roundId}`);
 
-// AC-11, AC-14: a shipped gift shows its due date and the carrier's tracking page; It arrived
+// AC-11, AC-14: a shipped gift shows its due date and the carrier's tracking page; Mark as arrived
 // marks it delivered, the round with it, and the delivered email goes.
-test("a shipped gift shows Shipped, due and Track it; It arrived makes it Delivered", async ({ page }) => {
+test("a shipped gift shows Shipped, due and Track it; Mark as arrived makes it Delivered", async ({ page }) => {
   const b = await readyBuyer(await createFreshUser());
   const person = await personFor(b.id, "Nora");
   const { roundId, ideaIds } = await seedRound(b.id, person, { budgetCents: 5000, ideas: [{ title: "Cozy throw blanket", totalCents: 4218 }] });
@@ -40,9 +40,9 @@ test("a shipped gift shows Shipped, due and Track it; It arrived makes it Delive
   await expect(track).toHaveAttribute("href", "https://www.ups.com/track?tracknum=1ZE2E0001");
   await expect(track).toHaveAttribute("target", "_blank");
 
-  await item.getByRole("button", { name: "It arrived" }).click();
+  await item.getByRole("button", { name: "Mark as arrived" }).click();
   await expect(item).toContainText(/Delivered \w{3}, \w{3} \d{1,2}/);
-  await expect(item.getByRole("button", { name: "It arrived" })).toHaveCount(0);
+  await expect(item.getByRole("button", { name: "Mark as arrived" })).toHaveCount(0);
   expect(await orderOf(orderId)).toEqual({ status: "delivered", delivered_by: "buyer" });
   expect((await roundOf(roundId)).status).toBe("delivered");
   expect((await notificationsOf(roundId)).filter((n) => n.kind === "delivered")).toHaveLength(1);
@@ -92,7 +92,7 @@ test("the round screen's Your gifts list fits the screen in light and dark", { t
       await expect(gifts.getByText(/May arrive .* · 2 days late/)).toBeVisible();
       await expect(gifts.getByRole("link", { name: "Choose another gift" })).toBeVisible();
       // Buttons are greyed until the page hydrates; the picture shows them ready.
-      for (const button of await gifts.getByRole("button", { name: "It arrived" }).all()) await expect(button).toBeEnabled();
+      for (const button of await gifts.getByRole("button", { name: "Mark as arrived" }).all()) await expect(button).toBeEnabled();
     },
     // The ticket's phone picture (light), from the iPhone run only.
     info.project.name === "iphone" ? info.outputPath("round-screen-phone.png") : undefined,
