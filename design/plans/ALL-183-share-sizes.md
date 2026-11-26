@@ -1,6 +1,6 @@
 # ALL-183 Share your sizes and favorite color: Spec and Plan
 
-> **Status:** spec written 2026-11-26 from the owner's answers, with the owner's scope-freeze exception. It still needs an adversarial review, then the plan. Building starts after the owner's family test.
+> **Status:** spec approved by the owner 2026-11-26 (scope-freeze exception), reviewed adversarially; plan written. Building starts after the owner's family test.
 
 **Goal:** someone with a list saves their sizes once, and a person claiming a gift from that list sees the sizes that fit that gift, so they buy the right option.
 
@@ -45,7 +45,8 @@ None.
 | Which fields? | Shirt or top, pants, dress, shoe, ring, hat, favorite color; a fixed list | Owner: settings that help buy the right option. Adding one later is a small change. **[Claude's call]** the exact list, which the owner saw in the mock-up |
 | Sharing? | A switch per item, off by default | Owner |
 | Who sees shared items? | Anyone claiming from the list, signed in or not | Owner: family often claim without signing in |
-| Where? | In "Going to buy it?" and the claim box | Owner asked for claiming; the review showed people often buy before they claim. **[Owner to confirm]** |
+| Where? | In "Going to buy it?" and the claim box | Owner, 2026-11-26, after the review showed people often buy before they claim |
+| Forwarded links? | Anyone holding the link can read shared items with no sign-in, until the link is reset | Owner, 2026-11-26: sizes are low-risk and each is shared by choice |
 | Which items show? | Keywords in the gift's name; favorite color always; all shared when nothing matches | Owner asked for "smart, else all". **[Claude's call]** keywords over AI: free, instant, the same every time, and a wrong guess only adds a line. The words are product logic, kept in code next to their tests, like the guided questions' categories |
 | Address? | Left as it is | Owner |
 | Free text or picklists? | Free text, 30 characters | **[Claude's call]** sizes vary too much ("34 x 32", "10.5 wide", "M or L") |
@@ -64,4 +65,146 @@ None.
 
 ## Plan
 
-Written after the adversarial review.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** the spec's AC-1 to AC-12, in two PRs: the database (Task 1), then the app (Tasks 2 to 4).
+
+**Architecture:** this copies ALL-182 (`account_birthdays`, `lib/account-birthday.ts`, `/settings/birthday`, `getOwnerBirthday`), with three changes: the read is open to anon, it's fetched by a server action when a box opens rather than with the page, and the lists module filters the items by gift name.
+
+**Tech stack:** Supabase (migration, pgTAP), Next.js 16 server actions, React client components, Vitest, Playwright.
+
+### Global Constraints
+
+- Kinds, in this order, with these labels: `top` "Shirt or top", `pants` "Pants", `dress` "Dress", `shoe` "Shoe", `ring` "Ring", `hat` "Hat", `color` "Favorite color".
+- A value is trimmed, 1 to 30 characters (`char_length`, and the form counts code points the same way, with `[...s].length`), with no character below U+0020 and no U+007F.
+- Setting `list_sizes_enabled`, on only at exactly 1, shipped as `'1'`. The read also needs `list_link_card_enabled` = 1.
+- Settings copy, exactly: "Optional. Shared ones are shown to anyone with your list link when they go to claim a gift."
+- Panel: "<Name>'s sizes" (the name `shared-list.tsx` already computes as `name`), else "Their sizes". Items read "Label: value", joined by " · ".
+- Events are `account_sizes.saved`, `account_sizes.removed` and `lists.owner_sizes_failed`. They carry ids and error codes only, never a token, label or value.
+- Comments say why, without ticket ids (T86). Catch blocks around request data start with `unstable_rethrow`.
+
+### Review Focus
+
+1. A signed-out claimer on a phone must see the panel. Test it as anon in pgTAP (Task 1) and signed out in e2e (Task 4).
+2. Plural, capitalised and hyphenated store names ("Women's Ankle BOOTS", "Graphic T-Shirt") must still match. Covered by the store-name table (Task 3).
+3. A value with emoji, at exactly 30 code points, must pass both the form and the database. Tested in Task 1 and Task 2.
+4. The panel arriving late must not move the Claim gift button. Task 3 reserves its space, and the component test checks the button's place doesn't change.
+5. A reset link must stop the old token's reads. Covered in pgTAP (Task 1).
+
+### Task 1: Database (AC-3, 4, 8, 9, 10, 12)
+
+**Files:**
+- Create: `supabase/migrations/<timestamp>_account_sizes.sql` and `supabase/tests/account_sizes.test.sql`
+- Modify: `supabase/tests/app_settings.test.sql`, `packages/core/src/database.types.ts` (`pnpm db:types`), `design/database-map.html` and `apps/web/scripts/db-map/layout.json` (`pnpm db:map`, account lane next to `account_birthdays`), and `design/operations.md` > Erasing data step 1 plus `test/erase-runbook-db.test.ts`
+
+**Interfaces:**
+- Produces: table `public.account_sizes(user_id uuid pk default auth.uid() references auth.users on delete cascade, top, pants, dress, shoe, ring, hat, color text null, top_shared … color_shared boolean not null default false, created_at, updated_at)`. A check on each value as in Global Constraints. A check that `<kind>_shared` implies `<kind> is not null`.
+- Produces: `lists.owner_sizes(p_token uuid) returns jsonb`, an array of `{kind, value}` in kind order, shared items only. It's `security definer` with `search_path = ''`, uses `owner_id is distinct from auth.uid()`, needs both settings, and is granted to anon and authenticated.
+
+- [ ] **Step 1:** write pgTAP first.
+  - The function as anon, as a signed-in stranger and as the owner (the owner gets null).
+  - Unshared items are left out.
+  - The old token returns null after a reset.
+  - Either setting at 0 returns null.
+  - Anon can't select from the table, and a user can't read another user's row.
+  - Share without a value is refused.
+  - 31 characters, a newline, or 30 emoji: refused, refused, accepted.
+  - The cascade on account delete.
+- [ ] **Step 2:** add the `list_sizes_enabled` key to `app_settings.test.sql`. Run `pnpm db:test` and expect it to fail.
+- [ ] **Step 3:** write the migration. RLS policies copy `account_birthdays`; `revoke all … from anon`.
+- [ ] **Step 4:** `pnpm db:test` passes. Then run `pnpm db:types` and `pnpm db:map`.
+- [ ] **Step 5:** add `delete from public.account_sizes where user_id = …` to erase step 1, with its line in the runbook test. Run `pnpm test test/erase-runbook-db.test.ts` and expect it to pass.
+- [ ] **Step 6:** commit, then open PR 1, `feat(db): sizes you can share from your list's link (ALL-183)`.
+
+### Task 2: Settings (AC-1, 2, 3, 4, 10, 11)
+
+**Files:**
+- Create: `apps/web/lib/account-sizes.ts`, `app/settings/sizes/page.tsx`, `app/settings/sizes-form.tsx` and `app/settings/sizes-actions.ts`, with tests next to their birthday counterparts
+- Modify: `app/settings/page.tsx` and `app/settings/rows.ts`
+
+**Interfaces:**
+- Produces, in `lib/account-sizes.ts`:
+  - `SIZE_KINDS`: the ordered `{ kind, label }` list from Global Constraints, exported for Task 3.
+  - `type SizeKind`.
+  - `type MySizes = { kind: "unavailable" } | { kind: "loaded"; items: Record<SizeKind, { value: string; shared: boolean } | null> }`.
+  - `getMySizes(db, userId): Promise<MySizes>`.
+  - `parseSizesForm(form: FormData): { ok: true; row } | { ok: false; errors: Partial<Record<SizeKind, string>> }`.
+  - `saveMySizes(db, userId, row)`, which is one upsert.
+  - `removeMySizes(db, userId)`.
+  - `sizesSharingOn(appSettingInt): Promise<boolean>`.
+- Produces, in `rows.ts`: `sizesRowText(s: MySizes): string` and `showSizesRow(s, myList, on): boolean`.
+
+- [ ] **Step 1:** write the failing tests.
+  - `sizesRowText` gives "Not added", "3 saved, none shared", "3 saved, 1 shared", "3 shared" and "Couldn't load".
+  - `showSizesRow` mirrors `showBirthdayRow`.
+  - `parseSizesForm`: trims; refuses 31 code points and a newline; accepts 30 emoji; an empty box clears both value and share; Share with an empty box is dropped.
+  - The form: Share is disabled while its box is empty, it shows the Settings copy exactly, and it shows "Saved" after the action succeeds.
+  - The actions: each logs its one event with the user id only. With the feature off, save is refused and Remove all works.
+- [ ] **Step 2:** run `pnpm test app/settings lib/__tests__/account-sizes.test.ts` and expect it to fail.
+- [ ] **Step 3:** implement, copying the birthday screen's layout. The row goes under You, after Birthday, linking to `/settings/sizes`.
+- [ ] **Step 4:** run the tests again and expect them to pass. Then commit.
+
+### Task 3: The panel and the matching (AC-5, 6, 7, 9, 11)
+
+**Files:**
+- Create:
+  - `modules/lists/lib/relevant-sizes.ts` and its test.
+  - `modules/lists/actions/owner-sizes.ts` (`"use server"`).
+  - `modules/lists/components/sizes-panel.tsx` and its test.
+- Modify:
+  - `modules/lists/lib/lists.ts`, adding `getOwnerSizes(token)` beside `getOwnerBirthday`.
+  - `modules/lists/components/view-dialog.tsx` and `modules/lists/components/claim-dialog.tsx`, which render `<SizesPanel>` under the gift name.
+  - `modules/lists/components/shared-list.tsx`, which passes `token` and `name` down.
+
+**Interfaces:**
+- Consumes: `SIZE_KINDS` from Task 2, and `lists.owner_sizes` from Task 1.
+- Produces:
+  - `relevantSizes(giftName: string, shared: SharedSize[]): SharedSize[]`, where `type SharedSize = { kind: SizeKind; value: string }`.
+  - `getOwnerSizes(token: string): Promise<SharedSize[]>`, which returns `[]` on a bad token, an error (logged as `lists.owner_sizes_failed` with the code only) or nothing shared.
+  - `readOwnerSizes(token: string)`, the server action.
+  - `<SizesPanel token name giftName />`, a client component that fetches once on mount and reserves a fixed-height slot while loading. It renders nothing (and the slot closes) when the list is empty.
+
+- [ ] **Step 1:** write `relevant-sizes.test.ts` as a table of at least 30 real store names and the kinds expected. It must include:
+  - "Allbirds Wool Runners Sneakers" → shoe
+  - "Women's Ankle BOOTS" → shoe
+  - "Graphic T-Shirt" → top
+  - "Men's Dress Shirt" → top
+  - "Dress Shoes" → shoe
+  - "Wrap Dress" → dress
+  - "Levi's 501 Jeans" → pants
+  - "Ring Video Doorbell" → ring (a wrong hit that's allowed)
+  - "Wool Beanie" → hat
+  - "Bambu Lab A1 mini 3D Printer" → no match, so all
+  - "Rage Against the ML" → all
+
+  Favorite color always comes back when it's shared, and the results keep `SIZE_KINDS` order.
+- [ ] **Step 2:** write the component tests.
+  - The panel shows "Aaron's sizes" and "Shoe: 10.5 · Favorite color: Green" for a sneaker.
+  - It shows "Their sizes" when `name` is null.
+  - It renders nothing for `[]` and for a failed read.
+  - The Claim gift button's position doesn't change when the read resolves.
+  - ViewDialog and ClaimDialog both include it.
+  - Signed in on your own list, nothing is fetched.
+- [ ] **Step 3:** run `pnpm test modules/lists` and expect it to fail.
+- [ ] **Step 4:** implement. Matching lowercases the name, splits on anything that isn't a letter or digit, and tries each word as it is, without a trailing "s" and without a trailing "es". When "dress" is followed by a shirt, shoe or pants word, it counts as that word. The word lists are exactly AC-6's, plus "tshirt"; "t-shirt" splits into "t" and "shirt", so it matches through "shirt".
+- [ ] **Step 5:** run the tests again and expect them to pass. Then commit.
+
+### Task 4: Journey, docs and PR 2 (AC-1 to 11)
+
+**Files:**
+- Create: `e2e/share-sizes.spec.ts`
+- Modify: `design/decisions.md` (next T#, "Revises T42 (1), T97"), `planning/decisions.md` (next number), `design/ui.md` (the screen and the panel), `design/technical-design.md`, `design/operations.md` (the setting), `app/privacy/page.tsx` (with its test), and `apps/web/scripts/gallery.shots.ts` (the Settings screen and the claim box with the panel)
+
+- [ ] **Step 1:** write the e2e, using `createFreshUser`.
+  - The owner saves a shoe size and a hat size, and shares only the shoe.
+  - A signed-out visitor opens "Going to buy it?" on a sneaker gift and sees "Shoe: 10.5" but no hat.
+  - The claim box shows the same.
+  - With Share turned off, the visitor sees no panel.
+  - Tag one test `@layout` for the Settings screen at 320 px.
+- [ ] **Step 2:** run `pnpm e2e e2e/share-sizes.spec.ts` and expect it to pass. Then run `pnpm lint && pnpm typecheck && pnpm test && pnpm build`.
+- [ ] **Step 3:** update the docs and privacy page, then run `pnpm gallery`.
+- [ ] **Step 4:** commit, then open PR 2, `feat: share your sizes with people buying from your list (ALL-183)`, with `Closes ALL-183`. After it merges:
+  - Live check with the QA account, signed out in a second browser.
+  - Remove the QA account's sizes afterwards.
+  - Republish the screens page.
+  - Post the evidence on ALL-183.
