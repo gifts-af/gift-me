@@ -150,6 +150,7 @@ describe.skipIf(!stack)("the erase runbook's SQL (real local database)", () => {
     await order(a.id, mom, "delivered");
     await insert("concierge.accounts", { user_id: a.id, paid_features: true, concierge_access: true });
     await insert("public.account_addresses", { user_id: a.id, share_for_gifts: true, ...ADDRESS });
+    await insert("public.account_sizes", { user_id: a.id, top: "M", top_shared: true });
     const mine = await list(a.id, "Kettle");
     const theirs = await list(b.id, "Scarf");
     await insert("lists.gift_claims", { item_id: theirs.item, claimer_id: a.id, claimer_name: "Ada" });
@@ -183,6 +184,7 @@ describe.skipIf(!stack)("the erase runbook's SQL (real local database)", () => {
     expect(await rows("select paid_features, concierge_access from concierge.accounts where user_id = $1", a.id)).toEqual([
       { paid_features: false, concierge_access: false },
     ]);
+    expect(await count("public.account_sizes", "user_id = $1", a.id)).toBe(0);
     expect(await run(wait, gone)).toEqual([]);
     expect((await run(listFiles, gone)).map((f) => f.name).sort()).toEqual(files);
     await run(erase, gone);

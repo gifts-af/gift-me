@@ -66,7 +66,7 @@ select set_eq(
     'google_import_enabled', 'concierge_requests_per_day',
     'person_photo_stored_max_bytes', 'storage_files_per_account',
     'idea_busy_retry_seconds', 'idea_busy_retries_max',
-    'list_birthday_enabled'
+    'list_birthday_enabled', 'list_sizes_enabled'
   ],
   'every fee, limit, default and schedule setting is seeded'
 );
