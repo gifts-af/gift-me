@@ -214,17 +214,44 @@ describe.skipIf(!stack)("runHealthCheck (real local database)", () => {
     await order(await round(u, "needs_attention", "funds", addDays(today, 30)), "held", "funds");
   }
 
-  it("AC-2: no email and health.checked {problems: 0, sent: false}", async () => {
-    const { now, today } = dayIn(2);
-    await expectNothingElseOpen(now);
-    await tickRan(today);
-    await buyerWaits(today);
+  /** Runs `body` with health_launch_numbers set to `value`, then puts it back. */
+  async function withLaunchNumbers(value: string, body: () => Promise<void>) {
+    const was = (await pg.query("select value from concierge.app_settings where key = 'health_launch_numbers'")).rows[0].value;
+    await pg.query("update concierge.app_settings set value = $1 where key = 'health_launch_numbers'", [value]);
+    try {
+      await body();
+    } finally {
+      await pg.query("update concierge.app_settings set value = $1 where key = 'health_launch_numbers'", [was]);
+    }
+  }
 
-    const { deps: d } = deps(now);
-    expect(await runHealthCheck(d)).toEqual({ result: "quiet", problems: 0 });
-    expect(d.send).not.toHaveBeenCalled();
-    expect(checked()).toMatchObject({ result: "quiet", problems: 0, sent: false, weekly: false });
-  });
+  it("AC-2: with launch numbers off, no email and health.checked {problems: 0, sent: false}", () =>
+    withLaunchNumbers("0", async () => {
+      const { now, today } = dayIn(2);
+      await expectNothingElseOpen(now);
+      await tickRan(today);
+      await buyerWaits(today);
+
+      const { deps: d } = deps(now);
+      expect(await runHealthCheck(d)).toEqual({ result: "quiet", problems: 0 });
+      expect(d.send).not.toHaveBeenCalled();
+      expect(checked()).toMatchObject({ result: "quiet", problems: 0, sent: false, weekly: false });
+    }));
+
+  it("with launch numbers on, a quiet day sends All clear with the numbers from the real database", () =>
+    withLaunchNumbers("1", async () => {
+      const { now, today } = dayIn(2);
+      await expectNothingElseOpen(now);
+      await tickRan(today);
+      await buyerWaits(today);
+
+      const { deps: d, sent } = deps(now);
+      expect(await runHealthCheck(d)).toEqual({ result: "sent", problems: 0 });
+      expect(sent).toHaveLength(1);
+      expect(sent[0].subject).toContain("All clear");
+      expect(sent[0].text).toContain("New signups");
+      expect(sent[0].text).not.toContain("couldn't be read");
+    }));
 
   it("AC-3 on a Monday: the weekly email with All clear and the counts", async () => {
     const { now, today } = dayIn(1);
