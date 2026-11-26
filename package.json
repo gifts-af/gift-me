@@ -27,6 +27,7 @@
     "db:types:check": "node scripts/db-types-check.mjs",
     "db:map": "pnpm --filter @gifts-af/web db:map",
     "db:map:check": "pnpm --filter @gifts-af/web db:map:check",
+    "round-page:check": "node --test scripts/round-page-check.test.mjs && node scripts/round-page-check.mjs",
     "ai:eval": "pnpm --filter @gifts-af/web ai:eval",
     "gallery": "node scripts/db-clean.mjs pnpm --filter @gifts-af/web gallery",
     "live-check": "pnpm --filter @gifts-af/web live-check",

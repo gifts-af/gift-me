@@ -17,5 +17,6 @@ spikes/ai/fixtures/screens/*-product.png
 apps/web/lib/ai/fixtures/screens/*-product.png
 apps/extension/*.zip
 
-# Left by the database-map hook until the map page is published (scripts/db-map-hooks.mjs).
+# Left by scripts/page-hooks.mjs until the database map or round engine page is published.
 .db-map-pending
+.round-page-pending

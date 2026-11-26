@@ -129,9 +129,14 @@ The shareable roadmap is one claude.ai page: https://claude.ai/artifact/6D9ycNqh
 
 The owner's claude.ai account owns the page. To update it, a person needs **edit** access, which the owner grants from the page's Share menu. Without it, the publish is refused. In that case, tell the person to ask the owner for edit access. Don't publish a copy.
 
-## Updating the round engine page
+## The round engine page
 
-The round engine page, https://claude.ai/artifact/Edr5DRi5s53iRPfAsuSnd8, draws `design/technical-design.md` §4.1, §5 and §5.1. When a change touches round statuses, the tick or the reminder schedule, update the page in the same piece of work: read it with the Artifact tool (`action: "read"`), change it, and republish to the same URL. Never publish a copy. The doc stays the source; if the two disagree, the doc wins. Edit access works the same as for the roadmap page.
+The round engine page, https://claude.ai/artifact/Edr5DRi5s53iRPfAsuSnd8, draws how a gift round moves: `design/technical-design.md` §4.1, §5 and §5.1. Its source is `design/round-engine.html`, edited by hand. The doc stays the source of truth; if the two disagree, the doc wins. Keeping it current is enforced in two steps, like the database map:
+
+- **In the PR (CI).** The `round-page` check (`pnpm round-page:check`) fails a PR that changes how a round moves without changing `design/round-engine.html`. "Changes how a round moves" means round code (`modules/concierge/rounds/`), the tick and job routes (`app/api/rounds/`), the schedule math in `packages/core` (`rounds.ts`, `round-plan.ts`, `schedule.ts`), a migration about rounds, or the doc's §4.1, §5 or §5.1; tests alone don't count. When the change doesn't alter what the page shows (a refactor, a log field, a bug fix that keeps the flow), add a line to the PR body instead: `Round engine page: no change, <why>`. Editing the body re-runs the check.
+- **After the merge (Claude Code).** The hook in `.claude/settings.json` (`scripts/page-hooks.mjs`) notices a merged PR that changed the page and asks for it to be published: pull main, then publish `design/round-engine.html` from the main checkout to the same URL with the Artifact tool. Never publish a copy. Until then a `.round-page-pending` note stays, and the session is stopped once before it finishes. A merge made outside Claude Code skips the hook, so whoever merges that way publishes it by hand.
+
+Edit access works the same as for the roadmap page.
 
 ## Updating the screens and emails page
 
@@ -142,7 +147,7 @@ The screens and emails page, https://claude.ai/artifact/9mrDvFAgoqxvxmzirJFCz6, 
 The database map, https://claude.ai/artifact/9uCRGGJL5Tu4X53VCYV3Rk, draws every table, how the tables connect, and every column, with each table's rules and definition. It is shared with the owner and Jim only, so link it from repo docs but not from the public roadmap or progress pages. Keeping it current is enforced in two steps:
 
 - **In the PR (CI).** The page is generated from the local database into `design/database-map.html` by `pnpm db:map`, and committed. CI's `pnpm db:map:check` fails when that file doesn't match the schema, so a migration that changes tables, columns, keys, rules or privacy policies must regenerate it. A migration that only changes data leaves it alone. A new table lands in the map's bottom strip until it's given a lane and a one-line note in `apps/web/scripts/db-map/layout.json` (`pnpm db:map` says so).
-- **After the merge (Claude Code).** A hook in `.claude/settings.json` notices a merged PR that changed the map and asks for it to be published once CI's `migrate` job on main passes: publish `design/database-map.html` from the main checkout to the same URL with the Artifact tool. Never publish a copy. Until then a `.db-map-pending` note stays, and the session is stopped once before it finishes. A merge made outside Claude Code skips the hook, so whoever merges that way publishes it by hand.
+- **After the merge (Claude Code).** A hook in `.claude/settings.json` (`scripts/page-hooks.mjs`) notices a merged PR that changed the map and asks for it to be published once CI's `migrate` job on main passes: publish `design/database-map.html` from the main checkout to the same URL with the Artifact tool. Never publish a copy. Until then a `.db-map-pending` note stays, and the session is stopped once before it finishes. A merge made outside Claude Code skips the hook, so whoever merges that way publishes it by hand.
 
 ## Writing for the human in the loop
 
