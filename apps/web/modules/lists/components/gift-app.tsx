@@ -23,7 +23,7 @@ import Link from "next/link";
 import { PageFrame } from "@/components/app-shell/page-frame";
 import NamePrompt, { skippedNamePrompt } from "./name-prompt";
 import ShareButton from "./share-button";
-import SizeAsk, { dismissedSizes, type SaveSize } from "./size-ask";
+import SizeAsk, { dismissedSizes, sizeName, type SaveSize } from "./size-ask";
 import { Banner, inputClass } from "./ui";
 
 export { UNDO_MS } from "@/modules/lists/lib/list-saver";
@@ -147,7 +147,7 @@ type GiftAppProps = {
   shareHint?: ReactNode;
   needsName?: boolean;
   saveName?: SaveName | null;
-  sizeAsk?: { missing: SizeKind[]; save: SaveSize } | null;
+  sizeAsk?: { missing: SizeKind[]; save: SaveSize; userId: string } | null;
 };
 
 /**
@@ -300,9 +300,20 @@ export default function GiftApp({
     setNotice("");
     saver.add({ ...draft, id: newId(), addedAt: Date.now() });
     if (!sizeAsk) return;
-    const dismissed = dismissedSizes();
+    const dismissed = dismissedSizes(sizeAsk.userId);
     const kind = sizeKindsFor(draft.name).find((k) => k !== "color" && missingSizes.has(k) && !dismissed.has(k));
     setAskingSize(kind ? { kind, key: Date.now() } : null);
+    // The add panel announces the add; this says what appeared below it.
+    if (kind) setAnnouncement(`Add your ${sizeName(kind)}? Asked below, optional.`);
+  }
+
+  function setMissing(kind: SizeKind, missing: boolean) {
+    setMissingSizes((now) => {
+      const next = new Set(now);
+      if (missing) next.add(kind);
+      else next.delete(kind);
+      return next;
+    });
   }
 
   function removeGift(id: string) {
@@ -472,15 +483,15 @@ export default function GiftApp({
           <SizeAsk
             key={askingSize.key}
             kind={askingSize.kind}
+            userId={sizeAsk.userId}
             save={sizeAsk.save}
-            onSaved={(kind) =>
-              setMissingSizes((now) => {
-                const next = new Set(now);
-                next.delete(kind);
-                return next;
-              })
-            }
-            onClose={() => setAskingSize(null)}
+            onSaving={(kind) => setMissing(kind, false)}
+            onFailed={(kind) => setMissing(kind, true)}
+            onClose={() => {
+              setAskingSize(null);
+              // The card had focus; don't leave it on <body>.
+              headingRef.current?.focus();
+            }}
           />
         )}
 

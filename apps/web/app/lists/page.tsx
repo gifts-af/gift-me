@@ -35,7 +35,9 @@ async function ListLoader() {
   // Sizes not saved yet, which adding a gift may ask for. Unread sizes ask for none.
   const missingSizes =
     sizesOn && sizes.status === "loaded"
-      ? (Object.entries(sizes.items) as [SizeKind, unknown][]).filter(([, item]) => item === null).map(([kind]) => kind)
+      ? (Object.entries(sizes.items) as [SizeKind, unknown][])
+          .filter(([kind, item]) => item === null && kind !== "color")
+          .map(([kind]) => kind)
       : null;
   const needsName = !profile.error && profile.data != null && !profile.data.display_name;
   return (
@@ -43,7 +45,7 @@ async function ListLoader() {
       initial={initial}
       needsName={needsName}
       saveName={saveDisplayName}
-      sizeAsk={missingSizes ? { missing: missingSizes, save: saveOneSizeAction } : null}
+      sizeAsk={missingSizes && userId ? { missing: missingSizes, save: saveOneSizeAction, userId } : null}
       shareHint={birthdayOn && birthday.kind === "none" ? <BirthdayHint /> : null}
       footer={<ShareAddressSwitch sharing={sharing} saveAction={saveMyAddressAction} setSharingAction={setSharingAction} />}
     />

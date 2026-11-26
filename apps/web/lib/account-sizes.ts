@@ -84,20 +84,33 @@ export function parseOneSize(raw: string): { ok: true; value: string } | { ok: f
   return error ? { ok: false, error } : { ok: true, value };
 }
 
+export type OneSizeSave = "saved" | "already" | "failed";
+
 /**
- * Saves one size, shared. The upsert names only that column and its switch,
- * so every other saved size and switch stays as it was.
+ * Saves one size, shared, only while that size is still empty (T100): a size
+ * saved meanwhile in Settings or another tab, shared or not, is never
+ * overwritten. Only that column and its switch are written, so every other
+ * size and switch stays as it was. "already" means it was filled meanwhile.
  */
-export async function saveOneSize(db: SizesDb, userId: string, kind: SizeKind, value: string): Promise<boolean> {
+export async function saveOneSize(db: SizesDb, userId: string, kind: SizeKind, value: string): Promise<OneSizeSave> {
   // A computed key widens to an index signature, which the row type refuses.
-  const row = { user_id: userId, [kind]: value, [`${kind}_shared`]: true } as Partial<SizesRow> & { user_id: string };
-  const { error } = await db.from(TABLE).upsert(row, { onConflict: "user_id" });
-  if (error) {
-    failed(userId, "save_one", error);
-    return false;
+  const fields = { [kind]: value, [`${kind}_shared`]: true } as Partial<SizesRow>;
+  const updated = await db.from(TABLE).update(fields).eq("user_id", userId).is(kind, null).select("user_id");
+  if (updated.error) {
+    failed(userId, "save_one", updated.error);
+    return "failed";
   }
-  logEvent("account_sizes.saved", { user_id: userId, kind });
-  return true;
+  if (updated.data.length === 0) {
+    // No row with that size empty: either no row yet, or the size is filled.
+    const inserted = await db.from(TABLE).insert({ ...fields, user_id: userId } as SizesRow & { user_id: string });
+    if (inserted.error?.code === "23505") return "already";
+    if (inserted.error) {
+      failed(userId, "save_one", inserted.error);
+      return "failed";
+    }
+  }
+  logEvent("account_sizes.saved", { user_id: userId, kind, source: "my_list" });
+  return "saved";
 }
 
 export async function removeMySizes(db: SizesDb, userId: string): Promise<boolean> {

@@ -28,7 +28,7 @@ describe("sizes actions", () => {
     t.on = true;
     t.save.mockReset().mockResolvedValue(true);
     t.remove.mockReset().mockResolvedValue(true);
-    t.saveOne.mockReset().mockResolvedValue(true);
+    t.saveOne.mockReset().mockResolvedValue("saved");
     t.revalidate.mockClear();
   });
 
@@ -89,8 +89,14 @@ describe("sizes actions", () => {
     });
 
     it("says so when the save fails", async () => {
-      t.saveOne.mockResolvedValue(false);
+      t.saveOne.mockResolvedValue("failed");
       expect(await saveOneSizeAction("top", "M")).toEqual({ ok: false, error: "That didn't save. Try again." });
+    });
+
+    it("points to Settings when the size was saved meanwhile", async () => {
+      t.saveOne.mockResolvedValue("already");
+      expect(await saveOneSizeAction("top", "M")).toEqual({ ok: false, error: "That size is already saved. Change it in Settings." });
+      expect(t.revalidate).not.toHaveBeenCalled();
     });
   });
 });

@@ -21,6 +21,7 @@ const member: MyList = {
 };
 
 let version = 1;
+let userId = "u1";
 let user: ReturnType<typeof userEvent.setup>;
 let save: ReturnType<typeof vi.fn<(kind: SizeKind, value: string) => Promise<{ ok: true } | { ok: false; error: string }>>>;
 
@@ -32,13 +33,14 @@ async function addByHand(name: string) {
 }
 
 const app = (missing: SizeKind[] = ["top", "pants", "dress", "shoe", "ring", "hat"]) => (
-  <GiftApp initial={member} sizeAsk={{ missing, save }} />
+  <GiftApp initial={member} sizeAsk={{ missing, save, userId }} />
 );
 const card = () => screen.queryByRole("region", { name: /Add your .* size\?/ });
 
 describe("asking for a missing size", () => {
   beforeEach(() => {
     localStorage.clear();
+    userId = "u1";
     user = userEvent.setup();
     version = 1;
     save = vi.fn(async () => ({ ok: true as const }));
@@ -57,7 +59,8 @@ describe("asking for a missing size", () => {
     render(app());
     await addByHand("Flannel Shirt");
     expect(card()).toHaveAccessibleName("Add your shirt or top size?");
-    expect(screen.getByText(/People who claim gifts from your list will see it/)).toBeVisible();
+    expect(screen.getByText(/Anyone with your list link will see it when they go to claim/)).toBeVisible();
+    expect(screen.getByText("Add your shirt or top size? Asked below, optional.")).toBeInTheDocument();
     expect(screen.getByLabelText("Shirt or top size")).toBeVisible();
   });
 
@@ -81,9 +84,9 @@ describe("asking for a missing size", () => {
     render(app());
     await addByHand("Nike Sneakers");
     await user.type(screen.getByLabelText("Shoe size"), "9.5");
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Save and share" }));
     expect(save).toHaveBeenCalledWith("shoe", "9.5");
-    expect(await screen.findByText(/Saved\. People who claim will see your shoe size\./)).toBeVisible();
+    expect(await screen.findByText(/Saved and shared\. Anyone with your list link will see your shoe size when they go to claim\./)).toBeVisible();
     expect(screen.getByRole("link", { name: "Change it in Settings" })).toHaveAttribute("href", "/settings/sizes");
     await addByHand("Running Shoes");
     expect(card()).toBeNull();
@@ -94,7 +97,7 @@ describe("asking for a missing size", () => {
     render(app());
     await addByHand("Gold Ring");
     await user.type(screen.getByLabelText("Ring size"), "7");
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Save and share" }));
     expect(await screen.findByText("Use 30 characters or fewer.")).toBeVisible();
     expect(screen.getByLabelText("Ring size")).toHaveValue("7");
   });
@@ -102,7 +105,7 @@ describe("asking for a missing size", () => {
   it("asks for a typed size before calling the server", async () => {
     render(app());
     await addByHand("Gold Ring");
-    await user.click(screen.getByRole("button", { name: "Save" }));
+    await user.click(screen.getByRole("button", { name: "Save and share" }));
     expect(screen.getByText("Type a size, or pick Not now.")).toBeVisible();
     expect(save).not.toHaveBeenCalled();
   });
@@ -112,6 +115,7 @@ describe("asking for a missing size", () => {
     await addByHand("Wool Beanie");
     await user.click(screen.getByRole("button", { name: "Not now" }));
     expect(card()).toBeNull();
+    expect(screen.getByRole("heading", { level: 1, name: "My list" })).toHaveFocus();
     await addByHand("Baseball Cap");
     expect(card()).toBeNull();
     view.unmount();
@@ -138,5 +142,41 @@ describe("asking for a missing size", () => {
     await act(async () => {});
     view.rerender(page("visible"));
     expect(card()).toBeNull();
+  });
+
+  it("Not now is per account: another account on this device is still asked (AC-5)", async () => {
+    const view = render(app());
+    await addByHand("Wool Beanie");
+    await user.click(screen.getByRole("button", { name: "Not now" }));
+    view.unmount();
+    userId = "u2";
+    render(app());
+    await addByHand("Wool Beanie");
+    expect(card()).toHaveAccessibleName("Add your hat size?");
+  });
+
+  it("doesn't ask again for a size whose save is still on its way, and asks again if it fails", async () => {
+    let finish!: (r: { ok: false; error: string }) => void;
+    save.mockReturnValueOnce(new Promise((r) => (finish = r)));
+    render(app());
+    await addByHand("Flannel Shirt");
+    await user.type(screen.getByLabelText("Shirt or top size"), "M");
+    await user.click(screen.getByRole("button", { name: "Save and share" }));
+    await addByHand("Polo Shirt");
+    expect(card()).toBeNull();
+    await act(async () => finish({ ok: false, error: "That didn't save. Try again." }));
+    await addByHand("Rugby Shirt");
+    expect(card()).toHaveAccessibleName("Add your shirt or top size?");
+  });
+
+  it("sends one save for two quick presses", async () => {
+    let finish!: (r: { ok: true }) => void;
+    save.mockReturnValueOnce(new Promise((r) => (finish = r)));
+    render(app());
+    await addByHand("Gold Ring");
+    await user.type(screen.getByLabelText("Ring size"), "7");
+    await user.keyboard("{Enter}{Enter}");
+    await act(async () => finish({ ok: true }));
+    expect(save).toHaveBeenCalledOnce();
   });
 });

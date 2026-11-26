@@ -27,7 +27,7 @@ vi.mock("@/modules/lists", () => ({ GiftApp: () => null, GiftAppSkeleton: () => 
 
 const { default: ListsPage } = await import("../page");
 
-type AppProps = { shareHint?: ReactNode; sizeAsk?: { missing: string[] } | null };
+type AppProps = { shareHint?: ReactNode; sizeAsk?: { missing: string[]; userId: string } | null };
 
 async function appProps(): Promise<AppProps> {
   const stack: ReactNode[] = [ListsPage()];
@@ -81,8 +81,10 @@ describe("which sizes adding a gift may ask for (ALL-184)", () => {
     t.sizes = { status: "loaded", items: { ...none, shoe: { value: "9", shared: false }, color: { value: "Red", shared: true } } };
   });
 
-  it("is every size not saved yet", async () => {
-    expect((await appProps()).sizeAsk?.missing).toEqual(["top", "pants", "dress", "ring", "hat"]);
+  it("is every size not saved yet, never favorite color, for the signed-in user", async () => {
+    expect((await appProps()).sizeAsk).toMatchObject({ missing: ["top", "pants", "dress", "ring", "hat"], userId: "u1" });
+    t.sizes = { status: "loaded", items: none };
+    expect((await appProps()).sizeAsk?.missing).toEqual(["top", "pants", "dress", "shoe", "ring", "hat"]);
   });
 
   it("is none when sizes are switched off or couldn't be read", async () => {

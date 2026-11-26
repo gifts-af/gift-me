@@ -54,7 +54,9 @@ export async function saveOneSizeAction(kind: SizeKind, value: string): Promise<
   const s = await session();
   if (!s) return SIGN_IN_AGAIN;
   if (!(await sizesSharingOn(appSettingInt))) return { ok: false, error: "This is switched off right now." };
-  if (!(await saveOneSize(s.db, s.userId, kind, parsed.value))) return { ok: false, error: "That didn't save. Try again." };
+  const saved = await saveOneSize(s.db, s.userId, kind, parsed.value);
+  if (saved === "already") return { ok: false, error: "That size is already saved. Change it in Settings." };
+  if (saved === "failed") return { ok: false, error: "That didn't save. Try again." };
   refresh();
   return { ok: true };
 }

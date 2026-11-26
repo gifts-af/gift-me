@@ -33,8 +33,8 @@ test("adding a shirt asks for the shirt size, and saving it leaves the hat as it
   await addByHand(page, "Flannel Shirt");
   await expect(card(page)).toHaveAccessibleName("Add your shirt or top size?");
   await card(page).getByLabel("Shirt or top size").fill("M");
-  await card(page).getByRole("button", { name: "Save" }).click();
-  await expect(page.getByText("Saved. People who claim will see your shirt or top size.")).toBeVisible();
+  await card(page).getByRole("button", { name: "Save and share" }).click();
+  await expect(page.getByText("Saved and shared. Anyone with your list link will see your shirt or top size when they go to claim.")).toBeVisible();
   await expect(page.getByRole("link", { name: "Change it in Settings" })).toHaveAttribute("href", "/settings/sizes");
 
   // The hat is saved, so a beanie doesn't ask.
