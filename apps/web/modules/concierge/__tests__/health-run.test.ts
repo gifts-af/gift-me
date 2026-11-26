@@ -384,8 +384,8 @@ describe("runHealthCheck", () => {
         expect(d.sent).toHaveLength(1);
         expect(d.sent[0].subject).toContain("All clear");
         expect(d.sent[0].text).toContain("New signups");
-        expect(d.sent[0].text).toContain("2 in the last day (5 all time)");
-        expect(d.sent[0].text).toContain("9 in the last day (40 all time)");
+        expect(d.sent[0].text).toContain("2 in the last day, 5 all time");
+        expect(d.sent[0].text).toContain("9 in the last day, 40 all time");
       }));
 
     it("numbers that can't be read are one line, the email still goes, and the error text stays out", () =>

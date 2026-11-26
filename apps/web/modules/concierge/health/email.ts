@@ -113,11 +113,11 @@ const LAUNCH_LINES: [keyof Exclude<NonNullable<HealthReport["launch"]>, string>,
   ["peopleAdded", "People added"],
 ];
 
-/** Last 24 hours, with the all-time count in brackets. Team and test accounts are left out (metrics_excluded). */
+/** Last 24 hours, then all time. Team and test accounts are left out (metrics_excluded). */
 function launchRows(launch: HealthReport["launch"]): EmailRow[] {
   if (!launch) return [];
   if (launch === "unreadable") return [{ title: "Launch numbers", detail: "The numbers couldn't be read" }];
-  return LAUNCH_LINES.map(([key, title]) => ({ title, detail: `${launch[key].day} in the last day (${launch[key].total} all time)` }));
+  return LAUNCH_LINES.map(([key, title]) => ({ title, detail: `${launch[key].day} in the last day, ${launch[key].total} all time` }));
 }
 
 /** One email to the owner inbox: each problem with its runbook link, and on the weekly day the counts and costs. */
