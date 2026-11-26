@@ -55,10 +55,13 @@ export function relevantSizes(giftName: string, shared: SharedSize[]): SharedSiz
     matched.add(kind);
   });
 
-  // Nothing recognised, or nothing recognised that is shared: show everything,
-  // since a missing line costs more than an extra one.
-  const hits = shared.filter((s) => matched.has(s.kind));
-  const chosen = hits.length > 0 ? shared.filter((s) => matched.has(s.kind) || s.kind === "color") : shared;
+  // A name that matches no kind could be anything, so show everything shared.
+  // A name that matches shows only its sizes (and color), even if that is none:
+  // we know what the gift is, so unrelated sizes would be noise.
+  const chosen =
+    matched.size === 0
+      ? shared
+      : shared.filter((s) => matched.has(s.kind) || s.kind === "color");
 
   const order = SIZE_KINDS.map((k) => k.kind);
   return [...chosen].sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind));

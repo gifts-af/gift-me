@@ -78,9 +78,16 @@ describe("relevantSizes", () => {
     expect(relevantSizes("Dyson Airwrap", shared)).toEqual(shared);
   });
 
-  it("shows everything when the matched kind is not shared", () => {
-    const shared: SharedSize[] = [{ kind: "hat", value: "M" }];
-    expect(relevantSizes("Running Shoes", shared)).toEqual(shared);
+  it("shows only the color when the matched kind is not shared", () => {
+    const shared: SharedSize[] = [
+      { kind: "hat", value: "M" },
+      { kind: "color", value: "Green" },
+    ];
+    expect(relevantSizes("Running Shoes", shared)).toEqual([{ kind: "color", value: "Green" }]);
+  });
+
+  it("shows nothing when the matched kind and color are not shared", () => {
+    expect(relevantSizes("Running Shoes", [{ kind: "hat", value: "M" }])).toEqual([]);
   });
 
   it("keeps SIZE_KINDS order whatever the input order", () => {
