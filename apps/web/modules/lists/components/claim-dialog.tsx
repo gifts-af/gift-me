@@ -2,9 +2,11 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { withNext } from "@/lib/safe-next";
+import type { SharedSize } from "@/lib/size-kinds";
 import type { ClaimResult } from "@/modules/lists/actions/claims";
 import type { Gift, SharedList } from "@/modules/lists/lib/lists";
 import Modal from "./modal";
+import SizesPanel from "./sizes-panel";
 import { Banner, inputClass, labelClass } from "./ui";
 
 const NAME_KEY = "giftme:guest-name";
@@ -44,9 +46,23 @@ export type ClaimDialogProps = {
   // and offers their own list. The parent must then keep us mounted
   // on success. `ownerName` is the shown name, or null.
   offer?: { ownerName: string | null; onNotNow: () => void };
+  // The owner's shared sizes, null until they've loaded or when the read failed.
+  sizes?: SharedSize[] | null;
+  ownerName?: string | null;
 };
 
-export default function ClaimDialog({ gift, viewer, next, onConfirm, onClose, offer }: ClaimDialogProps) {
+export default function ClaimDialog({
+  gift,
+  viewer,
+  next,
+  onConfirm,
+  onClose,
+  offer,
+  sizes = null,
+  ownerName = null,
+}: ClaimDialogProps) {
+  // Taken when the box opens: sizes landing later must not push the form down while it's used.
+  const [openedSizes] = useState(sizes);
   const [name, setName] = useState(() => (viewer.signedIn ? "" : readSavedName()));
   const [nameError, setNameError] = useState("");
   const [error, setError] = useState("");
@@ -128,6 +144,8 @@ export default function ClaimDialog({ gift, viewer, next, onConfirm, onClose, of
           </h2>
           <p className="text-[15px] font-semibold [overflow-wrap:anywhere]">{gift.name}</p>
         </div>
+
+        <SizesPanel sizes={openedSizes} name={ownerName} giftName={gift.name} />
 
         {taken ? (
           <Banner tone="warn" role="alert">

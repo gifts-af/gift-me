@@ -249,3 +249,71 @@ describe("SharedList", () => {
     });
   });
 });
+
+describe("the sizes fetch (ALL-183 AC-5, AC-7)", () => {
+  const listFor = (isOwner: boolean): SharedListData => ({
+    title: "t",
+    cardEnabled: true,
+    ownerName: "Aaron",
+    linkedPerson: null,
+    isOwner,
+    viewer: guest,
+    items: [{ ...item("a", "Sneakers"), productUrl: "https://www.target.com/p/x" }],
+  });
+  const sizes = [{ kind: "shoe", value: "10.5" }];
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 20));
+
+  async function open() {
+    await userEvent.click(screen.getByRole("link", { name: /View on/ }));
+  }
+
+  it("fetches once per visit and the box shows the result", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => sizes });
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      const { rerender } = render(<SharedList token="tok" list={listFor(false)} />);
+      await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+      expect(fetchMock.mock.calls[0][0]).toBe("/share/tok/sizes");
+      await settle();
+      rerender(<SharedList token="tok" list={{ ...listFor(false) }} />);
+      await settle();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      await open();
+      expect(await screen.findByText("Aaron's sizes")).toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("doesn't fetch on the viewer's own list", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    try {
+      render(<SharedList token="tok" list={listFor(true)} />);
+      await settle();
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("shows no panel and no error when the fetch fails", async () => {
+    for (const fetchMock of [
+      vi.fn().mockRejectedValue(new Error("offline")),
+      vi.fn().mockResolvedValue({ ok: false, json: async () => sizes }),
+    ]) {
+      vi.stubGlobal("fetch", fetchMock);
+      try {
+        const { unmount } = render(<SharedList token="tok" list={listFor(false)} />);
+        await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+        await settle();
+        await open();
+        expect(screen.queryByText(/sizes/)).toBeNull();
+        expect(screen.queryByRole("alert")).toBeNull();
+        unmount();
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    }
+  });
+});
