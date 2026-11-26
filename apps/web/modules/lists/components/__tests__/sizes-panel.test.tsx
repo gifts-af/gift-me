@@ -18,7 +18,7 @@ const sizes: SharedSize[] = [
   { kind: "color", value: "Green" },
 ];
 
-describe("SizesPanel (ALL-183 AC-5, AC-7)", () => {
+describe("SizesPanel (AC-5, AC-7)", () => {
   it("names the person and joins the items that fit", () => {
     render(<SizesPanel sizes={sizes} name="Aaron" giftName="Allbirds Wool Runners Sneakers" />);
     expect(screen.getByText("Aaron's sizes")).toBeInTheDocument();

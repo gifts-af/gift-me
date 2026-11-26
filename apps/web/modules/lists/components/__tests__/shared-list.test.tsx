@@ -250,7 +250,7 @@ describe("SharedList", () => {
   });
 });
 
-describe("the sizes fetch (ALL-183 AC-5, AC-7)", () => {
+describe("the sizes fetch (AC-5, AC-7)", () => {
   const listFor = (isOwner: boolean): SharedListData => ({
     title: "t",
     cardEnabled: true,

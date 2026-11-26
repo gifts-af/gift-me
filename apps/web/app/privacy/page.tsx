@@ -64,7 +64,7 @@ export default function PrivacyPage() {
           <p>
             You can also save your sizes and favorite color in Settings. Each one is private until you switch on Share
             for it. Shared ones can be seen by anyone who has your list link, signed in or not, when they go to claim a
-            gift, so they buy the right size. Turn Share off, or reset your link, and they can&apos;t.
+            gift, so they buy the right size or color. Turn Share off, or reset your link, and they can&apos;t.
           </p>
         </Section>
 

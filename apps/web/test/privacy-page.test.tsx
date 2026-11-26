@@ -39,7 +39,7 @@ describe("the privacy page", () => {
   it("says sizes you share can be seen by anyone with your list link", () => {
     render(<PrivacyPage />);
     expect(section("What your account keeps")).toHaveTextContent(
-      "Shared ones can be seen by anyone who has your list link, signed in or not, when they go to claim a gift",
+      "Shared ones can be seen by anyone who has your list link, signed in or not, when they go to claim a gift, so they buy the right size or color",
     );
   });
 

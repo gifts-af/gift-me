@@ -5,7 +5,7 @@ vi.mock("@/modules/lists", () => ({ getOwnerSizes }));
 
 import { GET } from "../route";
 
-describe("GET /share/[token]/sizes (ALL-183 AC-9)", () => {
+describe("GET /share/[token]/sizes (AC-9)", () => {
   it("returns the sizes as JSON, never cached", async () => {
     getOwnerSizes.mockResolvedValue([{ kind: "shoe", value: "10.5" }]);
     const response = await GET(new Request("http://x/share/t/sizes"), { params: Promise.resolve({ token: "t" }) });

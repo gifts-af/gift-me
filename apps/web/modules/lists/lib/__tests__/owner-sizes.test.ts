@@ -9,7 +9,7 @@ import { getOwnerSizes } from "../lists";
 
 const TOKEN = "11111111-1111-4111-8111-111111111111";
 
-describe("getOwnerSizes (ALL-183 AC-5, AC-7, AC-11)", () => {
+describe("getOwnerSizes (AC-5, AC-7, AC-11)", () => {
   beforeEach(() => {
     rpc.mockReset();
     logEvent.mockReset();

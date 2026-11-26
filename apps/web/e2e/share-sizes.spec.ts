@@ -8,7 +8,7 @@ import { signIn, type Credentials } from "./sign-in";
 // Fresh accounts: one row each.
 const GIFT = "Allbirds Wool Runners Sneakers";
 
-async function saveSizes(page: Page, owner: Credentials, { shareHat }: { shareHat: boolean }) {
+async function saveSizes(page: Page, owner: Credentials, { shareHat, color = false }: { shareHat: boolean; color?: boolean }) {
   await signIn(page, owner);
   await page.goto("/settings");
   await page.getByRole("link", { name: /Sizes and favorites/ }).click();
@@ -17,6 +17,10 @@ async function saveSizes(page: Page, owner: Credentials, { shareHat }: { shareHa
   await page.getByLabel("Hat", { exact: true }).fill("7 1/4");
   await page.getByRole("switch", { name: "Share Shoe" }).click();
   if (shareHat) await page.getByRole("switch", { name: "Share Hat" }).click();
+  if (color) {
+    await page.getByLabel("Favorite color", { exact: true }).fill("Green");
+    await page.getByRole("switch", { name: "Share Favorite color" }).click();
+  }
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
   await page.context().clearCookies();
@@ -27,7 +31,8 @@ async function openAsVisitor(page: Page, path: string, box: "view" | "claim") {
   const sizes = page.waitForResponse((r) => r.url().endsWith("/sizes") && r.request().method() === "GET");
   await page.goto(path);
   await expect(page.getByRole("heading", { name: GIFT })).toBeVisible();
-  await sizes;
+  // The headers aren't enough: a box snapshots the sizes when it opens, so wait for the body.
+  await (await sizes).finished();
   if (box === "view") await page.getByRole("link", { name: /^View on/ }).click();
   else await page.getByRole("button", { name: `Claim ${GIFT}` }).click();
   return page.getByRole("dialog");
@@ -41,7 +46,9 @@ test("a signed-out visitor sees the shared shoe size, not the hat, before buying
   // Nothing is in the page itself (AC-9).
   const html = await (await request.get(path)).text();
   // A bare "10.5" turns up in the logo's SVG path, so look for it as a value.
-  expect(html).not.toMatch(/"10\.5"|>10\.5<|Shoe: 10\.5/);
+  // The page's data is escaped inside a script, so the quotes may come with backslashes.
+  expect(html).not.toMatch(/\?"10\.5\?"|>10\.5<|Shoe: 10\.5|10\.5\?"/);
+  expect(html).not.toMatch(/\?"kind\?":\?"shoe/);
   expect(html).not.toMatch(/Sam.s sizes|Their sizes/);
   expect(html).not.toContain("7 1/4");
 
@@ -57,10 +64,10 @@ test("a signed-out visitor sees the shared shoe size, not the hat, before buying
   await expect(page.getByRole("dialog")).not.toContainText("Hat");
 });
 
-test("with Share turned off the visitor sees no panel", async ({ page }) => {
+test("with Share turned off the visitor sees no shoe size", async ({ page }) => {
   const owner = await createFreshUser("Sam");
   const path = await saveSneakerList(owner);
-  await saveSizes(page, owner, { shareHat: false });
+  await saveSizes(page, owner, { shareHat: false, color: true });
   await signIn(page, owner);
   await page.goto("/settings/sizes");
   await page.getByRole("switch", { name: "Share Shoe" }).click();
@@ -68,11 +75,13 @@ test("with Share turned off the visitor sees no panel", async ({ page }) => {
   await expect(page.getByRole("status").filter({ hasText: /^Saved$/ })).toBeVisible();
   await page.context().clearCookies();
 
-  // openAsVisitor waits for the response, so an empty answer can't pass by being early.
+  // openAsVisitor waits for the whole response, so the missing shoe can't be down to being early.
+  // The shared color is the control: the panel does show, just without the shoe.
   const view = await openAsVisitor(page, path, "view");
   await expect(view.getByText("Going to buy it?")).toBeVisible();
+  await expect(view.getByText("Favorite color: Green")).toBeVisible();
+  await expect(view).not.toContainText("Shoe");
   await expect(view).not.toContainText("10.5");
-  await expect(view).not.toContainText("sizes");
 });
 
 test("the Sizes screen fits the narrowest phone", { tag: "@layout" }, async ({ page }) => {
