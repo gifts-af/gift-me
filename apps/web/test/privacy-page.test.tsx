@@ -7,7 +7,7 @@ const section = (name: string) => screen.getByRole("heading", { level: 2, name }
 describe("the privacy page", () => {
   it("says when it last changed", () => {
     render(<PrivacyPage />);
-    expect(screen.getByText("Last updated 25 November 2026")).toBeInTheDocument();
+    expect(screen.getByText("Last updated 26 November 2026")).toBeInTheDocument();
   });
 
   it("covers Google sign-in and contacts, with Google's Limited Use statement", () => {
