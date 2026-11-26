@@ -302,7 +302,8 @@ export default function GiftApp({
     if (!sizeAsk) return;
     const dismissed = dismissedSizes(sizeAsk.userId);
     const kind = sizeKindsFor(draft.name).find((k) => k !== "color" && missingSizes.has(k) && !dismissed.has(k));
-    setAskingSize(kind ? { kind, key: Date.now() } : null);
+    // A gift with nothing to ask leaves an open card alone, so a half-typed size isn't lost.
+    if (kind) setAskingSize((now) => (now?.kind === kind ? now : { kind, key: Date.now() }));
     // The add panel announces the add; this says what appeared below it.
     if (kind) setAnnouncement(`Add your ${sizeName(kind)}? Asked below, optional.`);
   }

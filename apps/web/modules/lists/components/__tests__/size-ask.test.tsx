@@ -163,7 +163,8 @@ describe("asking for a missing size", () => {
     await user.type(screen.getByLabelText("Shirt or top size"), "M");
     await user.click(screen.getByRole("button", { name: "Save and share" }));
     await addByHand("Polo Shirt");
-    expect(card()).toBeNull();
+    // The card on its way is the only one: no second ask.
+    expect(screen.getAllByRole("region", { name: /Add your .* size\?/ })).toHaveLength(1);
     await act(async () => finish({ ok: false, error: "That didn't save. Try again." }));
     await addByHand("Rugby Shirt");
     expect(card()).toHaveAccessibleName("Add your shirt or top size?");
@@ -178,5 +179,13 @@ describe("asking for a missing size", () => {
     await user.keyboard("{Enter}{Enter}");
     await act(async () => finish({ ok: true }));
     expect(save).toHaveBeenCalledOnce();
+  });
+
+  it("keeps a half-typed size when a gift with nothing to ask is added", async () => {
+    render(app());
+    await addByHand("Flannel Shirt");
+    await user.type(screen.getByLabelText("Shirt or top size"), "L");
+    await addByHand("Stanley Tumbler");
+    expect(screen.getByLabelText("Shirt or top size")).toHaveValue("L");
   });
 });

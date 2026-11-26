@@ -76,7 +76,7 @@ export async function saveMySizes(db: SizesDb, userId: string, row: SizesRow): P
   return true;
 }
 
-/** One size typed on My list (ALL-184): the same rules as a Settings box, but empty is refused. */
+/** One size typed on My list (T100): the same rules as a Settings box, but empty is refused. */
 export function parseOneSize(raw: string): { ok: true; value: string } | { ok: false; error: string } {
   const value = raw.trim();
   if (!value) return { ok: false, error: "Type a size, or pick Not now." };

@@ -39,7 +39,7 @@ export async function removeSizesAction(): Promise<SizesResult> {
   return (await removeMySizes(s.db, s.userId)) ? refresh() : { ok: false, error: "That didn't work. Try again." };
 }
 
-// The kinds My list may ask for: every size, never favorite color (ALL-184).
+// The kinds My list may ask for: every size, never favorite color (T100).
 const ASKABLE = new Set<string>(SIZE_KINDS.map(({ kind }) => kind).filter((kind) => kind !== "color"));
 
 export type OneSizeResult = { ok: true } | { ok: false; error: string };
