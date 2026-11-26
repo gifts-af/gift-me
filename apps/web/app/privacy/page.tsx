@@ -30,7 +30,7 @@ export default function PrivacyPage() {
       <main className="mx-auto flex w-full max-w-2xl flex-col gap-7 px-4 pb-12 pt-6 text-[15px] leading-relaxed">
         <div className="flex flex-col gap-1.5">
           <h1 className="text-[28px] font-extrabold leading-tight tracking-tight">Privacy</h1>
-          <p className="text-muted-foreground">Last updated 25 November 2026</p>
+          <p className="text-muted-foreground">Last updated 26 November 2026</p>
         </div>
 
         <p>
@@ -155,7 +155,10 @@ export default function PrivacyPage() {
         <Section title="Who else handles it">
           <p>We share data only with the services that run {APP_NAME}, and only what each one needs:</p>
           <ul className="list-disc pl-5">
-            <li>Supabase stores the data, and Vercel runs the site.</li>
+            <li>
+              Supabase stores the data, and Vercel runs the site. Vercel also counts page visits for us, without
+              cookies and without anything that identifies you.
+            </li>
             <li>Anthropic&apos;s Claude, through Vercel&apos;s AI Gateway, reads captures and suggests gift ideas.</li>
             <li>Resend sends our emails and receives the notes you email us. Feedback and concierge requests reach us in Gmail.</li>
             <li>Cloudflare checks that our public forms are used by people, not bots.</li>
