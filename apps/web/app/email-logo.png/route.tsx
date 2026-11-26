@@ -7,8 +7,10 @@ import { INK, tagSvg } from "@/lib/logo-art";
 
 // The GiftsAF wordmark at the top of every email (ALL-71): "Gifts" in heavy
 // type, then the yellow "AF" tag, like components/logo.tsx. A PNG because
-// Gmail doesn't show SVG. Emails are always light (T33), so it's drawn on
-// white. Drawn at twice the size the email shows it.
+// Gmail doesn't show SVG. Drawn on a white badge with rounded corners: on a
+// light email the badge can't be seen, and when a phone's dark mode darkens
+// the email (Gmail does, and leaves pictures alone) it reads as a sticker
+// instead of a white box. Drawn at twice the size the email shows it.
 const SCALE = 2;
 
 export async function GET() {
@@ -29,16 +31,18 @@ export async function GET() {
           display: "flex",
           alignItems: "center",
           background: "#ffffff",
+          borderRadius: 16,
+          paddingLeft: 12,
           color: INK,
           fontFamily: "Geist",
-          fontSize: 48,
+          fontSize: 42,
           fontWeight: 900,
           letterSpacing: -1.5,
         }}
       >
         Gifts
         {/* eslint-disable-next-line @next/next/no-img-element -- ImageResponse draws an <img>, not a page */}
-        <img src={tag} width={94} height={80} alt="" style={{ marginLeft: 4, marginTop: -12 }} />
+        <img src={tag} width={84} height={72} alt="" style={{ marginLeft: 3, marginTop: -10 }} />
       </div>
     ),
     {
