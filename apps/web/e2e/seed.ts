@@ -41,6 +41,24 @@ export async function saveOneGiftList(user: Credentials): Promise<void> {
   });
 }
 
+/** Saves a list with a sneaker gift that has a store link, and returns its share path. */
+export async function saveSneakerList(user: Credentials): Promise<string> {
+  await rpc(user, "lists", "save_list_checked", {
+    p_list_id: null,
+    p_title: null,
+    p_items: [{ id: null, name: "Allbirds Wool Runners Sneakers", price_cents: 9500, image_url: null, product_url: "https://www.allbirds.com/products/mens-wool-runners", asin: null, source: "manual", added_at: null }],
+    p_expected: null,
+  });
+  const { url, publishableKey } = localSupabase();
+  const { access_token, user: me } = await session(user);
+  const res = await fetch(`${url}/rest/v1/lists?select=share_token&owner_id=eq.${me.id}`, {
+    headers: { apikey: publishableKey, Authorization: `Bearer ${access_token}`, "Accept-Profile": "lists" },
+  });
+  if (!res.ok) throw new Error(`Couldn't read the share token: ${res.status} ${await res.text()}`);
+  const [list] = (await res.json()) as { share_token: string }[];
+  return `/share/${list.share_token}`;
+}
+
 /** Links the buyer's person to a list `owner` has just made, with one gift per photo (null: a gift without one). */
 export async function linkListWithPhotos(owner: Credentials, buyer: Credentials, personId: string, photos: (string | null)[]): Promise<void> {
   await rpc(owner, "lists", "save_list_checked", {
