@@ -193,6 +193,8 @@ This is a row under You for someone with a list: "Not added", "3 saved, 1 shared
 
 **The sizes panel** is a muted rounded box under the gift name in "Going to buy it?" and in the claim box on someone else's list: "Sam's sizes" (or "Their sizes") and the items that fit the gift, such as "Shoe: 10.5 · Favorite color: Green". It shows only what its box had when it opened, so sizes that arrive late never push the buttons down under a thumb; with none, the box looks as it always did. A name that matches a kind shows only that kind and favorite color; with no match it shows everything shared (T99).
 
+**Asking on add (ALL-184).** When a gift added on My list has a name that matches a size you haven't saved (the same matcher), a muted card under the add panel asks "Add your shirt or top size?", says "People who claim gifts from your list will see it, so they get the right one.", and has the size box, Save and Not now. Save stores that size and shares it, leaving the others as they were, and the card says "Saved. People who claim will see your shirt or top size." with "Change it in Settings". Not now hides it, and that size isn't asked again on this device. Favorite color is never asked this way. The card goes with the next add, and when the page is left. Gifts added from the extension don't ask.
+
 ## Gifts in progress
 
 **Every gift round that can still change, or has a gift on its way, is one row that opens its round page** (`/rounds/<id>`). Nothing shows when there are none, or when they can't be read.

@@ -14,6 +14,8 @@ import {
   type SaveStatus,
 } from "@/modules/lists/lib/list-saver";
 import type { Gift, MyList } from "@/modules/lists/lib/lists";
+import { sizeKindsFor } from "@/modules/lists/lib/relevant-sizes";
+import type { SizeKind } from "@/lib/size-kinds";
 import AddGiftPanel, { type NewGift } from "./add-gift-panel";
 import GiftList from "./gift-list";
 import GiftSummary from "./gift-summary";
@@ -21,6 +23,7 @@ import Link from "next/link";
 import { PageFrame } from "@/components/app-shell/page-frame";
 import NamePrompt, { skippedNamePrompt } from "./name-prompt";
 import ShareButton from "./share-button";
+import SizeAsk, { dismissedSizes, type SaveSize } from "./size-ask";
 import { Banner, inputClass } from "./ui";
 
 export { UNDO_MS } from "@/modules/lists/lib/list-saver";
@@ -144,16 +147,26 @@ type GiftAppProps = {
   shareHint?: ReactNode;
   needsName?: boolean;
   saveName?: SaveName | null;
+  sizeAsk?: { missing: SizeKind[]; save: SaveSize } | null;
 };
 
 /**
  * `initial` is null for a guest. `footer` shows below the list once a saved list exists.
  * `shareHint` shows beside the save status once Share has been used.
  * `needsName` (no display name yet) makes Share ask for one, saved with `saveName` (ALL-136).
+ * `sizeAsk` (signed in, sizes sharing on) asks for a missing size when a gift
+ * that needs one is added: `missing` is every size not saved yet.
  * The list is built from `initial` once: a later render with new data (a
  * router refresh) doesn't replace what's on screen.
  */
-export default function GiftApp({ initial, footer = null, shareHint = null, needsName = false, saveName = null }: GiftAppProps) {
+export default function GiftApp({
+  initial,
+  footer = null,
+  shareHint = null,
+  needsName = false,
+  saveName = null,
+  sizeAsk = null,
+}: GiftAppProps) {
   const isGuest = initial === null;
   const loadError = initial?.loadError ?? null;
   // Fixed at the first render, so a refresh that fails to load can't stop a
@@ -276,9 +289,20 @@ export default function GiftApp({ initial, footer = null, shareHint = null, need
     return () => document.removeEventListener("click", confirmLeave, true);
   }, [askBeforeLeaving]);
 
+  // The size the card is asking for, and the sizes still missing: one saved
+  // here isn't asked for again, without waiting for a reload.
+  const [askingSize, setAskingSize] = useState<{ kind: SizeKind; key: number } | null>(null);
+  const [missingSizes, setMissingSizes] = useState(() => new Set(sizeAsk?.missing ?? []));
+  // Next keeps this page's state when it's left: an old card shouldn't greet you on return.
+  useLayoutEffect(() => () => setAskingSize(null), []);
+
   function addGift(draft: NewGift) {
     setNotice("");
     saver.add({ ...draft, id: newId(), addedAt: Date.now() });
+    if (!sizeAsk) return;
+    const dismissed = dismissedSizes();
+    const kind = sizeKindsFor(draft.name).find((k) => k !== "color" && missingSizes.has(k) && !dismissed.has(k));
+    setAskingSize(kind ? { kind, key: Date.now() } : null);
   }
 
   function removeGift(id: string) {
@@ -443,6 +467,22 @@ export default function GiftApp({ initial, footer = null, shareHint = null, need
           readStorePage={isGuest ? undefined : readStorePage}
           lookUpAmazon={isGuest ? undefined : lookUpAmazon}
         />
+
+        {sizeAsk && askingSize && !isGuest && (
+          <SizeAsk
+            key={askingSize.key}
+            kind={askingSize.kind}
+            save={sizeAsk.save}
+            onSaved={(kind) =>
+              setMissingSizes((now) => {
+                const next = new Set(now);
+                next.delete(kind);
+                return next;
+              })
+            }
+            onClose={() => setAskingSize(null)}
+          />
+        )}
 
         <section aria-labelledby="list-heading" className="pt-2">
           <GiftList gifts={gifts} onRemove={removeGift} />

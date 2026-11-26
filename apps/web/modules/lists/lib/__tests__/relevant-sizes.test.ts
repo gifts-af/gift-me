@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { SIZE_KINDS, type SharedSize, type SizeKind } from "@/lib/size-kinds";
-import { relevantSizes } from "../relevant-sizes";
+import { relevantSizes, sizeKindsFor } from "../relevant-sizes";
 
 const ALL: SharedSize[] = SIZE_KINDS.map(({ kind }) => ({ kind, value: `v-${kind}` }));
 const NO_COLOR = ALL.filter((s) => s.kind !== "color");
@@ -103,5 +103,24 @@ describe("relevantSizes", () => {
 
   it("returns an empty list when nothing is shared", () => {
     expect(relevantSizes("Wool Beanie", [])).toEqual([]);
+  });
+});
+
+describe("sizeKindsFor (ALL-184: which size to ask for on add)", () => {
+  it.each<[string, SizeKind[]]>([
+    ["Flannel Shirt", ["top"]],
+    ["Nike Air Max Sneakers", ["shoe"]],
+    ["Men's Dress Shoes", ["shoe"]],
+    ["Converse High Top", ["shoe"]],
+    ["Wool Sweater and Beanie Set", ["top", "hat"]],
+    ["Ring Light", ["ring"]],
+    ["Stanley Tumbler", []],
+    ["Dress Socks", []],
+  ])("%s → %j", (name, kinds) => {
+    expect(sizeKindsFor(name)).toEqual(kinds);
+  });
+
+  it("never names favorite color", () => {
+    expect(sizeKindsFor("Red Shirt")).toEqual(["top"]);
   });
 });

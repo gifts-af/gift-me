@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const t = vi.hoisted(() => ({ user: "u1" as string | null, on: true, save: vi.fn(), remove: vi.fn(), revalidate: vi.fn() }));
+const t = vi.hoisted(() => ({ user: "u1" as string | null, on: true, save: vi.fn(), saveOne: vi.fn(), remove: vi.fn(), revalidate: vi.fn() }));
 vi.mock("server-only", () => ({}));
 vi.mock("next/cache", () => ({ revalidatePath: t.revalidate }));
 vi.mock("@/lib/app-settings", () => ({ appSettingInt: vi.fn() }));
@@ -11,9 +11,10 @@ vi.mock("@/lib/account-sizes", async (original) => ({
   ...(await original<typeof import("@/lib/account-sizes")>()),
   sizesSharingOn: async () => t.on,
   saveMySizes: t.save,
+  saveOneSize: t.saveOne,
   removeMySizes: t.remove,
 }));
-const { saveSizesAction, removeSizesAction } = await import("../sizes-actions");
+const { saveSizesAction, removeSizesAction, saveOneSizeAction } = await import("../sizes-actions");
 
 const form = (fields: Record<string, string>) => {
   const f = new FormData();
@@ -27,6 +28,7 @@ describe("sizes actions", () => {
     t.on = true;
     t.save.mockReset().mockResolvedValue(true);
     t.remove.mockReset().mockResolvedValue(true);
+    t.saveOne.mockReset().mockResolvedValue(true);
     t.revalidate.mockClear();
   });
 
@@ -62,5 +64,33 @@ describe("sizes actions", () => {
     expect((await saveSizesAction(form({ top: "M" }))).ok).toBe(false);
     expect((await removeSizesAction()).ok).toBe(false);
     expect(t.remove).not.toHaveBeenCalled();
+  });
+
+  describe("one size from My list (ALL-184)", () => {
+    it("saves that size, shared, for the session's user", async () => {
+      expect(await saveOneSizeAction("shoe", " 9 ")).toEqual({ ok: true });
+      expect(t.saveOne).toHaveBeenCalledWith(expect.anything(), "u1", "shoe", "9");
+      expect(t.revalidate.mock.calls.flat()).toEqual(["/settings", "/settings/sizes"]);
+    });
+
+    it.each(["color", "shoe_shared", "user_id", ""])("refuses the kind %j", async (kind) => {
+      expect((await saveOneSizeAction(kind as never, "M")).ok).toBe(false);
+      expect(t.saveOne).not.toHaveBeenCalled();
+    });
+
+    it("refuses a bad value, when off, or signed out", async () => {
+      expect(await saveOneSizeAction("top", "a".repeat(31))).toEqual({ ok: false, error: "Use 30 characters or fewer." });
+      t.on = false;
+      expect((await saveOneSizeAction("top", "M")).ok).toBe(false);
+      t.on = true;
+      t.user = null;
+      expect((await saveOneSizeAction("top", "M")).ok).toBe(false);
+      expect(t.saveOne).not.toHaveBeenCalled();
+    });
+
+    it("says so when the save fails", async () => {
+      t.saveOne.mockResolvedValue(false);
+      expect(await saveOneSizeAction("top", "M")).toEqual({ ok: false, error: "That didn't save. Try again." });
+    });
   });
 });

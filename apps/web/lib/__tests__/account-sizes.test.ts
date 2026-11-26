@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
-import { getMySizes, parseSizesForm, removeMySizes, saveMySizes, sizesSharingOn, type SizesDb, type SizesRow } from "../account-sizes";
+import { getMySizes, parseOneSize, parseSizesForm, removeMySizes, saveMySizes, saveOneSize, sizesSharingOn, type SizesDb, type SizesRow } from "../account-sizes";
 
 // The real table and its rules are in account_sizes.test.sql; these check what
 // each result turns into, and that events never hold a value or a label.
@@ -132,5 +132,27 @@ describe("sizesSharingOn (AC-10)", () => {
       }),
     ).toBe(false);
     expect(logged()).toContain("account_sizes.setting_failed");
+  });
+});
+
+describe("one size at a time (ALL-184)", () => {
+  it("checks the value by the Settings rules", () => {
+    expect(parseOneSize("  M ")).toEqual({ ok: true, value: "M" });
+    expect(parseOneSize("   ")).toEqual({ ok: false, error: "Type a size, or pick Not now." });
+    expect(parseOneSize("a".repeat(31))).toEqual({ ok: false, error: "Use 30 characters or fewer." });
+    expect(parseOneSize("two\nlines")).toEqual({ ok: false, error: "Take out line breaks and tabs." });
+  });
+
+  it("upserts only that size and its share, so the others stay as they were", async () => {
+    const t = db({});
+    expect(await saveOneSize(t.client, "u1", "shoe", "9.5")).toBe(true);
+    expect(t.upsert).toHaveBeenCalledWith({ user_id: "u1", shoe: "9.5", shoe_shared: true }, { onConflict: "user_id" });
+    expect(logged()).toContain("account_sizes.saved");
+    expect(logged()).not.toContain("9.5");
+  });
+
+  it("reports a failed save", async () => {
+    expect(await saveOneSize(db({ error: { code: "23514" } }).client, "u1", "top", "M")).toBe(false);
+    expect(logged()).toContain("23514");
   });
 });

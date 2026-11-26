@@ -43,14 +43,20 @@ export type ParsedSizes = { ok: true; row: SizesRow } | { ok: false; errors: Par
 
 // Counted in code points, as Postgres char_length counts them; .length would
 // count an emoji as two and refuse a value the database accepts.
+function valueError(value: string): string | null {
+  if ([...value].length > MAX_LENGTH) return `Use ${MAX_LENGTH} characters or fewer.`;
+  if (/[\u0000-\u001f\u007f]/.test(value)) return "Take out line breaks and tabs.";
+  return null;
+}
+
 export function parseSizesForm(form: FormData): ParsedSizes {
   const row: Record<string, string | null | boolean> = {};
   const errors: Partial<Record<SizeKind, string>> = {};
   for (const { kind } of SIZE_KINDS) {
     const raw = form.get(kind);
     const value = typeof raw === "string" ? raw.trim() : "";
-    if ([...value].length > MAX_LENGTH) errors[kind] = `Use ${MAX_LENGTH} characters or fewer.`;
-    else if (/[\u0000-\u001f\u007f]/.test(value)) errors[kind] = "Take out line breaks and tabs.";
+    const error = valueError(value);
+    if (error) errors[kind] = error;
     row[kind] = value || null;
     // Sharing an empty box means nothing, so it's dropped rather than refused.
     row[`${kind}_shared`] = value !== "" && form.get(`${kind}_shared`) === "on";
@@ -67,6 +73,30 @@ export async function saveMySizes(db: SizesDb, userId: string, row: SizesRow): P
     return false;
   }
   logEvent("account_sizes.saved", { user_id: userId });
+  return true;
+}
+
+/** One size typed on My list (ALL-184): the same rules as a Settings box, but empty is refused. */
+export function parseOneSize(raw: string): { ok: true; value: string } | { ok: false; error: string } {
+  const value = raw.trim();
+  if (!value) return { ok: false, error: "Type a size, or pick Not now." };
+  const error = valueError(value);
+  return error ? { ok: false, error } : { ok: true, value };
+}
+
+/**
+ * Saves one size, shared. The upsert names only that column and its switch,
+ * so every other saved size and switch stays as it was.
+ */
+export async function saveOneSize(db: SizesDb, userId: string, kind: SizeKind, value: string): Promise<boolean> {
+  // A computed key widens to an index signature, which the row type refuses.
+  const row = { user_id: userId, [kind]: value, [`${kind}_shared`]: true } as Partial<SizesRow> & { user_id: string };
+  const { error } = await db.from(TABLE).upsert(row, { onConflict: "user_id" });
+  if (error) {
+    failed(userId, "save_one", error);
+    return false;
+  }
+  logEvent("account_sizes.saved", { user_id: userId, kind });
   return true;
 }
 
