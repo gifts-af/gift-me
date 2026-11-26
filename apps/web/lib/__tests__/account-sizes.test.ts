@@ -13,8 +13,9 @@ const logged = () => log.mock.calls.map((c) => String(c[0])).join("\n");
 function db(result: { data?: unknown; error?: { code: string } | null }) {
   const answer = Promise.resolve({ data: result.data ?? null, error: result.error ?? null });
   const upsert = vi.fn(() => answer);
-  const chain = { select: () => chain, eq: () => Object.assign(answer, { maybeSingle: () => answer }), delete: () => chain, upsert };
-  return { client: { from: () => chain } as unknown as SizesDb, upsert };
+  const del = vi.fn(() => chain);
+  const chain = { select: () => chain, eq: () => Object.assign(answer, { maybeSingle: () => answer }), delete: del, upsert };
+  return { client: { from: () => chain } as unknown as SizesDb, upsert, del };
 }
 
 const form = (fields: Record<string, string>) => {
@@ -70,10 +71,10 @@ describe("parseSizesForm (AC-3)", () => {
     if (!r.ok) expect(r.errors.color).toMatch(/30/);
   });
 
-  it.each(["two\nlines", "tab\there", "bell\u0007", "del\u007f"])("refuses control characters in %j", (value) => {
+  it.each(["two\nlines", "tab\there", "nul\u0000", "bell\u0007", "del\u007f"])("refuses control characters in %j", (value) => {
     const r = parseSizesForm(form({ ring: value }));
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.errors.ring).toBeTruthy();
+    if (!r.ok) expect(r.errors.ring).toBe("Take out line breaks and tabs.");
   });
 });
 
@@ -87,6 +88,18 @@ describe("saving and removing", () => {
     expect(logged()).toContain("account_sizes.saved");
     expect(logged()).toContain("u1");
     expect(logged()).not.toMatch(/"M"|Shirt/);
+  });
+
+  it("deletes the row, in one call, when every box is empty", async () => {
+    const t = db({});
+    const empty = parseSizesForm(form({}));
+    expect(empty.ok).toBe(true);
+    if (!empty.ok) return;
+    expect(await saveMySizes(t.client, "u1", empty.row)).toBe(true);
+    expect(t.upsert).not.toHaveBeenCalled();
+    expect(t.del).toHaveBeenCalledOnce();
+    expect(logged()).toContain("account_sizes.removed");
+    expect(logged()).not.toContain("account_sizes.saved");
   });
 
   it("reports a failed save and remove, with the code", async () => {

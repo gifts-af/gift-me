@@ -50,7 +50,7 @@ export function parseSizesForm(form: FormData): ParsedSizes {
     const raw = form.get(kind);
     const value = typeof raw === "string" ? raw.trim() : "";
     if ([...value].length > MAX_LENGTH) errors[kind] = `Use ${MAX_LENGTH} characters or fewer.`;
-    else if (/[\u0000-\u001f\u007f]/.test(value)) errors[kind] = "Use letters, numbers or spaces only, with no line breaks.";
+    else if (/[\u0000-\u001f\u007f]/.test(value)) errors[kind] = "Take out line breaks and tabs.";
     row[kind] = value || null;
     // Sharing an empty box means nothing, so it's dropped rather than refused.
     row[`${kind}_shared`] = value !== "" && form.get(`${kind}_shared`) === "on";
@@ -59,6 +59,8 @@ export function parseSizesForm(form: FormData): ParsedSizes {
 }
 
 export async function saveMySizes(db: SizesDb, userId: string, row: SizesRow): Promise<boolean> {
+  // Nothing left to keep: a row of nulls would only linger, so it goes.
+  if (SIZE_KINDS.every(({ kind }) => row[kind] === null)) return removeMySizes(db, userId);
   const { error } = await db.from(TABLE).upsert({ ...row, user_id: userId }, { onConflict: "user_id" });
   if (error) {
     failed(userId, "save", error);

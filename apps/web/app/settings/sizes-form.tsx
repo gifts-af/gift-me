@@ -151,7 +151,7 @@ export function SizesForm({
         {hasSaved && (
           <Button
             type="button"
-            variant="ghost"
+            variant="outline"
             disabled={busy}
             onClick={() =>
               void run(removeAction, "That didn't work. Try again.", () => {

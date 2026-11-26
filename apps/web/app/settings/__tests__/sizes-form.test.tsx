@@ -77,6 +77,11 @@ describe("SizesForm", () => {
     expect(await screen.findByText("That didn't save. Try again.")).toBeVisible();
   });
 
+  it("draws Remove all with an edge, not as bare text (principle 7)", () => {
+    setup({ saved: items({ top: { value: "M", shared: false } }) });
+    expect(button("Remove all")!.className).toMatch(/border/);
+  });
+
   it("removes everything and empties the boxes", async () => {
     const t = setup({ saved: items({ top: { value: "M", shared: false } }) });
     t.remove.mockImplementationOnce(async () => {
