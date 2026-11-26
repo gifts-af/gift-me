@@ -136,6 +136,7 @@ One line each (CLAUDE.md > Scope freeze). Reviewed when the freeze lifts.
 - Give's layout shifts as it loads (ALL-179).
 - A concierge request whose release fails shows as sent (ALL-179).
 - Privacy and Feedback links inside the app (ALL-179).
+- "No ideas" emails go one per round: one account got four at once on 2026-11-26; group them into one, like failures (ALL-116).
 
 ## A common thread
 
