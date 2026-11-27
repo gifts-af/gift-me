@@ -29,7 +29,7 @@ function expectFrame(text: string) {
   const body = screen.getByText(text, { exact: false });
   expect(banner.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   const profile = screen.getByRole("link", { name: "See Jimmy's profile" });
-  expect(profile).toHaveAttribute("href", "https://app.test/people/p-j");
+  expect(profile).toHaveAttribute("href", "https://app.test/people/p-j/know");
   expect(profile).toHaveAttribute("target", "_blank");
   expect(screen.getByRole("button", { name: "Capture another" })).toBeInTheDocument();
 }

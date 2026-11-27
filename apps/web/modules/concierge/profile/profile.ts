@@ -15,6 +15,7 @@ import {
   type ReadinessSettings,
 } from "@gifts-af/core";
 import { logEvent } from "@/lib/log";
+import { valueKey } from "../capture/extract";
 import { hasPaidFeatures } from "../paid-features";
 import type { SaveResult } from "../settings";
 import type { Answer } from "./rules";
@@ -228,7 +229,8 @@ export async function skipQuestion(db: Db, personId: string, key: QuestionKey, p
  * "Add something" on What we know: a fact the buyer typed, so it's confirmed, with the
  * "You told us" source (`note`). The insert sets `changed_at`, so it counts as a new fact and a
  * round whose last search found nothing is searched again (T68). One they turned off comes back
- * on, as an answered question does: they just told us it's true. `edit` comes from `parseFactEdit`.
+ * on, as an answered question does, and a ✨ suggestion is confirmed: they just told us it's true.
+ * `edit` comes from `parseFactEdit`.
  */
 export async function addFact(
   db: Db,
@@ -258,21 +260,22 @@ export async function addFact(
     return { ok: false, error: "That didn't save. Try again." };
   }
 
-  // Already saved: on again if it was off, else say so. `value_key` is the value as the unique
-  // index compares it; parseFactEdit already trimmed and collapsed the spaces.
-  const turned = await facts
+  // Already saved. Turned off: on again. A ✨ suggestion: typing it vouches for it, as "Looks
+  // right" does (only turning on moves changed_at, so that alone isn't a new fact). Otherwise
+  // say so. `value_key` is matched the way the unique index compares values.
+  const vouched = await facts
     .update({ active: true, confirmed: true })
     .eq("person_id", personId)
     .eq("category", edit.category)
-    .eq("value_key", edit.value.toLowerCase())
-    .eq("active", false)
+    .eq("value_key", valueKey(edit.value))
+    .or("active.eq.false,confirmed.eq.false")
     .select("id");
-  if (turned.error) {
-    logEvent("profile.fact_add_failed", { person_id: personId, code: turned.error.code });
+  if (vouched.error) {
+    logEvent("profile.fact_add_failed", { person_id: personId, code: vouched.error.code });
     return { ok: false, error: "That didn't save. Try again." };
   }
-  if (turned.data.length === 0) return { ok: false, error: "That's already on their profile." };
-  logEvent("profile.fact_turned_on", { user_id: await currentUserId(db), fact_id: turned.data[0].id });
+  if (vouched.data.length === 0) return { ok: false, error: "That's already on their profile." };
+  logEvent("profile.fact_added_again", { user_id: await currentUserId(db), fact_id: vouched.data[0].id });
   return { ok: true };
 }
 

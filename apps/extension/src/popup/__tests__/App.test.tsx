@@ -383,7 +383,7 @@ describe("Here's what I learned (ALL-25)", () => {
     expect(screen.getByText("Wants: a ceramic pour-over set")).toBeInTheDocument();
     expect(screen.getByText("Already has: Owala water bottle")).toBeInTheDocument();
     const link = screen.getByRole("link", { name: "See Mom's profile" });
-    expect(link).toHaveAttribute("href", "https://app.test/people/p-mom");
+    expect(link).toHaveAttribute("href", "https://app.test/people/p-mom/know");
     expect(link).toHaveAttribute("target", "_blank");
   });
 

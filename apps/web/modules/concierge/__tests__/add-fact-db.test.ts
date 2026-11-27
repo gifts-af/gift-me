@@ -50,7 +50,7 @@ describe.skipIf(!stack)("addFact (real local database)", () => {
   /** A round whose one search, a minute ago, found nothing, with an older fact. */
   async function waitingRound(userId: string, personId: string) {
     await pg.query(
-      "insert into concierge.profile_facts (user_id, person_id, category, value, source, updated_at) values ($1, $2, 'interest', 'Tea', 'question', now() - interval '5 days')",
+      "insert into concierge.profile_facts (user_id, person_id, category, value, source, confirmed, updated_at) values ($1, $2, 'interest', 'Tea', 'question', true, now() - interval '5 days')",
       [userId, personId],
     );
     const occasionId = await one("insert into concierge.occasions (user_id, person_id, kind, month, day) values ($1, $2, 'birthday', 3, 14) returning id", [userId, personId]);
@@ -79,7 +79,7 @@ describe.skipIf(!stack)("addFact (real local database)", () => {
     expect(await addFact(u.db, u.personId, { category: "interest", value: "pottery" })).toEqual({ ok: true });
 
     expect(await facts(u.personId)).toEqual([
-      { category: "interest", value: "Tea", source: "question", confirmed: false, active: true },
+      { category: "interest", value: "Tea", source: "question", confirmed: true, active: true },
       { category: "interest", value: "pottery", source: "note", confirmed: true, active: true },
     ]);
     expect(await runsLeft(roundId)).toBe(true);
@@ -103,6 +103,19 @@ describe.skipIf(!stack)("addFact (real local database)", () => {
     const result = await addFact(u.db, u.personId, { category: "interest", value: "tea" });
     expect(result).toEqual({ ok: false, error: "That's already on their profile." });
     expect(await facts(u.personId)).toHaveLength(1);
+    expect(await runsLeft(roundId)).toBe(false);
+  });
+
+  // Typing what a ✨ suggestion already says vouches for it, as "Looks right" does. It's the same
+  // fact the last search read, so it doesn't count as new.
+  it("confirms a matching AI suggestion instead of saying it's there", async () => {
+    const u = await newUser();
+    const roundId = await waitingRound(u.id, u.personId);
+    await pg.query("update concierge.profile_facts set source = 'capture', confirmed = false where person_id = $1", [u.personId]);
+
+    expect(await addFact(u.db, u.personId, { category: "interest", value: "tea" })).toEqual({ ok: true });
+
+    expect(await facts(u.personId)).toEqual([{ category: "interest", value: "Tea", source: "capture", confirmed: true, active: true }]);
     expect(await runsLeft(roundId)).toBe(false);
   });
 

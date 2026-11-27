@@ -70,7 +70,7 @@ export function Learned({
         </p>
       )}
       <div className="flex gap-2.5">
-        <a className="btn-primary flex-1" href={`${config.appOrigin}/people/${personId}`} target="_blank" rel="noreferrer">
+        <a className="btn-primary flex-1" href={`${config.appOrigin}/people/${personId}/know`} target="_blank" rel="noreferrer">
           See {name}'s profile
         </a>
         <button className="btn-outline flex-1" type="button" onClick={onAnother} disabled={busy}>

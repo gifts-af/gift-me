@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CATEGORY_GROUPS } from "@gifts-af/core";
+import { isSensitive } from "@/lib/ai/sensitive";
 
 // "Add something" on What we know (ALL-186): the words and a kind, saved as a new fact.
 
@@ -30,9 +31,26 @@ const sent = (fn: { mock: { calls: [unknown, FormData][] } }) => Object.fromEntr
 describe("AddFact", () => {
   it("has a box with an example, and every kind, starting on Interests", () => {
     setup();
-    expect(box()).toHaveAttribute("placeholder", expect.stringMatching(/^Loves pottery, size M/));
+    expect(box()).toHaveAttribute("placeholder", "Loves pottery, cold brew…");
     expect(kind()).toHaveValue("interest");
     expect([...(kind() as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(CATEGORY_GROUPS.map((g) => g.label));
+  });
+
+  // An example that mixes kinds invites a size saved as an interest (review of ALL-186).
+  it("gives each kind its own example, never one the sensitive-topics rule would refuse", async () => {
+    const { user } = setup();
+    await user.selectOptions(kind(), "size");
+    expect(box()).toHaveAttribute("placeholder", "Size M tops, shoe size 9…");
+    const examples = new Set<string>();
+    for (const g of CATEGORY_GROUPS) {
+      await user.selectOptions(kind(), g.category);
+      const example = box().getAttribute("placeholder") ?? "";
+      expect(example, g.category).toMatch(/…$/);
+      expect(isSensitive(example), example).toBe(false);
+      expect(example, example).not.toMatch(/allerg|diet|gluten|vegan|sober|medic/i);
+      examples.add(example);
+    }
+    expect(examples.size).toBe(CATEGORY_GROUPS.length);
   });
 
   it("sends the words and the kind picked, then empties the box and says Added", async () => {

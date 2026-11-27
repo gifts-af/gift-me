@@ -11,11 +11,27 @@ import type { SaveResult } from "@/modules/concierge";
 
 // "Add something" at the top of What we know: the buyer's own words and a kind, saved as a fact
 // "You told us". The words live in state, not the form: React clears a form after its action, and
-// refused words must stay put. Most of what people add is something the person likes.
+// refused words must stay put. The kind starts on Interests: most of what people add is
+// something the person likes.
 
 type Action = (previous: null, formData: FormData) => Promise<SaveResult>;
 
 const FIRST_KIND: FactCategory = "interest";
+
+// The box's example follows the kind picked, so it never invites a size saved as an interest.
+// No health, diet or other sensitive examples: those are refused (C-8).
+const EXAMPLES: Record<FactCategory, string> = {
+  interest: "Loves pottery, cold brew…",
+  wants: "A new rain jacket, concert tickets…",
+  loved: "The cookbook from last Christmas…",
+  size: "Size M tops, shoe size 9…",
+  brand: "Patagonia, Le Creuset…",
+  style: "Minimal, earthy colors…",
+  owns: "A stand mixer, an e-reader…",
+  dislike: "Scented candles, novelty socks…",
+  avoid: "Anything with glitter, more mugs…",
+  constraint: "Small apartment, no room for big things…",
+};
 
 export function AddFact({ personId, action }: { personId: string; /** `addFactAction` */ action: Action }) {
   const id = useId();
@@ -63,7 +79,7 @@ export function AddFact({ personId, action }: { personId: string; /** `addFactAc
         <Input
           id={`${id}-value`}
           value={value}
-          placeholder="Loves pottery, size M, allergic to nuts…"
+          placeholder={EXAMPLES[category]}
           onChange={(e) => {
             setValue(e.target.value);
             setAdded(false);
