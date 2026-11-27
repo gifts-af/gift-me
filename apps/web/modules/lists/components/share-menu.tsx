@@ -2,7 +2,8 @@
 
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Link as LinkIcon, MessageCircle, Share } from "lucide-react";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { Button } from "@/components/ui/button";
 import { FacebookIcon, InstagramIcon, WhatsAppIcon, XIcon } from "./share-icons";
 
 const SHARE_TEXT = "Here's my gift list on GiftsAF:";
@@ -40,7 +41,14 @@ export function shareLinks(url: string) {
 }
 
 export default function ShareMenu(props: ShareMenuProps) {
-  const { open, onOpenChange, url, onUsed } = props;
+  const { open, onOpenChange: setOpen, url, onUsed } = props;
+  // Instagram gets its own step: how to add the link is said here, before Instagram opens and
+  // covers the page. Its button is a second tap, so the share sheet still opens from a tap.
+  const [step, setStep] = useState<"menu" | "instagram">("menu");
+  function onOpenChange(next: boolean) {
+    if (!next) setStep("menu");
+    setOpen(next);
+  }
   const links = shareLinks(url);
 
   function choose(action: () => void) {
@@ -63,51 +71,73 @@ export default function ShareMenu(props: ShareMenuProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Share your list</DialogTitle>
-          <DialogDescription>Anyone with the link can see your list.</DialogDescription>
-        </DialogHeader>
-        <ul className="flex flex-col gap-2">
-          {props.instagram && (
-            <li>
-              <button type="button" className={OPTION} onClick={choose(props.onInstagram)} aria-label="Instagram Story" aria-describedby="share-ig-hint">
+        {step === "instagram" ? (
+          <>
+            <DialogHeader>
+              <DialogTitle>Share to Instagram</DialogTitle>
+              <DialogDescription>Your list card goes in a Story or post. Instagram can&apos;t add the link itself, so:</DialogDescription>
+            </DialogHeader>
+            <ol className="flex list-decimal flex-col gap-2 pl-5 text-[15px]">
+              <li>
+                Tap <strong>Open Instagram</strong> and pick Story. We copy your link at the same time.
+              </li>
+              <li>
+                Add a <strong>Link</strong> sticker and paste.
+              </li>
+            </ol>
+            <div className="flex flex-col gap-2 sm:flex-row-reverse">
+              <Button type="button" onClick={choose(props.onInstagram)}>
                 <InstagramIcon />
-                <span className="flex flex-col items-start text-left">
-                  Instagram Story
-                  {/* Said before the tap: the share sheet covers the page note right after. */}
-                  <span id="share-ig-hint" className="text-[13px] font-normal text-muted-foreground">
-                    Posts your list card and copies your link. In Instagram, add a Link sticker and paste it.
-                  </span>
-                </span>
-              </button>
-            </li>
-          )}
-          {props.messages && (
-            <li>
-              <a href={links.messages} className={OPTION} onClick={choose(() => {})}>
-                <MessageCircle className="size-5" aria-hidden="true" />
-                Messages
-              </a>
-            </li>
-          )}
-          {web(links.whatsapp, <WhatsAppIcon />, "WhatsApp")}
-          {web(links.facebook, <FacebookIcon />, "Facebook")}
-          {web(links.x, <XIcon />, "X")}
-          <li>
-            <button type="button" className={OPTION} onClick={choose(props.onCopy)}>
-              <LinkIcon className="size-5" aria-hidden="true" />
-              Copy link
-            </button>
-          </li>
-          {props.more && (
-            <li>
-              <button type="button" className={OPTION} onClick={choose(props.onMore)}>
-                <Share className="size-5" aria-hidden="true" />
-                More…
-              </button>
-            </li>
-          )}
-        </ul>
+                Open Instagram
+              </Button>
+              <Button type="button" variant="outline" onClick={() => setStep("menu")}>
+                Back
+              </Button>
+            </div>
+          </>
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle>Share your list</DialogTitle>
+              <DialogDescription>Anyone with the link can see your list.</DialogDescription>
+            </DialogHeader>
+            <ul className="flex flex-col gap-2">
+              {props.instagram && (
+                <li>
+                  <button type="button" className={OPTION} onClick={() => setStep("instagram")}>
+                    <InstagramIcon />
+                    Instagram Story
+                  </button>
+                </li>
+              )}
+              {props.messages && (
+                <li>
+                  <a href={links.messages} className={OPTION} onClick={choose(() => {})}>
+                    <MessageCircle className="size-5" aria-hidden="true" />
+                    Messages
+                  </a>
+                </li>
+              )}
+              {web(links.whatsapp, <WhatsAppIcon />, "WhatsApp")}
+              {web(links.facebook, <FacebookIcon />, "Facebook")}
+              {web(links.x, <XIcon />, "X")}
+              <li>
+                <button type="button" className={OPTION} onClick={choose(props.onCopy)}>
+                  <LinkIcon className="size-5" aria-hidden="true" />
+                  Copy link
+                </button>
+              </li>
+              {props.more && (
+                <li>
+                  <button type="button" className={OPTION} onClick={choose(props.onMore)}>
+                    <Share className="size-5" aria-hidden="true" />
+                    More…
+                  </button>
+                </li>
+              )}
+            </ul>
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );
