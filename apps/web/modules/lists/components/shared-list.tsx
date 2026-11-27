@@ -11,18 +11,20 @@ import { TopBar } from "@/components/app-shell/top-bar";
 import type { SharedSize } from "@/lib/size-kinds";
 import { DEFAULT_LIST_TITLE } from "@/modules/lists/lib/list-title";
 import type { GiftClaim, SharedGift, SharedList as SharedListData } from "@/modules/lists/lib/lists";
+import AddToMineDialog, { addToMineExplained, rememberAddToMineExplained } from "./add-to-mine-dialog";
 import ClaimDialog from "./claim-dialog";
 import GiftList from "./gift-list";
 import GiftSummary from "./gift-summary";
 import { Banner } from "./ui";
 import ViewDialog from "./view-dialog";
 
+const ADD_LINK = "h-auto min-h-11 justify-start gap-1 px-0 text-[13px] font-normal text-muted-foreground underline underline-offset-2 hover:bg-transparent hover:text-foreground";
+
 /**
  * `nav` fills the top bar (the page builds it; this is a client component), and
  * `top` is the card: above the heading when signed in, below the heading and
  * above the gifts when signed out, so a visitor sees the list first.
  */
-const ADD_LINK = "h-auto min-h-11 justify-start gap-1 px-0 text-[13px] font-normal text-muted-foreground underline underline-offset-2 hover:bg-transparent hover:text-foreground";
 
 export type SharedListProps = {
   list: SharedListData;
@@ -75,6 +77,31 @@ export default function SharedList({ list, token, nav, top, addToMine }: SharedL
   const [addedNotice, setAddedNotice] = useState(false);
   const canAdd = !!addToMine && !list.isOwner;
 
+  // The first "Add to my list" explains itself (vs Claim); after that it just adds.
+  const [explaining, setExplaining] = useState<SharedGift | null>(null);
+
+  function signUpToAdd(gift: SharedGift) {
+    return `/auth/sign-up?next=${encodeURIComponent(`/share/${token}?add=${gift.id}`)}`;
+  }
+
+  function startAddToMine(gift: SharedGift) {
+    if (!addToMineExplained()) {
+      setExplaining(gift);
+      return;
+    }
+    if (list.viewer.signedIn) void handleAddToMine(gift);
+    else router.push(signUpToAdd(gift));
+  }
+
+  function confirmAddToMine() {
+    const gift = explaining;
+    setExplaining(null);
+    rememberAddToMineExplained();
+    if (!gift) return;
+    if (list.viewer.signedIn) void handleAddToMine(gift);
+    else router.push(signUpToAdd(gift));
+  }
+
   async function handleAddToMine(gift: SharedGift) {
     if (!addToMine) return;
     setAddingId(gift.id);
@@ -103,6 +130,7 @@ export default function SharedList({ list, token, nav, top, addToMine }: SharedL
     const id = new URLSearchParams(window.location.search).get("add");
     if (!id) return;
     addedOnArrival.current = true;
+    rememberAddToMineExplained();
     router.replace(`/share/${token}${window.location.hash}`, { scroll: false });
     const gift = list.items.find((item) => item.id === id);
     if (gift) void handleAddToMine(gift);
@@ -172,13 +200,17 @@ export default function SharedList({ list, token, nav, top, addToMine }: SharedL
     }
     if (!list.viewer.signedIn) {
       // Sign up (which links to sign in) and come back here to add it.
-      const next = encodeURIComponent(`/share/${token}?add=${gift.id}`);
       return (
-        <Button asChild variant="ghost" size="sm" className={ADD_LINK}>
-          <Link href={`/auth/sign-up?next=${next}`} aria-label={`Add ${gift.name} to my list`}>
-            <Plus aria-hidden="true" />
-            Add to my list
-          </Link>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className={ADD_LINK}
+          onClick={() => startAddToMine(gift)}
+          aria-label={`Add ${gift.name} to my list`}
+        >
+          <Plus aria-hidden="true" />
+          Add to my list
         </Button>
       );
     }
@@ -189,7 +221,7 @@ export default function SharedList({ list, token, nav, top, addToMine }: SharedL
         variant="ghost"
         size="sm"
         className={ADD_LINK}
-        onClick={() => handleAddToMine(gift)}
+        onClick={() => startAddToMine(gift)}
         disabled={busy}
         aria-busy={busy}
         aria-label={`Add ${gift.name} to my list`}
@@ -253,6 +285,13 @@ export default function SharedList({ list, token, nav, top, addToMine }: SharedL
 
   return (
     <>
+      <AddToMineDialog
+        giftName={explaining?.name ?? null}
+        ownerName={list.cardEnabled ? list.ownerName : null}
+        signedOut={!list.viewer.signedIn}
+        onConfirm={confirmAddToMine}
+        onCancel={() => setExplaining(null)}
+      />
       <TopBar>{nav}</TopBar>
       <PageFrame wide className="gap-4">
         {list.viewer.signedIn && top}
