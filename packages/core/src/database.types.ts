@@ -2348,6 +2348,7 @@ export type Database = {
           round_status: Database["concierge"]["Enums"]["round_status"];
         }[];
       };
+      switch_account_to_card: { Args: { p_email: string }; Returns: string };
       tracking_candidates: {
         Args: { p_today: string };
         Returns: {
