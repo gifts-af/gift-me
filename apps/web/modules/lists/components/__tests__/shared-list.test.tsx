@@ -3,7 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { GiftClaim, SharedGift, SharedList as SharedListData } from "@/modules/lists/lib/lists";
 
-const router = { refresh: vi.fn(), replace: vi.fn() };
+const router = { refresh: vi.fn(), replace: vi.fn(), push: vi.fn() };
 vi.mock("next/navigation", () => ({ useRouter: () => router }));
 vi.mock("@/modules/lists/actions/claims", () => ({ claimGift: vi.fn(), unclaimGift: vi.fn() }));
 const { claimGift } = await import("@/modules/lists/actions/claims");
@@ -335,13 +335,42 @@ describe("+ My list", () => {
     expect(screen.queryByRole("link", { name: /to my list/ })).toBeNull();
   });
 
-  it("signed out, leads to sign-up and back here with the gift to add", () => {
+  it("the first time, explains it isn't claiming, and Cancel adds nothing", async () => {
+    localStorage.clear();
+    const addToMine = vi.fn().mockResolvedValue({ ok: true });
+    render(<SharedList token="t" list={listFor(member)} addToMine={addToMine} />);
+    await userEvent.click(screen.getByRole("button", { name: "Add Kettle to my list" }));
+    const dialog = within(await screen.findByRole("dialog"));
+    expect(dialog.getByText(/doesn.t claim or buy it/)).toBeTruthy();
+    expect(dialog.getByText(/tap/).textContent).toContain("Claim");
+    await userEvent.click(dialog.getByRole("button", { name: "Cancel" }));
+    expect(addToMine).not.toHaveBeenCalled();
+  });
+
+  it("after the explanation is confirmed once, adds straight away", async () => {
+    localStorage.clear();
+    const addToMine = vi.fn().mockResolvedValue({ ok: true });
+    const { unmount } = render(<SharedList token="t" list={listFor(member)} addToMine={addToMine} />);
+    await userEvent.click(screen.getByRole("button", { name: "Add Kettle to my list" }));
+    await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Add to my list" }));
+    expect(addToMine).toHaveBeenCalledTimes(1);
+    unmount();
+    render(<SharedList token="t" list={listFor(member)} addToMine={addToMine} />);
+    await userEvent.click(screen.getByRole("button", { name: "Add Kettle to my list" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(addToMine).toHaveBeenCalledTimes(2);
+  });
+
+  it("signed out, explains, then leads to sign-up and back here with the gift to add", async () => {
+    localStorage.clear();
     render(<SharedList token="t" list={listFor(guest)} addToMine={vi.fn()} />);
-    const link = screen.getByRole("link", { name: "Add Kettle to my list" });
-    expect(link.getAttribute("href")).toBe(`/auth/sign-up?next=${encodeURIComponent("/share/t?add=a")}`);
+    await userEvent.click(screen.getByRole("button", { name: "Add Kettle to my list" }));
+    await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Sign up and add it" }));
+    expect(router.push).toHaveBeenCalledWith(`/auth/sign-up?next=${encodeURIComponent("/share/t?add=a")}`);
   });
 
   it("signed in, adds the gift and then says it's on your list", async () => {
+    localStorage.setItem("giftsaf:add-to-mine-explained", "1");
     const addToMine = vi.fn().mockResolvedValue({ ok: true });
     render(<SharedList token="t" list={listFor(member)} addToMine={addToMine} />);
     await userEvent.click(screen.getByRole("button", { name: "Add Kettle to my list" }));
@@ -352,6 +381,7 @@ describe("+ My list", () => {
   });
 
   it("shows the error when the add fails, and keeps the button", async () => {
+    localStorage.setItem("giftsaf:add-to-mine-explained", "1");
     const addToMine = vi.fn().mockResolvedValue({ ok: false, error: "Your list is full. Remove a gift to add this one." });
     render(<SharedList token="t" list={listFor(member)} addToMine={addToMine} />);
     await userEvent.click(screen.getByRole("button", { name: "Add Kettle to my list" }));
