@@ -13,7 +13,7 @@ export function CaptureForm({
   note: string;
   onNoteChange: (note: string) => void;
   saveLabel: string;
-  /** The alpha money notice (ALL-94); null when saving won't spend anything. */
+  /** The money notice; null when saving won't spend anything. */
   moneyNotice: string | null;
   canSave: boolean;
   busy: boolean;

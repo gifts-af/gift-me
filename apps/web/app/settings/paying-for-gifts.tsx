@@ -112,7 +112,7 @@ export function PayingForGifts({
 
       {status.kind === "not_allowed" && (
         <p className="text-[15px] text-muted-foreground [text-wrap:balance]">
-          Buying gifts is open to test accounts during the alpha. We&apos;ll tell you when it opens up.
+          Buying gifts isn&apos;t open on your account yet. We&apos;ll tell you when it opens up.
         </p>
       )}
 

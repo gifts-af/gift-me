@@ -17,10 +17,10 @@ describe("where the logo shows", () => {
     logoInHomeLink();
   });
 
-  it("is in the home page and tour top bar, next to the ALPHA tag", () => {
+  it("is in the home page and tour top bar, with no alpha tag", () => {
     render(<HomeTopBar />);
     logoInHomeLink();
-    expect(screen.getByText("ALPHA")).toBeInTheDocument();
+    expect(screen.queryByText(/alpha/i)).toBeNull();
   });
 
   it("heads the sign-in pages", () => {

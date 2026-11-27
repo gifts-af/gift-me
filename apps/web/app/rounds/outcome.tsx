@@ -39,7 +39,7 @@ const HELD: Record<string, Words> = {
   address: { title: "Waiting on an address", body: "Add the address and we'll order it. We've emailed you how." },
   unconfirmed: { title: "Waiting on Zinc", body: "Zinc hasn't confirmed the order yet. We'll email you either way." },
   paused: { title: "Not ordered yet", body: "Buying is paused right now. We'll order it when it's back on." },
-  not_allowed: { title: "Not ordered yet", body: "Buying gifts is open to test accounts during the alpha." },
+  not_allowed: { title: "Not ordered yet", body: "Buying gifts isn't open on your account yet." },
 };
 const HELD_OTHER: Words = { title: "Not ordered yet", body: "We'll try again if there's time, and email you what happens." };
 
@@ -62,7 +62,7 @@ const ERRORS: Record<BuyError, Words> = {
   needs_confirmation: { title: "This is over the budget now", body: "Nothing was bought. Buy anyway, or pick something else." },
   over_budget: { title: "Over the most you allowed", body: "Nothing was bought. Pick something cheaper." },
   no_address: { title: "We need an address", body: "Nothing was bought." },
-  not_allowed: { title: "Not on your account yet", body: "Buying gifts is open to test accounts during the alpha." },
+  not_allowed: { title: "Not on your account yet", body: "Buying gifts isn't open on your account yet." },
   not_shared: { title: "Their list isn't shared with you any more", body: "Nothing was bought." },
   already_bought: { title: "Already on one of your orders", body: "Nothing was bought twice." },
   already_ordered: { title: "Already ordered", body: "This gift was ordered already. Nothing more was bought." },

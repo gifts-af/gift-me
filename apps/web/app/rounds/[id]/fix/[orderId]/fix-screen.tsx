@@ -158,7 +158,7 @@ const CHECK_WORDS: Record<
 > = {
   once: "The price went up again, so we won't try this one a third time.",
   unavailable: "We can't get today's price for this one.",
-  not_allowed: "Checking prices is open to test accounts during the alpha.",
+  not_allowed: "Checking prices isn't open on your account yet.",
   not_current: "This gift was already sorted out. Reload to see what happened.",
   not_open: "This gift can't be changed now. Reload to see what happened.",
   zinc_off: "Buying is switched off right now, so we didn't check the price.",

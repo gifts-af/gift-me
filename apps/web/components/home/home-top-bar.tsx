@@ -3,7 +3,7 @@ import { Logo } from "@/components/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { TopBarRow } from "@/components/top-bar-row";
 
-// The home page's own bar: the name with an ALPHA tag, and Sign in.
+// The home page's own bar: the name and Sign in.
 // "How it works" shows from computer width up.
 export function HomeTopBar({ howItWorks = false }: { howItWorks?: boolean }) {
   return (
@@ -11,9 +11,6 @@ export function HomeTopBar({ howItWorks = false }: { howItWorks?: boolean }) {
       <TopBarRow>
       <Link href="/" className="inline-flex min-h-11 items-center gap-2 text-[19px]">
         <Logo />
-        <span className="rounded-md bg-secondary px-1.5 py-0.5 text-[10px] font-extrabold tracking-wider text-foreground">
-          ALPHA
-        </span>
       </Link>
       <nav className="flex items-center gap-3 text-[14px] font-semibold sm:gap-5">
         {howItWorks && (
