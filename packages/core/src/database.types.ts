@@ -1536,29 +1536,16 @@ export type Database = {
         Args: { p_context: string; p_round_id: string };
         Returns: Database["concierge"]["Enums"]["round_status"];
       };
-      card_charge_cents:
-        | { Args: { p_goods_cents: number }; Returns: number }
-        | {
-            Args: {
-              p_bps: number;
-              p_fixed: number;
-              p_goods_cents: number;
-              p_margin: number;
-              p_zinc_fee: number;
-            };
-            Returns: number;
-          }
-        | {
-            Args: {
-              p_goods_cents: number;
-              p_order: Omit<
-                Database["concierge"]["Tables"]["orders"]["Row"],
-                Database["concierge"]["Tables"]["orders"]["ComputedFields"]
-              >;
-            };
-            Returns: number;
-          };
-      card_fee_cents: { Args: { p_goods_cents: number }; Returns: number };
+      card_charge_cents: {
+        Args: {
+          p_bps: number;
+          p_fixed: number;
+          p_goods_cents: number;
+          p_margin: number;
+          p_zinc_fee: number;
+        };
+        Returns: number;
+      };
       card_margin_cents: { Args: Record<PropertyKey, never>; Returns: number };
       check_card_order: {
         Args: {
@@ -2019,17 +2006,6 @@ export type Database = {
       reconcile_round: {
         Args: { p_context?: string; p_round_id: string };
         Returns: Database["concierge"]["Enums"]["round_status"];
-      };
-      record_card_costs: {
-        Args: {
-          p_estimated: boolean;
-          p_final: number;
-          p_order: Omit<
-            Database["concierge"]["Tables"]["orders"]["Row"],
-            Database["concierge"]["Tables"]["orders"]["ComputedFields"]
-          >;
-        };
-        Returns: undefined;
       };
       record_cost: {
         Args: {

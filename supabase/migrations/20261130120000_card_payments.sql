@@ -58,6 +58,12 @@ comment on column concierge.orders.payment_method_id is
 -- est_total_cents is a wallet total, which includes Zinc's fee. A card buyer's charge
 -- is worked out from the goods (price, shipping and tax) instead.
 alter table concierge.gift_ideas add column goods_cents integer check (goods_cents >= 0);
+do $$
+begin
+  if concierge.setting_int('zinc_order_fee_cents') is null then
+    raise exception 'card payments: missing setting zinc_order_fee_cents';
+  end if;
+end $$;
 update concierge.gift_ideas
    set goods_cents = greatest(0, est_total_cents - concierge.setting_int('zinc_order_fee_cents'))
  where goods_cents is null;
@@ -153,42 +159,6 @@ as $$
   select ceil(((p_goods_cents + p_margin + p_zinc_fee + p_fixed)::numeric * 10000) / (10000 - p_bps))::integer;
 $$;
 
--- With an order's saved fees.
-create function concierge.card_charge_cents(p_goods_cents integer, p_order concierge.orders)
-returns integer
-language sql
-immutable
-set search_path = ''
-as $$
-  select concierge.card_charge_cents(p_goods_cents, p_order.margin_cents, p_order.zinc_fee_cents,
-                                     p_order.card_fee_bps, p_order.card_fee_fixed_cents);
-$$;
-
--- With today's fees, for approving.
-create function concierge.card_charge_cents(p_goods_cents integer)
-returns integer
-language sql
-stable
-security definer
-set search_path = ''
-as $$
-  select concierge.card_charge_cents(p_goods_cents, concierge.card_margin_cents(),
-                                     concierge.setting_int('zinc_fee_cents'), concierge.setting_int('card_fee_bps'),
-                                     concierge.setting_int('card_fee_fixed_cents'));
-$$;
-
--- The whole GiftsAF fee at a goods cap, with today's fees: what fee_cents holds until
--- the order settles, so committed spend (cap plus fee) is the most the card is charged.
-create function concierge.card_fee_cents(p_goods_cents integer)
-returns integer
-language sql
-stable
-security definer
-set search_path = ''
-as $$
-  select concierge.card_charge_cents(p_goods_cents) - p_goods_cents;
-$$;
-
 -- ─── check_card_order: may this card buyer approve these orders? ─────────────
 -- Raised with the caller's name, so the app reads them as it does every other refusal.
 -- connect_off: card payments are switched off. no_card: no saved card or phone.
@@ -218,32 +188,6 @@ begin
                  or (e ->> 'card_fee_fixed_cents')::integer is distinct from concierge.setting_int('card_fee_fixed_cents')) then
     raise exception '%: fees_changed', p_caller using errcode = 'P0001';
   end if;
-end;
-$$;
-
--- ─── record_card_costs: Zinc's fee and the card fee, once per order ──────────
-create function concierge.record_card_costs(p_order concierge.orders, p_final integer, p_estimated boolean)
-returns void
-language plpgsql
-security definer
-set search_path = ''
-as $$
-declare
-  v_enabled integer := concierge.setting_int('cost_tracking_enabled');
-  v_excluded boolean;
-begin
-  if v_enabled is null then
-    raise exception 'record_card_costs: missing setting cost_tracking_enabled';
-  end if;
-  if v_enabled = 0 then
-    return;
-  end if;
-  v_excluded := coalesce((select a.costs_excluded from concierge.accounts a where a.user_id = p_order.user_id), false);
-  insert into concierge.cost_events (kind, cents, estimated, excluded, order_id)
-  values ('zinc_order_fee', p_order.zinc_fee_cents, false, v_excluded, p_order.id),
-         ('card_fee', greatest(0, p_final - p_order.total_cents - p_order.margin_cents - p_order.zinc_fee_cents),
-          p_estimated, v_excluded, p_order.id)
-  on conflict (order_id, kind) where kind in ('zinc_order_fee', 'card_fee') do nothing;
 end;
 $$;
 
@@ -364,7 +308,9 @@ begin
                                   margin_cents, zinc_fee_cents, card_fee_bps, card_fee_fixed_cents, -- New.
                                   max_charge_cents, payment_method_id) -- New.
     values (p_user_id, p_round_id, (v_el ->> 'idea_id')::uuid, v_mode, (v_el ->> 'max_price_cents')::integer,
-            case when v_mode = 'connect' then concierge.card_fee_cents((v_el ->> 'max_price_cents')::integer)
+            case when v_mode = 'connect'
+                 then concierge.card_charge_cents((v_el ->> 'max_price_cents')::integer, (v_el ->> 'margin_cents')::integer, (v_el ->> 'zinc_fee_cents')::integer,
+                                                        (v_el ->> 'card_fee_bps')::integer, (v_el ->> 'card_fee_fixed_cents')::integer) - (v_el ->> 'max_price_cents')::integer
                  else (v_el ->> 'fee_cents')::integer end,
             v_el ->> 'gift_message', 'held', 'retry', v_el ->> 'ship_to',
             v_el -> 'address' ->> 'city', v_el -> 'address' ->> 'state',
@@ -372,13 +318,15 @@ begin
             case when v_el ->> 'address_source' = 'shared'
                  then coalesce((v_el ->> 'address_owner_id')::uuid,
                                (select l.owner_id from lists.active_link(r.person_id) l)) end,
-            -- New: a card order saves the fees it was approved with, the most the card
-            -- can be charged, and the card itself; it is only ever sent on that card.
-            case when v_mode = 'connect' then concierge.card_margin_cents() end,
-            case when v_mode = 'connect' then concierge.setting_int('zinc_fee_cents') end,
-            case when v_mode = 'connect' then concierge.setting_int('card_fee_bps') end,
-            case when v_mode = 'connect' then concierge.setting_int('card_fee_fixed_cents') end,
-            case when v_mode = 'connect' then concierge.card_charge_cents((v_el ->> 'max_price_cents')::integer) end,
+            -- New: a card order saves the fees it was approved with (the ones the buyer
+            -- saw, checked against today's settings above), the most the card can be
+            -- charged, and the card itself; it is only ever sent on that card.
+            case when v_mode = 'connect' then (v_el ->> 'margin_cents')::integer end,
+            case when v_mode = 'connect' then (v_el ->> 'zinc_fee_cents')::integer end,
+            case when v_mode = 'connect' then (v_el ->> 'card_fee_bps')::integer end,
+            case when v_mode = 'connect' then (v_el ->> 'card_fee_fixed_cents')::integer end,
+            case when v_mode = 'connect' then concierge.card_charge_cents((v_el ->> 'max_price_cents')::integer, (v_el ->> 'margin_cents')::integer, (v_el ->> 'zinc_fee_cents')::integer,
+                                                        (v_el ->> 'card_fee_bps')::integer, (v_el ->> 'card_fee_fixed_cents')::integer) end,
             case when v_mode = 'connect' then a.stripe_payment_method_id end)
     returning * into v_order;
     insert into concierge.order_addresses (order_id, user_id, recipient_first_name, recipient_last_name, address_line1,
@@ -514,13 +462,17 @@ begin
     end if;
   end if;
 
+  if v_new_goods is null and v_new_total > 0 and concierge.setting_int('zinc_order_fee_cents') is null then
+    raise exception 'replace_failed_order: missing setting zinc_order_fee_cents'; -- New.
+  end if;
   update concierge.orders set resolved = true where id = v_old.id;
   -- placeRound's cap re-check follows the new price. New: so does a card gift
   -- bought again at today's price, and the goods move with the total.
   if v_same and (v_old.failure_type = 'price_up' or (v_old.failure_type = 'card_needed' and v_new_total > 0)) then
     update concierge.gift_ideas
        set est_total_cents = v_new_total,
-           goods_cents = coalesce(v_new_goods, goods_cents), -- New.
+           -- New: a caller that sends only the total sent a wallet total, which includes Zinc's fee.
+           goods_cents = coalesce(v_new_goods, v_new_total - concierge.setting_int('zinc_order_fee_cents')), -- New.
            -- A round with no budget has nothing to be over.
            over_budget = coalesce(v_new_total > r.budget_cents, false)
      where id = v_idea.id;
@@ -532,19 +484,22 @@ begin
                                 margin_cents, zinc_fee_cents, card_fee_bps, card_fee_fixed_cents, -- New.
                                 max_charge_cents, payment_method_id) -- New.
   values (p_user_id, p_round_id, v_idea.id, v_mode, (p_order ->> 'max_price_cents')::integer,
-          case when v_mode = 'connect' then concierge.card_fee_cents((p_order ->> 'max_price_cents')::integer)
+          case when v_mode = 'connect'
+               then concierge.card_charge_cents((p_order ->> 'max_price_cents')::integer, (p_order ->> 'margin_cents')::integer, (p_order ->> 'zinc_fee_cents')::integer,
+                                                        (p_order ->> 'card_fee_bps')::integer, (p_order ->> 'card_fee_fixed_cents')::integer) - (p_order ->> 'max_price_cents')::integer
                else (p_order ->> 'fee_cents')::integer end,
           p_order ->> 'gift_message', 'held', 'retry', p_order ->> 'ship_to',
           p_order -> 'address' ->> 'city', p_order -> 'address' ->> 'state', p_order ->> 'address_source',
           case when p_order ->> 'address_source' = 'shared'
                then coalesce((p_order ->> 'address_owner_id')::uuid,
                              (select l.owner_id from lists.active_link(r.person_id) l)) end,
-          -- New: today's fees and card, as approve_round.
-          case when v_mode = 'connect' then concierge.card_margin_cents() end,
-          case when v_mode = 'connect' then concierge.setting_int('zinc_fee_cents') end,
-          case when v_mode = 'connect' then concierge.setting_int('card_fee_bps') end,
-          case when v_mode = 'connect' then concierge.setting_int('card_fee_fixed_cents') end,
-          case when v_mode = 'connect' then concierge.card_charge_cents((p_order ->> 'max_price_cents')::integer) end,
+          -- New: today's fees (as checked) and card, as approve_round.
+          case when v_mode = 'connect' then (p_order ->> 'margin_cents')::integer end,
+          case when v_mode = 'connect' then (p_order ->> 'zinc_fee_cents')::integer end,
+          case when v_mode = 'connect' then (p_order ->> 'card_fee_bps')::integer end,
+          case when v_mode = 'connect' then (p_order ->> 'card_fee_fixed_cents')::integer end,
+          case when v_mode = 'connect' then concierge.card_charge_cents((p_order ->> 'max_price_cents')::integer, (p_order ->> 'margin_cents')::integer, (p_order ->> 'zinc_fee_cents')::integer,
+                                                        (p_order ->> 'card_fee_bps')::integer, (p_order ->> 'card_fee_fixed_cents')::integer) end,
           case when v_mode = 'connect' then a.stripe_payment_method_id end)
   returning * into v_order;
   insert into concierge.order_addresses (order_id, user_id, recipient_first_name, recipient_last_name, address_line1,
@@ -617,6 +572,12 @@ begin
   if v_run.round_id is not null
      and exists (select 1 from concierge.gift_ideas i where i.round_id = v_run.round_id and i.status <> 'rejected') then
     return 0;
+  end if;
+
+  -- New: an old-shape idea's goods come from Zinc's wallet fee; never a silent $0.
+  if exists (select 1 from jsonb_array_elements(p_ideas) e where not e ? 'goods_cents')
+     and concierge.setting_int('zinc_order_fee_cents') is null then
+    raise exception 'save_ideas: missing setting zinc_order_fee_cents';
   end if;
 
   if v_run.round_id is null then
@@ -746,9 +707,11 @@ begin
           update concierge.orders set status = 'cancelled', failure_type = 'round_closed' where id = v_order.id;
           continue;
         end if;
-        -- New: a card order is never held for funds; a 402 there is the app's mistake.
+        -- New: a card order is never held for funds. A 402 there is the app's mistake, so
+        -- the order ends with nothing bought rather than undoing the rest of the batch.
         if v_el ->> 'outcome' = 'insufficient' and v_order.funding_mode = 'connect' then
-          raise exception 'record_outcomes: insufficient on a card order' using errcode = '22023';
+          perform concierge.fail_order_row(v_order, 'failed');
+          continue;
         end if;
         -- New: an unsent card order whose card is no longer the saved one is never sent on it.
         if v_el ->> 'outcome' = 'unsent' and v_order.funding_mode = 'connect'
@@ -827,6 +790,7 @@ declare
   v_placed concierge.orders; -- New.
   v_final integer; -- New.
   v_estimated boolean; -- New.
+  v_excluded boolean; -- New.
 begin
   if p_status not in ('placed', 'failed') then
     raise exception 'Unknown order status %', p_status using errcode = '22023';
@@ -857,15 +821,38 @@ begin
       -- New: a card order records what the card was charged, and the fee is that
       -- minus the goods. Without Zinc's figure, it's worked out from the saved
       -- fees. With no goods total at all, the fee stays at the approved cap.
-      if v_placed.funding_mode = 'connect' and v_placed.total_cents is not null then
-        v_final := (v_price ->> 'final_charge_cents')::integer;
-        v_estimated := v_final is null;
-        v_final := coalesce(v_final, concierge.card_charge_cents(v_placed.total_cents, v_placed));
-        update concierge.orders
-           set final_charge_cents = v_final,
-               fee_cents = greatest(0, v_final - v_placed.total_cents)
-         where id = p_order_id;
-        perform concierge.record_card_costs(v_placed, v_final, v_estimated);
+      -- Zinc's fee and the card fee are each counted once per order (the unique index),
+      -- whichever of the webhook and the sweep settles it first; nothing while cost
+      -- tracking is off. Above the approved maximum, the app alerts (it reads both).
+      if v_placed.funding_mode = 'connect' then
+        if v_placed.total_cents is not null then
+          v_final := (v_price ->> 'final_charge_cents')::integer;
+          v_estimated := v_final is null;
+          v_final := coalesce(v_final, concierge.card_charge_cents(v_placed.total_cents, v_placed.margin_cents,
+                                                                  v_placed.zinc_fee_cents, v_placed.card_fee_bps,
+                                                                  v_placed.card_fee_fixed_cents));
+          update concierge.orders
+             set final_charge_cents = v_final,
+                 fee_cents = greatest(0, v_final - v_placed.total_cents)
+           where id = p_order_id;
+        end if;
+        if concierge.setting_int('cost_tracking_enabled') is null then
+          raise exception 'settle_order: missing setting cost_tracking_enabled';
+        end if;
+        if concierge.setting_int('cost_tracking_enabled') = 1 then
+          v_excluded := coalesce((select a.costs_excluded from concierge.accounts a where a.user_id = p_user_id), false);
+          -- Zinc's fee is our saved setting, not a figure Zinc reported: estimated.
+          insert into concierge.cost_events (kind, cents, estimated, excluded, order_id)
+          values ('zinc_order_fee', v_placed.zinc_fee_cents, true, v_excluded, p_order_id)
+          on conflict (order_id, kind) where kind in ('zinc_order_fee', 'card_fee') do nothing;
+          -- The card fee needs the goods total; without it there's nothing to work it out from.
+          if v_final is not null then
+            insert into concierge.cost_events (kind, cents, estimated, excluded, order_id)
+            values ('card_fee', greatest(0, v_final - v_placed.total_cents - v_placed.margin_cents - v_placed.zinc_fee_cents),
+                    v_estimated, v_excluded, p_order_id)
+            on conflict (order_id, kind) where kind in ('zinc_order_fee', 'card_fee') do nothing;
+          end if;
+        end if;
       end if;
     else
       perform concierge.fail_order_row(v_order, coalesce(p_failure_type, 'failed'));
@@ -959,17 +946,17 @@ begin
     return;
   end if;
 
-  -- New: the held orders say who pays. A round never mixes the two (an account
-  -- with held wallet orders is never switched), so a mix is a bug: fail loudly.
-  if (select count(distinct o.funding_mode) from concierge.orders o
-       where o.round_id = p_round_id and o.status = 'held') <> 1 then
-    raise exception 'begin_placing: mixed funding modes' using errcode = 'P0001';
-  end if;
-  v_mode := (select o.funding_mode from concierge.orders o where o.round_id = p_round_id and o.status = 'held' limit 1);
+  -- New: the held orders say who pays.
+  v_mode := (select min(o.funding_mode) from concierge.orders o where o.round_id = p_round_id and o.status = 'held');
 
   -- Gates, in order: the kill switch, paid features, then setup.
   if coalesce(concierge.setting_int('zinc_ordering_enabled'), 0) <> 1 then
     v_gate := 'paused';
+  -- New: a round never mixes the two (an account with held wallet orders is never
+  -- switched), so a mix is a bug: fail loudly, but only while ordering is on.
+  elsif (select count(distinct o.funding_mode) from concierge.orders o
+          where o.round_id = p_round_id and o.status = 'held') <> 1 then
+    raise exception 'begin_placing: mixed funding modes' using errcode = 'P0001';
   -- New: card payments have their own switch.
   elsif v_mode = 'connect' and coalesce(concierge.setting_int('connect_enabled'), 0) <> 1 then
     v_gate := 'paused';
@@ -981,7 +968,7 @@ begin
         and (a.user_id is null or a.zinc_connected_at is null or a.zinc_api_key_secret_id is null or a.buyer_phone is null) then
     v_gate := 'setup';
   end if;
-  if v_gate is not null and v_mode = 'connect' and v_gate = 'paused' then
+  if v_gate = 'paused' and v_mode = 'connect' then
     -- New: a paused card order reads paused whatever it waited on (gate_held_orders).
     update concierge.orders set hold_reason = 'paused' where round_id = p_round_id and status = 'held';
     perform concierge.reconcile_round(p_round_id);
@@ -1044,6 +1031,13 @@ begin
            status = 'placing',
            hold_reason = null
      where id = (v_el ->> 'id')::uuid and round_id = p_round_id and status = 'held';
+    -- New: a lower cap lowers a card order's maximum charge and fee with it, from its saved fees.
+    update concierge.orders
+       set max_charge_cents = concierge.card_charge_cents(max_price_cents, margin_cents, zinc_fee_cents,
+                                                          card_fee_bps, card_fee_fixed_cents),
+           fee_cents = concierge.card_charge_cents(max_price_cents, margin_cents, zinc_fee_cents,
+                                                   card_fee_bps, card_fee_fixed_cents) - max_price_cents
+     where id = (v_el ->> 'id')::uuid and round_id = p_round_id and status = 'placing' and funding_mode = 'connect';
   end loop;
 
   perform concierge.reconcile_round(p_round_id);
@@ -1195,7 +1189,8 @@ $$;
 -- ─── start_card_session: leaving for Stripe's page ────────────────────────────
 -- Saves the buyer's Stripe customer on the account the first time, under its lock, so a
 -- buyer who comes back days later reuses it rather than leaving a second customer at
--- Stripe (T42). 'ok', or 'other_customer' when the account already has a different one.
+-- Stripe (T42). 'ok', 'other_customer' when the account already has a different one, or
+-- 'not_yours' when the round, ideas or failed order aren't this buyer's.
 create function concierge.start_card_session(p_user_id uuid, p_session_id text, p_customer text, p_round_id uuid,
                                              p_idea_ids uuid[], p_failed_order_id uuid)
 returns text
@@ -1210,6 +1205,17 @@ begin
   select * into a from concierge.accounts where user_id = p_user_id for update;
   if a.stripe_customer_id is not null and a.stripe_customer_id is distinct from p_customer then
     return 'other_customer';
+  end if;
+  -- Where the buyer goes back to must be theirs: the return link is built from these.
+  if (p_round_id is not null
+      and not exists (select 1 from concierge.gift_rounds where id = p_round_id and user_id = p_user_id))
+     or (p_failed_order_id is not null
+         and not exists (select 1 from concierge.orders where id = p_failed_order_id and user_id = p_user_id
+                                                         and round_id is not distinct from p_round_id))
+     or exists (select 1 from unnest(coalesce(p_idea_ids, '{}')) x
+                 where not exists (select 1 from concierge.gift_ideas i
+                                    where i.id = x and i.user_id = p_user_id and i.round_id is not distinct from p_round_id)) then
+    return 'not_yours';
   end if;
   update concierge.accounts set stripe_customer_id = p_customer where user_id = p_user_id and stripe_customer_id is null;
   insert into concierge.card_sessions (user_id, stripe_session_id, stripe_customer_id, round_id, idea_ids, failed_order_id)
@@ -1245,21 +1251,13 @@ $$;
 
 -- ─── grants: server only ──────────────────────────────────────────────────────
 revoke all on function concierge.card_charge_cents(integer, integer, integer, integer, integer) from public, anon, authenticated;
-revoke all on function concierge.card_charge_cents(integer, concierge.orders) from public, anon, authenticated;
-revoke all on function concierge.card_charge_cents(integer) from public, anon, authenticated;
-revoke all on function concierge.card_fee_cents(integer) from public, anon, authenticated;
 revoke all on function concierge.check_card_order(concierge.accounts, jsonb, text) from public, anon, authenticated;
-revoke all on function concierge.record_card_costs(concierge.orders, integer, boolean) from public, anon, authenticated;
 revoke all on function concierge.save_card(uuid, text, text, text) from public, anon, authenticated;
 revoke all on function concierge.start_card_session(uuid, text, text, uuid, uuid[], uuid) from public, anon, authenticated;
 revoke all on function concierge.card_margin_cents() from public, anon, authenticated;
 revoke all on function concierge.remove_card(uuid) from public, anon, authenticated;
 grant execute on function concierge.card_charge_cents(integer, integer, integer, integer, integer) to service_role;
-grant execute on function concierge.card_charge_cents(integer, concierge.orders) to service_role;
-grant execute on function concierge.card_charge_cents(integer) to service_role;
-grant execute on function concierge.card_fee_cents(integer) to service_role;
 grant execute on function concierge.check_card_order(concierge.accounts, jsonb, text) to service_role;
-grant execute on function concierge.record_card_costs(concierge.orders, integer, boolean) to service_role;
 grant execute on function concierge.save_card(uuid, text, text, text) to service_role;
 grant execute on function concierge.start_card_session(uuid, text, text, uuid, uuid[], uuid) to service_role;
 grant execute on function concierge.card_margin_cents() to service_role;

@@ -3,7 +3,7 @@
 -- does, the switch, settling, saving and removing a card, and who can read any of it.
 begin;
 \ir _helpers.psql
-select plan(102);
+select plan(123);
 
 update concierge.app_settings set value = '1' where key in ('zinc_ordering_enabled', 'connect_enabled', 'cost_tracking_enabled');
 
@@ -114,8 +114,14 @@ select tests.act_as(:'u');
 select throws_ok('select stripe_customer_id from concierge.accounts', '42501', null, 'a buyer can''t read their customer id');
 select throws_ok('select stripe_payment_method_id from concierge.accounts', '42501', null, 'a buyer can''t read their card id');
 select throws_ok($$update concierge.accounts set stripe_payment_method_id = 'pm_x'$$, '42501', null, 'a buyer can''t set a card');
-select throws_ok('select payment_method_id from concierge.orders', '42501', null, 'a buyer can''t read an order''s card');
-select throws_ok('select max_charge_cents from concierge.orders', '42501', null, 'nor its fee columns');
+select throws_ok(format('select %I from concierge.orders', c), '42501', null, 'a buyer can''t read orders.' || c)
+  from unnest(array['margin_cents', 'zinc_fee_cents', 'card_fee_bps', 'card_fee_fixed_cents', 'max_charge_cents',
+                    'final_charge_cents', 'payment_method_id']) c;
+select throws_ok(format('update concierge.orders set %I = null', c), '42501', null, 'a buyer can''t set orders.' || c)
+  from unnest(array['margin_cents', 'zinc_fee_cents', 'card_fee_bps', 'card_fee_fixed_cents', 'max_charge_cents',
+                    'final_charge_cents', 'payment_method_id']) c;
+select throws_ok('select concierge.start_card_session(auth.uid(), ''s'', ''c'', null, null, null)', '42501', null,
+  'a buyer can''t call start_card_session');
 select throws_ok('select * from concierge.card_sessions', '42501', null, 'a buyer can''t read card sessions');
 select throws_ok('select concierge.save_card(auth.uid(), ''s'', ''c'', ''p'')', '42501', null, 'a buyer can''t call save_card');
 select throws_ok('select concierge.remove_card(auth.uid())', '42501', null, 'a buyer can''t call remove_card');
@@ -126,7 +132,6 @@ select tests.reset_role();
 select is(concierge.card_charge_cents(5000, 250, 100, 290, 30), 5541, 'Zinc''s example: $50 goods, $2.50 margin, $1 fee');
 select is(concierge.card_charge_cents(2259, 100, 100, 290, 30), 2564, '$22.59 goods charge $25.64');
 select is(concierge.card_charge_cents(2349, 100, 100, 290, 30), 2657, '$23.49 goods charge $26.57');
-select is(concierge.card_charge_cents(2259), 2564, 'with today''s settings');
 
 -- ─── approving ───────────────────────────────────────────────────
 
@@ -140,6 +145,9 @@ select is((select max_charge_cents from tests.cp_order(:'r1')), concierge.card_c
 select is((select fee_cents from tests.cp_order(:'r1')), concierge.card_charge_cents(2485, 100, 100, 290, 30) - 2485,
           'fee_cents is the whole fee at the cap, so committed spend is the most charged');
 select is((select payment_method_id from tests.cp_order(:'r1')), 'pm_1', 'and the card it was approved with');
+update concierge.accounts set funding_mode = 'zinc_wallet' where user_id = :'u';
+select is((select funding_mode from tests.cp_order(:'r1')), 'connect', 'a held order keeps its mode when the account''s changes (case 1)');
+update concierge.accounts set funding_mode = 'connect' where user_id = :'u';
 
 -- The fees changed after the page loaded.
 select tests.cp_round(:'u') as r2 \gset
@@ -195,6 +203,8 @@ select is(tests.cp_state(:'r3'), 'held/paused', 'gate_held_orders pauses a card 
 select tests.cp_round(:'u') as r4 \gset
 select tests.cp_approve_all(:'r4');
 select is(concierge.remove_card(:'u'), 'placing', 'remove is refused while an order is placing (case 6)');
+update concierge.orders set status = 'unconfirmed' where round_id = :'r1';
+select is(concierge.remove_card(:'u'), 'placing', 'and while one is unconfirmed');
 select is(tests.cp_card(:'u'), 'pm_1', 'and the card stays');
 update concierge.orders set status = 'placed' where round_id = :'r1';
 select is(concierge.remove_card(:'u'), 'ok', 'remove works once nothing is placing');
@@ -214,6 +224,7 @@ select is(concierge.start_card_session(:'nc', 'cs_n1', 'cus_n', null, null, null
 select is((select stripe_customer_id from concierge.accounts where user_id = :'nc'), 'cus_n', 'and the customer is saved on the account straight away');
 select is(concierge.start_card_session(:'nc', 'cs_n2', 'cus_other', null, null, null), 'other_customer', 'a second customer is refused');
 select is((select count(*)::int from concierge.card_sessions where user_id = :'nc'), 1, 'and no visit is recorded for it');
+select is(concierge.start_card_session(:'nc', 'cs_n3', 'cus_n', :'r1', null, null), 'not_yours', 'a round that isn''t theirs is refused');
 
 -- Saving a card: once, only your own (case 15).
 select is(concierge.save_card(:'u', 'cs_1', 'cus_1', 'pm_3'), 'used', 'the same visit twice saves nothing');
@@ -260,9 +271,12 @@ select is(tests.cp_state(:'rb'), 'failed/card_needed', 'it is card_needed too');
 select tests.cp_round(:'u') as r6 \gset
 select tests.cp_approve_all(:'r6');
 select tests.cp_place(:'r6');
-select throws_ok(format($$select concierge.record_outcomes(%L, jsonb_build_array(jsonb_build_object('order_id', %L, 'outcome', 'insufficient')))$$,
-                        :'r6', (select id from tests.cp_order(:'r6'))),
-  '22023', null, 'insufficient on a card order is refused');
+select concierge.record_outcomes(:'r6', jsonb_build_array(jsonb_build_object('order_id', (select id from tests.cp_order(:'r6')), 'outcome', 'insufficient')));
+select is(tests.cp_state(:'r6'), 'failed/failed', 'insufficient on a card order ends it with nothing bought, never a funds hold');
+select is(tests.cp_card(:'u'), 'pm_4', 'and leaves the card alone');
+select tests.cp_round(:'u') as r6 \gset
+select tests.cp_approve_all(:'r6');
+select tests.cp_place(:'r6');
 
 -- A wallet order "declined" is a plain failure.
 select tests.cp_place(:'rw');
@@ -293,12 +307,14 @@ select is((select estimated from concierge.cost_events where order_id = (select 
           'the card fee is marked estimated without Zinc''s figure');
 select is((select cents::int from concierge.cost_events where order_id = (select id from tests.cp_order(:'r7')) and kind = 'card_fee'), 108,
           'the card fee is the fee less our margin and Zinc''s');
--- Settled again with another price (case 8).
-update concierge.orders set status = 'placing' where id = (select id from tests.cp_order(:'r7'));
+select is((select estimated from concierge.cost_events where order_id = (select id from tests.cp_order(:'r7')) and kind = 'zinc_order_fee'), true,
+          'Zinc''s fee is our saved figure, so it''s marked estimated');
+-- Settled again with another price, as the webhook after the sweep (case 8).
 select concierge.settle_order(:'u', (select id from tests.cp_order(:'r7')), 'placed', null,
                               '{"total_cents": 2349, "final_charge_cents": 2700}');
 select is((select count(*)::int from concierge.cost_events where order_id = (select id from tests.cp_order(:'r7'))), 2,
           'a second settle records no second cost row');
+select is((select final_charge_cents from tests.cp_order(:'r7')), 2657, 'and the first charge is kept');
 
 -- With Zinc's charge.
 select tests.cp_round(:'u') as r8 \gset
@@ -315,11 +331,20 @@ select tests.cp_place(:'r9');
 select (select fee_cents from tests.cp_order(:'r9')) as fee9 \gset
 select concierge.settle_order(:'u', (select id from tests.cp_order(:'r9')), 'placed', null, null);
 select is((select status || '/' || fee_cents from tests.cp_order(:'r9')), 'placed/' || :'fee9', 'with no prices, the fee stays at the cap');
+select is((select string_agg(kind, ',') from concierge.cost_events where order_id = (select id from tests.cp_order(:'r9'))), 'zinc_order_fee',
+          'Zinc''s fee is still counted; the card fee needs a total');
+
+-- A cap lowered at placing lowers the card's maximum with it.
+select tests.cp_round(:'u') as r9b \gset
+select tests.cp_approve_all(:'r9b');
+select count(*) from concierge.begin_placing(:'r9b', tests.cp_lock(:'r9b'), current_date,
+  jsonb_build_array(jsonb_build_object('id', (select id from tests.cp_order(:'r9b')), 'max_price_cents', 2259))) \gset placed_
+select is((select max_charge_cents || '/' || fee_cents from tests.cp_order(:'r9b')), '2564/305', 'a lower cap lowers the maximum charge and fee');
 
 -- The cost report leaves card costs out of the AI and lookup averages, and counts them on their own.
 select concierge.cost_per_gift(now() + interval '1 minute') as costs_after \gset
-select is((:'costs_after'::jsonb ->> 'cardGifts')::int - (:'costs_before'::jsonb ->> 'cardGifts')::int, 2, 'card gifts are counted');
-select is((:'costs_after'::jsonb ->> 'zincFeeCents')::numeric - (:'costs_before'::jsonb ->> 'zincFeeCents')::numeric, 200::numeric,
+select is((:'costs_after'::jsonb ->> 'cardGifts')::int - (:'costs_before'::jsonb ->> 'cardGifts')::int, 3, 'card gifts are counted');
+select is((:'costs_after'::jsonb ->> 'zincFeeCents')::numeric - (:'costs_before'::jsonb ->> 'zincFeeCents')::numeric, 300::numeric,
           'Zinc''s fee once per card gift');
 select is(array[:'costs_after'::jsonb ->> 'aiCents', :'costs_after'::jsonb ->> 'lookupCents'],
           array[:'costs_before'::jsonb ->> 'aiCents', :'costs_before'::jsonb ->> 'lookupCents'],
@@ -349,7 +374,9 @@ select concierge.record_outcomes(:'r10', jsonb_build_array(jsonb_build_object(
 select (select id from tests.cp_order(:'r10')) as f2 \gset
 update concierge.accounts set stripe_payment_method_id = 'pm_7' where user_id = :'u';
 select is((select count(*)::int from concierge.replace_failed_order(:'r10', :'u', tests.cp_lock(:'r10'), :'f2',
-             tests.cp_el(tests.cp_idea(:'r10'), '{"margin_cents": 120}'))), 1, 'a second decline can be bought again too');
+             tests.cp_el(tests.cp_idea(:'r10'), '{"margin_cents": 120, "new_total_cents": 2559}'))), 1, 'a second decline can be bought again too');
+select is((select goods_cents from concierge.gift_ideas where id = tests.cp_idea(:'r10')), 2459,
+          'a re-quote sent as a wallet total moves the goods too (case 13)');
 update concierge.app_settings set value = '35' where key = 'fee_part_running_cents';
 
 -- Past ship-by, never.
