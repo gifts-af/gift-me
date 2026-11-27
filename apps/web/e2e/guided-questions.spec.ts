@@ -79,8 +79,7 @@ test("a new person gets questions, and answering raises the meter (AC-1, AC-2)",
 
   await expect(page).toHaveURL(new RegExp(`/people/${personId}$`));
   await expect(page.getByRole("meter")).toHaveAttribute("aria-valuenow", "50");
-  await expect(page.getByText("You answered").first()).toBeVisible();
-  await expect(page.getByRole("region", { name: "Interests" }).getByText("crime podcasts")).toBeVisible();
+  await expect(page.getByRole("link", { name: /^What we know/ })).toHaveText("What we know3 facts");
   await expect(page.getByRole("link", { name: "Answer 4 questions" })).toBeVisible();
 
   // Following the next step: a live form, nothing left over, the answered ones gone.

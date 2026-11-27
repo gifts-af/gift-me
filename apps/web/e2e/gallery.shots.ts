@@ -62,6 +62,7 @@ const SIGNED_IN: [name: string, url: (s: Seeded) => string][] = [
   ["person-linked-list", (s) => `/people/${s.linkedId}`],
   ["person-gift-in-progress", (s) => `/people/${s.dadId}`],
   ["person-questions", (s) => `/people/${s.personId}/questions`],
+  ["person-know", (s) => `/people/${s.personId}/know`],
   ["person-budget", (s) => `/people/${s.personId}/budget`],
   ["person-about", (s) => `/people/${s.personId}/about`],
   ["person-saved-gifts", (s) => `/people/${s.personId}/saved-gifts`],

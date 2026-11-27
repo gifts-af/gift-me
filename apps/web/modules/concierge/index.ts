@@ -30,6 +30,7 @@ export { readUnreadCaptures } from "./capture/facts";
 // The profile: what we know, guided questions, the readiness meter (ALL-26).
 export {
   activeFacts,
+  addFact,
   answerQuestions,
   confirmFact,
   deleteFact,

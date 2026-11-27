@@ -111,11 +111,11 @@ describe("IdeasScreen", () => {
       expect(screen.queryByRole("link", { name: /questions/i })).toBeNull();
       unmount();
     }
-    // No facts yet: the message, with the way to add some.
+    // No facts yet: the message, with the way to add some (What we know, ALL-186).
     setup({ action: vi.fn(async (): Promise<Result> => ({ ok: false, error: NO_FACTS })) });
     await userEvent.click(suggest());
     expect(await screen.findByRole("alert")).toHaveTextContent(NO_FACTS);
-    expect(screen.getByRole("link", { name: "Answer a few questions" })).toHaveAttribute("href", "/people/p1/questions");
+    expect(screen.getByRole("link", { name: "Add something" })).toHaveAttribute("href", "/people/p1/know");
   });
 
   it("shows each idea: title, store, price, full cost, arrival and reason, keeping its product id", () => {

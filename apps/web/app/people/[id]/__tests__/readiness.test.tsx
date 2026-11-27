@@ -20,10 +20,14 @@ describe("ReadinessBanner", () => {
     expect(screen.getByRole("link", { name: "Answer 1 question" })).toBeInTheDocument();
   });
 
-  it("suggests a capture when no questions are left", () => {
+  // ALL-186: with the questions done, adding something yourself is the other way in.
+  it("suggests adding something, or a capture, when no questions are left", () => {
     render(<ReadinessBanner personId="p1" name="Dad" readiness={{ score: 30, label: "Getting there", step: { kind: "capture" } }} />);
-    expect(screen.getByText(/Capture a page about Dad/)).toBeInTheDocument();
-    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Add something" })).toHaveAttribute("href", "/people/p1/know");
+    expect(screen.getByText(/capture a page about them/)).toHaveTextContent(
+      "Add something about Dad, or capture a page about them with the extension, to learn more.",
+      { normalizeWhitespace: true },
+    );
   });
 
   it("suggests nothing when ready", () => {

@@ -70,7 +70,7 @@ test("a person's facts, with an AI suggestion and an unread capture, fit the scr
   // The projects run at once as the same user, so each gets its own Dad.
   const { personId } = await seed(`Dad L ${testInfo.project.name}`);
   await signIn(page);
-  await page.goto(`/people/${personId}`);
+  await page.goto(`/people/${personId}/know`);
   await expect(page.getByRole("region", { name: "Wants" }).getByText("a new rotary fly-tying vise")).toBeVisible();
   await expect(page.getByRole("button", { name: "Read it now" })).toBeVisible();
   expect(await phoneLayoutProblems(page)).toEqual([]);
@@ -85,7 +85,7 @@ test("facts open in place and save as you go: confirmed, turned off and on, edit
   const factRow = async () =>
     (await rest(`profile_facts?id=eq.${vise}&select=value,category,active,confirmed`, { profile: "concierge" }))[0];
   await signIn(page);
-  await page.goto(`/people/${personId}`);
+  await page.goto(`/people/${personId}/know`);
 
   const know = page.getByRole("region", { name: "What we know" });
   const wants = page.getByRole("region", { name: "Wants" });
@@ -167,10 +167,58 @@ test("facts open in place and save as you go: confirmed, turned off and on, edit
 test("without paid features, the page doesn't offer reading and says why (ALL-94)", async ({ page }, testInfo) => {
   const { personId } = await seed(`Dad ${testInfo.project.name}`, { user: SECOND_USER, paidFeatures: false });
   await signIn(page, SECOND_USER);
-  await page.goto(`/people/${personId}`);
+  await page.goto(`/people/${personId}/know`);
 
   await expect(page.getByText("1 capture hasn't been read.")).toBeVisible();
   await expect(page.getByText("Reading pages with AI costs money, so it's only on for test accounts for now.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Read it now" })).toHaveCount(0);
   await expect(page.getByRole("note")).toHaveCount(0);
+});
+
+// ALL-186: the person's page sums up what we know in one row, and its page takes a new fact.
+test("adds a fact on the What we know page, which the person's row counts", async ({ page }, testInfo) => {
+  const name = `Dad Add ${testInfo.project.name}`;
+  const { personId } = await seed(name);
+  const added = async () =>
+    rest(`profile_facts?person_id=eq.${personId}&source=eq.note&select=category,value,source,confirmed,active,changed_at`, { profile: "concierge" });
+  await signIn(page);
+  await page.goto(`/people/${personId}`);
+
+  // One row, not the list: 2 facts, and the failed capture still to read.
+  await expect(page.getByText("a new rotary fly-tying vise")).toHaveCount(0);
+  const row = page.getByRole("link", { name: /^What we know/ });
+  await expect(row).toHaveText("What we know2 facts · 1 to read");
+  await row.click();
+  await expect(page).toHaveURL(new RegExp(`/people/${personId}/know$`));
+  await expect(page.getByRole("heading", { level: 1, name: "What we know" })).toBeVisible();
+
+  // The starter questions are still open, so they're offered with facts known too.
+  await expect(page.getByRole("link", { name: "Answer more questions" })).toHaveAttribute("href", `/people/${personId}/questions`);
+
+  const box = page.getByRole("textbox", { name: "Add something" });
+  await box.fill("pottery classes");
+  await page.getByRole("combobox", { name: "Kind" }).selectOption("wants");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(page.getByText("Added", { exact: true })).toBeVisible();
+  await expect(box).toHaveValue("");
+  const wants = page.getByRole("region", { name: "Wants" });
+  await expect(wants.getByText("pottery classes")).toBeVisible();
+  await expect(wants.getByText("You told us")).toBeVisible();
+
+  // Saved as the buyer's own active fact, with changed_at set (what wakes a waiting round).
+  const [fact] = await added();
+  expect(fact).toMatchObject({ category: "wants", value: "pottery classes", source: "note", confirmed: true, active: true });
+  expect(fact.changed_at).toBeTruthy();
+
+  // The same again is refused, and the words stay.
+  await box.fill("Pottery classes");
+  await page.getByRole("combobox", { name: "Kind" }).selectOption("wants");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(page.getByRole("main").getByRole("alert")).toHaveText("That's already on their profile.");
+  await expect(box).toHaveValue("Pottery classes");
+  expect(await added()).toHaveLength(1);
+
+  await page.getByRole("link", { name }).first().click();
+  await expect(page).toHaveURL(new RegExp(`/people/${personId}$`));
+  await expect(page.getByRole("link", { name: /^What we know/ })).toHaveText("What we know3 facts · 1 to read");
 });

@@ -16,6 +16,7 @@ import { onDemandIdeaDeps, placeAddressHeld } from "@/lib/wiring";
 import { IDEA_MESSAGES, NO_FACTS } from "./[id]/ideas/messages";
 import {
   addPerson,
+  addFact,
   answerQuestions,
   confirmFact,
   costRecorder,
@@ -250,32 +251,47 @@ export async function importContactsAction(_previous: ImportResult | null, formD
   return { ...counts, failed: result.failed + parsed.refused };
 }
 
-// "What we know" (ALL-26): edit, turn off or delete a fact; read unread captures.
+// "What we know" (ALL-26): add, edit, turn off or delete a fact; read unread captures. Facts show
+// on the person's page (the row's count) and on What we know, so both are refreshed.
 const db = async () => (await createClient()) as unknown as Db;
+
+function factsChanged(result: SaveResult, personId: string): SaveResult {
+  if (result.ok && isId(personId)) revalidatePath(`/people/${personId}/know`);
+  return refresh(result, personId);
+}
+
+// "Add something": the buyer's own words, with the kind they picked.
+export async function addFactAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
+  const personId = text(formData, "personId");
+  if (!isId(personId)) return BAD_FORM;
+  const parsed = parseFactEdit({ category: text(formData, "category"), value: text(formData, "value") });
+  if (!parsed.ok) return parsed;
+  return factsChanged(await addFact(await db(), personId, { category: parsed.category, value: parsed.value }), personId);
+}
 
 export async function editFactAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
   const parsed = parseFactEdit({ category: text(formData, "category"), value: text(formData, "value") });
   if (!parsed.ok) return parsed;
   if (!isId(text(formData, "id"))) return BAD_FORM;
   const edit = { category: parsed.category, value: parsed.value };
-  return refresh(await updateFact(await db(), text(formData, "id"), edit), text(formData, "personId"));
+  return factsChanged(await updateFact(await db(), text(formData, "id"), edit), text(formData, "personId"));
 }
 
 export async function setFactActiveAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
   if (!isId(text(formData, "id"))) return BAD_FORM;
   const active = text(formData, "active") === "true";
-  return refresh(await setFactActive(await db(), text(formData, "id"), active), text(formData, "personId"));
+  return factsChanged(await setFactActive(await db(), text(formData, "id"), active), text(formData, "personId"));
 }
 
 // "Looks right" on a ✨ fact (ALL-127): confirms it without changing it.
 export async function confirmFactAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
   if (!isId(text(formData, "id"))) return BAD_FORM;
-  return refresh(await confirmFact(await db(), text(formData, "id")), text(formData, "personId"));
+  return factsChanged(await confirmFact(await db(), text(formData, "id")), text(formData, "personId"));
 }
 
 export async function deleteFactAction(_previous: SaveResult | null, formData: FormData): Promise<SaveResult> {
   if (!isId(text(formData, "id"))) return BAD_FORM;
-  return refresh(await deleteFact(await db(), text(formData, "id")), text(formData, "personId"));
+  return factsChanged(await deleteFact(await db(), text(formData, "id")), text(formData, "personId"));
 }
 
 // Guided questions (ALL-26): fields are named after each question's key.
@@ -289,6 +305,7 @@ export async function answerQuestionsAction(_previous: SaveResult | null, formDa
   if (result.ok) {
     revalidatePath(`/people/${personId}`);
     revalidatePath(`/people/${personId}/questions`);
+    revalidatePath(`/people/${personId}/know`);
   }
   return result;
 }
@@ -301,6 +318,7 @@ export async function skipQuestionAction(_previous: SaveResult | null, formData:
   if (result.ok) {
     revalidatePath(`/people/${personId}`);
     revalidatePath(`/people/${personId}/questions`);
+    revalidatePath(`/people/${personId}/know`);
   }
   return result;
 }
@@ -314,6 +332,7 @@ export async function readCapturesAction(_previous: SaveResult | null, formData:
   );
   // Some may have been read even when another failed, so refresh either way.
   revalidatePath(`/people/${personId}`);
+  revalidatePath(`/people/${personId}/know`);
   return result;
 }
 

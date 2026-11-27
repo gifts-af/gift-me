@@ -52,16 +52,16 @@ const knowledge = (over: Partial<Knowledge> = {}): Knowledge => ({
   ...over,
 });
 
-function setup(k: Knowledge = knowledge(), questionsHref: string | null = "/people/p1/questions", hasAccess = true) {
+function setup(k: Knowledge = knowledge(), hasAccess = true) {
   const actions = {
     editAction: vi.fn(async (...a: [unknown, FormData]) => (void a, ok as Result)),
     setActiveAction: vi.fn(async (...a: [unknown, FormData]) => (void a, ok as Result)),
     deleteAction: vi.fn(async (...a: [unknown, FormData]) => (void a, ok as Result)),
     readAction: vi.fn(async (...a: [unknown, FormData]) => (void a, ok as Result)),
   };
-  const view = render(<WhatWeKnow personId="p1" name="Dad" knowledge={k} questionsHref={questionsHref} hasAccess={hasAccess} {...actions} />);
+  const view = render(<WhatWeKnow personId="p1" name="Dad" knowledge={k} hasAccess={hasAccess} {...actions} />);
   const rerender = (next: Knowledge) =>
-    view.rerender(<WhatWeKnow personId="p1" name="Dad" knowledge={next} questionsHref={questionsHref} hasAccess={hasAccess} {...actions} />);
+    view.rerender(<WhatWeKnow personId="p1" name="Dad" knowledge={next} hasAccess={hasAccess} {...actions} />);
   return { ...actions, rerender };
 }
 
@@ -77,6 +77,14 @@ describe("WhatWeKnow", () => {
     expect(within(screen.getByRole("region", { name: "Wants" })).getByText("a rotary vise")).toBeInTheDocument();
   });
 
+  // ALL-186: on its own page, whose title says What we know, so the list has no heading of its own.
+  it("is one region named What we know, with a heading for each kind", () => {
+    setup();
+    expect(screen.getByRole("region", { name: "What we know" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "What we know" })).toBeNull();
+    expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual(["Interests", "Wants"]);
+  });
+
   it("marks an AI suggestion and links to where it came from (D47)", () => {
     setup();
     const wants = screen.getByRole("region", { name: "Wants" });
@@ -86,16 +94,12 @@ describe("WhatWeKnow", () => {
     expect(link).toHaveAttribute("target", "_blank");
   });
 
-  it("points to the questions when there's nothing yet", () => {
-    setup(knowledge({ groups: [] }));
-    expect(screen.getByText(/Nothing yet/)).toBeInTheDocument();
-  });
-
+  // The page it's on has the box to add one and the questions link, so it doesn't repeat them.
   it.each([
-    [true, "Nothing yet. Capture a page about Dad with the extension and we'll learn from it."],
-    [false, "Nothing yet. Capture a page about Dad with the extension."],
-  ])("with no questions open, points to a capture; with access %s, that's all it says (AC-19)", (hasAccess, text) => {
-    setup(knowledge({ groups: [] }), null, hasAccess);
+    [true, "Nothing yet. Add something above, or capture a page about Dad with the extension and we'll learn from it."],
+    [false, "Nothing yet. Add something above, or capture a page about Dad with the extension."],
+  ])("with nothing yet, points to adding one or a capture; with access %s, that's all it says (AC-19)", (hasAccess, text) => {
+    setup(knowledge({ groups: [] }), hasAccess);
     expect(screen.getByText(/^Nothing yet/)).toHaveTextContent(text, { normalizeWhitespace: true });
     expect(screen.queryByText(/learn from it/) !== null).toBe(hasAccess);
   });

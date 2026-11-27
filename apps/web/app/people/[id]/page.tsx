@@ -6,12 +6,8 @@ import { TopBar } from "@/components/app-shell/top-bar";
 import { PersonGifts } from "./person-gifts";
 import { PersonView } from "./person-view";
 
-// For the Server Actions on this page: "Read them now" (readCapturesAction) reads unread
-// captures with AI one after another, which can run long. 300 s is the most Vercel's Fluid
-// compute allows on our plan (review of ALL-127). Next needs a literal here.
-export const maxDuration = 300;
-
-// One person: what we know, then rows that open their own screens (ALL-127).
+// One person: rows that open their own screens (ALL-127), What we know among them. Its
+// "Read them now", which can run long, is on that screen (know/page.tsx keeps the 300 s).
 // Signed-out visitors are sent to sign in by proxy.ts.
 export default function PersonPage({
   params,

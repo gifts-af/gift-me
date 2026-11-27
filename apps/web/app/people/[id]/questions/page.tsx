@@ -47,10 +47,14 @@ async function Loaded({ params }: { params: Promise<{ id: string }> }) {
           skipAction={skipQuestionAction}
         />
       ) : (
+        // Email links ("Tell us more about …") land here after every question is answered,
+        // so this offers the way to add something instead of a dead end.
         <div className="flex flex-col gap-4">
-          <p className="text-[15px] text-muted-foreground">No questions right now.</p>
+          <p className="text-[15px] text-muted-foreground">
+            No questions right now. You can still tell us anything about {person.name} in your own words.
+          </p>
           <Button asChild>
-            <Link href={`/people/${person.id}`}>Back to {person.name}</Link>
+            <Link href={`/people/${person.id}/know`}>Add something</Link>
           </Button>
         </div>
       )}

@@ -231,14 +231,14 @@ A line is never false. With several gifts, the one that most needs the buyer win
 **Birthday (ALL-182)** is a row under You for someone with a list. Its screen has month, day, Save and Remove. After Share on My list, someone with none saved sees a small "No birthday saved. Add it (optional)" on the save-status row. It never moves the list; phones drop "(optional)" and hide "Saved" while it shows.
 
 
-**A person's page is what we know about them, then a short list of rows.** Each row shows its value and opens its own screen, like Settings (T71). There's no Edit form on the page any more. On a computer it's the same centred column. Plan: [`plans/ALL-127-save-as-you-go.md`](plans/ALL-127-save-as-you-go.md).
+**A person's page is a short list of rows.** Each row shows its value and opens its own screen, like Settings (T71). What we know became a row too (ALL-186), so the facts no longer spill down the page. There's no Edit form on the page any more. On a computer it's the same centred column. Plan: [`plans/ALL-127-save-as-you-go.md`](plans/ALL-127-save-as-you-go.md).
 
 | On Mom's page (`/people/[id]`), top to bottom | Shows | Opens |
 |---|---|---|
 | Header | Photo, name, "Mother · next occasion", where ideas come from, the readiness banner. A failed photo from the Add form says so here | — |
 | Their list | At the top, for someone with a linked list: "Mom's GiftsAF list", a "See their list" button and photos of up to 3 unclaimed gifts, each opening the list at that gift. Unlinked, the paste-a-link prompt | Their list |
 | Gifts in progress | Only when there are some: one row per open round (see Gifts in progress) | The round |
-| What we know | The facts, as before | Facts are changed in place |
+| What we know | "12 facts" (the ones in use), "1 fact" or "None yet", plus " · 2 to read" while captures wait to be read | What we know |
 | About Mom | "Mother · Birthday Mar 14" (no birthday: just "Mother") | About Mom |
 | Occasions | Each occasion with its switch, date and order-by date, as rows | Switches save when flipped |
 | Gifts: Budget | The base and occasion amounts (ALL-120) | Budget |
@@ -259,7 +259,7 @@ A line is never false. With several gifts, the one that most needs the buyer win
 
 **Gift ideas** (`/people/[id]/ideas`, ALL-27) is where a buyer asks for ideas without waiting for a round:
 - **Top:** a "Suggest ideas for Mom" button with the money notice always visible beside it ("Suggesting ideas uses AI and live product lookups, which cost real money: usually about 40¢, at most $1", from settings; the style of [Money notice](#money-notice-decision-53-all-94), no "Alpha:"). While it runs, the button is off and a line says it takes about a minute. With no button, a line says why: "Suggestions are switched off right now." while the engine is off (`idea_engine_enabled` = 0), or "Gift ideas aren't available on your account yet." for a buyer without paid features.
-- **A run that finds nothing:** a plain line, never a blank. "Tell us a bit about them first" (with an "Answer a few questions" link) when there are no facts, "We couldn't find anything suitable this time", or "Couldn't get ideas. Try again."
+- **A run that finds nothing:** a plain line, never a blank. "Tell us a bit about them first" (with an "Add something" link to What we know) when there are no facts, "We couldn't find anything suitable this time", or "Couldn't get ideas. Try again."
 - **Each idea** is a row: the title (a link to the product), the price including shipping, estimated tax and the order fee, and the store ("$74.00 · Amazon"), "Arrives by Dec 10 if ordered today", and a one-line reason it fits. At most one idea per run is over budget, and it carries an **Over budget** label (also shown in the round emails). With no budget, nothing is labelled.
 - A new run replaces the last on-demand set. Ideas made inside a round aren't shown here.
 
@@ -313,14 +313,19 @@ A clickable, phone-first prototype, published as a private shareable artifact pa
 | Heads-up email | Two kinds. **Reminder:** the options as small read-only rows and "Choose a gift"; nothing is bought until you choose. **Auto-buy on** (opt-in, A-7): says which gift will be bought and on what date, marks it, and offers "Review or change" and how to skip. The "Buy this" and button links are plain app URLs for the signed-in owner (T80, see Approval screens); other buttons are signed one-time links (design §6.4) | N-1, A-7, decision 40 |
 | Computer width | Give and the gift list only | — |
 
-**As built on the person page (ALL-26, D51, ALL-127):** "What we know" is one list of facts by category, each with its source and ✨ on unconfirmed AI suggestions. Tapping a fact opens it in place, and it saves as you go (T71), with no Save button:
+**What we know** (`/people/[id]/know`, ALL-26, D51, ALL-127, ALL-186) is its own screen, opened from the person's What we know row. Top to bottom:
+- **Add something:** a text box, a **Kind** picker over the fact kinds (starts on Interests) and **Add**. The box's example follows the kind, so it never suggests mixing kinds: "Loves pottery, cold brew…" for Interests, "Size M tops, shoe size 9…" for Sizes, "Anything with glitter, more mugs…" for Avoid, and so on (never a health or diet example, which would be refused). The fact is saved on, confirmed and marked "You told us"; it counts as new, so a round waiting after a search that found nothing tries again (T68). "Added" shows under it and the box empties. Empty words say "Type something first."; the same fact again says "That's already on their profile." and keeps the words; one that was turned off comes back on instead, and one that's a ✨ suggestion is confirmed, as "Looks right" does. Typed text follows the same sensitive-topics rule as edits (C-8).
+- **Answer more questions** ("Answer a few questions" while nothing is known), whenever any starter question is open.
+- **The list:** one list of facts by category, each with its source and ✨ on unconfirmed AI suggestions. With nothing yet, it says "Nothing yet. Add something above, or capture a page about Mom with the extension". Turned off facts and unread captures ("Read them now") sit under it, as before.
+
+Tapping a fact opens it in place, and it saves as you go (T71), with no Save button:
 - **Fact** (the words) saves when you leave the field or press Enter, or when the fact is closed with **Done**; **Kind** saves when picked. Each save carries both, so a words save never puts back the old kind. Empty words show "Type something first." and save nothing; a failed save keeps what was typed and shows why under the fields.
 - **Use for gift ideas** is a switch that saves when flipped. Off moves the fact to "Turned off", where it keeps its text so the AI won't suggest it again; it stays open where it was until Done, so it can be flipped back.
 - **Looks right** shows only on an unconfirmed ✨ suggestion: it confirms the fact as it is, and the ✨ goes. Changing a fact's words or kind also confirms it, as before; saving with no change sends nothing.
 - **Delete** still asks first.
 - An open fact stays where it was opened until Done, even when a new kind belongs in another group, so "Saved" doesn't jump away. The fields stay off until the page's JavaScript has loaded (ALL-110).
 
-"Add a note" isn't built yet.
+With no starter questions left, the readiness banner's next step is "Add something about Mom, or capture a page about them", linking to What we know, and the questions screen's "No questions right now" offers **Add something** too, so the "Tell us more" email never ends at a dead end.
 
 Not mocked up now: the reaction prompt (ALL-34) and other later screens. They reuse these patterns and get mock-ups in their own tickets if needed **[Claude's call]**.
 

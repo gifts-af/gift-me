@@ -20,7 +20,12 @@ export class CaptureNotFound extends Error {
 
 /** Two facts are the same when category and value match, ignoring case and spacing. */
 export function factKey(category: string, value: string): string {
-  return `${category}:${value.trim().replace(/\s+/g, " ").toLowerCase()}`;
+  return `${category}:${valueKey(value)}`;
+}
+
+/** A value as `profile_facts.value_key` and its unique index compare it: trimmed, spaces collapsed, lower case. */
+export function valueKey(value: string): string {
+  return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 /** Keeps confident, non-sensitive facts the person doesn't already have (active or removed). */
