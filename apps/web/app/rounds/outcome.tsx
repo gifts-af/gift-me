@@ -10,7 +10,7 @@ import { money } from "@/app/people/[id]/money";
 // always told). The actions return only these codes; the words live here.
 
 export type BuyError = ApproveError | ReplaceError | "zinc_off" | "session" | "bad_form";
-export type BuyResult = Extract<ApproveResult, { ok: true }> | { ok: false; error: BuyError };
+export type BuyResult = Extract<ApproveResult, { ok: true }> | { ok: false; error: BuyError; neverMoreThanCents?: number };
 
 /**
  * The money notice (decision 53), always shown next to anything that places an order: the
@@ -50,6 +50,7 @@ const FAILED: Record<string, Words> = {
   address_withdrawn: { title: "The address isn't shared any more", body: "We didn't buy it. We've emailed you what you can do." },
   address_rejected: { title: "The store couldn't ship to that address", body: "We didn't buy it. We've emailed you what you can do." },
   store_cancelled: { title: "The store cancelled it", body: "The money is back in your Zinc wallet. We've emailed you what you can do." },
+  card_needed: { title: "Your card changed or couldn't be charged", body: "Nothing was bought. We've emailed you what you can do." },
 };
 const FAILED_OTHER: Words = { title: "The store couldn't take the order", body: "We didn't buy it. We've emailed you what you can do." };
 
@@ -73,8 +74,8 @@ const ERRORS: Record<BuyError, Words> = {
   once: { title: "The price went up again", body: "Nothing was bought. Pick another idea." },
   unavailable: { title: "We can't get today's price", body: "Nothing was bought. Pick another idea." },
   zinc_off: { title: "Buying isn't switched on here", body: "Nothing was bought." },
-  no_card: { title: "Add a card first", body: "Nothing was bought. Add a card, then tap Buy again." },
-  connect_off: { title: "Buying is paused", body: "Nothing was bought. Paying by card is switched off right now." },
+  no_card: { title: "Add a card first", body: "Nothing was bought. Add a card, then tap Buy again. Adding a card doesn't buy anything." },
+  connect_off: { title: "Buying is paused", body: "We can't buy gifts right now. Nothing was bought. We'll email you when it's back on." },
   session: { title: "Your session ended", body: "Sign in again. Nothing was bought." },
   bad_form: { title: "That didn't go through", body: "Nothing was bought. Reload and try again." },
 };

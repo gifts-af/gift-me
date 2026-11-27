@@ -1,12 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { z } from "zod";
 import { FACT_VALUE_MAX, RATINGS, type Database } from "@gifts-af/core";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { buyingWiring, lookupWiring, roundDbDeps, settingInt } from "@/lib/wiring";
+import { errorFields, logEvent } from "@/lib/log";
+import { siteUrl } from "@/lib/site-url";
+import { buyingWiring, lookupWiring, roundDbDeps, settingInt, stripeWiring } from "@/lib/wiring";
 import {
   approveAndBuy,
   costRecorder,
@@ -19,10 +22,12 @@ import {
   type RejectionOutlook,
   rejectRoundIdeas,
   replaceFailedOrder,
+  replacementMaxCents,
   roundAccess,
   saveReaction,
   setRoundBudget,
   skipRound,
+  startCardSession,
   tellDelivered,
   type ReactionRefusal,
   type ShipTo,
@@ -30,6 +35,8 @@ import {
 import type { BudgetResult, RejectResult } from "./[id]/round-screen";
 import type { CheckResult } from "./[id]/fix/[orderId]/fix-screen";
 import type { BuyResult } from "./outcome";
+import type { StartCardResult } from "./card-ui";
+import { baseUrlFrom } from "../settings/base-url";
 import type { PickAgainResult, SkipResult } from "./ways-out";
 
 // The round, confirm and fix pages' server actions (ALL-29). Each takes the user from the session, validates
@@ -161,6 +168,17 @@ function shipToOf(form: FormData): ShipTo | undefined | null {
 /** Only the "Buy anyway" button sends over=1. The module checks the budget and allowance either way. */
 const overOf = (form: FormData) => field(form, "over") === "1";
 
+/**
+ * A card buyer's "Most you'll pay" as the page showed it: undefined when it didn't send one, null
+ * when it's malformed. The module refuses a card buy without it (price_changed).
+ */
+function shownMaxOf(form: FormData): number | undefined | null {
+  const raw = field(form, "shownMaxCents");
+  if (raw === null) return undefined;
+  const parsed = z.coerce.number().int().min(0).max(Number.MAX_SAFE_INTEGER).safeParse(raw);
+  return parsed.success ? parsed.data : null;
+}
+
 /** The confirm page's one button (AC-2, AC-4, AC-6, AC-8, AC-10, AC-11). */
 export async function buyAction(roundId: string, form: FormData): Promise<BuyResult> {
   const id = RoundId.safeParse(roundId);
@@ -170,7 +188,8 @@ export async function buyAction(roundId: string, form: FormData): Promise<BuyRes
   const ideas = z.array(z.uuid()).min(1).max(50).safeParse((field(form, "ideas") ?? "").split(","));
   const note = z.string().max(2000).safeParse(field(form, "note") ?? "");
   const shipTo = shipToOf(form);
-  if (!id.success || !ideas.success || !note.success || shipTo === null) return { ok: false, error: "bad_form" };
+  const shownMax = shownMaxOf(form);
+  if (!id.success || !ideas.success || !note.success || shipTo === null || shownMax === null) return { ok: false, error: "bad_form" };
   const user = await signedIn();
   if (!user) return { ok: false, error: "session" };
 
@@ -185,6 +204,7 @@ export async function buyAction(roundId: string, form: FormData): Promise<BuyRes
       ...(note.data.trim() ? { giftMessage: note.data } : {}),
       overBudgetConfirmed: overOf(form),
       ...(shipTo ? { shipTo } : {}),
+      ...(shownMax !== undefined ? { shownMaxCents: shownMax } : {}),
     },
     purchase,
   );
@@ -210,7 +230,15 @@ export async function checkPriceAction(roundId: string, orderId: string): Promis
     { userId: user.userId, roundId: id.data, orderId: order.data },
     { ...roundDbDeps(new Date()), lookup, recordCost: costRecorder(createAdminClient) },
   );
-  return typeof result === "string" ? { ok: false, error: result } : { ok: true, oldCents: result.oldCents, newCents: result.newCents };
+  if (typeof result === "string") return { ok: false, error: result };
+  // A card buyer's "Most you'll pay" at today's price, which Buy again sends back (AC-4).
+  const maxCents = await replacementMaxCents(roundDbDeps(new Date()), {
+    userId: user.userId,
+    roundId: id.data,
+    failedOrderId: order.data,
+    totalCents: result.newCents,
+  });
+  return { ok: true, oldCents: result.oldCents, newCents: result.newCents, maxCents };
 }
 
 /** The fix page's buttons (AC-14, AC-15, AC-15a): the same gift again, or the next-best one. */
@@ -221,7 +249,8 @@ export async function replaceAction(roundId: string, orderId: string, form: Form
   const shownRaw = field(form, "shownTotalCents");
   const shown = shownRaw === null ? null : z.coerce.number().int().min(0).safeParse(shownRaw);
   const shipTo = shipToOf(form);
-  if (!id.success || !order.success || !idea.success || (shown !== null && !shown.success) || shipTo === null) {
+  const shownMax = shownMaxOf(form);
+  if (!id.success || !order.success || !idea.success || (shown !== null && !shown.success) || shipTo === null || shownMax === null) {
     return { ok: false, error: "bad_form" };
   }
   const user = await signedIn();
@@ -239,6 +268,7 @@ export async function replaceAction(roundId: string, orderId: string, form: Form
       failedOrderId: order.data,
       ideaId: idea.data,
       ...(shown?.success ? { shownTotalCents: shown.data } : {}),
+      ...(shownMax !== undefined ? { shownMaxCents: shownMax } : {}),
       ...(shipTo ? { shipTo } : {}),
       overBudgetConfirmed: overOf(form),
     },
@@ -246,6 +276,43 @@ export async function replaceAction(roundId: string, orderId: string, form: Form
   );
   if (result.ok) revalidatePath(`/rounds/${id.data}`);
   return result;
+}
+
+// ─── a card (paying by card) ─────────────────────────────────────────────────
+
+const CardFrom = z.union([
+  z.literal("settings"),
+  z.object({ roundId: z.uuid(), ideaIds: z.array(z.uuid()).max(50), failedOrderId: z.uuid().optional() }).strict(),
+]);
+
+/**
+ * "Add a card", "Change" and Settings' "Replace card": leaves for Stripe's card page, which comes
+ * back to where the buyer started. It never buys anything. `phone` is asked for only when the
+ * account has none (Zinc needs one on every order). The module checks the round, ideas and failed
+ * order are this buyer's, and that paying by card is on.
+ */
+export async function startCardAction(from: unknown, phone: string | null): Promise<StartCardResult> {
+  const parsed = CardFrom.safeParse(from);
+  const phoneOk = phone === null || (typeof phone === "string" && phone.length <= 40);
+  if (!parsed.success || !phoneOk) return { ok: false, error: "not_yours" };
+  const user = await signedIn();
+  if (!user) return { ok: false, error: "session" };
+  const db = createAdminClient();
+  try {
+    const stripe = await stripeWiring(db);
+    if (!stripe) return { ok: false, error: "unavailable" };
+    // Stripe sends the buyer back to the host they're on (a preview, or local), else the site's own.
+    const site = baseUrlFrom(await headers()) ?? siteUrl();
+    const out = await startCardSession(
+      { db, now: new Date(), stripe, siteUrl: site },
+      { userId: user.userId, from: parsed.data, ...(phone !== null ? { phone } : {}) },
+    );
+    if (typeof out === "string") return { ok: false, error: out };
+    return { ok: true, url: out.url };
+  } catch (error) {
+    logEvent("card.start_failed", { user_id: user.userId, ...errorFields(error) });
+    return { ok: false, error: "unavailable" };
+  }
 }
 
 // ─── a failed gift's ways out ────────────────────────────────────────────────

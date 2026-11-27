@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // buyAction's input checks (ALL-29 Task 12): malformed input is refused before the session or
 // any money path is touched. The real action runs in the round journeys (Task 13).
-const { createClient, approveAndBuy, quoteFailedOrder, replaceFailedOrder, costRecorder, createAdminClient, recorder, buyingWiring, lookupWiring } = vi.hoisted(() => ({
+const { createClient, approveAndBuy, quoteFailedOrder, replaceFailedOrder, costRecorder, createAdminClient, recorder, buyingWiring, lookupWiring, replacementMaxCents } = vi.hoisted(() => ({
   createClient: vi.fn(),
   approveAndBuy: vi.fn(),
   quoteFailedOrder: vi.fn(),
@@ -12,12 +12,13 @@ const { createClient, approveAndBuy, quoteFailedOrder, replaceFailedOrder, costR
   recorder: vi.fn(),
   buyingWiring: vi.fn(),
   lookupWiring: vi.fn(),
+  replacementMaxCents: vi.fn(),
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient }));
 vi.mock("@/lib/wiring", () => ({ buyingWiring, lookupWiring, roundDbDeps: vi.fn() }));
-vi.mock("@/modules/concierge", () => ({ approveAndBuy, quoteFailedOrder, replaceFailedOrder, costRecorder, MAX_BUDGET_CENTS: 1 }));
+vi.mock("@/modules/concierge", () => ({ approveAndBuy, quoteFailedOrder, replaceFailedOrder, replacementMaxCents, costRecorder, MAX_BUDGET_CENTS: 1 }));
 
 import { buyAction, checkPriceAction, replaceAction } from "../actions";
 
@@ -80,5 +81,52 @@ describe("price-check cost recording", () => {
     await replaceAction(ROUND, id(2), form({ ideaId: id(3), shownTotalCents: "5000" }));
     expect(costRecorder).toHaveBeenCalledWith(createAdminClient);
     expect(replaceFailedOrder.mock.calls[0][1]).toMatchObject({ env: "test", recordCost: recorder });
+  });
+});
+
+describe("a card buyer's Most you'll pay (AC-4)", () => {
+  const signedIn = () => createClient.mockResolvedValue({ auth: { getClaims: async () => ({ data: { claims: { sub: "u1" } } }) } });
+
+  it("buyAction passes on the Most you'll pay the page showed", async () => {
+    signedIn();
+    buyingWiring.mockResolvedValue({ engine: {}, purchase: {} });
+    approveAndBuy.mockResolvedValue({ ok: false, error: "busy" });
+    await buyAction(ROUND, form({ ideas: id(2), shownMaxCents: "2797" }));
+    expect(approveAndBuy.mock.calls[0][0]).toMatchObject({ shownMaxCents: 2797 });
+  });
+
+  it("buyAction sends none when the page showed none (a wallet buyer)", async () => {
+    signedIn();
+    buyingWiring.mockResolvedValue({ engine: {}, purchase: {} });
+    approveAndBuy.mockResolvedValue({ ok: false, error: "busy" });
+    await buyAction(ROUND, form({ ideas: id(2) }));
+    expect(approveAndBuy.mock.calls[0][0]).not.toHaveProperty("shownMaxCents");
+  });
+
+  it("a malformed one is refused before the session", async () => {
+    for (const bad of ["-1", "2.5", "abc"]) {
+      expect(await buyAction(ROUND, form({ ideas: id(2), shownMaxCents: bad }))).toEqual({ ok: false, error: "bad_form" });
+      expect(await replaceAction(ROUND, id(2), form({ ideaId: id(3), shownMaxCents: bad }))).toEqual({ ok: false, error: "bad_form" });
+    }
+    expect(createClient).not.toHaveBeenCalled();
+  });
+
+  it("replaceAction passes it on too", async () => {
+    signedIn();
+    buyingWiring.mockResolvedValue({ engine: {}, purchase: {} });
+    lookupWiring.mockResolvedValue({ key: "k" });
+    replaceFailedOrder.mockResolvedValue({ ok: false, error: "busy" });
+    await replaceAction(ROUND, id(2), form({ ideaId: id(3), shownMaxCents: "3380" }));
+    expect(replaceFailedOrder.mock.calls[0][0]).toMatchObject({ shownMaxCents: 3380 });
+  });
+
+  it("checkPriceAction returns the Most you'll pay at today's price", async () => {
+    signedIn();
+    buyingWiring.mockResolvedValue({ engine: {}, purchase: {} });
+    lookupWiring.mockResolvedValue({ key: "k" });
+    quoteFailedOrder.mockResolvedValue({ oldCents: 2564, newCents: 2600 });
+    replacementMaxCents.mockResolvedValue(2840);
+    expect(await checkPriceAction(ROUND, id(2))).toEqual({ ok: true, oldCents: 2564, newCents: 2600, maxCents: 2840 });
+    expect(replacementMaxCents.mock.calls[0][1]).toEqual({ userId: "u1", roundId: ROUND, failedOrderId: id(2), totalCents: 2600 });
   });
 });

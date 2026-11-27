@@ -8,12 +8,12 @@ import { TopBar } from "@/components/app-shell/top-bar";
 import { APP_NAME } from "@/lib/brand";
 import { errorFields, logEvent } from "@/lib/log";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { capsFor, getZincWallet, type RoundPageIdea, type RoundPageView } from "@/modules/concierge";
+import { capsFor, capsForPayer, cardBuyer, getZincWallet, type RoundPageIdea, type RoundPageView } from "@/modules/concierge";
 import { settingInt, zincWiring } from "@/lib/wiring";
-import { buyAction } from "../../actions";
+import { buyAction, startCardAction } from "../../actions";
 import { OtherAccount } from "../../access";
 import { loadRound, shipToChoices } from "../../load";
-import { ConfirmScreen } from "./confirm-screen";
+import { ConfirmScreen, type ConfirmCard } from "./confirm-screen";
 
 // For buyAction on this page: buying places the gifts at Zinc, which can run for a while (one
 // zinc_place_budget_ms plus a request in flight). 300 s is the most Vercel's Fluid compute
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
 };
 
 type Params = Promise<{ id: string }>;
-type Search = Promise<{ ideas?: string; over?: string }>;
+type Search = Promise<{ ideas?: string; over?: string; card?: string }>;
 
 export default function BuyPage({ params, searchParams }: { params: Params; searchParams: Search }) {
   return (
@@ -84,7 +84,7 @@ async function balanceCents(userId: string): Promise<number | null> {
 }
 
 async function Loaded({ params, searchParams }: { params: Params; searchParams: Search }) {
-  const [{ id }, { ideas: raw }] = await Promise.all([params, searchParams]);
+  const [{ id }, { ideas: raw, card: back }] = await Promise.all([params, searchParams]);
   const loaded = await loadRound(id);
   if (loaded.kind === "other") return <OtherAccount />;
   const { view, userId } = loaded;
@@ -96,23 +96,37 @@ async function Loaded({ params, searchParams }: { params: Params; searchParams: 
   const picks = ids.map((i) => byId.get(i)!).sort((a, b) => a.rank - b.rank);
 
   const db = createAdminClient();
+  const buyer = await cardBuyer({ db, now: new Date() }, userId);
   const [feeCents, marginPct, giftMessageMax, choices, balance] = await Promise.all([
     settingInt(db, "zinc_order_fee_cents"),
     settingInt(db, "order_price_margin_pct"),
     settingInt(db, "zinc_gift_message_max_chars"),
     shipToChoices(view.round.personId, userId),
-    balanceCents(userId),
+    // A card buyer has no Zinc balance.
+    buyer.mode === "connect" ? null : balanceCents(userId),
   ]);
   const pct = view.overBudgetPct ?? 0;
-  // The most the wallet can be charged, as approveAndBuy will cap it; past the allowance there's none.
-  const caps = capsFor(
-    { budget_cents: view.round.budgetCents },
-    picks.map((i) => i.totalCents),
-    { over_budget_pct: pct },
-    true,
-    { feeCents, marginPct },
-    0,
-  );
+  const round = { budget_cents: view.round.budgetCents };
+  const totals = picks.map((i) => i.totalCents);
+  // The most the buyer can be charged, as approveAndBuy will cap it; past the allowance there's none.
+  // A card buyer's is the whole charge at the goods caps, fee included (AC-4).
+  const caps =
+    buyer.mode === "connect"
+      ? capsForPayer(round, totals, { over_budget_pct: pct }, true, buyer.payer, marginPct, 0)
+      : capsFor(round, totals, { over_budget_pct: pct }, true, { feeCents, marginPct }, 0);
+  const card: ConfirmCard | undefined =
+    buyer.mode === "connect"
+      ? {
+          on: buyer.on,
+          hasCard: buyer.hasCard,
+          needsPhone: buyer.phone === null,
+          fee: buyer.fee,
+          capGoodsCents: typeof caps === "string" ? null : caps.caps.reduce((a, b) => a + b, 0),
+          // Only "cancelled" comes back to the gift; the return route sends the rest to Settings.
+          cardReturn: back === "cancelled" ? back : null,
+          startCard: startCardAction.bind(null, { roundId: id, ideaIds: ids }),
+        }
+      : undefined;
 
   const name = view.round.personName ?? "them";
   return (
@@ -134,6 +148,7 @@ async function Loaded({ params, searchParams }: { params: Params; searchParams: 
         buyerAddress={choices.buyerAddress}
         returnPath={`/rounds/${id}/buy?ideas=${ids.join(",")}`}
         buyAction={buyAction}
+        card={card}
       />
     </>
   );

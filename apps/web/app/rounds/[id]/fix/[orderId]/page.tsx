@@ -9,12 +9,12 @@ import { TopBar } from "@/components/app-shell/top-bar";
 import { Button } from "@/components/ui/button";
 import { APP_NAME } from "@/lib/brand";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { isId } from "@/modules/concierge";
+import { cardBuyer, isId, replacementMaxCents } from "@/modules/concierge";
 import { settingInt } from "@/lib/wiring";
-import { checkPriceAction, pickAgainAction, replaceAction, skipRoundAction } from "../../../actions";
+import { checkPriceAction, pickAgainAction, replaceAction, skipRoundAction, startCardAction } from "../../../actions";
 import { OtherAccount } from "../../../access";
 import { loadRound, shipToChoices } from "../../../load";
-import { FixScreen } from "./fix-screen";
+import { FixScreen, type FixCard } from "./fix-screen";
 
 // For replaceAction on this page: replacing places the new gift at Zinc, which can run for a
 // while. 300 s is the most Vercel's Fluid compute allows on our plan. Next needs a literal here.
@@ -30,10 +30,11 @@ export const metadata: Metadata = {
 };
 
 type Params = Promise<{ id: string; orderId: string }>;
+type Search = Promise<{ card?: string }>;
 
 const ADDRESS_FAILURES = new Set(["address_withdrawn", "address_rejected"]);
 
-export default function FixPage({ params }: { params: Params }) {
+export default function FixPage({ params, searchParams }: { params: Params; searchParams: Search }) {
   return (
     <>
       <TopBar>
@@ -41,15 +42,15 @@ export default function FixPage({ params }: { params: Params }) {
       </TopBar>
       <PageFrame>
         <Suspense fallback={<p className="text-[15px] text-muted-foreground">Loading…</p>}>
-          <Loaded params={params} />
+          <Loaded params={params} searchParams={searchParams} />
         </Suspense>
       </PageFrame>
     </>
   );
 }
 
-async function Loaded({ params }: { params: Params }) {
-  const { id, orderId } = await params;
+async function Loaded({ params, searchParams }: { params: Params; searchParams: Search }) {
+  const [{ id, orderId }, { card: cardBack }] = await Promise.all([params, searchParams]);
   if (!isId(orderId)) notFound();
   const loaded = await loadRound(id);
   if (loaded.kind === "other") return <OtherAccount />;
@@ -88,11 +89,31 @@ async function Loaded({ params }: { params: Params }) {
   const canSkip = view.liveOrders.length === 0;
   const canPick = canSkip && view.round.status === "needs_attention" && view.failedOrders.length === 1;
   const db = createAdminClient();
-  const [lookupCents, feeCents, choices] = await Promise.all([
+  const deps = { db, now: new Date() };
+  const [lookupCents, feeCents, choices, buyer] = await Promise.all([
     settingInt(db, "zinc_lookup_cents"),
     settingInt(db, "zinc_order_fee_cents"),
     shipToChoices(view.round.personId, userId),
+    cardBuyer(deps, userId),
   ]);
+  let card: FixCard | undefined;
+  if (buyer.mode === "connect") {
+    // "Most you'll pay" for each gift that can be bought here at its total on the page; Buy sends it back.
+    const targets = [idea, nextBest].filter((i) => i !== null);
+    const maxes = await Promise.all(
+      targets.map((i) => replacementMaxCents(deps, { userId, roundId: id, failedOrderId: order.id, totalCents: i.totalCents })),
+    );
+    card = {
+      on: buyer.on,
+      hasCard: buyer.hasCard,
+      needsPhone: buyer.phone === null,
+      fee: buyer.fee,
+      // Only "cancelled" comes back to the gift; the return route sends the rest to Settings.
+      cardReturn: cardBack === "cancelled" ? cardBack : null,
+      startCard: startCardAction.bind(null, { roundId: id, ideaIds: [], failedOrderId: order.id }),
+      maxFor: Object.fromEntries(targets.map((i, n) => [i.id, maxes[n]])),
+    };
+  }
 
   return (
     <>
@@ -121,6 +142,7 @@ async function Loaded({ params }: { params: Params }) {
         canSkip={canSkip}
         pickAgainAction={pickAgainAction}
         skipRoundAction={skipRoundAction}
+        card={card}
       />
     </>
   );

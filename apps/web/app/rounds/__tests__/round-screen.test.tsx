@@ -35,6 +35,7 @@ function idea(o: Partial<RoundPageIdea> = {}): RoundPageIdea {
     claimedByMe: false,
     noLongerShared: false,
     livePrice: true,
+    goodsCents: null,
     ...o,
   };
 }
