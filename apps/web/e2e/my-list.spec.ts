@@ -44,6 +44,20 @@ test("adds save at once, Undo puts a gift back, and a remove saves once its wind
   await expect(gift(page, "Kettle")).toHaveCount(0);
 });
 
+// ALL-188: a link with a name and price is added in one tap and saved.
+test("one tap on Add saves a gift from a full-match link", async ({ page }) => {
+  await signIn(page, await createFreshUser());
+  await page.goto("/lists");
+  await page.getByLabel("Paste a link").fill("https://www.amazon.com/dp/B07FZ8S74R");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(page.getByText(/^Added Echo Dot \(3rd Gen\).* to your list\.$/)).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByLabel("Paste a link")).toHaveValue("");
+  await expect(page.getByRole("button", { name: "Add to list" })).toHaveCount(0);
+  await expect(saveStatus(page)).toHaveText("Saved");
+  await page.reload();
+  await expect(page.getByRole("heading", { level: 3, name: /^Echo Dot \(3rd Gen\)/ })).toBeVisible();
+});
+
 test("a stale tab can't overwrite newer gifts, and keeps its own (AC-14)", async ({ page, context }) => {
   await signIn(page, await createFreshUser());
   await page.goto("/lists");

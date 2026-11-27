@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { useLayoutEffect, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 import { lookupProductLink, storeName, type MissingField } from "@/modules/lists/lib/product-link";
-import { centsToInputValue, formatCents, parsePriceToCents } from "@/modules/lists/lib/format";
+import { centsToInputValue, parsePriceToCents } from "@/modules/lists/lib/format";
 import type { PageProduct } from "@gifts-af/core/store-page";
 import { useExtensionStoreUrl } from "@/components/extension-link";
 import type { AmazonLookupResult, AmazonProduct } from "@/modules/lists/lib/amazon-lookup";
@@ -16,7 +16,9 @@ type Draft = { name: string; price: string; imageUrl: string };
 type FieldErrors = Partial<Record<keyof Draft, string>>;
 // Where the gift came from, carried through to onAdd untouched.
 type Meta = Pick<Gift, "productUrl" | "asin" | "source">;
-type Mode = "closed" | "found" | "details";
+type Mode = "closed" | "details";
+// What the panel last said: a gift added, or why a lookup was held back.
+type Announcement = { text: string; tone: "done" | "hold" };
 // A lookup that found a product, complete or partial.
 type FoundLookup = Exclude<Lookup, { status: "error" }>;
 
@@ -120,8 +122,9 @@ function isAmazonSource(source: LookupProduct["source"] | null): boolean {
 }
 
 /**
- * Paste a link and tap Add (mock-up "list"): a full match shows as a card to
- * confirm; a partial one opens the details, prefilled, at the missing field.
+ * Paste a link and tap Add (mock-up "list"): a full match is added to the
+ * list straight away; a partial one opens the details, prefilled, at the
+ * missing field, and holds there until it's added or cancelled.
  * "Add by hand" opens the same details empty.
  *
  * When signed in, the server fills the name, price and photo:
@@ -140,8 +143,8 @@ export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }: Add
   const [lookup, setLookup] = useState<Lookup | null>(null);
   const [pending, setPending] = useState(false);
   const [errors, setErrors] = useState<FieldErrors>({});
-  const [announcement, setAnnouncement] = useState("");
-  // 'closed' | 'found' (confirm a full match) | 'details' (the editable fields)
+  const [announcement, setAnnouncement] = useState<Announcement>({ text: "", tone: "done" });
+  // 'closed' | 'details' (the editable fields)
   const [mode, setMode] = useState<Mode>("closed");
   const storeUrl = useExtensionStoreUrl();
 
@@ -151,7 +154,6 @@ export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }: Add
   const urlRef = useRef<HTMLInputElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const priceRef = useRef<HTMLInputElement>(null);
-  const addRef = useRef<HTMLButtonElement>(null);
 
   function setField(field: keyof Draft, value: string) {
     setDraft((prev) => ({ ...prev, [field]: value }));
@@ -174,7 +176,7 @@ export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }: Add
   async function handleAutofill() {
     const myRequest = ++requestId.current;
     setPending(true);
-    setAnnouncement("");
+    setAnnouncement({ text: "", tone: "done" });
 
     let result: Lookup;
     try {
@@ -203,17 +205,29 @@ export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }: Add
 
     if (myRequest !== requestId.current) return; // superseded
     setPending(false);
-    setLookup(result);
 
     if (result.status === "error") {
+      setLookup(result);
       // Leave the fields alone -- a failed lookup must never wipe typed input.
       urlRef.current?.focus();
       return;
     }
 
+    const { product } = result;
+    if (result.status === "complete" && product.name && product.priceCents !== null) {
+      // A full match is saved in one tap: a second confirm step read as already
+      // saved, and the next paste replaced it.
+      add(product.name, product.priceCents, product.imageUrl ?? "", {
+        productUrl: product.productUrl,
+        asin: product.asin,
+        source: product.source,
+      });
+      return;
+    }
+
     // A new link is a new gift: start from an empty draft so nothing from an
     // earlier link or typed value survives, including fields added later (ALL-91).
-    const { product } = result;
+    setLookup(result);
     setDraft({
       ...EMPTY_DRAFT,
       name: product.name ?? "",
@@ -224,16 +238,41 @@ export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }: Add
     setErrors({});
 
     // Land the cursor on the first thing still needed.
-    if (result.missing.includes("name")) {
-      setMode("details");
-      focusSoon(nameRef);
-    } else if (result.missing.includes("priceCents")) {
-      setMode("details");
-      focusSoon(priceRef);
-    } else {
-      setMode("found");
-      focusSoon(addRef);
+    setMode("details");
+    focusSoon(result.missing.includes("name") ? nameRef : priceRef);
+  }
+
+  function lookUpLink() {
+    // A half-finished gift from a link is never replaced by the next one; an
+    // empty or typed "Add by hand" draft is (ALL-91).
+    if (mode === "details" && meta.productUrl !== null) {
+      setAnnouncement({ text: "Finish adding this one first, or tap Cancel.", tone: "hold" });
+      return;
     }
+    handleAutofill();
+  }
+
+  function add(name: string, priceCents: number, imageUrl: string, from: Meta) {
+    onAdd({
+      name,
+      priceCents,
+      imageUrl: imageUrl.trim() || null,
+      productUrl: from.productUrl,
+      asin: from.asin,
+      source: from.source,
+    });
+    clear();
+    setAnnouncement({ text: `Added ${name} to your list.`, tone: "done" });
+    urlRef.current?.focus();
+  }
+
+  function clear() {
+    setUrl("");
+    setDraft(EMPTY_DRAFT);
+    setMeta(EMPTY_META);
+    setLookup(null);
+    setErrors({});
+    setMode("closed");
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -256,23 +295,7 @@ export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }: Add
       return;
     }
 
-    onAdd({
-      name,
-      priceCents,
-      imageUrl: draft.imageUrl.trim() || null,
-      productUrl: meta.productUrl,
-      asin: meta.asin,
-      source: meta.source,
-    });
-
-    setUrl("");
-    setDraft(EMPTY_DRAFT);
-    setMeta(EMPTY_META);
-    setLookup(null);
-    setErrors({});
-    setMode("closed");
-    setAnnouncement(`Added ${name} to your list.`);
-    urlRef.current?.focus();
+    add(name, priceCents, draft.imageUrl, meta);
   }
 
   return (
@@ -298,18 +321,26 @@ export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }: Add
                 // After pasting a link, Enter should mean "look it up".
                 if (event.key === "Enter") {
                   event.preventDefault();
-                  handleAutofill();
+                  lookUpLink();
                 }
               }}
             />
           </div>
           {/* type="button" is essential: the default is submit, and being the
               first button in the form it would become the implicit Enter target. */}
-          <Button type="button" variant="secondary" onClick={handleAutofill} disabled={pending} aria-busy={pending}>
+          <Button type="button" variant="secondary" onClick={lookUpLink} disabled={pending} aria-busy={pending}>
             {pending ? "Looking…" : "Add"}
           </Button>
         </div>
         <LookupStatus lookup={lookup} pending={pending} />
+        {/* Visible, not only announced, so a sighted person sees a one-tap add landed. */}
+        <p
+          className={`text-[13px] font-semibold [overflow-wrap:anywhere] empty:hidden ${announcement.tone === "done" ? "text-success" : "text-warning"}`}
+          role="status"
+          aria-live="polite"
+        >
+          {announcement.text}
+        </p>
         {/* Desktop Chrome only, and only before a gift is under way (ALL-65). */}
         {storeUrl && mode === "closed" && !lookup && !pending && (
           <p className="text-[13px] text-muted-foreground">
@@ -323,28 +354,6 @@ export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }: Add
               Save from any shop with the extension
             </a>
           </p>
-        )}
-
-        {mode === "found" && (
-          <div className="flex items-center gap-3 rounded-lg border bg-card p-3">
-            <ImagePreview key={draft.imageUrl} src={draft.imageUrl} />
-            <div className="min-w-0 flex-1">
-              <p className="text-[15px] font-semibold [overflow-wrap:anywhere]">{draft.name}</p>
-              <p className="num text-[13px] text-muted-foreground">
-                {formatCents(parsePriceToCents(draft.price) ?? 0)} · found on {storeName(meta.productUrl ?? "")}
-              </p>
-              <button
-                type="button"
-                className="text-[13px] text-muted-foreground underline underline-offset-[3px]"
-                onClick={() => setMode("details")}
-              >
-                Edit details
-              </button>
-            </div>
-            <Button ref={addRef} type="submit" variant="secondary" size="sm">
-              Add to list
-            </Button>
-          </div>
         )}
 
         {mode !== "details" && (
@@ -429,7 +438,7 @@ export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }: Add
             </div>
 
             <div className="flex items-center gap-3">
-              <Button ref={addRef} type="submit" variant="secondary">
+              <Button type="submit" variant="secondary">
                 Add to list
               </Button>
               <Button
@@ -438,8 +447,14 @@ export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }: Add
                 size="sm"
                 className="px-1"
                 onClick={() => {
-                  setMode("closed");
-                  setErrors({});
+                  setAnnouncement({ text: "", tone: "done" });
+                  // A draft from a link goes with its link; "Add by hand" closes as before.
+                  if (meta.productUrl !== null) {
+                    clear();
+                  } else {
+                    setMode("closed");
+                    setErrors({});
+                  }
                 }}
               >
                 Cancel
@@ -448,10 +463,6 @@ export default function AddGiftPanel({ onAdd, readStorePage, lookUpAmazon }: Add
           </fieldset>
         )}
       </form>
-
-      <p className="sr-only" role="status" aria-live="polite">
-        {announcement}
-      </p>
     </section>
   );
 }

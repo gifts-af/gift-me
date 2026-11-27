@@ -37,13 +37,8 @@ export default function LookupStatus({ lookup, pending }: LookupStatusProps) {
     );
   }
 
-  if (lookup.status === "complete") {
-    return (
-      <p className="text-[13px] text-success" role="status">
-        Found it. Check the details, then add it.
-      </p>
-    );
-  }
+  // A full match is added straight away, so it has nothing to say here.
+  if (lookup.status === "complete") return null;
 
   const needsName = lookup.missing.includes("name");
   // Only what the page itself gave: an Amazon read keeps the link's name and
