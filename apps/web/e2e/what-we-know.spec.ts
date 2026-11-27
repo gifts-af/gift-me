@@ -124,7 +124,7 @@ test("facts open in place and save as you go: confirmed, turned off and on, edit
   await page.getByRole("button", { name: "Turn on a new rotary fly-tying vise" }).click();
   await expect(wants.getByText("a new rotary fly-tying vise")).toBeVisible();
 
-  // Kind, then words (AC-9): each saves, and the words' save keeps the new kind.
+  // Type, then words (AC-9): each saves, and the words' save keeps the new type.
   await wants.getByRole("button", { name: "a new rotary fly-tying vise", exact: true }).click();
   await know.getByRole("combobox", { name: "Type" }).selectOption("loved");
   await expect(know.getByRole("status")).toHaveText("Saved");
