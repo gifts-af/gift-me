@@ -17,6 +17,8 @@ describe("sampleEmails", () => {
       "reminder-questions",
       "final_notice",
       "needs_attention",
+      "needs_attention-card_needed",
+      "needs_attention-card_needed_saved",
       "reaction_prompt",
       "reaction_prompt-several",
       "needs_address",
@@ -26,6 +28,7 @@ describe("sampleEmails", () => {
       "hold_funds",
       "hold_funds-still",
       "hold_setup",
+      "hold_setup-card",
       "hold_address",
       "hold_trouble",
       "hold_unconfirmed",
@@ -35,11 +38,14 @@ describe("sampleEmails", () => {
       "too_late",
       "missed_on_us",
       "ordered",
+      "ordered-card",
       "failed_late",
       "failed_late-partial",
+      "failed_late-card",
       "failed_late-several",
       "failed_several",
       "store_cancelled_late",
+      "store_cancelled_late-card",
       "tracking_news",
       "delivered",
       "gift_late",
@@ -62,7 +68,7 @@ describe("sampleEmails", () => {
   it("points every button at the given link, so tapping a sample is harmless", () => {
     // These are answered by replying, or need nothing back, so they have no links; the all-clear lists no problem to link,
     // and a late store cancel or a too-late no-ideas email has nothing left to do in the app.
-    const noLinks = ["notes_tip", "notes_not_read", "notes_cant_cancel", "health-weekly-all-clear", "store_cancelled_late", "no_ideas-too_late"];
+    const noLinks = ["notes_tip", "notes_not_read", "notes_cant_cancel", "health-weekly-all-clear", "store_cancelled_late", "store_cancelled_late-card", "no_ideas-too_late"];
     for (const { name, email } of samples.filter((s) => !noLinks.includes(s.name))) {
       const hrefs = [...email.html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
       expect(hrefs.length, name).toBeGreaterThan(0);

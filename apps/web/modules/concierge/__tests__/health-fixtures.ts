@@ -33,6 +33,8 @@ export function snapshot(over: Partial<HealthSnapshot> = {}): HealthSnapshot {
     heldZinc: [],
     deadlineClose: [],
     ideasWaiting: [],
+    overMaxCharge: [],
+    cardHoldOld: [],
     weekly: { waitingAddress: 0, waitingFunds: 0, waitingSetup: 0, waitingApproval: 0, noIdeas: 0, roundsFailed: 0, failedCaptures: 0 },
     ...over,
   };
@@ -54,6 +56,10 @@ export function costs(over: Partial<CostPerGift> = {}): CostPerGift {
     billCents: 500,
     billGifts: 6,
     orderFeeCents: 100,
+    cardGifts: 0,
+    zincFeeCents: 0,
+    cardFeeOrders: 0,
+    cardFeeCents: 0,
     excludedCents: 42,
     ...over,
   };

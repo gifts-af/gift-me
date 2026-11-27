@@ -19,7 +19,14 @@ const costSchema = z.object({
   bills: z.array(z.object({ month: z.iso.date(), vendors: z.array(z.string()) })),
   billCents: cents,
   billGifts: count,
+  // The wallet's order fee setting, for the fixed part.
   orderFeeCents: cents,
+  // Card orders settled record what they paid Zinc and the card company per order (one row
+  // each). An order settled with no total has no card fee row, so cardFeeOrders can be fewer.
+  cardGifts: count,
+  zincFeeCents: cents,
+  cardFeeOrders: count,
+  cardFeeCents: cents,
   // The QA account's costs, not in any number above.
   excludedCents: cents,
 });
@@ -66,6 +73,27 @@ export function costLines(c: CostPerGift): EmailRow[] {
         : { title: `Fixed part of the fee: ${dollars(base)}, or ${dollars(base + running)} with running the service`, detail: includes };
   }
 
+  // Counted from each card order's own rows, once each, and never as the wallet setting again.
+  // Settled, not completed: a store-cancelled card order keeps its rows.
+  const zincEach = c.cardGifts > 0 ? `${dollars(c.zincFeeCents / c.cardGifts)} an order` : "no orders";
+  const cardFeeEach =
+    c.cardFeeOrders === 0
+      ? "none known yet"
+      : c.cardFeeOrders === c.cardGifts
+        ? `${dollars(c.cardFeeCents / c.cardFeeOrders)} an order`
+        : `${dollars(c.cardFeeCents / c.cardFeeOrders)} an order over the ${c.cardFeeOrders} with a known total`;
+  const card: EmailRow[] =
+    c.cardGifts > 0 || c.zincFeeCents > 0 || c.cardFeeCents > 0
+      ? [
+          {
+            title: `Card orders settled: ${c.cardGifts}`,
+            detail:
+              `Zinc's fees ${dollars(c.zincFeeCents)} in total, ${zincEach}. ` +
+              `Card fees ${dollars(c.cardFeeCents)} in total, ${cardFeeEach}. As recorded per order, not in the fixed part above.`,
+          },
+        ]
+      : [];
+
   return [
     {
       title: "Cost per completed gift",
@@ -78,6 +106,7 @@ export function costLines(c: CostPerGift): EmailRow[] {
     { title: title("Product lookups", lookups), detail: `${dollars(c.lookupCents)} in total` },
     { title: title("Running the service", running), detail: bills },
     fixed,
+    ...card,
     { title: `QA account: ${dollars(c.excludedCents)}`, detail: "Not counted above" },
   ];
 }

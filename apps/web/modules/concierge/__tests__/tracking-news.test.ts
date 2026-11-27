@@ -255,6 +255,21 @@ describe.skipIf(!stack)("the daily news summary (real local database)", () => {
     expect(text).not.toMatch(/\$\d/);
   });
 
+  it("a card order's late cancel says the whole charge is refunded to the card, fee included (AC-9)", async () => {
+    const u = await newUser({ autoTopUp: null });
+    const r = await lateCancel(u);
+    // Paid by card: the four fee inputs, the card and what it was charged, as approval and settling save them.
+    await held.pg.query(
+      `update concierge.orders set funding_mode = 'connect', margin_cents = 100, zinc_fee_cents = 100, card_fee_bps = 290,
+              card_fee_fixed_cents = 30, max_charge_cents = 4000, payment_method_id = 'pm_x', final_charge_cents = 3655 where id = $1`,
+      [r.orderId],
+    );
+    expect(await news(u, 31)).toEqual({ sent: 1 });
+    const text = lastText(u);
+    expect(text).toContain("The whole charge, $36.55, is refunded to your card, fee included. It can take 5 to 10 days to show.");
+    expect(text).not.toMatch(/zinc|wallet|balance/i);
+  });
+
   /** "Sat, Mar 14" for day `n`, as the emails write dates. */
   function expectedText(n: number): string {
     const d = new Date(`${addDays(held.today, n)}T00:00:00Z`);

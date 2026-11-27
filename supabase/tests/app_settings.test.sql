@@ -68,7 +68,8 @@ select set_eq(
     'idea_busy_retry_seconds', 'idea_busy_retries_max',
     'list_birthday_enabled', 'list_sizes_enabled',
     'connect_enabled', 'zinc_fee_cents', 'card_fee_bps', 'card_fee_fixed_cents',
-    'fee_part_ai_cents', 'fee_part_running_cents', 'stripe_timeout_ms', 'card_session_minutes', 'fee_label', 'fee_pricing_note'
+    'fee_part_ai_cents', 'fee_part_running_cents', 'stripe_timeout_ms', 'card_session_minutes', 'fee_label', 'fee_pricing_note',
+    'over_max_charge_days', 'card_hold_alert_days'
   ],
   'every fee, limit, default and schedule setting is seeded'
 );

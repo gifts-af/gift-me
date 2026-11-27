@@ -100,6 +100,10 @@ export type RoundOrder = {
   store: string | null;
   /** When it was delivered (ISO); null before then. */
   deliveredAt: string | null;
+  /** How it's paid: 'connect' by card, 'zinc_wallet' from the buyer's Zinc wallet. */
+  fundingMode: string;
+  /** What the card was charged, gift and GiftsAF fee together, once a card order settles; null otherwise. */
+  finalChargeCents: number | null;
 };
 
 /**
@@ -122,6 +126,8 @@ export type TrackingCandidate = {
   deliveryDaysMax: number | null;
   /** What Zinc refunded for a store cancel; null when it didn't say (or for any other gift). */
   refundCents: number | null;
+  /** A store-cancelled card order: the whole charge, refunded to the card; null when unknown. Undefined for others. */
+  card?: { chargeCents: number | null };
   failureType: string | null;
   resolved: boolean;
   /** The retailer's name, as stored ("walmart"), read only for store cancels; null otherwise or when unknown. */
@@ -195,6 +201,8 @@ export type RoundContext = {
   ideaEngineOn: boolean;
   /** The round's orders, oldest first, with their idea's title (ALL-32). */
   orders: RoundOrder[];
+  /** A card is saved now; read only when a card gift ended card_needed (its email says what to do), false otherwise. */
+  hasCard: boolean;
   /** The person was removed (soft-deleted): emails don't link their page (ALL-116). */
   personRemoved: boolean;
   /** The round closed before its ship-by day (the cancel link, the occasion off, the person removed). */
@@ -665,7 +673,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
           .order("rank"),
         concierge
           .from("orders")
-          .select("id, idea_id, status, provider_order_id, hold_reason, failure_type, resolved, failed_at, failed_after_close, max_price_cents, fee_cents, total_cents, refund_cents, ship_city, delivered_at, created_at, gift_ideas(title, retailer)")
+          .select("id, idea_id, status, provider_order_id, hold_reason, failure_type, resolved, failed_at, failed_after_close, max_price_cents, fee_cents, total_cents, refund_cents, ship_city, delivered_at, created_at, funding_mode, final_charge_cents, gift_ideas(title, retailer)")
           .eq("round_id", roundId)
           .order("created_at")
           .order("id"),
@@ -711,6 +719,14 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
         country: x.country,
       });
       const restored = round.status === "generating" ? await readRestored(db, roundId, ideas.data.map((i) => i.id)) : null;
+      // Whether a card is saved now, only when a card gift needs one: its email says what to do.
+      // Only the answer is kept, never the card's id.
+      let hasCard = false;
+      if (orders.data.some((o) => o.funding_mode === "connect" && o.failure_type === "card_needed")) {
+        const acct = await concierge.from("accounts").select("stripe_payment_method_id").eq("user_id", round.user_id).maybeSingle();
+        if (acct.error) fail("Reading whether a card is saved failed", acct.error);
+        hasCard = !!acct.data?.stripe_payment_method_id;
+      }
       return {
         userId: round.user_id,
         personId: round.person_id,
@@ -752,7 +768,10 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
           totalCents: o.total_cents,
           refundCents: o.refund_cents,
           deliveredAt: o.delivered_at,
+          fundingMode: o.funding_mode,
+          finalChargeCents: o.final_charge_cents,
         })),
+        hasCard,
         personRemoved: p.deleted_at !== null,
         // Closed on a day before its ship-by day: not by the deadline.
         dateChanged: round.occasion_year === null,
@@ -897,11 +916,16 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
       // The store's name is said only in a store-cancelled email.
       const cancelled = data.filter((r) => r.status === "failed").map((r) => r.order_id);
       const stores = new Map<string, string | null>();
+      const cards = new Map<string, { chargeCents: number | null }>();
       const moved = new Set<string>();
       if (cancelled.length) {
-        const { data: rows, error: storeError } = await concierge.from("orders").select("id, gift_ideas(retailer), gift_rounds(occasion_year)").in("id", cancelled);
+        const { data: rows, error: storeError } = await concierge
+          .from("orders")
+          .select("id, funding_mode, final_charge_cents, gift_ideas(retailer), gift_rounds(occasion_year)")
+          .in("id", cancelled);
         if (storeError) fail("Loading the cancelled gifts' stores failed", storeError);
         for (const o of rows) {
+          if (o.funding_mode === "connect") cards.set(o.id, { chargeCents: o.final_charge_cents });
           stores.set(o.id, (o.gift_ideas as { retailer: string | null } | null)?.retailer ?? null);
           if ((o.gift_rounds as { occasion_year: number | null } | null)?.occasion_year === null) moved.add(o.id);
         }
@@ -920,6 +944,7 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
         handlingDaysMax: r.handling_days_max ?? null,
         deliveryDaysMax: r.delivery_days_max ?? null,
         refundCents: r.refund_cents ?? null,
+        ...(cards.has(r.order_id) ? { card: cards.get(r.order_id) } : {}),
         failureType: r.failure_type ?? null,
         resolved: r.resolved,
         store: stores.get(r.order_id) ?? null,

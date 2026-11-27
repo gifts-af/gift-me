@@ -288,6 +288,7 @@ export class FakeRoundStore implements RoundStore {
       ideaEngineOn: true,
       ...this.ideaState.get(roundId),
       orders: [],
+      hasCard: false,
       personRemoved: false,
       closedEarly: false,
       dateChanged: false,

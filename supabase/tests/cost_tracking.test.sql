@@ -211,7 +211,7 @@ select tests.reset_role();
 
 select is(
   (select array_agg(k order by k) from jsonb_object_keys(:'r1'::jsonb) k),
-  array['aiCents', 'aiEstimated', 'aiRecords', 'billCents', 'billGifts', 'bills', 'cardFeeCents', 'cardGifts', 'excludedCents', 'gifts', 'lookupCents', 'orderFeeCents', 'since', 'windowDays', 'zincFeeCents'],
+  array['aiCents', 'aiEstimated', 'aiRecords', 'billCents', 'billGifts', 'bills', 'cardFeeCents', 'cardFeeOrders', 'cardGifts', 'excludedCents', 'gifts', 'lookupCents', 'orderFeeCents', 'since', 'windowDays', 'zincFeeCents'],
   'cost_per_gift returns exactly the CostPerGift keys');
 select is((:'r1'::jsonb ->> 'gifts')::int, 5, 'gifts counts placed, shipped and delivered orders in the window, start excluded and p_now included, not excluded accounts');
 select is((:'r1'::jsonb ->> 'windowDays')::int, 90, 'windowDays comes from the setting');

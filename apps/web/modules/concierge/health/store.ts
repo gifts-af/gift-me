@@ -28,6 +28,8 @@ const snapshotSchema = z
     held_zinc: z.array(orderRef.extend({ hold_reason: z.string() })),
     deadline_close: z.array(roundRef.extend({ reason: z.string(), ship_by_deadline: z.string() })),
     ideas_waiting: z.array(roundRef.extend({ ship_by_deadline: z.string() })),
+    over_max_charge: z.array(orderRef.extend({ charge_cents: z.number(), max_charge_cents: z.number(), days: z.number() })),
+    card_hold_old: z.array(orderRef.extend({ status: z.string(), since: z.string(), days: z.number() })),
     weekly: z.object({
       waiting_address: z.number(),
       waiting_funds: z.number(),
@@ -57,6 +59,22 @@ const snapshotSchema = z
     heldZinc: s.held_zinc.map((o) => ({ orderId: o.order_id, roundId: o.round_id, userId: o.user_id, holdReason: o.hold_reason })),
     deadlineClose: s.deadline_close.map((r) => ({ roundId: r.round_id, userId: r.user_id, reason: r.reason, shipByDeadline: r.ship_by_deadline })),
     ideasWaiting: s.ideas_waiting.map((r) => ({ roundId: r.round_id, userId: r.user_id, shipByDeadline: r.ship_by_deadline })),
+    overMaxCharge: s.over_max_charge.map((o) => ({
+      orderId: o.order_id,
+      roundId: o.round_id,
+      userId: o.user_id,
+      chargeCents: o.charge_cents,
+      maxChargeCents: o.max_charge_cents,
+      days: o.days,
+    })),
+    cardHoldOld: s.card_hold_old.map((o) => ({
+      orderId: o.order_id,
+      roundId: o.round_id,
+      userId: o.user_id,
+      status: o.status,
+      since: o.since,
+      days: o.days,
+    })),
     weekly: {
       waitingAddress: s.weekly.waiting_address,
       waitingFunds: s.weekly.waiting_funds,

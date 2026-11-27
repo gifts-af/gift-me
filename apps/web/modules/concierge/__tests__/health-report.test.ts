@@ -19,6 +19,30 @@ describe("healthReport", () => {
     expect(r.problems[1].ids).toEqual({ orderId: "o1", roundId: "r2", userId: "u1" });
   });
 
+  it("a card order charged over its maximum is a problem, with both amounts and the window", () => {
+    const r = run(snapshot({ overMaxCharge: [{ orderId: "o9", roundId: "r9", userId: "u1", chargeCents: 2565, maxChargeCents: 2564, days: 7 }] }));
+    expect(r.problems).toEqual([
+      {
+        kind: "over_max_charge",
+        ids: { orderId: "o9", roundId: "r9", userId: "u1" },
+        detail: { chargeCents: 2565, maxChargeCents: 2564, days: 7 },
+      },
+    ]);
+  });
+
+  it("a card hold getting old is a problem, with its status, since when and the limit", () => {
+    const r = run(
+      snapshot({ cardHoldOld: [{ orderId: "o8", roundId: "r8", userId: "u1", status: "unconfirmed", since: "2026-11-18T10:00:00Z", days: 5 }] }),
+    );
+    expect(r.problems).toEqual([
+      {
+        kind: "card_hold_old",
+        ids: { orderId: "o8", roundId: "r8", userId: "u1" },
+        detail: { status: "unconfirmed", since: "2026-11-18T10:00:00Z", days: 5 },
+      },
+    ]);
+  });
+
   it("AC-2: nothing actionable on a Tuesday gives no problems and isWeekly false", () => {
     const r = run(snapshot({ weekly: { ...snapshot().weekly, waitingAddress: 1, waitingFunds: 1 } }));
     expect(r.problems).toEqual([]);

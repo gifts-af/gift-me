@@ -186,6 +186,9 @@ describe.skipIf(!stack)("placing and sweeping card orders (real local database, 
     expect((await orders(r.roundId))[0]).toMatchObject({ status: "placed", total_cents: 2259, final_charge_cents: 2564, fee_cents: 305 });
     expect(orderPlaced).toHaveBeenCalledWith(r.roundId);
     expect(events("order.over_max_charge")).toEqual([]);
+    // What the ordered email is built from, read by the real round store.
+    const ctx = await createSupabaseRoundStore(db()).roundContext(r.roundId);
+    expect(ctx.orders[0]).toMatchObject({ fundingMode: "connect", totalCents: 2259, feeCents: 305, finalChargeCents: 2564 });
   });
 
   it("a wallet order's request body is unchanged: no payment, the buyer's own key (AC-16)", async () => {
@@ -226,6 +229,10 @@ describe.skipIf(!stack)("placing and sweeping card orders (real local database, 
       ["failed", "card_needed"],
     ]);
     expect(await card(u)).toBeNull();
+    // The card_needed email says to add a card: none is saved now.
+    expect(await createSupabaseRoundStore(db()).roundContext(r.roundId)).toMatchObject({ hasCard: false });
+    await pg.query("update concierge.accounts set stripe_payment_method_id = $2 where user_id = $1", [u, `pm_new_${u}`]);
+    expect(await createSupabaseRoundStore(db()).roundContext(r.roundId)).toMatchObject({ hasCard: true });
   });
 
   it("an order Zinc already has as declined (found after a 409) ends card_needed and clears the card", async () => {
@@ -286,10 +293,13 @@ describe.skipIf(!stack)("placing and sweeping card orders (real local database, 
       zinc.plan.set(urlOf(r.ideaIds[0]), [{ status: 402, code }]);
       await buy(u, r);
       expect(zinc.posts).toHaveLength(1);
-      expect((await orders(r.roundId)).map((o) => [o.status, o.hold_reason, o.failure_type])).toEqual([
+      const after = await orders(r.roundId);
+      expect(after.map((o) => [o.status, o.hold_reason, o.failure_type])).toEqual([
         ["held", "paused", null],
         ["held", "paused", null],
       ]);
+      // A fresh key, so once the account is fixed Zinc can't answer the retry with its stored refusal.
+      expect(after[0].idem).not.toBe(zinc.posts[0].idem);
       expect(await roundRow(r.roundId)).toMatchObject({ status: "needs_attention", attention_reason: "paused" });
       expect(await card(u)).toBe(`pm_${u}`);
       expect(events("zinc.connect_unauthorized")).toEqual([expect.objectContaining({ round_id: r.roundId, reason: "account", code, alert: true })]);
