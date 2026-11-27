@@ -11,7 +11,7 @@ select tests.create_user('c@example.com') as c \gset
 -- ─── Settings ───────────────────────────────────────────────────────────────
 
 select is(concierge.setting_int('amazon_paste_lookup_enabled'), 1, 'Amazon paste lookups are on');
-select is(concierge.setting_int('amazon_paste_lookups_per_user_per_day'), 10, '10 lookups a day per person');
+select is(concierge.setting_int('amazon_paste_lookups_per_user_per_day'), 30, '30 lookups a day per person');
 select is(concierge.setting_int('amazon_paste_lookup_timeout_ms'), 10000, 'a lookup waits up to 10 s');
 select is(concierge.setting_int('amazon_paste_lookups_per_day_total'), 200, '200 lookups a day across everyone');
 

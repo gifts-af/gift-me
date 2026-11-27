@@ -1,7 +1,7 @@
 {
   "_about": "The hand-written part of the database map (pnpm db:map). Each lane lists its tables top to bottom; strip is the bottom row. notes is the one line shown under each table's name. A table the database has but this file doesn't goes in the strip with no note, and db:map says so: add it to a lane and give it a note.",
   "lanes": {
-    "lists": ["lists.lists", "lists.list_items", "lists.gift_claims", "lists.person_links"],
+    "lists": ["lists.lists", "lists.list_items", "lists.gift_claims", "lists.photo_repairs", "lists.person_links"],
     "public": ["public.profiles", "public.people", "public.account_addresses", "public.account_birthdays", "public.account_sizes"],
     "person": ["concierge.occasions", "concierge.budgets", "concierge.profile_facts", "concierge.questions",
                "concierge.captures", "concierge.inbound_messages", "concierge.saved_gifts"],
@@ -15,6 +15,7 @@
   "edges": [
     { "from": "lists.list_items", "to": "lists.lists", "label": "on a list", "kind": "down" },
     { "from": "lists.gift_claims", "to": "lists.list_items", "label": "claims", "kind": "down" },
+    { "from": "lists.photo_repairs", "to": "lists.list_items", "kind": "side" },
     { "from": "lists.person_links", "to": "lists.lists", "kind": "side" },
     { "from": "lists.person_links", "to": "public.people", "label": "links to your person", "kind": "bridge" },
     { "from": "concierge.gift_ideas", "to": "concierge.gift_rounds", "label": "ideas for", "kind": "down" },
@@ -42,6 +43,7 @@
     "lists.person_links": "your person ↔ their list",
     "lists.amazon_lookups": "daily paste-lookup count",
     "lists.photo_deletions": "photos waiting to delete",
+    "lists.photo_repairs": "missing-photo retries, backoff",
     "concierge.occasions": "birthdays, holidays",
     "concierge.budgets": "per occasion",
     "concierge.budget_defaults": "your base budgets",
