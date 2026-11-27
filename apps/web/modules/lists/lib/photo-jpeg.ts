@@ -10,11 +10,14 @@ export type JpegOptions = { widthPx: number; quality: number; minPx: number; max
 
 export type JpegResult = { ok: true; jpeg: Buffer } | { ok: false; reason: "bad_image" | "tiny_image" | "too_big" };
 
+// A decompression bomb (a small file that unpacks to a huge image) is refused before decoding.
+const MAX_INPUT_PIXELS = 25_000_000;
+
 export async function toListPhotoJpeg(bytes: Buffer, opts: JpegOptions): Promise<JpegResult> {
   let width: number | undefined;
   let height: number | undefined;
   try {
-    ({ width, height } = await sharp(bytes).metadata());
+    ({ width, height } = await sharp(bytes, { limitInputPixels: MAX_INPUT_PIXELS }).metadata());
   } catch {
     return { ok: false, reason: "bad_image" };
   }
@@ -23,7 +26,7 @@ export async function toListPhotoJpeg(bytes: Buffer, opts: JpegOptions): Promise
 
   let jpeg: Buffer;
   try {
-    jpeg = await sharp(bytes)
+    jpeg = await sharp(bytes, { limitInputPixels: MAX_INPUT_PIXELS })
       .rotate()
       .resize({ width: opts.widthPx, withoutEnlargement: true })
       .flatten({ background: "#ffffff" })

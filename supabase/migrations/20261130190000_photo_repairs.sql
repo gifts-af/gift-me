@@ -11,8 +11,10 @@
 --   * lists.photo_repairs, one row per gift tried, for the backoff: waits
 --     double after each failure, and a gift is given up on after
 --     photo_repair_max_attempts;
---   * lists.photo_repair_candidates(), the gifts due a try, real people's
---     and the most active first;
+--   * lists.photo_repair_candidates(), which claims the gifts due a try,
+--     real people's and the most active first;
+--   * lists.save_repaired_photo(), which saves a found photo and moves the
+--     list's version so an open My list tab can't overwrite it;
 --   * lists.take_repair_amazon_lookup(), one Zinc lookup counted against
 --     amazon_paste_lookups_per_day_total only (the repair has no signed-in
 --     person), so amazon_lookups.user_id may now be null;
@@ -100,41 +102,102 @@ $$;
 revoke execute on function lists.is_guessed_amazon_photo(text) from public, anon;
 grant execute on function lists.is_guessed_amazon_photo(text) to authenticated, service_role;
 
--- Gifts due a try: a link, no stored photo, no photo or the guessed Amazon
--- one, added in the last p_max_age_days, not given up on and not waiting.
--- Typed-in gifts (no link) and any other photo are never touched.
+-- Claims the gifts due a try: a link, no stored photo, no photo or the
+-- guessed Amazon one, added in the last p_max_age_days, not given up on and
+-- not waiting. Typed-in gifts (no link) and any other photo are never
+-- touched. Each gift picked is claimed for p_claim_minutes (its
+-- next_attempt_at moves forward, attempts unchanged), and claims take turns
+-- on one lock, so two runs never pick the same gift. The run then saves the
+-- real outcome over the claim.
 -- Order (owner): real people before team and test accounts
 -- (accounts.metrics_excluded; no accounts row is a real person), then the
 -- most active owner (latest of the list's update, the owner's last sign-in
 -- and the gift's add), then the newest gift. Security definer to read
 -- auth.users; the server only.
-create function lists.photo_repair_candidates(p_limit integer, p_max_age_days integer)
+create function lists.photo_repair_candidates(p_limit integer, p_max_age_days integer, p_claim_minutes integer)
 returns table (item_id uuid, owner_id uuid, product_url text, asin text, image_url text, attempts integer)
-language sql
-stable
+language plpgsql
+volatile
 security definer
 set search_path = ''
 as $$
-  select i.id, l.owner_id, i.product_url, i.asin, i.image_url, coalesce(r.attempts, 0)
-    from lists.list_items i
-    join lists.lists l on l.id = i.list_id
-    left join lists.photo_repairs r on r.item_id = i.id
-    left join concierge.accounts a on a.user_id = l.owner_id
-    left join auth.users u on u.id = l.owner_id
-   where i.product_url is not null
-     and not i.has_photo
-     and (i.image_url is null or lists.is_guessed_amazon_photo(i.image_url))
-     and i.added_at >= now() - make_interval(days => p_max_age_days)
-     and (r.item_id is null or (r.gave_up_at is null and r.next_attempt_at <= now()))
-   order by coalesce(a.metrics_excluded, false),
-            greatest(l.updated_at, u.last_sign_in_at, i.added_at) desc,
-            i.added_at desc,
-            i.id
-   limit p_limit;
+#variable_conflict use_column
+begin
+  perform pg_advisory_xact_lock(hashtextextended('lists.photo_repair_candidates', 0));
+  return query
+  with picked as (
+    select i.id, l.owner_id, i.product_url, i.asin, i.image_url, coalesce(r.attempts, 0) as attempts
+      from lists.list_items i
+      join lists.lists l on l.id = i.list_id
+      left join lists.photo_repairs r on r.item_id = i.id
+      left join concierge.accounts a on a.user_id = l.owner_id
+      left join auth.users u on u.id = l.owner_id
+     where i.product_url is not null
+       and not i.has_photo
+       and (i.image_url is null or lists.is_guessed_amazon_photo(i.image_url))
+       and i.added_at >= now() - make_interval(days => p_max_age_days)
+       and (r.item_id is null or (r.gave_up_at is null and r.next_attempt_at <= now()))
+     order by coalesce(a.metrics_excluded, false),
+              greatest(l.updated_at, u.last_sign_in_at, i.added_at) desc,
+              i.added_at desc,
+              i.id
+     limit p_limit
+  ), claimed as (
+    insert into lists.photo_repairs as r (item_id, next_attempt_at)
+    select p.id, now() + make_interval(mins => p_claim_minutes) from picked p
+    on conflict on constraint photo_repairs_pkey do update set next_attempt_at = excluded.next_attempt_at
+  )
+  select p.id, p.owner_id, p.product_url, p.asin, p.image_url, p.attempts from picked p;
+end;
 $$;
 
-revoke execute on function lists.photo_repair_candidates(integer, integer) from public, anon, authenticated;
-grant execute on function lists.photo_repair_candidates(integer, integer) to service_role;
+revoke execute on function lists.photo_repair_candidates(integer, integer, integer) from public, anon, authenticated;
+grant execute on function lists.photo_repair_candidates(integer, integer, integer) to service_role;
+
+-- Gives a gift its repaired photo, only if it is still as the repair found
+-- it (no stored photo, same link, same photo), and moves its list's version
+-- the way add_item does, so a My list tab opened before the repair can't
+-- save the old photo back over it (save_list_checked answers GL409 and the
+-- tab merges). Same locks as a save: the owner's, then the list row. True
+-- when the photo was saved.
+create function lists.save_repaired_photo(p_item_id uuid, p_product_url text, p_old_image_url text, p_new_image_url text)
+returns boolean
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_list_id uuid;
+  v_owner uuid;
+begin
+  select i.list_id, l.owner_id into v_list_id, v_owner
+    from lists.list_items i join lists.lists l on l.id = i.list_id
+   where i.id = p_item_id;
+  if v_list_id is null then
+    return false;
+  end if;
+
+  perform pg_advisory_xact_lock(hashtextextended('lists.save_list_checked:' || v_owner::text, 0));
+  perform 1 from lists.lists where id = v_list_id for update;
+
+  update lists.list_items
+     set image_url = p_new_image_url, has_photo = true
+   where id = p_item_id
+     and list_id = v_list_id
+     and not has_photo
+     and product_url = p_product_url
+     and image_url is not distinct from p_old_image_url;
+  if not found then
+    return false;
+  end if;
+
+  update lists.lists set updated_at = clock_timestamp() where id = v_list_id;
+  return true;
+end;
+$$;
+
+revoke execute on function lists.save_repaired_photo(uuid, text, text, text) from public, anon, authenticated;
+grant execute on function lists.save_repaired_photo(uuid, text, text, text) to service_role;
 
 -- ─── Zinc lookups for the repair ────────────────────────────────────────────
 
@@ -189,6 +252,7 @@ insert into concierge.app_settings (key, value, description) values
   ('photo_repair_backoff_days', '1', 'Days the photo repair waits after a gift''s first failed try; the wait doubles after each one (1, 2, 4, 8).'),
   ('photo_repair_max_age_days', '60', 'Only gifts added in this many days are tried by the photo repair.'),
   ('photo_repair_budget_ms', '60000', 'Most time (ms) one photo repair run starts new gifts for; it shares the daily tick''s 300 s with the rounds, and the rest wait for the next day.'),
+  ('photo_repair_claim_minutes', '15', 'Minutes a photo repair run holds the gifts it picked, so an overlapping run skips them; longer than photo_repair_budget_ms plus one gift''s slowest try.'),
   ('photo_repair_min_px', '100', 'Smallest photo the repair keeps, in pixels on each side; anything smaller (like a 1x1 placeholder) is refused.')
 on conflict (key) do nothing;
 

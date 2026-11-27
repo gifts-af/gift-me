@@ -2,7 +2,7 @@
 -- them; has_photo may turn on but never off.
 begin;
 \ir _helpers.psql
-select plan(14);
+select plan(15);
 
 select tests.create_user('repair-a@example.com') as a \gset
 
@@ -23,7 +23,8 @@ insert into lists.photo_repairs (item_id, attempts) values ('00000000-0000-4000-
 
 select tests.act_as(:'a');
 select throws_ok($$select * from lists.photo_repairs$$, '42501', null, 'a signed-in user cannot read photo_repairs');
-select throws_ok($$select * from lists.photo_repair_candidates(10, 60)$$, '42501', null, 'nor list the candidates');
+select throws_ok($$select * from lists.photo_repair_candidates(10, 60, 15)$$, '42501', null, 'nor list the candidates');
+select throws_ok($$select lists.save_repaired_photo('00000000-0000-4000-8000-0000000000b1', 'https://shop.test/p', null, 'https://x.test/a.jpg')$$, '42501', null, 'nor save a repaired photo');
 select throws_ok($$select lists.take_repair_amazon_lookup()$$, '42501', null, 'nor take a repair lookup');
 
 select tests.act_as_server();

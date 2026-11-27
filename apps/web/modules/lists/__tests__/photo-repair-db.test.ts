@@ -62,8 +62,11 @@ describe.skipIf(!dbUp)("photo repair on local Supabase", () => {
     return id;
   }
 
-  async function candidates(limit = 10000): Promise<string[]> {
-    const { data, error } = await admin.schema("lists").rpc("photo_repair_candidates", { p_limit: limit, p_max_age_days: 60 });
+  /** Claims (like a run) the top `limit`; this file's gifts rank first, their lists being touched in the future. */
+  async function candidates(limit = 50): Promise<string[]> {
+    const { data, error } = await admin
+      .schema("lists")
+      .rpc("photo_repair_candidates", { p_limit: limit, p_max_age_days: 60, p_claim_minutes: 15 });
     if (error) throw error;
     return (data ?? []).map((r) => r.item_id).filter((id) => scope.has(id));
   }
@@ -135,10 +138,20 @@ describe.skipIf(!dbUp)("photo repair on local Supabase", () => {
     const realList = await owner({ activeInDays: 20 });
     const team = await gift(teamList, { url: "https://shop.test/team" });
     const real = await gift(realList, { url: "https://shop.test/real" });
-    const all = await candidates();
-    expect(all.indexOf(real)).toBeLessThan(all.indexOf(team));
-    const { data } = await admin.schema("lists").rpc("photo_repair_candidates", { p_limit: 1, p_max_age_days: 60 });
+    expect(team).not.toBe(real);
+    const { data } = await admin
+      .schema("lists")
+      .rpc("photo_repair_candidates", { p_limit: 1, p_max_age_days: 60, p_claim_minutes: 15 });
     expect(data?.map((r) => r.item_id)).toEqual([real]);
+  });
+
+  it("claims what it picks, so an overlapping run doesn't pick the same gifts", async () => {
+    const list = await owner({ activeInDays: 40 });
+    const item = await gift(list, { url: "https://shop.test/claimed" });
+    expect(await candidates()).toEqual([item]);
+    expect(await candidates()).toEqual([]);
+    const row = await pg.query(`select attempts, next_attempt_at > now() as held from lists.photo_repairs where item_id = $1`, [item]);
+    expect(row.rows[0]).toEqual({ attempts: 0, held: true });
   });
 
   it("backs off after a failure, retries when due, and stops after the last attempt", async () => {
@@ -153,7 +166,7 @@ describe.skipIf(!dbUp)("photo repair on local Supabase", () => {
     await pg.query(`update lists.photo_repairs set next_attempt_at = now() - interval '1 minute' where item_id = $1`, [item]);
     expect(await candidates()).toContain(item);
 
-    await pg.query(`update lists.photo_repairs set attempts = 3 where item_id = $1`, [item]);
+    await pg.query(`update lists.photo_repairs set attempts = 3, next_attempt_at = now() - interval '1 minute' where item_id = $1`, [item]);
     await repairMissingPhotos(settings, deps({}));
     const last = await pg.query(`select attempts, gave_up_at is not null as gave_up from lists.photo_repairs where item_id = $1`, [item]);
     expect(last.rows[0]).toEqual({ attempts: 4, gave_up: true });
@@ -166,6 +179,8 @@ describe.skipIf(!dbUp)("photo repair on local Supabase", () => {
     const item = await gift(list, { url: "https://www.amazon.com/dp/B0G5Z36T3N", image: GUESSED("B0G5Z36T3N"), asin: "B0G5Z36T3N" });
     await pg.query(`insert into lists.photo_repairs (item_id, attempts, next_attempt_at) values ($1, 1, now() - interval '1 minute')`, [item]);
     const photo = await sharp({ create: { width: 600, height: 600, channels: 3, background: "#3a6" } }).png().toBuffer();
+    // The version a My list tab opened before the repair holds.
+    const before = await pg.query(`select owner_id, to_json(updated_at) #>> '{}' as version from lists.lists where id = $1`, [list]);
 
     const result = await repairMissingPhotos(
       settings,
@@ -186,9 +201,35 @@ describe.skipIf(!dbUp)("photo repair on local Supabase", () => {
     const stored = await admin.storage.from("list-photos").download(`${item}.jpg`);
     expect(stored.error).toBeNull();
 
+    // That stale tab can't save the old photo back: its version is out of date.
+    await pg.query("begin");
+    try {
+      await pg.query(`select set_config('request.jwt.claims', $1, true)`, [JSON.stringify({ sub: before.rows[0].owner_id, role: "authenticated" })]);
+      await pg.query("set local role authenticated");
+      await expect(
+        pg.query(`select lists.save_list_checked($1, 'My list', '[]'::jsonb, $2)`, [list, before.rows[0].version]),
+      ).rejects.toMatchObject({ code: "GL409" });
+    } finally {
+      await pg.query("rollback");
+    }
+
     // Removing the gift queues its stored photo, like an extension photo.
     await pg.query(`delete from lists.list_items where id = $1`, [item]);
     expect((await pg.query(`select 1 from lists.photo_deletions where path = $1`, [`${item}.jpg`])).rowCount).toBe(1);
     await pg.query(`delete from lists.photo_deletions where path = $1`, [`${item}.jpg`]);
+  });
+
+  it("takes repair lookups from the daily total, and refuses once it's used up", async () => {
+    // In a transaction that's rolled back, so the shared ceiling and count are left as they were.
+    await pg.query("begin");
+    try {
+      const used = Number((await pg.query(`select count(*) from lists.amazon_lookups where created_at >= now() - interval '1 day'`)).rows[0].count);
+      await pg.query(`update concierge.app_settings set value = $1 where key = 'amazon_paste_lookups_per_day_total'`, [String(used + 1)]);
+      expect((await pg.query(`select lists.take_repair_amazon_lookup() as ok`)).rows[0].ok).toBe(true);
+      expect((await pg.query(`select count(*)::int as n from lists.amazon_lookups where user_id is null and created_at > now() - interval '1 minute'`)).rows[0].n).toBeGreaterThan(0);
+      expect((await pg.query(`select lists.take_repair_amazon_lookup() as ok`)).rows[0].ok).toBe(false);
+    } finally {
+      await pg.query("rollback");
+    }
   });
 });

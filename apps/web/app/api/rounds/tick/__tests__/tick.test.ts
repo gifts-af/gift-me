@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TickHeartbeat } from "@/modules/concierge";
-import { handleTick, handleTickStep, isTestClock, onlyStep } from "../tick";
+import { handleTick, handleTickStep, isTestClock, onlyStep, runHousekeeping } from "../tick";
 
 // The tick takes dayOf from the concierge module, which is server-only.
 vi.mock("server-only", () => ({}));
@@ -26,17 +26,41 @@ const req = (auth?: string, query = "") =>
 afterEach(() => vi.restoreAllMocks());
 
 describe("handleTickStep (?only=photo_repair)", () => {
-  it("runs only the step, behind the same secret", async () => {
+  it("runs only the named step, behind the same secret", async () => {
     const step = vi.fn(async () => ({ repaired: 2, failed: 0 }));
     const request = req(`Bearer ${SECRET}`, "?only=photo_repair");
     expect(onlyStep(request)).toBe("photo_repair");
-    const res = await handleTickStep(request, { cronSecret: SECRET }, step);
+    const res = await handleTickStep(request, { cronSecret: SECRET }, { photo_repair: step });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true, result: { repaired: 2, failed: 0 } });
 
-    const refused = await handleTickStep(req("Bearer wrong", "?only=photo_repair"), { cronSecret: SECRET }, step);
+    const refused = await handleTickStep(req("Bearer wrong", "?only=photo_repair"), { cronSecret: SECRET }, { photo_repair: step });
     expect(refused.status).toBe(401);
     expect(step).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["rounds", "", "constructor", "toString"])("refuses only=%j with 400 and runs nothing", async (value) => {
+    const step = vi.fn(async () => ({}));
+    const res = await handleTickStep(req(`Bearer ${SECRET}`, `?only=${value}`), { cronSecret: SECRET }, { photo_repair: step });
+    expect(res.status).toBe(400);
+    expect(step).not.toHaveBeenCalled();
+  });
+});
+
+describe("runHousekeeping", () => {
+  it("logs a failed step by name and error code, then runs the next", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const next = vi.fn(async () => {});
+    await runHousekeeping({
+      photo_cleanup: async () => {
+        throw Object.assign(new Error("secret detail"), { code: "57P01" });
+      },
+      photo_repair: next,
+    });
+    expect(next).toHaveBeenCalled();
+    const failed = events(log).filter((e) => e.event === "tick_cleanup_failed");
+    expect(failed).toEqual([expect.objectContaining({ step: "photo_cleanup", code: "57P01", name: "Error" })]);
+    expect(JSON.stringify(failed)).not.toContain("secret detail");
   });
 });
 

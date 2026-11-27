@@ -16,6 +16,7 @@ const SETTINGS: Record<string, number> = {
   photo_repair_enabled: 1,
   photo_repair_per_run: 20,
   photo_repair_budget_ms: 60000,
+  photo_repair_claim_minutes: 15,
   photo_repair_max_attempts: 4,
   photo_repair_backoff_days: 1,
   photo_repair_max_age_days: 60,
@@ -49,7 +50,9 @@ const ARITZIA: Candidate = {
 
 function fakeDb(candidates: Candidate[]) {
   const rpc = vi.fn(async (name: string) =>
-    name === "photo_repair_candidates" ? { data: candidates, error: null } : { data: null, error: null },
+    name === "photo_repair_candidates"
+      ? { data: candidates, error: null }
+      : { data: name === "save_repaired_photo" ? true : null, error: null },
   );
   const upsert = vi.fn(async () => ({ error: null }));
   const updates: Record<string, unknown>[] = [];
@@ -107,7 +110,7 @@ describe("repairMissingPhotos", () => {
     expect(await repairMissingPhotos(settings(), d)).toEqual({ repaired: 1, failed: 0 });
 
     expect(d.lookUpAmazon).toHaveBeenCalledWith("B0G5Z36T3N", AMAZON.owner_id);
-    expect(f.rpc).toHaveBeenCalledWith("photo_repair_candidates", { p_limit: 20, p_max_age_days: 60 });
+    expect(f.rpc).toHaveBeenCalledWith("photo_repair_candidates", { p_limit: 20, p_max_age_days: 60, p_claim_minutes: 15 });
     expect(f.rpc).toHaveBeenCalledWith("queue_photo", { p_item_id: AMAZON.item_id });
     const [path, body, opts] = f.upload.mock.calls[0] as unknown as [string, Buffer, { contentType: string }];
     expect(path).toBe(`${AMAZON.item_id}.jpg`);
@@ -115,9 +118,12 @@ describe("repairMissingPhotos", () => {
     const meta = await sharp(body).metadata();
     expect(meta.format).toBe("jpeg");
     expect(meta.width).toBe(400);
-    expect(f.updates).toEqual([
-      { image_url: `https://db.test/storage/v1/object/public/list-photos/${AMAZON.item_id}.jpg`, has_photo: true },
-    ]);
+    expect(f.rpc).toHaveBeenCalledWith("save_repaired_photo", {
+      p_item_id: AMAZON.item_id,
+      p_product_url: AMAZON.product_url,
+      p_old_image_url: AMAZON.image_url,
+      p_new_image_url: `https://db.test/storage/v1/object/public/list-photos/${AMAZON.item_id}.jpg`,
+    });
     expect(f.upsert).not.toHaveBeenCalled();
     expect(d.log).toHaveBeenCalledWith("lists.photo_repaired", {
       item_id: AMAZON.item_id,
@@ -133,7 +139,7 @@ describe("repairMissingPhotos", () => {
     const d = deps(f.db, { download: vi.fn(async () => ({ ok: true as const, bytes: ONE_BY_ONE_GIF })) });
     expect(await repairMissingPhotos(settings(), d)).toEqual({ repaired: 0, failed: 1 });
     expect(f.upload).not.toHaveBeenCalled();
-    expect(f.updates).toEqual([]);
+    expect(f.rpc).not.toHaveBeenCalledWith("save_repaired_photo", expect.anything());
     expect(f.upsert).toHaveBeenCalledWith({
       item_id: AMAZON.item_id,
       attempts: 1,
@@ -189,6 +195,29 @@ describe("repairMissingPhotos", () => {
     const d = deps(f.db, { readPage, now: () => new Date(t) });
     expect(await repairMissingPhotos(settings(), d)).toEqual({ repaired: 0, failed: 1 });
     expect(readPage).toHaveBeenCalledTimes(1);
+  });
+
+  it("reads a non-Amazon link with an ASIN-shaped id as a store page, never through Zinc", async () => {
+    const other = { ...ARITZIA, product_url: "https://shop.test/product/ABCD123456/", asin: "ABCD123456" };
+    const f = fakeDb([other]);
+    const d = deps(f.db);
+    await repairMissingPhotos(settings(), d);
+    expect(d.lookUpAmazon).not.toHaveBeenCalled();
+    expect(d.readPage).toHaveBeenCalledWith(other.product_url, other.owner_id);
+  });
+
+  it("counts no attempt and stops when photo downloads are switched off", async () => {
+    const f = fakeDb([AMAZON, ARITZIA]);
+    const d = deps(f.db, {
+      readPage: vi.fn(async () => ({
+        ok: true as const,
+        product: { name: null, priceCents: null, imageUrl: "https://shop.test/x.jpg" } as never,
+      })),
+      download: vi.fn(async () => ({ ok: false as const, reason: "off" as const })),
+    });
+    expect(await repairMissingPhotos(settings(), d)).toEqual({ repaired: 0, failed: 0 });
+    expect(d.download).toHaveBeenCalledTimes(1);
+    expect(f.upsert).not.toHaveBeenCalled();
   });
 
   it("does nothing with the switch off", async () => {

@@ -132,7 +132,7 @@ export async function fetchStorePage(rawUrl: string, limits: StorePageLimits, de
   return r.ok ? { ok: true, html: r.body.toString("utf8"), finalUrl: r.finalUrl } : r;
 }
 
-export type ImageFetchResult = { ok: true; bytes: Buffer } | { ok: false; reason: FetchFailure | "not_image" };
+export type ImageFetchResult = { ok: true; bytes: Buffer } | { ok: false; reason: FetchFailure | "not_image" | "off" };
 
 /**
  * Downloads a product photo with the same guards as a page read: public

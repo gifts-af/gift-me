@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { extractAsin } from "@gifts-af/core/store-page/link";
+import { extractAsin, isAmazonHost } from "@gifts-af/core/store-page/link";
 import type { Database } from "@gifts-af/core";
 import type { AmazonLookupResult } from "./amazon-lookup";
 import type { JpegOptions, JpegResult } from "./photo-jpeg";
@@ -26,6 +26,8 @@ export type PhotoRepairSettings = {
   perRun: number;
   /** Starts no new gift after this many ms of the run. */
   budgetMs: number;
+  /** How long the gifts a run picks stay claimed, so an overlapping run skips them. */
+  claimMinutes: number;
   maxAttempts: number;
   backoffDays: number;
   maxAgeDays: number;
@@ -59,11 +61,13 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Reads the settings; any that can't be read throws (T23: no fallback in code). */
 export async function photoRepairSettings(read: (key: string) => Promise<number>): Promise<PhotoRepairSettings> {
-  const [enabled, perRun, budgetMs, maxAttempts, backoffDays, maxAgeDays, minPx, widthPx, quality, maxBytes] = await Promise.all(
+  const [enabled, perRun, budgetMs, claimMinutes, maxAttempts, backoffDays, maxAgeDays, minPx, widthPx, quality, maxBytes] =
+    await Promise.all(
     [
       "photo_repair_enabled",
       "photo_repair_per_run",
       "photo_repair_budget_ms",
+      "photo_repair_claim_minutes",
       "photo_repair_max_attempts",
       "photo_repair_backoff_days",
       "photo_repair_max_age_days",
@@ -73,7 +77,7 @@ export async function photoRepairSettings(read: (key: string) => Promise<number>
       "list_photo_max_bytes",
     ].map(read),
   );
-  return { enabled: enabled === 1, perRun, budgetMs, maxAttempts, backoffDays, maxAgeDays, jpeg: { minPx, widthPx, quality, maxBytes } };
+  return { enabled: enabled === 1, perRun, budgetMs, claimMinutes, maxAttempts, backoffDays, maxAgeDays, jpeg: { minPx, widthPx, quality, maxBytes } };
 }
 
 /** After failure number `attempts` (1-based): when to try again, or give up. Waits double: 1, 2, 4, 8 days. */
@@ -92,7 +96,7 @@ export function afterFailure(
  * Outcomes that say nothing about the gift (a switch, the daily ceiling): no attempt is counted.
  * Neither is gift_changed: an edit during the run starts the gift over.
  */
-const NOT_THE_GIFTS_FAULT = new Set(["off", "not_configured", "over_limit"]);
+const NOT_THE_GIFTS_FAULT = new Set(["off", "not_configured", "over_limit", "image_off"]);
 
 function hostOf(url: string): string | null {
   try {
@@ -116,7 +120,11 @@ export async function repairMissingPhotos(
   if (!s.enabled) return { repaired: 0, failed: 0 };
 
   const lists = deps.db.schema("lists");
-  const found = await lists.rpc("photo_repair_candidates", { p_limit: s.perRun, p_max_age_days: s.maxAgeDays });
+  const found = await lists.rpc("photo_repair_candidates", {
+    p_limit: s.perRun,
+    p_max_age_days: s.maxAgeDays,
+    p_claim_minutes: s.claimMinutes,
+  });
   if (found.error) throw new Error(`Finding gifts to repair failed: ${found.error.message}`);
 
   let repaired = 0;
@@ -127,7 +135,7 @@ export async function repairMissingPhotos(
   for (const c of (found.data ?? []) as Candidate[]) {
     // The run shares the tick's time limit with the rounds: past its budget, the rest wait a day.
     if (deps.now().getTime() - started >= s.budgetMs) break;
-    const asin = c.asin ?? extractAsin(safePath(c.product_url));
+    const asin = amazonAsin(c);
     const kind = asin ? "amazon" : "store";
     if (closed[kind]) continue;
     const store = hostOf(c.product_url);
@@ -139,7 +147,9 @@ export async function repairMissingPhotos(
       continue;
     }
     if (NOT_THE_GIFTS_FAULT.has(outcome) || outcome === "gift_changed") {
-      if (outcome !== "gift_changed") closed[kind] = true;
+      // Photo downloads off stops both kinds; the rest stop only their own.
+      if (outcome === "image_off") closed.amazon = closed.store = true;
+      else if (outcome !== "gift_changed") closed[kind] = true;
       deps.log("lists.photo_repair_failed", { item_id: c.item_id, user_id: c.owner_id, outcome, store, attempt: c.attempts });
       continue;
     }
@@ -166,12 +176,16 @@ export async function repairMissingPhotos(
   return { repaired, failed };
 }
 
-function safePath(url: string): string {
+/** The ASIN, only for a link on an Amazon host (as listGiftRoute decides): another store's id-shaped path isn't one. */
+function amazonAsin(c: Candidate): string | null {
+  let url: URL;
   try {
-    return new URL(url).pathname;
+    url = new URL(c.product_url);
   } catch {
-    return "";
+    return null;
   }
+  if (!isAmazonHost(url.hostname)) return null;
+  return c.asin ?? extractAsin(url.pathname);
 }
 
 /** "repaired", or a short failure code for the log and photo_repairs.last_outcome. */
@@ -208,16 +222,14 @@ async function repairOne(c: Candidate, asin: string | null, s: PhotoRepairSettin
   if (uploaded.error) return "store_failed";
   const publicUrl = bucket.getPublicUrl(path).data.publicUrl;
 
-  // Only if the gift is still as we found it: an edit in the meantime wins.
-  const saved = await lists
-    .from("list_items")
-    .update({ image_url: publicUrl, has_photo: true })
-    .eq("id", c.item_id)
-    .eq("has_photo", false)
-    .eq("product_url", c.product_url)
-    .filter("image_url", c.image_url === null ? "is" : "eq", c.image_url ?? "null")
-    .select("id");
+  // Only if the gift is still as we found it (an edit in the meantime wins), and the list's
+  // version moves so an open My list tab can't save the old photo back.
+  const saved = await lists.rpc("save_repaired_photo", {
+    p_item_id: c.item_id,
+    p_product_url: c.product_url,
+    p_old_image_url: c.image_url as string,
+    p_new_image_url: publicUrl,
+  });
   if (saved.error) return "store_failed";
-  if (!saved.data || saved.data.length === 0) return "gift_changed";
-  return "repaired";
+  return saved.data === true ? "repaired" : "gift_changed";
 }

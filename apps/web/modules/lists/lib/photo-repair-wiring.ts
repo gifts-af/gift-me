@@ -61,7 +61,9 @@ export async function runPhotoRepair(
       return lookupStorePage({ url, userId: ownerId }, await pageLimits(), { ...web, log: logEvent, now: Date.now });
     },
     async download(url) {
-      const { timeoutMs, maxBytes } = await pageLimits();
+      // Store fetches switched off covers photo downloads too.
+      const { enabled, timeoutMs, maxBytes } = await pageLimits();
+      if (!enabled) return { ok: false, reason: "off" };
       return fetchStoreImage(url, { timeoutMs, maxBytes }, web);
     },
     toJpeg: toListPhotoJpeg,

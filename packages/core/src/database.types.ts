@@ -2749,7 +2749,11 @@ export type Database = {
       person_list: { Args: { p_person_id: string }; Returns: Json };
       person_share_token: { Args: { p_person_id: string }; Returns: string };
       photo_repair_candidates: {
-        Args: { p_limit: number; p_max_age_days: number };
+        Args: {
+          p_claim_minutes: number;
+          p_limit: number;
+          p_max_age_days: number;
+        };
         Returns: {
           asin: string;
           attempts: number;
@@ -2772,6 +2776,15 @@ export type Database = {
           p_title: string;
         };
         Returns: Json;
+      };
+      save_repaired_photo: {
+        Args: {
+          p_item_id: string;
+          p_new_image_url: string;
+          p_old_image_url: string;
+          p_product_url: string;
+        };
+        Returns: boolean;
       };
       share_preview: { Args: { p_token: string }; Returns: Json };
       store_host: { Args: { p_url: string }; Returns: string };
