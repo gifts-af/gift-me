@@ -1,7 +1,6 @@
 "use client";
 
 import { useId, useState } from "react";
-import Link from "next/link";
 import { ChevronDown, ChevronRight, ExternalLink } from "lucide-react";
 import { CAPTURE_READ_OFF, CATEGORY_GROUPS, captureReadNotice, type FactCategory } from "@gifts-af/core";
 import { ExtensionLink } from "@/components/extension-link";
@@ -17,7 +16,7 @@ import { cn } from "@/lib/utils";
 import type { Profile, ProfileFact, SaveResult } from "@/modules/concierge";
 import { confirmFactAction } from "../actions";
 
-// "What we know" on a person's page (ALL-26, C-7, D51): one list by category,
+// "What we know" (ALL-26, C-7, D51), on its own page (/people/[id]/know): one list by category,
 // each fact with its source. Tapping a fact opens it in place, and it saves as
 // you go (ALL-127, T71): the text on leaving the field or Enter, the kind when
 // picked, "Use for gift ideas" when flipped. A ✨ fact gets "Looks right".
@@ -71,7 +70,6 @@ export function WhatWeKnow({
   personId,
   name,
   knowledge,
-  questionsHref,
   hasAccess,
   editAction,
   setActiveAction,
@@ -81,8 +79,6 @@ export function WhatWeKnow({
   personId: string;
   name: string;
   knowledge: Knowledge;
-  /** Where the empty state points; null when questions are off or none are open. */
-  questionsHref: string | null;
   /** To the concierge, which is what learns from captures. */
   hasAccess: boolean;
 } & Actions) {
@@ -115,32 +111,20 @@ export function WhatWeKnow({
   };
 
   return (
-    <section className="flex flex-col gap-4 border-b border-border pb-6" aria-labelledby="know-heading">
-      <h2 id="know-heading" className="text-lg font-semibold">
-        What we know
-      </h2>
-
+    // The page's title says What we know, so the list is named by it rather than headed again.
+    <section className="flex flex-col gap-4" aria-label="What we know">
       {groups.length === 0 && (
         <p className="text-[15px] text-muted-foreground">
-          Nothing yet.{" "}
-          {questionsHref ? (
-            <>
-              <Link href={questionsHref} className="inline-flex min-h-11 items-center font-semibold text-primary underline-offset-2 hover:underline">
-                Answer a few questions
-              </Link>{" "}
-              or capture a page about {name} with <ExtensionLink>the extension</ExtensionLink>.
-            </>
-          ) : (
-            <>Capture a page about {name} with <ExtensionLink>the extension</ExtensionLink>{hasAccess && " and we'll learn from it"}.</>
-          )}
+          Nothing yet. Add something above, or capture a page about {name} with <ExtensionLink>the extension</ExtensionLink>
+          {hasAccess && " and we'll learn from it"}.
         </p>
       )}
 
       {groups.map((g) => (
         <section key={g.category} className="flex flex-col gap-1" aria-labelledby={`facts-${g.category}`}>
-          <h3 id={`facts-${g.category}`} className="text-[15px] font-semibold">
+          <h2 id={`facts-${g.category}`} className="text-[15px] font-semibold">
             {g.label}
-          </h3>
+          </h2>
           <ul className="flex flex-col divide-y divide-border">
             {g.facts.map((f, index) => (
               <FactRow

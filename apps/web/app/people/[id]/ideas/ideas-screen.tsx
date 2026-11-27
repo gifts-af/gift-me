@@ -138,8 +138,8 @@ export function IdeasScreen({
           {error === NO_FACTS && (
             <>
               {" "}
-              <Link href={`/people/${personId}/questions`} className="font-semibold underline">
-                Answer a few questions
+              <Link href={`/people/${personId}/know`} className="font-semibold underline">
+                Add something
               </Link>
             </>
           )}

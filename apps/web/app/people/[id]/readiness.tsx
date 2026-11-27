@@ -31,7 +31,15 @@ export function ReadinessBanner({ personId, name, readiness }: { personId: strin
         </p>
       )}
       {step.kind === "capture" && (
-        <p className="text-[13px] text-muted-foreground">Capture a page about {name} with <ExtensionLink>the extension</ExtensionLink> to learn more.</p>
+        <p className="text-[13px] text-muted-foreground">
+          <Link
+            href={`/people/${personId}/know`}
+            className="inline-flex min-h-11 items-center font-semibold text-primary underline-offset-2 hover:underline"
+          >
+            Add something
+          </Link>{" "}
+          about {name}, or capture a page about them with <ExtensionLink>the extension</ExtensionLink>, to learn more.
+        </p>
       )}
     </section>
   );

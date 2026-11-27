@@ -224,6 +224,58 @@ export async function skipQuestion(db: Db, personId: string, key: QuestionKey, p
   return { ok: true };
 }
 
+/**
+ * "Add something" on What we know: a fact the buyer typed, so it's confirmed, with the
+ * "You told us" source (`note`). The insert sets `changed_at`, so it counts as a new fact and a
+ * round whose last search found nothing is searched again (T68). One they turned off comes back
+ * on, as an answered question does: they just told us it's true. `edit` comes from `parseFactEdit`.
+ */
+export async function addFact(
+  db: Db,
+  personId: string,
+  edit: { category: FactCategory; value: string },
+): Promise<SaveResult> {
+  // RLS hides someone else's person and a deleted one.
+  const person = await db.from("people").select("id").eq("id", personId).maybeSingle();
+  if (person.error) {
+    logEvent("profile.fact_add_failed", { person_id: personId, code: person.error.code });
+    return { ok: false, error: "That didn't save. Try again." };
+  }
+  if (!person.data) return { ok: false, error: "This person is no longer on your list." };
+
+  const facts = db.schema("concierge").from("profile_facts");
+  const { data, error } = await facts
+    .insert({ person_id: personId, category: edit.category, value: edit.value, source: "note", confirmed: true })
+    .select("id")
+    .single();
+  if (!error) {
+    logEvent("profile.fact_added", { user_id: await currentUserId(db), person_id: personId, fact_id: data.id });
+    return { ok: true };
+  }
+  if (error.code === POSTGRES_CHECK) return { ok: false, error: "That's too long. Shorten it and try again." };
+  if (error.code !== POSTGRES_UNIQUE) {
+    logEvent("profile.fact_add_failed", { person_id: personId, code: error.code });
+    return { ok: false, error: "That didn't save. Try again." };
+  }
+
+  // Already saved: on again if it was off, else say so. `value_key` is the value as the unique
+  // index compares it; parseFactEdit already trimmed and collapsed the spaces.
+  const turned = await facts
+    .update({ active: true, confirmed: true })
+    .eq("person_id", personId)
+    .eq("category", edit.category)
+    .eq("value_key", edit.value.toLowerCase())
+    .eq("active", false)
+    .select("id");
+  if (turned.error) {
+    logEvent("profile.fact_add_failed", { person_id: personId, code: turned.error.code });
+    return { ok: false, error: "That didn't save. Try again." };
+  }
+  if (turned.data.length === 0) return { ok: false, error: "That's already on their profile." };
+  logEvent("profile.fact_turned_on", { user_id: await currentUserId(db), fact_id: turned.data[0].id });
+  return { ok: true };
+}
+
 /** Saying a fact is right, by fixing it, counts as confirming it (AC-6). */
 export async function updateFact(
   db: Db,

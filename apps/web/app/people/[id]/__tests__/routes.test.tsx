@@ -45,11 +45,10 @@ async function openPerson(search: Record<string, string>) {
 }
 
 describe("a person's routes", () => {
-  // The address screen can place held gifts; the person's page reads captures
-  // with AI (readCapturesAction), which can run long too (review of PR 1).
-  it("keeps 300 s on the address screen and the person's page", () => {
+  // The address screen can place held gifts, which can run long (review of PR 1). Reading
+  // captures moved to What we know, which keeps its own 300 s (know-page.test.tsx).
+  it("keeps 300 s on the address screen", () => {
     expect(addressPage.maxDuration).toBe(300);
-    expect((personPage as { maxDuration?: number }).maxDuration).toBe(300);
   });
 
   // ALL-27: an idea run can take two AI and two Zinc timeouts (150 s as shipped).

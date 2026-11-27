@@ -8,25 +8,16 @@ import { readAccess } from "@/components/concierge-gate";
 import { appSettingInt } from "@/lib/app-settings";
 import { createClient } from "@/lib/supabase/server";
 import { todayForRequest } from "@/lib/today";
-import { getPerson, countSavedGifts, getProfile, hasPastGifts, onDemandIdeas, type Db, type PersonDetail } from "@/modules/concierge";
+import { getPerson, countSavedGifts, getProfile, hasPastGifts, onDemandIdeas, type Db, type PersonDetail, type Profile } from "@/modules/concierge";
 import { getPersonListPhotos, getPersonShareToken } from "@/modules/lists";
 import { SettingsRow } from "@/components/settings-row";
-import {
-  deleteFactAction,
-  deletePersonAction,
-  editFactAction,
-  linkUnlinkedListAction,
-  readCapturesAction,
-  setFactActiveAction,
-  setOccasionEnabledAction,
-} from "../actions";
+import { deletePersonAction, linkUnlinkedListAction, setOccasionEnabledAction } from "../actions";
 import { BudgetRow } from "./budget-row";
 import { DeletePerson } from "./delete-person";
 import { LinkedList } from "./linked-list";
 import { ListLink } from "./list-link";
 import { Occasions } from "./occasions";
 import { ReadinessBanner } from "./readiness";
-import { WhatWeKnow } from "./what-we-know";
 
 /** The About row's value (ALL-127): "Mother · Birthday Mar 14". */
 function aboutSummary(person: PersonDetail): string {
@@ -42,6 +33,13 @@ function addressSummary(address: PersonDetail["address"]): string {
   return address.address.line1 ?? "Not added";
 }
 
+/** The What we know row's value: how many facts are in use, and captures still to read. */
+function knowSummary(profile: Pick<Profile, "groups" | "unread">): string {
+  const n = profile.groups.reduce((sum, g) => sum + g.facts.length, 0);
+  const facts = n === 0 ? "None yet" : n === 1 ? "1 fact" : `${n} facts`;
+  return profile.unread > 0 ? `${facts} · ${profile.unread} to read` : facts;
+}
+
 /** A bordered block of rows, like Settings' groups (ALL-115), with an optional heading. */
 function RowGroup({ title, children }: { title?: string; children: React.ReactNode }) {
   return (
@@ -53,8 +51,8 @@ function RowGroup({ title, children }: { title?: string; children: React.ReactNo
 }
 
 /**
- * A person's page (T71): who they are, what we know, then a short
- * list of rows. Each row shows its value and opens its own screen, where it
+ * A person's page (T71): who they are, then a short list of rows, What we
+ * know first. Each row shows its value and opens its own screen, where it
  * changes. Without concierge access, what only the concierge does is left out.
  * An unknown, deleted or someone else's id is a 404.
  */
@@ -132,19 +130,8 @@ export async function PersonView({
 
       {hasAccess && profile.readiness && <ReadinessBanner personId={person.id} name={person.name} readiness={profile.readiness} />}
 
-      <WhatWeKnow
-        personId={person.id}
-        name={person.name}
-        knowledge={profile}
-        hasAccess={hasAccess}
-        questionsHref={profile.openCount > 0 ? `${base}/questions` : null}
-        editAction={editFactAction}
-        setActiveAction={setFactActiveAction}
-        deleteAction={deleteFactAction}
-        readAction={readCapturesAction}
-      />
-
       <RowGroup>
+        <SettingsRow href={`${base}/know`} label="What we know" value={knowSummary(profile)} />
         <SettingsRow href={`${base}/about`} label={`About ${person.name}`} value={aboutSummary(person)} />
       </RowGroup>
 

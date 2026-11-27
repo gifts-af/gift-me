@@ -4,7 +4,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 const getPerson = vi.hoisted(() => vi.fn());
 const cardEnabled = vi.hoisted(() => ({ value: 1 }));
 const getProfile = vi.hoisted(() =>
-  vi.fn(async (...args: unknown[]) => (void args, { groups: [], off: [], unread: 0, openCount: 0, readiness: null as unknown })),
+  vi.fn(async (...args: unknown[]) => (void args, { groups: [] as unknown[], off: [] as unknown[], unread: 0, openCount: 0, readiness: null as unknown })),
 );
 const countSavedGifts = vi.hoisted(() => vi.fn(async (...args: unknown[]) => (void args, 0)));
 const onDemandIdeas = vi.hoisted(() => vi.fn(async (...args: unknown[]) => (void args, [] as unknown[])));
@@ -74,7 +74,7 @@ describe("PersonView", () => {
     expect(screen.getByRole("heading", { level: 1, name: "Dad" })).toBeInTheDocument();
     expect(screen.getByText("No list linked").querySelector("svg")).toBeNull();
     const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent);
-    expect(headings).toEqual(["Does Dad have a GiftsAF list?", "What we know", "Occasions", "Gifts"]);
+    expect(headings).toEqual(["Does Dad have a GiftsAF list?", "Occasions", "Gifts"]);
     expect(getProfile.mock.calls[0].slice(1)).toEqual(["p1", false]);
     expect(screen.getByRole("switch", { name: "Birthday" })).toBeChecked();
     expect(screen.getByRole("button", { name: "Delete Dad" })).toBeInTheDocument();
@@ -92,7 +92,7 @@ describe("PersonView", () => {
     render(await PersonView({ id: "p1", photoFailed: false, gifts: <p>Their gifts</p> }));
     const gifts = screen.getByText("Their gifts");
     const prompt = screen.getByRole("heading", { name: "Does Dad have a GiftsAF list?" });
-    const know = screen.getByRole("heading", { name: "What we know" });
+    const know = screen.getByRole("link", { name: /^What we know/ });
     expect(prompt.compareDocumentPosition(gifts) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(gifts.compareDocumentPosition(know) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -196,6 +196,49 @@ describe("PersonView", () => {
     });
   });
 
+  // ALL-186: one row, like the others, opening the facts on their own page.
+  describe("the What we know row", () => {
+    const facts = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `f${i}` }));
+    const know = () => screen.getByRole("link", { name: /^What we know/ });
+
+    it.each([
+      ["None yet", [], 0],
+      ["1 fact", [{ category: "interest", label: "Interests", facts: facts(1) }], 0],
+      [
+        "12 facts",
+        [
+          { category: "interest", label: "Interests", facts: facts(5) },
+          { category: "size", label: "Sizes", facts: facts(7) },
+        ],
+        0,
+      ],
+      ["3 facts · 2 to read", [{ category: "interest", label: "Interests", facts: facts(3) }], 2],
+      ["None yet · 1 to read", [], 1],
+    ])("says %s, opening What we know", async (value, groups, unread) => {
+      getPerson.mockResolvedValue(dad);
+      getProfile.mockResolvedValueOnce({ groups, off: [{ id: "x" }], unread, openCount: 0, readiness: null });
+      await show();
+      expect(know()).toHaveAttribute("href", "/people/p1/know");
+      expect(know().textContent).toBe(`What we know${value}`);
+    });
+
+    it("comes before About, with no facts on the page itself", async () => {
+      getPerson.mockResolvedValue(dad);
+      getProfile.mockResolvedValueOnce({
+        groups: [{ category: "interest", label: "Interests", facts: [{ id: "f1", value: "fly fishing" }] }],
+        off: [],
+        unread: 0,
+        openCount: 0,
+        readiness: null,
+      });
+      await show();
+      const labels = screen.getAllByRole("link").map((l) => l.firstChild?.textContent);
+      expect(labels.indexOf("About Dad")).toBe(labels.indexOf("What we know") + 1);
+      expect(screen.queryByText("fly fishing")).toBeNull();
+      expect(screen.queryByRole("region", { name: "What we know" })).toBeNull();
+    });
+  });
+
   it("has an About row with the relationship and birthday, opening About", async () => {
     getPerson.mockResolvedValue(dad);
     await show();
@@ -291,7 +334,6 @@ describe("PersonView", () => {
       orderBy: screen.queryByText(/^Order by/) !== null,
       tooLate: screen.queryByText("Too late to ship") !== null,
       heldGifts: screen.queryByText(/waiting on an address/) !== null,
-      learn: screen.queryByText(/we'll learn from it/) !== null,
     });
     const profile = () => getProfile.mockResolvedValueOnce({ groups: [], off: [], unread: 0, openCount: 0, readiness });
 
@@ -299,7 +341,7 @@ describe("PersonView", () => {
       getPerson.mockResolvedValue(late);
       profile();
       await show();
-      expect(parts()).toEqual({ readiness: true, ideas: true, orderBy: true, tooLate: true, heldGifts: true, learn: true });
+      expect(parts()).toEqual({ readiness: true, ideas: true, orderBy: true, tooLate: true, heldGifts: true });
       expect(screen.queryByText(REMINDERS)).toBeNull();
     });
 
@@ -312,18 +354,16 @@ describe("PersonView", () => {
       getPerson.mockResolvedValue(late);
       profile();
       await show();
-      expect(parts()).toEqual({ readiness: false, ideas: false, orderBy: false, tooLate: false, heldGifts, learn: false });
+      expect(parts()).toEqual({ readiness: false, ideas: false, orderBy: false, tooLate: false, heldGifts });
       expect(screen.queryByText(REMINDERS) !== null).toBe(note);
       expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual([
         "Does Dad have a GiftsAF list?",
-        "What we know",
         "Occasions",
         "Gifts",
       ]);
-      expect(screen.getByText(/^Nothing yet/)).toHaveTextContent("Capture a page about Dad with the extension.");
       expect(screen.getByText("Fri, Dec 25")).toBeInTheDocument();
       expect(screen.getByRole("switch", { name: "Birthday" })).toBeChecked();
-      for (const name of [/^About Dad/, /^Budget/, /^Saved gifts/, /^Shipping address/]) expect(screen.getByRole("link", { name })).toBeInTheDocument();
+      for (const name of [/^What we know/, /^About Dad/, /^Budget/, /^Saved gifts/, /^Shipping address/]) expect(screen.getByRole("link", { name })).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Delete Dad" })).toBeInTheDocument();
     });
   });

@@ -1,5 +1,5 @@
 // What the Gift ideas screen says when a run brings back no ideas (ALL-27). Shared by
-// suggestIdeasAction, which picks one, and the screen, which adds the questions link to NO_FACTS.
+// suggestIdeasAction, which picks one, and the screen, which adds the link to What we know to NO_FACTS.
 
 export const NO_FACTS = "Tell us a bit about them first.";
 
