@@ -491,6 +491,7 @@ export default function GiftApp({
             onCopy={copyAndSay}
             onMore={() => void openShareSheet()}
             onUsed={() => setShared(true)}
+            note={shareHint}
           />
         )}
         {isGuest && (

@@ -27,6 +27,8 @@ export type ShareMenuProps = {
   onMore: () => void;
   // Any option used, links included.
   onUsed: () => void;
+  // A small note under the options, such as the birthday link. Tapping inside it closes the box.
+  note?: ReactNode;
 };
 
 export function shareLinks(url: string) {
@@ -102,6 +104,12 @@ export default function ShareMenu(props: ShareMenuProps) {
             </li>
           )}
         </ul>
+        {props.note && (
+          // The note's link reaches 10 px past its text; the padding keeps that off the last option.
+          <div className="flex justify-center pt-2.5" onClick={() => onOpenChange(false)}>
+            {props.note}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
