@@ -346,7 +346,8 @@ describe("+ My list", () => {
     render(<SharedList token="t" list={listFor(member)} addToMine={addToMine} />);
     await userEvent.click(screen.getByRole("button", { name: "Add Kettle to my list" }));
     expect(addToMine).toHaveBeenCalledWith("t", "a");
-    expect(screen.getByRole("button", { name: "On your list ✓" })).toHaveProperty("disabled", true);
+    expect(screen.getByText("On your list ✓")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Add Kettle to my list" })).toBeNull();
     expect(screen.getByText(/Added to your list/)).toBeTruthy();
   });
 
@@ -363,7 +364,7 @@ describe("+ My list", () => {
     try {
       const addToMine = vi.fn().mockResolvedValue({ ok: true });
       render(<SharedList token="t" list={listFor(member)} addToMine={addToMine} />);
-      expect(await screen.findByRole("button", { name: "On your list ✓" })).toBeTruthy();
+      expect(await screen.findByText("On your list ✓")).toBeTruthy();
       expect(addToMine).toHaveBeenCalledTimes(1);
       expect(router.replace).toHaveBeenCalledWith("/share/t", { scroll: false });
     } finally {

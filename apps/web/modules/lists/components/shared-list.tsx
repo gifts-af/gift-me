@@ -22,6 +22,8 @@ import ViewDialog from "./view-dialog";
  * `top` is the card: above the heading when signed in, below the heading and
  * above the gifts when signed out, so a visitor sees the list first.
  */
+const ADD_LINK = "h-auto min-h-11 justify-start gap-1 px-0 text-[13px] font-normal text-muted-foreground underline underline-offset-2 hover:bg-transparent hover:text-foreground";
+
 export type SharedListProps = {
   list: SharedListData;
   token: string;
@@ -160,23 +162,22 @@ export default function SharedList({ list, token, nav, top, addToMine }: SharedL
     setAnnouncement(`You unclaimed ${gift.name}.`);
   }
 
+  // Quieter than Claim on purpose: Claim is what this page is for, adding to your own list is a side door.
   function renderAddToMine(gift: SharedGift) {
     if (!canAdd) return null;
     if (added.has(gift.id)) {
       return (
-        <Button type="button" variant="outline" size="sm" className="w-full" disabled>
-          On your list ✓
-        </Button>
+        <span className="inline-flex min-h-11 items-center text-[13px] text-muted-foreground">On your list ✓</span>
       );
     }
     if (!list.viewer.signedIn) {
       // Sign up (which links to sign in) and come back here to add it.
       const next = encodeURIComponent(`/share/${token}?add=${gift.id}`);
       return (
-        <Button asChild variant="outline" size="sm" className="w-full">
+        <Button asChild variant="ghost" size="sm" className={ADD_LINK}>
           <Link href={`/auth/sign-up?next=${next}`} aria-label={`Add ${gift.name} to my list`}>
             <Plus aria-hidden="true" />
-            My list
+            Add to my list
           </Link>
         </Button>
       );
@@ -185,16 +186,16 @@ export default function SharedList({ list, token, nav, top, addToMine }: SharedL
     return (
       <Button
         type="button"
-        variant="outline"
+        variant="ghost"
         size="sm"
-        className="w-full"
+        className={ADD_LINK}
         onClick={() => handleAddToMine(gift)}
         disabled={busy}
         aria-busy={busy}
         aria-label={`Add ${gift.name} to my list`}
       >
         <Plus aria-hidden="true" />
-        {busy ? "Adding…" : "My list"}
+        {busy ? "Adding…" : "Add to my list"}
       </Button>
     );
   }
