@@ -16,6 +16,7 @@ const IPHONE =
   "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1";
 
 afterEach(() => {
+  delete (globalThis as { chrome?: unknown }).chrome;
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
 });
@@ -54,6 +55,20 @@ describe("AccountMenu", () => {
     const item = await screen.findByRole("menuitem", { name: "Get the Chrome extension" });
     expect(item).toHaveAttribute("href", STORE);
     expect(item).toHaveAttribute("target", "_blank");
+  });
+
+  it("leaves the extension out once it's installed", async () => {
+    vi.stubEnv("NEXT_PUBLIC_EXTENSION_STORE_URL", STORE);
+    vi.stubEnv("NEXT_PUBLIC_EXTENSION_ID", "abc");
+    vi.spyOn(navigator, "userAgent", "get").mockReturnValue(DESKTOP_CHROME);
+    // The installed extension answers the page's ping.
+    (globalThis as { chrome?: unknown }).chrome = {
+      runtime: { sendMessage: (_id: string, _m: unknown, reply: (r: unknown) => void) => reply({ ok: false }) },
+    };
+    render(<AccountMenu email="sam@example.com" />);
+    await userEvent.click(screen.getByRole("button", { name: "Account" }));
+    await screen.findByRole("menuitem", { name: "Settings" });
+    expect(screen.queryByRole("menuitem", { name: /extension/i })).not.toBeInTheDocument();
   });
 
   it("leaves the extension out where it can't be installed", async () => {
