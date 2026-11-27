@@ -723,7 +723,15 @@ No card order is placed and Add a card is hidden; held card gifts read "paused" 
 1. The owner's wallet orders are delivered or closed; the owner disconnects Zinc in Settings.
 2. Set the app webhook on that Zinc account to `https://giftsaf.com/api/zinc/webhook/app` and check it with `GET /webhooks/endpoint`.
 3. Keep that Zinc account's wallet at $0 with auto top-up off (planning 66), so an order sent without a card fails instead of spending it.
-4. In Stripe: the Radar rule that blocks cards from outside the US (planning 66) and the statement name.
+4. In Stripe's dashboard (owner, as the account holder; these are account settings the API can't set for us):
+   - **Radar:** a rule that blocks cards from outside the US (planning 66).
+   - **Statement descriptor:** `GIFTSAF` (Settings > Public details).
+   - **Business name:** `GiftsAF` (Settings > Business details). It shows in Stripe's terms text and receipts; the app also sets it on the card page itself.
+   - **Public details:** a support email that receives mail, and links to the terms and privacy pages, so Checkout can show them.
+   - **Branding** (Settings > Branding): icon and logo from the yellow gift-tag art (the same images the app passes: `https://giftsaf.com/apple-icon` and the email logo), brand colour `#0f766e`, accent colour `#0f766e`. These cover receipts and emails; the card page gets the app's own per-visit settings either way.
+   - **Payment methods:** Link off, so it can't offer to save the card to Link even though the app asks for cards only.
+
+**What the app sets on each visit to Stripe's card page** (Checkout `branding_settings` and session options, no dashboard step): business name `GiftsAF`, the gift-tag icon and logo by URL, button colour `#0f766e`, white background, rounded corners, the font closest to ours, our consent text, cards only, setup mode.
 
 ### After a store cancel
 

@@ -328,6 +328,9 @@ export async function connectWiring(db: SupabaseClient<Database>, env?: Env): Pr
 
 ### Task 8: Screens (AC-1, AC-4, AC-5, AC-6, AC-12, AC-13, AC-17)
 
+**Mock-ups approved by the owner, 2026-11-27:** screens (parts 1 to 4) and emails (part 6) as drawn, the consent wording as written, statement name `GIFTSAF`. **Also (owner):** Stripe's card page as on-brand as Stripe allows. Per visit through `branding_settings`: business name, icon and logo by URL (the gift-tag art from `lib/logo-art.ts`), button colour `#0f766e`, background, border style, font. Dashboard-only items (Radar, statement descriptor, account branding and accent colour, public details, Link off) are on the owner checklist in `design/operations.md` > Card payments.
+
+
 **Files:** `app/rounds/[id]/buy/{page,confirm-screen}.tsx`, `app/rounds/[id]/fix/[orderId]/{page,fix-screen}.tsx`, `app/rounds/outcome.tsx`, `app/settings/paying-for-gifts*.tsx`, `app/settings/paying/page.tsx`, `app/privacy/page.tsx`; `e2e/card-payments.spec.ts`.
 
 - Mock-ups first, shown to the owner with the consent wording and statement name (phone and desktop, light and dark). Build after their OK.
