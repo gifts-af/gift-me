@@ -13,7 +13,7 @@ import { OCCASION_NAMES } from "@/lib/occasion-format";
 export type PickAgainResult =
   | { ok: true }
   | { ok: false; error: "not_found" | "busy" | "not_open" | "not_current" | "other_gifts" | "session" | "bad_form" };
-export type SkipResult = { ok: true } | { ok: false; error: "not_found" | "session" | "bad_form" };
+export type SkipResult = { ok: true } | { ok: false; error: "not_found" | "not_open" | "on_its_way" | "session" | "bad_form" };
 
 const CHANGED = "This gift can't be changed now. Reload to see what happened.";
 const WORDS: Record<Extract<PickAgainResult | SkipResult, { ok: false }>["error"], string> = {
@@ -21,6 +21,7 @@ const WORDS: Record<Extract<PickAgainResult | SkipResult, { ok: false }>["error"
   not_open: CHANGED,
   not_current: CHANGED,
   other_gifts: CHANGED,
+  on_its_way: "A gift is already being bought, so we didn't skip. Reload to see it.",
   not_found: "That didn't go through. Reload and try again.",
   session: "Your session ended. Sign in again.",
   bad_form: "That didn't go through. Reload and try again.",

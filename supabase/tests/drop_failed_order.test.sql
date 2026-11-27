@@ -3,7 +3,7 @@
 -- when that order is the round's only one still in play.
 begin;
 \ir _helpers.psql
-select plan(14);
+select plan(19);
 
 select tests.create_user('drop-buyer@example.com', 'Buyer') as a \gset
 select tests.create_user('drop-mom@example.com', 'Mom') as mom \gset
@@ -68,6 +68,8 @@ grant execute on all functions in schema tests to anon, authenticated, service_r
 select * from tests.df_round(:'a', :'p_pat', 'price_up') \gset d1_
 select is((select array[status::text, attention_reason] from concierge.gift_rounds where id = :'d1_round_id'),
   array['needs_attention', 'price_up'], 'the fixture round needs attention for the price rise');
+-- Told about the failure, the engine left it waiting for its deadline (holdAction).
+update concierge.gift_rounds set next_action_at = ship_by_deadline::timestamptz where id = :'d1_round_id';
 
 select tests.act_as_server();
 select lives_ok(tests.df_sql(:'d1_round_id', :'a', :'d1_lock', :'d1_failed_order'),
@@ -79,6 +81,8 @@ select is(
      from concierge.gift_rounds r where r.id = :'d1_round_id'),
   array['true', 'awaiting_approval', 'none', 'true'],
   'the failed order is resolved and the round is back to choosing, still open');
+select ok((select next_action_at <= now() from concierge.gift_rounds where id = :'d1_round_id'),
+  'and due now, so the next tick plans its reminders again');
 select is((select status::text from concierge.gift_ideas where id = :'d1_failed_idea'), 'selected',
   'after a price rise the failed gift stays listed but can''t be bought again at its old price');
 
@@ -97,6 +101,13 @@ select lives_ok(:'d2_sql', 'an address failure can be dropped');
 select tests.reset_role();
 select is((select status::text from concierge.gift_ideas where id = :'d2_failed_idea'), 'proposed',
   'after an address failure the same gift is on offer again');
+select * from tests.df_round(:'a', :'p_pat', 'card_needed') \gset d5_
+select tests.act_as_server();
+select tests.df_sql(:'d5_round_id', :'a', :'d5_lock', :'d5_failed_order') as d5_sql \gset
+select lives_ok(:'d5_sql', 'a card failure can be dropped');
+select tests.reset_role();
+select is((select status::text from concierge.gift_ideas where id = :'d5_failed_idea'), 'proposed',
+  'after a card failure the same gift is on offer again');
 
 -- ─── A list gift: its claim goes back to the list ────────────────────────────
 select * from tests.df_round(:'a', :'p_mom', 'out_of_stock', :'i_vase') \gset d3_
@@ -113,6 +124,15 @@ select * from tests.df_round(:'a', :'p_pat', 'price_up') \gset d4_
 select tests.act_as_server();
 select throws_ok(tests.df_sql(:'d4_round_id', :'a', now() + interval '1 hour', :'d4_failed_order'),
   'P0001', 'drop_failed_order: lease not held', 'refused without the round''s lease');
+select throws_ok(tests.df_sql(:'d4_round_id', :'mom', :'d4_lock', :'d4_failed_order'),
+  'P0001', 'drop_failed_order: lease not held', 'refused for someone else''s round');
+select tests.reset_role();
+-- On the ship-by day, as approve_round.
+select * from tests.df_round(:'a', :'p_pat', 'price_up') \gset d6_
+update concierge.gift_rounds set ship_by_deadline = (now() at time zone 'utc')::date where id = :'d6_round_id';
+select tests.act_as_server();
+select throws_ok(tests.df_sql(:'d6_round_id', :'a', :'d6_lock', :'d6_failed_order'),
+  'P0001', 'drop_failed_order: not open', 'refused from the ship-by day on');
 -- Already resolved (dropped once already, then bought again): not current.
 select throws_ok(tests.df_sql(:'d1_round_id', :'a', :'d1_lock', :'d1_failed_order'),
   'P0001', 'drop_failed_order: not current', 'refused for an order that is already resolved');

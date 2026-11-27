@@ -73,10 +73,12 @@ begin
     perform lists.release_for_order(v_item, p_user_id);
   end if;
 
-  -- Back to choosing. The schedule keeps its place: reminders already sent
-  -- stay sent, and the deadline still closes the round.
+  -- Back to choosing, due now: a failure left the round waiting for its
+  -- deadline, so the next tick plans the approval steps again. Reminders
+  -- already sent stay sent; one that's due goes out, and the deadline still
+  -- closes the round.
   update concierge.gift_rounds
-     set status = 'awaiting_approval', attention_reason = null
+     set status = 'awaiting_approval', attention_reason = null, next_action_at = now()
    where id = p_round_id;
 end;
 $$;

@@ -11,7 +11,7 @@ import { LOCAL_DB, localStack } from "../../../test/local-db";
 import type { DbDeps } from "../zinc/types";
 
 vi.mock("server-only", () => ({}));
-const { dropFailedOrder, roundView } = await import("../rounds/approval");
+const { dropFailedOrder, roundView, skipRound } = await import("../rounds/approval");
 const { createSupabaseNotifyStore } = await import("../notify/store");
 
 const stack = await localStack({ api: true });
@@ -24,6 +24,8 @@ describe.skipIf(!dbUp)("a failed gift's ways out (real local database)", () => {
   let pg: Client;
   const users: string[] = [];
   const deps = (): DbDeps => ({ db: admin!, now: new Date() });
+  // The real cancel link path, as skipRoundAction wires it.
+  const skipDeps = () => ({ ...deps(), cancel: (roundId: string, userId: string) => createSupabaseNotifyStore(admin!).cancelHeldGift(roundId, userId) });
 
   beforeAll(async () => {
     pg = new Client({ connectionString: LOCAL_DB });
@@ -125,8 +127,7 @@ describe.skipIf(!dbUp)("a failed gift's ways out (real local database)", () => {
   it("Skip closes the round through the cancel link's path: the untold failure goes to the late email", async () => {
     const u = await newUser();
     const r = await failedRound(u, ["out_of_stock"]);
-    const outcome = await createSupabaseNotifyStore(admin!).cancelHeldGift(r.roundId, u.id);
-    expect(outcome).toEqual({ cancelled: 0, ordering: 0, onItsWay: 0 });
+    expect(await skipRound({ userId: u.id, roundId: r.roundId }, skipDeps())).toEqual({ ok: true });
 
     const row = await roundRow(r.roundId);
     expect(row.status).toBe("skipped");
@@ -135,5 +136,41 @@ describe.skipIf(!dbUp)("a failed gift's ways out (real local database)", () => {
     expect(order).toEqual({ resolved: true, failed_after_close: true });
     const view = (await roundView(r.roundId, await signedIn(u), new Date()))!;
     expect(view.closedText).toBe("This gift round was stopped");
+  });
+
+  it("Skip refuses a round with a gift being bought, and one that isn't waiting on a fix, closing nothing", async () => {
+    const u = await newUser();
+    const r = await failedRound(u, ["out_of_stock"]);
+    // A replacement bought in another tab is being placed.
+    await pg.query(
+      `insert into concierge.orders (user_id, round_id, idea_id, funding_mode, max_price_cents, fee_cents, status, ship_to, ship_city, ship_state)
+       values ($1, $2, $3, 'zinc_wallet', 1800, 100, 'placing', 'recipient', 'Dayton', 'OH')`,
+      [u.id, r.roundId, r.mug],
+    );
+    expect(await skipRound({ userId: u.id, roundId: r.roundId }, skipDeps())).toEqual({ ok: false, error: "on_its_way" });
+    expect((await roundRow(r.roundId)).closed_at).toBeNull();
+
+    const choosing = await failedRound(u, ["price_up"]);
+    expect(await dropFailedOrder({ userId: u.id, roundId: choosing.roundId, orderId: choosing.orderIds[0] }, deps())).toEqual({ ok: true });
+    expect(await skipRound({ userId: u.id, roundId: choosing.roundId }, skipDeps())).toEqual({ ok: false, error: "not_open" });
+    expect(await skipRound({ userId: (await newUser()).id, roundId: r.roundId }, skipDeps())).toEqual({ ok: false, error: "not_found" });
+  });
+
+  it("a gift bought in another tab between the check and the close isn't called a skip", async () => {
+    const u = await newUser();
+    const r = await failedRound(u, ["out_of_stock"]);
+    const racing = {
+      ...skipDeps(),
+      cancel: async (roundId: string, userId: string) => {
+        await pg.query(
+          `insert into concierge.orders (user_id, round_id, idea_id, funding_mode, max_price_cents, fee_cents, status, ship_to, ship_city, ship_state)
+           values ($1, $2, $3, 'zinc_wallet', 1800, 100, 'placing', 'recipient', 'Dayton', 'OH')`,
+          [userId, roundId, r.mug],
+        );
+        return createSupabaseNotifyStore(admin!).cancelHeldGift(roundId, userId);
+      },
+    };
+    expect(await skipRound({ userId: u.id, roundId: r.roundId }, racing)).toEqual({ ok: false, error: "on_its_way" });
+    expect((await roundRow(r.roundId)).status).not.toBe("skipped");
   });
 });

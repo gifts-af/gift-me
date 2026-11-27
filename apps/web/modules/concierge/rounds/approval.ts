@@ -311,6 +311,45 @@ export async function dropFailedOrder(input: { userId: string; roundId: string; 
   });
 }
 
+export type SkipRoundResult = { ok: true } | { ok: false; error: "not_found" | "not_open" | "on_its_way" };
+/** What closing a round through the cancel link did (the notify store's cancelHeldGift). */
+type Cancelled = { cancelled: number; ordering: number; onItsWay: number };
+
+/**
+ * "Skip <name>'s <occasion>" on a failed gift: only on an open round needing attention with nothing
+ * held, being ordered or on its way, then closed through the hold emails' cancel path (`cancel`,
+ * cancel_held), which tells untold failures by the late email and never skips a round with a gift
+ * on its way (T27). A gift bought in another tab in between ends the round as ordered instead:
+ * that's reported, not called a skip.
+ */
+export async function skipRound(
+  input: { userId: string; roundId: string },
+  deps: DbDeps & { cancel: (roundId: string, userId: string) => Promise<Cancelled | null> },
+): Promise<SkipRoundResult> {
+  const { userId, roundId } = input;
+  const round = await ownRound(deps, roundId, userId);
+  if (!round) return { ok: false, error: "not_found" };
+  if (round.closed_at !== null || round.status !== "needs_attention") return { ok: false, error: "not_open" };
+  const { data, error } = await concierge(deps)
+    .from("orders")
+    .select("id")
+    .eq("round_id", roundId)
+    .not("status", "in", "(cancelled,failed,refunded)")
+    .limit(1);
+  if (error) fail("Loading the round's orders failed", error);
+  if (data.length > 0) return { ok: false, error: "on_its_way" };
+
+  const outcome = await deps.cancel(roundId, userId);
+  if (!outcome) return { ok: false, error: "not_found" };
+  const ids = { round_id: roundId, user_id: userId };
+  if (outcome.ordering + outcome.onItsWay > 0) {
+    logEvent("round.skip_overtaken", { ...ids, ordering: outcome.ordering, on_its_way: outcome.onItsWay });
+    return { ok: false, error: "on_its_way" };
+  }
+  logEvent("round.skipped_by_buyer", { ...ids, cancelled: outcome.cancelled });
+  return { ok: true };
+}
+
 // ─── page reads ──────────────────────────────────────────────────────────────
 
 /** Whose round this is, and nothing else (AC-3, S4): the only service-role read for the page. */

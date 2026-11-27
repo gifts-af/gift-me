@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { FACT_VALUE_MAX, RATINGS, type Database } from "@gifts-af/core";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { logEvent } from "@/lib/log";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { buyingWiring, lookupWiring, roundDbDeps, settingInt } from "@/lib/wiring";
@@ -24,6 +23,7 @@ import {
   roundAccess,
   saveReaction,
   setRoundBudget,
+  skipRound,
   tellDelivered,
   type ReactionRefusal,
   type ShipTo,
@@ -265,19 +265,20 @@ export async function pickAgainAction(roundId: string, orderId: string): Promise
 
 /**
  * "Skip <name>'s <occasion>": closes the round the way the hold emails' cancel link does
- * (cancel_held), which marks failures the buyer hasn't heard about for the late email, cancels
- * anything held and never skips a round with a gift on its way (T27).
+ * (cancel_held), through skipRound, which checks the round can be skipped first.
  */
 export async function skipRoundAction(roundId: string): Promise<SkipResult> {
   const id = RoundId.safeParse(roundId);
   if (!id.success) return { ok: false, error: "bad_form" };
   const user = await signedIn();
   if (!user) return { ok: false, error: "session" };
-  const outcome = await createSupabaseNotifyStore(createAdminClient()).cancelHeldGift(id.data, user.userId);
-  if (!outcome) return { ok: false, error: "not_found" };
-  logEvent("round.skipped_by_buyer", { round_id: id.data, user_id: user.userId, ordering: outcome.ordering, on_its_way: outcome.onItsWay });
+  const store = createSupabaseNotifyStore(createAdminClient());
+  const result = await skipRound(
+    { userId: user.userId, roundId: id.data },
+    { ...roundDbDeps(new Date()), cancel: (rid, uid) => store.cancelHeldGift(rid, uid) },
+  );
   revalidatePath(`/rounds/${id.data}`);
-  return { ok: true };
+  return result;
 }
 
 // ─── tracking ────────────────────────────────────────────────────────────────
