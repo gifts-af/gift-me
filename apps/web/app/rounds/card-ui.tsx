@@ -227,7 +227,7 @@ export function FeeInfo(f: FeeFigures) {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-h-[90dvh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="flex justify-between gap-3 pr-10">
+            <DialogTitle className="flex w-full justify-between gap-3">
               <span>{f.fee.label}</span>
               <span className="tabular-nums">{cents(feeTotal)}</span>
             </DialogTitle>
