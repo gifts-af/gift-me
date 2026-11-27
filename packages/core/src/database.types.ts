@@ -24,6 +24,8 @@ export type Database = {
           notification_prefs: NonNullable<Json>;
           over_budget_pct: number;
           paid_features: boolean;
+          stripe_customer_id: string | null;
+          stripe_payment_method_id: string | null;
           updated_at: string;
           user_id: string;
           zinc_api_key_secret_id: string | null;
@@ -48,6 +50,8 @@ export type Database = {
           notification_prefs?: NonNullable<Json>;
           over_budget_pct?: number;
           paid_features?: boolean;
+          stripe_customer_id?: string | null;
+          stripe_payment_method_id?: string | null;
           updated_at?: string;
           user_id?: string;
           zinc_api_key_secret_id?: string | null;
@@ -71,6 +75,8 @@ export type Database = {
           notification_prefs?: NonNullable<Json>;
           over_budget_pct?: number;
           paid_features?: boolean;
+          stripe_customer_id?: string | null;
+          stripe_payment_method_id?: string | null;
           updated_at?: string;
           user_id?: string;
           zinc_api_key_secret_id?: string | null;
@@ -277,6 +283,58 @@ export type Database = {
         };
         Relationships: [];
       };
+      card_sessions: {
+        Row: {
+          created_at: string;
+          failed_order_id: string | null;
+          id: string;
+          idea_ids: string[] | null;
+          round_id: string | null;
+          stripe_customer_id: string;
+          stripe_session_id: string;
+          used_at: string | null;
+          user_id: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          created_at?: string;
+          failed_order_id?: string | null;
+          id?: string;
+          idea_ids?: string[] | null;
+          round_id?: string | null;
+          stripe_customer_id: string;
+          stripe_session_id: string;
+          used_at?: string | null;
+          user_id: string;
+        };
+        Update: {
+          created_at?: string;
+          failed_order_id?: string | null;
+          id?: string;
+          idea_ids?: string[] | null;
+          round_id?: string | null;
+          stripe_customer_id?: string;
+          stripe_session_id?: string;
+          used_at?: string | null;
+          user_id?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "card_sessions_failed_order_id_fkey";
+            columns: ["failed_order_id"];
+            isOneToOne: false;
+            referencedRelation: "orders";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "card_sessions_round_id_fkey";
+            columns: ["round_id"];
+            isOneToOne: false;
+            referencedRelation: "gift_rounds";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       cost_events: {
         Row: {
           cents: number;
@@ -336,6 +394,7 @@ export type Database = {
           est_tax_cents: number;
           est_total_cents: number;
           first_party: boolean | null;
+          goods_cents: number | null;
           handling_days_max: number | null;
           id: string;
           image_url: string | null;
@@ -367,6 +426,7 @@ export type Database = {
           est_tax_cents?: number;
           est_total_cents: number;
           first_party?: boolean | null;
+          goods_cents?: number | null;
           handling_days_max?: number | null;
           id?: string;
           image_url?: string | null;
@@ -397,6 +457,7 @@ export type Database = {
           est_tax_cents?: number;
           est_total_cents?: number;
           first_party?: boolean | null;
+          goods_cents?: number | null;
           handling_days_max?: number | null;
           id?: string;
           image_url?: string | null;
@@ -837,6 +898,8 @@ export type Database = {
         Row: {
           address_owner_id: string | null;
           address_source: string | null;
+          card_fee_bps: number | null;
+          card_fee_fixed_cents: number | null;
           created_at: string;
           delivered_at: string | null;
           delivered_by: string | null;
@@ -845,6 +908,7 @@ export type Database = {
           failed_at: string | null;
           failure_type: string | null;
           fee_cents: number;
+          final_charge_cents: number | null;
           funding_mode: string;
           gift_message: string | null;
           hold_reason: string | null;
@@ -852,9 +916,12 @@ export type Database = {
           idea_id: string;
           idempotency_key: string;
           is_gift: boolean;
+          margin_cents: number | null;
+          max_charge_cents: number | null;
           max_price_cents: number;
           merchant_order_id: string | null;
           packages: NonNullable<Json>;
+          payment_method_id: string | null;
           placed_at: string | null;
           provider: string;
           provider_order_id: string | null;
@@ -872,11 +939,14 @@ export type Database = {
           tracking_event_at: string | null;
           updated_at: string;
           user_id: string;
+          zinc_fee_cents: number | null;
         };
         ComputedFields: never;
         Insert: {
           address_owner_id?: string | null;
           address_source?: string | null;
+          card_fee_bps?: number | null;
+          card_fee_fixed_cents?: number | null;
           created_at?: string;
           delivered_at?: string | null;
           delivered_by?: string | null;
@@ -885,6 +955,7 @@ export type Database = {
           failed_at?: string | null;
           failure_type?: string | null;
           fee_cents: number;
+          final_charge_cents?: number | null;
           funding_mode: string;
           gift_message?: string | null;
           hold_reason?: string | null;
@@ -892,9 +963,12 @@ export type Database = {
           idea_id: string;
           idempotency_key?: string;
           is_gift?: boolean;
+          margin_cents?: number | null;
+          max_charge_cents?: number | null;
           max_price_cents: number;
           merchant_order_id?: string | null;
           packages?: NonNullable<Json>;
+          payment_method_id?: string | null;
           placed_at?: string | null;
           provider?: string;
           provider_order_id?: string | null;
@@ -912,10 +986,13 @@ export type Database = {
           tracking_event_at?: string | null;
           updated_at?: string;
           user_id?: string;
+          zinc_fee_cents?: number | null;
         };
         Update: {
           address_owner_id?: string | null;
           address_source?: string | null;
+          card_fee_bps?: number | null;
+          card_fee_fixed_cents?: number | null;
           created_at?: string;
           delivered_at?: string | null;
           delivered_by?: string | null;
@@ -924,6 +1001,7 @@ export type Database = {
           failed_at?: string | null;
           failure_type?: string | null;
           fee_cents?: number;
+          final_charge_cents?: number | null;
           funding_mode?: string;
           gift_message?: string | null;
           hold_reason?: string | null;
@@ -931,9 +1009,12 @@ export type Database = {
           idea_id?: string;
           idempotency_key?: string;
           is_gift?: boolean;
+          margin_cents?: number | null;
+          max_charge_cents?: number | null;
           max_price_cents?: number;
           merchant_order_id?: string | null;
           packages?: NonNullable<Json>;
+          payment_method_id?: string | null;
           placed_at?: string | null;
           provider?: string;
           provider_order_id?: string | null;
@@ -951,6 +1032,7 @@ export type Database = {
           tracking_event_at?: string | null;
           updated_at?: string;
           user_id?: string;
+          zinc_fee_cents?: number | null;
         };
         Relationships: [
           {
@@ -1340,6 +1422,8 @@ export type Database = {
         Returns: {
           address_owner_id: string | null;
           address_source: string | null;
+          card_fee_bps: number | null;
+          card_fee_fixed_cents: number | null;
           created_at: string;
           delivered_at: string | null;
           delivered_by: string | null;
@@ -1348,6 +1432,7 @@ export type Database = {
           failed_at: string | null;
           failure_type: string | null;
           fee_cents: number;
+          final_charge_cents: number | null;
           funding_mode: string;
           gift_message: string | null;
           hold_reason: string | null;
@@ -1355,9 +1440,12 @@ export type Database = {
           idea_id: string;
           idempotency_key: string;
           is_gift: boolean;
+          margin_cents: number | null;
+          max_charge_cents: number | null;
           max_price_cents: number;
           merchant_order_id: string | null;
           packages: NonNullable<Json>;
+          payment_method_id: string | null;
           placed_at: string | null;
           provider: string;
           provider_order_id: string | null;
@@ -1375,6 +1463,7 @@ export type Database = {
           tracking_event_at: string | null;
           updated_at: string;
           user_id: string;
+          zinc_fee_cents: number | null;
         }[];
         SetofOptions: {
           from: "*";
@@ -1393,6 +1482,8 @@ export type Database = {
         Returns: {
           address_owner_id: string | null;
           address_source: string | null;
+          card_fee_bps: number | null;
+          card_fee_fixed_cents: number | null;
           created_at: string;
           delivered_at: string | null;
           delivered_by: string | null;
@@ -1401,6 +1492,7 @@ export type Database = {
           failed_at: string | null;
           failure_type: string | null;
           fee_cents: number;
+          final_charge_cents: number | null;
           funding_mode: string;
           gift_message: string | null;
           hold_reason: string | null;
@@ -1408,9 +1500,12 @@ export type Database = {
           idea_id: string;
           idempotency_key: string;
           is_gift: boolean;
+          margin_cents: number | null;
+          max_charge_cents: number | null;
           max_price_cents: number;
           merchant_order_id: string | null;
           packages: NonNullable<Json>;
+          payment_method_id: string | null;
           placed_at: string | null;
           provider: string;
           provider_order_id: string | null;
@@ -1428,6 +1523,7 @@ export type Database = {
           tracking_event_at: string | null;
           updated_at: string;
           user_id: string;
+          zinc_fee_cents: number | null;
         }[];
         SetofOptions: {
           from: "*";
@@ -1439,6 +1535,40 @@ export type Database = {
       cancel_held: {
         Args: { p_context: string; p_round_id: string };
         Returns: Database["concierge"]["Enums"]["round_status"];
+      };
+      card_charge_cents:
+        | { Args: { p_goods_cents: number }; Returns: number }
+        | {
+            Args: {
+              p_bps: number;
+              p_fixed: number;
+              p_goods_cents: number;
+              p_margin: number;
+              p_zinc_fee: number;
+            };
+            Returns: number;
+          }
+        | {
+            Args: {
+              p_goods_cents: number;
+              p_order: Omit<
+                Database["concierge"]["Tables"]["orders"]["Row"],
+                Database["concierge"]["Tables"]["orders"]["ComputedFields"]
+              >;
+            };
+            Returns: number;
+          };
+      card_fee_cents: { Args: { p_goods_cents: number }; Returns: number };
+      check_card_order: {
+        Args: {
+          a: Omit<
+            Database["concierge"]["Tables"]["accounts"]["Row"],
+            Database["concierge"]["Tables"]["accounts"]["ComputedFields"]
+          >;
+          p_caller: string;
+          p_orders: Json;
+        };
+        Returns: undefined;
       };
       claim_access_request: { Args: { p_user_id: string }; Returns: string };
       claim_due_money_rounds: {
@@ -1748,6 +1878,8 @@ export type Database = {
         Returns: {
           address_owner_id: string | null;
           address_source: string | null;
+          card_fee_bps: number | null;
+          card_fee_fixed_cents: number | null;
           created_at: string;
           delivered_at: string | null;
           delivered_by: string | null;
@@ -1756,6 +1888,7 @@ export type Database = {
           failed_at: string | null;
           failure_type: string | null;
           fee_cents: number;
+          final_charge_cents: number | null;
           funding_mode: string;
           gift_message: string | null;
           hold_reason: string | null;
@@ -1763,9 +1896,12 @@ export type Database = {
           idea_id: string;
           idempotency_key: string;
           is_gift: boolean;
+          margin_cents: number | null;
+          max_charge_cents: number | null;
           max_price_cents: number;
           merchant_order_id: string | null;
           packages: NonNullable<Json>;
+          payment_method_id: string | null;
           placed_at: string | null;
           provider: string;
           provider_order_id: string | null;
@@ -1783,6 +1919,7 @@ export type Database = {
           tracking_event_at: string | null;
           updated_at: string;
           user_id: string;
+          zinc_fee_cents: number | null;
         }[];
         SetofOptions: {
           from: "*";
@@ -1822,6 +1959,8 @@ export type Database = {
         Returns: {
           address_owner_id: string | null;
           address_source: string | null;
+          card_fee_bps: number | null;
+          card_fee_fixed_cents: number | null;
           created_at: string;
           delivered_at: string | null;
           delivered_by: string | null;
@@ -1830,6 +1969,7 @@ export type Database = {
           failed_at: string | null;
           failure_type: string | null;
           fee_cents: number;
+          final_charge_cents: number | null;
           funding_mode: string;
           gift_message: string | null;
           hold_reason: string | null;
@@ -1837,9 +1977,12 @@ export type Database = {
           idea_id: string;
           idempotency_key: string;
           is_gift: boolean;
+          margin_cents: number | null;
+          max_charge_cents: number | null;
           max_price_cents: number;
           merchant_order_id: string | null;
           packages: NonNullable<Json>;
+          payment_method_id: string | null;
           placed_at: string | null;
           provider: string;
           provider_order_id: string | null;
@@ -1857,6 +2000,7 @@ export type Database = {
           tracking_event_at: string | null;
           updated_at: string;
           user_id: string;
+          zinc_fee_cents: number | null;
         }[];
         SetofOptions: {
           from: "*";
@@ -1874,6 +2018,17 @@ export type Database = {
       reconcile_round: {
         Args: { p_context?: string; p_round_id: string };
         Returns: Database["concierge"]["Enums"]["round_status"];
+      };
+      record_card_costs: {
+        Args: {
+          p_estimated: boolean;
+          p_final: number;
+          p_order: Omit<
+            Database["concierge"]["Tables"]["orders"]["Row"],
+            Database["concierge"]["Tables"]["orders"]["ComputedFields"]
+          >;
+        };
+        Returns: undefined;
       };
       record_cost: {
         Args: {
@@ -1927,6 +2082,7 @@ export type Database = {
         Args: { p_lock: string; p_round_id: string };
         Returns: boolean;
       };
+      remove_card: { Args: { p_user_id: string }; Returns: string };
       remove_zinc_secrets: {
         Args: { p_api_key_secret_id: string; p_webhook_secret_id: string };
         Returns: undefined;
@@ -1942,6 +2098,8 @@ export type Database = {
         Returns: {
           address_owner_id: string | null;
           address_source: string | null;
+          card_fee_bps: number | null;
+          card_fee_fixed_cents: number | null;
           created_at: string;
           delivered_at: string | null;
           delivered_by: string | null;
@@ -1950,6 +2108,7 @@ export type Database = {
           failed_at: string | null;
           failure_type: string | null;
           fee_cents: number;
+          final_charge_cents: number | null;
           funding_mode: string;
           gift_message: string | null;
           hold_reason: string | null;
@@ -1957,9 +2116,12 @@ export type Database = {
           idea_id: string;
           idempotency_key: string;
           is_gift: boolean;
+          margin_cents: number | null;
+          max_charge_cents: number | null;
           max_price_cents: number;
           merchant_order_id: string | null;
           packages: NonNullable<Json>;
+          payment_method_id: string | null;
           placed_at: string | null;
           provider: string;
           provider_order_id: string | null;
@@ -1977,6 +2139,7 @@ export type Database = {
           tracking_event_at: string | null;
           updated_at: string;
           user_id: string;
+          zinc_fee_cents: number | null;
         }[];
         SetofOptions: {
           from: "*";
@@ -2033,6 +2196,15 @@ export type Database = {
       save_budgets: {
         Args: { p_amounts: Json; p_person_id: string };
         Returns: undefined;
+      };
+      save_card: {
+        Args: {
+          p_customer: string;
+          p_payment_method: string;
+          p_session_id: string;
+          p_user_id: string;
+        };
+        Returns: string;
       };
       save_ideas: {
         Args: { p_ideas: Json; p_run_id: string };
@@ -2095,6 +2267,8 @@ export type Database = {
         Returns: {
           address_owner_id: string | null;
           address_source: string | null;
+          card_fee_bps: number | null;
+          card_fee_fixed_cents: number | null;
           created_at: string;
           delivered_at: string | null;
           delivered_by: string | null;
@@ -2103,6 +2277,7 @@ export type Database = {
           failed_at: string | null;
           failure_type: string | null;
           fee_cents: number;
+          final_charge_cents: number | null;
           funding_mode: string;
           gift_message: string | null;
           hold_reason: string | null;
@@ -2110,9 +2285,12 @@ export type Database = {
           idea_id: string;
           idempotency_key: string;
           is_gift: boolean;
+          margin_cents: number | null;
+          max_charge_cents: number | null;
           max_price_cents: number;
           merchant_order_id: string | null;
           packages: NonNullable<Json>;
+          payment_method_id: string | null;
           placed_at: string | null;
           provider: string;
           provider_order_id: string | null;
@@ -2130,6 +2308,7 @@ export type Database = {
           tracking_event_at: string | null;
           updated_at: string;
           user_id: string;
+          zinc_fee_cents: number | null;
         }[];
         SetofOptions: {
           from: "*";

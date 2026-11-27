@@ -1,7 +1,7 @@
 -- Code columns accept the values the app writes and refuse anything else.
 begin;
 \ir _helpers.psql
-select plan(43);
+select plan(44);
 
 select tests.create_user('codes@example.com') as u \gset
 insert into public.people (user_id, name, relationship) values (:'u', 'P', 'friend') returning id as p \gset
@@ -82,6 +82,7 @@ select throws_ok(format($$update concierge.inbound_messages set image_type = 'ap
 
 select lives_ok(format($$update concierge.orders set failure_type = 'address_rejected' where id = %L$$, :'ord'), 'a known failure type is saved');
 select lives_ok(format($$update concierge.orders set failure_type = 'store_cancelled' where id = %L$$, :'ord'), 'store_cancelled is a known failure type');
+select lives_ok(format($$update concierge.orders set failure_type = 'card_needed' where id = %L$$, :'ord'), 'card_needed is a known failure type');
 select throws_ok(format($$update concierge.orders set failure_type = 'max_price_exceeded' where id = %L$$, :'ord'),
   '23514', null, 'a raw Zinc error code is refused');
 
