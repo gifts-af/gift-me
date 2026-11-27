@@ -104,13 +104,13 @@ async function discard(response: Response): Promise<void> {
   }
 }
 
-async function readCapped(response: Response, maxBytes: number): Promise<string | null> {
+async function readCapped(response: Response, maxBytes: number): Promise<Buffer | null> {
   const declared = Number(response.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > maxBytes) {
     await discard(response);
     return null;
   }
-  if (!response.body) return "";
+  if (!response.body) return Buffer.alloc(0);
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
@@ -124,10 +124,37 @@ async function readCapped(response: Response, maxBytes: number): Promise<string 
     }
     chunks.push(value);
   }
-  return Buffer.concat(chunks).toString("utf8");
+  return Buffer.concat(chunks);
 }
 
 export async function fetchStorePage(rawUrl: string, limits: StorePageLimits, deps: StorePageDeps): Promise<FetchResult> {
+  const r = await fetchPublic(rawUrl, limits, deps, HTML_TYPE, BROWSER_HEADERS);
+  return r.ok ? { ok: true, html: r.body.toString("utf8"), finalUrl: r.finalUrl } : r;
+}
+
+export type ImageFetchResult = { ok: true; bytes: Buffer } | { ok: false; reason: FetchFailure | "not_image" };
+
+/**
+ * Downloads a product photo with the same guards as a page read: public
+ * addresses only, every redirect checked, capped in size and time. A plain
+ * request: no browser disguise (T52).
+ */
+export async function fetchStoreImage(rawUrl: string, limits: StorePageLimits, deps: StorePageDeps): Promise<ImageFetchResult> {
+  const r = await fetchPublic(rawUrl, limits, deps, IMAGE_TYPE, { accept: "image/*" });
+  if (r.ok) return { ok: true, bytes: r.body };
+  return r.reason === "not_html" ? { ok: false, reason: "not_image" } : r;
+}
+
+const HTML_TYPE = /^\s*(text\/html|application\/xhtml\+xml)/i;
+const IMAGE_TYPE = /^\s*image\//i;
+
+async function fetchPublic(
+  rawUrl: string,
+  limits: StorePageLimits,
+  deps: StorePageDeps,
+  type: RegExp,
+  headers: Record<string, string>,
+): Promise<{ ok: true; body: Buffer; finalUrl: string } | { ok: false; reason: FetchFailure }> {
   const start = checkUrl(rawUrl);
   if (!start) return { ok: false, reason: "bad_url" };
   let url: URL = start;
@@ -139,7 +166,7 @@ export async function fetchStorePage(rawUrl: string, limits: StorePageLimits, de
       if (!(await hostIsPublic(url, deps.resolve))) return { ok: false, reason: "blocked_address" };
 
       const response = await deps.fetch(url.href, {
-        headers: BROWSER_HEADERS,
+        headers,
         redirect: "manual",
         signal: controller.signal,
       });
@@ -156,13 +183,13 @@ export async function fetchStorePage(rawUrl: string, limits: StorePageLimits, de
         await discard(response);
         return { ok: false, reason: "http_status" };
       }
-      if (!/^\s*(text\/html|application\/xhtml\+xml)/i.test(response.headers.get("content-type") ?? "")) {
+      if (!type.test(response.headers.get("content-type") ?? "")) {
         await discard(response);
         return { ok: false, reason: "not_html" };
       }
-      const html = await readCapped(response, limits.maxBytes);
-      if (html === null) return { ok: false, reason: "too_big" };
-      return { ok: true, html, finalUrl: url.href };
+      const body = await readCapped(response, limits.maxBytes);
+      if (body === null) return { ok: false, reason: "too_big" };
+      return { ok: true, body, finalUrl: url.href };
     }
     return { ok: false, reason: "too_many_redirects" };
   } catch {

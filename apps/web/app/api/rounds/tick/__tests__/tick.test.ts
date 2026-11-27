@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TickHeartbeat } from "@/modules/concierge";
-import { handleTick, isTestClock } from "../tick";
+import { handleTick, handleTickStep, isTestClock, onlyStep } from "../tick";
 
 // The tick takes dayOf from the concierge module, which is server-only.
 vi.mock("server-only", () => ({}));
@@ -24,6 +24,21 @@ const req = (auth?: string, query = "") =>
   new Request(`https://example.test/api/rounds/tick${query}`, { headers: auth ? { authorization: auth } : {} });
 
 afterEach(() => vi.restoreAllMocks());
+
+describe("handleTickStep (?only=photo_repair)", () => {
+  it("runs only the step, behind the same secret", async () => {
+    const step = vi.fn(async () => ({ repaired: 2, failed: 0 }));
+    const request = req(`Bearer ${SECRET}`, "?only=photo_repair");
+    expect(onlyStep(request)).toBe("photo_repair");
+    const res = await handleTickStep(request, { cronSecret: SECRET }, step);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, result: { repaired: 2, failed: 0 } });
+
+    const refused = await handleTickStep(req("Bearer wrong", "?only=photo_repair"), { cronSecret: SECRET }, step);
+    expect(refused.status).toBe(401);
+    expect(step).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("handleTick", () => {
   it.each([

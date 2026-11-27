@@ -2452,18 +2452,18 @@ export type Database = {
         Row: {
           created_at: string;
           id: number;
-          user_id: string;
+          user_id: string | null;
         };
         ComputedFields: never;
         Insert: {
           created_at?: string;
           id?: never;
-          user_id: string;
+          user_id?: string | null;
         };
         Update: {
           created_at?: string;
           id?: never;
-          user_id?: string;
+          user_id?: string | null;
         };
         Relationships: [];
       };
@@ -2643,6 +2643,39 @@ export type Database = {
         };
         Relationships: [];
       };
+      photo_repairs: {
+        Row: {
+          attempts: number;
+          gave_up_at: string | null;
+          item_id: string;
+          last_outcome: string | null;
+          next_attempt_at: string;
+        };
+        ComputedFields: never;
+        Insert: {
+          attempts?: number;
+          gave_up_at?: string | null;
+          item_id: string;
+          last_outcome?: string | null;
+          next_attempt_at?: string;
+        };
+        Update: {
+          attempts?: number;
+          gave_up_at?: string | null;
+          item_id?: string;
+          last_outcome?: string | null;
+          next_attempt_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "photo_repairs_item_id_fkey";
+            columns: ["item_id"];
+            isOneToOne: true;
+            referencedRelation: "list_items";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: {
       [_ in never]: never;
@@ -2697,6 +2730,7 @@ export type Database = {
       };
       is_allowed_image_url: { Args: { p_url: string }; Returns: boolean };
       is_amazon_host: { Args: { p_host: string }; Returns: boolean };
+      is_guessed_amazon_photo: { Args: { p_url: string }; Returns: boolean };
       item_shared: {
         Args: { p_item_id: string; p_person_id: string };
         Returns: boolean;
@@ -2714,6 +2748,17 @@ export type Database = {
       owner_sizes: { Args: { p_token: string }; Returns: Json };
       person_list: { Args: { p_person_id: string }; Returns: Json };
       person_share_token: { Args: { p_person_id: string }; Returns: string };
+      photo_repair_candidates: {
+        Args: { p_limit: number; p_max_age_days: number };
+        Returns: {
+          asin: string;
+          attempts: number;
+          image_url: string;
+          item_id: string;
+          owner_id: string;
+          product_url: string;
+        }[];
+      };
       queue_photo: { Args: { p_item_id: string }; Returns: undefined };
       release_for_order: {
         Args: { p_item_id: string; p_user_id: string };
@@ -2737,6 +2782,10 @@ export type Database = {
       take_photo_deletions: {
         Args: { p_limit: number; p_older_than: string };
         Returns: string[];
+      };
+      take_repair_amazon_lookup: {
+        Args: Record<PropertyKey, never>;
+        Returns: boolean;
       };
       unclaim_gift: {
         Args: { p_item_id: string; p_token: string };

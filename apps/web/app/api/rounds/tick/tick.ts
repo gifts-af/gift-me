@@ -51,6 +51,26 @@ export async function handleTick(
   return Response.json({ ok: true, ...summary });
 }
 
+/** `?only=photo_repair`: run just that housekeeping step, nothing else (no rounds, no heartbeat). */
+export const onlyStep = (request: Request): string | null => new URL(request.url).searchParams.get("only");
+
+/**
+ * One housekeeping step on its own, behind the same secret, so it can be forced on production
+ * without running the day's rounds again (a forced tick runs everyone's due rounds).
+ */
+export async function handleTickStep(request: Request, env: Env, step: () => Promise<unknown>): Promise<Response> {
+  if (!env.cronSecret || request.headers.get("authorization") !== `Bearer ${env.cronSecret}`) {
+    return Response.json({ ok: false }, { status: 401 });
+  }
+  try {
+    const result = await step();
+    return Response.json({ ok: true, result });
+  } catch {
+    logEvent("tick_cleanup_failed", { step: onlyStep(request) });
+    return Response.json({ ok: false }, { status: 500 });
+  }
+}
+
 /** A heartbeat write that fails is an alert, but never changes the tick's own result. */
 async function beat(write: () => Promise<void> | undefined): Promise<void> {
   try {
