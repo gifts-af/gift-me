@@ -16,7 +16,7 @@ A typical buyer won't keep $100 parked in a Zinc account (owner). Friends join o
 | Where is the card entered? | Stripe's own page, then back to the gift. Revises 59's "inline" | Owner, 2026-11-25 |
 | First fixed part | $2.00, from estimates. ALL-76 sets the final amount. A setting (T23) | Owner, 2026-11-25 |
 | After a declined, removed or replaced card | The buyer adds a card, then taps Buy again. **Saving a card never buys anything** | Owner, 2026-11-25 (replaces "saving a new one buys the waiting gift") |
-| Removing a card mid-purchase | Refused with "try again shortly" while an order is `placing` or `unconfirmed` | Owner, 2026-11-25 |
+| Removing a card mid-purchase | Refused while an order is `placing`; allowed while one is only `unconfirmed`, since the hold is already on the card | Owner, 2026-11-25; revised 2026-11-27 |
 | Wallet buyers and shared addresses | Not blocked: the only wallet buyers are the owner and Jim | Owner, 2026-11-25 |
 | Store cancels | We refund everything and absorb Stripe's fee | Owner, 2026-11-25 |
 | A decline Zinc doesn't tell apart | Today's "couldn't buy it" page | Owner, 2026-11-25 |
@@ -71,7 +71,7 @@ Most you'll pay              $25.64
 | AC-10 | Zinc posts an event to the app's webhook | It's handled | Signature checked; the order is found first and the user comes from it; only `connect` orders change there, and only wallet orders at a buyer's own webhook. A definite unknown order gets 200 and an alert; a failed lookup still errors, so Zinc retries |
 | AC-11 | A list owner's shared address | A buyer uses connect | The buyer can't see the street anywhere they can reach (real order). The sharing wording stays as it is while wallet buyers remain, because they can still see a street in Zinc **[Claude's call]** |
 | AC-12 | `connect_enabled` is off | Anyone | No connect order is placed (checked in SQL under the lock) and Add a card is hidden; held ones show as `paused` whatever their stored reason, so nobody is asked for a card; events, sweep, tracking and Remove still work |
-| AC-13 | The buyer removes or replaces their card | Settings | The old one is detached at Stripe; unplaced gifts end as `card_needed` at their next placing try, and need a card and a Buy again tap; placed ones unaffected; removing is refused while an order is `placing` or `unconfirmed` |
+| AC-13 | The buyer removes or replaces their card | Settings | The old one is detached at Stripe; unplaced gifts end as `card_needed` at their next placing try, and need a card and a Buy again tap; placed ones unaffected; removing is refused while an order is `placing` |
 | AC-14 | A connect order's price is known | It's recorded | Zinc's fee and the card fee are each counted once, whichever of the webhook and the sweep comes first; the report's fee from settings isn't added again for connect orders (ALL-144). The AI and lookup averages behind `margin_cents` never include these two kinds, so the buyer doesn't pay them twice |
 | AC-21 | Stripe's card page | A buyer saves a card | Card only, Link off, no `customer_update`; what Stripe stores on the customer after the first real card is checked and listed on `/privacy` **[Verify]**. Cards from outside the US are blocked by a Stripe Radar rule (runbook; owner's call, see Owner decisions) |
 | AC-15 | Fee settings change | Next approval | New amounts, no deploy; approved orders, held ones included, keep theirs |
@@ -87,7 +87,7 @@ Most you'll pay              $25.64
 - **`max_price` excludes margin and fees** (Zinc docs). Every total comes from the idea's price, shipping and tax plus the buyer's fee, because `est_total_cents` already contains the wallet's $1.
 - **Saved on the order at approval:** the four fee inputs and the approved maximum. The re-check uses them, not today's settings. Budget code that adds a flat fee (`committedSpendCents`, `sequentialCaps`, `recheckedCaps`, `replace_failed_order`) gets a connect path: goods first, then `charge`. The wallet meaning of `fee_cents` and `total_cents` doesn't change; on a connect order `fee_cents` is the whole GiftsAF fee: at the cap until the order settles, then Zinc's actual charge minus the goods total, or `charge(total) - total` from the saved inputs if Zinc doesn't report it.
 - **Placing.** `placeRound` and `begin_placing` gate on a saved card instead of a wallet when `funding_mode` is `connect`. One app Zinc key places these, on the same Zinc account as the owner's wallet; a connect order whose body has no `payment` is refused before it's sent, because Zinc would take it from that wallet. Wallet orders keep the buyer's key. Approval records the card on each order; only that card is sent, resends included. Other wallet checks to split: `hold-gate.ts`, `rounds/store.ts` (`canBuy`), `steps.ts` (balance warning), and the fee wording. Dev and previews use a `zn_test_` key and Stripe test mode, production live ones, with today's environment check.
-- **No card.** Each order records the card it was approved with and is only ever sent on that card. A decline fails its own order as `card_needed` and, if that card is still the saved one, clears it. `begin_placing` ends any gift whose recorded card isn't the saved one as `card_needed`, so a removed, declined or replaced card stops every waiting gift without touching other rounds. The fix page replaces it on a tap. Approval without a card is refused. Remove takes the account lock, refuses while an order is `placing` or `unconfirmed`, clears the database, then detaches at Stripe. Replaces a separate needs-a-tap mark (owner agreed, 2026-11-25).
+- **No card.** Each order records the card it was approved with and is only ever sent on that card. A decline fails its own order as `card_needed` and, if that card is still the saved one, clears it. `begin_placing` ends any gift whose recorded card isn't the saved one as `card_needed`, so a removed, declined or replaced card stops every waiting gift without touching other rounds. The fix page replaces it on a tap. Approval without a card is refused. Remove takes the account lock, refuses while an order is `placing`, clears the database, then detaches at Stripe (but not a card an `unconfirmed` order was sent on, see Task 4). Replaces a separate needs-a-tap mark (owner agreed, 2026-11-25).
 - **Data.** Two ids on `accounts` (customer, payment method), never readable by the buyer's client. No card number, brand or last four stored. The confirm page says "Saved card"; details are read from Stripe in Settings.
 - **Stripe customer:** we send our user id only (T42). Stripe's page may collect more itself; turn off what can be, and list the rest on `/privacy`. Consent text on Stripe's page says when we charge and how much.
 - **Settings:** `connect_enabled` (0), `margin_cents` (100) and `zinc_fee_cents` (100), which make the $2.00 fixed part; `card_fee_bps` (290), `card_fee_fixed_cents` (30); the fee labels.
@@ -113,16 +113,18 @@ Moving wallet accounts; a spending page (ALL-145); a returns flow; tax; digital 
 | 3. What makes the charge | The hold matches our formula to 1 cent or less; $0 margin accepted | The final charge, its rounding, who pays Stripe's fee, whether the rate is fixed |
 | 4. Events and the hold | `connect.state` is `secured` on create | Capture, release, and events at one app webhook |
 
-### Owner decisions from the 2026-11-27 review
+### Owner decisions from the 2026-11-27 review (answered by the owner, 2026-11-27; planning 66)
 
-1. Charged more than "Most you'll pay": refund the difference automatically and email the buyer, rather than only alerting? **Claude's pick: alert only until the real card order shows whether it happens; then decide.**
-2. A person's budget now counts the GiftsAF fee, so a $22.59 gift is over a $25 budget for a card buyer. OK? **Pick: yes.**
-3. Jim disconnects his Zinc wallet before Task 10 so he can make the first card order? **Pick: yes.**
-4. Block non-US cards with a Stripe Radar rule? **Pick: yes.**
-5. Add ALL-98 to CLAUDE.md's scope-freeze exceptions (built now)? No PR merges until then. **Pick: yes; only the owner edits that list.**
-6. Keep the shared Zinc account's wallet at $0 with auto top-up off once the app key is on production, so a card order that somehow lacks `payment` fails instead of spending it? **Pick: yes.**
-7. Launch on Jim's account first, everyone else after the real card order passes? **Pick: yes.**
-8. Refuse Remove only while an order is `placing`, not `unconfirmed` (the hold is already on the card; `unconfirmed` can last days)? Revises 2026-11-25. **Pick: yes.**
+1. Charged more than "Most you'll pay": refund the difference automatically and email the buyer, rather than only alerting? **Decided: alert only until a real order shows it happens [Claude's call, accepted].**
+2. A person's budget now counts the GiftsAF fee, so a $22.59 gift is over a $25 budget for a card buyer. OK? **Decided: yes.**
+3. Jim disconnects his Zinc wallet before Task 10 so he can make the first card order? **Decided: yes.**
+4. Block non-US cards with a Stripe Radar rule? **Decided: yes.**
+5. Add ALL-98 to CLAUDE.md's scope-freeze exceptions (built now)? **Decided: yes** (CLAUDE.md, `c8a3f28`).
+6. Keep the shared Zinc account's wallet at $0 with auto top-up off once the app key is on production, so a card order that somehow lacks `payment` fails instead of spending it? **Decided: yes.**
+7. Launch on Jim's account first, everyone else after the real card order passes? **Decided: yes.**
+8. Refuse Remove only while an order is `placing`, not `unconfirmed` (the hold is already on the card; `unconfirmed` can last days)? Revises 2026-11-25. **Decided: yes [Claude's call, accepted]; built in PR #175.**
+9. Zinc's pending answers (returns, chargebacks, hold length, fee on top or from the margin, $0 margin): each stays a setting or a runbook step **[Claude's call, accepted]**.
+10. Business form: **sole proprietorship for now**, Stripe in the owner's name. Moving off Vercel Hobby before the first real charge is planned separately.
 
 ## Principles check
 
@@ -229,7 +231,7 @@ expect(() => chargeCents(100, { ...F, cardFeeBps: 10000 })).toThrow(RangeError);
 - `settle_order`: for `placed`, saves `final_charge_cents` from `p_price`, else `ceil((total + margin + zinc fee + fixed) * 10000 / (10000 - bps))`; sets `fee_cents` to it minus `total_cents`; writes `zinc_order_fee` and `card_fee` with `on conflict do nothing`, the card fee marked estimated without Zinc's number. No total: keeps `fee_cents` at the cap, writes no card-fee row. No cost rows while tracking is off.
 - `save_card(p_user_id, p_session_id text, p_customer text, p_payment_method text) returns text`: `ok`, `used` or `not_yours` (another user, a customer that isn't the row's, or one that differs from the account's). Locks the account; uses the session once; changes no order.
 - `start_card_session(p_user_id, p_session_id, p_customer, p_round_id, p_idea_ids, p_failed_order_id) returns text`: saves the Stripe customer on the account the first time, under its lock, so an abandoned visit leaves no orphan customer at Stripe (T42); `other_customer` if the account has a different one.
-- `remove_card(p_user_id) returns text`: `ok` or `placing`. Locks only the account (`begin_placing` takes it too, so a send can't start in between); `placing` while any order is `placing` or `unconfirmed`; otherwise nulls the card and keeps the customer. Changes no order.
+- `remove_card(p_user_id) returns text`: `ok` or `placing`. Locks only the account (`begin_placing` takes it too, so a send can't start in between); `placing` while any order is `placing` (an `unconfirmed` one doesn't block it: the hold is already on the card; owner, 2026-11-27); otherwise nulls the card and keeps the customer. Changes no order.
 - `cost_per_gift`: also returns `cardGifts`, `zincFeeCents`, `cardFeeCents`; `orderFeeCents` stays the wallet setting.
 
 - [ ] pgTAP, failing first:
@@ -269,7 +271,7 @@ export async function stripeWiring(db: SupabaseClient<Database>, env?: Env): Pro
 - The customer holds `metadata[user_id]` only: no name or email (T42). The account's `stripe_customer_id` is reused; one is created only when it's null, with a Stripe idempotency key made from the user id, and saved on the `card_sessions` row. Session: `mode=setup`, card only, `usage=off_session`, our consent text.
 - `finishCardSession` reads the session back from Stripe and requires status `complete`, the stored row's user, our customer, the same mode, and a row no older than `card_session_minutes`. `backTo` is built from the stored row, never from the request.
 - `phone` is required when the account's `buyer_phone` is null, and saved by the same form (AC-17).
-- `removeCard` clears the database, then detaches every payment method on the customer. `finishCardSession` detaches the old ones too, when no order is `placing` or `unconfirmed`. A failed detach logs `card.detach_failed` with `alert: true`.
+- `removeCard` clears the database, then detaches every payment method on the customer except the saved one and any an `unconfirmed` or `placing` order was sent on (so Zinc can still capture its hold); those go at the next Remove or Replace **[Claude's call]**. `finishCardSession` does the same for the old ones. A failed detach logs `card.detach_failed` (a log line, not an alert).
 
 - [ ] Unit tests, failing first: each `finishCardSession` requirement, when missed, saves nothing; a replayed return is `used`; a live key with `ZINC_ENV=test` is null; `removeCard` returning `placing` makes no Stripe call; request bodies contain no email or name; the session asks for cards only, with no `customer_update`; Replace after the first save creates no customer, and Remove detaches both cards; a session Stripe reports as not complete saves nothing. Implement; pass; commit.
 
