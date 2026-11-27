@@ -17,14 +17,14 @@ beforeEach(() => {
   hydrated.value = true;
 });
 
-function setup(result: Result = { ok: true }) {
+function setup(result: Result = { ok: true }, hasAccess = true) {
   const action = vi.fn(async (...a: [unknown, FormData]) => (void a, result));
-  render(<AddFact personId="p1" action={action} />);
+  render(<AddFact personId="p1" action={action} hasAccess={hasAccess} />);
   return { action, user: userEvent.setup() };
 }
 
 const box = () => screen.getByRole("textbox", { name: "Add something" });
-const kind = () => screen.getByRole("combobox", { name: "Kind" });
+const kind = () => screen.getByRole("combobox", { name: "Type" });
 const add = () => screen.getByRole("button", { name: "Add" });
 const sent = (fn: { mock: { calls: [unknown, FormData][] } }) => Object.fromEntries(fn.mock.calls[0][1].entries());
 
@@ -87,6 +87,18 @@ describe("AddFact", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("That's already on their profile.");
     expect(box()).toHaveValue("tea");
     expect(screen.queryByText("Added")).toBeNull();
+  });
+
+  const savedForLater = "Saved for when your concierge opens. We'll use it for gift ideas.";
+
+  it("tells someone without concierge access what their facts are for", () => {
+    setup({ ok: true }, false);
+    expect(screen.getByText(savedForLater)).toBeInTheDocument();
+  });
+
+  it("doesn't explain it to someone with concierge access", () => {
+    setup({ ok: true }, true);
+    expect(screen.queryByText(savedForLater)).toBeNull();
   });
 
   it("keeps the fields off until the page can save (ALL-110)", () => {

@@ -114,7 +114,7 @@ describe("WhatWeKnow", () => {
     expect(open).toHaveAttribute("aria-expanded", "true");
     const row = open.closest("li")!;
     expect(within(row).getByLabelText("Fact")).toHaveValue("fly fishing");
-    expect(within(row).getByLabelText("Kind")).toHaveValue("interest");
+    expect(within(row).getByLabelText("Type")).toHaveValue("interest");
     expect(within(row).getByRole("switch", { name: "Use for gift ideas" })).toBeChecked();
     expect(screen.queryByRole("button", { name: "Save" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Turn off" })).not.toBeInTheDocument();
@@ -170,7 +170,7 @@ describe("WhatWeKnow", () => {
     const user = userEvent.setup();
     const { editAction } = setup();
     await user.click(screen.getByRole("button", { name: "fly fishing" }));
-    await user.selectOptions(screen.getByLabelText("Kind"), "brand");
+    await user.selectOptions(screen.getByLabelText("Type"), "brand");
     await waitFor(() => expect(editAction).toHaveBeenCalledOnce());
     expect(sent(editAction, 0)).toMatchObject({ value: "fly fishing", category: "brand" });
     const value = screen.getByLabelText("Fact");
@@ -185,7 +185,7 @@ describe("WhatWeKnow", () => {
     const user = userEvent.setup();
     const { rerender } = setup();
     await user.click(screen.getByRole("button", { name: "fly fishing" }));
-    await user.selectOptions(screen.getByLabelText("Kind"), "brand");
+    await user.selectOptions(screen.getByLabelText("Type"), "brand");
     expect(await screen.findByRole("status")).toHaveTextContent("Saved");
     // The server's fresh page: the fact is now under Brands.
     rerender(
@@ -198,7 +198,7 @@ describe("WhatWeKnow", () => {
     );
     const interests = screen.getByRole("region", { name: "Interests" });
     expect(within(interests).getByLabelText("Fact")).toHaveValue("fly fishing");
-    expect(within(interests).getByLabelText("Kind")).toHaveValue("brand");
+    expect(within(interests).getByLabelText("Type")).toHaveValue("brand");
     expect(screen.getByRole("status")).toHaveTextContent("Saved");
     expect(screen.queryByRole("region", { name: "Brands" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Done" }));

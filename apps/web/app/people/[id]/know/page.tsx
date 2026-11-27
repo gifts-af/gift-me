@@ -58,7 +58,7 @@ async function Loaded({ params }: { params: Promise<{ id: string }> }) {
     <>
       <BackLink href={base} label={person.name} />
       <PageTitle>What we know</PageTitle>
-      <AddFact personId={person.id} action={addFactAction} />
+      <AddFact personId={person.id} action={addFactAction} hasAccess={access?.access ?? false} />
       {profile.openCount > 0 && (
         <p className="-my-3 text-[15px]">
           <Link
