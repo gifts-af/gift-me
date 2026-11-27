@@ -2504,6 +2504,8 @@ export type Database = {
         Row: {
           added_at: string;
           asin: string | null;
+          copied_from_item_id: string | null;
+          copied_from_list_id: string | null;
           has_photo: boolean;
           id: string;
           image_url: string | null;
@@ -2521,6 +2523,8 @@ export type Database = {
         Insert: {
           added_at?: string;
           asin?: string | null;
+          copied_from_item_id?: string | null;
+          copied_from_list_id?: string | null;
           has_photo?: boolean;
           id?: string;
           image_url?: string | null;
@@ -2537,6 +2541,8 @@ export type Database = {
         Update: {
           added_at?: string;
           asin?: string | null;
+          copied_from_item_id?: string | null;
+          copied_from_list_id?: string | null;
           has_photo?: boolean;
           id?: string;
           image_url?: string | null;
@@ -2551,6 +2557,20 @@ export type Database = {
           store_host?: never;
         };
         Relationships: [
+          {
+            foreignKeyName: "list_items_copied_from_item_id_fkey";
+            columns: ["copied_from_item_id"];
+            isOneToOne: false;
+            referencedRelation: "list_items";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "list_items_copied_from_list_id_fkey";
+            columns: ["copied_from_list_id"];
+            isOneToOne: false;
+            referencedRelation: "lists";
+            referencedColumns: ["id"];
+          },
           {
             foreignKeyName: "list_items_list_id_fkey";
             columns: ["list_id"];

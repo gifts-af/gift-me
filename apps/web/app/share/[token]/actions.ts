@@ -12,6 +12,7 @@ import {
   getSharedList,
   linkUnlinkedPerson,
   readStoredPhoto,
+  setCopiedFrom,
   setGiftImageUrl,
   storedPhotoId,
   unlinkPerson,
@@ -118,6 +119,12 @@ export async function addFromShareAction(token: string, itemId: string): Promise
     if (body.outcome === "added" && gift.imageUrl && !photoId) {
       // A store's own photo link: add_item takes only a stored photo, so it's set after. Best effort.
       await setGiftImageUrl(db, newId, gift.imageUrl).catch(() => {});
+    }
+    if (body.outcome === "added") {
+      // Where it came from, for creators' credit later. Best effort: the gift is already added.
+      await setCopiedFrom(admin(), newId, itemId).catch(() =>
+        logEvent("lists.copied_from_failed", { item_id: newId, source_item_id: itemId }),
+      );
     }
     return { ok: true };
   } catch (error) {

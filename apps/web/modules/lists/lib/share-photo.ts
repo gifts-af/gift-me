@@ -25,3 +25,19 @@ export async function setGiftImageUrl(db: SupabaseClient<Database>, itemId: stri
   const { error } = await db.schema("lists").from("list_items").update({ image_url: imageUrl }).eq("id", itemId);
   if (error) throw new Error("Setting the photo failed");
 }
+
+/**
+ * Service role: record which shared list and gift a "+ My list" copy came from, so a list's
+ * owner can later see how many people added their gifts. The source list is read from the
+ * source gift, so it can't be given wrongly.
+ */
+export async function setCopiedFrom(admin: SupabaseClient<Database>, itemId: string, sourceItemId: string): Promise<void> {
+  const { data, error: readError } = await admin.schema("lists").from("list_items").select("list_id").eq("id", sourceItemId).maybeSingle();
+  if (readError || !data) throw new Error("Reading the source gift failed");
+  const { error } = await admin
+    .schema("lists")
+    .from("list_items")
+    .update({ copied_from_list_id: data.list_id, copied_from_item_id: sourceItemId })
+    .eq("id", itemId);
+  if (error) throw new Error("Recording where the gift came from failed");
+}
