@@ -66,7 +66,9 @@ select set_eq(
     'google_import_enabled', 'concierge_requests_per_day',
     'person_photo_stored_max_bytes', 'storage_files_per_account',
     'idea_busy_retry_seconds', 'idea_busy_retries_max',
-    'list_birthday_enabled', 'list_sizes_enabled'
+    'list_birthday_enabled', 'list_sizes_enabled',
+    'connect_enabled', 'zinc_fee_cents', 'card_fee_bps', 'card_fee_fixed_cents',
+    'fee_part_ai_cents', 'fee_part_running_cents', 'stripe_timeout_ms', 'card_session_minutes', 'fee_label', 'fee_pricing_note'
   ],
   'every fee, limit, default and schedule setting is seeded'
 );

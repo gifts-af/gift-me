@@ -90,6 +90,8 @@ describe.skipIf(!stack)("code column CHECK lists match the app (real local datab
       "address_withdrawn",
       // SQL fail_order_row (20261113100000_order_address_source.sql): a shared address the store refused.
       "address_rejected",
+      // SQL fail_order_row and begin_placing (20261130120000_card_payments.sql): a card order whose card was declined or changed.
+      "card_needed",
       // SQL round closing around a held gift (20261114100000_every_failure_told.sql).
       "held_expired",
       "cancelled",

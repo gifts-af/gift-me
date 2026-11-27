@@ -16,6 +16,7 @@ export * from "./address";
 export * from "./database.types";
 export * from "./paid-features";
 export * from "./funding";
+export * from "./card-fees";
 export * from "./ideas";
 export * from "./contact";
 export * from "./approval";
