@@ -109,15 +109,17 @@ create unique index cost_events_card_order_once on concierge.cost_events (order_
 
 -- ─── settings ─────────────────────────────────────────────────────────────────
 -- Planning 61: a $2.00 fixed part (Zinc's $1.00, plus our $1.00 margin, which is AI
--- suggestions $0.65 and running the service $0.35), and the card fee on top.
+-- suggestions $0.65 and running the service $0.35), and the card fee on top. The margin
+-- is always the sum of its two parts, so the (i) breakdown can't disagree with the charge.
+-- zinc_fee_cents is separate from the wallet's zinc_order_fee_cents: both are Zinc's $1
+-- today, but Zinc sets each and they may differ.
 insert into concierge.app_settings (key, value, description) values
   ('connect_enabled', '0', 'Switch for paying by card: 1 lets card buyers add a card and buy, 0 places no card order and hides Add a card. Orders already sent still settle.'),
-  ('margin_cents', '100', 'Our part of the GiftsAF fee per card order, in cents: AI suggestions plus running the service. Sent to Zinc as the order''s margin. Must equal fee_part_ai_cents + fee_part_running_cents.'),
   ('zinc_fee_cents', '100', 'Zinc''s fee per card order, in cents, as Zinc adds it to the card charge.'),
   ('card_fee_bps', '290', 'The card fee''s percentage part on the whole charge, in basis points (290 = 2.9%).'),
   ('card_fee_fixed_cents', '30', 'The card fee''s fixed part per charge, in cents.'),
-  ('fee_part_ai_cents', '65', 'The GiftsAF fee breakdown: AI suggestions, in cents (planning 61).'),
-  ('fee_part_running_cents', '35', 'The GiftsAF fee breakdown: running the service, in cents (planning 61).'),
+  ('fee_part_ai_cents', '65', 'Our margin per card order, part 1: AI suggestions, in cents (planning 61). The margin sent to Zinc is this plus fee_part_running_cents.'),
+  ('fee_part_running_cents', '35', 'Our margin per card order, part 2: running the service, in cents (planning 61).'),
   ('stripe_timeout_ms', '10000', 'How long a call to Stripe may take before it is given up on, in milliseconds.'),
   ('card_session_minutes', '60', 'How long a visit to Stripe''s card-saving page stays usable, in minutes.')
 on conflict (key) do nothing;
@@ -126,6 +128,17 @@ insert into concierge.app_settings (key, value, description) values
   ('fee_label', '"GiftsAF fee"', 'The fee line''s name on the buy page, emails and receipts.'),
   ('fee_pricing_note', '"Launch pricing: at cost"', 'The line under the fee breakdown.')
 on conflict (key) do nothing;
+
+-- ─── card_margin_cents: our part of the fee, from its two parts ──────────────
+create function concierge.card_margin_cents()
+returns integer
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select concierge.setting_int('fee_part_ai_cents') + concierge.setting_int('fee_part_running_cents');
+$$;
 
 -- ─── card_charge_cents: the whole charge for some goods ──────────────────────
 -- The same rounding as chargeCents in packages/core: up, so the charge shown is never
@@ -159,7 +172,7 @@ stable
 security definer
 set search_path = ''
 as $$
-  select concierge.card_charge_cents(p_goods_cents, concierge.setting_int('margin_cents'),
+  select concierge.card_charge_cents(p_goods_cents, concierge.card_margin_cents(),
                                      concierge.setting_int('zinc_fee_cents'), concierge.setting_int('card_fee_bps'),
                                      concierge.setting_int('card_fee_fixed_cents'));
 $$;
@@ -194,12 +207,12 @@ begin
   if a.stripe_customer_id is null or a.stripe_payment_method_id is null or a.buyer_phone is null then
     raise exception '%: no_card', p_caller using errcode = 'P0001';
   end if;
-  if concierge.setting_int('margin_cents') is null or concierge.setting_int('zinc_fee_cents') is null
+  if concierge.card_margin_cents() is null or concierge.setting_int('zinc_fee_cents') is null
      or concierge.setting_int('card_fee_bps') is null or concierge.setting_int('card_fee_fixed_cents') is null then
     raise exception '%: missing a card fee setting', p_caller;
   end if;
   if exists (select 1 from jsonb_array_elements(p_orders) e
-              where (e ->> 'margin_cents')::integer is distinct from concierge.setting_int('margin_cents')
+              where (e ->> 'margin_cents')::integer is distinct from concierge.card_margin_cents()
                  or (e ->> 'zinc_fee_cents')::integer is distinct from concierge.setting_int('zinc_fee_cents')
                  or (e ->> 'card_fee_bps')::integer is distinct from concierge.setting_int('card_fee_bps')
                  or (e ->> 'card_fee_fixed_cents')::integer is distinct from concierge.setting_int('card_fee_fixed_cents')) then
@@ -361,7 +374,7 @@ begin
                                (select l.owner_id from lists.active_link(r.person_id) l)) end,
             -- New: a card order saves the fees it was approved with, the most the card
             -- can be charged, and the card itself; it is only ever sent on that card.
-            case when v_mode = 'connect' then concierge.setting_int('margin_cents') end,
+            case when v_mode = 'connect' then concierge.card_margin_cents() end,
             case when v_mode = 'connect' then concierge.setting_int('zinc_fee_cents') end,
             case when v_mode = 'connect' then concierge.setting_int('card_fee_bps') end,
             case when v_mode = 'connect' then concierge.setting_int('card_fee_fixed_cents') end,
@@ -527,7 +540,7 @@ begin
                then coalesce((p_order ->> 'address_owner_id')::uuid,
                              (select l.owner_id from lists.active_link(r.person_id) l)) end,
           -- New: today's fees and card, as approve_round.
-          case when v_mode = 'connect' then concierge.setting_int('margin_cents') end,
+          case when v_mode = 'connect' then concierge.card_margin_cents() end,
           case when v_mode = 'connect' then concierge.setting_int('zinc_fee_cents') end,
           case when v_mode = 'connect' then concierge.setting_int('card_fee_bps') end,
           case when v_mode = 'connect' then concierge.setting_int('card_fee_fixed_cents') end,
@@ -946,10 +959,11 @@ begin
     return;
   end if;
 
-  -- New: the held orders say who pays; a round never mixes the two.
+  -- New: the held orders say who pays. A round never mixes the two (an account
+  -- with held wallet orders is never switched), so a mix is a bug: fail loudly.
   if (select count(distinct o.funding_mode) from concierge.orders o
        where o.round_id = p_round_id and o.status = 'held') <> 1 then
-    return;
+    raise exception 'begin_placing: mixed funding modes' using errcode = 'P0001';
   end if;
   v_mode := (select o.funding_mode from concierge.orders o where o.round_id = p_round_id and o.status = 'held' limit 1);
 
@@ -1178,6 +1192,32 @@ begin
 end;
 $$;
 
+-- ─── start_card_session: leaving for Stripe's page ────────────────────────────
+-- Saves the buyer's Stripe customer on the account the first time, under its lock, so a
+-- buyer who comes back days later reuses it rather than leaving a second customer at
+-- Stripe (T42). 'ok', or 'other_customer' when the account already has a different one.
+create function concierge.start_card_session(p_user_id uuid, p_session_id text, p_customer text, p_round_id uuid,
+                                             p_idea_ids uuid[], p_failed_order_id uuid)
+returns text
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  a concierge.accounts;
+begin
+  insert into concierge.accounts (user_id) values (p_user_id) on conflict (user_id) do nothing;
+  select * into a from concierge.accounts where user_id = p_user_id for update;
+  if a.stripe_customer_id is not null and a.stripe_customer_id is distinct from p_customer then
+    return 'other_customer';
+  end if;
+  update concierge.accounts set stripe_customer_id = p_customer where user_id = p_user_id and stripe_customer_id is null;
+  insert into concierge.card_sessions (user_id, stripe_session_id, stripe_customer_id, round_id, idea_ids, failed_order_id)
+  values (p_user_id, p_session_id, p_customer, p_round_id, p_idea_ids, p_failed_order_id);
+  return 'ok';
+end;
+$$;
+
 -- ─── remove_card: Settings > Remove ───────────────────────────────────────────
 -- 'ok', or 'placing' while any order is being sent or unconfirmed, so a card isn't
 -- taken away under a send. begin_placing takes the same account lock, so a send can't
@@ -1211,6 +1251,8 @@ revoke all on function concierge.card_fee_cents(integer) from public, anon, auth
 revoke all on function concierge.check_card_order(concierge.accounts, jsonb, text) from public, anon, authenticated;
 revoke all on function concierge.record_card_costs(concierge.orders, integer, boolean) from public, anon, authenticated;
 revoke all on function concierge.save_card(uuid, text, text, text) from public, anon, authenticated;
+revoke all on function concierge.start_card_session(uuid, text, text, uuid, uuid[], uuid) from public, anon, authenticated;
+revoke all on function concierge.card_margin_cents() from public, anon, authenticated;
 revoke all on function concierge.remove_card(uuid) from public, anon, authenticated;
 grant execute on function concierge.card_charge_cents(integer, integer, integer, integer, integer) to service_role;
 grant execute on function concierge.card_charge_cents(integer, concierge.orders) to service_role;
@@ -1219,4 +1261,6 @@ grant execute on function concierge.card_fee_cents(integer) to service_role;
 grant execute on function concierge.check_card_order(concierge.accounts, jsonb, text) to service_role;
 grant execute on function concierge.record_card_costs(concierge.orders, integer, boolean) to service_role;
 grant execute on function concierge.save_card(uuid, text, text, text) to service_role;
+grant execute on function concierge.start_card_session(uuid, text, text, uuid, uuid[], uuid) to service_role;
+grant execute on function concierge.card_margin_cents() to service_role;
 grant execute on function concierge.remove_card(uuid) to service_role;

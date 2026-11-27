@@ -3,7 +3,7 @@
 -- does, the switch, settling, saving and removing a card, and who can read any of it.
 begin;
 \ir _helpers.psql
-select plan(97);
+select plan(102);
 
 update concierge.app_settings set value = '1' where key in ('zinc_ordering_enabled', 'connect_enabled', 'cost_tracking_enabled');
 
@@ -105,9 +105,8 @@ select has_column('concierge', 'accounts', c, 'accounts.' || c) from unnest(arra
 select has_column('concierge', 'orders', c, 'orders.' || c)
   from unnest(array['margin_cents', 'zinc_fee_cents', 'card_fee_bps', 'card_fee_fixed_cents', 'max_charge_cents',
                     'final_charge_cents', 'payment_method_id']) c;
-select is(concierge.setting_int('margin_cents'),
-          concierge.setting_int('fee_part_ai_cents') + concierge.setting_int('fee_part_running_cents'),
-          'the margin is the sum of its breakdown parts');
+select is(concierge.card_margin_cents(), 100, 'the margin is the sum of its breakdown parts, $0.65 + $0.35');
+select ok(not exists (select 1 from concierge.app_settings where key = 'margin_cents'), 'the margin has no setting of its own to drift');
 select is(concierge.setting_int('connect_enabled'), 1, 'the switch can be turned on (seeded off)');
 select is((select value #>> '{}' from concierge.app_settings where key = 'fee_label'), 'GiftsAF fee', 'the fee''s name is a setting');
 
@@ -208,6 +207,13 @@ select is(tests.cp_state(:'r4'), 'held/retry', 'saving a card buys nothing');
 select is(tests.cp_place(:'r4'), 0, 'the waiting gift isn''t sent on the new card');
 select is(tests.cp_state(:'r4'), 'failed/card_needed', 'it ends as card_needed, for a Buy again tap');
 select is((select resolved from tests.cp_order(:'r4')), false, 'and waits on the buyer');
+
+-- Leaving for Stripe: the customer is kept on the account at once.
+select tests.create_user('new-card@example.com') as nc \gset
+select is(concierge.start_card_session(:'nc', 'cs_n1', 'cus_n', null, null, null), 'ok', 'a first visit to Stripe''s page is recorded');
+select is((select stripe_customer_id from concierge.accounts where user_id = :'nc'), 'cus_n', 'and the customer is saved on the account straight away');
+select is(concierge.start_card_session(:'nc', 'cs_n2', 'cus_other', null, null, null), 'other_customer', 'a second customer is refused');
+select is((select count(*)::int from concierge.card_sessions where user_id = :'nc'), 1, 'and no visit is recorded for it');
 
 -- Saving a card: once, only your own (case 15).
 select is(concierge.save_card(:'u', 'cs_1', 'cus_1', 'pm_3'), 'used', 'the same visit twice saves nothing');
@@ -328,7 +334,7 @@ select tests.cp_place(:'r10');
 select is(tests.cp_state(:'r10'), 'failed/card_needed', 'a replaced card leaves the gift card_needed');
 select (select id from tests.cp_order(:'r10')) as f1 \gset
 select (select idempotency_key from tests.cp_order(:'r10')) as k1 \gset
-update concierge.app_settings set value = '120' where key = 'margin_cents';
+update concierge.app_settings set value = '55' where key = 'fee_part_running_cents';
 select is((select count(*)::int from concierge.replace_failed_order(:'r10', :'u', tests.cp_lock(:'r10'), :'f1',
              tests.cp_el(tests.cp_idea(:'r10'), '{"margin_cents": 120, "new_total_cents": 2459, "new_goods_cents": 2359}'))), 1,
           'Buy again makes a new order');
@@ -344,7 +350,7 @@ select (select id from tests.cp_order(:'r10')) as f2 \gset
 update concierge.accounts set stripe_payment_method_id = 'pm_7' where user_id = :'u';
 select is((select count(*)::int from concierge.replace_failed_order(:'r10', :'u', tests.cp_lock(:'r10'), :'f2',
              tests.cp_el(tests.cp_idea(:'r10'), '{"margin_cents": 120}'))), 1, 'a second decline can be bought again too');
-update concierge.app_settings set value = '100' where key = 'margin_cents';
+update concierge.app_settings set value = '35' where key = 'fee_part_running_cents';
 
 -- Past ship-by, never.
 select tests.cp_round(:'u') as r11 \gset

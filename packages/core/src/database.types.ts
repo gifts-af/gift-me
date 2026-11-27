@@ -1559,6 +1559,7 @@ export type Database = {
             Returns: number;
           };
       card_fee_cents: { Args: { p_goods_cents: number }; Returns: number };
+      card_margin_cents: { Args: Record<PropertyKey, never>; Returns: number };
       check_card_order: {
         Args: {
           a: Omit<
@@ -2316,6 +2317,17 @@ export type Database = {
           isOneToOne: false;
           isSetofReturn: true;
         };
+      };
+      start_card_session: {
+        Args: {
+          p_customer: string;
+          p_failed_order_id: string;
+          p_idea_ids: string[];
+          p_round_id: string;
+          p_session_id: string;
+          p_user_id: string;
+        };
+        Returns: string;
       };
       start_idea_run: {
         Args: {
