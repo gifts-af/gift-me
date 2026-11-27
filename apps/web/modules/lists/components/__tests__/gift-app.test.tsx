@@ -67,6 +67,13 @@ async function addByHand(name: string) {
   await user.click(screen.getByRole("button", { name: "Add to list" }));
 }
 
+// Share opens the menu; Copy link copies. With the name prompt up, there's no menu yet.
+async function shareAndCopy(name: RegExp = /Share/) {
+  await user.click(screen.getByRole("button", { name }));
+  const copy = screen.queryByRole("button", { name: "Copy link" });
+  if (copy) await user.click(copy);
+}
+
 const remove = (name: string) => user.click(screen.getByRole("button", { name: new RegExp(`Remove ${name}`) }));
 const beforeUnloadBlocked = () => {
   const event = new Event("beforeunload", { cancelable: true });
@@ -92,64 +99,182 @@ describe("GiftApp", () => {
     vi.restoreAllMocks();
   });
 
-  describe("Share opens the share sheet on a phone", () => {
-    const share = () => user.click(screen.getByRole("button", { name: /Share/ }));
+  describe("Share opens a menu of share options", () => {
+    const NOTE = "Link copied. In Instagram, add a Link sticker and paste it.";
+    const LINK = `${window.location.origin}/share/tok`;
     let shareSpy: ReturnType<typeof vi.fn>;
+    let fetchSpy: ReturnType<typeof vi.fn>;
 
-    function asDevice(touch: boolean, outcome: () => Promise<void> = async () => {}) {
+    // jsdom has no share sheet, canShare or matchMedia: each test says which device it is.
+    function asDevice({
+      touch = true,
+      sheet = true,
+      files = true,
+      outcome = async () => {},
+    }: { touch?: boolean; sheet?: boolean; files?: boolean; outcome?: () => Promise<void> } = {}) {
       shareSpy = vi.fn(outcome);
-      Object.defineProperty(navigator, "share", { value: shareSpy, configurable: true });
-      // jsdom has no matchMedia.
+      if (sheet) {
+        Object.defineProperty(navigator, "share", { value: shareSpy, configurable: true });
+        Object.defineProperty(navigator, "canShare", {
+          value: (data?: ShareData) => files && !!data?.files?.length,
+          configurable: true,
+        });
+      }
       Object.defineProperty(window, "matchMedia", {
         value: (query: string) => ({ matches: touch && query === "(pointer: coarse)", media: query }) as MediaQueryList,
         configurable: true,
       });
+      // The /share/<token>/story route, mocked.
+      fetchSpy = vi.fn(async () => new Response(new Blob(["png"], { type: "image/png" }), { status: 200 }));
+      vi.stubGlobal("fetch", fetchSpy);
+    }
+
+    async function openMenu() {
+      await user.click(screen.getByRole("button", { name: "Share" }));
+      return screen.findByRole("dialog", { name: "Share your list" });
+    }
+    const optionNames = (menu: HTMLElement) =>
+      within(menu)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent);
+
+    async function imageLoaded() {
+      await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledWith("/share/tok/story"));
+      await act(async () => {});
     }
 
     afterEach(() => {
       Reflect.deleteProperty(navigator, "share");
+      Reflect.deleteProperty(navigator, "canShare");
       Reflect.deleteProperty(window, "matchMedia");
+      vi.unstubAllGlobals();
     });
 
-    it("opens the sheet with the list link, and doesn't say Copied!", async () => {
-      asDevice(true);
+    it("offers every option on a phone that can share images", async () => {
+      asDevice();
+      render(<GiftApp initial={member} />);
+      const menu = await openMenu();
+      expect(optionNames(menu)).toEqual(["Instagram Story", "Messages", "WhatsApp", "Facebook", "X", "Copy link", "More…"]);
+    });
+
+    it("hides Instagram Story where files can't be shared", async () => {
+      asDevice({ files: false });
+      render(<GiftApp initial={member} />);
+      const menu = await openMenu();
+      expect(optionNames(menu)).toEqual(["Messages", "WhatsApp", "Facebook", "X", "Copy link", "More…"]);
+    });
+
+    it("on a computer with no share sheet, offers only the web links and Copy link", async () => {
+      asDevice({ touch: false, sheet: false });
+      render(<GiftApp initial={member} />);
+      const menu = await openMenu();
+      expect(optionNames(menu)).toEqual(["WhatsApp", "Facebook", "X", "Copy link"]);
+    });
+
+    it("links each option with the list link encoded", async () => {
+      asDevice();
+      render(<GiftApp initial={member} />);
+      const menu = await openMenu();
+      const href = (name: string) => within(menu).getByRole("link", { name }).getAttribute("href");
+      const text = encodeURIComponent(`Here's my gift list on GiftsAF: ${LINK}`);
+      expect(href("Messages")).toBe(`sms:?&body=${text}`);
+      expect(href("WhatsApp")).toBe(`https://wa.me/?text=${text}`);
+      expect(href("Facebook")).toBe(`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(LINK)}`);
+      expect(href("X")).toBe(
+        `https://x.com/intent/post?text=${encodeURIComponent("My gift list on GiftsAF")}&url=${encodeURIComponent(LINK)}`,
+      );
+      for (const name of ["WhatsApp", "Facebook", "X"]) {
+        const link = within(menu).getByRole("link", { name });
+        expect(link).toHaveAttribute("target", "_blank");
+        expect(link).toHaveAttribute("rel", "noopener noreferrer");
+      }
+    });
+
+    it("Copy link copies and says Copied!", async () => {
+      asDevice();
+      render(<GiftApp initial={member} />);
+      const menu = await openMenu();
+      await user.click(within(menu).getByRole("button", { name: "Copy link" }));
+      expect(await navigator.clipboard.readText()).toBe(LINK);
+      expect(shareSpy).not.toHaveBeenCalled();
+      expect(await screen.findByRole("button", { name: "Copied!" })).toBeVisible();
+    });
+
+    it("More… opens the share sheet with the list link, and doesn't say Copied!", async () => {
+      asDevice();
       const writeText = vi.spyOn(navigator.clipboard, "writeText");
       render(<GiftApp initial={member} />);
-      await share();
-      expect(shareSpy).toHaveBeenCalledWith(expect.objectContaining({ url: expect.stringContaining("/share/tok") }));
+      const menu = await openMenu();
+      await user.click(within(menu).getByRole("button", { name: "More…" }));
+      expect(shareSpy).toHaveBeenCalledWith(expect.objectContaining({ url: LINK }));
       expect(writeText).not.toHaveBeenCalled();
       expect(screen.queryByRole("button", { name: "Copied!" })).toBeNull();
     });
 
-    it("does nothing more when the sheet is closed", async () => {
-      asDevice(true, () => Promise.reject(new DOMException("closed", "AbortError")));
+    it("More… does nothing more when the sheet is closed", async () => {
+      asDevice({ outcome: () => Promise.reject(new DOMException("closed", "AbortError")) });
       const writeText = vi.spyOn(navigator.clipboard, "writeText");
       render(<GiftApp initial={member} />);
-      await share();
+      await user.click(within(await openMenu()).getByRole("button", { name: "More…" }));
       expect(writeText).not.toHaveBeenCalled();
       expect(screen.queryByLabelText("Share link")).toBeNull();
     });
 
-    it("copies the link when the sheet fails", async () => {
-      asDevice(true, () => Promise.reject(new DOMException("blocked", "NotAllowedError")));
+    it("More… copies the link when the sheet fails", async () => {
+      asDevice({ outcome: () => Promise.reject(new DOMException("blocked", "NotAllowedError")) });
       render(<GiftApp initial={member} />);
-      await share();
-      expect(await navigator.clipboard.readText()).toContain("/share/tok");
-      expect(screen.getByRole("button", { name: "Copied!" })).toBeVisible();
+      await user.click(within(await openMenu()).getByRole("button", { name: "More…" }));
+      expect(await navigator.clipboard.readText()).toBe(LINK);
+      expect(await screen.findByRole("button", { name: "Copied!" })).toBeVisible();
     });
 
-    it("copies the link on a computer, even where a sheet exists", async () => {
-      asDevice(false);
+    it("Instagram Story shares a PNG, copies the link and says how to add it", async () => {
+      asDevice();
+      const writeText = vi.spyOn(navigator.clipboard, "writeText");
       render(<GiftApp initial={member} />);
-      await share();
-      expect(shareSpy).not.toHaveBeenCalled();
-      expect(await navigator.clipboard.readText()).toContain("/share/tok");
+      await imageLoaded();
+      await user.click(within(await openMenu()).getByRole("button", { name: "Instagram Story" }));
+      expect(writeText).toHaveBeenCalledWith(LINK);
+      const [[data]] = shareSpy.mock.calls as [[ShareData]];
+      expect(data.url).toBeUndefined();
+      expect(data.files?.[0].type).toBe("image/png");
+      expect(data.files?.[0].name).toBe("giftsaf-list.png");
+      expect(screen.getAllByText(NOTE)[0]).toBeVisible();
+    });
+
+    it("Instagram Story does nothing more when the sheet is closed", async () => {
+      asDevice({ outcome: () => Promise.reject(new DOMException("closed", "AbortError")) });
+      render(<GiftApp initial={member} />);
+      await imageLoaded();
+      await user.click(within(await openMenu()).getByRole("button", { name: "Instagram Story" }));
+      expect(shareSpy).toHaveBeenCalledTimes(1);
+      expect(screen.queryByLabelText("Share link")).toBeNull();
+    });
+
+    it("Instagram Story falls back to the share sheet when sharing the image fails", async () => {
+      asDevice({ outcome: () => Promise.reject(new DOMException("blocked", "NotAllowedError")) });
+      render(<GiftApp initial={member} />);
+      await imageLoaded();
+      await user.click(within(await openMenu()).getByRole("button", { name: "Instagram Story" }));
+      await vi.waitFor(() => expect(shareSpy).toHaveBeenCalledTimes(2));
+      expect(shareSpy).toHaveBeenLastCalledWith(expect.objectContaining({ url: LINK }));
+      expect(screen.queryByText(NOTE)).toBeNull();
+    });
+
+    it("Instagram Story falls back to the share sheet when the image didn't load", async () => {
+      asDevice();
+      fetchSpy.mockResolvedValue(new Response("nope", { status: 404 }));
+      render(<GiftApp initial={member} />);
+      await imageLoaded();
+      await user.click(within(await openMenu()).getByRole("button", { name: "Instagram Story" }));
+      expect(shareSpy).toHaveBeenCalledTimes(1);
+      expect(shareSpy).toHaveBeenCalledWith(expect.objectContaining({ url: LINK }));
     });
   });
 
   describe("the note under Share (ALL-182 AC-13)", () => {
     const HINT = <p>No birthday saved</p>;
-    const share = () => user.click(screen.getByRole("button", { name: /Share/ }));
+    const share = shareAndCopy;
 
     it("shows once the link is copied, and not before", async () => {
       render(<GiftApp initial={member} shareHint={HINT} />);
@@ -732,7 +857,7 @@ describe("GiftApp", () => {
   it("shows the share notice below the title, so Share doesn't move when it appears", async () => {
     Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
     render(<GiftApp initial={member} />);
-    await user.click(screen.getByRole("button", { name: /Share/ }));
+    await shareAndCopy();
     const notice = await screen.findByLabelText("Share link");
     const title = screen.getByRole("heading", { level: 1, name: "My list" });
     expect(title.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -750,7 +875,7 @@ describe("GiftApp", () => {
     it("asks first, then saves the name and copies the link", async () => {
       const saveName = vi.fn<SaveName>(async () => ({ ok: true }));
       render(<GiftApp initial={member} needsName saveName={saveName} />);
-      await user.click(screen.getByRole("button", { name: /Share/ }));
+      await shareAndCopy();
       const dialog = await screen.findByRole("dialog", { name: "What name should your list show?" });
       expect(within(dialog).getByLabelText("Your name")).toHaveValue("");
       await user.type(within(dialog).getByLabelText("Your name"), "  Aaron ");
@@ -760,8 +885,8 @@ describe("GiftApp", () => {
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: /Copied!/ })).toBeInTheDocument();
 
-      // Named now: the next Share just copies.
-      await user.click(screen.getByRole("button", { name: /Copied!/ }));
+      // Named now: the next Share opens the menu.
+      await shareAndCopy(/Copied!/);
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       expect(writeText).toHaveBeenCalledTimes(2);
     });
@@ -769,7 +894,7 @@ describe("GiftApp", () => {
     it("Skip copies the link without a name, and isn't asked again on this device", async () => {
       const saveName = vi.fn<SaveName>();
       const { unmount } = render(<GiftApp initial={member} needsName saveName={saveName} />);
-      await user.click(screen.getByRole("button", { name: /Share/ }));
+      await shareAndCopy();
       await user.click(await screen.findByRole("button", { name: "Skip" }));
       expect(writeText).toHaveBeenCalledTimes(1);
       expect(await screen.findByRole("button", { name: /Copied!/ })).toBeInTheDocument();
@@ -778,7 +903,7 @@ describe("GiftApp", () => {
       unmount();
 
       render(<GiftApp initial={member} needsName saveName={saveName} />);
-      await user.click(screen.getByRole("button", { name: /Share/ }));
+      await shareAndCopy();
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       expect(writeText).toHaveBeenCalledTimes(2);
     });
@@ -786,7 +911,7 @@ describe("GiftApp", () => {
     it("keeps the dialog open with the error when the name can't be saved", async () => {
       const saveName = vi.fn<SaveName>(async () => ({ ok: false, error: "Your name couldn't be saved. Try again." }));
       render(<GiftApp initial={member} needsName saveName={saveName} />);
-      await user.click(screen.getByRole("button", { name: /Share/ }));
+      await shareAndCopy();
       const dialog = await screen.findByRole("dialog");
       await user.type(within(dialog).getByLabelText("Your name"), "Aaron");
       await user.click(within(dialog).getByRole("button", { name: "Save and copy link" }));
@@ -797,7 +922,7 @@ describe("GiftApp", () => {
     it("needs a name to save: an empty one is refused without calling the server", async () => {
       const saveName = vi.fn<SaveName>();
       render(<GiftApp initial={member} needsName saveName={saveName} />);
-      await user.click(screen.getByRole("button", { name: /Share/ }));
+      await shareAndCopy();
       const dialog = await screen.findByRole("dialog");
       await user.click(within(dialog).getByRole("button", { name: "Save and copy link" }));
       expect(within(dialog).getByRole("alert")).toHaveTextContent("Type a name, or tap Skip.");
@@ -807,7 +932,7 @@ describe("GiftApp", () => {
 
     it("doesn't ask someone who has a name", async () => {
       render(<GiftApp initial={member} saveName={vi.fn<SaveName>()} />);
-      await user.click(screen.getByRole("button", { name: /Share/ }));
+      await shareAndCopy();
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       expect(writeText).toHaveBeenCalledTimes(1);
     });

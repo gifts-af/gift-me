@@ -137,8 +137,9 @@ test.describe("signed in", () => {
     await page.goto("/lists");
     await page.getByRole("button", { name: "Share", exact: true }).click();
     const skip = page.getByRole("button", { name: "Skip" });
-    await expect(skip.or(page.getByText("No birthday saved.")).first()).toBeVisible();
-    if (await skip.isVisible()) await skip.click();
+    const copy = page.getByRole("button", { name: "Copy link" });
+    await expect(skip.or(copy).first()).toBeVisible();
+    await (await skip.isVisible() ? skip : copy).click();
     await expect(skip).toHaveCount(0);
     await expect(page.getByText("No birthday saved.")).toBeVisible();
     await shoot(page, "my-list-shared");

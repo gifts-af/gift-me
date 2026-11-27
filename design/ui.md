@@ -392,7 +392,7 @@ The prototype's colours and stylesheet go; **none of its behaviour does.** When 
 - Removing a gift, and focus moving somewhere sensible after
 - Saving, the warning on leaving, and the save error messages (since ALL-127: saving as you go, see Editing and saving > My list)
 - A guest's list carried over through sign-in or sign-up (kept for 24 hours)
-- Sharing a list link: the share sheet on a phone (Messages, WhatsApp, Instagram…), copying on a computer or when the sheet fails, with a copy-by-hand fallback when the clipboard is blocked
+- Sharing a list link: Share opens a menu (a bottom sheet on phones, a box on computers) of rows with each brand's mark and name: Instagram Story (only where image files can be shared: sends the list card as a picture, copies the link first and says "Link copied. In Instagram, add a Link sticker and paste it."; if the picture isn't ready or the sheet fails, opens the share sheet), Messages (phones only), WhatsApp, Facebook, X, Copy link ("Copied!", with a copy-by-hand fallback when the clipboard is blocked) and More… (the browser's share sheet, where there is one; copies the link if it fails)
 - The shared list page: a signed-out friend can view and claim; the owner sees "this is your list" and can't claim; a second claim on the same gift is refused
 - Dark mode, keyboard focus, and screen-reader announcements
 
