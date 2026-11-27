@@ -136,7 +136,7 @@ describe("GiftApp", () => {
     const optionNames = (menu: HTMLElement) =>
       within(menu)
         .getAllByRole("listitem")
-        .map((li) => li.textContent);
+        .map((li) => li.querySelector("[aria-label]")?.getAttribute("aria-label") ?? li.textContent);
 
     async function imageLoaded() {
       await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledWith("/share/tok/story"));
@@ -155,6 +155,8 @@ describe("GiftApp", () => {
       render(<GiftApp initial={member} />);
       const menu = await openMenu();
       expect(optionNames(menu)).toEqual(["Instagram Story", "Messages", "WhatsApp", "Facebook", "X", "Copy link", "More…"]);
+      // Said before the tap, because the share sheet covers the page note straight after.
+      expect(within(menu).getByRole("button", { name: "Instagram Story" })).toHaveAccessibleDescription(/add a Link sticker and paste it/);
     });
 
     it("hides Instagram Story where files can't be shared", async () => {
