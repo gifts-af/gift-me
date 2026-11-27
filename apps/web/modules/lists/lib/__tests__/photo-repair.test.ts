@@ -15,6 +15,7 @@ const ONE_BY_ONE_GIF = Buffer.from("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAAB
 const SETTINGS: Record<string, number> = {
   photo_repair_enabled: 1,
   photo_repair_per_run: 20,
+  photo_repair_budget_ms: 60000,
   photo_repair_max_attempts: 4,
   photo_repair_backoff_days: 1,
   photo_repair_max_age_days: 60,
@@ -176,6 +177,18 @@ describe("repairMissingPhotos", () => {
     expect(await repairMissingPhotos(settings(), deps(f.db, { lookUpAmazon }))).toEqual({ repaired: 0, failed: 0 });
     expect(lookUpAmazon).toHaveBeenCalledTimes(1);
     expect(f.upsert).not.toHaveBeenCalled();
+  });
+
+  it("starts no new gift once the run's time budget is spent", async () => {
+    const f = fakeDb([ARITZIA, { ...ARITZIA, item_id: "55555555-5555-4555-8555-555555555555" }]);
+    let t = NOW.getTime();
+    const readPage = vi.fn(async () => {
+      t += 60000;
+      return { ok: false as const, reason: "http_status" as const };
+    });
+    const d = deps(f.db, { readPage, now: () => new Date(t) });
+    expect(await repairMissingPhotos(settings(), d)).toEqual({ repaired: 0, failed: 1 });
+    expect(readPage).toHaveBeenCalledTimes(1);
   });
 
   it("does nothing with the switch off", async () => {

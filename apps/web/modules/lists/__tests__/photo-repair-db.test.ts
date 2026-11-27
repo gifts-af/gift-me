@@ -114,6 +114,8 @@ describe.skipIf(!dbUp)("photo repair on local Supabase", () => {
   afterAll(async () => {
     for (const id of users) await admin.auth.admin.deleteUser(id);
     for (const id of mine) await admin.storage.from("list-photos").remove([`${id}.jpg`]);
+    // Removed gifts with a photo queued their files: leave the shared queue as it was.
+    if (dbUp) await pg.query(`delete from lists.photo_deletions where path = any($1)`, [[...mine].map((id) => `${id}.jpg`)]);
     await pg.end().catch(() => {});
   });
 

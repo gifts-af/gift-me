@@ -67,6 +67,8 @@ select set_eq(
     'person_photo_stored_max_bytes', 'storage_files_per_account',
     'idea_busy_retry_seconds', 'idea_busy_retries_max',
     'list_birthday_enabled', 'list_sizes_enabled',
+    'photo_repair_enabled', 'photo_repair_per_run', 'photo_repair_budget_ms', 'photo_repair_max_attempts',
+    'photo_repair_backoff_days', 'photo_repair_max_age_days', 'photo_repair_min_px',
     'connect_enabled', 'zinc_fee_cents', 'card_fee_bps', 'card_fee_fixed_cents',
     'fee_part_ai_cents', 'fee_part_running_cents', 'stripe_timeout_ms', 'card_session_minutes', 'fee_label', 'fee_pricing_note',
     'over_max_charge_days', 'card_hold_alert_days'

@@ -188,6 +188,7 @@ insert into concierge.app_settings (key, value, description) values
   ('photo_repair_max_attempts', '4', 'Failed tries before the photo repair gives up on a gift.'),
   ('photo_repair_backoff_days', '1', 'Days the photo repair waits after a gift''s first failed try; the wait doubles after each one (1, 2, 4, 8).'),
   ('photo_repair_max_age_days', '60', 'Only gifts added in this many days are tried by the photo repair.'),
+  ('photo_repair_budget_ms', '60000', 'Most time (ms) one photo repair run starts new gifts for; it shares the daily tick''s 300 s with the rounds, and the rest wait for the next day.'),
   ('photo_repair_min_px', '100', 'Smallest photo the repair keeps, in pixels on each side; anything smaller (like a 1x1 placeholder) is refused.')
 on conflict (key) do nothing;
 

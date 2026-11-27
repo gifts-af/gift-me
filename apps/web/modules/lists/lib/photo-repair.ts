@@ -24,6 +24,8 @@ type Field = string | number | boolean | null;
 export type PhotoRepairSettings = {
   enabled: boolean;
   perRun: number;
+  /** Starts no new gift after this many ms of the run. */
+  budgetMs: number;
   maxAttempts: number;
   backoffDays: number;
   maxAgeDays: number;
@@ -57,10 +59,11 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 /** Reads the settings; any that can't be read throws (T23: no fallback in code). */
 export async function photoRepairSettings(read: (key: string) => Promise<number>): Promise<PhotoRepairSettings> {
-  const [enabled, perRun, maxAttempts, backoffDays, maxAgeDays, minPx, widthPx, quality, maxBytes] = await Promise.all(
+  const [enabled, perRun, budgetMs, maxAttempts, backoffDays, maxAgeDays, minPx, widthPx, quality, maxBytes] = await Promise.all(
     [
       "photo_repair_enabled",
       "photo_repair_per_run",
+      "photo_repair_budget_ms",
       "photo_repair_max_attempts",
       "photo_repair_backoff_days",
       "photo_repair_max_age_days",
@@ -70,7 +73,7 @@ export async function photoRepairSettings(read: (key: string) => Promise<number>
       "list_photo_max_bytes",
     ].map(read),
   );
-  return { enabled: enabled === 1, perRun, maxAttempts, backoffDays, maxAgeDays, jpeg: { minPx, widthPx, quality, maxBytes } };
+  return { enabled: enabled === 1, perRun, budgetMs, maxAttempts, backoffDays, maxAgeDays, jpeg: { minPx, widthPx, quality, maxBytes } };
 }
 
 /** After failure number `attempts` (1-based): when to try again, or give up. Waits double: 1, 2, 4, 8 days. */
@@ -120,7 +123,10 @@ export async function repairMissingPhotos(
   let failed = 0;
   // Amazon lookups or page reads switched off, or today's lookups used up: stop asking this run.
   const closed = { amazon: false, store: false };
+  const started = deps.now().getTime();
   for (const c of (found.data ?? []) as Candidate[]) {
+    // The run shares the tick's time limit with the rounds: past its budget, the rest wait a day.
+    if (deps.now().getTime() - started >= s.budgetMs) break;
     const asin = c.asin ?? extractAsin(safePath(c.product_url));
     const kind = asin ? "amazon" : "store";
     if (closed[kind]) continue;
