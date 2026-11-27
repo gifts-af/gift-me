@@ -3,7 +3,8 @@ import Link from "next/link";
 
 /**
  * One row of the Settings list (ALL-115): label left, value muted right,
- * chevron. A person's page uses it too (ALL-120, ALL-127).
+ * chevron. A person's page uses it too (ALL-120, ALL-127). The value may be a node, so a caller can
+ * colour part of it (Give's "2 need you" in amber).
  */
 export function SettingsRow({ href, label, value }: { href: string; label: string; value: React.ReactNode }) {
   return (
