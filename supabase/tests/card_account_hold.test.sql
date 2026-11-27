@@ -1,8 +1,9 @@
 -- Card orders paused for a problem with our own Zinc account (record_outcomes' paused outcome),
--- and the health email's list of card orders charged over their maximum (health_snapshot).
+-- and the health email's card lists (health_snapshot): orders charged over their maximum, and
+-- card holds getting old.
 begin;
 \ir _helpers.psql
-select plan(13);
+select plan(22);
 
 update concierge.app_settings set value = '1' where key in ('zinc_ordering_enabled', 'connect_enabled', 'cost_tracking_enabled');
 
@@ -81,27 +82,74 @@ update concierge.gift_rounds set closed_at = now() where id = :'r2';
 select concierge.record_outcomes(:'r2', jsonb_build_array(jsonb_build_object('order_id', (tests.ah_order(:'r2')).id, 'outcome', 'paused')));
 select is((select o.status || '/' || o.failure_type from tests.ah_order(:'r2') o), 'cancelled/round_closed', 'a closed round''s paused order is cancelled');
 
+-- paused is only for a card order: a wallet order is held for funds, never paused.
+select tests.create_user('wallet-hold@example.com') as w \gset
+insert into concierge.accounts (user_id, paid_features, buyer_phone, funding_mode)
+values (:'w', true, '5555550101', 'zinc_wallet');
+select tests.ah_round(:'w') as rw \gset
+insert into concierge.orders (user_id, round_id, idea_id, funding_mode, max_price_cents, fee_cents, status,
+                              ship_to, ship_city, ship_state)
+select :'w', :'rw', i.id, 'zinc_wallet', 2485, 100, 'placing', 'recipient', 'Dayton', 'OH'
+  from concierge.gift_ideas i where i.round_id = :'rw';
+select throws_ok(format($$select concierge.record_outcomes(%L, jsonb_build_array(jsonb_build_object('order_id', %L, 'outcome', 'paused')))$$,
+                        :'rw', (tests.ah_order(:'rw')).id),
+                 '22023', null, 'a wallet order can''t be paused for the card account');
+
 -- ─── health_snapshot: charged over the maximum ───────────────────
 
-select tests.ah_round(:'u', array['Over', 'Under', 'Old']) as r3 \gset
+update concierge.app_settings set value = '7' where key = 'over_max_charge_days';
+select tests.ah_round(:'u', array['Over', 'Under', 'Old', 'Older']) as r3 \gset
 select tests.ah_placing(:'r3');
 update concierge.orders o set status = 'placed', placed_at = now() - interval '1 hour', total_cents = 2259,
-       final_charge_cents = o.max_charge_cents + case i.title when 'Over' then 1 when 'Old' then 5 else 0 end
+       final_charge_cents = o.max_charge_cents + case i.title when 'Under' then 0 else 1 end
   from concierge.gift_ideas i where i.id = o.idea_id and o.round_id = :'r3';
 update concierge.orders set placed_at = now() - interval '26 hours' where id = (tests.ah_order(:'r3', 'Old')).id;
+update concierge.orders set placed_at = now() - interval '8 days' where id = (tests.ah_order(:'r3', 'Older')).id;
 select concierge.health_snapshot(now()) as snap \gset
 select ok((:'snap'::jsonb -> 'over_max_charge') @> jsonb_build_array(jsonb_build_object(
             'order_id', (tests.ah_order(:'r3', 'Over')).id, 'round_id', :'r3', 'user_id', :'u',
             'charge_cents', (tests.ah_order(:'r3', 'Over')).final_charge_cents,
-            'max_charge_cents', (tests.ah_order(:'r3', 'Over')).max_charge_cents)),
-          'a card order charged a cent over its maximum is listed, with both amounts');
+            'max_charge_cents', (tests.ah_order(:'r3', 'Over')).max_charge_cents, 'days', 7)),
+          'a card order charged a cent over its maximum is listed, with both amounts and the window');
 select ok(not (:'snap'::jsonb -> 'over_max_charge') @> jsonb_build_array(jsonb_build_object('order_id', (tests.ah_order(:'r3', 'Under')).id)),
           'one charged exactly its maximum is not');
-select ok(not (:'snap'::jsonb -> 'over_max_charge') @> jsonb_build_array(jsonb_build_object('order_id', (tests.ah_order(:'r3', 'Old')).id)),
-          'one placed more than a day ago was in an earlier email');
+select ok((:'snap'::jsonb -> 'over_max_charge') @> jsonb_build_array(jsonb_build_object('order_id', (tests.ah_order(:'r3', 'Old')).id)),
+          'one placed yesterday is listed again: a day whose email failed doesn''t lose it');
+select ok(not (:'snap'::jsonb -> 'over_max_charge') @> jsonb_build_array(jsonb_build_object('order_id', (tests.ah_order(:'r3', 'Older')).id)),
+          'one placed before the window is not');
 select is(jsonb_typeof(:'snap'::jsonb -> 'over_max_charge'), 'array', 'the list is always there');
-select is((select jsonb_array_length(concierge.health_snapshot(now() + interval '3 days') -> 'over_max_charge')), 0,
-          'an empty list once nothing new is over');
+select is((select jsonb_array_length(concierge.health_snapshot(now() + interval '8 days') -> 'over_max_charge')), 0,
+          'an empty list once nothing in the window is over');
+update concierge.app_settings set value = '1' where key = 'over_max_charge_days';
+select ok(not (concierge.health_snapshot(now()) -> 'over_max_charge') @> jsonb_build_array(jsonb_build_object('order_id', (tests.ah_order(:'r3', 'Old')).id)),
+          'the window is the over_max_charge_days setting');
+
+-- ─── health_snapshot: a card hold getting old ────────────────────
+
+update concierge.app_settings set value = '5' where key = 'card_hold_alert_days';
+select tests.ah_round(:'u', array['Placing', 'Unconfirmed']) as r4 \gset
+select tests.ah_placing(:'r4');
+select concierge.mark_unconfirmed((tests.ah_order(:'r4', 'Unconfirmed')).id);
+select concierge.health_snapshot(now() + interval '6 days') as old \gset
+select ok((:'old'::jsonb -> 'card_hold_old') @> jsonb_build_array(
+            jsonb_build_object('order_id', (tests.ah_order(:'r4', 'Placing')).id, 'round_id', :'r4', 'user_id', :'u',
+                               'status', 'placing', 'days', 5),
+            jsonb_build_object('order_id', (tests.ah_order(:'r4', 'Unconfirmed')).id, 'status', 'unconfirmed')),
+          'card orders placing or unconfirmed longer than card_hold_alert_days are listed, with their status');
+select ok((select e ? 'since' from jsonb_array_elements(:'old'::jsonb -> 'card_hold_old') e
+            where e ->> 'order_id' = (tests.ah_order(:'r4', 'Placing')).id::text),
+          'with when it was sent');
+select ok(not (concierge.health_snapshot(now() + interval '4 days') -> 'card_hold_old')
+              @> jsonb_build_array(jsonb_build_object('order_id', (tests.ah_order(:'r4', 'Placing')).id)),
+          'not before card_hold_alert_days');
+select ok(not (:'old'::jsonb -> 'card_hold_old') @> jsonb_build_array(jsonb_build_object('order_id', (tests.ah_order(:'rw')).id)),
+          'a wallet order has no card hold');
+select ok(not (:'old'::jsonb -> 'card_hold_old') @> jsonb_build_array(jsonb_build_object('order_id', (tests.ah_order(:'r3', 'Over')).id)),
+          'a placed card order is not listed');
+
+delete from concierge.app_settings where key = 'card_hold_alert_days';
+select throws_ok($$select concierge.health_snapshot(now())$$, 'P0001', 'health_snapshot: missing setting',
+                 'a missing card_hold_alert_days fails the check loudly');
 select ok(not has_function_privilege('authenticated', 'concierge.health_snapshot(timestamptz)', 'execute'),
           'the snapshot is still the server''s only');
 

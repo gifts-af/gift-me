@@ -28,6 +28,7 @@ describe("sampleEmails", () => {
       "hold_funds",
       "hold_funds-still",
       "hold_setup",
+      "hold_setup-card",
       "hold_address",
       "hold_trouble",
       "hold_unconfirmed",

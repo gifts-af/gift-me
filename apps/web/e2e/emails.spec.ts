@@ -20,7 +20,7 @@ function renderSamples(): { name: string; html: string }[] {
 
 const samples = renderSamples();
 
-test("every email sample was rendered: 51 concierge, five forms and requests", () => {
+test("every email sample was rendered: 56 concierge, five forms and requests", () => {
   expect(samples.map((s) => s.name).sort()).toEqual(
     [
       "final_notice",
@@ -38,6 +38,8 @@ test("every email sample was rendered: 51 concierge, five forms and requests", (
       "no_ideas-too_late",
       "needs_address",
       "needs_attention",
+      "needs_attention-card_needed",
+      "needs_attention-card_needed_saved",
       "reaction_prompt",
       "reaction_prompt-several",
       "reminder",
@@ -46,15 +48,18 @@ test("every email sample was rendered: 51 concierge, five forms and requests", (
       "skipped-held",
       "skipped-partial",
       "ordered",
+      "ordered-card",
       "tracking_news",
       "gift_late",
       "gift_on_time",
       "store_cancelled_late",
+      "store_cancelled_late-card",
       "delivered",
       "heads_up-funding",
       "hold_funds",
       "hold_funds-still",
       "hold_setup",
+      "hold_setup-card",
       "hold_address",
       "hold_trouble",
       "hold_unconfirmed",
@@ -64,6 +69,7 @@ test("every email sample was rendered: 51 concierge, five forms and requests", (
       "too_late",
       "missed_on_us",
       "failed_late",
+      "failed_late-card",
       "failed_late-partial",
       "failed_late-several",
       "failed_several",

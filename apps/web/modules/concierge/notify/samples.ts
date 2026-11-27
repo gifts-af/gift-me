@@ -49,6 +49,7 @@ export function sampleEmails(link: string): SampleEmail[] {
       add("needs_attention-card_needed", kind, { ...SAMPLE_DATA.needs_attention.data, cardNeeded: { saved: false } }, links);
       add("needs_attention-card_needed_saved", kind, { ...SAMPLE_DATA.needs_attention.data, cardNeeded: { saved: true } }, links);
     }
+    if (kind === "hold_setup") add("hold_setup-card", kind, { ...SAMPLE_DATA.hold_setup.data, card: true }, links);
     if (kind === "store_cancelled_late") {
       const [g] = SAMPLE_DATA.store_cancelled_late.data.gifts;
       add("store_cancelled_late-card", kind, { ...SAMPLE_DATA.store_cancelled_late.data, gifts: [{ title: g.title, store: g.store, card: { totalText: "$25.64" } }] }, links);
@@ -102,7 +103,12 @@ function healthSamples(link: string): SampleEmail[] {
     { kind: "credit_low", detail: { balanceCents: 320, lowCents: 500 } },
     { kind: "zinc_low", detail: { balanceCents: 210, lowCents: 500 } },
     { kind: "deadline_close", ids: ref("7"), detail: { reason: "address", shipByDeadline: "2026-03-14" } },
-    { kind: "over_max_charge", ids: { ...ref("8"), orderId: id("80") }, detail: { chargeCents: 2565, maxChargeCents: 2564 } },
+    { kind: "over_max_charge", ids: { ...ref("8"), orderId: id("80") }, detail: { chargeCents: 2565, maxChargeCents: 2564, days: 7 } },
+    {
+      kind: "card_hold_old",
+      ids: { ...ref("9"), orderId: id("90") },
+      detail: { status: "unconfirmed", since: "2026-03-05T10:04:00Z", days: 5 },
+    },
   ];
   const weekly = { waitingAddress: 1, waitingFunds: 1, waitingSetup: 0, waitingApproval: 2, noIdeas: 0, roundsFailed: 0, failedCaptures: 1 };
   const costs: HealthReport["costs"] = {
@@ -122,6 +128,7 @@ function healthSamples(link: string): SampleEmail[] {
     orderFeeCents: 100,
     cardGifts: 2,
     zincFeeCents: 200,
+    cardFeeOrders: 2,
     cardFeeCents: 150,
     excludedCents: 42,
   };

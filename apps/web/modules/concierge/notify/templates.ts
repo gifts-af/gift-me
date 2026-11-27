@@ -178,7 +178,8 @@ export type TemplateData = {
     personRemoved?: boolean;
   };
   /** ALL-116: `tried`, how many gifts were ordered in the round. */
-  failed_several: Occasion & OtherGifts & ByCard & { tried: number; failed: FailedGift[]; orderByText: string };
+  // `card`: paid by card, for the refund wording; `pendingHold`: a listed card failure may have left a hold.
+  failed_several: Occasion & OtherGifts & ByCard & { tried: number; failed: FailedGift[]; orderByText: string; pendingHold?: boolean };
   /**
    * ALL-33: gifts the store cancelled after they were bought, too late to ship another. `store`
    * and `amountText` (the refund) are left out when unknown, never guessed.
@@ -655,15 +656,29 @@ export const TEMPLATES: {
 
   hold_setup: (d, links) => {
     const end = holdEnd(links.cancel, costOnceSorted(d.feeText, d.card));
+    // A card buyer's setup hold only ever means the phone is missing (begin_placing): the card is saved.
+    if (d.card) {
+      return {
+        subject: `Add your phone number to buy ${d.personName}'s gift`,
+        ...renderEmail({
+          heading: `Sorry, we couldn't buy ${d.personName}'s gift yet`,
+          paragraphs: [
+            `Sorry for the hold-up. You chose ${giftList(d.giftTitles)} for ${d.personName}'s ${d.occasion} on ${d.dateText}, but we don't have your phone number, so we couldn't buy ${itOrThem(d.giftTitles)}. You haven't been charged.`,
+            "Stores need a phone number for delivery. Add yours and we'll buy it.",
+          ],
+          button: { label: "Add your phone number", url: links.setup },
+          tip: end.tip,
+          link: end.cancel,
+        }),
+      };
+    }
     return {
       subject: `Finish setting up payment to send ${d.personName}'s gift`,
       ...renderEmail({
         heading: `Sorry, we couldn't buy ${d.personName}'s gift yet`,
         paragraphs: [
           `Sorry for the hold-up. You chose ${giftList(d.giftTitles)} for ${d.personName}'s ${d.occasion} on ${d.dateText}, but payment isn't set up yet, so we couldn't buy ${itOrThem(d.giftTitles)}. You haven't been charged.`,
-          d.card
-            ? `What happens next: add your phone in Settings. It takes about a minute, and then we'll buy ${itOrThem(d.giftTitles)}.`
-            : `What happens next: gifts are paid from your own Zinc balance. Connect Zinc and add your phone in Settings. It takes about a minute, and once it's connected and funded, we'll buy ${itOrThem(d.giftTitles)}.`,
+          `What happens next: gifts are paid from your own Zinc balance. Connect Zinc and add your phone in Settings. It takes about a minute, and once it's connected and funded, we'll buy ${itOrThem(d.giftTitles)}.`,
         ],
         button: { label: "Finish setup", url: links.setup },
         tip: end.tip,
@@ -958,8 +973,9 @@ export const TEMPLATES: {
       subject: title,
       ...renderEmail({
         heading: title,
-        // A pending hold only for gifts that weren't bought; a cancelled one was charged and refunded.
-        paragraphs: [lead, ...(refunded < n ? holdDrops(d) : []), ...alsoOrderedLines(d)],
+        // A pending hold only when a listed failure may have made one: not a cancelled gift (charged
+        // and refunded), nor a refused card (no hold was made).
+        paragraphs: [lead, ...(d.pendingHold ? [HOLD_DROPS] : []), ...alsoOrderedLines(d)],
         rows: d.failed.map((f) => ({ title: f.title, detail: f.detail })),
         button: { label: `See ${d.personName}'s gift`, url: links.open },
         link: d.failed.filter((f) => f.action).map((f) => ({ label: f.action as string, url: f.url })),

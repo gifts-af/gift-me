@@ -76,11 +76,11 @@ describe("costLines", () => {
     expect(rows[4][0]).toBe("Fixed part of the fee: $1.52");
   });
 
-  it("AC-14: card gifts' own Zinc and card fees show once each, and the wallet fee setting isn't added for them", () => {
-    const rows = said({ cardGifts: 2, zincFeeCents: 200, cardFeeCents: 150 });
+  it("AC-14: card orders' own Zinc and card fees show once each, and the wallet fee setting isn't added for them", () => {
+    const rows = said({ cardGifts: 2, zincFeeCents: 200, cardFeeOrders: 2, cardFeeCents: 150 });
     expect(rows[5]).toEqual([
-      "Card gifts: 2",
-      "Zinc's fees $2.00 and card fees $1.50 in total, as recorded per order: $1.00 and $0.75 a gift. Not in the fixed part above.",
+      "Card orders settled: 2",
+      "Zinc's fees $2.00 in total, $1.00 an order. Card fees $1.50 in total, $0.75 an order. As recorded per order, not in the fixed part above.",
     ]);
     // The fixed part is the same as without card gifts: it isn't $1.00 more for each of them.
     expect(rows[4]).toEqual(said()[4]);
@@ -89,8 +89,21 @@ describe("costLines", () => {
     expect(rows[6]).toEqual(["QA account: $0.42", "Not counted above"]);
   });
 
-  it("no card gifts: no card row, so a wallet-only report is unchanged", () => {
-    expect(said().map((r) => r[0])).not.toContain(expect.stringContaining("Card gifts"));
+  it("the card fee is averaged over the orders that have one, not every order settled", () => {
+    const rows = said({ cardGifts: 3, zincFeeCents: 300, cardFeeOrders: 2, cardFeeCents: 210 });
+    expect(rows[5]).toEqual([
+      "Card orders settled: 3",
+      "Zinc's fees $3.00 in total, $1.00 an order. Card fees $2.10 in total, $1.05 an order over the 2 with a known total. As recorded per order, not in the fixed part above.",
+    ]);
+  });
+
+  it("no card fee known yet: totals only, nothing divides by zero", () => {
+    const rows = said({ cardGifts: 1, zincFeeCents: 100, cardFeeOrders: 0, cardFeeCents: 0 });
+    expect(rows[5][1]).toBe("Zinc's fees $1.00 in total, $1.00 an order. Card fees $0.00 in total, none known yet. As recorded per order, not in the fixed part above.");
+  });
+
+  it("no card orders: no card row, so a wallet-only report is unchanged", () => {
+    expect(said().map((r) => r[0])).not.toContain(expect.stringContaining("Card orders"));
     expect(said()).toHaveLength(6);
   });
 
@@ -124,6 +137,7 @@ describe("readCostPerGift", () => {
     ["a number as text", { ...costs(), aiCents: "372" }],
     ["a date that isn't one", { ...costs(), since: "soon" }],
     ["card fees missing", { ...costs(), cardFeeCents: undefined }],
+    ["the card fee's order count missing", { ...costs(), cardFeeOrders: undefined }],
     ["a month that isn't one", { ...costs(), bills: [{ month: "2026-13-01", vendors: ["Resend"] }] }],
   ])("refuses %s (E4)", async (_what, body) => {
     await expect(readCostPerGift(answering(body), MONDAY, 1000)).rejects.toMatchObject({ name: "ZodError" });

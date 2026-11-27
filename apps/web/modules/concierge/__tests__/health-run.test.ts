@@ -68,6 +68,7 @@ const SNAPSHOT = {
   deadline_close: [],
   ideas_waiting: [],
   over_max_charge: [],
+  card_hold_old: [],
   weekly: { waiting_address: 0, waiting_funds: 0, waiting_setup: 0, waiting_approval: 0, no_ideas: 0, rounds_failed: 0, failed_captures: 0 },
 };
 

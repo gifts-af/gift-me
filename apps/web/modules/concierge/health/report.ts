@@ -36,6 +36,7 @@ export type ProblemKind =
   | "zinc_low"
   | "deadline_close"
   | "over_max_charge"
+  | "card_hold_old"
   | "check_failed";
 
 /** Where a health check that couldn't run stopped: a fixed token, never the error's text (E6). */
@@ -154,7 +155,16 @@ export function healthReport(
     problems.push({
       kind: "over_max_charge",
       ids: { orderId: o.orderId, roundId: o.roundId, userId: o.userId },
-      detail: { chargeCents: o.chargeCents, maxChargeCents: o.maxChargeCents },
+      detail: { chargeCents: o.chargeCents, maxChargeCents: o.maxChargeCents, days: o.days },
+    });
+  }
+
+  // A card order not settled for days: the bank's hold on the card may lapse.
+  for (const o of snap.cardHoldOld) {
+    problems.push({
+      kind: "card_hold_old",
+      ids: { orderId: o.orderId, roundId: o.roundId, userId: o.userId },
+      detail: { status: o.status, since: o.since, days: o.days },
     });
   }
 

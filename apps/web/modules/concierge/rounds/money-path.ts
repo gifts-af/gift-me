@@ -624,8 +624,9 @@ async function sendOpenFailures(
           ...occasion,
           tried: Math.max(tried, failed.length),
           failed: failed.map((o) => openRow(o, ctx.personName, ownerAsked, `${deps.notify.baseUrl}${fixPath(round.id, o.id)}`, ctx.hasCard)),
-          // A store cancel by card is refunded to the card; any other card failure may show a hold.
+          // A store cancel by card is refunded to the card; a failure that may have left a hold says so.
           ...(failed.some((o) => isCard(o) && STORE_CANCELLED(o)) || holdOn(failed).card ? { card: true } : {}),
+          ...(holdOn(failed).card ? { pendingHold: true } : {}),
           ...also,
           orderByText,
         },
@@ -739,7 +740,7 @@ async function tellClosing(
 }
 
 /** Why a held gift was cancelled at the deadline, for the closing summary (plan review S4). */
-function heldDetail(o: RoundOrder, orderingPaused: boolean): string {
+export function heldDetail(o: RoundOrder, orderingPaused: boolean): string {
   if (orderingPaused || o.holdReason === "paused") {
     return "A problem on our side stopped us ordering it in time. That's on us, and we're sorry.";
   }
@@ -747,7 +748,10 @@ function heldDetail(o: RoundOrder, orderingPaused: boolean): string {
     case "funds":
       return "There wasn't enough in your Zinc balance in time, so we cancelled it.";
     case "setup":
-      return "Payment wasn't set up in time, so we cancelled it.";
+      // A card buyer's setup hold only ever means the phone is missing (begin_placing).
+      return o.fundingMode === "connect"
+        ? "Stores need a phone number for delivery, and we didn't have yours in time, so we cancelled it."
+        : "Payment wasn't set up in time, so we cancelled it.";
     case "address":
       return "We didn't have an address we could ship to in time, so we cancelled it.";
     default:

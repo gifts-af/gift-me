@@ -7,8 +7,14 @@
 -- as a funds 402 is for a wallet order. Before, it was held on its old key, so once the
 -- account was fixed Zinc could answer the retry with the refusal it had stored.
 --
--- health_snapshot, copied from 20261127120000_moved_dates.sql, lists the card orders
--- charged over their approved maximum in the last day, for the owner's health email.
+-- health_snapshot, copied from 20261127120000_moved_dates.sql, lists for the owner's health
+-- email the card orders charged over their approved maximum in the last over_max_charge_days,
+-- and the card orders placing or unconfirmed for more than card_hold_alert_days (the bank's
+-- hold lapses after about 7 days).
+--
+-- cost_per_gift, copied from 20261130120000_card_payments.sql, averages the card fee over the
+-- orders that have one (cardFeeOrders) and counts an excluded account's card costs in
+-- excludedCents.
 --
 -- Left as it is: store_cancel_order. A card order the store cancels after settling keeps
 -- its zinc_order_fee and card_fee cost rows (cost_events is insert-only). What Zinc
@@ -18,6 +24,11 @@
 --
 -- Only the lines marked New differ from the copied definitions. Same signatures, so
 -- create or replace keeps their grants.
+
+insert into concierge.app_settings (key, value, description) values
+  ('over_max_charge_days', '7', 'How many days the health email keeps listing a card order charged over its maximum, so a day whose email failed doesn''t lose it.'),
+  ('card_hold_alert_days', '5', 'Days a card order may stay placing or unconfirmed before the health email lists it: the bank''s hold on the card lapses after about 7.')
+on conflict (key) do nothing;
 
 
 -- ─── record_outcomes ───────────────────────────────────────────────────────────
@@ -85,7 +96,11 @@ begin
       -- New: our own Zinc account refused a card order (an account code). It's held paused
       -- for the owner, with a fresh key: the refusal created nothing at Zinc, and Zinc could
       -- answer a retry on the old key with its stored refusal once the account is fixed.
+      -- Only a card order: a wallet order is never refused for the card account.
       when 'paused' then
+        if v_order.funding_mode <> 'connect' then
+          raise exception 'A paused outcome for a wallet order' using errcode = '22023';
+        end if;
         if v_closed then
           update concierge.orders set status = 'cancelled', failure_type = 'round_closed' where id = v_order.id;
           continue;
@@ -120,11 +135,14 @@ declare
   v_max_attempts integer := concierge.setting_int('round_max_attempts');
   v_stale_minutes integer := concierge.setting_int('placing_stale_minutes');
   v_final_days integer := concierge.setting_int('hold_final_days');
+  v_over_days integer := concierge.setting_int('over_max_charge_days'); -- New.
+  v_hold_days integer := concierge.setting_int('card_hold_alert_days'); -- New.
   v_today date := (p_now at time zone 'utc')::date;
   v_tick concierge.tick_heartbeats;
 begin
   -- No fallback value (T23): a missing setting fails the check loudly.
-  if v_max_attempts is null or v_stale_minutes is null or v_final_days is null then
+  if v_max_attempts is null or v_stale_minutes is null or v_final_days is null
+     or v_over_days is null or v_hold_days is null then -- New.
     raise exception 'health_snapshot: missing setting';
   end if;
 
@@ -205,17 +223,32 @@ begin
          and not exists (select 1 from concierge.gift_ideas i where i.round_id = r.id and i.status <> 'rejected')
          and r.ship_by_deadline <= v_today + v_final_days), '[]'),
 
-    -- New: card orders charged more than the "Most you'll pay" shown at approval, once each:
-    -- placed within the last day, like the idea-run counts. order.over_max_charge alerts at
-    -- the time; this is the daily list (design/operations.md > Alerts).
+    -- New: card orders charged more than the "Most you'll pay" shown at approval, placed in
+    -- the last over_max_charge_days. An order is listed on each of those days, so a day whose
+    -- email failed doesn't lose it. order.over_max_charge alerts at the time; this is the
+    -- daily list (design/operations.md > Alerts).
     'over_max_charge', coalesce((
       select jsonb_agg(jsonb_build_object('order_id', o.id, 'round_id', o.round_id, 'user_id', o.user_id,
-                                          'charge_cents', o.final_charge_cents, 'max_charge_cents', o.max_charge_cents)
+                                          'charge_cents', o.final_charge_cents, 'max_charge_cents', o.max_charge_cents,
+                                          'days', v_over_days)
                        order by o.placed_at, o.id)
         from concierge.orders o
        where o.funding_mode = 'connect'
          and o.final_charge_cents > o.max_charge_cents
-         and o.placed_at > p_now - interval '25 hours' and o.placed_at <= p_now), '[]'),
+         and o.placed_at > p_now - make_interval(days => v_over_days) and o.placed_at <= p_now), '[]'),
+
+    -- New: card orders placing or unconfirmed for more than card_hold_alert_days, while the
+    -- bank's hold on the card may lapse (design/operations.md > A card hold that's getting old).
+    -- Aged by updated_at, as placing_stale is: the order last changed when it was sent, or when
+    -- the sweep marked it unconfirmed soon after.
+    'card_hold_old', coalesce((
+      select jsonb_agg(jsonb_build_object('order_id', o.id, 'round_id', o.round_id, 'user_id', o.user_id,
+                                          'status', o.status, 'since', o.updated_at, 'days', v_hold_days)
+                       order by o.updated_at, o.id)
+        from concierge.orders o
+       where o.funding_mode = 'connect'
+         and o.status in ('placing', 'unconfirmed')
+         and o.updated_at < p_now - make_interval(days => v_hold_days)), '[]'),
 
     'weekly', (
       select jsonb_build_object(
@@ -240,3 +273,102 @@ begin
 end;
 $$;
 
+
+-- ─── cost_per_gift ─────────────────────────────────────────────────────────────
+create or replace function concierge.cost_per_gift(p_now timestamptz)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_enabled integer := concierge.setting_int('cost_tracking_enabled');
+  v_days integer;
+  v_fee integer;
+  v_since timestamptz;
+  v_start timestamptz;
+  v_result jsonb;
+begin
+  if v_enabled is null then
+    raise exception 'cost_per_gift: missing setting cost_tracking_enabled';
+  end if;
+  if v_enabled = 0 then
+    return null;
+  end if;
+
+  v_days := concierge.setting_int('cost_window_days');
+  v_fee := concierge.setting_int('zinc_order_fee_cents');
+  select (s.value #>> '{}')::timestamptz into v_since from concierge.app_settings s where s.key = 'cost_tracking_since';
+  if v_days is null then
+    raise exception 'cost_per_gift: missing setting cost_window_days';
+  end if;
+  if v_since is null then
+    raise exception 'cost_per_gift: missing setting cost_tracking_since';
+  end if;
+  if v_fee is null then
+    raise exception 'cost_per_gift: missing setting zinc_order_fee_cents';
+  end if;
+
+  v_start := greatest(p_now - make_interval(days => v_days), v_since);
+
+  with gifts as (
+    select o.placed_at
+      from concierge.orders o
+     where o.status in ('placed', 'shipped', 'delivered')
+       and o.placed_at > v_start and o.placed_at <= p_now
+       and not coalesce((select a.costs_excluded from concierge.accounts a where a.user_id = o.user_id), false)
+  ),
+  costs as (
+    select c.kind, c.cents, c.estimated, c.excluded
+      from concierge.cost_events c
+     where c.created_at > v_start and c.created_at <= p_now
+       and c.kind in ('ai_ideas', 'ai_capture', 'lookup_ideas', 'lookup_price_check')
+  ),
+  -- What card orders actually paid Zinc and the card company, per order. New: excluded rows
+  -- are kept here, for excludedCents.
+  card_costs as (
+    select c.kind, c.cents, c.excluded
+      from concierge.cost_events c
+     where c.created_at > v_start and c.created_at <= p_now
+       and c.kind in ('zinc_order_fee', 'card_fee')
+  ),
+  months as (
+    select b.month, array_agg(b.vendor order by b.vendor) as vendors, sum(b.cents) as cents
+      from concierge.monthly_bills b
+     where (b.month::timestamp at time zone 'utc') >= v_start
+       and ((b.month + interval '1 month') at time zone 'utc') <= p_now
+     group by b.month
+  )
+  select jsonb_build_object(
+    'since', to_char(v_start at time zone 'utc', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"'),
+    'windowDays', v_days,
+    'gifts', (select count(*) from gifts),
+    'aiCents', (select coalesce(sum(cents), 0) from costs where not excluded and kind in ('ai_ideas', 'ai_capture')),
+    'lookupCents', (select coalesce(sum(cents), 0) from costs where not excluded and kind in ('lookup_ideas', 'lookup_price_check')),
+    'aiRecords', (select count(*) from costs where not excluded and kind in ('ai_ideas', 'ai_capture')),
+    'aiEstimated', (select count(*) from costs where not excluded and estimated and kind in ('ai_ideas', 'ai_capture')),
+    'bills', coalesce((select jsonb_agg(jsonb_build_object('month', to_char(m.month, 'YYYY-MM-DD'), 'vendors', to_jsonb(m.vendors)) order by m.month)
+                         from months m), '[]'::jsonb),
+    'billCents', (select coalesce(sum(cents), 0) from months),
+    'billGifts', (select count(*) from gifts g
+                   where exists (select 1 from months m
+                                  where (g.placed_at at time zone 'utc') >= m.month
+                                    and (g.placed_at at time zone 'utc') < m.month + interval '1 month')),
+    'orderFeeCents', v_fee,
+    -- Card orders settled, with their own Zinc and card fees; orderFeeCents stays the wallet
+    -- setting. A store-cancelled card order keeps its rows, so this counts settled orders, not
+    -- completed gifts.
+    'cardGifts', (select count(*) from card_costs where not excluded and kind = 'zinc_order_fee'),
+    'zincFeeCents', (select coalesce(sum(cents), 0) from card_costs where not excluded and kind = 'zinc_order_fee'),
+    -- New: an order settled with no total has no card_fee row, so the card fee is averaged over these.
+    'cardFeeOrders', (select count(*) from card_costs where not excluded and kind = 'card_fee'),
+    'cardFeeCents', (select coalesce(sum(cents), 0) from card_costs where not excluded and kind = 'card_fee'),
+    -- New: an excluded account's card costs are counted here too.
+    'excludedCents', (select coalesce(sum(cents), 0) from costs where excluded)
+                     + (select coalesce(sum(cents), 0) from card_costs where excluded))
+  into v_result;
+
+  return v_result;
+end;
+$$;

@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { Channel } from "../notify/channels";
 import { sendEmail } from "../rounds/emails";
 import type { EngineDeps } from "../rounds/engine";
-import { tellFailures, tellOrdered } from "../rounds/money-path";
+import { heldDetail, tellFailures, tellOrdered } from "../rounds/money-path";
 import type { ClaimedRound, RoundContext, RoundOrder, RoundStore } from "../rounds/store";
 import { BASE, captureLog, EMAIL, USER } from "./round-engine-fakes";
 import { FakeStore } from "./fake-store";
@@ -149,6 +149,31 @@ describe("failed while the round is open", () => {
     expect(t.said()).not.toMatch(ZINC);
   });
 
+  it("a summary of a store cancel and a card_needed: refunded to the card, and no pending hold (neither made one)", async () => {
+    const t = setup(
+      [
+        order({ status: "failed", failureType: "store_cancelled", refundCents: 2259 }),
+        order({ id: "o2", ideaId: "i2", title: "Mug", status: "failed", failureType: "card_needed" }),
+      ],
+      { hasCard: true },
+    );
+    await tellFailures(t.round, t.deps);
+    expect(t.said()).toContain("refunded to your card, fee included");
+    expect(t.said()).not.toContain(HOLD);
+  });
+
+  it("a summary with an ordinary card failure still says a pending hold drops off", async () => {
+    const t = setup(
+      [
+        order({ status: "failed", failureType: "store_cancelled", refundCents: 2259 }),
+        order({ id: "o2", ideaId: "i2", title: "Mug", status: "failed", failureType: "out_of_stock" }),
+      ],
+      { hasCard: true },
+    );
+    await tellFailures(t.round, t.deps);
+    expect(t.said()).toContain(HOLD);
+  });
+
   it("AC-8: an ordinary card failure says a pending hold drops off", async () => {
     const t = setup([order({ status: "failed", failureType: "failed" })]);
     await tellFailures(t.round, t.deps);
@@ -190,5 +215,19 @@ describe("held card orders", () => {
     const round = { ...t.round, attentionReason: "address", shipByDeadline: "2030-03-03" } as ClaimedRound;
     await sendEmail("hold:1:notice", round, await t.deps.store.roundContext("r1"), t.deps, {});
     expect(t.said()).toContain("its price plus Zinc's $1 fee");
+  });
+});
+
+describe("a held gift cancelled at the deadline (closing summary)", () => {
+  it("setup on a card order means only the phone was missing, never payment", () => {
+    const d = heldDetail(order({ status: "held", holdReason: "setup" }), false);
+    expect(d).toBe("Stores need a phone number for delivery, and we didn't have yours in time, so we cancelled it.");
+    expect(d).not.toMatch(/payment|set up/i);
+  });
+
+  it("a wallet order's setup line is unchanged", () => {
+    expect(heldDetail(order({ status: "held", holdReason: "setup", fundingMode: "zinc_wallet" }), false)).toBe(
+      "Payment wasn't set up in time, so we cancelled it.",
+    );
   });
 });

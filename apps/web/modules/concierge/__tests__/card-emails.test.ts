@@ -43,7 +43,7 @@ describe("failed on a card order (6b)", () => {
     const one = TEMPLATES.needs_attention({ ...OCC, card: true, reason: "the store couldn't place the order for the Mouse pad, and you haven't been charged for it.", orderByText: "March 5" }, OPEN);
     expect(one.text).toContain(HOLD);
     const two = TEMPLATES.failed_several(
-      { ...OCC, card: true, tried: 2, orderByText: "March 5", failed: [{ title: "A", detail: "x", url: "u" }, { title: "B", detail: "y", url: "u" }] },
+      { ...OCC, card: true, pendingHold: true, tried: 2, orderByText: "March 5", failed: [{ title: "A", detail: "x", url: "u" }, { title: "B", detail: "y", url: "u" }] },
       OPEN,
     );
     expect(two.text).toContain(HOLD);
@@ -105,5 +105,13 @@ describe("held card orders", () => {
     const m = TEMPLATES[kind]({ ...OCC, giftTitles: ["Mouse pad"], feeText: "$1", card: true }, links);
     expect(said(m)).not.toMatch(ZINC);
     expect(m.text).toContain("its price plus the GiftsAF fee");
+  });
+
+  it("hold_setup: for a card buyer only the phone is missing, so it asks for that and never says payment isn't set up", () => {
+    const links = { setup: "s", cancel: "c" };
+    const m = TEMPLATES.hold_setup({ ...OCC, giftTitles: ["Mouse pad"], feeText: "$1", card: true }, links);
+    expect(m.subject).toBe("Add your phone number to buy Jimmy's gift");
+    expect(m.text).toContain("Stores need a phone number for delivery. Add yours and we'll buy it.");
+    expect(said(m)).not.toMatch(/payment|set up|setup/i);
   });
 });

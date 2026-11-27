@@ -46,7 +46,8 @@ describe("buildHealthEmail", () => {
         placingStale: [{ orderId: "o2", roundId: "r3", userId: "u1" }],
         heldZinc: [{ orderId: "o3", roundId: "r4", userId: "u1", holdReason: "retry" }],
         deadlineClose: [{ roundId: "r5", userId: "u1", reason: "funds", shipByDeadline: "2026-12-01" }],
-        overMaxCharge: [{ orderId: "o6", roundId: "r6", userId: "u1", chargeCents: 2565, maxChargeCents: 2564 }],
+        overMaxCharge: [{ orderId: "o6", roundId: "r6", userId: "u1", chargeCents: 2565, maxChargeCents: 2564, days: 7 }],
+        cardHoldOld: [{ orderId: "o7", roundId: "r7", userId: "u1", status: "placing", since: "2026-11-18T10:00:00Z", days: 5 }],
       }),
       { ...vendors, aiCreditCents: 0, zincAppBalanceCents: 1, aiConfigured: false },
       { ...settings, ideaEngineEnabled: true },
@@ -107,10 +108,24 @@ describe("buildHealthEmail", () => {
     expect(e.text.split("\n").filter((l) => l.startsWith("- "))).toHaveLength(1);
   });
 
-  it("a card charged over its maximum names the order and both amounts, and links the alert's runbook row", () => {
-    const email = build(snapshot({ overMaxCharge: [{ orderId: "o6", roundId: "r6", userId: "u1", chargeCents: 2565, maxChargeCents: 2564 }] }));
-    expect(email.text).toContain("- A card was charged more than the most shown (round r6, order o6, user u1: charged $25.65, most shown $25.64)");
+  it("a card charged over its maximum names the order, both amounts and the window, and links the alert's runbook row", () => {
+    const email = build(
+      snapshot({ overMaxCharge: [{ orderId: "o6", roundId: "r6", userId: "u1", chargeCents: 2565, maxChargeCents: 2564, days: 7 }] }),
+    );
+    expect(email.text).toContain(
+      "- A card was charged more than the most shown (round r6, order o6, user u1: charged $25.65, most shown $25.64, charged over the maximum in the last 7 days)",
+    );
     expect(RUNBOOK_ANCHORS.over_max_charge).toBe("alerts-events-with-alert-true");
+  });
+
+  it("a card hold getting old names the order, its status and since when, and links its runbook section", () => {
+    const email = build(
+      snapshot({ cardHoldOld: [{ orderId: "o7", roundId: "r7", userId: "u1", status: "placing", since: "2026-11-18T10:00:00Z", days: 5 }] }),
+    );
+    expect(email.text).toContain(
+      "- A card hold is getting old (round r7, order o7, user u1: placing since 2026-11-18 10:00 UTC, more than 5 days; the bank's hold lapses after about 7)",
+    );
+    expect(RUNBOOK_ANCHORS.card_hold_old).toBe("a-card-hold-thats-getting-old");
   });
 
   it("the deadline_close row uses the fixed copy", () => {

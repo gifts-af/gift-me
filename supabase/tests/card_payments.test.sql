@@ -3,7 +3,7 @@
 -- does, the switch, settling, saving and removing a card, and who can read any of it.
 begin;
 \ir _helpers.psql
-select plan(123);
+select plan(125);
 
 update concierge.app_settings set value = '1' where key in ('zinc_ordering_enabled', 'connect_enabled', 'cost_tracking_enabled');
 
@@ -342,9 +342,17 @@ select count(*) from concierge.begin_placing(:'r9b', tests.cp_lock(:'r9b'), curr
   jsonb_build_array(jsonb_build_object('id', (select id from tests.cp_order(:'r9b')), 'max_price_cents', 2259))) \gset placed_
 select is((select max_charge_cents || '/' || fee_cents from tests.cp_order(:'r9b')), '2564/305', 'a lower cap lowers the maximum charge and fee');
 
+-- A QA account's card cost: in no figure but the excluded one.
+insert into concierge.cost_events (kind, cents, estimated, excluded, order_id)
+values ('zinc_order_fee', 77, true, true, (select id from tests.cp_order(:'r9b')));
+
 -- The cost report leaves card costs out of the AI and lookup averages, and counts them on their own.
 select concierge.cost_per_gift(now() + interval '1 minute') as costs_after \gset
-select is((:'costs_after'::jsonb ->> 'cardGifts')::int - (:'costs_before'::jsonb ->> 'cardGifts')::int, 3, 'card gifts are counted');
+select is((:'costs_after'::jsonb ->> 'cardGifts')::int - (:'costs_before'::jsonb ->> 'cardGifts')::int, 3, 'card orders settled are counted');
+select is((:'costs_after'::jsonb ->> 'cardFeeOrders')::int - (:'costs_before'::jsonb ->> 'cardFeeOrders')::int, 2,
+          'the card fee is averaged over the orders that have one: not the one with no total');
+select is((:'costs_after'::jsonb ->> 'excludedCents')::numeric - (:'costs_before'::jsonb ->> 'excludedCents')::numeric, 77::numeric,
+          'an excluded account''s card costs are in the excluded figure');
 select is((:'costs_after'::jsonb ->> 'zincFeeCents')::numeric - (:'costs_before'::jsonb ->> 'zincFeeCents')::numeric, 300::numeric,
           'Zinc''s fee once per card gift');
 select is(array[:'costs_after'::jsonb ->> 'aiCents', :'costs_after'::jsonb ->> 'lookupCents'],
