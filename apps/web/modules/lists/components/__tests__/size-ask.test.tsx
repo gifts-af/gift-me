@@ -9,6 +9,7 @@ vi.mock("@/modules/lists/actions/lists", () => ({ saveList: vi.fn() }));
 vi.mock("@/modules/lists/actions/store-page", () => ({ readStorePage: vi.fn() }));
 vi.mock("@/modules/lists/actions/amazon-lookup", () => ({ lookUpAmazon: vi.fn() }));
 const { saveList } = await import("@/modules/lists/actions/lists");
+const { lookUpAmazon } = await import("@/modules/lists/actions/amazon-lookup");
 const { default: GiftApp } = await import("../gift-app");
 
 // Asking for a missing size when a gift that needs one is added (ALL-184).
@@ -62,6 +63,19 @@ describe("asking for a missing size", () => {
     expect(screen.getByText(/Anyone with your list link will see it when they go to claim/)).toBeVisible();
     expect(screen.getByText("Add your shirt or top size? Asked below, optional.")).toBeInTheDocument();
     expect(screen.getByLabelText("Shirt or top size")).toBeVisible();
+  });
+
+  it("still asks after a one-tap add from a link (ALL-188 AC-4)", async () => {
+    vi.mocked(lookUpAmazon).mockResolvedValue({
+      ok: true,
+      product: { name: "Flannel Shirt", priceCents: 2999, imageUrl: null, productId: "B0EXAMPLE1" },
+    });
+    render(app());
+    await user.click(screen.getByLabelText("Paste a link"));
+    await user.paste("https://www.amazon.com/Flannel-Shirt/dp/B0EXAMPLE1");
+    await user.click(screen.getByRole("button", { name: "Add" }));
+    expect(await screen.findByRole("region", { name: "Add your shirt or top size?" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Add to list" })).not.toBeInTheDocument();
   });
 
   it.each<[string, string, SizeKind[]]>([

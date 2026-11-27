@@ -25,14 +25,51 @@ async function lookUp(url: string) {
 }
 
 describe("adding a gift", () => {
-  it("shows a full match as a card to confirm, then adds it", async () => {
+  it("adds a full match in one tap, clears the link and says so (AC-1)", async () => {
     const onAdd = await lookUp("https://www.amazon.com/dp/B07FZ8S74R");
-    await screen.findByText(/Echo Dot \(3rd Gen\)/);
-    expect(screen.getByText(/\$39\.99 · found on Amazon/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Add to list" }));
+    await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(1));
     expect(onAdd).toHaveBeenCalledWith(
       expect.objectContaining({ priceCents: 3999, asin: "B07FZ8S74R", source: "amazon-fixture" }),
     );
+    expect(screen.getByLabelText("Paste a link")).toHaveValue("");
+    expect(screen.getByLabelText("Paste a link")).toHaveFocus();
+    // Shown, not only announced, so a sighted person knows it's saved.
+    expect(screen.getByText("Added Echo Dot (3rd Gen) Smart Speaker with Alexa - Charcoal to your list.")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Add to list" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Gift name")).not.toBeInTheDocument();
+  });
+
+  it("keeps a partial match's draft when another link is looked up (AC-3)", async () => {
+    const onAdd = await lookUp("https://www.amazon.com/Wool-Hiking-Socks/dp/B0EXAMPLE1");
+    await waitFor(() => expect(screen.getByLabelText("Price")).toHaveFocus());
+    await userEvent.type(screen.getByLabelText("Price"), "18");
+
+    const field = screen.getByLabelText("Paste a link");
+    await userEvent.clear(field);
+    await userEvent.paste("https://www.amazon.com/dp/B07FZ8S74R");
+    await userEvent.click(screen.getByRole("button", { name: "Add" }));
+
+    expect(await screen.findByText("Finish adding this one first, or tap Cancel.")).toBeVisible();
+    expect(screen.getByLabelText("Gift name")).toHaveValue("Wool Hiking Socks");
+    expect(screen.getByLabelText("Price")).toHaveValue("18");
+    expect(onAdd).not.toHaveBeenCalled();
+
+    // Cancel clears the draft and closes it; the next lookup goes ahead.
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByLabelText("Gift name")).not.toBeInTheDocument();
+    await userEvent.click(field);
+    await userEvent.paste("https://www.amazon.com/dp/B07FZ8S74R");
+    await userEvent.click(screen.getByRole("button", { name: "Add" }));
+    await waitFor(() => expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({ asin: "B07FZ8S74R" })));
+  });
+
+  it("adds a partial match with Add to list, then clears the link (AC-2)", async () => {
+    const onAdd = await lookUp("https://www.amazon.com/Wool-Hiking-Socks/dp/B0EXAMPLE1");
+    await waitFor(() => expect(screen.getByLabelText("Price")).toHaveFocus());
+    expect(screen.getByLabelText("Paste a link")).toHaveValue("https://www.amazon.com/Wool-Hiking-Socks/dp/B0EXAMPLE1");
+    await userEvent.type(screen.getByLabelText("Price"), "18");
+    await userEvent.click(screen.getByRole("button", { name: "Add to list" }));
+    expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({ name: "Wool Hiking Socks", priceCents: 1800 }));
     expect(screen.getByLabelText("Paste a link")).toHaveValue("");
   });
 
@@ -110,9 +147,8 @@ describe("adding a gift from another store while signed in (ALL-10)", () => {
       pageRead({ name: "Great Value Rice, 32 oz", priceCents: 182, imageUrl: "https://i5.walmartimages.com/rice.jpeg" }),
     );
     const onAdd = await lookUpWith(readStorePage, WALMART);
-    expect(await screen.findByText(/\$1\.82 · found on walmart\.com/)).toBeInTheDocument();
+    await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(1));
     expect(readStorePage).toHaveBeenCalledWith(WALMART);
-    await userEvent.click(screen.getByRole("button", { name: "Add to list" }));
     expect(onAdd).toHaveBeenCalledWith({
       name: "Great Value Rice, 32 oz",
       priceCents: 182,
@@ -178,11 +214,9 @@ describe("adding an Amazon gift while signed in (ALL-141)", () => {
     }));
     const readStorePage = vi.fn<ReadPage>();
     const onAdd = await lookUpWith(lookUpAmazon, AMAZON, readStorePage);
-    expect(await screen.findByText(/\$11\.95 · found on Amazon/)).toBeInTheDocument();
+    await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(1));
     expect(lookUpAmazon).toHaveBeenCalledWith("B0G5Z36T3N");
     expect(readStorePage).not.toHaveBeenCalled();
-    expect(screen.getByText("Found it. Check the details, then add it.")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Add to list" }));
     expect(onAdd).toHaveBeenCalledWith({
       name: "SOULWIT Headband Protector",
       priceCents: 1195,
@@ -212,9 +246,10 @@ describe("adding an Amazon gift while signed in (ALL-141)", () => {
       ok: true,
       product: { name: null, priceCents: 2400, imageUrl: REAL_PHOTO, productId: "B0EXAMPLE1" },
     }));
-    await lookUpWith(lookUpAmazon, "https://www.amazon.com/Wool-Hiking-Socks/dp/B0EXAMPLE1");
-    expect(await screen.findByText(/\$24\.00 · found on Amazon/)).toBeInTheDocument();
-    expect(screen.getByText("Wool Hiking Socks")).toBeInTheDocument();
+    const onAdd = await lookUpWith(lookUpAmazon, "https://www.amazon.com/Wool-Hiking-Socks/dp/B0EXAMPLE1");
+    await waitFor(() =>
+      expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({ name: "Wool Hiking Socks", priceCents: 2400 })),
+    );
   });
 
   it("says only what Zinc gave when it gave just the name", async () => {
@@ -251,7 +286,8 @@ describe("adding an Amazon gift while signed in (ALL-141)", () => {
             product: { name: "SOULWIT Headband Protector", priceCents: 1195, imageUrl: REAL_PHOTO, productId: "B0G5Z36T3N" },
           }),
     );
-    render(<AddGiftPanel onAdd={vi.fn()} readStorePage={vi.fn<ReadPage>()} lookUpAmazon={lookUpAmazon} />);
+    const onAdd = vi.fn();
+    render(<AddGiftPanel onAdd={onAdd} readStorePage={vi.fn<ReadPage>()} lookUpAmazon={lookUpAmazon} />);
     const field = screen.getByLabelText("Paste a link");
     await userEvent.click(field);
     await userEvent.paste("https://www.amazon.com/Wool-Hiking-Socks/dp/B0EXAMPLE1");
@@ -260,16 +296,16 @@ describe("adding an Amazon gift while signed in (ALL-141)", () => {
     await userEvent.clear(field);
     await userEvent.paste(AMAZON);
     await userEvent.keyboard("{Enter}");
-    expect(await screen.findByText(/\$11\.95 · found on Amazon/)).toBeInTheDocument();
+    await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(1));
 
     answerFirst({
       ok: true,
       product: { name: "Wool Hiking Socks, 3 pairs", priceCents: 2400, imageUrl: REAL_PHOTO, productId: "B0EXAMPLE1" },
     });
     await new Promise((r) => setTimeout(r, 20));
-    expect(screen.getByText(/\$11\.95 · found on Amazon/)).toBeInTheDocument();
-    expect(screen.queryByText(/Wool Hiking Socks/)).not.toBeInTheDocument();
-    expect(screen.getByText("SOULWIT Headband Protector")).toBeInTheDocument();
+    expect(onAdd).toHaveBeenCalledTimes(1);
+    expect(onAdd).toHaveBeenCalledWith(expect.objectContaining({ name: "SOULWIT Headband Protector" }));
+    expect(screen.queryByLabelText("Gift name")).not.toBeInTheDocument();
   });
 
   it("drops a stand-in fixture price once Zinc answers without one", async () => {
@@ -332,10 +368,11 @@ describe("pasting a new link starts a fresh draft (ALL-91)", () => {
         ? pageRead({ name: "Slim Chino", priceCents: 1997, imageUrl: "https://content.gapinc.com/chino.png" })
         : { ok: false, reason: "nothing_found" },
     );
-    render(<AddGiftPanel onAdd={vi.fn()} readStorePage={readStorePage} />);
+    const onAdd = vi.fn();
+    render(<AddGiftPanel onAdd={onAdd} readStorePage={readStorePage} />);
 
     await paste(BANANA);
-    await screen.findByText(/\$19\.97 · found on bananarepublic\.gap\.com/);
+    await waitFor(() => expect(onAdd).toHaveBeenCalledTimes(1));
 
     await paste(WALMART);
     await waitFor(() => expect(screen.getByLabelText("Price")).toHaveFocus());
