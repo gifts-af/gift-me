@@ -63,7 +63,7 @@ Keep these in step with the privacy page (`apps/web/app/privacy/page.tsx`, gifts
   >
   > When you click the icon, the extension reads the tab you're on, on your computer. Nothing leaves your computer until you press Add or Save. It never reads your browsing history or runs in the background.
   >
-  > GiftsAF is invite only while in early alpha. Sign in with your GiftsAF account.
+  > Sign in with your GiftsAF account.
 
 - **Privacy policy:** https://giftsaf.com/privacy
 - **Single purpose:** Save gifts and gift ideas from any page to GiftsAF.
