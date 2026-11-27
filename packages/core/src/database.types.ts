@@ -2558,20 +2558,6 @@ export type Database = {
         };
         Relationships: [
           {
-            foreignKeyName: "list_items_copied_from_item_id_fkey";
-            columns: ["copied_from_item_id"];
-            isOneToOne: false;
-            referencedRelation: "list_items";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "list_items_copied_from_list_id_fkey";
-            columns: ["copied_from_list_id"];
-            isOneToOne: false;
-            referencedRelation: "lists";
-            referencedColumns: ["id"];
-          },
-          {
             foreignKeyName: "list_items_list_id_fkey";
             columns: ["list_id"];
             isOneToOne: false;
