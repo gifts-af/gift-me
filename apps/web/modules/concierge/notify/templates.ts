@@ -1029,7 +1029,7 @@ export const TEMPLATES: {
     ...renderEmail({
       heading: "We didn't read your note",
       paragraphs: [
-        "Thanks for your note. Emailed notes are read only for test accounts during the alpha, so we didn't keep or read this one.",
+        "Thanks for your note. Emailed notes aren't open on your account yet, so we didn't keep or read this one.",
         "We'll only tell you this once. Notes you email later won't be kept either.",
       ],
     }),

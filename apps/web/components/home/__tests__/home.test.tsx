@@ -74,7 +74,7 @@ describe("home page", () => {
   it("the bar has Sign in and How it works, and nothing says invite only (AC-1, AC-2)", () => {
     const { container } = render(<WelcomePage />);
     expect(link("Sign in")).toHaveAttribute("href", "/auth/login");
-    expect(screen.getByText("ALPHA")).toBeInTheDocument();
+    expect(container).not.toHaveTextContent(/alpha/i);
     expect(container).not.toHaveTextContent(/invite/i);
     expect(link("How it works")).toHaveAttribute("href", "#how-it-works");
   });
@@ -140,7 +140,7 @@ describe("home page", () => {
   it("asks for feedback and credits the builders", () => {
     render(<WelcomePage />);
     expect(screen.getByRole("button", { name: "Send feedback" })).not.toHaveAttribute("href");
-    expect(screen.getByText("GiftsAF alpha · made by Jim and Aaron")).toBeInTheDocument();
+    expect(screen.getByText("GiftsAF · made by Jim and Aaron")).toBeInTheDocument();
   });
 
   it("sets a title and description for sharing", () => {

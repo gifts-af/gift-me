@@ -46,7 +46,7 @@ export const dayFromNow = (n: number) => new Date(Date.now() + n * DAY_MS).toISO
 export type Buyer = { creds: Credentials; id: string; zincKey: string };
 
 /**
- * Makes `creds` a buyer who can buy: paid features (test accounts during the alpha), a phone for
+ * Makes `creds` a buyer who can buy: paid features (switched on per account), a phone for
  * Zinc, a 20% over-budget allowance, and a connected Zinc account whose key the fake Zinc takes.
  */
 export async function readyBuyer(creds: Credentials): Promise<Buyer> {

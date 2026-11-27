@@ -609,10 +609,11 @@ describe("notes emails (ALL-31)", () => {
     expect(mail.text).toContain("couldn't tell who it's about");
   });
 
-  it("notes_not_read says notes are read only for test accounts during the alpha (AC-10)", () => {
+  it("notes_not_read says emailed notes aren't open on the account yet (AC-10)", () => {
     const mail = TEMPLATES.notes_not_read({}, {});
     for (const out of both(mail)) {
-      expect(out).toContain("only for test accounts during the alpha");
+      expect(out).toMatch(/Emailed notes aren(&#39;|')t open on your account yet/);
+      expect(out).not.toMatch(/alpha/i);
       expect(out).toMatch(/didn(&#39;|')t keep or read/);
     }
   });

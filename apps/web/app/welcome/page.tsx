@@ -16,7 +16,7 @@ import { APP_NAME } from "@/lib/brand";
 export const metadata: Metadata = {
   title: APP_NAME,
   description:
-    "Gifting, handled AF. We remember the dates, find the gift, and ship it. You just tap yes. Early alpha.",
+    "Gifting, handled AF. We remember the dates, find the gift, and ship it. You just tap yes.",
 };
 
 export default function WelcomePage() {

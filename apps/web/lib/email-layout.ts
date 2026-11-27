@@ -48,7 +48,7 @@ export type EmailParts = {
   /** An amber box above the button, its lead in bold (ALL-32: "Your Zinc balance is low."). */
   warning?: { lead: string; text: string };
   button?: { label: string; url: string };
-  /** A small amber note right under the button (ALL-32: the alpha money line). */
+  /** A small amber note right under the button (ALL-32: the money line). */
   note?: string;
   /** A small grey line after the note, before the plain links (ALL-32: the auto top-up tip). */
   tip?: string;

@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { sampleEmails } from "../notify/samples";
 
-const WALLET_HASH = "e2d5ccc07a6421992fc54e93d6b781698d6ea73877b307c5ef2f530eb688164f";
+const WALLET_HASH = "aefe7f2934782a8247b5f14659928a42860c49e2bcd91da0f0a511851c533c37";
 
 describe("wallet emails", () => {
   it("AC-16: a wallet buyer's emails are byte-for-byte what they were before card payments", () => {

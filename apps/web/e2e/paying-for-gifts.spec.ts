@@ -144,7 +144,7 @@ test.describe("paying for gifts, in order on one account", () => {
   test("state 1: without paid features it says why and offers nothing", async ({ page, browser }) => {
     await signIn(page, USER);
     await page.goto("/settings/paying");
-    await expect(section(page).getByText("Buying gifts is open to test accounts during the alpha.")).toBeVisible();
+    await expect(section(page).getByText("Buying gifts isn't open on your account yet.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Connect Zinc" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Disconnect Zinc" })).toHaveCount(0);
     await shoot(page, browser, "1-not-allowed");
@@ -155,7 +155,7 @@ test.describe("paying for gifts, in order on one account", () => {
     await signIn(page, USER);
     await page.goto("/settings/paying");
 
-    // State 2: ready to connect, with the alpha money notice.
+    // State 2: ready to connect, with the money notice.
     await expect(section(page).getByRole("note")).toHaveText(
       "Each gift costs its price plus Zinc's $1 order fee, taken from your Zinc balance.",
     );
