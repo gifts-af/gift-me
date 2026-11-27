@@ -16,7 +16,10 @@ export type ProgressOrder = OrderState & {
 export type ProgressLine = {
   text: string;
   tone: "ready" | "warn" | "muted";
-  /** The buyer can move it on, so it's listed first. */
+  /**
+   * The buyer can move it on, so it's listed first and counted as "need you" on Give: a fix, a
+   * choice to make, an address or money to add. Amber alone doesn't mean it (see `told`).
+   */
   needsBuyer: boolean;
 };
 
@@ -25,7 +28,8 @@ const yours = (text: string): ProgressLine => ({ text, tone: "warn", needsBuyer:
 
 const WAITING = {
   looking: ours("Looking for ideas"),
-  told: yours("No ideas found yet"),
+  // Amber so it stands out, but there's nothing for the buyer to do: we keep looking.
+  told: { text: "No ideas found yet", tone: "warn", needsBuyer: false } satisfies ProgressLine,
   address: yours("Needs an address"),
   unknown: ours("No ideas yet"),
 };
