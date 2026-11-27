@@ -23,6 +23,7 @@ import Link from "next/link";
 import { PageFrame } from "@/components/app-shell/page-frame";
 import NamePrompt, { skippedNamePrompt } from "./name-prompt";
 import ShareButton from "./share-button";
+import ShareMenu from "./share-menu";
 import SizeAsk, { dismissedSizes, sizeName, type SaveSize } from "./size-ask";
 import { Banner, inputClass } from "./ui";
 
@@ -122,11 +123,17 @@ function guardWhileSaving(saver: ListSaver, sending: Promise<unknown>): () => vo
 }
 
 // The same while loading and loaded, so Share arriving doesn't move the page.
-// The share sheet only on touch screens: desktop browsers have one too, but people there
-// expect Share to copy the link.
-function canUseShareSheet(): boolean {
-  return typeof navigator.share === "function" && window.matchMedia?.("(pointer: coarse)").matches === true;
+// Instagram offers Story and Feed only for an image file, and only phones run it.
+function canShareImageFile(): boolean {
+  if (typeof navigator.canShare !== "function" || window.matchMedia?.("(pointer: coarse)").matches !== true) return false;
+  try {
+    return navigator.canShare({ files: [new File([], "x.png", { type: "image/png" })] });
+  } catch {
+    return false;
+  }
 }
+
+const INSTAGRAM_NOTE = "Link copied. In Instagram, add a Link sticker and paste it.";
 
 const TITLE_ROW ="flex min-h-11 items-center justify-between gap-3";
 
@@ -346,35 +353,40 @@ export default function GiftApp({
   const [shared, setShared] = useState(false);
   // Next keeps this page's state when it's left: the note waits for the next Share.
   useLayoutEffect(() => () => setShared(false), []);
-  // Bumped when the prompt copies the link, so Share shows "Copied!" then too.
-  const [copiedAfterPrompt, setCopiedAfterPrompt] = useState(0);
+  // Bumped when the link is copied, so Share shows "Copied!".
+  const [copiedSignal, setCopiedSignal] = useState(0);
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  // What this device can do, read after hydration so the server and first render agree.
+  const [device, setDevice] = useState({ touch: false, sheet: false, imageFiles: false });
+  useEffect(
+    () =>
+      setDevice({
+        touch: window.matchMedia?.("(pointer: coarse)").matches === true,
+        sheet: typeof navigator.share === "function",
+        imageFiles: canShareImageFile(),
+      }),
+    [],
+  );
+  const [origin, setOrigin] = useState("");
+  useEffect(() => setOrigin(window.location.origin), []);
+  const shareUrl = list.shareToken && origin ? `${origin}/share/${list.shareToken}` : "";
 
   async function handleShareClick(): Promise<boolean> {
     if (!named && saveName && !skippedNamePrompt()) {
       setAskingName(true);
       return false;
     }
-    return copyShareLink();
+    setMenuOpen(true);
+    return false;
   }
 
-  // On a phone, opens the share sheet (Messages, WhatsApp, Instagram…); elsewhere, or if the
-  // sheet fails, copies the link. Resolves true only once the link is on the clipboard, so
-  // "Copied!" never shows after the sheet. Called before any await, so the tap still counts.
+  // Resolves true only once the link is on the clipboard; otherwise shows it to copy by hand.
   async function copyShareLink(): Promise<boolean> {
     if (!list.shareToken) return false;
     const url = `${window.location.origin}/share/${list.shareToken}`;
     setAnnouncement("");
     setShared(true);
-    if (canUseShareSheet()) {
-      try {
-        await navigator.share({ title: "My gift list", text: "My gift list on GiftsAF", url });
-        setShareNotice(null);
-        return false;
-      } catch (e) {
-        // Closing the sheet isn't a failure; anything else falls back to copying.
-        if (e instanceof DOMException && e.name === "AbortError") return false;
-      }
-    }
     try {
       // Undefined outside a secure context, e.g. a phone on plain HTTP.
       await navigator.clipboard.writeText(url);
@@ -385,6 +397,70 @@ export default function GiftApp({
     setShareNotice(null);
     setAnnouncement("Share link copied.");
     return true;
+  }
+
+  function copyAndSay() {
+    void copyShareLink().then((ok) => ok && setCopiedSignal((n) => n + 1));
+  }
+
+  // The browser's own share sheet; if it fails, copies the link. Called before any
+  // await, so the tap still counts.
+  async function openShareSheet() {
+    if (!list.shareToken) return;
+    const url = `${window.location.origin}/share/${list.shareToken}`;
+    setAnnouncement("");
+    setShared(true);
+    try {
+      await navigator.share({ title: "My gift list", text: "My gift list on GiftsAF", url });
+      setShareNotice(null);
+    } catch (e) {
+      // Closing the sheet isn't a failure; anything else falls back to copying.
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      copyAndSay();
+    }
+  }
+
+  // Instagram Story: the list card as a PNG, fetched ahead so the tap can open the
+  // sheet at once (Safari drops the tap after a long await).
+  const storyImage = useRef<Blob | null>(null);
+  const shareToken = list.shareToken;
+  const instagramShown = device.imageFiles && !isGuest && !!shareToken && shareBlockedReason === null;
+  useEffect(() => {
+    storyImage.current = null;
+    if (!instagramShown || !shareToken) return;
+    let current = true;
+    fetch(`/share/${shareToken}/story`)
+      .then((res) => (res.ok ? res.blob() : null))
+      .then((blob) => {
+        if (current && blob) storyImage.current = blob;
+      })
+      .catch(() => {});
+    return () => {
+      current = false;
+    };
+  }, [instagramShown, shareToken]);
+
+  async function shareToInstagram() {
+    const blob = storyImage.current;
+    if (!blob || !list.shareToken) {
+      await openShareSheet();
+      return;
+    }
+    const url = `${window.location.origin}/share/${list.shareToken}`;
+    // Not awaited: the share below has to start inside the tap.
+    navigator.clipboard?.writeText(url).catch(() => {});
+    const sharing = navigator.share({ files: [new File([blob], "giftsaf-list.png", { type: "image/png" })] });
+    setShared(true);
+    setShareNotice({ text: INSTAGRAM_NOTE });
+    setAnnouncement(INSTAGRAM_NOTE);
+    try {
+      await sharing;
+    } catch (e) {
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      setShareNotice(null);
+      setAnnouncement("");
+      await openShareSheet();
+    }
   }
 
   // "Saving…" and a failed save need the row for themselves.
@@ -399,8 +475,22 @@ export default function GiftApp({
             onOpenChange={setAskingName}
             saveName={saveName}
             copyLink={copyShareLink}
-            onCopied={() => setCopiedAfterPrompt((n) => n + 1)}
+            onCopied={() => setCopiedSignal((n) => n + 1)}
             onNamed={() => setNamed(true)}
+          />
+        )}
+        {shareUrl && (
+          <ShareMenu
+            open={menuOpen}
+            onOpenChange={setMenuOpen}
+            url={shareUrl}
+            instagram={instagramShown}
+            messages={device.touch}
+            more={device.sheet}
+            onInstagram={() => void shareToInstagram()}
+            onCopy={copyAndSay}
+            onMore={() => void openShareSheet()}
+            onUsed={() => setShared(true)}
           />
         )}
         {isGuest && (
@@ -443,7 +533,7 @@ export default function GiftApp({
               My list
             </h1>
             {!isGuest && (
-              <ShareButton blockedReason={shareBlockedReason} onShare={handleShareClick} copiedSignal={copiedAfterPrompt} />
+              <ShareButton blockedReason={shareBlockedReason} onShare={handleShareClick} copiedSignal={copiedSignal} />
             )}
           </div>
           <div className="flex min-h-6 flex-wrap items-center justify-between gap-x-3">

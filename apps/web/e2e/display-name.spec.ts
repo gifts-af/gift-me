@@ -39,10 +39,11 @@ test("Share asks for a name, saves it, and Settings shows it", async ({ page }) 
   await field.press("Enter");
   await expect(page.getByRole("status")).toHaveText("Saved");
 
-  // Named now: Share just shares.
+  // Named now: Share opens the share menu.
   await page.goto("/lists");
   await page.evaluate(() => Object.defineProperty(navigator, "clipboard", { value: undefined }));
   await page.getByRole("button", { name: /Share/ }).click();
+  await page.getByRole("dialog", { name: "Share your list" }).getByRole("button", { name: "Copy link" }).click();
   await expect(page.getByLabel("Share link")).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
 });

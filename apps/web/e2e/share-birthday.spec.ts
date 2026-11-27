@@ -36,6 +36,7 @@ test("save a birthday after sharing, and someone adding you gets it, until you r
   await page.goto("/lists");
   await expect(page.getByText("No birthday saved.")).toHaveCount(0);
   await page.getByRole("button", { name: /^(Share|Copied!)$/ }).click();
+  await page.getByRole("dialog", { name: "Share your list" }).getByRole("button", { name: "Copy link" }).click();
   await page.getByRole("link", { name: "No birthday saved. Add it (optional)" }).click();
 
   // The Birthday screen saves it.
@@ -48,6 +49,7 @@ test("save a birthday after sharing, and someone adding you gets it, until you r
   await expect(page.getByRole("link", { name: /Birthday/ })).toContainText("Mar 14");
   await page.goto("/lists");
   await page.getByRole("button", { name: /^(Share|Copied!)$/ }).click();
+  await page.getByRole("dialog", { name: "Share your list" }).getByRole("button", { name: "Copy link" }).click();
   await expect(page.getByText("No birthday saved.")).toHaveCount(0);
 
   // Someone adding Sam finds it, and what's on the form is saved.
@@ -114,6 +116,7 @@ test("the Birthday screen and the note under Share fit", { tag: "@layout" }, asy
   const gift = page.getByRole("heading", { level: 3, name: "Wool socks" });
   const before = (await gift.boundingBox())!.y;
   await page.getByRole("button", { name: /^(Share|Copied!)$/ }).click();
+  await page.getByRole("dialog", { name: "Share your list" }).getByRole("button", { name: "Copy link" }).click();
   await expect(page.getByText("No birthday saved.")).toBeVisible();
   expect((await gift.boundingBox())!.y).toBe(before);
   const summary = (await page.getByText("$1,240.00").first().boundingBox())!;
