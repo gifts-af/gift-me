@@ -650,7 +650,11 @@ update concierge.app_settings set value = '0' where key = 'zinc_ordering_enabled
 |---|---|---|
 | `order.shared_address_notice_failed` | The email asking a list owner to check their saved address, after a store couldn't use it, was refused, or finding the owner failed. The buyer has already been told. | Nothing, if it clears: the daily tick tries again. If it repeats, check Resend (status, key, a bounced address). |
 | `order.shared_address_notice_abandoned` | That email kept being refused for `check_address_retry_days`, so we stopped and deleted the rejected address. The owner was never told. | Tell the owner yourself if you can. Check Resend for why their address is refused. |
-| `order.sweep_skipped` | The sweep that looks up stuck "placing" orders couldn't run: `no_key` (the user's key is missing) or `env_mismatch` (`ZINC_ENV` differs from the environment the key was made in). | Fix `ZINC_ENV` for the environment, or ask the user to reconnect Zinc in Settings. The orders stay "placing" until then. |
+| `order.sweep_skipped` | The sweep that looks up stuck "placing" orders couldn't run: `no_key` (the key is missing) or `env_mismatch` (`ZINC_ENV` differs from the environment the key was made in). | Fix `ZINC_ENV` for the environment. For a wallet order, ask the user to reconnect Zinc in Settings; for a card order (`funding_mode` `connect`), set `ZINC_CONNECT_API_KEY` on the environment (**Card payments**). The orders stay "placing" until then. |
+| `zinc.connect_unauthorized` | A card order couldn't be sent because of our side, not the buyer's card: the app Zinc key is missing or refused, or Zinc reports an account problem (`card_verification_required` on a new Zinc account, `stripe_error`). The round is held as paused; the buyer isn't asked to do anything. `reason` or `code` says which. | Check `ZINC_CONNECT_API_KEY` on that environment and the Zinc account's Connect page (Stripe still connected, account age). The held gifts place on a later tick once it's fixed. If it can't be fixed soon, follow **Stop card payments**. |
+| `zinc.unknown_order` | Zinc sent an event to the app webhook for an order we don't have. Often a test-key order posting to production's webhook (assumption A6). | If `provider_order_id` is a test order, nothing; move dev to its own Zinc account if it repeats. Otherwise treat it like `zinc.webhook_unmatched` above, using the owner's Zinc dashboard. |
+| `zinc.card_event_on_buyer_webhook` | A card order's event reached a buyer's own webhook: the app webhook on the owner's Zinc account was replaced, so card orders now rely on the sweep only. | Set the app webhook again (**Card payments** > Before the first real card order, step 2), and disconnect the wallet connection that replaced it. |
+| `order.over_max_charge` | Zinc charged a card more than the "Most you'll pay" shown at approval (`final_charge_cents` above `max_charge_cents`). Likely an Amex or non-US card fee above `card_fee_bps`, or assumption A2 being wrong. | Refund the difference from the Stripe dashboard and tell the buyer. Then fix the fee settings or `chargeCents` before more card orders. The health email lists these orders too (plan Task 9). |
 | `order.sweep_failed` | Looking up a stuck "placing" order at Zinc failed (Zinc down, an answer we couldn't read, or our database). `kind` and `code` say which. | Nothing if it clears on the next tick (the sweep runs every tick and never resends). If it repeats for the same `order_id`, check Zinc's status and the buyer's key; if Zinc can't find the order, follow **Unconfirmed orders**. |
 | `order.unconfirmed` | The sweep looked up an order stuck "placing" and Zinc has no record of it, so we don't know if it was bought. The buyer has been told "we're confirming your gift". | Open the buyer's Zinc dashboard, find the order by our `order_id` in its metadata (the `order_id` in the event), and settle it with `concierge.settle_order` as placed or failed (**Unconfirmed orders** above). The buyer is emailed on the next tick. |
 | `zinc.webhook_unmatched` | Zinc sent an order event we can't tie to any order of ours, and Zinc says it has no such order for that buyer's key (or the order carries no reference). `zinc_event` isn't logged, so find the event in the buyer's Zinc dashboard by `provider_order_id`. What it means depends on the event: **placed or failed**, the buyer's order may be stuck "placing" or "unconfirmed"; **cancelled**, the store cancelled a gift and Zinc refunded the buyer, who hasn't been told; **a tracking event** (tracking, shipped, estimate, delivered), only where a gift is was missed. | **Placed or failed:** settle ours with `concierge.settle_order` as placed or failed (**Unconfirmed orders** above). **Cancelled:** find our order (the buyer's rounds, by gift and date), then run `select * from concierge.store_cancel_order('<user_id>', '<order_id>', current_date, <refund in cents, or null>);`. Before the ship-by date the next look emails the buyer with the fix link; on or after it the next daily news run tells them. **A tracking event:** usually nothing. If it was a delivered event and the round's other gifts have arrived, run `select * from concierge.mark_delivered('<user_id>', '<order_id>', 'zinc');` and the tick sends the delivered email. |
@@ -691,6 +695,43 @@ Code and migration ship together. If the code is rolled back with Vercel's insta
 ### Rolling back ALL-120 (base budget)
 
 Vercel's instant rollback brings back the old budget section, which can't show or clear a base budget, while `round_candidates` keeps using it. After the rollback, run `delete from concierge.budgets where occasion_kind = 'any';` on the database. This deletes base budgets people typed, for good, which is fine before launch. Occasion budgets are untouched (T73).
+
+## Card payments (ALL-98)
+
+Card buyers save a card on Stripe's page once, and each gift is one charge through Zinc Connect: the gift plus the GiftsAF fee. Spec and plan: [design/plans/ALL-98-card-payments.md](plans/ALL-98-card-payments.md); design T101; decisions planning 59, 61, 66. **Off on production** (`connect_enabled` = 0, nobody on `connect`) until the owner's real card order passes (plan Task 10).
+
+**Environment variables** (in `apps/web/.env.example`; set per environment in Vercel; never the same key on two environments):
+
+| Variable | What it does |
+|---|---|
+| `STRIPE_SECRET_KEY` | Our Stripe account's secret key. `sk_test_` only with `ZINC_ENV=test`, `sk_live_` only with `live`; any other mix turns card saving off. |
+| `ZINC_CONNECT_API_KEY` | The Zinc key that places every card order, on the owner's Zinc account. Its prefix must fit `ZINC_ENV` (`zn_test_` with `test`). It can only create an order that carries the card `payment`. |
+| `ZINC_CONNECT_WEBHOOK_SECRET` | The secret Zinc signs card-order events with, at `/api/zinc/webhook/app`. |
+
+**Settings:** `connect_enabled` (the switch), `zinc_fee_cents` 100, `card_fee_bps` 290, `card_fee_fixed_cents` 30, `fee_part_ai_cents` 65 and `fee_part_running_cents` 35 (the margin is their sum), `stripe_timeout_ms`, `card_session_minutes`, `fee_label`, `fee_pricing_note`. Fees are saved on each order when it's approved, so a change only affects later approvals.
+
+### Stop card payments
+
+```sql
+update concierge.app_settings set value = '0' where key = 'connect_enabled';
+```
+
+No card order is placed and Add a card is hidden; held card gifts read "paused" and nobody is asked for a card. Orders already sent settle as usual. `zinc_ordering_enabled` = 0 still stops all ordering.
+
+### Before the first real card order
+
+1. The owner's wallet orders are delivered or closed; the owner disconnects Zinc in Settings.
+2. Set the app webhook on that Zinc account to `https://giftsaf.com/api/zinc/webhook/app` and check it with `GET /webhooks/endpoint`.
+3. Keep that Zinc account's wallet at $0 with auto top-up off (planning 66), so an order sent without a card fails instead of spending it.
+4. In Stripe: the Radar rule that blocks cards from outside the US (planning 66) and the statement name.
+
+### After a store cancel
+
+Zinc should refund the whole card charge (assumption A5). Five days after a cancel, check the charge in Stripe. If it isn't refunded, refund it from the Stripe dashboard and note it on the order's ticket.
+
+### A card hold that's getting old
+
+A card order that stays `placing` or `unconfirmed` for days may outlive the bank's hold (about 7 days). Follow **Unconfirmed orders**, using the owner's Zinc dashboard (card orders are on the app's account), and ask Zinc what happens when the hold lapses.
 
 ## Gifts in progress (ALL-167)
 

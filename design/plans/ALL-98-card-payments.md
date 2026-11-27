@@ -158,6 +158,7 @@ Moving wallet accounts; a spending page (ALL-145); a returns flow; tax; digital 
 | A1 | A decline or bank approval is a 4xx on create or an `order.failed` event, with a code in `CARD_CODES`: Zinc's documented `payment_failed`, `invalid_payment_method`, `payment_method_required`, `card_verification_required` and `insufficient_funds`. `payment_declined` is the store refusing payment, not the bank, so it stays `failed` and never clears the card. Unverified until a real decline | An unlisted code becomes today's `failed`; add the code |
 | A5 | On a store cancel Zinc refunds the whole card charge (its Connect guide; its `order.cancelled` text says "wallet") | Runbook: no refund in Stripe within 5 days of the cancel, refund from the Stripe dashboard. Checked in the real card order if a cancel happens |
 | A7 | On a card order Zinc's `price_components.total` is the goods only, and `connect.final_charge` adds the margin and fees **[Verify]** | Otherwise `settle_order`'s fee (charge minus total) is near 0 and committed spend counts fees twice; fix `placedPrice` before turning it on |
+| A8 | A card declined after our request timed out leaves no Zinc order (Zinc: "if it's declined, no order is created") **[Verify]** | The sweep finds nothing and the order becomes `unconfirmed` with the owner alerted; settle it as failed by hand, and the buyer gets today's failed-gift path (runbook **Unconfirmed orders**) |
 | A6 | Test-key (`zn_test_`) orders post to the test webhook, not production's **[Verify]** | Production would alert `zinc.unknown_order` for dev orders (E8); then dev and previews move to their own Zinc account |
 | A2 | Zinc charges `round((total + margin + zinc_fee + fixed) / (1 - pct))` | Above our maximum alerts; fix `charge` before launch |
 | A3 | Events for the connect account reach one registered webhook with today's signature | Rework Task 7 |
@@ -349,6 +350,7 @@ export async function connectWiring(db: SupabaseClient<Database>, env?: Env): Pr
 
 **Files:** `supabase/migrations/<date>_card_payments_launch.sql`, its pgTAP.
 
+- Before step 1, in Stripe: the US-only Radar rule (planning 66), so a non-US card's higher fee can't push a charge over "Most you'll pay" (PR #176 review). The health email lists any order charged over its maximum (Task 9).
 - First, in this order: the owner's wallet orders are delivered or closed (today the in-transit loaf pan, order `48bd263a`), the owner disconnects Zinc in Settings (which clears the account's webhook), and the app webhook is set on that Zinc account. Check it with `GET /webhooks/endpoint`.
 - **Step 1 (PR 4a):** switch the owner's account (aaron.aallen@gmail.com) only, then the real card order below, bought by the owner (owner, 2026-11-27; was Jim's). **Step 2 (PR 4b), only after it passes:** set `accounts.funding_mode` and the column default to `connect` for everyone else, Jim included, except accounts with `zinc_connected_at` set, a wallet order `held`, `placing` or `unconfirmed`, or an unresolved wallet failure.
 - [ ] pgTAP for each exception. **PR 4**, merged after ALL-75 and the app webhook on the Zinc account.
