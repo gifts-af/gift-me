@@ -58,7 +58,8 @@ const TABLE: [string, SizeKind[]][] = [
   ["Converse Chuck Taylor All Star High Top", ["shoe"]],
   ["Cole Haan Cap Toe Oxford", ["shoe"]],
   ["Cotton TShirt", ["top"]],
-  ["Dress Socks 6-Pack", EVERYTHING],
+  ["Dress Socks 6-Pack", ["shoe"]],
+  ["Smartwool Hiking Socks", ["shoe"]],
   ["Nike Dunk Low Top Sneakers", ["shoe"]],
   ["Vans Old Skool High Tops", ["shoe"]],
   ["Vans Sk8-Hi Hi-Tops", ["shoe"]],
@@ -121,7 +122,8 @@ describe("sizeKindsFor (ALL-184: which size to ask for on add)", () => {
     ["Wool Sweater and Beanie Set", ["top", "hat"]],
     ["Ring Light", ["ring"]],
     ["Stanley Tumbler", []],
-    ["Dress Socks", []],
+    ["Dress Socks", ["shoe"]],
+    ["Wool Sock", ["shoe"]],
   ])("%s → %j", (name, kinds) => {
     expect(sizeKindsFor(name)).toEqual(kinds);
   });

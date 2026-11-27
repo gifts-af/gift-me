@@ -6,7 +6,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { createFreshUser } from "./fresh-user";
 import { localSupabase } from "./local-supabase";
 import { personFor, readyBuyer, rest, seedFailedOrder, seedOrder, seedPastGifts, seedRound, type PastGiftsSeed } from "./rounds";
-import { addMother, addSavedGift, linkListWithPhotos, saveBudgets, saveOneGiftList, saveSharedShoeAndColor } from "./seed";
+import { addMother, addSavedGift, linkListWithPhotos, saveBudgets, saveOneGiftList, saveSharedShoeAndColor, saveSneakerList } from "./seed";
 import { signIn, session, type Credentials } from "./sign-in";
 
 // Screenshots for the gallery (ALL-000, see playwright.gallery.config.ts).
@@ -53,10 +53,11 @@ const SIGNED_OUT: [name: string, url: string][] = [
 ];
 
 // Filled in by beforeAll: a fresh account with one person (with a saved gift) and a one-gift list,
-// plus a round awaiting approval and another with a gift to fix (ALL-29).
-type Seeded = { user: Credentials; personId: string; linkedId: string; dadId: string; heldId: string; shareToken: string; round: { id: string; ideaIds: string[] }; fix: { roundId: string; orderId: string }; past: PastGiftsSeed };
+// plus a round awaiting approval and another with a gift to fix (ALL-29), and a friend's shared list.
+type Seeded = { user: Credentials; personId: string; linkedId: string; dadId: string; heldId: string; shareToken: string; friendSharePath: string;round: { id: string; ideaIds: string[] }; fix: { roundId: string; orderId: string }; past: PastGiftsSeed };
 const SIGNED_IN: [name: string, url: (s: Seeded) => string][] = [
   ["home", () => "/give"],
+  ["gifts", () => "/gifts"],
   ["my-list", () => "/lists"],
   ["person", (s) => `/people/${s.personId}`],
   ["person-linked-list", (s) => `/people/${s.linkedId}`],
@@ -79,6 +80,7 @@ const SIGNED_IN: [name: string, url: (s: Seeded) => string][] = [
   ["settings-sizes", () => "/settings/sizes"],
   ["settings-paying", () => "/settings/paying"],
   ["shared-list", (s) => `/share/${s.shareToken}`],
+  ["shared-list-friend", (s) => s.friendSharePath],
   ["round", (s) => `/rounds/${s.round.id}`],
   ["round-held", (s) => `/rounds/${s.heldId}`],
   ["round-buy", (s) => `/rounds/${s.round.id}/buy?ideas=${s.round.ideaIds.slice(0, 2).join(",")}`],
@@ -109,7 +111,8 @@ test.describe("signed in", () => {
     const linkedId = await addMother(user, "Grandma Rose");
     const photo = (n: number) => `${testInfo.project.use.baseURL}/pwa-icon/192?v=${n}`;
     await linkListWithPhotos(await createFreshUser(), user, linkedId, [1, 2, 3].map(photo));
-    seeded = { user, personId, linkedId, shareToken: await shareToken(user), ...(await addRounds(user)) };
+    const friendSharePath = await saveSneakerList(await createFreshUser("Sam Lee"));
+    seeded = { user, personId, linkedId, shareToken: await shareToken(user), friendSharePath, ...(await addRounds(user)) };
   });
 
   for (const [name, url] of SIGNED_IN) {
@@ -143,6 +146,34 @@ test.describe("signed in", () => {
     await expect(skip).toHaveCount(0);
     await expect(page.getByText("No birthday saved.")).toBeVisible();
     await shoot(page, "my-list-shared");
+  });
+
+  // The Share menu, open. A remembered Skip of the name prompt lets Share open the menu at once.
+  // A phone shows Instagram Story and More… only where the browser can share files, which the
+  // test browsers can't, so a phone gets a share sheet that does nothing.
+  test("my-list-share-menu", async ({ page, isMobile }) => {
+    await page.addInitScript((phone) => {
+      localStorage.setItem("giftsaf:skip-name-prompt", "1");
+      if (!phone) return;
+      Object.defineProperty(navigator, "share", { value: async () => {}, configurable: true });
+      Object.defineProperty(navigator, "canShare", { value: () => true, configurable: true });
+    }, isMobile);
+    await signIn(page, seeded.user);
+    await page.goto("/lists");
+    await page.getByRole("button", { name: "Share", exact: true }).click();
+    const menu = page.getByRole("dialog", { name: "Share your list" });
+    await expect(menu.getByRole("button", { name: "Copy link" })).toBeVisible();
+    if (isMobile) await expect(menu.getByRole("button", { name: "Instagram Story" })).toBeVisible();
+    await shoot(page, "my-list-share-menu");
+  });
+
+  // The first "Add to my list" on a friend's list explains itself; a fresh browser hasn't seen it.
+  test("shared-list-add-dialog", async ({ page }) => {
+    await signIn(page, seeded.user);
+    await page.goto(seeded.friendSharePath);
+    await page.getByRole("button", { name: "Add Allbirds Wool Runners Sneakers to my list" }).click();
+    await expect(page.getByRole("dialog", { name: "Add it to your own list?" })).toBeVisible();
+    await shoot(page, "shared-list-add-dialog");
   });
 
   // Adding a shirt with no shirt size saved asks for one. The shirt comes off

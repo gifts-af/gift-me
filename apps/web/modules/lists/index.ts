@@ -26,6 +26,8 @@ export type { GiftLinkRead } from "./lib/gift-link";
 export { storeName } from "./lib/product-link";
 // The daily tick deletes the stored photos of removed gifts (ALL-78).
 export { removeDeletedPhotos } from "./lib/photo-cleanup";
+// ...and retries gifts with a link but no usable photo.
+export { runPhotoRepair } from "./lib/photo-repair-wiring";
 // "Add to my list" from the Chrome extension (ALL-78): POST /api/lists/items.
 export { addFromExtension, parseExtensionAddForm } from "./lib/extension-add";
 export type { ExtensionAddResponse } from "./lib/extension-add";

@@ -15,7 +15,7 @@ select tests.create_user('x@example.com') as x \gset
 
 select is(concierge.setting_int('google_import_enabled'), 0, 'Google import is off');
 select is(concierge.setting_int('concierge_requests_per_day'), 10, '10 requests a day');
-select is(concierge.setting_int('amazon_paste_lookups_per_user_per_day'), 10, '10 Amazon lookups a day per person');
+select is(concierge.setting_int('amazon_paste_lookups_per_user_per_day'), 30, '30 Amazon lookups a day per person');
 select is(concierge.setting_int('amazon_paste_lookups_per_day_total'), 200, '200 Amazon lookups a day across everyone');
 
 -- ─── Reading ─────────────────────────────────────────────────────────────────
