@@ -122,7 +122,13 @@ function guardWhileSaving(saver: ListSaver, sending: Promise<unknown>): () => vo
 }
 
 // The same while loading and loaded, so Share arriving doesn't move the page.
-const TITLE_ROW = "flex min-h-11 items-center justify-between gap-3";
+// The share sheet only on touch screens: desktop browsers have one too, but people there
+// expect Share to copy the link.
+function canUseShareSheet(): boolean {
+  return typeof navigator.share === "function" && window.matchMedia?.("(pointer: coarse)").matches === true;
+}
+
+const TITLE_ROW ="flex min-h-11 items-center justify-between gap-3";
 
 export function GiftAppSkeleton() {
   return (
@@ -351,12 +357,24 @@ export default function GiftApp({
     return copyShareLink();
   }
 
-  // Resolves true once the link is on the clipboard.
+  // On a phone, opens the share sheet (Messages, WhatsApp, Instagram…); elsewhere, or if the
+  // sheet fails, copies the link. Resolves true only once the link is on the clipboard, so
+  // "Copied!" never shows after the sheet. Called before any await, so the tap still counts.
   async function copyShareLink(): Promise<boolean> {
     if (!list.shareToken) return false;
     const url = `${window.location.origin}/share/${list.shareToken}`;
     setAnnouncement("");
     setShared(true);
+    if (canUseShareSheet()) {
+      try {
+        await navigator.share({ title: "My gift list", text: "My gift list on GiftsAF", url });
+        setShareNotice(null);
+        return false;
+      } catch (e) {
+        // Closing the sheet isn't a failure; anything else falls back to copying.
+        if (e instanceof DOMException && e.name === "AbortError") return false;
+      }
+    }
     try {
       // Undefined outside a secure context, e.g. a phone on plain HTTP.
       await navigator.clipboard.writeText(url);

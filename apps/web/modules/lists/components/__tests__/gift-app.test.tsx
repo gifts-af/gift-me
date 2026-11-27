@@ -92,6 +92,61 @@ describe("GiftApp", () => {
     vi.restoreAllMocks();
   });
 
+  describe("Share opens the share sheet on a phone", () => {
+    const share = () => user.click(screen.getByRole("button", { name: /Share/ }));
+    let shareSpy: ReturnType<typeof vi.fn>;
+
+    function asDevice(touch: boolean, outcome: () => Promise<void> = async () => {}) {
+      shareSpy = vi.fn(outcome);
+      Object.defineProperty(navigator, "share", { value: shareSpy, configurable: true });
+      // jsdom has no matchMedia.
+      Object.defineProperty(window, "matchMedia", {
+        value: (query: string) => ({ matches: touch && query === "(pointer: coarse)", media: query }) as MediaQueryList,
+        configurable: true,
+      });
+    }
+
+    afterEach(() => {
+      Reflect.deleteProperty(navigator, "share");
+      Reflect.deleteProperty(window, "matchMedia");
+    });
+
+    it("opens the sheet with the list link, and doesn't say Copied!", async () => {
+      asDevice(true);
+      const writeText = vi.spyOn(navigator.clipboard, "writeText");
+      render(<GiftApp initial={member} />);
+      await share();
+      expect(shareSpy).toHaveBeenCalledWith(expect.objectContaining({ url: expect.stringContaining("/share/tok") }));
+      expect(writeText).not.toHaveBeenCalled();
+      expect(screen.queryByRole("button", { name: "Copied!" })).toBeNull();
+    });
+
+    it("does nothing more when the sheet is closed", async () => {
+      asDevice(true, () => Promise.reject(new DOMException("closed", "AbortError")));
+      const writeText = vi.spyOn(navigator.clipboard, "writeText");
+      render(<GiftApp initial={member} />);
+      await share();
+      expect(writeText).not.toHaveBeenCalled();
+      expect(screen.queryByLabelText("Share link")).toBeNull();
+    });
+
+    it("copies the link when the sheet fails", async () => {
+      asDevice(true, () => Promise.reject(new DOMException("blocked", "NotAllowedError")));
+      render(<GiftApp initial={member} />);
+      await share();
+      expect(await navigator.clipboard.readText()).toContain("/share/tok");
+      expect(screen.getByRole("button", { name: "Copied!" })).toBeVisible();
+    });
+
+    it("copies the link on a computer, even where a sheet exists", async () => {
+      asDevice(false);
+      render(<GiftApp initial={member} />);
+      await share();
+      expect(shareSpy).not.toHaveBeenCalled();
+      expect(await navigator.clipboard.readText()).toContain("/share/tok");
+    });
+  });
+
   describe("the note under Share (ALL-182 AC-13)", () => {
     const HINT = <p>No birthday saved</p>;
     const share = () => user.click(screen.getByRole("button", { name: /Share/ }));
