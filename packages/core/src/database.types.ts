@@ -1728,6 +1728,15 @@ export type Database = {
           user_id: string;
         }[];
       };
+      drop_failed_order: {
+        Args: {
+          p_failed_order_id: string;
+          p_lock: string;
+          p_round_id: string;
+          p_user_id: string;
+        };
+        Returns: undefined;
+      };
       due_rounds: {
         Args: { p_now: string };
         Returns: {
@@ -2234,6 +2243,15 @@ export type Database = {
       shared_address_owner_to_tell: {
         Args: { p_round_id: string };
         Returns: string;
+      };
+      skip_failed_round: {
+        Args: {
+          p_lock: string;
+          p_round_id: string;
+          p_shown_order_ids: string[];
+          p_user_id: string;
+        };
+        Returns: Database["concierge"]["Enums"]["round_status"];
       };
       skip_open_rounds: {
         Args: { p_occasion_id: string; p_person_id: string };

@@ -5,6 +5,10 @@ import userEvent from "@testing-library/user-event";
 import type { RejectionOutlook, RoundPageIdea, RoundPageOrder, RoundPageView } from "@/modules/concierge";
 import { IdeaPhoto } from "@/components/idea-photo";
 import { RoundScreen, type BudgetResult, type RejectResult } from "../[id]/round-screen";
+import type { PickAgainResult, SkipResult } from "../ways-out";
+
+const router = vi.hoisted(() => ({ push: vi.fn(), refresh: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => router }));
 
 // The round screen (ALL-29 Task 11). The server actions are faked here; the real ones run in the
 // round journeys (Task 13) against local Supabase, and their module logic in approval-db.test.ts.
@@ -852,5 +856,62 @@ describe("a held gift", () => {
     expect(shown({ estDeliveryDate: "2026-12-14" })).toHaveTextContent("Shipped · was due Mon, Dec 14");
     expect(shown({ estDeliveryDate: "2026-12-19" })).not.toHaveTextContent("May arrive");
     expect(shown({ status: "placed" })).not.toHaveTextContent("usually arrives");
+  });
+});
+
+describe("RoundScreen: a failed gift's ways out (ALL-185)", () => {
+  function withWaysOut(v: RoundPageView) {
+    const pick = vi.fn(async (...a: [string, string]): Promise<PickAgainResult> => (void a, { ok: true }));
+    const skip = vi.fn(async (...a: [string, string[]]): Promise<SkipResult> => (void a, { ok: true }));
+    const ok = async () => ({ ok: true }) as const;
+    render(
+      <RoundScreen
+        view={v}
+        rejectAction={async () => ({ ok: true, more: true, saved: true })}
+        setBudgetAction={ok}
+        outlookAction={async () => OUTLOOK}
+        arrivedAction={ok}
+        reactionsOpen={false}
+        waysOut={{ pick, skip }}
+      />,
+    );
+    return { pick, skip };
+  }
+
+  it("Needs a fix offers Pick a different gift and Skip when it's the round's one gift", async () => {
+    router.push.mockClear();
+    const pad = idea({ title: "Mouse pad", status: "selected" });
+    const failed = order({ id: "of1", ideaId: pad.id, title: "Mouse pad", status: "failed", failureType: "price_up" });
+    const { pick } = withWaysOut(view({ ideas: [pad, idea({ title: "Switch" })], failedOrders: [failed] }, { status: "needs_attention" }));
+    expect(screen.getByRole("link", { name: "Fix this" })).toBeInTheDocument();
+    expect(screen.getByText("Drops the Mouse pad (it can't be bought again this time) and lets you choose from Mom's other ideas, or ask for new ones.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Skip Mom's birthday" })).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Pick a different gift" }));
+    expect(pick).toHaveBeenCalledWith("r1", "of1");
+    await waitFor(() => expect(router.push).toHaveBeenCalledWith("/rounds/r1"));
+  });
+
+  it("with two gifts to fix, only Skip is offered", () => {
+    const a = order({ status: "failed", failureType: "price_up" });
+    const b = order({ status: "failed", failureType: "out_of_stock" });
+    withWaysOut(view({ failedOrders: [a, b] }, { status: "needs_attention" }));
+    expect(screen.queryByRole("button", { name: "Pick a different gift" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Skip Mom's birthday" })).toBeInTheDocument();
+  });
+
+  it("with a gift on its way, neither is offered", () => {
+    const failed = order({ status: "failed", failureType: "out_of_stock" });
+    withWaysOut(view({ failedOrders: [failed], liveOrders: [order({ status: "placed" })] }, { status: "needs_attention" }));
+    expect(screen.queryByRole("button", { name: "Pick a different gift" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Skip/ })).toBeNull();
+  });
+
+  it("back to choosing, the dropped gift stays listed but can't be ticked, and the rest can", () => {
+    const pad = idea({ title: "Mouse pad", status: "selected" });
+    withWaysOut(view({ ideas: [pad, idea({ title: "Mug" })] }));
+    expect(screen.getByRole("checkbox", { name: "Mouse pad" })).toBeDisabled();
+    expect(screen.getByText("Couldn't be bought")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "Mug" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "None of these" })).toBeInTheDocument();
   });
 });

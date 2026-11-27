@@ -21,6 +21,7 @@ const allowed: [RoundStatus, RoundStatus][] = [
   ["needs_attention", "ordered"],
   ["needs_attention", "generating"],
   ["needs_attention", "skipped"],
+  ["needs_attention", "awaiting_approval"], // "Pick a different gift" on the only failed gift (drop_failed_order)
 ];
 
 describe("round statuses", () => {

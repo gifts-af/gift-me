@@ -10,6 +10,7 @@ import { buyingWiring, lookupWiring, roundDbDeps, settingInt } from "@/lib/wirin
 import {
   approveAndBuy,
   costRecorder,
+  dropFailedOrder,
   markGiftArrived,
   MAX_BUDGET_CENTS,
   parseBudget,
@@ -21,6 +22,7 @@ import {
   roundAccess,
   saveReaction,
   setRoundBudget,
+  skipRound,
   tellDelivered,
   type ReactionRefusal,
   type ShipTo,
@@ -28,6 +30,7 @@ import {
 import type { BudgetResult, RejectResult } from "./[id]/round-screen";
 import type { CheckResult } from "./[id]/fix/[orderId]/fix-screen";
 import type { BuyResult } from "./outcome";
+import type { PickAgainResult, SkipResult } from "./ways-out";
 
 // The round, confirm and fix pages' server actions (ALL-29). Each takes the user from the session, validates
 // its input, and leaves ownership to the module, which checks the round is theirs again on the
@@ -242,6 +245,36 @@ export async function replaceAction(roundId: string, orderId: string, form: Form
     { ...purchase, lookup, recordCost: costRecorder(createAdminClient) },
   );
   if (result.ok) revalidatePath(`/rounds/${id.data}`);
+  return result;
+}
+
+// ─── a failed gift's ways out ────────────────────────────────────────────────
+
+/** "Pick a different gift": drops the failed gift and puts the round back to choosing. */
+export async function pickAgainAction(roundId: string, orderId: string): Promise<PickAgainResult> {
+  const id = RoundId.safeParse(roundId);
+  const order = RoundId.safeParse(orderId);
+  if (!id.success || !order.success) return { ok: false, error: "bad_form" };
+  const user = await signedIn();
+  if (!user) return { ok: false, error: "session" };
+  const result = await dropFailedOrder({ userId: user.userId, roundId: id.data, orderId: order.data }, roundDbDeps(new Date()));
+  if (result.ok) revalidatePath(`/rounds/${id.data}`);
+  return result;
+}
+
+/**
+ * "Skip <name>'s <occasion>": closes the round the way the hold emails' cancel link does
+ * (cancel_held), through skipRound, which checks the round can be skipped first.
+ */
+export async function skipRoundAction(roundId: string, shownOrderIds: string[]): Promise<SkipResult> {
+  const id = RoundId.safeParse(roundId);
+  // An input bound, not a business limit: the page shows a round's failed gifts, a handful at most.
+  const shown = z.array(z.uuid()).max(50).safeParse(shownOrderIds);
+  if (!id.success || !shown.success) return { ok: false, error: "bad_form" };
+  const user = await signedIn();
+  if (!user) return { ok: false, error: "session" };
+  const result = await skipRound({ userId: user.userId, roundId: id.data, shownOrderIds: shown.data }, roundDbDeps(new Date()));
+  revalidatePath(`/rounds/${id.data}`);
   return result;
 }
 

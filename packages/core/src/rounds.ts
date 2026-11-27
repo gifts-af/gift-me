@@ -25,7 +25,8 @@ const NEXT: Record<RoundStatus, readonly RoundStatus[]> = {
   delivered: ["complete"],
   complete: [],
   needs_address: ["generating", "skipped"],
-  needs_attention: ["ordered", "generating", "skipped"],
+  // awaiting_approval: "Pick a different gift" drops the only failed gift (drop_failed_order).
+  needs_attention: ["ordered", "generating", "skipped", "awaiting_approval"],
   skipped: [],
 };
 

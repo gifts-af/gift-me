@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import type { RoundPageIdea, RoundPageOrder } from "@/modules/concierge";
 import { money } from "@/app/people/[id]/money";
 import { OverBudgetSheet } from "../../../over-budget-sheet";
+import { WaysOut, type PickAgainResult, type SkipResult } from "../../../ways-out";
 import {
   MoneyNotice,
   Outcome,
@@ -32,7 +33,8 @@ import {
 // (AC-4a): today's price is looked up only when "Check today's price" is tapped, and the money
 // notice sits by that button. Every button that buys has the money notice by it too (decision
 // 53), and says it buys. A replacement over the budget asks first, as the round screen does,
-// and only then reads "Buy anyway"; the server checks the budget and the allowance again.
+// and only then reads "Buy anyway"; the server checks the budget and the allowance again. Below
+// the buying, "Pick a different gift" and "Skip" are the ways out that buy nothing (WaysOut, T102).
 
 export type FixResult = BuyResult;
 export type CheckResult =
@@ -78,6 +80,14 @@ export type FixScreenProps = {
     orderId: string,
     form: FormData,
   ) => Promise<FixResult>;
+  /** The round's occasion kind, for "Skip Nora's birthday"; null when it can't be read. */
+  occasionKind: string | null;
+  /** "Pick a different gift": only when this is the round's only gift still in play. */
+  canPick: boolean;
+  /** "Skip": only when no gift in the round is held, being ordered or on its way. */
+  canSkip: boolean;
+  pickAgainAction: (roundId: string, orderId: string) => Promise<PickAgainResult>;
+  skipRoundAction: (roundId: string, shownOrderIds: string[]) => Promise<SkipResult>;
 };
 
 const ADDRESS_FAILURES = new Set(["address_withdrawn", "address_rejected"]);
@@ -462,7 +472,21 @@ export function FixScreen(p: FixScreenProps) {
         </div>
       )}
 
-      {seeAll}
+      {/* "Pick a different gift" opens every idea, so "See all ideas" only when it can't. */}
+      {!p.canPick && seeAll}
+      <WaysOut
+        roundId={roundId}
+        orderId={order.id}
+        giftTitle={idea?.title ?? order.title}
+        failureType={order.failureType}
+        personName={p.personName}
+        occasionKind={p.occasionKind}
+        canPick={p.canPick}
+        canSkip={p.canSkip}
+        pickAction={p.pickAgainAction}
+        skipAction={p.skipRoundAction}
+        shownOrderIds={[order.id]}
+      />
 
       <OverBudgetSheet
         open={pendingOver !== null}

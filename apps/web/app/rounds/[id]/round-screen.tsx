@@ -27,6 +27,7 @@ import { money } from "@/app/people/[id]/money";
 import { deliveredText, storeCancelledText } from "../gift-status";
 import { OverBudgetSheet } from "../over-budget-sheet";
 import { personAddressHref } from "../ship-to";
+import { WaysOut, type PickAgainResult, type SkipResult } from "../ways-out";
 
 // The round screen (ALL-29, design/plans/ALL-29-approval.md AC-5–AC-7, AC-9, AC-12, AC-13a,
 // AC-17, AC-18, AC-29, AC-30): list gifts first, then the AI's ideas; tick one or more and go on
@@ -82,7 +83,10 @@ function blockedBecause(idea: RoundPageIdea, ordered: Set<string>, toFix: Set<st
   // Its order failed: the buyer's claim on it stays until it's fixed, but it isn't on an order.
   if (toFix.has(idea.id)) return "Needs a fix";
   // On one of this buyer's live orders, in this round or another (approve_round: already_bought).
-  return block === null ? null : BLOCKED[block];
+  if (block !== null) return BLOCKED[block];
+  // Chosen once, its order failed and was dropped or replaced: it stays listed, but can't be
+  // bought again from here (drop_failed_order).
+  return idea.status === "selected" ? "Couldn't be bought" : null;
 }
 
 function IdeaCard({
@@ -614,6 +618,7 @@ export function RoundScreen({
   arrivedAction,
   reactionsOpen,
   walletUrl = "/settings/paying",
+  waysOut,
 }: {
   view: RoundPageView;
   /** `rejectAction` */
@@ -628,6 +633,11 @@ export function RoundScreen({
   reactionsOpen: boolean;
   /** Where the Zinc balance is topped up: Zinc's own page, or Paying for gifts. */
   walletUrl?: string;
+  /** `pickAgainAction` and `skipRoundAction`, for a failed gift's ways out; without them they're hidden. */
+  waysOut?: {
+    pick: (roundId: string, orderId: string) => Promise<PickAgainResult>;
+    skip: (roundId: string, shownOrderIds: string[]) => Promise<SkipResult>;
+  };
 }) {
   const { round } = view;
   const budget = round.budgetCents;
@@ -814,6 +824,24 @@ export function RoundScreen({
             ))}
           </ul>
         </section>
+      )}
+
+      {/* A failed gift's ways out besides buying, as on its fix page: only while nothing in the
+          round is held, being ordered or on its way; picking again only when it's the one gift. */}
+      {waysOut && view.closedText === null && view.failedOrders.length > 0 && view.liveOrders.length === 0 && (
+        <WaysOut
+          roundId={round.id}
+          orderId={view.failedOrders[0].id}
+          giftTitle={view.failedOrders[0].title}
+          failureType={view.failedOrders[0].failureType}
+          personName={round.personName}
+          occasionKind={round.occasionKind}
+          canPick={round.status === "needs_attention" && view.failedOrders.length === 1}
+          canSkip
+          pickAction={waysOut.pick}
+          skipAction={waysOut.skip}
+          shownOrderIds={view.failedOrders.map((o) => o.id)}
+        />
       )}
 
       {canBuy && budget === null && <BudgetField roundId={round.id} action={setBudgetAction} />}

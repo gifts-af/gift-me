@@ -5,6 +5,10 @@ import { zincFeeNotice } from "@gifts-af/core";
 import type { RoundPageIdea, RoundPageOrder } from "@/modules/concierge";
 import { outcomeWords } from "../outcome";
 import { FixScreen, type CheckResult, type FixResult, type FixScreenProps } from "../[id]/fix/[orderId]/fix-screen";
+import type { PickAgainResult, SkipResult } from "../ways-out";
+
+const router = vi.hoisted(() => ({ push: vi.fn(), refresh: vi.fn() }));
+vi.mock("next/navigation", () => ({ useRouter: () => router }));
 
 // The fix page (ALL-29 Task 12). The server actions are faked here; the real ones run in the
 // round journeys (Task 13) against local Supabase, and the module logic in replace.test.ts.
@@ -60,12 +64,14 @@ const NOTICE = "Checking today's price is a live lookup, which costs real money:
 
 function setup(
   o: Partial<FixScreenProps> = {},
-  results: { check?: CheckResult; fix?: FixResult } = {},
+  results: { check?: CheckResult; fix?: FixResult; pick?: PickAgainResult; skip?: SkipResult } = {},
 ) {
   const checkPriceAction = vi.fn(async (...a: [string, string]): Promise<CheckResult> => (void a, results.check ?? { ok: true, oldCents: 5420, newCents: 5840 }));
   const replaceAction = vi.fn(
     async (...a: [string, string, FormData]): Promise<FixResult> => (void a, results.fix ?? { ok: true, status: "ordered", reason: null }),
   );
+  const pickAgainAction = vi.fn(async (...a: [string, string]): Promise<PickAgainResult> => (void a, results.pick ?? { ok: true }));
+  const skipRoundAction = vi.fn(async (...a: [string, string[]]): Promise<SkipResult> => (void a, results.skip ?? { ok: true }));
   const failed = idea({ title: "LEGO Botanical Orchid" });
   const props: FixScreenProps = {
     roundId: "r1",
@@ -85,10 +91,15 @@ function setup(
     returnPath: "/rounds/r1/fix/o1",
     checkPriceAction,
     replaceAction,
+    occasionKind: "birthday",
+    canPick: false,
+    canSkip: false,
+    pickAgainAction,
+    skipRoundAction,
     ...o,
   };
   render(<FixScreen {...props} />);
-  return { checkPriceAction, replaceAction, failed };
+  return { checkPriceAction, replaceAction, failed, pickAgainAction, skipRoundAction };
 }
 
 describe("FixScreen: a price rise", () => {
@@ -268,5 +279,66 @@ describe("FixScreen: other failures", () => {
       "href",
       `/settings/address?next=${encodeURIComponent("/rounds/r1/fix/o1")}`,
     );
+  });
+});
+
+describe("FixScreen: ways out besides buying (ALL-185)", () => {
+  it("Pick a different gift drops the failed gift and opens the round, in place of See all ideas", async () => {
+    router.push.mockClear();
+    const { pickAgainAction } = setup({ canPick: true, canSkip: true });
+    expect(screen.queryByRole("link", { name: "See all ideas" })).toBeNull();
+    expect(
+      screen.getByText("Drops the LEGO Botanical Orchid (it can't be bought again this time) and lets you choose from Mom's other ideas, or ask for new ones."),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Pick a different gift" }));
+    expect(pickAgainAction).toHaveBeenCalledWith("r1", "o1");
+    await vi.waitFor(() => expect(router.push).toHaveBeenCalledWith("/rounds/r1"));
+  });
+
+  it("a refused pick says so and stays on the page", async () => {
+    router.push.mockClear();
+    setup({ canPick: true, canSkip: true }, { pick: { ok: false, error: "busy" } });
+    await userEvent.click(screen.getByRole("button", { name: "Pick a different gift" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("This round is busy right now. Try again in a minute.");
+    expect(router.push).not.toHaveBeenCalled();
+  });
+
+  it("Skip asks first, says it can't be undone, and Keep looking skips nothing", async () => {
+    const { skipRoundAction } = setup({ canSkip: true });
+    await userEvent.click(screen.getByRole("button", { name: "Skip Mom's birthday" }));
+    const dialog = await screen.findByRole("dialog", { name: "Skip Mom's birthday?" });
+    expect(dialog).toHaveTextContent("Nothing will be bought for this birthday and we won't look for more ideas. Next year's starts as usual. You can't undo this.");
+    await userEvent.click(screen.getByRole("button", { name: "Keep looking" }));
+    expect(skipRoundAction).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("Skip it closes the round and opens its page", async () => {
+    router.push.mockClear();
+    const { skipRoundAction } = setup({ canSkip: true, occasionKind: "christmas" });
+    await userEvent.click(screen.getByRole("button", { name: "Skip Mom's Christmas" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Skip it" }));
+    expect(skipRoundAction).toHaveBeenCalledWith("r1", ["o1"]);
+    await vi.waitFor(() => expect(router.push).toHaveBeenCalledWith("/rounds/r1"));
+  });
+
+  it("after an address or card problem the gift stays buyable, so the helper doesn't say it's gone", () => {
+    setup({ canPick: true, canSkip: true, order: order({ failureType: "address_withdrawn" }) });
+    expect(screen.getByText("Drops the LEGO Botanical Orchid and lets you choose from Mom's other ideas, or ask for new ones.")).toBeInTheDocument();
+  });
+
+  it("without a known occasion the confirm doesn't promise next year", async () => {
+    setup({ canSkip: true, occasionKind: null });
+    await userEvent.click(screen.getByRole("button", { name: "Skip Mom's gift" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Nothing will be bought and we won't look for more ideas. You can't undo this.");
+    expect(dialog).not.toHaveTextContent("Next year");
+  });
+
+  it("with another gift in play, neither way out is offered", () => {
+    setup({ canPick: false, canSkip: false });
+    expect(screen.queryByRole("button", { name: "Pick a different gift" })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Skip/ })).toBeNull();
+    expect(screen.getByRole("link", { name: "See all ideas" })).toBeInTheDocument();
   });
 });

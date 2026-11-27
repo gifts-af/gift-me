@@ -475,6 +475,47 @@ test("an out_of_stock gift is replaced by the next-best idea", async ({ page }) 
   ]);
 });
 
+// ALL-185: a failed gift's ways out besides buying.
+test("Pick a different gift drops a price_up gift and opens the round, where another idea can be bought", async ({ page }) => {
+  const b = await buyer();
+  const person = await personFor(b.id, "Nora");
+  const { roundId, ideaIds } = await seedRound(b.id, person, {
+    ideas: [
+      { title: "Desk mouse pad", totalCents: 2259 },
+      { title: "Fly line dressing", totalCents: 1200 },
+    ],
+  });
+  const orderId = await seedFailedOrder(b.id, roundId, ideaIds[0], "price_up");
+  await signIn(page, b.creds);
+  await page.goto(`/rounds/${roundId}/fix/${orderId}`);
+  await expect(page.getByText("Drops the Desk mouse pad (it can't be bought again this time) and lets you choose from Nora's other ideas, or ask for new ones.")).toBeVisible();
+  await page.getByRole("button", { name: "Pick a different gift" }).click();
+
+  await expect(page).toHaveURL(new RegExp(`/rounds/${roundId}$`));
+  await expect(page.getByRole("checkbox", { name: "Fly line dressing" })).toBeEnabled();
+  await expect(page.getByRole("checkbox", { name: "Desk mouse pad" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "None of these" })).toBeVisible();
+  expect(await roundOf(roundId)).toMatchObject({ status: "awaiting_approval" });
+  expect(await ordersOf(roundId)).toEqual([expect.objectContaining({ id: orderId, status: "failed", resolved: true })]);
+});
+
+test("Skip closes the round for good after asking, and its page says so", async ({ page }) => {
+  const b = await buyer();
+  const person = await personFor(b.id, "Nora");
+  const { roundId, ideaIds } = await seedRound(b.id, person, { ideas: [{ title: "Desk mouse pad", totalCents: 2259 }] });
+  await seedFailedOrder(b.id, roundId, ideaIds[0], "out_of_stock");
+  await signIn(page, b.creds);
+  await page.goto(`/rounds/${roundId}`);
+  await page.getByRole("button", { name: /^Skip Nora's / }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("Next year's starts as usual. You can't undo this.");
+  await dialog.getByRole("button", { name: "Skip it" }).click();
+
+  await expect(page.getByRole("status").filter({ hasText: "This gift round was stopped" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Fix this" })).toHaveCount(0);
+  expect(await roundOf(roundId)).toMatchObject({ status: "skipped" });
+});
+
 test("two gifts, one sold out: the page after Buy names each, the ordered one and the failed one", async ({ page }) => {
   const { soldOut } = FAKE_PRODUCTS;
   const b = await buyer();
