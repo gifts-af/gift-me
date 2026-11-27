@@ -7,7 +7,7 @@ const section = (name: string) => screen.getByRole("heading", { level: 2, name }
 describe("the privacy page", () => {
   it("says when it last changed", () => {
     render(<PrivacyPage />);
-    expect(screen.getByText("Last updated 26 November 2026")).toBeInTheDocument();
+    expect(screen.getByText("Last updated 27 November 2026")).toBeInTheDocument();
   });
 
   it("covers Google sign-in and contacts, with Google's Limited Use statement", () => {
@@ -88,5 +88,17 @@ describe("the privacy page", () => {
   it("says what the AI gets when it looks for ideas", () => {
     render(<PrivacyPage />);
     expect(section("What the AI reads")).toHaveTextContent(/ideas.*occasion.*budget/);
+  });
+
+  it("AC-21: says what Stripe's card page collects, that we never see the card, and that Stripe gets only an id", () => {
+    render(<PrivacyPage />);
+    const others = section("Who else handles it");
+    expect(others).toHaveTextContent(
+      "If you pay by card, you type your card on Stripe's own page, not ours. Stripe keeps the card number, expiry date, security code and ZIP code, and we never see them.",
+    );
+    expect(others).toHaveTextContent("We send Stripe an id for your account, never your name or email.");
+    expect(others).toHaveTextContent("We keep only Stripe's ids for you and your card");
+    expect(others).toHaveTextContent("Stripe's Link, which would offer to save your card with Stripe, is off.");
+    expect(within(others).getByRole("link", { name: "Stripe's privacy policy" })).toHaveAttribute("href", "https://stripe.com/privacy");
   });
 });

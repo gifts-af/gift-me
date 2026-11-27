@@ -16,6 +16,8 @@ import {
   disconnectZinc,
   hasConciergeAccess,
   pollConnect,
+  removeCard,
+  saveCardPhone,
   saveConciergeSettings,
   savePhone,
   sendTestNotification,
@@ -25,7 +27,10 @@ import {
   type ZincDeps,
 } from "@/modules/concierge";
 import { baseUrlFrom } from "./base-url";
-import { placeHeld, zincWiring } from "@/lib/wiring";
+import { placeHeld, stripeWiring, zincWiring } from "@/lib/wiring";
+import { siteUrl } from "@/lib/site-url";
+import { z } from "zod";
+import type { RemoveCardResult, SavePhoneResult } from "./card-paying";
 
 // Saves the time zone on its own, as the picker on Settings needs (ALL-115).
 export async function saveTimezone(zone: string): Promise<SaveResult> {
@@ -178,4 +183,48 @@ export async function disconnectZincAccount(): Promise<PaymentResult> {
 
 export async function saveBuyerPhone(raw: string): Promise<PaymentResult> {
   return withZinc((userId, deps) => savePhone(userId, String(raw), deps, placeHeld));
+}
+
+// ─── paying by card ──────────────────────────────────────────────────────────
+
+/**
+ * Settings > Remove card. Refused while a gift is being bought with it ("placing"): nothing
+ * changes. Otherwise the card is forgotten here first, then detached at Stripe; a detach that
+ * failed is logged by the module and the card is still gone on our side.
+ */
+export async function removeCardAction(): Promise<RemoveCardResult> {
+  const supabase = await createClient();
+  const userId = (await supabase.auth.getClaims()).data?.claims?.sub;
+  if (!userId) return { ok: false, error: "session" };
+  try {
+    const db = createAdminClient();
+    const stripe = await stripeWiring(db);
+    if (!stripe) return { ok: false, error: "failed" };
+    const out = await removeCard({ db, now: new Date(), stripe, siteUrl: siteUrl() }, userId);
+    if (out === "placing") return { ok: false, error: "placing" };
+    refreshPaying();
+    return { ok: true };
+  } catch (error) {
+    logEvent("card.remove_failed", { user_id: userId, ...errorFields(error) });
+    return { ok: false, error: "failed" };
+  }
+}
+
+/** Settings > Your phone for a card buyer (Zinc needs one on every order). */
+export async function saveCardPhoneAction(raw: string): Promise<SavePhoneResult> {
+  const value = z.string().max(40).safeParse(raw);
+  if (!value.success) return { ok: false, error: "Enter a 10-digit phone number." };
+  const supabase = await createClient();
+  const userId = (await supabase.auth.getClaims()).data?.claims?.sub;
+  if (!userId) return { ok: false, error: "Your session ended. Sign in again." };
+  try {
+    const out = await saveCardPhone({ db: createAdminClient(), now: new Date() }, userId, value.data);
+    if (out === "bad_phone") return { ok: false, error: "Enter a 10-digit phone number." };
+    if (out === "not_card") return { ok: false, error: "That didn't work. Reload and try again." };
+    refreshPaying();
+    return { ok: true };
+  } catch (error) {
+    logEvent("card.phone_save_failed", { user_id: userId, ...errorFields(error) });
+    return { ok: false, error: "That didn't work. Try again in a minute." };
+  }
 }

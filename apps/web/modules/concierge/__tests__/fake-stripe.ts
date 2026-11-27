@@ -1,6 +1,7 @@
 // A fake Stripe HTTP API for card tests against the real local database (E5: fake only what we
 // don't own). Just the calls stripe/card.ts makes: customers, setup-mode Checkout Sessions,
 // listing, reading and detaching a customer's cards.
+import { checkoutParamRefusal, versionRefusal } from "@/test/fake-stripe-contract";
 import type { StripeHttp } from "../stripe/client";
 
 export type StripeRequest = { method: string; path: string; body: URLSearchParams; idempotencyKey: string | null };
@@ -60,6 +61,8 @@ export class FakeStripe {
     const idem = headers["Idempotency-Key"] ?? null;
     this.requests.push({ method, path: u.pathname, body, idempotencyKey: idem });
     const json = (status: number, b: unknown) => new Response(JSON.stringify(b), { status });
+    const version = versionRefusal(headers["Stripe-Version"]);
+    if (version) return json(version.status, version.body);
     const missing = () => json(404, { error: { type: "invalid_request_error", code: "resource_missing", message: "No such thing" } });
 
     if (method === "POST" && u.pathname === "/v1/customers") {
@@ -77,6 +80,8 @@ export class FakeStripe {
       return json(200, { id, object: "customer" });
     }
     if (method === "POST" && u.pathname === "/v1/checkout/sessions") {
+      const unknown = checkoutParamRefusal(body);
+      if (unknown) return json(unknown.status, unknown.body);
       if (this.sessionStatus !== null) return json(this.sessionStatus, { error: { type: "api_error", message: "Stripe broke" } });
       const id = this.id("cs");
       this.sessions.set(id, {

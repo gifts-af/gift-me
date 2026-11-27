@@ -63,7 +63,8 @@ export type QuoteDeps = DbDeps & { lookup: { http: ZincHttp; key: string }; reco
  * `zinc_off`: zinc_ordering_enabled isn't 1, so a re-buy would only be held (E7's off switch).
  */
 export type QuoteResult =
-  | { oldCents: number; newCents: number }
+  // `byCard`: the buyer pays by card, so the caller works out a "Most you'll pay" (a wallet buyer has none).
+  | { oldCents: number; newCents: number; byCard: boolean }
   | "not_allowed"
   | "not_current"
   | "not_open"
@@ -263,7 +264,31 @@ export async function quoteFailedOrder(input: { userId: string; roundId: string;
   const [payer, feeCents] = await Promise.all([readPayer(deps, userId), setting(deps, "zinc_order_fee_cents")]);
   const today = await requote(deps, idea, feeCents, ids, { userId, orderId });
   if (today === null) return "unavailable";
-  return { oldCents: ideaTotalCents(idea, payer), newCents: totalFor(today, payer) };
+  return { oldCents: ideaTotalCents(idea, payer), newCents: totalFor(today, payer), byCard: payer.mode === "connect" };
+}
+
+/**
+ * A card buyer's "Most you'll pay" for replacing a failed gift with one whose whole charge today is
+ * `totalCents`, worked out as replaceFailedOrder will (the round's other live orders counted, the
+ * over-budget allowance said yes to), so the fix page can show it and send it back as
+ * `shownMaxCents`. Null for a wallet buyer, or when it's past the allowance. Only reads.
+ */
+export async function replacementMaxCents(
+  deps: DbDeps,
+  input: { userId: string; roundId: string; failedOrderId: string; totalCents: number },
+): Promise<number | null> {
+  const payer = await readPayer(deps, input.userId);
+  if (payer.mode !== "connect") return null;
+  const [round, account, orders, marginPct] = await Promise.all([
+    readRound(deps, input.roundId),
+    readAccount(deps, input.userId),
+    liveOrders(deps, input.roundId),
+    setting(deps, "order_price_margin_pct"),
+  ]);
+  if (!round || round.user_id !== input.userId || !account) return null;
+  const committed = committedSpendCents(orders.filter((o) => o.id !== input.failedOrderId).map(asCommitted));
+  const fit = capsForPayer(round, [input.totalCents], account, true, payer, marginPct, committed);
+  return typeof fit === "string" ? null : fit.neverMoreThanCents;
 }
 
 /**

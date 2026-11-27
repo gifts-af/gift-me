@@ -141,7 +141,7 @@ export { approveAndBuy } from "./purchase/approve";
 export type { ApproveError, ApproveInput, ApproveResult, GiftOutcome } from "./purchase/approve";
 export { capsFor } from "./purchase/approve";
 export type { ShipTo } from "./purchase/approve";
-export { quoteFailedOrder, replaceFailedOrder } from "./purchase/replace";
+export { quoteFailedOrder, replaceFailedOrder, replacementMaxCents } from "./purchase/replace";
 export type { QuoteDeps, QuoteResult, ReplaceError, ReplaceInput, ReplaceResult } from "./purchase/replace";
 export { placeAddressHeld as placeAddressHeldFor, placeHeldForUser, placeRound, sweepStalePlacing } from "./purchase/place";
 export type { PlaceOutcome } from "./purchase/place";
@@ -167,8 +167,9 @@ export { amazonPasteDetails } from "./zinc/products";
 export type { AmazonPasteDetails, ZincProductDetails } from "./zinc/products";
 export type { ZincHttp } from "./zinc/client";
 // Paying by card: saving, reading and removing the buyer's card on Stripe's own page.
-export { finishCardSession, removeCard, savedCard, startCardSession } from "./stripe/card";
-export type { CardDeps, CardFrom } from "./stripe/card";
+export { cardBuyer, cardGoods, finishCardSession, removeCard, saveCardPhone, savedCard, startCardSession } from "./stripe/card";
+export type { CardBuyer, CardDeps, CardFrom, FeeSheet } from "./stripe/card";
+export { capsForPayer, readPayer, type Payer } from "./purchase/payer";
 export type { StripeHttp } from "./stripe/client";
 // A wallet's balance at Zinc; the health check reads the app's own (T17).
 export { getWallet } from "./zinc/account";

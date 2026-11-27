@@ -121,3 +121,28 @@ describe("Outcome with several gifts", () => {
     expect(panel).toHaveTextContent(/^It's out of stockWe didn't buy it\. We've emailed you what you can do\.$/);
   });
 });
+
+describe("Outcome for a card buyer", () => {
+  const refused = (error: "no_card" | "connect_off") => {
+    render(<Outcome result={{ ok: false, error }} roundId="r1" />);
+    return screen.getByRole("status");
+  };
+
+  it("AC-12: paused says buying is paused and nothing was bought, never a Zinc word", () => {
+    expect(refused("connect_off")).toHaveTextContent(
+      /^Buying is pausedWe can't buy gifts right now\. Nothing was bought\. We'll email you when it's back on\.$/,
+    );
+  });
+
+  it("AC-6: no card says to add one, and that adding one buys nothing", () => {
+    expect(refused("no_card")).toHaveTextContent(
+      /^Add a card firstNothing was bought\. Add a card, then tap Buy again\. Adding a card doesn't buy anything\.$/,
+    );
+  });
+
+  it("AC-6: a declined card at placing says nothing was bought", () => {
+    const panel = show(undefined, "failed", "card_needed");
+    expect(panel).toHaveTextContent(/^Your card changed or couldn't be chargedNothing was bought\. We've emailed you what you can do\.$/);
+    expect(panel).not.toHaveTextContent(/Zinc|store couldn't/);
+  });
+});

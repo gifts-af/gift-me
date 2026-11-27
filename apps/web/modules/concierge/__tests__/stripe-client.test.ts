@@ -2,7 +2,7 @@
 // Stripe's code only, never its message or an id (E6). Stripe is faked: we don't own it.
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { StripeError, formBody, stripeCall } from "../stripe/client";
+import { STRIPE_API_VERSION, StripeError, formBody, stripeCall } from "../stripe/client";
 import type { StripeHttp } from "../stripe/client";
 
 type Seen = { url: string; init: RequestInit };
@@ -49,6 +49,14 @@ describe("stripeCall", () => {
     expect(headers["Content-Type"]).toBe("application/x-www-form-urlencoded");
     expect(headers["Idempotency-Key"]).toBe("customer-u1");
     expect(String(seen[0].init.body)).toBe("metadata%5Buser_id%5D=u1");
+  });
+
+  it("pins Stripe's API version on every call, the first that knows branding_settings", async () => {
+    const seen: Seen[] = [];
+    await stripeCall(http(json(200, {}), seen), "GET", "/v1/x", z.object({}), { op: "x" });
+    await stripeCall(http(json(200, {}), seen), "POST", "/v1/x", z.object({}), { op: "x", body: { a: "1" } });
+    expect(STRIPE_API_VERSION).toBe("2025-09-30.clover");
+    for (const s of seen) expect((s.init.headers as Record<string, string>)["Stripe-Version"]).toBe(STRIPE_API_VERSION);
   });
 
   it("puts a GET's query on the URL and sends no body", async () => {

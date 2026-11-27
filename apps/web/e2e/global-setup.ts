@@ -1,4 +1,6 @@
+import { clearConnectSwitch } from "./connect-switch";
 import { startFakeGateway } from "./fake-gateway";
+import { startFakeStripe } from "./fake-stripe";
 import { startFakeZinc } from "./fake-zinc";
 import { giveAccess } from "./fresh-user";
 import { localSupabase } from "./local-supabase";
@@ -14,7 +16,8 @@ export default async function globalSetup() {
   // Zinc's stand-in for paying-for-gifts.spec.ts (ALL-32), and the AI Gateway's for the idea
   // engine (ALL-27). Not needed against a deployed site.
   if (process.env.E2E_BASE_URL) return;
-  const servers = [await startFakeZinc(), await startFakeGateway()];
+  const servers = [await startFakeZinc(), await startFakeGateway(), await startFakeStripe()];
+  clearConnectSwitch();
   const before = new Map<string, unknown>();
   for (const key of [...Object.keys(RUN_SETTINGS), ...SPEC_SWITCHES]) before.set(key, await getSetting(key));
   for (const [key, value] of Object.entries(RUN_SETTINGS)) await setSetting(key, value);
@@ -35,6 +38,9 @@ const RUN_SETTINGS: Record<string, number> = {
   google_import_enabled: 1,
   idea_rounds_per_tick: 100,
   idea_round_runs_per_day: 100,
+  // Paying by card on, for card-payments.spec.ts: it only changes anything for card accounts,
+  // which no other spec has.
+  connect_enabled: 1,
 };
 // suggest-ideas.spec.ts, round-engine.spec.ts and approval.spec.ts switch the engines on, and run
 // at the same time, so none switches them back: the teardown does, once every spec has finished.

@@ -88,6 +88,41 @@ describe.skipIf(!supabase)("Zinc and engine wiring (real local database and engi
     expect(await wiring.stripeWiring(db, { ZINC_ENV: "test", STRIPE_SECRET_KEY: "rk_test_x" })).toBeNull();
     expect(await wiring.stripeWiring(db, { ZINC_ENV: "test" })).toBeNull();
     expect(await wiring.stripeWiring(db, { STRIPE_SECRET_KEY: "sk_test_x" })).toBeNull();
+    // Stripe's own API unless the browser tests point it at their stand-in.
+    expect(test).not.toHaveProperty("base");
+    expect(await wiring.stripeWiring(db, { ZINC_ENV: "test", STRIPE_SECRET_KEY: "sk_test_x", STRIPE_API_BASE: "http://127.0.0.1:4598" })).toMatchObject({
+      base: "http://127.0.0.1:4598",
+    });
+    expect(await wiring.stripeWiring(db, { ZINC_ENV: "test", STRIPE_SECRET_KEY: "sk_test_x", STRIPE_API_BASE: "http://localhost:4598" })).toMatchObject({
+      base: "http://localhost:4598",
+    });
+  });
+
+  it("ignores STRIPE_API_BASE on Vercel or off this machine, so a key can never be sent elsewhere", async () => {
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const db = createAdminClient();
+    const key = { ZINC_ENV: "live", STRIPE_SECRET_KEY: "sk_live_x" };
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const cases = [
+        { ...key, STRIPE_API_BASE: "http://127.0.0.1:4598", VERCEL_ENV: "production" },
+        { ...key, STRIPE_API_BASE: "http://localhost:4598", VERCEL_ENV: "preview" },
+        { ...key, STRIPE_API_BASE: "https://stripe.evil.example" },
+        { ...key, STRIPE_API_BASE: "http://127.0.0.1.evil.example" },
+        { ...key, STRIPE_API_BASE: "not a url" },
+      ];
+      for (const env of cases) {
+        const out = await wiring.stripeWiring(db, env);
+        expect(out).toMatchObject({ key: "sk_live_x", mode: "live" });
+        expect(out).not.toHaveProperty("base");
+      }
+      const events = log.mock.calls.map((c) => JSON.parse(String(c[0])));
+      expect(events.filter((e) => e.event === "stripe.base_ignored")).toHaveLength(cases.length);
+      // The value itself is never logged.
+      expect(log.mock.calls.flat().join(" ")).not.toMatch(/evil|4598|127\.0\.0\.1|localhost/);
+    } finally {
+      log.mockRestore();
+    }
   });
 
   it("gives card orders the app's Zinc key only when it fits ZINC_ENV and the webhook secret is set", async () => {

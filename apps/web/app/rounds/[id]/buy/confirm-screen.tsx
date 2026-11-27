@@ -11,10 +11,11 @@ import { storeLabel } from "@/lib/store-label";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import type { RoundPageIdea } from "@/modules/concierge";
+import type { FeeSheet, RoundPageIdea } from "@/modules/concierge";
 import { money } from "@/app/people/[id]/money";
 import { listPriceNote } from "../round-screen";
 import { MoneyNotice, Outcome, UNKNOWN, outcomeWords, type BuyResult } from "../../outcome";
+import { AddCard, BuyingPaused, CardMoneyNotice, CardReturnNotice, CostLine, FeeInfo, SavedCard, type StartCardResult } from "../../card-ui";
 import {
   EMPTY_ADDRESS,
   OtherAddressForm,
@@ -29,6 +30,26 @@ import {
 } from "../../ship-to";
 
 export type { BuyResult };
+
+/**
+ * A card buyer's page (mock-ups 1a to 1d): each idea's total is its whole charge, fee included.
+ * Without a card it offers Add a card (and asks for the phone there when none is saved); with
+ * one, "Saved card" and Buy now. Paused (connect_enabled off): nothing to add or buy.
+ */
+export type ConfirmCard = {
+  on: boolean;
+  hasCard: boolean;
+  needsPhone: boolean;
+  fee: FeeSheet;
+  /** The picks' goods caps together, for the (i) breakdown's "if the price goes up"; null past the allowance. */
+  capGoodsCents: number | null;
+  /** The return route's `card=`, when the buyer just came back from Stripe's page. */
+  cardReturn: string | null;
+  /** Each pick's price, shipping and tax alone, by idea id (cardGoods). */
+  goodsFor: Record<string, number>;
+  /** Leaves for Stripe's page and comes back to this gift; never buys. */
+  startCard: (phone: string | null) => Promise<StartCardResult>;
+};
 
 // The confirm page (ALL-29 AC-2, AC-4, AC-8, AC-10, AC-11, AC-12b, AC-18, AC-19): everything that
 // will happen, then one button that buys. Loading it never buys (AC-4a). Whether it's over the
@@ -58,10 +79,12 @@ export type ConfirmScreenProps = {
   /** This page, for the address forms' `next`. */
   returnPath: string;
   buyAction: (roundId: string, form: FormData) => Promise<BuyResult>;
+  /** Set for a card buyer; a wallet buyer sees the page as it was before cards. */
+  card?: ConfirmCard;
 };
 
 /** Errors that leave the page as it was, with the button, so the buyer can act and try again. */
-const STAY = new Set(["busy", "needs_confirmation", "gift_message_too_long", "no_address", "session"]);
+const STAY = new Set(["busy", "needs_confirmation", "gift_message_too_long", "no_address", "session", "price_changed", "no_card"]);
 
 function storeOf(i: RoundPageIdea): string | null {
   if (i.productUrl) {
@@ -96,6 +119,10 @@ export function ConfirmScreen(p: ConfirmScreenProps) {
   // The action threw: a purchase may have gone through, so the page says to check first.
   const [thrown, setThrown] = useState(false);
   const [pending, startTransition] = useTransition();
+  // A card buyer's "Most you'll pay": the server's newer, higher figure once it said so (AC-4).
+  const [maxNow, setMaxNow] = useState<number | null>(null);
+  const card = p.card;
+  const neverMoreThan = maxNow ?? p.neverMoreThanCents;
 
   if (result) {
     const gifts = ideas.length === 1 ? "gift" : "gifts";
@@ -127,7 +154,7 @@ export function ConfirmScreen(p: ConfirmScreenProps) {
               {[storeOf(i), listPriceNote(i), i.arriveBy ? `Arrives by ${shortDate(i.arriveBy)}` : null].filter(Boolean).join(" · ")}
             </span>
           </span>
-          <span className="flex-none text-[15px] font-semibold tabular-nums">{money(i.totalCents)}</span>
+          <span className="flex-none text-[15px] font-semibold tabular-nums">{money(card ? card.goodsFor[i.id] : i.totalCents)}</span>
         </li>
       ))}
     </ul>
@@ -156,6 +183,8 @@ export function ConfirmScreen(p: ConfirmScreenProps) {
     if (note.trim()) form.set("note", note);
     // Only from this button, in its "Buy anyway" state.
     if (over) form.set("over", "1");
+    // What the page showed, so the server buys only while that's still the most (AC-4).
+    if (card && neverMoreThan !== null) form.set("shownMaxCents", String(neverMoreThan));
     putShipTo(form, choice);
     setError(null);
     setThrown(false);
@@ -168,23 +197,49 @@ export function ConfirmScreen(p: ConfirmScreenProps) {
         return;
       }
       if (!r.ok && r.error === "needs_confirmation") setOverNow(true);
+      if (!r.ok && r.error === "price_changed" && r.neverMoreThanCents !== undefined) setMaxNow(r.neverMoreThanCents);
       if (!r.ok && STAY.has(r.error)) setError(r);
       else setResult(r);
     });
   }
 
   const n = ideas.length;
+  // A card buyer's goods alone.
+  const goods = card ? ideas.reduce((sum, i) => sum + card.goodsFor[i.id], 0) : 0;
+  const paused = card !== undefined && !card.on;
   return (
     <>
       {title}
       {cards}
 
-      <ul aria-label="What it costs" className="flex flex-col gap-1.5 rounded-xl border border-border p-3 text-[15px]">
-        <Line label="Price, shipping and tax" value={money(total - feeCents * n)} />
-        <Line label="Zinc's order fee" value={n === 1 ? money(feeCents) : `${n} × ${money(feeCents)}`} />
-        <Line label="Estimated total" value={`About ${money(total)}`} strong />
-        {p.neverMoreThanCents !== null && <Line label="Never more than" value={money(p.neverMoreThanCents)} />}
-      </ul>
+      {card ? (
+        <ul aria-label="What it costs" className="flex flex-col gap-1.5 rounded-xl border border-border p-3 text-[15px]">
+          <CostLine label="Price, shipping and tax" value={money(goods)} />
+          <CostLine
+            label={card.fee.label}
+            value={money(total - goods)}
+            extra={
+              <FeeInfo
+                fee={card.fee}
+                gifts={n}
+                goodsCents={goods}
+                totalCents={total}
+                capGoodsCents={maxNow === null ? card.capGoodsCents : null}
+                maxChargeCents={neverMoreThan}
+              />
+            }
+          />
+          <CostLine label="Estimated total" value={`About ${money(total)}`} strong />
+          {neverMoreThan !== null && <CostLine label="Most you'll pay" value={money(neverMoreThan)} strong />}
+        </ul>
+      ) : (
+        <ul aria-label="What it costs" className="flex flex-col gap-1.5 rounded-xl border border-border p-3 text-[15px]">
+          <Line label="Price, shipping and tax" value={money(total - feeCents * n)} />
+          <Line label="Zinc's order fee" value={n === 1 ? money(feeCents) : `${n} × ${money(feeCents)}`} />
+          <Line label="Estimated total" value={`About ${money(total)}`} strong />
+          {p.neverMoreThanCents !== null && <Line label="Never more than" value={money(p.neverMoreThanCents)} />}
+        </ul>
+      )}
 
       {fit === "over" && budgetCents !== null && (
         <p className="rounded-xl bg-warning-soft p-3 text-[15px] font-semibold text-warning">
@@ -197,6 +252,7 @@ export function ConfirmScreen(p: ConfirmScreenProps) {
         </p>
       )}
 
+      {!paused && (
       <div className="flex flex-col rounded-xl border border-border">
         <button
           type="button"
@@ -231,8 +287,23 @@ export function ConfirmScreen(p: ConfirmScreenProps) {
           )}
         </div>
       </div>
+      )}
 
-      <MoneyNotice feeCents={feeCents} balanceCents={p.balanceCents} />
+      {card && <CardReturnNotice status={card.cardReturn} />}
+      {paused && <BuyingPaused />}
+      {card?.on && !card.hasCard && (
+        <AddCard start={card.startCard} needsPhone={card.needsPhone}>
+          <p className="text-center text-[13px] text-muted-foreground">
+            Opens Stripe&apos;s secure card page, then brings you back here. <b>Nothing is bought until you tap Buy now.</b>
+          </p>
+        </AddCard>
+      )}
+      {card?.on && card.hasCard && <SavedCard start={() => card.startCard(null)} sub="Charged only when you tap Buy now." />}
+      {card ? (
+        card.on && card.hasCard && <CardMoneyNotice feeLabel={card.fee.label} />
+      ) : (
+        <MoneyNotice feeCents={feeCents} balanceCents={p.balanceCents} />
+      )}
 
       {thrown && (
         <p role="alert" className="text-[13px] text-destructive">
@@ -242,7 +313,9 @@ export function ConfirmScreen(p: ConfirmScreenProps) {
       {error && (
         <div role="alert" className="flex flex-col gap-1 text-[13px] text-destructive">
           <span className="font-semibold">{outcomeWords(error).title}</span>
-          {error.error === "no_address" ? (
+          {error.error === "price_changed" && maxNow !== null ? (
+            <span>{`The most you'll pay is now ${money(maxNow)}. Nothing was bought. Tap Buy now again to agree to it.`}</span>
+          ) : error.error === "no_address" ? (
             <AddressFix choice={choice} personId={p.personId} personName={personName} next={p.returnPath} />
           ) : error.error === "gift_message_too_long" ? (
             <span>{`Keep it under ${p.giftMessageMax} characters.`}</span>
@@ -252,14 +325,20 @@ export function ConfirmScreen(p: ConfirmScreenProps) {
         </div>
       )}
 
-      {buyable && (
+      {buyable && (!card || (card.on && card.hasCard)) && (
         <Button type="button" className="w-full" disabled={pending} aria-busy={pending} onClick={buy}>
           {label}
         </Button>
       )}
-      <Button asChild variant="link" className="self-center">
-        <Link href={`/rounds/${roundId}`}>See the other ideas</Link>
-      </Button>
+      {paused ? (
+        <Button asChild variant="outline">
+          <Link href={`/rounds/${roundId}`}>See the other ideas</Link>
+        </Button>
+      ) : (
+        <Button asChild variant="link" className="self-center">
+          <Link href={`/rounds/${roundId}`}>See the other ideas</Link>
+        </Button>
+      )}
 
       <ShipToDialog
         open={shipOpen}

@@ -7,7 +7,16 @@ import { z } from "zod";
 
 const BASE = "https://api.stripe.com";
 
-export type StripeHttp = { key: string; mode: "test" | "live"; timeoutMs: number; fetch: typeof fetch };
+/**
+ * The Stripe API version every call pins, so the account's default version can't change what our
+ * requests mean. This is Stripe's contract with us, not a business number (T23 doesn't apply): it is
+ * the first version with Checkout's `branding_settings`, which our card page sends. Moving it is a
+ * code change, checked against Stripe's changelog.
+ */
+export const STRIPE_API_VERSION = "2025-09-30.clover";
+
+/** `base`: Stripe's API, unless the browser tests point it at their stand-in (STRIPE_API_BASE). */
+export type StripeHttp = { key: string; mode: "test" | "live"; timeoutMs: number; fetch: typeof fetch; base?: string };
 
 export type StripeErrorKind = "unavailable" | "unauthorized" | "rejected";
 
@@ -56,11 +65,12 @@ export async function stripeCall<T>(h: StripeHttp, method: "GET" | "POST", path:
   const query = o.query ? `?${new URLSearchParams(o.query).toString()}` : "";
   let res: Response;
   try {
-    res = await h.fetch(`${BASE}${path}${query}`, {
+    res = await h.fetch(`${h.base ?? BASE}${path}${query}`, {
       method,
       headers: {
         Authorization: `Bearer ${h.key}`,
         "Content-Type": "application/x-www-form-urlencoded",
+        "Stripe-Version": STRIPE_API_VERSION,
         ...(o.idempotencyKey ? { "Idempotency-Key": o.idempotencyKey } : {}),
       },
       body: o.body ? formBody(o.body).toString() : undefined,

@@ -2,11 +2,11 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { classifyTotal, overBudgetLimitCents } from "@gifts-af/core";
+import { classifyTotal, goodsCapCents, overBudgetLimitCents, type FeeInputs } from "@gifts-af/core";
 import { IdeaPhoto } from "@/components/idea-photo";
 import { chooseBy, shortDate } from "@/lib/occasion-format";
 import { Button } from "@/components/ui/button";
-import type { RoundPageIdea, RoundPageOrder } from "@/modules/concierge";
+import type { FeeSheet, RoundPageIdea, RoundPageOrder } from "@/modules/concierge";
 import { money } from "@/app/people/[id]/money";
 import { OverBudgetSheet } from "../../../over-budget-sheet";
 import { WaysOut, type PickAgainResult, type SkipResult } from "../../../ways-out";
@@ -17,6 +17,7 @@ import {
   outcomeWords,
   type BuyResult,
 } from "../../../outcome";
+import { AddCard, BuyingPaused, CardMoneyNotice, CardReturnNotice, CostLine, FeeInfo, SavedCard, type StartCardResult } from "../../../card-ui";
 import {
   EMPTY_ADDRESS,
   OtherAddressForm,
@@ -38,7 +39,8 @@ import {
 
 export type FixResult = BuyResult;
 export type CheckResult =
-  | { ok: true; oldCents: number; newCents: number }
+  /** `maxCents`: a card buyer's "Most you'll pay" at today's price; null for a wallet buyer. */
+  | { ok: true; oldCents: number; newCents: number; maxCents?: number | null }
   | {
       ok: false;
       error:
@@ -51,6 +53,27 @@ export type CheckResult =
         | "session"
         | "bad_form";
     };
+
+/**
+ * A card buyer's fix page (mock-ups 3a to 3c). Paused: nothing to add or buy. No card: Add a card,
+ * which comes back here and buys nothing. With one: the gift at today's price (or its saved
+ * estimate), "Most you'll pay", and Buy again.
+ */
+export type FixCard = {
+  on: boolean;
+  hasCard: boolean;
+  needsPhone: boolean;
+  fee: FeeSheet;
+  /** Today's fee inputs, as the server judges a card buyer's charges (CardBuyer.payer.fees). */
+  fees: FeeInputs;
+  /** The price, shipping and tax alone of each idea that can be bought here, by id (cardGoods). */
+  goodsFor: Record<string, number>;
+  /** The return route's `card=`, when the buyer just came back from Stripe's page. */
+  cardReturn: string | null;
+  startCard: (phone: string | null) => Promise<StartCardResult>;
+  /** "Most you'll pay" for each idea that can be bought here, at its total on the page; null past the allowance. */
+  maxFor: Record<string, number | null>;
+};
 
 export type FixScreenProps = {
   roundId: string;
@@ -88,6 +111,8 @@ export type FixScreenProps = {
   canSkip: boolean;
   pickAgainAction: (roundId: string, orderId: string) => Promise<PickAgainResult>;
   skipRoundAction: (roundId: string, shownOrderIds: string[]) => Promise<SkipResult>;
+  /** Set for a card buyer; a wallet buyer sees the page as it was before cards. */
+  card?: FixCard;
 };
 
 const ADDRESS_FAILURES = new Set(["address_withdrawn", "address_rejected"]);
@@ -112,6 +137,10 @@ const WHAT_HAPPENED: Record<string, { title: string; body: string }> = {
   address_rejected: {
     title: "The store couldn't ship to that address",
     body: "The address was refused, so we didn't send it.",
+  },
+  card_needed: {
+    title: "Your card changed or couldn't be charged",
+    body: "Nothing was bought.",
   },
   store_cancelled: {
     title: "The store cancelled it",
@@ -153,6 +182,8 @@ type Target = {
   totalCents: number;
   shownTotalCents?: number;
   shipTo?: ShipChoice;
+  /** A card buyer's "Most you'll pay" for it, sent back so nothing dearer is bought (AC-4). */
+  maxCents?: number | null;
 };
 
 export function FixScreen(p: FixScreenProps) {
@@ -174,6 +205,11 @@ export function FixScreen(p: FixScreenProps) {
   const [other, setOther] = useState(false);
   const [saveToPerson, setSaveToPerson] = useState(false);
   const [buying, startBuying] = useTransition();
+  const maxFor = (ideaId: string) => p.card?.maxFor[ideaId] ?? null;
+  // A card buyer's newer, higher "Most you'll pay" per target, once the server said so (AC-4).
+  const [maxNow, setMaxNow] = useState<Record<string, number>>({});
+  const card = p.card;
+  const maxOf = (t: Target) => maxNow[t.key] ?? t.maxCents ?? null;
 
   if (result) return <Outcome result={result} roundId={roundId} />;
 
@@ -186,6 +222,8 @@ export function FixScreen(p: FixScreenProps) {
     if (t.shownTotalCents !== undefined)
       form.set("shownTotalCents", String(t.shownTotalCents));
     if (over) form.set("over", "1");
+    const max = maxOf(t);
+    if (card && max !== null) form.set("shownMaxCents", String(max));
     if (t.shipTo) putShipTo(form, t.shipTo);
     setError(null);
     setThrown(false);
@@ -203,7 +241,10 @@ export function FixScreen(p: FixScreenProps) {
         setPendingOver(t);
         return;
       }
-      if (!r.ok && r.error === "price_changed") setCheck(null);
+      if (!r.ok && r.error === "price_changed" && card && r.neverMoreThanCents !== undefined) {
+        const higher = r.neverMoreThanCents;
+        setMaxNow((m) => ({ ...m, [t.key]: higher }));
+      } else if (!r.ok && r.error === "price_changed") setCheck(null);
       if (!r.ok && STAY.has(r.error)) setError(r);
       else setResult(r);
     });
@@ -253,6 +294,68 @@ export function FixScreen(p: FixScreenProps) {
     });
   }
 
+  /** A card that couldn't be charged, with a card saved now (3b, 3c): today's price, then Buy again. */
+  function cardNeededBuy(c: FixCard, i: RoundPageIdea) {
+    const saved = <SavedCard start={() => c.startCard(null)} />;
+    const askFirst = i.livePrice && (check === null || (!check.ok && (check.error === "session" || check.error === "bad_form")));
+    if (askFirst) {
+      return (
+        <div className="flex flex-col gap-2">
+          {saved}
+          {check && !check.ok && (
+            <p role="alert" className="text-[13px] text-destructive">
+              {CHECK_WORDS[check.error]}
+            </p>
+          )}
+          <p role="note" className="rounded-lg bg-warning-soft px-2.5 py-2 text-[13px] text-warning">
+            {p.priceCheckNotice}
+          </p>
+          <Button type="button" variant="outline" className="w-full" disabled={checking} aria-busy={checking} onClick={checkPrice}>
+            Check today&apos;s price
+          </Button>
+        </div>
+      );
+    }
+    // Checked, or it can't be: a gift that can't be priced today keeps its saved estimate, still capped.
+    if (check && !check.ok && check.error !== "unavailable") {
+      return (
+        <p role="status" className="text-[15px]">
+          {CHECK_WORDS[check.error]}
+        </p>
+      );
+    }
+    const today = check?.ok ? check : null;
+    const total = today ? today.newCents : i.totalCents;
+    let goods = c.goodsFor[i.id];
+    if (today) {
+      try {
+        // Exact: each whole charge comes from one goods total.
+        goods = goodsCapCents(today.newCents, c.fees);
+      } catch {
+        goods = total;
+      }
+    }
+    const target: Target = { key: "same", ideaId: i.id, totalCents: total, maxCents: today ? (today.maxCents ?? null) : maxFor(i.id) };
+    const max = maxOf(target);
+    return (
+      <div className="flex flex-col gap-2">
+        <ul aria-label="What it costs" className="flex flex-col gap-1.5 rounded-xl border border-border p-3 text-[15px]">
+          <CostLine label={today ? "Today's price, shipping and tax" : "Price, shipping and tax"} value={money(goods)} />
+          <CostLine
+            label={c.fee.label}
+            value={money(total - goods)}
+            extra={<FeeInfo fee={c.fee} gifts={1} goodsCents={goods} totalCents={total} capGoodsCents={null} maxChargeCents={max} />}
+          />
+          <CostLine label="Estimated total" value={`About ${money(total)}`} strong />
+          {max !== null && <CostLine label="Most you'll pay" value={money(max)} strong />}
+        </ul>
+        {saved}
+        <CardMoneyNotice feeLabel={c.fee.label} />
+        {buyButton(target, `Buy again · about ${money(total)}`)}
+      </div>
+    );
+  }
+
   const seeAll = (
     <Button asChild variant="outline">
       <Link href={`/rounds/${roundId}`}>See all ideas</Link>
@@ -262,13 +365,29 @@ export function FixScreen(p: FixScreenProps) {
   const linkCls =
     "inline-flex min-h-11 items-center text-[15px] text-primary underline underline-offset-[3px]";
 
+  // A card buyer buys here only with paying by card on and a card saved; otherwise the page
+  // offers Add a card, or says buying is paused (AC-12).
+  const canBuyHere = !card || (card.on && card.hasCard);
+  const cardNeeded = failure === "card_needed";
+
   return (
     <>
       <section className="flex flex-col gap-2" aria-labelledby="fix-what">
-        <h2 id="fix-what" className="text-[17px] font-bold">
-          {words.title}
-        </h2>
-        <p className="text-[15px]">{`${words.body} Choose by ${chooseBy(p.shipByDeadline)} to still arrive in time.`}</p>
+        {cardNeeded ? (
+          <div className="rounded-xl bg-warning-soft p-3 text-[15px]">
+            <h2 id="fix-what" className="font-bold text-warning">
+              {words.title}
+            </h2>
+            <p>{`${words.body} Choose by ${chooseBy(p.shipByDeadline)} to still arrive in time.`}</p>
+          </div>
+        ) : (
+          <>
+            <h2 id="fix-what" className="text-[17px] font-bold">
+              {words.title}
+            </h2>
+            <p className="text-[15px]">{`${words.body} Choose by ${chooseBy(p.shipByDeadline)} to still arrive in time.`}</p>
+          </>
+        )}
         {idea && (
           <div className="flex items-start gap-3 rounded-xl border border-border p-3">
             <IdeaPhoto url={idea.imageUrl} title={idea.title} />
@@ -283,23 +402,43 @@ export function FixScreen(p: FixScreenProps) {
                   </span>
                   <span className="font-semibold">{`Now ${money(check.newCents)}`}</span>
                 </span>
+              ) : cardNeeded && canBuyHere ? (
+                idea.arriveBy && <span className="text-[13px] text-muted-foreground">{`Arrives by ${shortDate(idea.arriveBy)}`}</span>
               ) : (
                 <span className="text-[13px] tabular-nums text-muted-foreground">{`You approved ${money(idea.totalCents)}`}</span>
               )}
             </span>
+            {card && cardNeeded && canBuyHere && (
+              <span className="ml-auto flex-none text-[15px] font-semibold tabular-nums">{money(card.goodsFor[idea.id])}</span>
+            )}
           </div>
         )}
       </section>
 
-      <MoneyNotice feeCents={p.feeCents} />
+      {card ? (
+        canBuyHere && !cardNeeded && <CardMoneyNotice feeLabel={card.fee.label} />
+      ) : (
+        <MoneyNotice feeCents={p.feeCents} />
+      )}
 
-      {failure === "price_up" && idea && !idea.livePrice && (
+      {card && <CardReturnNotice status={card.cardReturn} />}
+      {card && !card.on && <BuyingPaused />}
+      {card?.on && !card.hasCard && (
+        <AddCard start={card.startCard} needsPhone={card.needsPhone}>
+          <p className="text-center text-[13px] text-muted-foreground">
+            Then you&apos;ll come back here and tap Buy again. <b>Adding a card doesn&apos;t buy anything.</b>
+          </p>
+        </AddCard>
+      )}
+      {card && canBuyHere && cardNeeded && idea && cardNeededBuy(card, idea)}
+
+      {canBuyHere && failure === "price_up" && idea && !idea.livePrice && (
         <p role="status" className="text-[15px]">
           We can&apos;t check today&apos;s price for this one.
         </p>
       )}
 
-      {failure === "price_up" && idea?.livePrice && (
+      {canBuyHere && failure === "price_up" && idea?.livePrice && (
         <div className="flex flex-col gap-2">
           {check === null ||
           (!check.ok &&
@@ -333,6 +472,7 @@ export function FixScreen(p: FixScreenProps) {
                 ideaId: idea.id,
                 totalCents: check.newCents,
                 shownTotalCents: check.newCents,
+                maxCents: check.maxCents ?? null,
               },
               `Buy at about ${money(check.newCents)}`,
             )
@@ -344,7 +484,7 @@ export function FixScreen(p: FixScreenProps) {
         </div>
       )}
 
-      {addressFailure && idea && (
+      {canBuyHere && addressFailure && idea && (
         <section className="flex flex-col gap-2" aria-labelledby="fix-where">
           <h2 id="fix-where" className="text-[17px] font-bold">
             Send it somewhere else
@@ -355,6 +495,7 @@ export function FixScreen(p: FixScreenProps) {
                 key: "buyer",
                 ideaId: idea.id,
                 totalCents: idea.totalCents,
+                maxCents: maxFor(idea.id),
                 shipTo: { kind: "buyer" },
               },
               `Ship it to me · buy for about ${money(idea.totalCents)}`,
@@ -378,6 +519,7 @@ export function FixScreen(p: FixScreenProps) {
                 key: "recipient",
                 ideaId: idea.id,
                 totalCents: idea.totalCents,
+                maxCents: maxFor(idea.id),
                 shipTo: { kind: "recipient" },
               },
               `Ship to ${personName}'s address in ${place(p.recipient)} · buy for about ${money(idea.totalCents)}`,
@@ -396,6 +538,7 @@ export function FixScreen(p: FixScreenProps) {
                   key: "other",
                   ideaId: idea.id,
                   totalCents: idea.totalCents,
+                  maxCents: maxFor(idea.id),
                   shipTo: {
                     kind: "other",
                     address,
@@ -418,7 +561,7 @@ export function FixScreen(p: FixScreenProps) {
         </section>
       )}
 
-      {!addressFailure && p.nextBest && (
+      {canBuyHere && !addressFailure && !cardNeeded && p.nextBest && (
         <section className="flex flex-col gap-2" aria-labelledby="fix-next">
           <h2 id="fix-next" className="text-[17px] font-bold">
             Or the next-best idea
@@ -446,6 +589,7 @@ export function FixScreen(p: FixScreenProps) {
               key: `next:${p.nextBest.id}`,
               ideaId: p.nextBest.id,
               totalCents: p.nextBest.totalCents,
+              maxCents: maxFor(p.nextBest.id),
             },
             "Buy this instead",
             failure === "price_up" ? "outline" : undefined,
@@ -467,7 +611,9 @@ export function FixScreen(p: FixScreenProps) {
           <span>
             {error.error === "no_address"
               ? "Check the address, or choose another."
-              : outcomeWords(error).body}
+              : error.error === "price_changed" && card && error.neverMoreThanCents !== undefined
+                ? `The most you'll pay is now ${money(error.neverMoreThanCents)}. Nothing was bought. Tap Buy again to agree to it.`
+                : outcomeWords(error).body}
           </span>
         </div>
       )}

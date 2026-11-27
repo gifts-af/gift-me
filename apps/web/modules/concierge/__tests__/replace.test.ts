@@ -158,7 +158,7 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
     zinc.calls = [];
 
     const quote = await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps());
-    expect(quote).toEqual({ oldCents: 4200, newCents: totalAt(5000) });
+    expect(quote).toEqual({ oldCents: 4200, newCents: totalAt(5000), byCard: false });
     // Read-only: nothing was written.
     expect(await orders(r.roundId)).toHaveLength(1);
 
@@ -188,7 +188,7 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
     expect((await orders(r.roundId))[0].max_price_cents).toBe(1850);
     zinc.catalog.set(`amazon:${r.productIds[0]}`, { priceCents: 1549 });
     zinc.products.set(urlOf(r.ideaIds[0]), { priceCents: 2349 });
-    expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps())).toEqual({ oldCents: 1773, newCents: 2472 });
+    expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps())).toEqual({ oldCents: 1773, newCents: 2472, byCard: false });
     const input = { userId, roundId: r.roundId, failedOrderId: failed, ideaId: r.ideaIds[0], shownTotalCents: 2472 };
     expect(await replaceFailedOrder(input, deps())).toEqual({ ok: false, error: "needs_confirmation" });
     expect(await replaceFailedOrder({ ...input, overBudgetConfirmed: true }, deps())).toEqual({ ok: true, status: "ordered", reason: null });
@@ -248,7 +248,7 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
     recordCost.mockImplementationOnce((() => {
       throw new Error("sync");
     }) as RecordCost);
-    expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps())).toEqual({ oldCents: 4200, newCents: totalAt(5000) });
+    expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps())).toEqual({ oldCents: 4200, newCents: totalAt(5000), byCard: false });
   });
 
   it("a Zinc error after the call still records the lookup, and the answer is unchanged", async () => {
@@ -276,7 +276,7 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
     const [failed] = await boughtAndFailed(userId, r, { 0: "max_price_exceeded" });
     zinc.catalog.set(`amazon:${r.productIds[0]}`, { priceCents: 5000 });
     recordCost.mockRejectedValueOnce(new Error("down"));
-    expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps())).toEqual({ oldCents: 4200, newCents: totalAt(5000) });
+    expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps())).toEqual({ oldCents: 4200, newCents: totalAt(5000), byCard: false });
   });
 
   it("the re-buy is refused when the price rose again since the page loaded", async () => {
@@ -287,7 +287,7 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
     zinc.calls = [];
     zinc.posts = [];
     const quote = await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps());
-    expect(quote).toEqual({ oldCents: 4200, newCents: totalAt(5000) });
+    expect(quote).toEqual({ oldCents: 4200, newCents: totalAt(5000), byCard: false });
 
     zinc.catalog.set(`amazon:${r.productIds[0]}`, { priceCents: 5600 });
     recordCost.mockClear();
@@ -430,7 +430,7 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
     zinc.products.set(g.url, { priceCents: 5000 });
     const cost = { userId, kind: "lookup_price_check", cents: lookupCents, estimated: true, orderId: failed };
 
-    expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps())).toEqual({ oldCents: 4200, newCents: totalAt(5000) });
+    expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps())).toEqual({ oldCents: 4200, newCents: totalAt(5000), byCard: false });
     expect(zinc.calls).toEqual([`GET ${g.path}`]);
     expect(recordCost.mock.calls).toEqual([[cost]]);
 
@@ -484,7 +484,7 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
     const { userId, r, failed } = await failedListGift({ url: "https://yetch.store/products/blue-mug", productId: "blue-mug" });
     const quote = () => quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps());
     zinc.catalog.set("yetch.store:blue-mug", { priceCents: 5000, productId: "8123456", handle: "blue-mug" });
-    expect(await quote()).toEqual({ oldCents: 4200, newCents: totalAt(5000) });
+    expect(await quote()).toEqual({ oldCents: 4200, newCents: totalAt(5000), byCard: false });
     zinc.catalog.set("yetch.store:blue-mug", { priceCents: 5000, productId: "8123456", handle: "red-mug" });
     expect(await quote()).toBe("unavailable");
   });
@@ -498,7 +498,7 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
         { offerId: "off_own", priceCents: 5000 },
       ],
     });
-    expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps())).toEqual({ oldCents: 4200, newCents: totalAt(5000) });
+    expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps())).toEqual({ oldCents: 4200, newCents: totalAt(5000), byCard: false });
   });
 
   it("an AI idea is still looked up by its saved store and id, whatever its link", async () => {
@@ -508,7 +508,7 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
     await pg.query("update concierge.gift_ideas set product_url = 'https://www.walmart.com/ip/1' where id = $1", [r.ideaIds[0]]);
     zinc.catalog.set(`amazon:${r.productIds[0]}`, { priceCents: 5000 });
     zinc.calls = [];
-    expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps())).toEqual({ oldCents: 4200, newCents: totalAt(5000) });
+    expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps())).toEqual({ oldCents: 4200, newCents: totalAt(5000), byCard: false });
     expect(zinc.calls).toEqual([`GET /products/${r.productIds[0]}/offers`]);
   });
 
@@ -839,7 +839,7 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
       zinc.catalog.set(`amazon:${r.productIds[0]}`, { priceCents: 5000 });
       const goods = totalAt(5000) - 100;
       // Check today's price shows both as this buyer pays them: whole charges, fee included.
-      expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps())).toEqual({ oldCents: chargeCents(2259, F), newCents: chargeCents(goods, F) });
+      expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps())).toEqual({ oldCents: chargeCents(2259, F), newCents: chargeCents(goods, F), byCard: true });
       const input = { userId, roundId: r.roundId, failedOrderId: failed, ideaId: r.ideaIds[0] };
       expect(await replaceFailedOrder({ ...input, shownMaxCents: most(goods, F) - 1 }, deps())).toEqual({ ok: false, error: "price_changed", neverMoreThanCents: most(goods, F) });
       expect(await replaceFailedOrder({ ...input, shownMaxCents: most(goods, F) }, deps())).toMatchObject({ ok: true });

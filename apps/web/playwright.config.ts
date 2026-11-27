@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import { FAKE_GATEWAY_KEY, FAKE_GATEWAY_URL } from "./e2e/fake-gateway";
+import { FAKE_STRIPE_KEY, FAKE_STRIPE_URL } from "./e2e/fake-stripe";
 import { FAKE_ZINC_APP_KEY, FAKE_ZINC_URL } from "./e2e/fake-zinc";
 import { localSupabase } from "./e2e/local-supabase";
 
@@ -82,6 +83,12 @@ export default defineConfig({
           AI_GATEWAY_BASE: FAKE_GATEWAY_URL,
           AI_GATEWAY_API_KEY: FAKE_GATEWAY_KEY,
           ZINC_API_KEY: FAKE_ZINC_APP_KEY,
+          // card-payments.spec.ts (ALL-98): Stripe's card page and API, and the app's Zinc key for
+          // card orders, all against the fakes. Live-looking keys, since ZINC_ENV is "live".
+          STRIPE_SECRET_KEY: FAKE_STRIPE_KEY,
+          STRIPE_API_BASE: FAKE_STRIPE_URL,
+          ZINC_CONNECT_API_KEY: "zn_live_E2E_CONNECT_KEY",
+          ZINC_CONNECT_WEBHOOK_SECRET: "zn_whsec_E2E_CONNECT",
         },
       },
 });

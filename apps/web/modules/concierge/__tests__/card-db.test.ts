@@ -10,7 +10,7 @@ import { LOCAL_DB, localStack } from "../../../test/local-db";
 import { FakeStripe } from "./fake-stripe";
 
 vi.mock("server-only", () => ({}));
-const { finishCardSession, removeCard, savedCard, startCardSession, CARD_CONSENT_TEXT } = await import("../stripe/card");
+const { cardBuyer, finishCardSession, removeCard, saveCardPhone, savedCard, startCardSession, CARD_CONSENT_TEXT } = await import("../stripe/card");
 type CardDeps = import("../stripe/card").CardDeps;
 
 const stack = await localStack({ api: true });
@@ -147,7 +147,11 @@ describe.skipIf(!dbUp)("saving a card (real local database, fake Stripe)", () =>
     expect(b.get("custom_text[submit][message]")).toBe(CARD_CONSENT_TEXT);
 
     // No email, name or phone goes to Stripe (T42).
-    for (const r of stripe.requests) expect(r.body.toString()).not.toMatch(/example\.test|Mary|5555550100|email|name|phone/i);
+    // (branding_settings[display_name] is our own name, GiftsAF.)
+    for (const r of stripe.requests) {
+      expect([...r.body.values()].join(" ")).not.toMatch(/example\.test|Mary|5555550100/i);
+      expect([...r.body.keys()].filter((k) => k !== "branding_settings[display_name]").join(" ")).not.toMatch(/email|name|phone/i);
+    }
 
     // The customer is on the account at once, and the visit is recorded.
     expect((await account(u)).stripe_customer_id).toBe(b.get("customer"));
@@ -371,5 +375,42 @@ describe.skipIf(!dbUp)("saving a card (real local database, fake Stripe)", () =>
     expect(await savedCard(deps(), u)).toBeNull();
     await saveCard(u);
     expect(await savedCard(deps(), u)).toEqual({ brand: "visa", last4: "4242" });
+  });
+  it("tells the screens how a buyer pays: a wallet buyer gets today's screens", async () => {
+    const u = await newUser();
+    expect(await cardBuyer(deps(), u)).toEqual({ mode: "zinc_wallet" });
+  });
+
+  it("AC-12, AC-17: a card buyer's switch, card, phone and today's fee settings, without card details", async () => {
+    const u = await newUser({ phone: null });
+    await pg.query("update concierge.accounts set funding_mode = 'connect' where user_id = $1", [u]);
+    const before = await cardBuyer(deps(), u);
+    expect(before).toMatchObject({
+      mode: "connect",
+      on: true,
+      hasCard: false,
+      phone: null,
+      payer: { mode: "connect", fees: { marginCents: 100, zincFeeCents: 100, cardFeeBps: 290, cardFeeFixedCents: 30 } },
+      fee: { label: "GiftsAF fee", pricingNote: "Launch pricing: at cost", zincFeeCents: 100, aiCents: 65, runningCents: 35, cardFeeBps: 290, cardFeeFixedCents: 30 },
+    });
+    await pg.query("update concierge.accounts set stripe_customer_id = 'cus_x', stripe_payment_method_id = 'pm_x' where user_id = $1", [u]);
+    expect(await saveCardPhone(deps(), u, "(555) 555-0101")).toBe("ok");
+    await pg.query("update concierge.app_settings set value = '0' where key = 'connect_enabled'");
+    try {
+      expect(await cardBuyer(deps(), u)).toMatchObject({ on: false, hasCard: true, phone: "5555550101" });
+    } finally {
+      await pg.query("update concierge.app_settings set value = '1' where key = 'connect_enabled'");
+    }
+    expect(stripe.requests).toEqual([]);
+  });
+
+  it("AC-17: saves a card buyer's phone only when it's a 10-digit number, and never a wallet buyer's here", async () => {
+    const card = await newUser({ phone: null });
+    await pg.query("update concierge.accounts set funding_mode = 'connect' where user_id = $1", [card]);
+    expect(await saveCardPhone(deps(), card, "123")).toBe("bad_phone");
+    expect((await account(card)).buyer_phone).toBeNull();
+    const wallet = await newUser({ phone: null });
+    expect(await saveCardPhone(deps(), wallet, "5555550102")).toBe("not_card");
+    expect((await account(wallet)).buyer_phone).toBeNull();
   });
 });

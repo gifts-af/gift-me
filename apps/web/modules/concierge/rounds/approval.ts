@@ -378,6 +378,8 @@ export type RoundPageIdea = {
   listItemId: string | null;
   priceCents: number;
   totalCents: number;
+  /** Price, shipping and tax alone, before any fee; null on an idea saved before it was kept. */
+  goodsCents: number | null;
   overBudget: boolean;
   rank: number;
   status: string;
@@ -690,6 +692,7 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date, gate
       listItemId: i.list_item_id,
       priceCents: i.price_cents,
       totalCents,
+      goodsCents: i.goods_cents,
       overBudget,
       rank: i.rank,
       status: i.status,

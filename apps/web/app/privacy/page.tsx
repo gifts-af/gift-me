@@ -30,7 +30,7 @@ export default function PrivacyPage() {
       <main className="mx-auto flex w-full max-w-2xl flex-col gap-7 px-4 pb-12 pt-6 text-[15px] leading-relaxed">
         <div className="flex flex-col gap-1.5">
           <h1 className="text-[28px] font-extrabold leading-tight tracking-tight">Privacy</h1>
-          <p className="text-muted-foreground">Last updated 26 November 2026</p>
+          <p className="text-muted-foreground">Last updated 27 November 2026</p>
         </div>
 
         <p>
@@ -166,6 +166,17 @@ export default function PrivacyPage() {
             <li>
               When you approve a gift, Zinc and the store it&apos;s bought from get what&apos;s needed to ship it: the
               recipient&apos;s name and address, your phone number, and any gift message.
+            </li>
+            <li>
+              If you pay by card, you type your card on Stripe&apos;s own page, not ours. Stripe keeps the card number,
+              expiry date, security code and ZIP code, and we never see them. We send Stripe an id for your account,
+              never your name or email. We keep only Stripe&apos;s ids for you and your card, and show the card&apos;s
+              brand and last four digits in Settings by asking Stripe. Zinc charges the card through Stripe for each
+              gift you approve. Stripe&apos;s Link, which would offer to save your card with Stripe, is off. See{" "}
+              <a href="https://stripe.com/privacy" className={LINK}>
+                Stripe&apos;s privacy policy
+              </a>
+              .
             </li>
           </ul>
         </Section>

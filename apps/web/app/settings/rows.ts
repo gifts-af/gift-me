@@ -21,6 +21,13 @@ export function paymentRowText(s: PaymentSummary | "error"): string {
   return PAYMENT_TEXT[s];
 }
 
+/** A card buyer's "Paying for gifts" row: a card saved, none, or paying by card switched off. */
+export type CardSummary = { card: "saved" | "none" | "paused" };
+
+export function cardRowText(s: CardSummary): string {
+  return s.card === "saved" ? "Saved" : s.card === "none" ? "Not added" : "Paused";
+}
+
 /** The right-hand text of Settings' "My address" row (ALL-115 AC-6). */
 export function addressRowText(a: MyAddress): string {
   if (a.kind === "unavailable") return "Couldn't load";
