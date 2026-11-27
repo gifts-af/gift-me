@@ -739,28 +739,28 @@ Step 1 of the launch (planning 66): the owner's account alone moves to card, the
 
 **What gates it (and what doesn't).** Taking money needs us off **Vercel Hobby**, which is for non-commercial use only: move to a commercial plan before step 6. **Making the repo private (ALL-75) does not gate it.** Nothing secret is in the repo; ALL-75 ties the two together only because a private org repo can't deploy on Hobby. The repo stays public as a showcase until the public launch (owner). Also needed first: the owner's live Stripe account (done, sole proprietorship in the owner's name) and a support inbox that receives mail (Public details, step 4).
 
-1. **Wait for the owner's wallet order to finish.** The loaf pan (order `48bd263a`) is delivered or closed, and the owner has no other wallet gift held, placing, unconfirmed or failed-and-unresolved:
+1. **Wait for every one of the owner's wallet gifts to finish.** The loaf pan (order `48bd263a`) and any other wallet gift is delivered or closed: none held, placing, unconfirmed, placed or shipped (a gift on its way would send its tracking, cancel and refund events to the app webhook after step 3, which ignores wallet orders), and no failure unresolved. Also check that the owner's is the only account connected to Zinc (`select count(*) from concierge.accounts where zinc_connected_at is not null` is 1; on 2026-11-27 it was):
    ```sql
    select id, status, failure_type, resolved from concierge.orders
     where user_id = (select id from auth.users where email = 'aaron.aallen@gmail.com')
       and funding_mode = 'zinc_wallet'
-      and (status in ('held', 'placing', 'unconfirmed') or (status = 'failed' and not resolved));
+      and (status in ('held', 'placing', 'unconfirmed', 'placed', 'shipped') or (status = 'failed' and not resolved));
    ```
    No rows means ready.
 2. **The owner disconnects Zinc** in GiftsAF Settings > Paying for gifts. This removes the owner's wallet webhook from the Zinc account (a Zinc account has one webhook).
 3. **Set the app webhook** on that Zinc account to `https://giftsaf.com/api/zinc/webhook/app`, signed with the secret in `ZINC_CONNECT_WEBHOOK_SECRET`. Check it with `GET /webhooks/endpoint` on the app key: the URL must be exactly that one. Production's env vars `ZINC_CONNECT_API_KEY` (live key, not `zn_test_`), `ZINC_CONNECT_WEBHOOK_SECRET` and `STRIPE_SECRET_KEY` (`sk_live_`) are set, and `ZINC_ENV=live`.
-4. **The shared Zinc wallet is at $0 with auto top-up off** (Zinc dashboard). An order sent without a card then fails instead of spending it.
+4. **The shared Zinc wallet is at $0 with auto top-up off** (Zinc dashboard). An order sent without a card then fails instead of spending it. A refund or return on an older wallet order can put money back later, so check it again at step 8.
 5. **Stripe dashboard checklist** (owner): everything under **Before the first real card order**, step 4 above: the US-only Radar rule, statement descriptor `GIFTSAF`, business name, public details with the support inbox, branding, Link off.
-6. **Merge the step-1 PR** (the `20261130160000_card_launch_owner.sql` migration). After CI's `migrate` job on main, check it switched the owner and nobody else:
+6. **Merge the step-1 PR** (the `20261130160000_card_launch_owner.sql` migration). Right before merging, repeat step 3's `GET /webhooks/endpoint` check. A green CI run doesn't mean the owner was switched (the migration only reports in its log), so after CI's `migrate` job on main, check it switched the owner and nobody else:
    ```sql
    select u.email, a.funding_mode from concierge.accounts a join auth.users u on u.id = a.user_id where a.funding_mode = 'connect';
    ```
-   One row, the owner's. If it shows none, the migration's notice says why (`still_connected` or `wallet_order_open`): fix that, then run `select concierge.switch_account_to_card('aaron.aallen@gmail.com');`, which does the same switch with the same checks.
+   One row, the owner's. If it shows none, `select concierge.switch_account_to_card('aaron.aallen@gmail.com');` says why (`still_connected` or `wallet_order_open`) and switches once it's fixed. **If you disconnect Zinc again to fix `still_connected`, that deletes the account's one webhook, the app's included: redo step 3 and its check.** On dev the owner's dev account may switch too; turn `connect_enabled` on there or switch it back if dev approvals stop with `connect_off`.
 7. **The owner turns card payments on:**
    ```sql
    update concierge.app_settings set value = '1' where key = 'connect_enabled';
    ```
-8. **One real gift under $25 on the owner's card**, a gift the owner wants to give, agreed beforehand (the QA account never buys). Add a card on Stripe's page, come back, check the Buy page's "Most you'll pay", tap Buy now.
+8. **Check the shared Zinc wallet is still $0**, then **one real gift under $25 on the owner's card**, a gift the owner wants to give, agreed beforehand (the QA account never buys). Add a card on Stripe's page, come back, check the Buy page's "Most you'll pay", tap Buy now.
 9. **Evidence checks** (post each on ALL-98):
    - The charge in Stripe is at most the "Most you'll pay" shown, and `orders.final_charge_cents` matches it (assumptions A2 and A7).
    - The Stripe payment settles, and its fees are as expected (who pays Stripe's fee: the open question in the plan).
@@ -769,7 +769,7 @@ Step 1 of the launch (planning 66): the owner's account alone moves to card, the
    - Tracking events arrive on the app webhook (`zinc.order_settled`, then shipped and delivered), and no `zinc.unknown_order` or `zinc.card_event_on_buyer_webhook` alert fires.
    - For a shared address, no street shows to the buyer anywhere (T61).
    - The statement line reads `GIFTSAF` once it posts.
-10. **If anything is wrong, turn it off** (**Stop card payments** above): `connect_enabled` 0. Orders already sent settle as usual; nobody else is on card yet. Step 2, everyone else, waits for the owner's go-ahead after this passes.
+10. **If anything is wrong, turn it off** (**Stop card payments** above): `connect_enabled` 0. Orders already sent settle as usual; nobody else is on card yet. To put the owner back on the wallet once no card order is open: `update concierge.accounts set funding_mode = 'zinc_wallet' where user_id = …`, then reconnect Zinc in Settings, which replaces the app webhook (card orders then rely on the sweep until it's set again). Step 2, everyone else, waits for the owner's go-ahead after this passes.
 
 ### After a store cancel
 
