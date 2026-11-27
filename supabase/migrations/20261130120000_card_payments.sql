@@ -1225,8 +1225,9 @@ end;
 $$;
 
 -- ─── remove_card: Settings > Remove ───────────────────────────────────────────
--- 'ok', or 'placing' while any order is being sent or unconfirmed, so a card isn't
--- taken away under a send. begin_placing takes the same account lock, so a send can't
+-- 'ok', or 'placing' while any order is being sent, so a card isn't taken away under a
+-- send. An unconfirmed order doesn't block it: Zinc already holds the money on the card,
+-- and an unconfirmed order can last days. begin_placing takes the same account lock, so a send can't
 -- start in between. Keeps the customer for the next card. Changes no order: waiting
 -- gifts end as card_needed at their next placing try.
 create function concierge.remove_card(p_user_id uuid)
@@ -1241,7 +1242,7 @@ begin
     return 'ok';
   end if;
   if exists (select 1 from concierge.orders
-              where user_id = p_user_id and status in ('placing', 'unconfirmed')) then
+              where user_id = p_user_id and status = 'placing') then
     return 'placing';
   end if;
   update concierge.accounts set stripe_payment_method_id = null where user_id = p_user_id;

@@ -204,7 +204,8 @@ select tests.cp_round(:'u') as r4 \gset
 select tests.cp_approve_all(:'r4');
 select is(concierge.remove_card(:'u'), 'placing', 'remove is refused while an order is placing (case 6)');
 update concierge.orders set status = 'unconfirmed' where round_id = :'r1';
-select is(concierge.remove_card(:'u'), 'placing', 'and while one is unconfirmed');
+select is(concierge.remove_card(:'u'), 'ok', 'but not while one is only unconfirmed: the hold is already on the card');
+update concierge.accounts set stripe_payment_method_id = 'pm_1' where user_id = :'u';
 select is(tests.cp_card(:'u'), 'pm_1', 'and the card stays');
 update concierge.orders set status = 'placed' where round_id = :'r1';
 select is(concierge.remove_card(:'u'), 'ok', 'remove works once nothing is placing');
