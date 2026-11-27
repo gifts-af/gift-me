@@ -288,6 +288,7 @@ export function capsForPayer(round: Pick<RoundRow, "budget_cents">, totals: numb
   { caps: number[]; maxCharges: number[] | null; neverMoreThanCents: number } | ApproveError;
 ```
 - Connect runs the same budget math on whole charges with a fee of 0, then `goodsCapCents`. Because `fee_cents = max_charge - max_price`, `committedSpendCents` needs no change.
+- **Idea runs judge a card buyer's candidates on the whole charge** (`chargeCents(goods)` at today's fees) for the budget filter and the over-budget flag; wallet buyers as today. This follows from the owner's decision that the GiftsAF fee counts toward the gift budget (planning 66), so it's not a new decision (ruled 2026-11-27).
 - Idea runs save `goods_cents`. `est_total_cents` keeps its wallet meaning; every reader that shows or judges a total (`place.ts`, `ideas/store.ts`, `read.ts`, `approval.ts`, `replace.ts`, emails) calls `ideaTotalCents(idea, payer)`, which for a card buyer is `chargeCents(goods_cents)` with today's fees. So nothing goes stale when fees or the buyer's way of paying change, and Task 10 needs no recompute. A re-quote sets both columns.
 - `ApproveInput` and `ReplaceInput` gain `shownMaxCents?: number`, required for connect; a higher maximum today returns `price_changed` with the new one. `no_card` and `connect_off` join `ApproveError`; `fees_changed` is shown as `price_changed`.
 - `recheckedCaps` for connect: totals are `chargeCents(goods, saved inputs)`, fee 0, then `goodsCapCents(…, saved inputs)`, then the lower of that and the saved cap.
