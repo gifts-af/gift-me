@@ -129,6 +129,22 @@ describe.skipIf(!dbUp)("createSupabaseIdeaStore", () => {
     expect(got?.facts.map((f) => f.value)).toEqual(["Loves fishing"]);
     expect(got?.relationship).toBe("father");
     expect(got?.overBudgetPct).toBe(20);
+    // A wallet buyer has no card fees; a card buyer gets today's.
+    expect(got?.cardFees).toBeNull();
+    await pg.query("update concierge.accounts set funding_mode = 'connect' where user_id = $1", [buyer.id]);
+    const fees = (await pg.query(
+      `select (select value::int from concierge.app_settings where key = 'fee_part_ai_cents') + (select value::int from concierge.app_settings where key = 'fee_part_running_cents') as margin,
+              (select value::int from concierge.app_settings where key = 'zinc_fee_cents') as zinc,
+              (select value::int from concierge.app_settings where key = 'card_fee_bps') as bps,
+              (select value::int from concierge.app_settings where key = 'card_fee_fixed_cents') as fixed`,
+    )).rows[0];
+    expect((await store().inputs({ userId: buyer.id, personId: person, roundId: null }))?.cardFees).toEqual({
+      marginCents: fees.margin,
+      zincFeeCents: fees.zinc,
+      cardFeeBps: fees.bps,
+      cardFeeFixedCents: fees.fixed,
+    });
+    await pg.query("update concierge.accounts set funding_mode = 'zinc_wallet' where user_id = $1", [buyer.id]);
     expect(got?.names).toEqual(["Burger", "Smith", "Bob", "Jim"]);
 
     // Another buyer's person, and a deleted one, aren't there at all.

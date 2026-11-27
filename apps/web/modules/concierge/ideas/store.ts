@@ -1,9 +1,10 @@
 import "server-only";
-import type { CalendarDate, OccasionKind, OccasionRule, ScheduleSettings } from "@gifts-af/core";
+import type { CalendarDate, FeeInputs, OccasionKind, OccasionRule, ScheduleSettings } from "@gifts-af/core";
 import { z } from "zod";
 import type { createAdminClient } from "@/lib/supabase/admin";
 import { hasPaidFeatures } from "../paid-features";
 import { activeFacts, type ActiveFact } from "../profile/profile";
+import { readPayer } from "../purchase/payer";
 
 // Everything one idea run needs from the database (ALL-27). runIdeas works on
 // this interface, so its tests use an in-memory store; this file is thin glue
@@ -78,6 +79,8 @@ export type IdeaInputs = {
   defaultBudgetCents: number | null;
   /** Rounds only: the linked list's offerable gifts, in list order (listGiftCandidates). Empty on demand. */
   listGifts: ListGift[];
+  /** A card buyer's fees at today's settings, so their budget counts the GiftsAF fee; null for a wallet buyer. */
+  cardFees: FeeInputs | null;
 };
 
 /**
@@ -333,7 +336,7 @@ export function createSupabaseIdeaStore(db: AdminDb): IdeaStore {
         };
       }
 
-      const [buyer, facts, excludedRows, account, occasions, budgets, byDefault] = await Promise.all([
+      const [buyer, facts, excludedRows, account, occasions, budgets, byDefault, payer] = await Promise.all([
         db.from("profiles").select("display_name").eq("id", userId).maybeSingle(),
         activeFacts(db, personId),
         excludedOffers(db, personId, roundId),
@@ -352,6 +355,7 @@ export function createSupabaseIdeaStore(db: AdminDb): IdeaStore {
           .eq("user_id", userId)
           .eq("relationship", person.relationship)
           .maybeSingle(),
+        readPayer({ db, now: new Date() }, userId),
       ]);
       if (buyer.error) fail("Loading the buyer failed", buyer.error);
       if (account.error) fail("Loading the account failed", account.error);
@@ -407,6 +411,7 @@ export function createSupabaseIdeaStore(db: AdminDb): IdeaStore {
         baseBudgetCents: budgetFor("any"),
         defaultBudgetCents: byDefault.data?.base_amount_cents ?? null,
         listGifts,
+        cardFees: payer.mode === "connect" ? payer.fees : null,
       };
     },
 
