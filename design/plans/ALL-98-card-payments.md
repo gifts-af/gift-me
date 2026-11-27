@@ -25,9 +25,9 @@ A typical buyer won't keep $100 parked in a Zinc account (owner). Friends join o
 | Proof before building | Zinc Connect can't use a Stripe sandbox (tested 2026-11-25). Unproven parts are assumptions (A1 to A4 below). **Revised 2026-11-27: build now, alongside other work, despite the scope freeze's "last"** (owner, relayed by the lead session; **not yet in CLAUDE.md's scope-freeze exceptions: the owner adds it**). Everything ships off (`connect_enabled` 0). **The real card order (under $25, Jim's card, a gift Jim wants to give) now gates turning it on (Task 10), not building** | Owner, 2026-11-25; revised 2026-11-27 |
 | Returns, disputes | By hand, with a runbook (59) | Owner, 2026-11-24 |
 
-**Plan review, 2026-11-27** (fresh reviewer): the app Zinc key is only usable through one function that requires `payment` (Task 6); launch is two steps, Jim first (Task 10); A7 on Zinc's totals; `est_total_cents` keeps one meaning; the margin is derived from its two parts; the Stripe customer is saved at once; store cancels adjust costs; a hold-age alert; mixed modes raise.
+**Plan review, 2026-11-27** (fresh reviewer): the app Zinc key is only usable through one function that requires `payment` (Task 6); launch is two steps, one account first (Task 10; the owner's, owner 2026-11-27); A7 on Zinc's totals; `est_total_cents` keeps one meaning; the margin is derived from its two parts; the Stripe customer is saved at once; store cancels adjust costs; a hold-age alert; mixed modes raise.
 
-**Spec review, 2026-11-27** (fresh reviewer, against today's code): card codes now follow Zinc's documented list (A1); Jim disconnects too before the first card order (Task 10); US-only cards and Stripe's page data become AC-21; fees aren't counted twice (AC-14); store-cancel refund is assumption A5 with a runbook check; test webhooks A6; the mixed-modes alert is cut; Task 10 recomputes open rounds' totals.
+**Spec review, 2026-11-27** (fresh reviewer, against today's code): card codes now follow Zinc's documented list (A1); the first card order's buyer disconnects their wallet first (Task 10); US-only cards and Stripe's page data become AC-21; fees aren't counted twice (AC-14); store-cancel refund is assumption A5 with a runbook check; test webhooks A6; the mixed-modes alert is cut; Task 10 recomputes open rounds' totals.
 
 ## Approaches considered
 
@@ -117,11 +117,11 @@ Moving wallet accounts; a spending page (ALL-145); a returns flow; tax; digital 
 
 1. Charged more than "Most you'll pay": refund the difference automatically and email the buyer, rather than only alerting? **Decided: alert only until a real order shows it happens [Claude's call, accepted].**
 2. A person's budget now counts the GiftsAF fee, so a $22.59 gift is over a $25 budget for a card buyer. OK? **Decided: yes.**
-3. Jim disconnects his Zinc wallet before Task 10 so he can make the first card order? **Decided: yes.**
+3. Jim disconnects his Zinc wallet before Task 10 so he can make the first card order? **Decided: yes; revised by the owner, 2026-11-27: the first card order is on the owner's account instead, so Jim follows step 2 like everyone else.**
 4. Block non-US cards with a Stripe Radar rule? **Decided: yes.**
 5. Add ALL-98 to CLAUDE.md's scope-freeze exceptions (built now)? **Decided: yes** (CLAUDE.md, `c8a3f28`).
 6. Keep the shared Zinc account's wallet at $0 with auto top-up off once the app key is on production, so a card order that somehow lacks `payment` fails instead of spending it? **Decided: yes.**
-7. Launch on Jim's account first, everyone else after the real card order passes? **Decided: yes.**
+7. Launch on one account first, everyone else after the real card order passes? **Decided: yes, the owner's account (revised from Jim's, owner 2026-11-27).**
 8. Refuse Remove only while an order is `placing`, not `unconfirmed` (the hold is already on the card; `unconfirmed` can last days)? Revises 2026-11-25. **Decided: yes [Claude's call, accepted]; built in PR #175.**
 9. Zinc's pending answers (returns, chargebacks, hold length, fee on top or from the margin, $0 margin): each stays a setting or a runbook step **[Claude's call, accepted]**.
 10. Business form: **sole proprietorship for now**, Stripe in the owner's name. Moving off Vercel Hobby before the first real charge is planned separately.
@@ -349,8 +349,8 @@ export async function connectWiring(db: SupabaseClient<Database>, env?: Env): Pr
 
 **Files:** `supabase/migrations/<date>_card_payments_launch.sql`, its pgTAP.
 
-- First, in this order: the owner's and Jim's wallet orders are delivered or closed, both disconnect Zinc in Settings (the owner's clears the account's webhook; Jim must be off wallet to make the first card order), and the app webhook is set on that Zinc account. Check it with `GET /webhooks/endpoint`.
-- **Step 1 (PR 4a):** switch Jim's account only, then the real card order below. **Step 2 (PR 4b), only after it passes:** set `accounts.funding_mode` and the column default to `connect`, except accounts with `zinc_connected_at` set, a wallet order `held`, `placing` or `unconfirmed`, or an unresolved wallet failure.
+- First, in this order: the owner's wallet orders are delivered or closed (today the in-transit loaf pan, order `48bd263a`), the owner disconnects Zinc in Settings (which clears the account's webhook), and the app webhook is set on that Zinc account. Check it with `GET /webhooks/endpoint`.
+- **Step 1 (PR 4a):** switch the owner's account (aaron.aallen@gmail.com) only, then the real card order below, bought by the owner (owner, 2026-11-27; was Jim's). **Step 2 (PR 4b), only after it passes:** set `accounts.funding_mode` and the column default to `connect` for everyone else, Jim included, except accounts with `zinc_connected_at` set, a wallet order `held`, `placing` or `unconfirmed`, or an unresolved wallet failure.
 - [ ] pgTAP for each exception. **PR 4**, merged after ALL-75 and the app webhook on the Zinc account.
 - [ ] The owner turns `connect_enabled` on. One gift under $25, bought by a person on a connect account, agreed with the owner first (the QA account never buys). Check the charge against the maximum shown, the Stripe settlement, one `card_fee` and one `zinc_order_fee` row, the email, tracking on the app webhook, and that no street shows for a shared address. Evidence on ALL-98.
 - **Turning it off:** `connect_enabled` 0. Orders already sent settle as usual.
