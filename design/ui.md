@@ -288,6 +288,8 @@ Mock-ups: [ALL-29 approval](https://claude.ai/artifact/UB35r46GYrCddcLj2Frxhh), 
 
 A clickable, phone-first prototype, published as a private shareable artifact page that the owner and Jim can each open on their phones and comment on. **Link:** [GiftsAF mock-ups](https://claude.ai/artifact/BvdSVB6RPatUPRbBDyPRzW) (private; shared with Jim from the page's Share menu). **Source:** [`design/mockups/ALL-41.html`](mockups/ALL-41.html); republish it to the same link after changes.
 
+**Card payments (ALL-98):** [`mockups/ALL-98-card-payments.html`](mockups/ALL-98-card-payments.html) ([page](https://claude.ai/artifact/LTXDoMnn2g9XWWJNzupNNJ)): Buy page with the GiftsAF fee, the fee breakdown, paused, the card-needed fix page, Settings, Stripe's consent text and the card-buyer emails. Waiting for the owner's OK.
+
 **Zinc connection (ALL-32):** [`mockups/ALL-32-settings.html`](mockups/ALL-32-settings.html) (Settings, four states), [`mockups/ALL-32-emails.html`](mockups/ALL-32-emails.html) and [`mockups/ALL-32-emails-2.html`](mockups/ALL-32-emails-2.html) (hold, ordered and skipped emails).
 
 **Reviewing:** the owner and Jim share one claude.ai login, so the built-in comments can't tell them apart. The page therefore has its own feedback: on each screen, a comment box with a name picker (Aaron or Jim), and a per-person **"I approve this screen"** button. Comments and approvals are stored in the artifact's shared database, so both people see each other's, and Claude can read them to make changes. Sign-off is complete when both have approved every screen.
