@@ -186,6 +186,9 @@ describe.skipIf(!stack)("placing and sweeping card orders (real local database, 
     expect((await orders(r.roundId))[0]).toMatchObject({ status: "placed", total_cents: 2259, final_charge_cents: 2564, fee_cents: 305 });
     expect(orderPlaced).toHaveBeenCalledWith(r.roundId);
     expect(events("order.over_max_charge")).toEqual([]);
+    // What the ordered email is built from, read by the real round store.
+    const ctx = await createSupabaseRoundStore(db()).roundContext(r.roundId);
+    expect(ctx.orders[0]).toMatchObject({ fundingMode: "connect", totalCents: 2259, feeCents: 305, finalChargeCents: 2564 });
   });
 
   it("a wallet order's request body is unchanged: no payment, the buyer's own key (AC-16)", async () => {
@@ -226,6 +229,10 @@ describe.skipIf(!stack)("placing and sweeping card orders (real local database, 
       ["failed", "card_needed"],
     ]);
     expect(await card(u)).toBeNull();
+    // The card_needed email says to add a card: none is saved now.
+    expect(await createSupabaseRoundStore(db()).roundContext(r.roundId)).toMatchObject({ hasCard: false });
+    await pg.query("update concierge.accounts set stripe_payment_method_id = $2 where user_id = $1", [u, `pm_new_${u}`]);
+    expect(await createSupabaseRoundStore(db()).roundContext(r.roundId)).toMatchObject({ hasCard: true });
   });
 
   it("an order Zinc already has as declined (found after a 409) ends card_needed and clears the card", async () => {

@@ -76,14 +76,22 @@ type OneGift = Occasion & { giftTitle: string };
  * not be bought.
  */
 export type OtherGifts = { onItsWay?: string[]; ordering?: string[]; arrived?: string[]; working?: string[] };
+/**
+ * Paid by card (planning 59): nothing is charged when a gift fails, but the bank may show a
+ * pending hold for a while, so the failure emails say it drops off. Never a Zinc balance.
+ */
+type ByCard = { card?: boolean };
 /** One failed gift while the round is open; `orderByText`: the last day to choose again in time. */
-type Failure = OneGift & OtherGifts & { orderByText: string };
+type Failure = OneGift & OtherGifts & ByCard & { orderByText: string };
 /** A failed gift in a summary (ALL-116): what happened, and the link text for what to do now. */
 // `url` is that gift's own fix page (ALL-29).
 /** `refunded`: the store cancelled it after it was bought, and the money is back in the Zinc wallet (ALL-33). */
 export type FailedGift = { title: string; detail: string; action?: string; url: string; refunded?: boolean };
-/** A gift the store cancelled after it was bought (ALL-33). */
-export type CancelledGift = { title: string; store?: string; amountText?: string };
+/**
+ * A gift the store cancelled after it was bought (ALL-33). `card`: paid by card, so the whole
+ * charge comes back to the card, fee included; `totalText` is that charge, left out when unknown.
+ */
+export type CancelledGift = { title: string; store?: string; amountText?: string; card?: { totalText?: string } };
 
 /**
  * One gift's news in the daily summary (ALL-33). `expectedText`: when it's now expected;
@@ -92,7 +100,7 @@ export type CancelledGift = { title: string; store?: string; amountText?: string
  */
 export type NewsItem = Occasion & { title: string } & (
     | { kind: "late"; expectedText: string; daysLate: number; again?: boolean; url?: string }
-    | { kind: "cancelled"; amountText?: string; dateChanged?: boolean }
+    | { kind: "cancelled"; amountText?: string; dateChanged?: boolean; card?: { totalText?: string } }
     | { kind: "on_time"; expectedText: string }
   );
 
@@ -115,7 +123,11 @@ export type TemplateData = {
   reminder: Occasion & Asks & { ideas: IdeaRow[] };
   final_notice: Occasion & { ideas: IdeaRow[]; orderByText: string };
   /** `orderByText`: when the buyer can still choose again; absent once there's nothing to choose. */
-  needs_attention: Occasion & OtherGifts & { reason: string; orderByText?: string };
+  /**
+   * `cardNeeded`: a card order ended card_needed (the card changed or couldn't be charged), told
+   * in its own words; `saved`: a card is saved now, so only Buy again is left to do.
+   */
+  needs_attention: Occasion & OtherGifts & ByCard & { reason: string; orderByText?: string; cardNeeded?: { saved: boolean } };
   /** Each occasion's delivered gifts without an answer. */
   reaction_prompt: { rounds: (Occasion & { gifts: { title: string }[] })[] };
   needs_address: Occasion & { reminder?: boolean };
@@ -137,21 +149,25 @@ export type TemplateData = {
     /** After a partial top-up (AC-22). */
     still?: boolean;
   };
-  hold_setup: Gifts & { feeText: string };
-  hold_address: Gifts & { feeText: string };
-  hold_trouble: Gifts & { feeText: string };
+  // `card`: paid by card, so the fee is the GiftsAF fee, never Zinc's.
+  hold_setup: Gifts & ByCard & { feeText: string };
+  hold_address: Gifts & ByCard & { feeText: string };
+  hold_trouble: Gifts & ByCard & { feeText: string };
   hold_unconfirmed: Gifts;
   price_up: Failure;
   out_of_stock: Failure;
   too_late: Failure;
   missed_on_us: Gifts;
-  /** City only, never the full address. */
-  ordered: OneGift & { cityText?: string };
+  /**
+   * City only, never the full address. `charge`: paid by card, what the card was charged, each
+   * part formatted; left out when Zinc's figures aren't known.
+   */
+  ordered: OneGift & { cityText?: string; charge?: { goodsText: string; feeText: string; totalText: string } };
   /**
    * Gifts that failed once their round closed, or untold when it closed (too late to choose
    * again), with why when known; `onItsWay`: the round's other gifts placed.
    */
-  failed_late: Occasion & {
+  failed_late: Occasion & ByCard & {
     failed: { title: string; detail?: string }[];
     onItsWay?: string[];
     /** Closed before its ship-by day (the cancel link, the occasion off, the person removed). */
@@ -162,7 +178,7 @@ export type TemplateData = {
     personRemoved?: boolean;
   };
   /** ALL-116: `tried`, how many gifts were ordered in the round. */
-  failed_several: Occasion & OtherGifts & { tried: number; failed: FailedGift[]; orderByText: string };
+  failed_several: Occasion & OtherGifts & ByCard & { tried: number; failed: FailedGift[]; orderByText: string };
   /**
    * ALL-33: gifts the store cancelled after they were bought, too late to ship another. `store`
    * and `amountText` (the refund) are left out when unknown, never guessed.
@@ -291,6 +307,18 @@ function skippedEmail(d: TemplateData["skipped"], links: TemplateLinks["skipped"
   };
 }
 
+/** After a card order fails: nothing was charged, but the bank may show a hold for a while. */
+const HOLD_DROPS = "If you see a pending hold on your card, it will drop off.";
+const holdDrops = (d: ByCard) => (d.card ? [HOLD_DROPS] : []);
+
+/** The store cancelled a gift paid by card: the whole charge comes back, fee included (owner). */
+const cardRefund = (totalText: string | undefined) =>
+  `The whole charge${totalText ? `, ${totalText},` : ""} is refunded to your card, fee included. It can take 5 to 10 days to show.`;
+
+/** A cancelled gift's refund, by card or to the Zinc wallet. */
+const refundOf = (g: { amountText?: string; card?: { totalText?: string } }) =>
+  g.card ? cardRefund(g.card.totalText) : `The ${g.amountText ?? "money"} is back in your Zinc wallet.`;
+
 const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** "the Mug", "the Mug and the Apron", "the Mug, the Apron and the Vase". */
@@ -321,7 +349,7 @@ function newsRow(i: NewsItem): { title: string; detail: string; link?: { label: 
     case "cancelled":
       return {
         title: `The store cancelled the ${i.title}`,
-        detail: `${forDay} The ${i.amountText ?? "money"} is back in your Zinc wallet. ${i.dateChanged ? "The date changed, so that round ended." : "It's too late to ship another in time."}`,
+        detail: `${forDay} ${refundOf(i)} ${i.dateChanged ? "The date changed, so that round ended." : "It's too late to ship another in time."}`,
       };
     case "on_time":
       return { title: `Good news: the ${i.title} is back on time`, detail: `${forDay} Now expected ${i.expectedText}.` };
@@ -397,7 +425,25 @@ function holdEnd(cancel: string, cost: string) {
   return { tip: cost, cancel: { before: "Changed your mind?", label: "Cancel this gift", url: cancel } };
 }
 
-const costOnceSorted = (feeText: string) => `Once it's sorted, we'll buy the gift: its price plus Zinc's ${feeText} fee.`;
+const costOnceSorted = (feeText: string, card?: boolean) =>
+  card ? `Once it's sorted, we'll buy the gift: its price plus the ${APP_NAME} fee.` : `Once it's sorted, we'll buy the gift: its price plus Zinc's ${feeText} fee.`;
+
+/** Why a card order ended card_needed, in every email that tells it. */
+export const CARD_NEEDED = "Your card changed or couldn't be charged. Nothing was bought.";
+
+/** A card order that ended card_needed (owner, 2026-11-25): saving a card never buys anything, only Buy again. */
+function cardNeededEmail(d: TemplateData["needs_attention"], saved: boolean, links: TemplateLinks["needs_attention"]): RenderedEmail {
+  const title = `Sorry, we couldn't buy ${d.personName}'s gift yet`;
+  return {
+    subject: title,
+    ...renderEmail({
+      heading: title,
+      paragraphs: [CARD_NEEDED, saved ? "Tap Buy again." : "Add a card and tap Buy again.", ...alsoOrderedLines(d)],
+      button: { label: saved ? "Review and buy again" : "Add a card", url: links.open },
+      footer: "What happens next: we won't try again on our own. Nothing is bought until you tap Buy again.",
+    }),
+  };
+}
 
 /** The low-balance box and top-up link of the heads-up (AC-11). */
 function fundingParts(f: Funding | undefined) {
@@ -513,12 +559,13 @@ export const TEMPLATES: {
     }),
   }),
 
-  needs_attention: (d, links) => ({
+  needs_attention: (d, links) => d.cardNeeded ? cardNeededEmail(d, d.cardNeeded.saved, links) : ({
     subject: `Sorry, there's a problem with ${d.personName}'s gift`,
     ...renderEmail({
       heading: `Sorry, there's a problem with ${d.personName}'s gift`,
       paragraphs: [
         `We're sorry. We couldn't finish the gift for ${d.personName}'s ${d.occasion} on ${d.dateText}: ${d.reason}`,
+        ...holdDrops(d),
         ...alsoOrderedLines(d),
       ],
       button: { label: "Review the gift", url: links.open },
@@ -607,14 +654,16 @@ export const TEMPLATES: {
   },
 
   hold_setup: (d, links) => {
-    const end = holdEnd(links.cancel, costOnceSorted(d.feeText));
+    const end = holdEnd(links.cancel, costOnceSorted(d.feeText, d.card));
     return {
       subject: `Finish setting up payment to send ${d.personName}'s gift`,
       ...renderEmail({
         heading: `Sorry, we couldn't buy ${d.personName}'s gift yet`,
         paragraphs: [
           `Sorry for the hold-up. You chose ${giftList(d.giftTitles)} for ${d.personName}'s ${d.occasion} on ${d.dateText}, but payment isn't set up yet, so we couldn't buy ${itOrThem(d.giftTitles)}. You haven't been charged.`,
-          `What happens next: gifts are paid from your own Zinc balance. Connect Zinc and add your phone in Settings. It takes about a minute, and once it's connected and funded, we'll buy ${itOrThem(d.giftTitles)}.`,
+          d.card
+            ? `What happens next: add your phone in Settings. It takes about a minute, and then we'll buy ${itOrThem(d.giftTitles)}.`
+            : `What happens next: gifts are paid from your own Zinc balance. Connect Zinc and add your phone in Settings. It takes about a minute, and once it's connected and funded, we'll buy ${itOrThem(d.giftTitles)}.`,
         ],
         button: { label: "Finish setup", url: links.setup },
         tip: end.tip,
@@ -624,7 +673,7 @@ export const TEMPLATES: {
   },
 
   hold_address: (d, links) => {
-    const end = holdEnd(links.cancel, costOnceSorted(d.feeText));
+    const end = holdEnd(links.cancel, costOnceSorted(d.feeText, d.card));
     return {
       subject: `Sorry, ${d.personName}'s gift needs an address`,
       ...renderEmail({
@@ -641,7 +690,7 @@ export const TEMPLATES: {
   },
 
   hold_trouble: (d, links) => {
-    const end = holdEnd(links.cancel, costOnceSorted(d.feeText));
+    const end = holdEnd(links.cancel, costOnceSorted(d.feeText, d.card));
     return {
       subject: `Sorry, we're having trouble ordering ${d.personName}'s gift`,
       ...renderEmail({
@@ -675,6 +724,7 @@ export const TEMPLATES: {
       heading: `Sorry, ${d.personName}'s gift went up in price`,
       paragraphs: [
         `We're sorry. The price of the ${d.giftTitle} for ${d.personName}'s ${d.occasion} on ${d.dateText} went up more than you allowed for, so we didn't buy it and you haven't been charged for it.`,
+        ...holdDrops(d),
         ...alsoOrderedLines(d),
       ],
       button: { label: "Review the gift", url: links.open },
@@ -688,6 +738,7 @@ export const TEMPLATES: {
       heading: `Sorry, ${d.personName}'s gift is out of stock`,
       paragraphs: [
         `We're sorry. The store ran out of the ${d.giftTitle} for ${d.personName}'s ${d.occasion} on ${d.dateText}, so we didn't buy it and you haven't been charged for it.`,
+        ...holdDrops(d),
         ...alsoOrderedLines(d),
       ],
       button: { label: "Choose another gift", url: links.open },
@@ -701,6 +752,7 @@ export const TEMPLATES: {
       heading: `Sorry, ${d.personName}'s gift can't arrive in time`,
       paragraphs: [
         `We're sorry. The ${d.giftTitle} wouldn't arrive in time for ${d.personName}'s ${d.occasion} on ${d.dateText} anymore, so we didn't buy it and you haven't been charged for it.`,
+        ...holdDrops(d),
         ...alsoOrderedLines(d),
       ],
       button: { label: "See faster gifts", url: links.open },
@@ -729,6 +781,15 @@ export const TEMPLATES: {
         `We ordered the ${d.giftTitle} for ${d.personName}'s ${d.occasion} on ${d.dateText}.` +
           (d.cityText ? ` It's on its way to ${d.cityText}.` : " It's on its way."),
       ],
+      ...(d.charge
+        ? {
+            rows: [
+              { title: d.giftTitle, detail: `${d.charge.goodsText} · price, shipping and tax` },
+              { title: `${APP_NAME} fee`, detail: d.charge.feeText },
+              { title: `Charged to your card: ${d.charge.totalText}` },
+            ],
+          }
+        : {}),
       button: { label: `See ${d.personName}'s gift`, url: links.open },
     }),
   }),
@@ -746,6 +807,7 @@ export const TEMPLATES: {
           several
             ? `We know you were counting on these for ${d.personName}'s ${d.occasion} on ${d.dateText}, and we're sorry they didn't work out. You haven't been charged for them.`
             : `We know you were counting on the ${one.title} for ${d.personName}'s ${d.occasion} on ${d.dateText}, and we're sorry it didn't work out. ${one.detail ?? "The store couldn't place the order."} You haven't been charged for it.`,
+          ...holdDrops(d),
           ...onItsWayLine(d.onItsWay),
         ],
         rows: several ? d.failed.map((f) => ({ title: f.title, ...(f.detail ? { detail: f.detail } : {}) })) : undefined,
@@ -760,7 +822,7 @@ export const TEMPLATES: {
   },
 
   store_cancelled_late: (d) => {
-    const refund = (g: CancelledGift) => `The ${g.amountText ?? "money"} is back in your Zinc wallet.`;
+    const refund = refundOf;
     if (d.gifts.length === 1) {
       const [g] = d.gifts;
       return {
@@ -886,14 +948,18 @@ export const TEMPLATES: {
           (n >= d.tried ? `${d.tried === 2 ? "neither" : "none"} of them went through.` : `${n} of them didn't go through.`) +
           ` You haven't been charged for ${n === 2 ? "either" : "them"}.`
         : refunded === n
-          ? `We're sorry. The store cancelled ${n} of the gifts we ordered for ${d.personName}'s ${d.occasion} on ${d.dateText}. The money for them is back in your Zinc wallet.`
+          ? `We're sorry. The store cancelled ${n} of the gifts we ordered for ${d.personName}'s ${d.occasion} on ${d.dateText}. ` +
+            (d.card ? "The whole charge for them is refunded to your card, fee included." : "The money for them is back in your Zinc wallet.")
           : `We're sorry. Of the gifts we tried for ${d.personName}'s ${d.occasion} on ${d.dateText}, the store cancelled ${refunded} and ${others} didn't go through. ` +
-            `The money for the cancelled ${refunded === 1 ? "gift" : "gifts"} is back in your Zinc wallet, and you haven't been charged for the ${others === 1 ? "other" : "others"}.`;
+            (d.card
+              ? `The whole charge for the cancelled ${refunded === 1 ? "gift" : "gifts"} is refunded to your card, fee included, and you haven't been charged for the ${others === 1 ? "other" : "others"}.`
+              : `The money for the cancelled ${refunded === 1 ? "gift" : "gifts"} is back in your Zinc wallet, and you haven't been charged for the ${others === 1 ? "other" : "others"}.`);
     return {
       subject: title,
       ...renderEmail({
         heading: title,
-        paragraphs: [lead, ...alsoOrderedLines(d)],
+        // A pending hold only for gifts that weren't bought; a cancelled one was charged and refunded.
+        paragraphs: [lead, ...(refunded < n ? holdDrops(d) : []), ...alsoOrderedLines(d)],
         rows: d.failed.map((f) => ({ title: f.title, detail: f.detail })),
         button: { label: `See ${d.personName}'s gift`, url: links.open },
         link: d.failed.filter((f) => f.action).map((f) => ({ label: f.action as string, url: f.url })),

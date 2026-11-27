@@ -3,7 +3,7 @@ import { chooseBy, shortDate } from "@/lib/occasion-format";
 import { storeLabel } from "@/lib/store-label";
 import { errorFields, logEvent } from "@/lib/log";
 import { notify, type NotifyResult } from "../notify/notify";
-import { endedAddressReason, type CancelledGift, type FailedGift, type OtherGifts } from "../notify/templates";
+import { CARD_NEEDED, endedAddressReason, type CancelledGift, type FailedGift, type OtherGifts } from "../notify/templates";
 import type { ClaimedRound, RoundContext, RoundOrder } from "./store";
 import { fixPath, money, occasionWord, roundPath, LIVE_HELD } from "./emails";
 import type { EngineDeps } from "./engine";
@@ -318,7 +318,7 @@ export async function tellOrdered(roundId: string, deps: EngineDeps): Promise<vo
         userId: ctx.userId,
         roundId,
         kind: "ordered",
-        data: { ...occasion, giftTitle: o.title, ...(o.shipCity ? { cityText: o.shipCity } : {}) },
+        data: { ...occasion, giftTitle: o.title, ...(o.shipCity ? { cityText: o.shipCity } : {}), ...chargeOf(o) },
         links: { open: { path: roundPath(roundId) } },
       },
       deps.notify,
@@ -349,6 +349,7 @@ export async function tellOrdered(roundId: string, deps: EngineDeps): Promise<vo
         data: {
           ...occasion,
           failed: fresh.map((o) => ({ title: o.title, detail: lateDetail(o, ctx.personName) })),
+          ...holdOn(fresh),
           ...(onItsWay.length > 0 ? { onItsWay } : {}),
           ...(ctx.closedEarly ? { closedEarly: true } : {}),
           ...(ctx.dateChanged ? { dateChanged: true } : {}),
@@ -401,7 +402,11 @@ function lateDetail(o: RoundOrder, personName: string): string {
     case "address_rejected":
       return `The store couldn't use the address ${personName} saved.`;
     case "store_cancelled":
-      return "The store cancelled it, and the money is back in your Zinc wallet.";
+      return isCard(o)
+        ? `The store cancelled it, and the whole charge${o.finalChargeCents !== null ? `, ${money(o.finalChargeCents)},` : ""} is refunded to your card, fee included.`
+        : "The store cancelled it, and the money is back in your Zinc wallet.";
+    case "card_needed":
+      return CARD_NEEDED;
     default:
       return "The store couldn't place the order.";
   }
@@ -416,8 +421,28 @@ function cancelledGift(o: RoundOrder): CancelledGift {
     title: o.title,
     ...(o.store ? { store: storeLabel(o.store)! } : {}),
     ...(o.refundCents !== null && o.refundCents > 0 ? { amountText: money(o.refundCents) } : {}),
+    // By card the whole charge comes back, fee included: what the card was charged, when known.
+    ...(isCard(o) ? { card: o.finalChargeCents !== null ? { totalText: money(o.finalChargeCents) } : {} } : {}),
   };
 }
+
+const isCard = (o: RoundOrder) => o.fundingMode === "connect";
+
+/**
+ * A settled card order's charge for the ordered email: the goods, the GiftsAF fee and the total.
+ * Nothing when Zinc's figures aren't known, rather than a guess.
+ */
+function chargeOf(o: RoundOrder): { charge?: { goodsText: string; feeText: string; totalText: string } } {
+  if (!isCard(o) || o.totalCents === null || o.finalChargeCents === null) return {};
+  return { charge: { goodsText: money(o.totalCents), feeText: money(o.feeCents), totalText: money(o.finalChargeCents) } };
+}
+
+/**
+ * Card failures that may have left a pending hold on the card: anything but a refused card (no hold
+ * was made) and a store cancel (charged, then refunded).
+ */
+const holdOn = (failed: RoundOrder[]) =>
+  failed.some((o) => isCard(o) && o.failureType !== "card_needed" && o.failureType !== "store_cancelled") ? { card: true } : {};
 
 const STORE_CANCELLED = (o: RoundOrder) => o.status === "failed" && o.failureType === "store_cancelled";
 
@@ -485,7 +510,7 @@ async function tellStoreCancelled(
 }
 
 /** Why a gift failed and what the buyer can do now, for a summary while the round is open. */
-function openRow(o: RoundOrder, personName: string, ownerAsked: boolean, url: string): FailedGift {
+function openRow(o: RoundOrder, personName: string, ownerAsked: boolean, url: string, hasCard: boolean): FailedGift {
   const choose = `Choose another gift instead of the ${o.title}`;
   switch (o.failureType) {
     case "price_up":
@@ -501,6 +526,13 @@ function openRow(o: RoundOrder, personName: string, ownerAsked: boolean, url: st
       return { title: o.title, detail: "It wouldn't arrive in time anymore. Choose something that ships faster.", action: choose, url };
     case "store_cancelled":
       return { title: o.title, detail: `${lateDetail(o, personName)} Choose another gift.`, action: choose, url, refunded: true };
+    case "card_needed":
+      return {
+        title: o.title,
+        detail: `${CARD_NEEDED} ${hasCard ? "Tap Buy again." : "Add a card and tap Buy again."}`,
+        action: hasCard ? `Buy the ${o.title} again` : `Add a card for the ${o.title}`,
+        url,
+      };
     case "address_withdrawn":
     case "address_rejected": {
       const asked = o.failureType === "address_rejected" && ownerAsked ? ` We'll ask ${personName} to check it, without mentioning a gift.` : "";
@@ -517,7 +549,7 @@ function openRow(o: RoundOrder, personName: string, ownerAsked: boolean, url: st
  * them back (and the run goes on, so a held gift is still tried). A crash after claiming keeps
  * them, so nothing is ever sent twice (AC-11).
  */
-async function tellFailures(round: ClaimedRound, deps: EngineDeps): Promise<"sent" | "none" | "refused"> {
+export async function tellFailures(round: ClaimedRound, deps: EngineDeps): Promise<"sent" | "none" | "refused"> {
   const { store } = deps;
   const ids = { round_id: round.id, user_id: round.userId };
   let ctx = await store.roundContext(round.id);
@@ -591,7 +623,9 @@ async function sendOpenFailures(
         data: {
           ...occasion,
           tried: Math.max(tried, failed.length),
-          failed: failed.map((o) => openRow(o, ctx.personName, ownerAsked, `${deps.notify.baseUrl}${fixPath(round.id, o.id)}`)),
+          failed: failed.map((o) => openRow(o, ctx.personName, ownerAsked, `${deps.notify.baseUrl}${fixPath(round.id, o.id)}`, ctx.hasCard)),
+          // A store cancel by card is refunded to the card; any other card failure may show a hold.
+          ...(failed.some((o) => isCard(o) && STORE_CANCELLED(o)) || holdOn(failed).card ? { card: true } : {}),
           ...also,
           orderByText,
         },
@@ -601,7 +635,7 @@ async function sendOpenFailures(
     );
   }
   const [o] = failed;
-  const one = { ...occasion, ...also, giftTitle: o.title, orderByText };
+  const one = { ...occasion, ...also, giftTitle: o.title, orderByText, ...holdOn([o]) };
   switch (o.failureType) {
     case "price_up":
       return notify({ ...base, kind: "price_up", data: one, links: fix(o) }, deps.notify);
@@ -614,14 +648,22 @@ async function sendOpenFailures(
       const reason = endedAddressReason(o.failureType, ctx.personName, [o.title], ownerAsked);
       return notify({ ...base, kind: "needs_attention", data: { ...occasion, ...also, reason, orderByText }, links: fix(o) }, deps.notify);
     }
+    case "card_needed":
+      // Its own email: the reason line is never shown.
+      return notify(
+        { ...base, kind: "needs_attention", data: { ...occasion, ...also, reason: CARD_NEEDED, orderByText, cardNeeded: { saved: ctx.hasCard } }, links: fix(o) },
+        deps.notify,
+      );
     case "store_cancelled": {
       const g = cancelledGift(o);
-      const reason = `${g.store ?? "the store"} cancelled the ${o.title}, and the ${g.amountText ?? "money"} is back in your Zinc wallet.`;
+      const reason = g.card
+        ? `${g.store ?? "the store"} cancelled the ${o.title}, and the whole charge${g.card.totalText ? `, ${g.card.totalText},` : ""} is refunded to your card, fee included.`
+        : `${g.store ?? "the store"} cancelled the ${o.title}, and the ${g.amountText ?? "money"} is back in your Zinc wallet.`;
       return notify({ ...base, kind: "needs_attention", data: { ...occasion, ...also, reason, orderByText }, links: fix(o) }, deps.notify);
     }
     default: {
       const reason = `the store couldn't place the order for the ${o.title}, and you haven't been charged for it.`;
-      return notify({ ...base, kind: "needs_attention", data: { ...occasion, ...also, reason, orderByText }, links: fix(o) }, deps.notify);
+      return notify({ ...base, kind: "needs_attention", data: { ...occasion, ...also, reason, orderByText, ...holdOn([o]) }, links: fix(o) }, deps.notify);
     }
   }
 }
@@ -672,6 +714,7 @@ async function tellClosing(
           occasion: occasionWord(ctx.occasionKind),
           dateText: shortDate(ctx.occasionDate),
           failed: rows,
+          ...holdOn(failed),
           ...(onItsWay.length > 0 ? { onItsWay } : {}),
           ...(ctx.personRemoved ? { personRemoved: true } : {}),
         },

@@ -144,6 +144,10 @@ function occasion(c: TrackingCandidate) {
 // Zinc's own refund amount, never what we were charged: when Zinc didn't say, no amount is said.
 const amountText = (c: TrackingCandidate) => (c.refundCents !== null && c.refundCents > 0 ? { amountText: money(c.refundCents) } : {});
 
+// By card the whole charge comes back to the card, fee included: what it was charged, when known.
+const byCard = (c: TrackingCandidate) =>
+  c.card ? { card: c.card.chargeCents !== null ? { totalText: money(c.card.chargeCents) } : {} } : {};
+
 const dateChanged = (c: TrackingCandidate) => (c.dateChanged ? { dateChanged: true } : {});
 
 function send(userId: string, items: Item[], deps: TrackingNewsDeps): Promise<NotifyResult> {
@@ -154,7 +158,7 @@ function send(userId: string, items: Item[], deps: TrackingNewsDeps): Promise<No
     if (news === "cancelled") {
       const store = c.store ? { store: storeLabel(c.store)! } : {};
       return notify(
-        { ...base, kind: "store_cancelled_late", data: { ...occasion(c), gifts: [{ title: c.title, ...store, ...amountText(c) }], ...dateChanged(c) }, links: {} },
+        { ...base, kind: "store_cancelled_late", data: { ...occasion(c), gifts: [{ title: c.title, ...store, ...amountText(c), ...byCard(c) }], ...dateChanged(c) }, links: {} },
         deps.notify,
       );
     }
@@ -178,7 +182,7 @@ function send(userId: string, items: Item[], deps: TrackingNewsDeps): Promise<No
 
 function newsItem({ c, news, expected, again }: Item, baseUrl: string): NewsItem {
   const common = { ...occasion(c), title: c.title };
-  if (news === "cancelled") return { kind: "cancelled", ...common, ...amountText(c), ...dateChanged(c) };
+  if (news === "cancelled") return { kind: "cancelled", ...common, ...amountText(c), ...byCard(c), ...dateChanged(c) };
   const expectedText = shortDate(expected!);
   if (news === "on_time") return { kind: "on_time", ...common, expectedText };
   return {

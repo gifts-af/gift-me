@@ -41,6 +41,18 @@ export function sampleEmails(link: string): SampleEmail[] {
       const partial = { cancelled: ["Linen apron"], onItsWay: ["Le Creuset mug set"], coming: true };
       add("skipped-partial", kind, { ...SAMPLE_DATA.skipped.data, held: true, partial }, links);
     }
+    // Paid by card (the card payments mock-ups, part 6).
+    if (kind === "ordered") {
+      add("ordered-card", kind, { ...SAMPLE_DATA.ordered.data, charge: { goodsText: "$22.59", feeText: "$3.05", totalText: "$25.64" } }, links);
+    }
+    if (kind === "needs_attention") {
+      add("needs_attention-card_needed", kind, { ...SAMPLE_DATA.needs_attention.data, cardNeeded: { saved: false } }, links);
+      add("needs_attention-card_needed_saved", kind, { ...SAMPLE_DATA.needs_attention.data, cardNeeded: { saved: true } }, links);
+    }
+    if (kind === "store_cancelled_late") {
+      const [g] = SAMPLE_DATA.store_cancelled_late.data.gifts;
+      add("store_cancelled_late-card", kind, { ...SAMPLE_DATA.store_cancelled_late.data, gifts: [{ title: g.title, store: g.store, card: { totalText: "$25.64" } }] }, links);
+    }
     if (kind === "out_of_stock") add("out_of_stock-partial", kind, { ...SAMPLE_DATA.out_of_stock.data, ordering: ["Linen apron"] }, links);
     if (kind === "failed_late") {
       add("failed_late-partial", kind, { ...SAMPLE_DATA.failed_late.data, onItsWay: ["Linen apron"] }, links);
@@ -48,6 +60,7 @@ export function sampleEmails(link: string): SampleEmail[] {
         { title: "Le Creuset mug set", detail: "The price went up more than you allowed for." },
         { title: "Linen apron", detail: "The store ran out." },
       ];
+      add("failed_late-card", kind, { ...SAMPLE_DATA.failed_late.data, failed: [{ title: "Le Creuset mug set" }], card: true }, links);
       add("failed_late-several", kind, { ...SAMPLE_DATA.failed_late.data, failed: two, onItsWay: ["Cast-iron herb planter"] }, links);
     }
     if (kind === "reaction_prompt") {

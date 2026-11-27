@@ -83,6 +83,8 @@ export async function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundCo
   const cancelLink = { ...link, action: "cancel_held_gift" as const };
   const held = ctx.orders.filter(LIVE_HELD);
   const gifts = { ...occasion, giftTitles: held.map((o) => o.title) };
+  // Paid by card: the hold emails name the GiftsAF fee, never Zinc's (a round's held gifts share one way of paying).
+  const byCard = held.some((o) => o.fundingMode === "connect") ? { card: true } : {};
   const feeText = async () => money(await deps.store.setting("zinc_order_fee_cents"));
   const reason: AttentionReason | null = round.attentionReason;
 
@@ -159,7 +161,7 @@ export async function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundCo
       return notify({ ...base, kind: "no_ideas", data: { personName: ctx.personName, again: false, tooLate: true }, links: {} }, notifyDeps);
     case "hold_trouble":
       return notify(
-        { ...base, kind: "hold_trouble", data: { ...gifts, feeText: await feeText() }, links: { open: link, cancel: cancelLink } },
+        { ...base, kind: "hold_trouble", data: { ...gifts, ...byCard, feeText: await feeText() }, links: { open: link, cancel: cancelLink } },
         notifyDeps,
       );
     case "hold_deadline":
@@ -217,7 +219,7 @@ export async function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundCo
           {
             ...base,
             kind: "hold_setup",
-            data: { ...gifts, feeText: await feeText() },
+            data: { ...gifts, ...byCard, feeText: await feeText() },
             links: { setup: { ...link, action: "open_settings" }, cancel: cancelLink },
           },
           notifyDeps,
@@ -227,7 +229,7 @@ export async function sendEmail(step: StepKey, round: ClaimedRound, ctx: RoundCo
           {
             ...base,
             kind: "hold_address",
-            data: { ...gifts, feeText: await feeText() },
+            data: { ...gifts, ...byCard, feeText: await feeText() },
             links: { addAddress: addressLink, cancel: cancelLink },
           },
           notifyDeps,
