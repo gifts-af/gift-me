@@ -3,13 +3,20 @@
 // account's secret, so one user can't forge events for another. Order events
 // only ever settle that user's own order, and only while it is placing or
 // unconfirmed, so a duplicate or late event changes nothing. Logs carry ids only (E6).
+//
+// Card orders live on the app's own Zinc account, which posts to /api/zinc/webhook/app, signed
+// with the app's secret. There the order is found first and the user comes from it, never from
+// the body. Each webhook changes only its own kind of order: card orders at the app's, wallet
+// orders at a buyer's. An order of the other kind is ignored quietly, since one Zinc account can
+// post both while the owner's wallet is still connected to it.
 import { z } from "zod";
 import { errorFields, logEvent } from "@/lib/log";
 import { failureTypeFor } from "./card-codes";
-import { call, ZincError } from "./client";
+import { ZincError } from "./client";
+import { alertIfOver, findOrderByReference, getOrder, placedPrice, type ConnectKey } from "./orders";
 import { parseEvent, verifySignature, type ZincEvent } from "./signature";
 import { handleTrackingEvent, TRACKING_EVENTS, type TrackingDeps } from "./tracking-events";
-import type { PlaceHeld, ZincDeps } from "./types";
+import type { PlacedPrice, PlaceHeld, ZincDeps } from "./types";
 
 type Deps = TrackingDeps & {
   placeHeld: PlaceHeld;
@@ -25,6 +32,28 @@ type Deps = TrackingDeps & {
   orderPlaced?: (roundId: string) => Promise<unknown>;
 };
 
+/** What handling one order event needs: everything but the wallet's placeHeld. */
+type OrderDeps = Omit<Deps, "placeHeld">;
+
+/**
+ * Our order for a Zinc order id, as one webhook sees it: found (with the user it belongs to), an
+ * order that is the other webhook's ("elsewhere": ignored without an alert), or a definite miss
+ * (null: alerted). Throws when a lookup fails, so Zinc retries.
+ */
+export type OrderMatch = { orderId: string; userId: string } | "elsewhere" | null;
+
+/** Which orders one webhook may change, and how it reads them at Zinc. */
+export type WebhookScope = {
+  /** The buyer whose own webhook it is; null on the app's, where the user comes from the order. */
+  userId: string | null;
+  mode: "zinc_wallet" | "connect";
+  find: (zincOrderId: string) => Promise<OrderMatch>;
+  /** The key that reads this webhook's orders at Zinc, or null when there is none. */
+  key: () => Promise<string | ConnectKey | null>;
+  /** Logged with an alert for a Zinc order we definitely don't have. */
+  unknownEvent: "zinc.webhook_unmatched" | "zinc.unknown_order";
+};
+
 const uuid = z.string().uuid();
 const secretRow = z.object({ user_id: z.string(), webhook_secret: z.string() });
 // Whole cents that fit the database's integer columns; anything else is a bad price block.
@@ -33,6 +62,7 @@ const priceParts = z.object({ subtotal: cents, shipping: cents, tax: cents, tota
 const placedData = z.object({ data: z.object({ price_components: z.unknown() }).nullish() });
 const zincOrder = z.object({ metadata: z.record(z.string(), z.unknown()).nullish() });
 const keyRow = z.object({ api_key: z.string().nullable() });
+const matchRow = z.object({ id: z.string(), user_id: z.string(), funding_mode: z.string() });
 
 // A missing Zinc env answers 404 before the signature is checked, deliberately: with Zinc off
 // in this environment there is nothing to verify against (see the route).
@@ -49,6 +79,13 @@ export async function handleZincWebhook(
   const parsed = secretRow.safeParse(data?.[0]);
   if (!parsed.success || !verifySignature(rawBody, signature, parsed.data.webhook_secret)) return { status: 401 };
   const userId = parsed.data.user_id;
+  const scope: WebhookScope = {
+    userId,
+    mode: "zinc_wallet",
+    find: (zincOrderId) => findOurOrder(userId, zincOrderId, deps),
+    key: () => userZincKey(userId, deps),
+    unknownEvent: "zinc.webhook_unmatched",
+  };
 
   let event: ZincEvent;
   try {
@@ -59,13 +96,8 @@ export async function handleZincWebhook(
   }
 
   try {
-    if (event.event === "order.placed" || event.event === "order.failed") {
-      await settle(userId, event, deps);
-    } else if (event.event === "order.cancelled") {
-      // Never behind order_tracking_enabled: money came back, so the buyer is always told.
-      await storeCancelled(userId, event, deps);
-    } else if (TRACKING_EVENTS.has(event.event)) {
-      await handleTrackingEvent(userId, event, deps);
+    if (await handleOrderEvent(scope, event, deps)) {
+      // Settled, cancelled or tracked.
     } else if (event.event === "wallet.auto_topup.succeeded") {
       if (await setAutoTopup(userId, true, event, deps)) await deps.placeHeld(userId);
     } else if (event.event === "wallet.auto_topup.disabled") {
@@ -80,6 +112,52 @@ export async function handleZincWebhook(
     throw error;
   }
   return { status: 200 };
+}
+
+/**
+ * The app's own Zinc account: events for card orders. 401 only for a bad or missing signature;
+ * everything else is 200, and a failure that a retry could fix throws (the route answers 500).
+ * Wallet events and wallet orders are ignored here.
+ */
+export async function handleAppZincWebhook(
+  rawBody: string,
+  signature: string | null,
+  deps: OrderDeps & { secret: string; connectKey: ConnectKey },
+): Promise<{ status: 200 | 401 }> {
+  if (!verifySignature(rawBody, signature, deps.secret)) return { status: 401 };
+  let event: ZincEvent;
+  try {
+    event = parseEvent(JSON.parse(rawBody));
+  } catch {
+    logEvent("zinc.webhook_invalid", { webhook: "app" });
+    return { status: 200 };
+  }
+  const scope: WebhookScope = {
+    userId: null,
+    mode: "connect",
+    find: (zincOrderId) => findConnectOrder(zincOrderId, deps),
+    key: async () => deps.connectKey,
+    unknownEvent: "zinc.unknown_order",
+  };
+  if (!(await handleOrderEvent(scope, event, deps))) {
+    logEvent("zinc.webhook_ignored", { webhook: "app", zinc_event: event.event, reason: "not_an_order_event" });
+  }
+  return { status: 200 };
+}
+
+/** Applies an order event (placed, failed, cancelled, tracking) within the webhook's scope. False for any other event. */
+async function handleOrderEvent(scope: WebhookScope, event: ZincEvent, deps: OrderDeps): Promise<boolean> {
+  if (event.event === "order.placed" || event.event === "order.failed") {
+    await settle(scope, event, deps);
+  } else if (event.event === "order.cancelled") {
+    // Never behind order_tracking_enabled: money came back, so the buyer is always told.
+    await storeCancelled(scope, event, deps);
+  } else if (TRACKING_EVENTS.has(event.event)) {
+    await handleTrackingEvent(scope, event, deps);
+  } else {
+    return false;
+  }
+  return true;
 }
 
 /** Zinc's timestamps are UTC and may lack the Z. Null when absent or unreadable. */
@@ -112,31 +190,150 @@ async function setAutoTopup(userId: string, on: boolean, event: ZincEvent, deps:
   return true;
 }
 
-/** Our order id for a Zinc order id: the row that holds it, else the reference we sent Zinc in metadata. */
-export async function findOurOrder(userId: string, zincOrderId: string, deps: ZincDeps): Promise<string | null> {
-  const concierge = deps.db.schema("concierge");
-  const { data, error } = await concierge
+/**
+ * A buyer's wallet order for a Zinc order id: the row that holds it, else the reference we sent
+ * Zinc in metadata. A card order, or another buyer's, is "elsewhere".
+ */
+export async function findOurOrder(userId: string, zincOrderId: string, deps: ZincDeps): Promise<OrderMatch> {
+  const row = await rowByProviderId(zincOrderId, deps);
+  if (row) return row.user_id === userId && row.funding_mode === "zinc_wallet" ? { orderId: row.id, userId } : "elsewhere";
+  const key = await userZincKey(userId, deps);
+  if (!key) return null;
+  // order_by_reference then finds it only among this buyer's orders, and loadOrder checks its mode.
+  const ref = await zincReference(deps, key, zincOrderId);
+  return ref ? { orderId: ref, userId } : null;
+}
+
+/**
+ * A card order for a Zinc order id on the app's webhook: the row that holds it, else the
+ * reference read back from Zinc with the app's key. The user is the order's. A wallet order is
+ * "elsewhere"; null is a definite miss. Throws when our database or Zinc can't answer.
+ */
+export async function findConnectOrder(
+  zincOrderId: string,
+  deps: Pick<ZincDeps, "db" | "http"> & { connectKey: ConnectKey },
+): Promise<OrderMatch> {
+  const asMatch = (row: MatchRow): OrderMatch => (row.funding_mode === "connect" ? { orderId: row.id, userId: row.user_id } : "elsewhere");
+  const row = await rowByProviderId(zincOrderId, deps);
+  if (row) return asMatch(row);
+  const ref = await zincReference(deps, deps.connectKey, zincOrderId);
+  if (!ref) return null;
+  // ref is a checked uuid, so it is safe inside the filter.
+  const { data, error } = await deps.db
+    .schema("concierge")
     .from("orders")
-    .select("id")
-    .eq("user_id", userId)
+    .select("id, user_id, funding_mode")
+    .or(`id.eq.${ref},idempotency_key.eq.${ref}`)
+    .limit(1);
+  if (error) throw new Error("Looking up the order failed.");
+  const byRef = matchRow.safeParse(data?.[0]);
+  return byRef.success ? asMatch(byRef.data) : null;
+}
+
+type MatchRow = z.infer<typeof matchRow>;
+
+/** Whichever of our orders holds this Zinc id, any buyer's. Throws when it can't be read. */
+async function rowByProviderId(zincOrderId: string, deps: Pick<ZincDeps, "db">): Promise<MatchRow | null> {
+  const { data, error } = await deps.db
+    .schema("concierge")
+    .from("orders")
+    .select("id, user_id, funding_mode")
     .eq("provider_order_id", zincOrderId)
     .limit(1);
   if (error) throw new Error("Looking up the order failed.");
-  if (data?.[0]) return data[0].id;
+  const row = matchRow.safeParse(data?.[0]);
+  return row.success ? row.data : null;
+}
 
-  // The webhook carries only Zinc's order id. Our row may not have it yet (a crash between
-  // sending and saving), so ask Zinc for the order and read back our own reference.
-  const key = await userZincKey(userId, deps);
-  if (!key) return null;
+/**
+ * Our reference (metadata.order_id) on Zinc's order, for a row that doesn't hold Zinc's id yet
+ * (a crash between sending and saving). Timeouts, 5xx and 429 throw, worth a Zinc retry; a
+ * definitive miss (404, 401) is null.
+ */
+async function zincReference(deps: Pick<ZincDeps, "http">, key: string | ConnectKey, zincOrderId: string): Promise<string | null> {
   try {
-    const order = await call(deps.http, "GET", `/orders/${encodeURIComponent(zincOrderId)}`, zincOrder, { key });
+    const order = await getOrder(deps.http, key, zincOrderId, zincOrder);
     const ref = uuid.safeParse(order.metadata?.order_id);
     return ref.success ? ref.data : null;
   } catch (error) {
-    // Timeouts, 5xx and 429 are worth a Zinc retry; a definitive miss (404, 401) is not.
     if (error instanceof ZincError && error.kind === "unavailable") throw error;
     return null;
   }
+}
+
+/** The order columns the webhook handlers read. */
+export type WebhookOrder = {
+  id: string;
+  round_id: string;
+  user_id: string;
+  status: string;
+  funding_mode: string;
+  provider_order_id: string | null;
+  max_charge_cents: number | null;
+};
+
+/**
+ * The webhook's order for an event, after the checks every order event shares: an id is given,
+ * the order is found and is this webhook's kind, and the Zinc id it holds (if any) is the event's.
+ * Null when the event stops here (logged); `order` is undefined when the reference matched no row.
+ */
+export async function loadOrder(
+  scope: WebhookScope,
+  event: ZincEvent,
+  deps: Pick<ZincDeps, "db">,
+): Promise<{ userId: string; zincOrderId: string; order: WebhookOrder | undefined } | null> {
+  if (!event.orderId) {
+    logEvent("zinc.webhook_unmatched", { user_id: scope.userId, reason: "no_order_id" });
+    return null;
+  }
+  const match = await scope.find(event.orderId);
+  if (match === "elsewhere") {
+    logEvent("zinc.webhook_ignored", { user_id: scope.userId, zinc_event: event.event, reason: "other_webhook" });
+    return null;
+  }
+  if (!match) {
+    // Zinc answered definitively that it has no such order for this key, or the reference is
+    // missing: the owner settles it by hand (design/operations.md > Alerts).
+    logEvent(scope.unknownEvent, { user_id: scope.userId, provider_order_id: event.orderId, alert: true });
+    return null;
+  }
+  const found = await deps.db.schema("concierge").rpc("order_by_reference", { p_user_id: match.userId, p_order_id: match.orderId });
+  if (found.error) throw new Error("Looking up the order failed.");
+  const order = found.data?.[0];
+  if (order && order.funding_mode !== scope.mode) {
+    logEvent("zinc.webhook_ignored", { user_id: match.userId, order_id: order.id, zinc_event: event.event, reason: "other_webhook" });
+    return null;
+  }
+  if (order?.provider_order_id && order.provider_order_id !== event.orderId) {
+    logEvent("zinc.webhook_provider_id_mismatch", { user_id: match.userId, order_id: order.id });
+    return null;
+  }
+  return { userId: match.userId, zincOrderId: event.orderId, order };
+}
+
+/**
+ * The prices an order settles as placed with. A wallet order takes what the event carries. A
+ * card order first reads Zinc's order (by our reference, with the webhook's key) for what the
+ * card was charged, so it's saved and checked against the maximum; a failed read throws and
+ * Zinc retries.
+ */
+export async function placedPriceFor(
+  scope: WebhookScope,
+  order: WebhookOrder,
+  fromEvent: PlacedPrice,
+  deps: Pick<ZincDeps, "http">,
+): Promise<PlacedPrice> {
+  if (scope.mode !== "connect") return fromEvent;
+  const key = await scope.key();
+  if (!key) throw new Error("No Zinc key to read the card order with.");
+  const found = await findOrderByReference(deps.http, key, order.id);
+  if (!found || found.status !== "placed") throw new Error(`Zinc's order isn't readable as placed (${found?.status ?? "none"}).`);
+  return placedPrice(found);
+}
+
+/** After a card order settles as placed: the owner is alerted when Zinc charged above the maximum. */
+export function checkCharge(scope: WebhookScope, order: WebhookOrder, price: PlacedPrice): void {
+  if (scope.mode === "connect") alertIfOver(order, price);
 }
 
 /** The user's own Zinc API key, or null when they have none. Throws when it can't be read. */
@@ -153,27 +350,14 @@ export async function userZincKey(userId: string, deps: Pick<ZincDeps, "db">): P
  * after it nothing is sent here, and the daily news tells it. A cancel that leaves every other
  * gift delivered sends the delivered email. Today is the UTC day of `now`, as in the engine.
  */
-async function storeCancelled(userId: string, event: ZincEvent, deps: Deps): Promise<void> {
-  if (!event.orderId) {
-    logEvent("zinc.webhook_unmatched", { user_id: userId, reason: "no_order_id" });
-    return;
-  }
-  const ourId = await findOurOrder(userId, event.orderId, deps);
-  if (!ourId) {
-    logEvent("zinc.webhook_unmatched", { user_id: userId, provider_order_id: event.orderId, alert: true });
-    return;
-  }
+async function storeCancelled(scope: WebhookScope, event: ZincEvent, deps: OrderDeps): Promise<void> {
+  const loaded = await loadOrder(scope, event, deps);
+  if (!loaded) return;
+  const { userId, order } = loaded;
   const concierge = deps.db.schema("concierge");
-  const found = await concierge.rpc("order_by_reference", { p_user_id: userId, p_order_id: ourId });
-  if (found.error) throw new Error("Looking up the order failed.");
-  const order = found.data?.[0];
   const ids = { user_id: userId, order_id: order?.id ?? null, zinc_event: event.event };
   if (!order) {
     logEvent("tracking.event_ignored", { ...ids, status: null });
-    return;
-  }
-  if (order.provider_order_id && order.provider_order_id !== event.orderId) {
-    logEvent("zinc.webhook_provider_id_mismatch", { user_id: userId, order_id: order.id });
     return;
   }
   const { data, error } = await concierge.rpc("store_cancel_order", {
@@ -203,34 +387,18 @@ async function storeCancelled(userId: string, event: ZincEvent, deps: Deps): Pro
   }
 }
 
-async function settle(userId: string, event: ZincEvent, deps: Deps): Promise<void> {
-  if (!event.orderId) {
-    logEvent("zinc.webhook_unmatched", { user_id: userId, reason: "no_order_id" });
-    return;
-  }
-  const ourId = await findOurOrder(userId, event.orderId, deps);
-  if (!ourId) {
-    // Zinc answered definitively that it has no such order for this key, or the reference is
-    // missing: the owner settles it by hand (design/operations.md > Alerts).
-    logEvent("zinc.webhook_unmatched", { user_id: userId, provider_order_id: event.orderId, alert: true });
-    return;
-  }
+async function settle(scope: WebhookScope, event: ZincEvent, deps: OrderDeps): Promise<void> {
+  const loaded = await loadOrder(scope, event, deps);
+  if (!loaded) return;
+  const { userId, zincOrderId, order } = loaded;
   const concierge = deps.db.schema("concierge");
-  const found = await concierge.rpc("order_by_reference", { p_user_id: userId, p_order_id: ourId });
-  if (found.error) throw new Error("Looking up the order failed.");
-  const order = found.data?.[0];
   if (!order || (order.status !== "placing" && order.status !== "unconfirmed")) {
     logEvent("zinc.webhook_ignored", { user_id: userId, order_id: order?.id ?? null, status: order?.status ?? null });
     return;
   }
 
-  if (order.provider_order_id && order.provider_order_id !== event.orderId) {
-    logEvent("zinc.webhook_provider_id_mismatch", { user_id: userId, order_id: order.id });
-    return;
-  }
-
   const placed = event.event === "order.placed";
-  let price: Record<string, string | number> = { provider_order_id: event.orderId };
+  let price: PlacedPrice = { provider_order_id: zincOrderId };
   if (placed) {
     const block = placedData.safeParse(event.raw);
     const raw = block.success ? block.data.data?.price_components : undefined;
@@ -247,6 +415,7 @@ async function settle(userId: string, event: ZincEvent, deps: Deps): Promise<voi
       ...(c?.tax !== undefined ? { tax_cents: c.tax } : {}),
       ...(c?.total !== undefined ? { total_cents: c.total } : {}),
     };
+    price = await placedPriceFor(scope, order, price, deps);
   }
   const errorType = typeof event.errorType === "string" ? event.errorType : undefined;
   if (!placed && event.errorType !== undefined && errorType === undefined) {
@@ -261,6 +430,7 @@ async function settle(userId: string, event: ZincEvent, deps: Deps): Promise<voi
     p_price: price,
   });
   if (error) throw new Error(`Settling the order failed (${error.code}).`);
+  if (placed) checkCharge(scope, order, price);
   logEvent("zinc.order_settled", { user_id: userId, order_id: order.id, status: placed ? "placed" : "failed" });
   // Tell the buyer now, not at the next tick: the gift is ordered, or a failure needs them. A
   // failure on a round that already closed (any status) gets its own email through tellOrdered.

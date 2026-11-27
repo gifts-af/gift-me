@@ -156,6 +156,18 @@ describe.skipIf(!dbUp)("Zinc connect (real local database, fake Zinc)", () => {
     expect(z.calls).toEqual([]);
   });
 
+  // Connecting would replace the app's webhook on the shared Zinc account (AC-18).
+  it("refuses to start a Zinc connection from a card (connect) account, before any Zinc call", async () => {
+    for (const env of ["test", "live"] as const) {
+      const userId = await newUser(true);
+      await pg.query("update concierge.accounts set funding_mode = 'connect' where user_id = $1", [userId]);
+      const z = zinc(happy, env);
+      expect(await startConnect(userId, z.deps, placeHeld)).toEqual({ kind: "not_allowed" });
+      expect(z.calls).toEqual([]);
+      expect((await pg.query("select count(*)::int as n from concierge.zinc_connect_attempts where user_id = $1", [userId])).rows[0].n).toBe(0);
+    }
+  });
+
   // S7 (owner): disconnecting needs only sign-in, so a user can always remove their key.
   it("disconnects without paid features: the key goes, and the webhook is cleared", async () => {
     const userId = await newUser(true);

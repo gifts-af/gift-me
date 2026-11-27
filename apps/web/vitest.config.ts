@@ -45,6 +45,7 @@ const LOCAL_DB_TESTS = [
   "modules/concierge/__tests__/tracking-delivered.test.ts",
   "modules/concierge/__tests__/tracking-news.test.ts",
   "modules/concierge/__tests__/zinc-connect.test.ts",
+  "modules/concierge/__tests__/zinc-app-webhook-db.test.ts",
   "modules/concierge/__tests__/zinc-events.test.ts",
   "modules/concierge/__tests__/zinc-tracking-events.test.ts",
   "modules/lists/__tests__/add-item-db.test.ts",

@@ -6,8 +6,8 @@
 import { z } from "zod";
 import { calendarDay, latestEstimate, packagesFromZinc, packagesToRows, type TrackedPackage } from "@gifts-af/core";
 import { errorFields, logEvent } from "@/lib/log";
-import { call } from "./client";
-import { eventTime, findOurOrder, userZincKey } from "./events";
+import { checkCharge, eventTime, loadOrder, placedPriceFor, type WebhookScope } from "./events";
+import { getOrder } from "./orders";
 import type { ZincEvent } from "./signature";
 import type { ZincDeps } from "./types";
 
@@ -39,50 +39,40 @@ function hasBadEstimate(raw: unknown): boolean {
   });
 }
 
-/** Applies one tracking event to the user's own order. Throws only where a Zinc retry could help. */
-export async function handleTrackingEvent(userId: string, event: ZincEvent, deps: TrackingDeps): Promise<void> {
+/** Applies one tracking event to an order within the webhook's scope. Throws only where a Zinc retry could help. */
+export async function handleTrackingEvent(scope: WebhookScope, event: ZincEvent, deps: TrackingDeps): Promise<void> {
   if ((await deps.setting("order_tracking_enabled")) !== 1) {
-    logEvent("tracking.event_ignored", { user_id: userId, zinc_event: event.event, reason: "off" });
+    logEvent("tracking.event_ignored", { user_id: scope.userId, zinc_event: event.event, reason: "off" });
     return;
   }
   // Gifts ship to a home address; pickup isn't handled in the MVP.
   if (event.event === "order.available_for_pickup") {
-    logEvent("tracking.event_ignored", { user_id: userId, zinc_event: event.event, reason: "pickup" });
+    logEvent("tracking.event_ignored", { user_id: scope.userId, zinc_event: event.event, reason: "pickup" });
     return;
   }
-  if (!event.orderId) {
-    logEvent("zinc.webhook_unmatched", { user_id: userId, reason: "no_order_id" });
-    return;
-  }
-  const ourId = await findOurOrder(userId, event.orderId, deps);
-  if (!ourId) {
-    logEvent("zinc.webhook_unmatched", { user_id: userId, provider_order_id: event.orderId, alert: true });
-    return;
-  }
+  const loaded = await loadOrder(scope, event, deps);
+  if (!loaded) return;
+  const { userId, zincOrderId, order } = loaded;
   const concierge = deps.db.schema("concierge");
-  const found = await concierge.rpc("order_by_reference", { p_user_id: userId, p_order_id: ourId });
-  if (found.error) throw new Error("Looking up the order failed.");
-  const order = found.data?.[0];
   if (!order) {
     logEvent("tracking.event_ignored", { user_id: userId, zinc_event: event.event, order_id: null, status: null });
     return;
   }
-  if (order.provider_order_id && order.provider_order_id !== event.orderId) {
-    logEvent("zinc.webhook_provider_id_mismatch", { user_id: userId, order_id: order.id });
-    return;
-  }
 
   // Tracking on an order still placing or unconfirmed means Zinc's order.placed was lost:
-  // settle it placed first, with the usual "ordered" email (tellOrdered sends it once).
+  // settle it placed first, with the usual "ordered" email (tellOrdered sends it once). A card
+  // order reads Zinc's charge first, so it's saved and checked against the maximum.
   if (order.status === "placing" || order.status === "unconfirmed") {
+    const price = await placedPriceFor(scope, order, { provider_order_id: zincOrderId }, deps);
     const settled = await concierge.rpc("settle_order", {
       p_user_id: userId,
       p_order_id: order.id,
       p_status: "placed",
       p_failure_type: "failed",
-      p_price: { provider_order_id: event.orderId },
+      p_price: price,
     });
     if (settled.error) throw new Error(`Settling the order failed (${settled.error.code}).`);
+    checkCharge(scope, order, price);
     logEvent("zinc.order_settled", { user_id: userId, order_id: order.id, status: "placed" });
     await tell(deps.orderPlaced, order.round_id, userId);
   }
@@ -122,7 +112,7 @@ export async function handleTrackingEvent(userId: string, event: ZincEvent, deps
     packages = packagesFromZinc(event.trackingNumbers);
     let bad = hasBadEstimate(event.trackingNumbers);
     if ((await deps.setting("zinc_tracking_fetch_enabled")) === 1) {
-      const raw = await fetchTracking(userId, event.orderId, deps);
+      const raw = await fetchTracking(scope, userId, zincOrderId, deps);
       if (raw !== null) {
         const fetched = packagesFromZinc(raw);
         // Zinc's own order comes last, so its entry wins for a package both name.
@@ -157,11 +147,12 @@ export async function handleTrackingEvent(userId: string, event: ZincEvent, deps
  * the carrier's estimate and Zinc's tracking link. Null on any failure: the event's own
  * packages are saved without an estimate, and a later event or the daily run catches up.
  */
-async function fetchTracking(userId: string, zincOrderId: string, deps: TrackingDeps): Promise<unknown> {
+async function fetchTracking(scope: WebhookScope, userId: string, zincOrderId: string, deps: TrackingDeps): Promise<unknown> {
   try {
-    const key = await userZincKey(userId, deps);
+    // The webhook's own key: the app's for a card order, the buyer's for a wallet one.
+    const key = await scope.key();
     if (!key) return null;
-    const order = await call(deps.http, "GET", `/orders/${encodeURIComponent(zincOrderId)}`, zincTracking, { key });
+    const order = await getOrder(deps.http, key, zincOrderId, zincTracking);
     return order.tracking_numbers ?? [];
   } catch (error) {
     logEvent("tracking.estimate_fetch_failed", { user_id: userId, ...errorFields(error) });

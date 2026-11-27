@@ -13,6 +13,11 @@ export async function readWebhookBody(
   maxBytes: () => Promise<number>,
 ): Promise<WebhookBody> {
   if (!uuid.safeParse(webhookId).success) return { ok: false, status: 404 };
+  return readCappedBody(request, maxBytes);
+}
+
+/** Reads the raw body, or 413 when it's over the cap: the app's webhook, which has no id. */
+export async function readCappedBody(request: Request, maxBytes: () => Promise<number>): Promise<WebhookBody> {
   const cap = await maxBytes();
   const declared = Number(request.headers.get("content-length"));
   if (Number.isFinite(declared) && declared > cap) return { ok: false, status: 413 };

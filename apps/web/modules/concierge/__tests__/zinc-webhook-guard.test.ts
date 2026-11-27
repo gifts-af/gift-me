@@ -1,6 +1,6 @@
 // The webhook route's checks before it trusts a body (ALL-32): id shape and size cap.
 import { describe, expect, it, vi } from "vitest";
-import { readWebhookBody } from "../zinc/guard";
+import { readCappedBody, readWebhookBody } from "../zinc/guard";
 
 const ID = "5f0c3a52-7a43-4e55-9b0f-0d3a1d7c1a11";
 const req = (body: string, headers: Record<string, string> = {}) =>
@@ -33,5 +33,13 @@ describe("readWebhookBody", () => {
 
   it("returns the body when within the cap", async () => {
     expect(await readWebhookBody(ID, req('{"a":1}'), async () => 100)).toEqual({ ok: true, body: '{"a":1}' });
+  });
+});
+
+// The app's webhook has no id; the same size cap applies.
+describe("readCappedBody", () => {
+  it("413 over the cap, the body within it", async () => {
+    expect(await readCappedBody(req("x", { "content-length": "101" }), async () => 100)).toEqual({ ok: false, status: 413 });
+    expect(await readCappedBody(req('{"a":1}'), async () => 100)).toEqual({ ok: true, body: '{"a":1}' });
   });
 });

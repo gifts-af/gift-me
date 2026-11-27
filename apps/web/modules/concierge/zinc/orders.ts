@@ -169,6 +169,18 @@ export async function findOrderByReference(h: ZincHttp, key: string | ConnectKey
 }
 
 /**
+ * Zinc's Get Order by Zinc's own id, read through `schema`: a wallet order with its buyer's key,
+ * a card order with the app's. Read-only, so the app key may use it. Throws ZincError.
+ */
+export async function getOrder<T>(h: ZincHttp, key: string | ConnectKey, zincOrderId: string, schema: z.ZodType<T>): Promise<T> {
+  const value = keyValue(key);
+  const path = `/orders/${encodeURIComponent(zincOrderId)}`;
+  if (!value) throw new ZincError("rejected", 0, "Zinc GET /orders not sent (app_key_missing)", "app_key_missing");
+  const r = await send(h, "GET", path, { key: value });
+  return parseBody(schema, r.json, "GET", path, r.status);
+}
+
+/**
  * A placed order's prices, as settle_order takes them. On a card order `final_charge_cents` is
  * what the card was charged (connect.final_charge, assumption A7); without it settle_order works
  * the charge out from the saved fees.
