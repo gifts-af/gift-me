@@ -15,7 +15,8 @@ import { session, signIn, type Credentials } from "./sign-in";
 // launch migration and the owner set them for real (plan Task 10).
 //
 // One journey per main path (T67): add a card and buy; cancel on Stripe's page; a declined card,
-// a new card and Buy again; paying by card switched off; and a wallet buyer's page unchanged. What
+// a new card and Buy again; a held gift whose card was removed, then a card added for another
+// gift; paying by card switched off; and a wallet buyer's page unchanged. What
 // each screen shows in every state is in the component tests (confirm-screen-card, fix-screen-card,
 // card-paying), the money rules in the local-db tests and pgTAP. The pictures at the end are
 // tagged @layout (T62).
@@ -44,9 +45,9 @@ async function cardBuyer(o: { phone?: string | null } = {}): Promise<CardBuyer> 
   return { creds, id };
 }
 
-/** A round for Jimmy with one idea, priced as the idea run saves it: goods alone, and the wallet total. */
-async function roundWith(buyerId: string, product: { productId: string; priceCents: number; title: string }) {
-  const p = await personFor(buyerId, "Jimmy");
+/** A round for Jimmy (or `name`) with one idea, priced as the idea run saves it: goods alone, and the wallet total. */
+async function roundWith(buyerId: string, product: { productId: string; priceCents: number; title: string }, name = "Jimmy") {
+  const p = await personFor(buyerId, name);
   const r = await seedRound(buyerId, p, {
     budgetCents: 4000,
     ideas: [{ title: product.title, totalCents: product.priceCents + 100, productId: product.productId }],
@@ -64,6 +65,59 @@ async function cardOrdersAtZinc(roundId: string): Promise<number> {
 
 const savedCardOf = async (id: string) =>
   (await rest<{ stripe_payment_method_id: string | null }[]>(`accounts?select=stripe_payment_method_id&user_id=eq.${id}`))[0].stripe_payment_method_id;
+
+const orderOf = async (roundId: string) => (await ordersOf(roundId))[0];
+
+// The daily tick, as approval.spec.ts runs it: the engine switched on (round-engine.spec.ts turns it
+// off around its own tests, in parallel), asked again if it found it off. Only rounds due now move.
+const CRON_SECRET = "e2e-cron-secret";
+async function tick(page: Page): Promise<void> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    await rest("app_settings?key=eq.round_engine_enabled", { method: "PATCH", body: { value: 1 } });
+    const res = await page.request.get("/api/rounds/tick", { headers: { Authorization: `Bearer ${CRON_SECRET}` }, timeout: 120_000 });
+    expect(res.status(), await res.text()).toBe(200);
+    if (((await res.json()) as { enabled: boolean }).enabled) return;
+  }
+  throw new Error("The round engine kept being switched off under the tick");
+}
+
+const setting = async (key: string) =>
+  (await rest<{ value: number }[]>(`app_settings?select=value&key=eq.${key}`))[0].value;
+
+/**
+ * Approves one idea through the real approve_round, as a Buy now tap does before placing: the
+ * round's lease taken, today's fee inputs, the person's address. It leaves the pick held for a
+ * retry, and the round not due, so no other spec's tick places it before this test asks.
+ */
+async function approveHeld(buyerId: string, roundId: string, ideaId: string) {
+  const lock = new Date(Date.now() + 10 * 60_000).toISOString();
+  await rest(`gift_rounds?id=eq.${roundId}`, { method: "PATCH", body: { locked_until: lock } });
+  const [ai, running, zincFee, bps, fixed] = await Promise.all(
+    ["fee_part_ai_cents", "fee_part_running_cents", "zinc_fee_cents", "card_fee_bps", "card_fee_fixed_cents"].map(setting),
+  );
+  await rest("rpc/approve_round", {
+    method: "POST",
+    body: {
+      p_round_id: roundId,
+      p_user_id: buyerId,
+      p_lock: lock,
+      p_orders: [
+        {
+          idea_id: ideaId,
+          max_price_cents: 2500,
+          margin_cents: ai + running,
+          zinc_fee_cents: zincFee,
+          card_fee_bps: bps,
+          card_fee_fixed_cents: fixed,
+          ship_to: "recipient",
+          address_source: "own",
+          address: { recipient_first_name: "Jimmy", recipient_last_name: "Rivera", address_line1: "12 Oak St", city: "Dayton", state: "OH", zip: "45402", country: "US" },
+        },
+      ],
+    },
+  });
+  await rest(`gift_rounds?id=eq.${roundId}`, { method: "PATCH", body: { locked_until: null, next_action_at: new Date(Date.now() + 7 * 86_400_000).toISOString() } });
+}
 
 async function setConnect(on: boolean) {
   await rest("app_settings?key=eq.connect_enabled", { method: "PATCH", body: { value: on ? 1 : 0 } });
@@ -118,8 +172,10 @@ test("AC-1, AC-3, AC-4, AC-17: add a card (phone asked there), come back, nothin
   expect(orders[0].status).not.toBe("failed");
   expect(await cardOrdersAtZinc(r.roundId)).toBe(1);
 
-  // Settings shows the card read from Stripe. Zinc hasn't confirmed the order yet (it's still
-  // being bought), so Remove is refused and the card stays (AC-13).
+  // Settings shows the card read from Stripe. While the order is still being bought (`placing`),
+  // Remove is refused and the card stays (AC-13). Zinc's answer or the sweep can move the order on
+  // at any moment, so it's held in `placing` here rather than raced.
+  await rest(`orders?id=eq.${orders[0].id}`, { method: "PATCH", body: { status: "placing" } });
   await page.goto("/settings/paying");
   await expect(page.getByText("Visa ending in 4242")).toBeVisible();
   await page.getByRole("button", { name: "Remove card" }).click();
@@ -178,6 +234,57 @@ test("AC-6, AC-13: a declined card fails the gift as card needed; a new card buy
   expect(orders).toHaveLength(2);
   expect(orders[1].status).not.toBe("failed");
   expect(await cardOrdersAtZinc(r.roundId)).toBe(2);
+});
+
+test("AC-13: a held gift whose card was removed isn't bought on the card added for another gift", async ({ page }) => {
+  const buyer = await cardBuyer();
+  const a = await roundWith(buyer.id, FAKE_PRODUCTS.cardBuy);
+  const b = await roundWith(buyer.id, FAKE_PRODUCTS.cardBuy, "Nora");
+  await signIn(page, buyer.creds);
+
+  // Gift A is approved on the first card and held, as approve_round leaves every pick before
+  // placing ("held" for "retry": if the app stops before placing, the next tick places it). The
+  // real approve_round writes it, with the round's lease as approval takes it, so the order saves
+  // the card and fees exactly as a Buy now tap would; nothing is placed yet.
+  await page.goto(`/rounds/${a.roundId}/buy?ideas=${a.ideaId}`);
+  await page.getByRole("button", { name: "Add a card" }).click();
+  await onStripe(page, "Save card");
+  await page.waitForURL(`**/rounds/${a.roundId}/buy?ideas=${a.ideaId}`);
+  const firstCard = await savedCardOf(buyer.id);
+  await approveHeld(buyer.id, a.roundId, a.ideaId);
+  expect(await orderOf(a.roundId)).toMatchObject({ status: "held" });
+  expect(await cardOrdersAtZinc(a.roundId)).toBe(0);
+
+  // Remove the card: allowed, since A is only held.
+  await page.goto("/settings/paying");
+  await page.getByRole("button", { name: "Remove card" }).click();
+  await expect(page.getByRole("button", { name: "Add a card" })).toBeVisible();
+  expect(await savedCardOf(buyer.id)).toBeNull();
+
+  // Add a card from gift B. Coming back buys nothing, A included.
+  await page.goto(`/rounds/${b.roundId}/buy?ideas=${b.ideaId}`);
+  await page.getByRole("button", { name: "Add a card" }).click();
+  await onStripe(page, "Save card");
+  await page.waitForURL(`**/rounds/${b.roundId}/buy?ideas=${b.ideaId}`);
+  await expect(page.getByText("Saved card")).toBeVisible();
+  expect(await savedCardOf(buyer.id)).not.toBe(firstCard);
+  expect(await ordersOf(b.roundId)).toEqual([]);
+  expect(["held", "failed"]).toContain((await orderOf(a.roundId)).status);
+  expect(await cardOrdersAtZinc(a.roundId)).toBe(0);
+
+  // A's next placing try (the tick, with A due now) ends it as card needed, on no card.
+  await rest(`gift_rounds?id=eq.${a.roundId}`, { method: "PATCH", body: { next_action_at: new Date().toISOString() } });
+  await tick(page);
+  expect(await orderOf(a.roundId)).toMatchObject({ status: "failed", failure_type: "card_needed" });
+  expect(await cardOrdersAtZinc(a.roundId)).toBe(0);
+  expect(await ordersOf(b.roundId)).toEqual([]);
+
+  // Only B's Buy now buys, and only B.
+  await page.getByRole("button", { name: /^Buy now/ }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Ordered" })).toBeVisible();
+  expect(await cardOrdersAtZinc(b.roundId)).toBe(1);
+  expect(await cardOrdersAtZinc(a.roundId)).toBe(0);
+  expect(await ordersOf(a.roundId)).toHaveLength(1);
 });
 
 test("AC-12: with paying by card off, there's no Add a card, on the gift or in Settings", async ({ page }) => {
