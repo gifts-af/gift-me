@@ -45,8 +45,8 @@ export function extensionAddStoreFor(
         p_item_id: args.itemId,
         p_name: args.name,
         p_price_cents: args.priceCents,
-        p_product_url: args.productUrl,
         // The generated types don't mark these nullable; add_item takes null for none.
+        p_product_url: args.productUrl as string,
         p_product_id: args.productId as string,
         p_photo_url: args.photoUrl as string,
         p_confirm_likely: args.confirmLikely,

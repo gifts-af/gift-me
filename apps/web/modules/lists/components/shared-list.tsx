@@ -1,9 +1,10 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { claimGift, unclaimGift, type UnclaimResult } from "@/modules/lists/actions/claims";
 import { PageFrame } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
@@ -26,9 +27,11 @@ export type SharedListProps = {
   token: string;
   nav?: ReactNode;
   top?: ReactNode;
+  /** "+ My list": the share page's server action. Without it the button isn't shown. */
+  addToMine?: (token: string, itemId: string) => Promise<{ ok: true } | { ok: false; error: string }>;
 };
 
-export default function SharedList({ list, token, nav, top }: SharedListProps) {
+export default function SharedList({ list, token, nav, top, addToMine }: SharedListProps) {
   const router = useRouter();
   // Claims change here without a reload. A refresh hands down a new
   // list.items, which replaces the local copy (React's "adjust state when a
@@ -63,6 +66,47 @@ export default function SharedList({ list, token, nav, top }: SharedListProps) {
       .catch(() => {});
     return () => controller.abort();
   }, [list.isOwner, token]);
+
+  // "+ My list": gifts copied to the viewer's own list this visit, and the one being copied.
+  const [added, setAdded] = useState<ReadonlySet<string>>(() => new Set());
+  const [addingId, setAddingId] = useState<string | null>(null);
+  const [addedNotice, setAddedNotice] = useState(false);
+  const canAdd = !!addToMine && !list.isOwner;
+
+  async function handleAddToMine(gift: SharedGift) {
+    if (!addToMine) return;
+    setAddingId(gift.id);
+    setActionError("");
+    let result: Awaited<ReturnType<typeof addToMine>>;
+    try {
+      result = await addToMine(token, gift.id);
+    } catch {
+      result = { ok: false, error: "Couldn't add that gift. Check your connection and try again." };
+    }
+    setAddingId(null);
+    if (!result.ok) {
+      setActionError(result.error);
+      return;
+    }
+    setAdded((prev) => new Set(prev).add(gift.id));
+    setAddedNotice(true);
+    setAnnouncement(`Added ${gift.name} to your list.`);
+  }
+
+  // Back from signing in with ?add=<gift id>: add that gift once, then drop the
+  // param so a reload doesn't add it again (a duplicate would be harmless anyway).
+  const addedOnArrival = useRef(false);
+  useEffect(() => {
+    if (!canAdd || !list.viewer.signedIn || addedOnArrival.current) return;
+    const id = new URLSearchParams(window.location.search).get("add");
+    if (!id) return;
+    addedOnArrival.current = true;
+    router.replace(`/share/${token}${window.location.hash}`, { scroll: false });
+    const gift = list.items.find((item) => item.id === id);
+    if (gift) void handleAddToMine(gift);
+    // Runs once on arrival.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // A link to one gift. The list streams in after the page does, too late for the browser's own
   // jump to it.
@@ -116,11 +160,58 @@ export default function SharedList({ list, token, nav, top }: SharedListProps) {
     setAnnouncement(`You unclaimed ${gift.name}.`);
   }
 
+  function renderAddToMine(gift: SharedGift) {
+    if (!canAdd) return null;
+    if (added.has(gift.id)) {
+      return (
+        <Button type="button" variant="outline" size="sm" className="w-full" disabled>
+          On your list ✓
+        </Button>
+      );
+    }
+    if (!list.viewer.signedIn) {
+      // Sign up (which links to sign in) and come back here to add it.
+      const next = encodeURIComponent(`/share/${token}?add=${gift.id}`);
+      return (
+        <Button asChild variant="outline" size="sm" className="w-full">
+          <Link href={`/auth/sign-up?next=${next}`} aria-label={`Add ${gift.name} to my list`}>
+            <Plus aria-hidden="true" />
+            My list
+          </Link>
+        </Button>
+      );
+    }
+    const busy = addingId === gift.id;
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="w-full"
+        onClick={() => handleAddToMine(gift)}
+        disabled={busy}
+        aria-busy={busy}
+        aria-label={`Add ${gift.name} to my list`}
+      >
+        <Plus aria-hidden="true" />
+        {busy ? "Adding…" : "My list"}
+      </Button>
+    );
+  }
+
   function renderActions(gift: SharedGift) {
     // The owner never sees claims (product decision 39); the database sends
-    // none, and there's nothing for them to claim.
+    // none, and there's nothing for them to claim. Nor the "+ My list" button.
     if (list.isOwner) return null;
+    return (
+      <>
+        {renderClaim(gift)}
+        {renderAddToMine(gift)}
+      </>
+    );
+  }
 
+  function renderClaim(gift: SharedGift) {
     if (gift.claim) {
       return (
         <>
@@ -180,6 +271,14 @@ export default function SharedList({ list, token, nav, top }: SharedListProps) {
           )}
         </div>
         {!list.viewer.signedIn && top}
+        {addedNotice && (
+          <Banner tone="accent">
+            Added to your list.{" "}
+            <Link href="/lists" className="underline underline-offset-[3px]">
+              See your list
+            </Link>
+          </Banner>
+        )}
         {actionError && (
           <Banner tone="error" role="alert">
             {actionError}

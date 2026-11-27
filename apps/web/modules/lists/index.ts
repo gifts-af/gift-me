@@ -30,3 +30,5 @@ export { removeDeletedPhotos } from "./lib/photo-cleanup";
 export { addFromExtension, parseExtensionAddForm } from "./lib/extension-add";
 export type { ExtensionAddResponse } from "./lib/extension-add";
 export { extensionAddStoreFor } from "./lib/extension-add-store";
+// "+ My list" on a shared list copies a gift, and its photo, to the viewer's list.
+export { readStoredPhoto, setGiftImageUrl, storedPhotoId } from "./lib/share-photo";
