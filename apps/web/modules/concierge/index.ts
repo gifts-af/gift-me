@@ -121,6 +121,7 @@ export {
 export type { DisconnectDeps, PaymentResult, PaymentStatus, PaymentSummary } from "./zinc/connect";
 export type { DbDeps, PlaceAddressHeld, PlaceHeld, ZincDeps } from "./zinc/types";
 export { handleZincWebhook } from "./zinc/events";
+export { connectKey, type ConnectKey } from "./zinc/orders";
 export { readWebhookBody } from "./zinc/guard";
 export { hasPaidFeatures } from "./paid-features";
 // Who has been let into the concierge, which is by request.

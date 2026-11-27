@@ -40,6 +40,7 @@ const order: ZincOrderInput = {
   shipTo: { firstName: "A", lastName: "B", line1: "1 Main", line2: null, city: "Town", state: "CA", postalCode: "94043", country: "US" },
   phone: "6505550100",
   giftMessage: "Happy birthday",
+  payment: null,
 };
 const created = { status: 201, body: { id: "zo_1" } };
 const nestedErr = (status: number, code: string, details?: unknown) => ({ status, body: { error: { code, message: "m", details } } });

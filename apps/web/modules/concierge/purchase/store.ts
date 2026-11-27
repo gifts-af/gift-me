@@ -4,6 +4,7 @@
 // lock the round row and leave its status to reconcile_round.
 import type { Address, AddressDraft, CalendarDate, ScheduleSettings } from "@gifts-af/core";
 import { errorFields, logEvent } from "@/lib/log";
+import type { ConnectKey } from "../zinc/orders";
 import type { DbDeps, ZincDeps } from "../zinc/types";
 
 export type PurchaseDeps = ZincDeps & {
@@ -20,6 +21,11 @@ export type PurchaseDeps = ZincDeps & {
   sleep?: (ms: number) => Promise<void>;
   /** Milliseconds, for the placing time budget; Date.now when left out. */
   clock?: () => number;
+  /**
+   * The app's Zinc key for card orders (connectWiring); null or left out where card payments
+   * aren't wired here, which holds card orders as paused and alerts the owner.
+   */
+  connectKey?: ConnectKey | null;
 };
 
 export function concierge(deps: DbDeps) {
@@ -251,12 +257,14 @@ export type Account = {
   buyer_phone: string | null;
   auto_topup_on: boolean | null;
   over_budget_pct: number;
+  /** Our Stripe customer for a card buyer; a card order is charged to it. */
+  stripe_customer_id: string | null;
 };
 
 export async function readAccount(deps: DbDeps, userId: string): Promise<Account | null> {
   const { data, error } = await concierge(deps)
     .from("accounts")
-    .select("zinc_connected_at, buyer_phone, auto_topup_on, over_budget_pct")
+    .select("zinc_connected_at, buyer_phone, auto_topup_on, over_budget_pct, stripe_customer_id")
     .eq("user_id", userId)
     .maybeSingle();
   if (error) fail("Reading the account failed", error);
@@ -269,6 +277,20 @@ export async function readKey(deps: DbDeps, userId: string): Promise<{ apiKey: s
   if (error) fail("Reading the Zinc key failed", error);
   const row = data?.[0];
   return row?.api_key ? { apiKey: row.api_key, env: row.zinc_env } : null;
+}
+
+/**
+ * The Zinc key an order is placed and looked up with, by its own funding_mode: a card order uses
+ * the app's key (the handle sendConnectOrder takes, for this app's ZINC_ENV), a wallet order its
+ * buyer's own key and the environment that key was saved for. Null when there's none here.
+ */
+export async function zincKeyFor(
+  d: PurchaseDeps,
+  o: { user_id: string; funding_mode: string },
+): Promise<{ key: string | ConnectKey; env: string | null } | null> {
+  if (o.funding_mode === "connect") return d.connectKey ? { key: d.connectKey, env: d.env } : null;
+  const k = await readKey(d, o.user_id);
+  return k ? { key: k.apiKey, env: k.env } : null;
 }
 
 /** The order_addresses columns, as approve_round and begin_placing take them. */

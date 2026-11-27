@@ -90,6 +90,23 @@ describe.skipIf(!supabase)("Zinc and engine wiring (real local database and engi
     expect(await wiring.stripeWiring(db, { STRIPE_SECRET_KEY: "sk_test_x" })).toBeNull();
   });
 
+  it("gives card orders the app's Zinc key only when it fits ZINC_ENV and the webhook secret is set", async () => {
+    const both = { ZINC_CONNECT_API_KEY: "zn_test_app", ZINC_CONNECT_WEBHOOK_SECRET: "zn_whsec_x" };
+    const test = wiring.connectWiring({ ...both, ZINC_ENV: "test" });
+    expect(test?.webhookSecret).toBe("zn_whsec_x");
+    // The key itself is never readable from the handle.
+    expect(JSON.stringify(test)).not.toContain("zn_test_app");
+    expect(wiring.connectWiring({ ...both, ZINC_ENV: "live" })).toBeNull();
+    expect(wiring.connectWiring({ ...both, ZINC_CONNECT_API_KEY: "zn_live_app", ZINC_ENV: "live" })).not.toBeNull();
+    expect(wiring.connectWiring({ ...both, ZINC_CONNECT_API_KEY: "zn_live_app", ZINC_ENV: "test" })).toBeNull();
+    expect(wiring.connectWiring({ ...both, ZINC_ENV: "staging" })).toBeNull();
+    expect(wiring.connectWiring({ ZINC_CONNECT_API_KEY: "zn_test_app", ZINC_ENV: "test" })).toBeNull();
+    expect(wiring.connectWiring({ ZINC_CONNECT_WEBHOOK_SECRET: "zn_whsec_x", ZINC_ENV: "test" })).toBeNull();
+    const { purchase } = await wiring.buyingWiring(new Date("2030-01-01T00:00:00Z"), { ...base, ...both, ZINC_CONNECT_API_KEY: "zn_live_app", EMAIL_OUTBOX: "log" });
+    expect(purchase?.connectKey).toBeTruthy();
+    expect((await wiring.buyingWiring(new Date("2030-01-01T00:00:00Z"), { ...base, EMAIL_OUTBOX: "log" })).purchase?.connectKey).toBeNull();
+  });
+
   it("gives the engine the real buying side, with the fee and margin from app_settings", async () => {
     const { engine, purchase } = await wiring.buyingWiring(new Date("2030-01-01T00:00:00Z"), { ...base, EMAIL_OUTBOX: "log" });
     expect(engine.zinc?.walletUrl).toBe("https://app.zinc.test/wallet");

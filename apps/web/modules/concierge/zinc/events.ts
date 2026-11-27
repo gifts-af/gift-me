@@ -5,6 +5,7 @@
 // unconfirmed, so a duplicate or late event changes nothing. Logs carry ids only (E6).
 import { z } from "zod";
 import { errorFields, logEvent } from "@/lib/log";
+import { failureTypeFor } from "./card-codes";
 import { call, ZincError } from "./client";
 import { parseEvent, verifySignature, type ZincEvent } from "./signature";
 import { handleTrackingEvent, TRACKING_EVENTS, type TrackingDeps } from "./tracking-events";
@@ -146,13 +147,6 @@ export async function userZincKey(userId: string, deps: Pick<ZincDeps, "db">): P
   return key.success && key.data.api_key ? key.data.api_key : null;
 }
 
-// Zinc's error_type to the failure types our SQL understands; anything else is a plain failure.
-export function failureType(errorType: string | undefined): string {
-  if (errorType === "max_price_exceeded") return "price_up";
-  if (errorType === "out_of_stock" || errorType === "invalid_shipping_address") return errorType;
-  return "failed";
-}
-
 /**
  * The store cancelled after placing, and Zinc refunded the wallet (store_cancel_order). Before
  * the ship-by date the buyer is told now through the failure path, with the fix page; on or
@@ -263,7 +257,7 @@ async function settle(userId: string, event: ZincEvent, deps: Deps): Promise<voi
     p_user_id: userId,
     p_order_id: order.id,
     p_status: placed ? "placed" : "failed",
-    p_failure_type: placed ? "failed" : failureType(errorType),
+    p_failure_type: placed ? "failed" : failureTypeFor(errorType, order.funding_mode),
     p_price: price,
   });
   if (error) throw new Error(`Settling the order failed (${error.code}).`);

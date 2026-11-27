@@ -26,11 +26,11 @@ import {
 import { errorFields, logEvent } from "@/lib/log";
 import { hasPaidFeatures } from "../paid-features";
 import { getWallet } from "../zinc/account";
+import { failureTypeFor } from "../zinc/card-codes";
 import { ZincError } from "../zinc/client";
-import { failureType } from "../zinc/events";
-import { findOrderByReference } from "../zinc/orders";
+import { alertIfOver, findOrderByReference, placedPrice, type ConnectKey } from "../zinc/orders";
 import { placeWithRetry } from "../zinc/retry";
-import type { ZincAddress } from "../zinc/types";
+import type { ZincAddress, ZincPayment } from "../zinc/types";
 import { savedFees } from "./payer";
 import {
   claimRoundNow,
@@ -52,6 +52,7 @@ import {
   type PurchaseDeps,
   type RoundRow,
   withLease,
+  zincKeyFor,
 } from "./store";
 
 export type PlaceOutcome = "ordered" | "held" | "not_ready";
@@ -205,6 +206,8 @@ export async function placeRound(
   const rank = (ideaId: string) => roundIdeas.get(ideaId)?.rank ?? Number.MAX_SAFE_INTEGER;
   all.sort((a, b) => rank(a.idea_id) - rank(b.idea_id));
   const held = all.filter((o) => o.status === "held");
+  // A round's held orders share one way of paying (begin_placing raises on a mix).
+  const card = held[0].funding_mode === "connect";
 
   // 1. Gates, before any Zinc call: the kill switch, paid features, setup.
   const gate = async (reason: "paused" | "not_allowed" | "setup") =>
@@ -213,14 +216,31 @@ export async function placeRound(
     logEvent("order.paused", ids);
     return gate("paused");
   }
+  if (card && (await setting(deps, "connect_enabled")) !== 1) {
+    logEvent("order.paused", { ...ids, reason: "connect_off" });
+    return gate("paused");
+  }
   if (!(await hasPaidFeatures(deps.db, r.user_id))) return gate("not_allowed");
   const account = await readAccount(deps, r.user_id);
-  const key = await readKey(deps, r.user_id);
-  if (!account?.zinc_connected_at || !account.buyer_phone || !key) return gate("setup");
-  if (key.env !== deps.env) {
-    // Never a live order with a test key, or the other way round.
-    logEvent("zinc.env_mismatch", ids);
-    return gate("setup");
+  let key: string | ConnectKey;
+  if (card) {
+    // A card buyer needs only a phone; the card itself is checked by begin_placing.
+    if (!account?.buyer_phone) return gate("setup");
+    if (!deps.connectKey) {
+      // Our own setup is missing, not the buyer's: held as paused and the owner alerted.
+      logEvent("zinc.connect_unauthorized", { ...ids, reason: "no_key", alert: true });
+      return gate("paused");
+    }
+    key = deps.connectKey;
+  } else {
+    const walletKey = await readKey(deps, r.user_id);
+    if (!account?.zinc_connected_at || !account.buyer_phone || !walletKey) return gate("setup");
+    if (walletKey.env !== deps.env) {
+      // Never a live order with a test key, or the other way round.
+      logEvent("zinc.env_mismatch", ids);
+      return gate("setup");
+    }
+    key = walletKey.apiKey;
   }
 
   // 2. Still on time, and still something to buy.
@@ -287,10 +307,11 @@ export async function placeRound(
   const caps = recheckedCaps(r, held, all, roundIdeas, account.over_budget_pct, deps.settings.marginPct);
 
   // 5. Known short: only when auto top-up is known to be off; otherwise Zinc may charge the card.
-  if (account.auto_topup_on === false) {
+  // A card order never touches a wallet.
+  if (typeof key === "string" && account.auto_topup_on === false) {
     let balance: number;
     try {
-      balance = (await getWallet(deps.http, key.apiKey)).balanceCents;
+      balance = (await getWallet(deps.http, key)).balanceCents;
     } catch (e) {
       // Can't tell; nothing is sent. The hold stays and the next tick tries again.
       logEvent("zinc.wallet_unavailable", { ...ids, kind: e instanceof ZincError ? e.kind : "unknown" });
@@ -326,8 +347,18 @@ export async function placeRound(
     })),
   });
   if (begin.error) fail("Beginning to place failed", begin.error);
-  const placing = ((begin.data ?? []) as { id: string; idea_id: string; idempotency_key: string; max_price_cents: number; gift_message: string | null }[])
-    .sort((a, b) => rank(a.idea_id) - rank(b.idea_id));
+  const placing = (
+    (begin.data ?? []) as {
+      id: string;
+      idea_id: string;
+      idempotency_key: string;
+      max_price_cents: number;
+      gift_message: string | null;
+      funding_mode: string;
+      payment_method_id: string | null;
+      margin_cents: number | null;
+    }[]
+  ).sort((a, b) => rank(a.idea_id) - rank(b.idea_id));
   if (placing.length === 0) {
     logEvent("order.begin_refused", ids);
     return outcomeOf((await readRound(deps, roundId))?.status ?? null);
@@ -341,6 +372,13 @@ export async function placeRound(
   const results: Result[] = [];
   let rest: "unsent" | "insufficient" | null = null;
   let unauthorized = false;
+  const mode = card ? "connect" : "zinc_wallet";
+  // A card order is charged to the card it was approved with, never the account's current one,
+  // and with its own saved margin. Anything missing is refused by sendConnectOrder before it's sent.
+  const paymentOf = (o: (typeof placing)[number]): ZincPayment | null =>
+    card
+      ? { mode: "connect", paymentMethod: o.payment_method_id ?? "", customer: account.stripe_customer_id ?? "", marginCents: o.margin_cents ?? -1 }
+      : null;
 
   for (const o of placing) {
     if (rest === null && clock() >= deadline) {
@@ -359,14 +397,22 @@ export async function placeRound(
       shipTo: toZincAddress(addresses.get(o.id)!),
       phone: account.buyer_phone,
       giftMessage: o.gift_message,
+      payment: paymentOf(o),
+    };
+    // A declined card stops the run: the rest stay unsent, and record_outcomes ends any whose
+    // card was cleared as card_needed.
+    const rejected = (code: string | undefined) => {
+      const failure = failureTypeFor(code, mode);
+      results.push({ order_id: o.id, outcome: "rejected", failure_type: failure });
+      if (failure === "card_declined") rest = "unsent";
     };
     try {
-      const res = await placeWithRetry(deps.http, key.apiKey, input, retry);
+      const res = await placeWithRetry(deps.http, key, input, retry);
       if ("insufficient" in res) {
         results.push({ order_id: o.id, outcome: "insufficient", available_cents: res.insufficient.availableCents });
         rest = "insufficient";
       } else if (res.existing?.status === "failed") {
-        results.push({ order_id: o.id, outcome: "rejected", failure_type: failureType(res.existing.errorType) });
+        rejected(res.existing.errorType);
       } else {
         results.push({ order_id: o.id, outcome: "sent", provider_order_id: res.providerOrderId });
       }
@@ -374,9 +420,10 @@ export async function placeRound(
       if (e instanceof ZincError && e.kind === "rejected") {
         // A synchronous 4xx on the first try: nothing was created at Zinc. After any ambiguous
         // try placeWithRetry only throws `unavailable`, so this never follows a timeout.
-        results.push({ order_id: o.id, outcome: "rejected", failure_type: failureType(e.code) });
+        rejected(e.code);
       } else if (e instanceof ZincError && e.kind === "unauthorized") {
-        // The key was revoked: nothing was created, and setup needs the buyer.
+        // The key was revoked: nothing was created. A buyer's own key needs them to set up again;
+        // the app's key is ours to fix.
         results.push({ order_id: o.id, outcome: "unsent" });
         rest = "unsent";
         unauthorized = true;
@@ -399,7 +446,11 @@ export async function placeRound(
       ...(res.available_cents !== undefined ? { available_cents: res.available_cents } : {}),
     });
   }
-  if (unauthorized) {
+  if (unauthorized && card) {
+    // Nobody is asked to fix their setup: paused, and the owner alerted (design/operations.md).
+    logEvent("zinc.connect_unauthorized", { ...ids, reason: "refused", alert: true });
+    status = await roundRpc(deps, "gate_held_orders", { p_round_id: roundId, p_reason: "paused" });
+  } else if (unauthorized) {
     logEvent("zinc.unauthorized", ids);
     status = await roundRpc(deps, "gate_held_orders", { p_round_id: roundId, p_reason: "setup" });
   }
@@ -473,14 +524,15 @@ export async function sweepStalePlacing(deps: PurchaseDeps): Promise<number> {
   for (const o of data ?? []) {
     const ids = { order_id: o.id, round_id: o.round_id, user_id: o.user_id };
     try {
-      const key = await readKey(deps, o.user_id);
+      // A card order is looked up with the app's key, a wallet order with its buyer's.
+      const key = await zincKeyFor(deps, o);
       if (!key || key.env !== deps.env) {
         // Looking it up with no key, or the other environment's, would wrongly find nothing.
         // An order stuck placing that we can't look up needs the owner (health email, W5-3).
         logEvent("order.sweep_skipped", { ...ids, reason: key ? "env_mismatch" : "no_key", alert: true });
         continue;
       }
-      const found = await findOrderByReference(deps.http, key.apiKey, o.id);
+      const found = await findOrderByReference(deps.http, key.key, o.id);
       if (!found) {
         await roundRpc(deps, "mark_unconfirmed", { p_order_id: o.id });
         // The owner settles it by hand (design/operations.md > Unconfirmed orders), so it alerts (E8).
@@ -496,20 +548,16 @@ export async function sweepStalePlacing(deps: PurchaseDeps): Promise<number> {
         continue;
       }
       if (found.status === "pending") continue; // still processing at Zinc: its webhook or a later sweep settles it
+      const price = placedPrice(found);
       const settled = await db.rpc("settle_order", {
         p_user_id: o.user_id,
         p_order_id: o.id,
         p_status: found.status,
-        p_failure_type: found.status === "failed" ? failureType(found.errorType) : "failed",
-        p_price: {
-          provider_order_id: found.providerOrderId,
-          ...(found.price?.subtotalCents !== undefined ? { subtotal_cents: found.price.subtotalCents } : {}),
-          ...(found.price?.shippingCents !== undefined ? { shipping_cents: found.price.shippingCents } : {}),
-          ...(found.price?.taxCents !== undefined ? { tax_cents: found.price.taxCents } : {}),
-          ...(found.price?.totalCents !== undefined ? { total_cents: found.price.totalCents } : {}),
-        },
+        p_failure_type: found.status === "failed" ? failureTypeFor(found.errorType, o.funding_mode) : "failed",
+        p_price: price,
       });
       if (settled.error) fail("Settling the order failed", settled.error);
+      if (found.status === "placed" && o.funding_mode === "connect") alertIfOver(o, price);
       logEvent("order.swept", { ...ids, status: found.status });
       done++;
       // Tell the buyer now, the way the webhook does: the gift is ordered, or a failure needs them

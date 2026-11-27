@@ -79,11 +79,14 @@ describe.skipIf(!stack)("code column CHECK lists match the app (real local datab
   });
 
   it("orders.failure_type allows every failure type the app and SQL write", async () => {
-    const { failureType } = await import("@/modules/concierge/zinc/events");
+    const { CARD_CODES, failureTypeFor } = await import("@/modules/concierge/zinc/card-codes");
     // No single list: each writer is named. A new writer adds its values here.
+    const zincCodes = ["max_price_exceeded", "out_of_stock", "invalid_shipping_address", "payment_declined", "something_else", undefined, ...CARD_CODES];
     const written = new Set([
-      // zinc/events.ts failureType: Zinc's error types mapped, anything else plain "failed".
-      ...["max_price_exceeded", "out_of_stock", "invalid_shipping_address", "something_else", undefined].map(failureType),
+      // zinc/card-codes.ts failureTypeFor (placing, the sweep and webhook events): Zinc's error types
+      // mapped, anything else plain "failed". Its card_declined is never stored: SQL fail_order_row
+      // turns it into card_needed (below) on a card order, or failed on a wallet one.
+      ...["zinc_wallet", "connect"].flatMap((mode) => zincCodes.map((c) => failureTypeFor(c, mode))).filter((t) => t !== "card_declined"),
       // purchase/place.ts: placing's own checks before calling Zinc.
       "failed",
       "too_late",
