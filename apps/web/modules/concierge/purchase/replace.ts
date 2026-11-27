@@ -16,7 +16,20 @@ import { hasPaidFeatures } from "../paid-features";
 import { ZincError, type ZincHttp } from "../zinc/client";
 import { listGiftRoute, productDetails, productOffers, type AmazonShipping, type ListGiftRoute, type ZincStep } from "../zinc/products";
 import type { DbDeps } from "../zinc/types";
-import { capsFor, destinationFor, refusalOf, saveDestination, tellCustomer, type ApproveError, type ApproveResult, type Destination, type ShipTo } from "./approve";
+import {
+  CARD_REFUSALS,
+  destinationFor,
+  moneyFields,
+  refusalOf,
+  saveDestination,
+  shownTooLow,
+  tellCustomer,
+  type ApproveError,
+  type ApproveResult,
+  type Destination,
+  type ShipTo,
+} from "./approve";
+import { capsForPayer, ideaTotalCents, readPayer, type Payer } from "./payer";
 import { asCommitted, placeRound } from "./place";
 import {
   claimRoundNow,
@@ -79,12 +92,16 @@ export type ReplaceInput = {
   ideaId: string;
   /** For a price-rise re-buy: the total the page showed from quoteFailedOrder. */
   shownTotalCents?: number;
+  /** The "never more than" the page showed; required for a card buyer, as ApproveInput's. */
+  shownMaxCents?: number;
   /** The failed order's ship-to when left out; an address failure needs a fixed address (AC-15a). */
   shipTo?: ShipTo;
   overBudgetConfirmed?: boolean;
 };
 
 const ADDRESS_FAILURES: readonly string[] = ["address_withdrawn", "address_rejected"];
+/** Failures whose own gift can be quoted again and bought at today's price. */
+const REQUOTED: readonly string[] = ["price_up", "card_needed"];
 
 /** A failed order can still be replaced: the round needs attention, isn't closed, and today (UTC) is before its ship-by day. */
 function canReplace(round: { status: string; closed_at: string | null; ship_by_deadline: string }, now: Date): boolean {
@@ -98,11 +115,18 @@ function isCurrentFailure(o: FailedOrderRow | null, userId: string, roundId: str
 
 /**
  * Today's estimated total for an idea (price, shipping, the tax estimate and the order fee,
- * as the idea run works it out), or null when it can't be had. One paid lookup, logged as
+ * as the idea run works it out) and its goods alone (the same without the fee), or null when
+ * it can't be had. One paid lookup, logged as
  * `order.requote` with its cost, which is also recorded for the failed order and its buyer
  * whenever a call was made, whatever way it ends.
  */
-async function requote(deps: QuoteDeps, idea: IdeaRow, feeCents: number, ids: Record<string, string>, bill: { userId: string; orderId: string }): Promise<number | null> {
+async function requote(
+  deps: QuoteDeps,
+  idea: IdeaRow,
+  feeCents: number,
+  ids: Record<string, string>,
+  bill: { userId: string; orderId: string },
+): Promise<{ totalCents: number; goodsCents: number } | null> {
   const [taxPct, lookupCents, amazonFreeShippingFromCents, amazonShippingCents] = await Promise.all([
     setting(deps, "idea_tax_estimate_pct"),
     setting(deps, "zinc_lookup_cents"),
@@ -156,7 +180,7 @@ async function requote(deps: QuoteDeps, idea: IdeaRow, feeCents: number, ids: Re
     cents: calls * lookupCents,
     ...(newCents !== null ? { old_cents: idea.est_total_cents, new_cents: newCents } : {}),
   });
-  return newCents;
+  return newCents === null ? null : { totalCents: newCents, goodsCents: newCents - feeCents };
 }
 
 type Route = Extract<ListGiftRoute, { kind: "offers" | "details" }>;
@@ -214,8 +238,9 @@ async function lookUp(lookup: QuoteDeps["lookup"], idea: IdeaRow, route: Route, 
 }
 
 /**
- * Today's price for a gift that failed with price_up (AC-14): read-only, one paid lookup,
- * inside the paid-features check. Only on the buyer's tap, never on load (AC-4a).
+ * Today's price for a gift that failed with price_up or card_needed (AC-14): read-only, one paid
+ * lookup, inside the paid-features check. Only on the buyer's tap, never on load (AC-4a). Both
+ * figures are what the gift costs this buyer: a card buyer's whole charge at today's fees.
  */
 export async function quoteFailedOrder(input: { userId: string; roundId: string; orderId: string }, deps: QuoteDeps): Promise<QuoteResult> {
   const { userId, roundId, orderId } = input;
@@ -227,15 +252,18 @@ export async function quoteFailedOrder(input: { userId: string; roundId: string;
   // Nothing can be bought on it any more, so no paid lookup.
   if (!canReplace(round, deps.now)) return "not_open";
   if (!isCurrentFailure(failed, userId, roundId)) return "not_current";
-  if (failed.failure_type !== "price_up") return "not_allowed";
+  if (!REQUOTED.includes(failed.failure_type ?? "")) return "not_allowed";
   if (!(await hasPaidFeatures(deps.db, userId))) return "not_allowed";
   // Stop all ordering stops this paid lookup too: a re-buy would only be held as paused.
   if ((await setting(deps, "zinc_ordering_enabled")) !== 1) return "zinc_off";
-  if (await priceRiseFixed(deps, failed.idea_id, failed.id)) return "once";
+  // Once per gift for a price rise (S2); a card that couldn't be charged may be tried again.
+  if (failed.failure_type === "price_up" && (await priceRiseFixed(deps, failed.idea_id, failed.id))) return "once";
   const idea = (await readIdeas(deps, [failed.idea_id])).get(failed.idea_id);
   if (!idea) return "unavailable";
-  const newCents = await requote(deps, idea, await setting(deps, "zinc_order_fee_cents"), ids, { userId, orderId });
-  return newCents === null ? "unavailable" : { oldCents: idea.est_total_cents, newCents };
+  const [payer, feeCents] = await Promise.all([readPayer(deps, userId), setting(deps, "zinc_order_fee_cents")]);
+  const today = await requote(deps, idea, feeCents, ids, { userId, orderId });
+  if (today === null) return "unavailable";
+  return { oldCents: ideaTotalCents(idea, payer), newCents: totalFor(today, payer) };
 }
 
 /**
@@ -282,18 +310,28 @@ async function replaceUnderLease(input: ReplaceInput, deps: PurchaseDeps & { loo
     const same = idea.id === failed.idea_id;
     const addressFailure = ADDRESS_FAILURES.includes(failed.failure_type ?? "");
     const priceUp = same && failed.failure_type === "price_up";
-    if (same ? !(priceUp || addressFailure) : idea.status !== "proposed") return { ok: false, error: "replaced" };
+    const cardNeeded = same && failed.failure_type === "card_needed";
+    if (same ? !(priceUp || addressFailure || cardNeeded) : idea.status !== "proposed") return { ok: false, error: "replaced" };
 
+    // What the gift costs this buyer: a card buyer's whole charge at today's fees (AC-5).
+    const payer = await readPayer(deps, userId);
+    let total = ideaTotalCents(idea, payer);
+    let requoted: { totalCents: number; goodsCents: number } | null = null;
     // A price-rise re-buy: once per gift, at no more than the page showed (S1, S2).
-    let total = idea.est_total_cents;
     if (priceUp) {
       if (await priceRiseFixed(deps, idea.id, failed.id)) return { ok: false, error: "once" };
       if (input.shownTotalCents === undefined) return { ok: false, error: "price_changed" };
       if (!deps.lookup) return { ok: false, error: "unavailable" };
-      const today = await requote({ ...deps, lookup: deps.lookup }, idea, deps.settings.feeCents, ids, { userId, orderId: failed.id });
-      if (today === null) return { ok: false, error: "unavailable" };
-      if (today > input.shownTotalCents) return { ok: false, error: "price_changed" };
-      total = today;
+      requoted = await requote({ ...deps, lookup: deps.lookup }, idea, deps.settings.feeCents, ids, { userId, orderId: failed.id });
+      if (requoted === null) return { ok: false, error: "unavailable" };
+      total = totalFor(requoted, payer);
+      if (total > input.shownTotalCents) return { ok: false, error: "price_changed" };
+    }
+    // A card that couldn't be charged: the same gift again at today's price, any number of times.
+    // One that can't be quoted today keeps its saved estimate, capped as ever.
+    if (cardNeeded && deps.lookup) {
+      requoted = await requote({ ...deps, lookup: deps.lookup }, idea, deps.settings.feeCents, ids, { userId, orderId: failed.id });
+      if (requoted !== null) total = totalFor(requoted, payer);
     }
 
     // The budget check and the cap, with the round's other live orders counted.
@@ -302,8 +340,13 @@ async function replaceUnderLease(input: ReplaceInput, deps: PurchaseDeps & { loo
     const others = (await liveOrders(deps, roundId)).filter((o) => o.id !== failed.id);
     several = others.length > 0;
     const committed = committedSpendCents(others.map(asCommitted));
-    const fit = capsFor(round, [total], account, input.overBudgetConfirmed === true, deps.settings, committed);
+    const fit = capsForPayer(round, [total], account, input.overBudgetConfirmed === true, payer, deps.settings.marginPct, committed);
     if (typeof fit === "string") return { ok: false, error: fit };
+    const changed = shownTooLow(payer, fit.neverMoreThanCents, input.shownMaxCents);
+    if (changed) {
+      logEvent("order.replace_refused", { ...ids, reason: "price_changed" });
+      return changed;
+    }
 
     const dest = await replacementDestination(deps, failed, round.person_id, addressFailure, input.shipTo);
     if (!dest) return { ok: false, error: "no_address" };
@@ -315,14 +358,15 @@ async function replaceUnderLease(input: ReplaceInput, deps: PurchaseDeps & { loo
       p_failed_order_id: failed.id,
       p_order: {
         idea_id: idea.id,
-        max_price_cents: fit.caps[0],
-        fee_cents: deps.settings.feeCents,
+        ...moneyFields(payer, fit.caps[0]),
         gift_message: failed.gift_message,
         ship_to: dest.ship_to,
         address_source: dest.address_source,
         address_owner_id: dest.address_owner_id,
         address: dest.address,
-        ...(priceUp ? { new_total_cents: total } : {}),
+        // The idea's saved price follows a re-quote: the wallet total, and for a card the goods alone.
+        ...(priceUp && requoted ? { new_total_cents: requoted.totalCents } : {}),
+        ...(cardNeeded && requoted ? { new_total_cents: requoted.totalCents, new_goods_cents: requoted.goodsCents } : {}),
       },
     });
     if (error) {
@@ -341,8 +385,14 @@ async function replaceUnderLease(input: ReplaceInput, deps: PurchaseDeps & { loo
   return tellCustomer(deps, roundId, { round_id: roundId, user_id: userId }, several);
 }
 
+/** What a re-quote costs this buyer: the wallet total, or the whole card charge at today's fees. */
+function totalFor(q: { totalCents: number; goodsCents: number }, payer: Payer): number {
+  return ideaTotalCents({ goods_cents: q.goodsCents, est_total_cents: q.totalCents }, payer);
+}
+
 /** replace_failed_order's refusals; "no new total" is a programming error and throws. */
 const REFUSALS: Record<string, ApproveError | ReplaceError> = {
+  ...CARD_REFUSALS,
   "lease not held": "busy",
   "not open": "not_open",
   "not current": "not_current",

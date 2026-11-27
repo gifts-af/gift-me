@@ -73,6 +73,8 @@ const ERRORS: Record<BuyError, Words> = {
   once: { title: "The price went up again", body: "Nothing was bought. Pick another idea." },
   unavailable: { title: "We can't get today's price", body: "Nothing was bought. Pick another idea." },
   zinc_off: { title: "Buying isn't switched on here", body: "Nothing was bought." },
+  no_card: { title: "Add a card first", body: "Nothing was bought. Add a card, then tap Buy again." },
+  connect_off: { title: "Buying is paused", body: "Nothing was bought. Paying by card is switched off right now." },
   session: { title: "Your session ended", body: "Sign in again. Nothing was bought." },
   bad_form: { title: "That didn't go through", body: "Nothing was bought. Reload and try again." },
 };

@@ -58,6 +58,7 @@ const inputs = (o: Partial<IdeaInputs> = {}): IdeaInputs => ({
   baseBudgetCents: null,
   defaultBudgetCents: null,
   listGifts: [],
+  cardFees: null,
   ...o,
 });
 
@@ -367,6 +368,28 @@ describe("runIdeas: results", () => {
     expect(gateway.bodies[0].content).toContain("Budget: $25.00");
     // 2760 delivered is over a $25 budget.
     expect(store.saved[0]).toMatchObject({ overBudget: true, arriveBy: null });
+  });
+
+  it("a card buyer's budget counts the GiftsAF fee: within by wallet, over or dropped by card", async () => {
+    const cardFees = { marginCents: 100, zincFeeCents: 100, cardFeeBps: 290, cardFeeFixedCents: 30 };
+    const budget = (cents: number, fees: IdeaInputs["cardFees"]) =>
+      inputs({ occasions: [{ rule: { kind: "birthday", month: 12, day: 20 }, ownBudgetCents: cents }], cardFees: fees });
+    // 2760 by wallet, 2977 charged by card (goods 2660).
+    world([2000], { zinc, gateway });
+    store.in = budget(2800, null);
+    await runIdeas(req(), deps());
+    expect(store.saved[0]).toMatchObject({ overBudget: false, estTotalCents: 2760 });
+
+    store.saved = [];
+    store.in = budget(2800, cardFees);
+    await runIdeas(req(), deps());
+    expect(store.saved[0]).toMatchObject({ overBudget: true, estTotalCents: 2760 });
+
+    // 15% over $24.00 allows 2760: kept over budget by wallet, dropped by card.
+    store.saved = [];
+    store.in = budget(2400, cardFees);
+    expect(await runIdeas(req(), deps())).toMatchObject({ status: "none" });
+    expect(store.saved).toEqual([]);
   });
 
   it("a round run uses the round's budget, and its deadline as the order date", async () => {

@@ -39,7 +39,15 @@ export type ZincOrderInput = {
   shipTo: ZincAddress;
   phone: string;
   giftMessage: string | null;
+  /**
+   * A card order's payment (Zinc Connect): null on a wallet order. Without it Zinc pays from the
+   * account's wallet, so sendConnectOrder refuses a card order that lacks it.
+   */
+  payment: ZincPayment | null;
 };
+
+/** What Zinc charges a card order to: the card the order was approved with, our Stripe customer, and its saved margin. */
+export type ZincPayment = { mode: "connect"; paymentMethod: string; customer: string; marginCents: number };
 
 export type FoundOrder = {
   providerOrderId: string;
@@ -47,4 +55,16 @@ export type FoundOrder = {
   errorType?: string;
   /** From job_result.price_components on a placed order, when Zinc gives whole cents. */
   price?: { subtotalCents?: number; shippingCents?: number; taxCents?: number; totalCents?: number };
+  /** A card order's whole charge (connect.final_charge), when Zinc gives whole cents (A7). */
+  finalChargeCents?: number;
+};
+
+/** A placed order's prices as settle_order takes them (p_price). */
+export type PlacedPrice = {
+  provider_order_id: string;
+  subtotal_cents?: number;
+  shipping_cents?: number;
+  tax_cents?: number;
+  total_cents?: number;
+  final_charge_cents?: number;
 };

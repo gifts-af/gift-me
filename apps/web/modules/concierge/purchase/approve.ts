@@ -6,6 +6,7 @@
 import { checkAddress, classifyTotal, isShippableAddress, type Address, type AddressDraft } from "@gifts-af/core";
 import { errorFields, logEvent } from "@/lib/log";
 import { hasPaidFeatures } from "../paid-features";
+import { capsForPayer, ideaTotalCents, readPayer, type Payer } from "./payer";
 import { EMAILED_REASONS, FAILURE_REASONS, placeRound, sequentialCaps } from "./place";
 import {
   buyerAddress,
@@ -45,6 +46,11 @@ export type ApproveInput = {
   overBudgetConfirmed?: boolean;
   /** The recipient when left out. */
   shipTo?: ShipTo;
+  /**
+   * The "never more than" the page showed. Required for a card buyer: when today's is higher
+   * (a fee or price changed since the page loaded), nothing is bought and the new one comes back.
+   */
+  shownMaxCents?: number;
 };
 
 export type ApproveError =
@@ -65,7 +71,13 @@ export type ApproveError =
   /** A list gift already on another of the buyer's live orders (AC-30). */
   | "already_bought"
   /** A pick is on one of this round's live orders already: a second tab after the buy went through. */
-  | "already_ordered";
+  | "already_ordered"
+  /** A card buyer's most-they-can-pay is higher than the page showed, or the fees changed meanwhile. */
+  | "price_changed"
+  /** A card buyer with no saved card or phone. */
+  | "no_card"
+  /** Paying by card is switched off (connect_enabled). */
+  | "connect_off";
 
 /**
  * One gift of several. `reason`: what it's held for or why it failed; for an ordered one, how
@@ -82,7 +94,8 @@ export type GiftOutcome = { orderId: string; title: string; status: "ordered" | 
  */
 export type ApproveResult =
   | { ok: true; status: "ordered" | "held" | "failed"; reason: string | null; gifts?: GiftOutcome[] | "unknown" }
-  | { ok: false; error: ApproveError };
+  /** `neverMoreThanCents`: with price_changed, today's figure, when it's known. */
+  | { ok: false; error: ApproveError; neverMoreThanCents?: number };
 
 /**
  * Each pick's price cap, and the most the wallet can be charged for them all (caps plus
@@ -169,6 +182,35 @@ export async function saveDestination(deps: PurchaseDeps, userId: string, person
   }
 }
 
+/**
+ * What a new order says about money, as approve_round and replace_failed_order take it. A wallet
+ * order sends the wallet fee, as before; a card order sends the fee inputs the buyer was shown,
+ * which the SQL checks against today's settings and saves, working out max_charge_cents itself.
+ */
+export function moneyFields(p: Payer, maxPriceCents: number): Record<string, number> {
+  if (p.mode === "zinc_wallet") return { max_price_cents: maxPriceCents, fee_cents: p.feeCents };
+  return {
+    max_price_cents: maxPriceCents,
+    margin_cents: p.fees.marginCents,
+    zinc_fee_cents: p.fees.zincFeeCents,
+    card_fee_bps: p.fees.cardFeeBps,
+    card_fee_fixed_cents: p.fees.cardFeeFixedCents,
+  };
+}
+
+/**
+ * A card buyer's "never more than", checked against what the page showed: price_changed with
+ * today's figure when it's higher or wasn't shown. Null when it's fine, and always for a wallet.
+ */
+export function shownTooLow(p: Payer, neverMoreThanCents: number, shownMaxCents: number | undefined): { ok: false; error: "price_changed"; neverMoreThanCents: number } | null {
+  if (p.mode === "zinc_wallet") return null;
+  if (shownMaxCents !== undefined && neverMoreThanCents <= shownMaxCents) return null;
+  return { ok: false, error: "price_changed", neverMoreThanCents };
+}
+
+/** The card refusals both functions raise (check_card_order); fees_changed reads as price_changed. */
+export const CARD_REFUSALS: Record<string, ApproveError> = { fees_changed: "price_changed", no_card: "no_card", connect_off: "connect_off" };
+
 /** approve_round's and replace_failed_order's refusals: the word after "<fn>: ". */
 export function refusalOf(message: string, fn: string): string {
   return message.startsWith(`${fn}: `) ? message.slice(fn.length + 2) : "";
@@ -221,9 +263,17 @@ export async function approveAndBuy(input: ApproveInput, deps: PurchaseDeps): Pr
     const account = await readAccount(deps, userId);
     if (!account) return { ok: false, error: "not_allowed" };
 
-    // 3. The budget check and the caps (AC-6, AC-7, AC-15).
-    const fit = capsFor(round, picks.map((id) => ideas.get(id)!.est_total_cents), account, input.overBudgetConfirmed === true, deps.settings, 0);
+    // 3. The budget check and the caps (AC-6, AC-7, AC-15), on what each gift costs this buyer:
+    //    a card buyer's whole charge, fee included (AC-5).
+    const payer = await readPayer(deps, userId);
+    const totals = picks.map((id) => ideaTotalCents(ideas.get(id)!, payer));
+    const fit = capsForPayer(round, totals, account, input.overBudgetConfirmed === true, payer, deps.settings.marginPct, 0);
     if (typeof fit === "string") return { ok: false, error: fit };
+    const changed = shownTooLow(payer, fit.neverMoreThanCents, input.shownMaxCents);
+    if (changed) {
+      logEvent("order.approve_refused", { ...ids, reason: "price_changed" });
+      return changed;
+    }
 
     // 4. Where it ships (AC-10).
     const dest = await destinationFor(deps, userId, round.person_id, input.shipTo ?? { kind: "recipient" });
@@ -235,8 +285,7 @@ export async function approveAndBuy(input: ApproveInput, deps: PurchaseDeps): Pr
       p_lock: lock,
       p_orders: picks.map((id, i) => ({
         idea_id: id,
-        max_price_cents: fit.caps[i],
-        fee_cents: deps.settings.feeCents,
+        ...moneyFields(payer, fit.caps[i]),
         gift_message: giftMessage,
         ship_to: dest.ship_to,
         address_source: dest.address_source,
@@ -252,6 +301,7 @@ export async function approveAndBuy(input: ApproveInput, deps: PurchaseDeps): Pr
       if (refusal === "claimed" || refusal === "replaced" || refusal === "not_shared" || refusal === "already_bought") {
         return { ok: false, error: refusal };
       }
+      if (CARD_REFUSALS[refusal]) return { ok: false, error: CARD_REFUSALS[refusal] };
       // Another tab or the tick took the lease in between.
       if (refusal === "lease not held") return { ok: false, error: "busy" };
       // The person was relinked after the address was read (T88). Trying again reads the

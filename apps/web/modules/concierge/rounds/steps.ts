@@ -52,7 +52,8 @@ export async function releaseQuietly(round: ClaimedRound, deps: StepDeps): Promi
 /**
  * The heads-up's low-balance warning (AC-11): what the next few weeks need against the
  * wallet, when auto top-up isn't known to be on. Only for a user with paid features and
- * Zinc connected; any Zinc error leaves it out rather than holding up the email.
+ * Zinc connected who pays by wallet (canBuy): a card buyer has no balance to warn about. Any Zinc
+ * error leaves it out rather than holding up the email.
  */
 async function headsUpFunding(round: ClaimedRound, deps: StepDeps): Promise<Funding | undefined> {
   const { zinc, store } = deps;

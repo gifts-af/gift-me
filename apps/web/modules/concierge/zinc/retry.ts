@@ -1,5 +1,5 @@
 import { ZincError, type ZincHttp } from "./client";
-import { createOrder, findOrderByReference } from "./orders";
+import { createOrder, findOrderByReference, sendConnectOrder, type ConnectKey } from "./orders";
 import type { FoundOrder, ZincOrderInput } from "./types";
 
 export type RetrySettings = {
@@ -20,7 +20,8 @@ const unavailable = () => new ZincError("unavailable", 0, "Zinc order not confir
  * Places an order, retrying only `unavailable` failures (network, timeout, 5xx, 429, an
  * unreadable 2xx) with the SAME idempotency key. Before each resend it looks the order up by
  * our reference, so a lost response never becomes a second order. 402 and other 4xx on the
- * first POST are never retried.
+ * first POST are never retried. With the app's key (a card order) every POST goes through
+ * sendConnectOrder, so each one, resends included, carries the order's payment.
  *
  * Once any attempt was ambiguous (it may have created the order: an `unavailable` failure or
  * a 409), every later error is thrown as `unavailable`, so the caller keeps the order placing
@@ -28,7 +29,7 @@ const unavailable = () => new ZincError("unavailable", 0, "Zinc order not confir
  */
 export async function placeWithRetry(
   h: ZincHttp,
-  key: string,
+  key: string | ConnectKey,
   o: ZincOrderInput,
   r: RetrySettings,
 ): Promise<PlaceResult> {
@@ -41,7 +42,7 @@ export async function placeWithRetry(
   for (let attempt = 1; ; attempt++) {
     let failure: ZincError;
     try {
-      const res = await createOrder(h, key, o);
+      const res = typeof key === "string" ? await createOrder(h, key, o) : await sendConnectOrder(h, key, o);
       if ("providerOrderId" in res) return res;
       if ("insufficient" in res) {
         // record_outcomes gives an insufficient order a NEW idempotency key, so after an

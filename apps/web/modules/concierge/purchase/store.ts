@@ -4,6 +4,7 @@
 // lock the round row and leave its status to reconcile_round.
 import type { Address, AddressDraft, CalendarDate, ScheduleSettings } from "@gifts-af/core";
 import { errorFields, logEvent } from "@/lib/log";
+import type { ConnectKey } from "../zinc/orders";
 import type { DbDeps, ZincDeps } from "../zinc/types";
 
 export type PurchaseDeps = ZincDeps & {
@@ -20,6 +21,11 @@ export type PurchaseDeps = ZincDeps & {
   sleep?: (ms: number) => Promise<void>;
   /** Milliseconds, for the placing time budget; Date.now when left out. */
   clock?: () => number;
+  /**
+   * The app's Zinc key for card orders (connectWiring); null or left out where card payments
+   * aren't wired here, which holds card orders as paused and alerts the owner.
+   */
+  connectKey?: ConnectKey | null;
 };
 
 export function concierge(deps: DbDeps) {
@@ -113,6 +119,12 @@ export type OrderRow = {
   /** The list owner whose shared address it was approved for; null unless address_source is shared (T88). */
   address_owner_id: string | null;
   created_at: string;
+  /** zinc_wallet or connect; a card order also has the fee inputs it was approved with. */
+  funding_mode: string;
+  margin_cents: number | null;
+  zinc_fee_cents: number | null;
+  card_fee_bps: number | null;
+  card_fee_fixed_cents: number | null;
 };
 
 export type FailedOrderRow = {
@@ -159,7 +171,9 @@ export async function priceRiseFixed(deps: DbDeps, ideaId: string, exceptId: str
 export async function liveOrders(deps: DbDeps, roundId: string): Promise<OrderRow[]> {
   const { data, error } = await concierge(deps)
     .from("orders")
-    .select("id, idea_id, status, hold_reason, max_price_cents, fee_cents, total_cents, idempotency_key, gift_message, ship_to, address_source, address_owner_id, created_at, resolved")
+    .select(
+      "id, idea_id, status, hold_reason, max_price_cents, fee_cents, total_cents, idempotency_key, gift_message, ship_to, address_source, address_owner_id, created_at, resolved, funding_mode, margin_cents, zinc_fee_cents, card_fee_bps, card_fee_fixed_cents",
+    )
     .eq("round_id", roundId)
     .neq("status", "cancelled")
     .order("created_at")
@@ -207,6 +221,8 @@ export type IdeaRow = {
   id: string;
   product_url: string | null;
   est_total_cents: number;
+  /** Price, shipping and tax without any fee: what a card buyer's charge is worked out from. */
+  goods_cents: number | null;
   handling_days_max: number | null;
   delivery_days_max: number | null;
   over_budget: boolean;
@@ -230,7 +246,7 @@ export async function readIdeas(deps: DbDeps, ids: string[]): Promise<Map<string
   if (ids.length === 0) return new Map();
   const { data, error } = await concierge(deps)
     .from("gift_ideas")
-    .select("id, round_id, product_url, est_total_cents, handling_days_max, delivery_days_max, over_budget, rank, status, source, retailer, retailer_product_id, offer_id")
+    .select("id, round_id, product_url, est_total_cents, goods_cents, handling_days_max, delivery_days_max, over_budget, rank, status, source, retailer, retailer_product_id, offer_id")
     .in("id", ids);
   if (error) fail("Loading the ideas failed", error);
   return new Map((data ?? []).map((i) => [i.id, i as IdeaRow]));
@@ -241,12 +257,14 @@ export type Account = {
   buyer_phone: string | null;
   auto_topup_on: boolean | null;
   over_budget_pct: number;
+  /** Our Stripe customer for a card buyer; a card order is charged to it. */
+  stripe_customer_id: string | null;
 };
 
 export async function readAccount(deps: DbDeps, userId: string): Promise<Account | null> {
   const { data, error } = await concierge(deps)
     .from("accounts")
-    .select("zinc_connected_at, buyer_phone, auto_topup_on, over_budget_pct")
+    .select("zinc_connected_at, buyer_phone, auto_topup_on, over_budget_pct, stripe_customer_id")
     .eq("user_id", userId)
     .maybeSingle();
   if (error) fail("Reading the account failed", error);
@@ -259,6 +277,20 @@ export async function readKey(deps: DbDeps, userId: string): Promise<{ apiKey: s
   if (error) fail("Reading the Zinc key failed", error);
   const row = data?.[0];
   return row?.api_key ? { apiKey: row.api_key, env: row.zinc_env } : null;
+}
+
+/**
+ * The Zinc key an order is placed and looked up with, by its own funding_mode: a card order uses
+ * the app's key (the handle sendConnectOrder takes, for this app's ZINC_ENV), a wallet order its
+ * buyer's own key and the environment that key was saved for. Null when there's none here.
+ */
+export async function zincKeyFor(
+  d: PurchaseDeps,
+  o: { user_id: string; funding_mode: string },
+): Promise<{ key: string | ConnectKey; env: string | null } | null> {
+  if (o.funding_mode === "connect") return d.connectKey ? { key: d.connectKey, env: d.env } : null;
+  const k = await readKey(d, o.user_id);
+  return k ? { key: k.apiKey, env: k.env } : null;
 }
 
 /** The order_addresses columns, as approve_round and begin_placing take them. */

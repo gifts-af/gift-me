@@ -9,6 +9,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import {
   advanceRound,
   clearUnfiledNotes,
+  connectKey,
   costRecorder,
   pruneExpiredActionLinks,
   pruneTrackingNumbers,
@@ -36,8 +37,10 @@ import {
   type PlaceHeld,
   type PurchaseDeps,
   type DbDeps,
+  type ConnectKey,
   type QuoteDeps,
   type SendJobs,
+  type StripeHttp,
   type StepDeps,
   type ZincDeps,
 } from "@/modules/concierge";
@@ -62,6 +65,35 @@ export async function zincWiring(
     deps: { db, http: { base, timeoutMs: data, fetch }, env: zincEnv, webhookBaseUrl: siteUrl(env), now: new Date() },
     walletUrl,
   };
+}
+
+/**
+ * Stripe, for saving a buyer's card: where STRIPE_SECRET_KEY is read (E3). Null unless a test key
+ * goes with ZINC_ENV "test" or a live key with "live", so a test card can never meet a live Zinc
+ * order or the other way round. Timed by stripe_timeout_ms.
+ */
+export async function stripeWiring(db: SupabaseClient<Database>, env: Env = process.env): Promise<StripeHttp | null> {
+  const key = env.STRIPE_SECRET_KEY;
+  const zincEnv = env.ZINC_ENV;
+  if (!key) return null;
+  const mode = key.startsWith("sk_test_") ? "test" : key.startsWith("sk_live_") ? "live" : null;
+  if (!mode || mode !== zincEnv) return null;
+  return { key, mode, timeoutMs: await settingInt(db, "stripe_timeout_ms"), fetch };
+}
+
+/**
+ * Zinc Connect, for card orders: where ZINC_CONNECT_API_KEY and ZINC_CONNECT_WEBHOOK_SECRET are read
+ * (E3). The key is the app's own on the owner's Zinc account, handed on only as a ConnectKey, which
+ * only sendConnectOrder can send with. Null unless both are set and the key fits ZINC_ENV (a
+ * `zn_test_` key with "test", any other with "live"), so a test key never meets a live order.
+ */
+export function connectWiring(env: Env = process.env): { key: ConnectKey; webhookSecret: string } | null {
+  const key = env.ZINC_CONNECT_API_KEY;
+  const webhookSecret = env.ZINC_CONNECT_WEBHOOK_SECRET;
+  const zincEnv = env.ZINC_ENV;
+  if (!key || !webhookSecret || (zincEnv !== "test" && zincEnv !== "live")) return null;
+  if (key.startsWith("zn_test_") !== (zincEnv === "test")) return null;
+  return { key: connectKey(key), webhookSecret };
 }
 
 /**
@@ -211,6 +243,7 @@ export async function buyingWiring(
   const purchase: PurchaseDeps = {
     ...zinc,
     settings: { feeCents, marginPct },
+    connectKey: connectWiring(env)?.key ?? null,
     // The caller has just tried placing; the engine only tells the buyer.
     advanceRound: (roundId) => advanceRound(roundId, engine, { justPlaced: true }),
     orderPlaced: (roundId) => tellOrdered(roundId, engine),

@@ -3,6 +3,7 @@
 // tax, fee, timeouts, limits) arrives as an argument (T23).
 
 import { classifyTotal, estimatedTotalCents } from "./budget";
+import { chargeCents, type FeeInputs } from "./card-fees";
 import { compareDates, type CalendarDate } from "./dates";
 import { arriveBy, canArriveInTime, orderBy, type ScheduleSettings } from "./schedule";
 
@@ -61,6 +62,11 @@ export type JudgeContext = {
   excluded: ReadonlySet<string>;
   /** After a "Too pricey" rejection (ALL-29): a total at or above this drops as over_limit. */
   maxTotalCents: number | null;
+  /**
+   * A card buyer's fees at today's settings, else null. A card buyer's budget is judged on the
+   * whole charge, GiftsAF fee included (planning 66); the total kept stays the wallet one.
+   */
+  cardFees: FeeInputs | null;
 };
 
 export function judgeCandidate(
@@ -85,14 +91,11 @@ export function judgeCandidate(
   ) {
     return { keep: false, reason: "late" };
   }
-  const totalCents = estimatedTotalCents({
-    priceCents: offer.priceCents,
-    shippingCents: offer.shippingCents,
-    taxCents: Math.round((offer.priceCents * ctx.taxPct) / 100),
-    feeCents: ctx.feeCents,
-  });
+  const taxCents = Math.round((offer.priceCents * ctx.taxPct) / 100);
+  const totalCents = estimatedTotalCents({ priceCents: offer.priceCents, shippingCents: offer.shippingCents, taxCents, feeCents: ctx.feeCents });
   if (ctx.maxTotalCents !== null && totalCents >= ctx.maxTotalCents) return { keep: false, reason: "over_limit" };
-  const fit = classifyTotal(totalCents, ctx.budgetCents, ctx.overBudgetPct);
+  const judged = ctx.cardFees === null ? totalCents : chargeCents(offer.priceCents + offer.shippingCents + taxCents, ctx.cardFees);
+  const fit = classifyTotal(judged, ctx.budgetCents, ctx.overBudgetPct);
   if (fit === "dropped") return { keep: false, reason: "over_limit" };
   return {
     keep: true,

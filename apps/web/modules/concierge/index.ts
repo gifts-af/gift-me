@@ -120,8 +120,9 @@ export {
 } from "./zinc/connect";
 export type { DisconnectDeps, PaymentResult, PaymentStatus, PaymentSummary } from "./zinc/connect";
 export type { DbDeps, PlaceAddressHeld, PlaceHeld, ZincDeps } from "./zinc/types";
-export { handleZincWebhook } from "./zinc/events";
-export { readWebhookBody } from "./zinc/guard";
+export { handleAppZincWebhook, handleZincWebhook } from "./zinc/events";
+export { connectKey, type ConnectKey } from "./zinc/orders";
+export { readCappedBody, readWebhookBody } from "./zinc/guard";
 export { hasPaidFeatures } from "./paid-features";
 // Who has been let into the concierge, which is by request.
 export {
@@ -164,6 +165,10 @@ export type { ShownIdea } from "./ideas/read";
 export { amazonPasteDetails } from "./zinc/products";
 export type { AmazonPasteDetails, ZincProductDetails } from "./zinc/products";
 export type { ZincHttp } from "./zinc/client";
+// Paying by card: saving, reading and removing the buyer's card on Stripe's own page.
+export { finishCardSession, removeCard, savedCard, startCardSession } from "./stripe/card";
+export type { CardDeps, CardFrom } from "./stripe/card";
+export type { StripeHttp } from "./stripe/client";
 // A wallet's balance at Zinc; the health check reads the app's own (T17).
 export { getWallet } from "./zinc/account";
 // The round screen (ALL-29): "None of these", a budget typed on an open round, and the page reads.

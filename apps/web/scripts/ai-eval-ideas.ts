@@ -114,6 +114,8 @@ function inputsFor(p: Person, today: CalendarDate): IdeaInputs {
     baseBudgetCents: null,
     defaultBudgetCents: null,
     listGifts: [],
+    // The eval judges ideas as a wallet buyer would.
+    cardFees: null,
   };
 }
 

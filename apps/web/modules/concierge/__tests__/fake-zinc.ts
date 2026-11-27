@@ -4,7 +4,7 @@
 // ─── fake Zinc ──────────────────────────────────────────────────────────────
 
 export type Behavior = "ok" | "402" | "timeout" | { status: number; code: string };
-type Post = { ref: string; idem: string; maxPrice: number; url: string; city: string; key: string };
+type Post = { ref: string; idem: string; maxPrice: number; url: string; city: string; key: string; body: Record<string, unknown> };
 
 /** A lookup's answer. `offers` replaces the one default offer; `productId` and `handle` are what a details reply names. */
 type FakeLookup = { priceCents: number; offers?: { offerId: string; priceCents: number }[]; productId?: string; handle?: string };
@@ -12,7 +12,7 @@ type FakeLookup = { priceCents: number; offers?: { offerId: string; priceCents: 
 export class FakeZinc {
   balance = 100_000;
   /** Zinc's orders, by our reference (metadata.order_id). */
-  orders = new Map<string, { id: string; status: string; job_result?: unknown }>();
+  orders = new Map<string, { id: string; status: string; job_result?: unknown; connect?: unknown }>();
   /** Behaviors by product URL, used in turn; the last one repeats. */
   plan = new Map<string, Behavior[]>();
   /** Prices by product URL: the check passes for these, and an order capped below its price fails. */
@@ -21,9 +21,13 @@ export class FakeZinc {
   catalog = new Map<string, FakeLookup>();
   posts: Post[] = [];
   calls: string[] = [];
+  /** Every request that reached Zinc, with the key it used. */
+  requests: { method: string; path: string; key: string; body: Record<string, unknown> | null; ref: string | null }[] = [];
   /** When set, POSTs wait on it (to hold a lease open). */
   gate: Promise<void> | null = null;
   onPost: (() => void) | null = null;
+  /** When set, every order lookup (GET /orders and GET /orders/<id>) answers with this status, like Zinc being down. */
+  lookupStatus: number | null = null;
 
   private next(url: string): Behavior {
     const list = this.plan.get(url);
@@ -40,11 +44,23 @@ export class FakeZinc {
     const auth = String((init?.headers as Record<string, string> | undefined)?.Authorization ?? "").replace("Bearer ", "");
     if (!this.known(auth)) return new Response(JSON.stringify({ error: { code: "unauthorized" } }), { status: 401 });
     this.calls.push(`${method} ${u.pathname}`);
+    this.requests.push({ method, path: u.pathname, key: auth, body: init?.body ? JSON.parse(String(init.body)) : null, ref: u.searchParams.get("metadata_value") });
     const json = (status: number, body: unknown) => new Response(JSON.stringify(body), { status });
     if (method === "GET" && u.pathname === "/wallet/me") return json(200, { spendable_balance: this.balance });
+    if (method === "GET" && u.pathname.startsWith("/orders") && this.lookupStatus !== null) {
+      return json(this.lookupStatus, { error: { code: "internal_error" } });
+    }
     if (method === "GET" && u.pathname === "/orders") {
       const o = this.orders.get(u.searchParams.get("metadata_value") ?? "");
       return json(200, { orders: o ? [o] : [] });
+    }
+    // Get Order by Zinc's id: the order with the reference we sent in metadata.
+    const one = /^\/orders\/([^/]+)$/.exec(u.pathname);
+    if (method === "GET" && one) {
+      const id = decodeURIComponent(one[1]);
+      const hit = [...this.orders.entries()].find(([, o]) => o.id === id);
+      if (!hit) return json(404, { error: { code: "order_not_found" } });
+      return json(200, { ...hit[1], metadata: { order_id: hit[0] } });
     }
     if (method === "GET" && u.pathname === "/retailers/check") {
       return json(200, { orderable: this.products.has(u.searchParams.get("url") ?? "") });
@@ -76,7 +92,7 @@ export class FakeZinc {
       const key = auth;
       const ref = body.metadata.order_id as string;
       const url = body.products[0].url as string;
-      this.posts.push({ ref, idem: body.idempotency_key, maxPrice: body.max_price, url, city: body.shipping_address.city, key });
+      this.posts.push({ ref, idem: body.idempotency_key, maxPrice: body.max_price, url, city: body.shipping_address.city, key, body });
       this.onPost?.();
       if (this.gate) await this.gate;
       // Like Zinc: the order is taken, then fails at checkout when the price is above max_price.

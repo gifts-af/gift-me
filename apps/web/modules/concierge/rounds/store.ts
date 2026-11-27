@@ -297,7 +297,7 @@ export interface RoundStore {
   cancelHeld(roundId: string): Promise<RoundStatus | null>;
   /** After a hold email: the reason it told (reconcile rule 4) and the balance it named (AC-22). */
   markHoldEmailed(roundId: string, reason: AttentionReason, balanceCents: number | null): Promise<void>;
-  /** Paid features on and Zinc connected: only then is the wallet read (AC-11). */
+  /** Paid features on, Zinc connected and paying by wallet (not card): only then is the wallet read (AC-11). */
   canBuy(userId: string): Promise<boolean>;
   /**
    * Rounds still open or ordered with a placed order whose `ordered:<id>` email isn't recorded,
@@ -930,9 +930,10 @@ export function createSupabaseRoundStore(db: SupabaseClient<Database> = createAd
 
     async canBuy(userId) {
       if (!(await hasPaidFeatures(db, userId))) return false;
-      const { data, error } = await concierge.from("accounts").select("zinc_connected_at").eq("user_id", userId).maybeSingle();
+      const { data, error } = await concierge.from("accounts").select("zinc_connected_at, funding_mode").eq("user_id", userId).maybeSingle();
       if (error) fail("Reading the account failed", error);
-      return Boolean(data?.zinc_connected_at);
+      // A card buyer has no Zinc wallet to warn about.
+      return Boolean(data?.zinc_connected_at) && data?.funding_mode !== "connect";
     },
   };
 }

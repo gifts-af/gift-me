@@ -266,6 +266,7 @@ async function attempt(req: IdeaRequest, deps: IdeaDeps, t: Tally): Promise<Idea
     orderDate: plan.orderDate,
     excluded: new Set(inputs.excluded),
     maxTotalCents: inputs.round?.maxTotalCents ?? null,
+    cardFees: inputs.cardFees,
   };
 
   // ─── the person's own list first (AC-27) ──

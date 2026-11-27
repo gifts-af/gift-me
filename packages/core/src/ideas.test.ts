@@ -52,6 +52,7 @@ const ctx = (c: Partial<JudgeContext> = {}): JudgeContext => ({
   orderDate: "2026-12-01",
   excluded: new Set(),
   maxTotalCents: null,
+  cardFees: null,
   ...c,
 });
 
@@ -112,6 +113,15 @@ describe("judgeCandidate", () => {
   });
   it("never says over budget with no budget", () => {
     expect(judgeCandidate(cand(), ctx({ budgetCents: null }), s)).toMatchObject({ keep: true, fit: "within" });
+  });
+  it("judges a card buyer's budget on the whole charge, GiftsAF fee included, and keeps the wallet total", () => {
+    // Goods 2000 + 500 + 160 = 2660; charged 2977 with these fees; 2760 by wallet.
+    const cardFees = { marginCents: 100, zincFeeCents: 100, cardFeeBps: 290, cardFeeFixedCents: 30 };
+    expect(judgeCandidate(cand(), ctx({ budgetCents: 2800 }), s)).toMatchObject({ keep: true, fit: "within", totalCents: 2760 });
+    expect(judgeCandidate(cand(), ctx({ budgetCents: 2800, cardFees }), s)).toMatchObject({ keep: true, fit: "over", totalCents: 2760 });
+    // Limit 2880 at 20% over 2400: the wallet total is over, the card charge past it.
+    expect(judgeCandidate(cand(), ctx({ budgetCents: 2400 }), s)).toMatchObject({ keep: true, fit: "over" });
+    expect(judgeCandidate(cand(), ctx({ budgetCents: 2400, cardFees }), s)).toEqual({ keep: false, reason: "over_limit" });
   });
   it("drops excluded products as given_or_rejected", () => {
     expect(judgeCandidate(cand(), ctx({ excluded: new Set(["p1"]) }), s)).toEqual({ keep: false, reason: "given_or_rejected" });

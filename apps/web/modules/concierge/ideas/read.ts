@@ -1,5 +1,6 @@
 import type { CalendarDate } from "@gifts-af/core";
 import { hasPaidFeatures } from "../paid-features";
+import { ideaTotalCents, readPayer } from "../purchase/payer";
 import type { Db } from "../profile/profile";
 
 // A person's on-demand ideas for the Gift ideas screen (ALL-27). Read with the
@@ -16,7 +17,7 @@ export type ShownIdea = {
   sellerName: string | null;
   /** The item alone. */
   priceCents: number;
-  /** The item, shipping, estimated tax and the order fee. */
+  /** What it costs this buyer: the item, shipping and estimated tax, plus the wallet's order fee or, by card, the GiftsAF fee. */
   totalCents: number;
   arriveBy: CalendarDate | null;
   reason: string | null;
@@ -27,11 +28,16 @@ export async function onDemandIdeas(db: Db, personId: string): Promise<ShownIdea
   const { data, error } = await db
     .schema("concierge")
     .from("gift_ideas")
-    .select("id, title, retailer, product_url, image_url, retailer_product_id, seller_name, price_cents, est_total_cents, arrive_by, reason, over_budget")
+    .select("id, title, retailer, product_url, image_url, retailer_product_id, seller_name, price_cents, est_total_cents, goods_cents, arrive_by, reason, over_budget")
     .eq("person_id", personId)
     .is("round_id", null)
     .order("rank");
   if (error) throw new Error(`Couldn't load gift ideas: ${error.message}`);
+  if (data.length === 0) return [];
+  // RLS showed only the signed-in user's ideas, so the payer is theirs.
+  const userId = (await db.auth.getClaims()).data?.claims?.sub;
+  if (!userId) throw new Error("Gift ideas were read without a signed-in user.");
+  const payer = await readPayer({ db, now: new Date() }, userId);
   return data.map((i) => ({
     id: i.id,
     title: i.title,
@@ -41,7 +47,7 @@ export async function onDemandIdeas(db: Db, personId: string): Promise<ShownIdea
     retailerProductId: i.retailer_product_id,
     sellerName: i.seller_name,
     priceCents: i.price_cents,
-    totalCents: i.est_total_cents,
+    totalCents: ideaTotalCents(i, payer),
     arriveBy: i.arrive_by,
     reason: i.reason,
     overBudget: i.over_budget,

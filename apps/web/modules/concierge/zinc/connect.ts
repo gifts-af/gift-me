@@ -69,6 +69,13 @@ async function readAccount(userId: string, deps: DbDeps): Promise<Account> {
   return data ?? { zinc_connected_at: null, buyer_phone: null, auto_topup_on: null };
 }
 
+/** Whether the account pays by card (funding_mode connect). No account row means wallet. */
+async function paysByCard(userId: string, deps: DbDeps): Promise<boolean> {
+  const { data, error } = await deps.db.schema("concierge").from("accounts").select("funding_mode").eq("user_id", userId).maybeSingle();
+  if (error) fail("Reading the account failed", error);
+  return data?.funding_mode === "connect";
+}
+
 async function readKey(userId: string, deps: DbDeps): Promise<string | null> {
   const { data, error } = await deps.db.schema("concierge").rpc("zinc_secrets", { p_user_id: userId });
   if (error) fail("Reading the Zinc key failed", error);
@@ -239,6 +246,12 @@ function zincProblem(userId: string, event: string, error: unknown): { error: st
 
 export async function startConnect(userId: string, deps: ZincDeps, placeHeld: PlaceHeld): Promise<PaymentResult> {
   if (!(await hasPaidFeatures(deps.db, userId))) return NOT_ALLOWED;
+  // A card buyer has no Zinc account of their own, and connecting one on the shared account
+  // would replace the app's webhook there, which card orders depend on.
+  if (await paysByCard(userId, deps)) {
+    logEvent("zinc.connect_refused", { user_id: userId, reason: "connect_account" });
+    return NOT_ALLOWED;
+  }
   // Already connected, or a code is still good (a second tap or tab): show that, don't issue another.
   const current = await getPaymentStatus(userId, deps);
   if (current.kind === "connected" || current.kind === "waiting") return current;
@@ -269,6 +282,11 @@ export async function startConnect(userId: string, deps: ZincDeps, placeHeld: Pl
 
 export async function pollConnect(userId: string, deps: ZincDeps, placeHeld: PlaceHeld): Promise<PaymentResult> {
   if (!(await hasPaidFeatures(deps.db, userId))) return NOT_ALLOWED;
+  // An attempt started before the account moved to card is never finished (see startConnect).
+  if (await paysByCard(userId, deps)) {
+    await dropAttempt(userId, deps);
+    return NOT_ALLOWED;
+  }
 
   // Only one tab calls Zinc at a time; the others just see where things stand (AC-3).
   const claim = await deps.db.schema("concierge").rpc("zinc_claim_poll", { p_user_id: userId, p_now: deps.now.toISOString() });

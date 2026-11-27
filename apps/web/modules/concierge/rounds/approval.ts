@@ -25,6 +25,7 @@ import { storeName } from "@gifts-af/core/store-page/link";
 import { hasPaidFeatures } from "../paid-features";
 import { isId } from "../profile/rules";
 import { listGiftCandidates } from "../ideas/store";
+import { ideaTotalCents, readPayer } from "../purchase/payer";
 import { claimRoundNow, concierge, fail, withLease } from "../purchase/store";
 import type { DbDeps } from "../zinc/types";
 import type { HoldGate } from "./hold-gate";
@@ -556,11 +557,11 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date, gate
   const r = round.data;
   if (!r) return null;
 
-  const [ideasRes, ordersRes, account, person, occasion, list, schedule] = await Promise.all([
+  const [ideasRes, ordersRes, account, person, occasion, list, schedule, payer] = await Promise.all([
     db
       .from("gift_ideas")
       .select(
-        "id, title, reason, retailer, retailer_product_id, product_url, image_url, source, list_item_id, price_cents, est_total_cents, over_budget, rank, status, arrive_by, handling_days_max, delivery_days_max, created_at",
+        "id, title, reason, retailer, retailer_product_id, product_url, image_url, source, list_item_id, price_cents, est_total_cents, goods_cents, over_budget, rank, status, arrive_by, handling_days_max, delivery_days_max, created_at",
       )
       .eq("round_id", roundId)
       .order("rank"),
@@ -577,6 +578,7 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date, gate
     db.from("occasions").select("kind").eq("id", r.occasion_id).maybeSingle(),
     personList(userDb, r.person_id),
     createSupabaseRoundStore(userDb).scheduleSettings(),
+    readPayer({ db: userDb, now }, r.user_id),
   ]);
   if (ideasRes.error) fail("Loading the round's ideas failed", ideasRes.error);
   if (ordersRes.error) fail("Loading the round's orders failed", ordersRes.error);
@@ -587,6 +589,9 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date, gate
   const items = new Map((list ?? []).map((i) => [i.id, i]));
   const ideas: RoundPageIdea[] = ideasRes.data.map((i) => {
     const item = i.list_item_id ? items.get(i.list_item_id) : undefined;
+    // What it costs this buyer: a card buyer's whole charge, fee included, judged on the budget (AC-5).
+    const totalCents = ideaTotalCents(i, payer);
+    const overBudget = payer.mode === "connect" ? r.budget_cents !== null && totalCents > r.budget_cents : i.over_budget;
     return {
       id: i.id,
       title: i.title,
@@ -597,8 +602,8 @@ export async function roundView(roundId: string, userDb: UserDb, now: Date, gate
       source: i.source === "list" ? "list" : "generated",
       listItemId: i.list_item_id,
       priceCents: i.price_cents,
-      totalCents: i.est_total_cents,
-      overBudget: i.over_budget,
+      totalCents,
+      overBudget,
       rank: i.rank,
       status: i.status,
       arriveBy: i.arrive_by,

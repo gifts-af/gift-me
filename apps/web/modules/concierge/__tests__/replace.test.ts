@@ -5,7 +5,7 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { Client } from "pg";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Database } from "@gifts-af/core";
+import { chargeCents, goodsCapCents, type Database, type FeeInputs } from "@gifts-af/core";
 import { storeName } from "@gifts-af/core/store-page/link";
 import { LOCAL_DB, localStack } from "../../../test/local-db";
 import type { RecordCost } from "../costs/record";
@@ -768,5 +768,118 @@ describe.skipIf(!dbUp)("replace a failed gift (real local database, fake Zinc)",
     const fresh = await pg.query("select address_owner_id from concierge.orders where round_id = $1 and idea_id = $2", [r.roundId, r.ideaIds[1]]);
     expect(fresh.rows).toEqual([{ address_owner_id: second }]);
     expect(zinc.posts).toEqual([expect.objectContaining({ city: "Toledo" })]);
+  });
+
+  // ─── a card that couldn't be charged (AC-4, AC-6, AC-15) ──────────────────
+
+  /** Card payments on for these tests only (the DB ships them off). */
+  async function withCards(run: () => Promise<void>) {
+    const was = (await pg.query("select value from concierge.app_settings where key = 'connect_enabled'")).rows[0].value;
+    await pg.query("update concierge.app_settings set value = '1' where key = 'connect_enabled'");
+    try {
+      await run();
+    } finally {
+      await pg.query("update concierge.app_settings set value = $1 where key = 'connect_enabled'", [was]);
+    }
+  }
+
+  async function todaysFees(): Promise<FeeInputs> {
+    const rows = (
+      await pg.query(
+        "select key, value::int as v from concierge.app_settings where key in ('fee_part_ai_cents', 'fee_part_running_cents', 'zinc_fee_cents', 'card_fee_bps', 'card_fee_fixed_cents')",
+      )
+    ).rows as { key: string; v: number }[];
+    const v = (k: string) => rows.find((r) => r.key === k)!.v;
+    return { marginCents: v("fee_part_ai_cents") + v("fee_part_running_cents"), zincFeeCents: v("zinc_fee_cents"), cardFeeBps: v("card_fee_bps"), cardFeeFixedCents: v("card_fee_fixed_cents") };
+  }
+
+  /** A card buyer with a saved card and no Zinc wallet, so nothing here reaches Zinc's order API. */
+  async function cardBuyer(): Promise<string> {
+    const userId = randomUUID();
+    users.push(userId);
+    await pg.query(
+      `insert into auth.users (id, instance_id, aud, role, email, raw_user_meta_data, created_at, updated_at)
+       values ($1, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', $2, '{}', now(), now())`,
+      [userId, `replace-${userId}@example.com`],
+    );
+    await pg.query(
+      `insert into concierge.accounts (user_id, paid_features, buyer_phone, funding_mode, stripe_customer_id, stripe_payment_method_id)
+       values ($1, true, '5555550100', 'connect', $2, $3)`,
+      [userId, `cus_test_${userId}`, `pm_test_1_${userId}`],
+    );
+    return userId;
+  }
+
+  const most = (goods: number, F: FeeInputs, marginPct = 10, budget = 10000) =>
+    chargeCents(goodsCapCents(Math.min(budget, Math.floor((chargeCents(goods, F) * (100 + marginPct)) / 100)), F), F);
+
+  /** Approved by card, then declined: card_needed, and the account's card cleared. A new card is then saved. */
+  async function cardNeeded(userId: string, r: Round, goods: number): Promise<string> {
+    await pg.query("update concierge.gift_ideas set goods_cents = $2 where id = $1", [r.ideaIds[0], goods]);
+    const F = await todaysFees();
+    expect(await approveAndBuy({ userId, roundId: r.roundId, ideaIds: [r.ideaIds[0]], shownMaxCents: most(goods, F) }, deps())).toMatchObject({ ok: true });
+    return declineAndReplaceCard(userId, r);
+  }
+  async function declineAndReplaceCard(userId: string, r: Round): Promise<string> {
+    const held = (await pg.query("select id from concierge.orders where round_id = $1 and status = 'held'", [r.roundId])).rows[0].id as string;
+    await pg.query("select concierge.fail_order($1, 'card_declined')", [held]);
+    expect((await pg.query("select failure_type from concierge.orders where id = $1", [held])).rows[0].failure_type).toBe("card_needed");
+    await pg.query("update concierge.accounts set stripe_payment_method_id = $2 where user_id = $1", [userId, `pm_test_${randomUUID()}`]);
+    return held;
+  }
+
+  it("a card_needed gift is bought again at today's price, twice in a row, each time a new order with today's fees", async () => {
+    await withCards(async () => {
+      const userId = await cardBuyer();
+      const r = await newRound(userId, { totals: [2359] });
+      const F = await todaysFees();
+      const failed = await cardNeeded(userId, r, 2259);
+
+      // Today the gift costs $50.00, with free shipping: its goods are the price and the tax estimate.
+      zinc.catalog.set(`amazon:${r.productIds[0]}`, { priceCents: 5000 });
+      const goods = totalAt(5000) - 100;
+      // Check today's price shows both as this buyer pays them: whole charges, fee included.
+      expect(await quoteFailedOrder({ userId, roundId: r.roundId, orderId: failed }, deps())).toEqual({ oldCents: chargeCents(2259, F), newCents: chargeCents(goods, F) });
+      const input = { userId, roundId: r.roundId, failedOrderId: failed, ideaId: r.ideaIds[0] };
+      expect(await replaceFailedOrder({ ...input, shownMaxCents: most(goods, F) - 1 }, deps())).toEqual({ ok: false, error: "price_changed", neverMoreThanCents: most(goods, F) });
+      expect(await replaceFailedOrder({ ...input, shownMaxCents: most(goods, F) }, deps())).toMatchObject({ ok: true });
+      const idea = (await pg.query("select est_total_cents, goods_cents from concierge.gift_ideas where id = $1", [r.ideaIds[0]])).rows[0];
+      expect(idea).toEqual({ est_total_cents: totalAt(5000), goods_cents: goods });
+      const fresh = (
+        await pg.query(
+          "select id, idempotency_key, funding_mode, max_charge_cents, margin_cents, card_fee_bps, payment_method_id from concierge.orders where round_id = $1 and status = 'held'",
+          [r.roundId],
+        )
+      ).rows[0];
+      expect(fresh).toMatchObject({ funding_mode: "connect", max_charge_cents: most(goods, F), margin_cents: F.marginCents, card_fee_bps: F.cardFeeBps });
+
+      // Declined again: bought again once more, under a new idempotency key.
+      const again = await declineAndReplaceCard(userId, r);
+      expect(again).toBe(fresh.id);
+      expect(await replaceFailedOrder({ ...input, failedOrderId: again, shownMaxCents: most(goods, F) }, deps())).toMatchObject({ ok: true });
+      const keys = (await pg.query("select idempotency_key from concierge.orders where round_id = $1", [r.roundId])).rows.map((o) => o.idempotency_key);
+      expect(new Set(keys).size).toBe(3);
+    });
+  });
+
+  it("a card_needed gift that can't be quoted today is bought at its saved estimate, still capped", async () => {
+    await withCards(async () => {
+      const userId = await cardBuyer();
+      const r = await newRound(userId, { totals: [2359] });
+      // Priced from a list: no product id, so there's nothing to look up.
+      await pg.query("update concierge.gift_ideas set retailer_product_id = null where id = $1", [r.ideaIds[0]]);
+      const F = await todaysFees();
+      const failed = await cardNeeded(userId, r, 2259);
+      zinc.calls = [];
+      const result = await replaceFailedOrder(
+        { userId, roundId: r.roundId, failedOrderId: failed, ideaId: r.ideaIds[0], shownMaxCents: most(2259, F) },
+        deps(),
+      );
+      expect(result).toMatchObject({ ok: true });
+      expect(offerCalls()).toEqual([]);
+      const fresh = (await pg.query("select max_price_cents, max_charge_cents from concierge.orders where round_id = $1 and status = 'held'", [r.roundId])).rows[0];
+      expect(fresh).toEqual({ max_price_cents: goodsCapCents(Math.floor((chargeCents(2259, F) * 110) / 100), F), max_charge_cents: most(2259, F) });
+      expect((await pg.query("select goods_cents from concierge.gift_ideas where id = $1", [r.ideaIds[0]])).rows[0].goods_cents).toBe(2259);
+    });
   });
 });

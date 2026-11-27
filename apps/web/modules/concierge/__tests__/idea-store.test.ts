@@ -129,6 +129,22 @@ describe.skipIf(!dbUp)("createSupabaseIdeaStore", () => {
     expect(got?.facts.map((f) => f.value)).toEqual(["Loves fishing"]);
     expect(got?.relationship).toBe("father");
     expect(got?.overBudgetPct).toBe(20);
+    // A wallet buyer has no card fees; a card buyer gets today's.
+    expect(got?.cardFees).toBeNull();
+    await pg.query("update concierge.accounts set funding_mode = 'connect' where user_id = $1", [buyer.id]);
+    const fees = (await pg.query(
+      `select (select value::int from concierge.app_settings where key = 'fee_part_ai_cents') + (select value::int from concierge.app_settings where key = 'fee_part_running_cents') as margin,
+              (select value::int from concierge.app_settings where key = 'zinc_fee_cents') as zinc,
+              (select value::int from concierge.app_settings where key = 'card_fee_bps') as bps,
+              (select value::int from concierge.app_settings where key = 'card_fee_fixed_cents') as fixed`,
+    )).rows[0];
+    expect((await store().inputs({ userId: buyer.id, personId: person, roundId: null }))?.cardFees).toEqual({
+      marginCents: fees.margin,
+      zincFeeCents: fees.zinc,
+      cardFeeBps: fees.bps,
+      cardFeeFixedCents: fees.fixed,
+    });
+    await pg.query("update concierge.accounts set funding_mode = 'zinc_wallet' where user_id = $1", [buyer.id]);
     expect(got?.names).toEqual(["Burger", "Smith", "Bob", "Jim"]);
 
     // Another buyer's person, and a deleted one, aren't there at all.
@@ -163,6 +179,17 @@ describe.skipIf(!dbUp)("createSupabaseIdeaStore", () => {
     expect(got?.baseBudgetCents).toBe(4000);
     expect(got?.defaultBudgetCents).toBe(2500);
     expect(got?.round).toBeNull();
+  });
+
+  it("save keeps each idea's goods (price, shipping and tax, no fee) apart from its wallet total", async () => {
+    const buyer = await newUser("Jim");
+    const person = await newPerson(buyer.id, "Dad");
+    const started = await store().start({ userId: buyer.id, personId: person, roundId: null }, new Date());
+    if (!("runId" in started)) throw new Error(`refused: ${started.refused}`);
+    // A total whose fee isn't today's wallet fee: the goods come from the parts, not the total.
+    await store().save(started.runId, [idea({ estTotalCents: 2900 })]);
+    const row = (await pg.query("select est_total_cents, goods_cents from concierge.gift_ideas where person_id = $1", [person])).rows[0];
+    expect(row).toEqual({ est_total_cents: 2900, goods_cents: 2660 });
   });
 
   it("start, progress and save round-trip a run", async () => {
