@@ -1,6 +1,6 @@
 // A failed gift's ways out besides buying (ALL-185) on the real local database (E5):
 // dropFailedOrder under the round's lease, and the skip, which is the hold emails' cancel link
-// (cancelHeldGift, cancel_held). The page reads go through a signed-in user's client, so RLS
+// (cancel_held, through skip_failed_round). The page reads go through a signed-in user's client, so RLS
 // applies. Skipped when the stack isn't running.
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
@@ -12,7 +12,6 @@ import type { DbDeps } from "../zinc/types";
 
 vi.mock("server-only", () => ({}));
 const { dropFailedOrder, roundView, skipRound } = await import("../rounds/approval");
-const { createSupabaseNotifyStore } = await import("../notify/store");
 
 const stack = await localStack({ api: true });
 const dbUp = stack !== null;
@@ -24,8 +23,6 @@ describe.skipIf(!dbUp)("a failed gift's ways out (real local database)", () => {
   let pg: Client;
   const users: string[] = [];
   const deps = (): DbDeps => ({ db: admin!, now: new Date() });
-  // The real cancel link path, as skipRoundAction wires it.
-  const skipDeps = () => ({ ...deps(), cancel: (roundId: string, userId: string) => createSupabaseNotifyStore(admin!).cancelHeldGift(roundId, userId) });
 
   beforeAll(async () => {
     pg = new Client({ connectionString: LOCAL_DB });
@@ -124,16 +121,34 @@ describe.skipIf(!dbUp)("a failed gift's ways out (real local database)", () => {
     expect(await dropFailedOrder({ userId: other.id, roundId: r.roundId, orderId: r.orderIds[0] }, deps())).toEqual({ ok: false, error: "not_found" });
   });
 
-  it("Skip closes the round through the cancel link's path: the untold failure goes to the late email", async () => {
+  /** Whether any email about this failure is still to come: untold while open, or the late email's sweep. */
+  const stillToTell = async (roundId: string, orderId: string) => {
+    const untold = await pg.query("select 1 from concierge.untold_failures($1) x where x = $2", [roundId, orderId]);
+    const late = await pg.query("select 1 from concierge.rounds_missing_late_failure_email() x where x = $1", [roundId]);
+    return untold.rowCount! > 0 || late.rowCount! > 0;
+  };
+
+  it("Pick a different gift on an untold failure sends no later email about it", async () => {
     const u = await newUser();
     const r = await failedRound(u, ["out_of_stock"]);
-    expect(await skipRound({ userId: u.id, roundId: r.roundId }, skipDeps())).toEqual({ ok: true });
+    expect(await stillToTell(r.roundId, r.orderIds[0])).toBe(true);
+    expect(await dropFailedOrder({ userId: u.id, roundId: r.roundId, orderId: r.orderIds[0] }, deps())).toEqual({ ok: true });
+    expect(await stillToTell(r.roundId, r.orderIds[0])).toBe(false);
+  });
+
+  it("Skip closes the round through the cancel link's close, and the failure the buyer saw gets no later email", async () => {
+    const u = await newUser();
+    const r = await failedRound(u, ["out_of_stock"]);
+    expect(await stillToTell(r.roundId, r.orderIds[0])).toBe(true);
+    expect(await skipRound({ userId: u.id, roundId: r.roundId }, deps())).toEqual({ ok: true });
 
     const row = await roundRow(r.roundId);
     expect(row.status).toBe("skipped");
     expect(row.closed_at).not.toBeNull();
+    expect(row.locked_until).toBeNull();
     const order = (await pg.query("select resolved, failed_after_close from concierge.orders where id = $1", [r.orderIds[0]])).rows[0];
-    expect(order).toEqual({ resolved: true, failed_after_close: true });
+    expect(order).toEqual({ resolved: true, failed_after_close: false });
+    expect(await stillToTell(r.roundId, r.orderIds[0])).toBe(false);
     const view = (await roundView(r.roundId, await signedIn(u), new Date()))!;
     expect(view.closedText).toBe("This gift round was stopped");
   });
@@ -147,30 +162,36 @@ describe.skipIf(!dbUp)("a failed gift's ways out (real local database)", () => {
        values ($1, $2, $3, 'zinc_wallet', 1800, 100, 'placing', 'recipient', 'Dayton', 'OH')`,
       [u.id, r.roundId, r.mug],
     );
-    expect(await skipRound({ userId: u.id, roundId: r.roundId }, skipDeps())).toEqual({ ok: false, error: "on_its_way" });
+    expect(await skipRound({ userId: u.id, roundId: r.roundId }, deps())).toEqual({ ok: false, error: "on_its_way" });
     expect((await roundRow(r.roundId)).closed_at).toBeNull();
 
     const choosing = await failedRound(u, ["price_up"]);
     expect(await dropFailedOrder({ userId: u.id, roundId: choosing.roundId, orderId: choosing.orderIds[0] }, deps())).toEqual({ ok: true });
-    expect(await skipRound({ userId: u.id, roundId: choosing.roundId }, skipDeps())).toEqual({ ok: false, error: "not_open" });
-    expect(await skipRound({ userId: (await newUser()).id, roundId: r.roundId }, skipDeps())).toEqual({ ok: false, error: "not_found" });
+    expect(await skipRound({ userId: u.id, roundId: choosing.roundId }, deps())).toEqual({ ok: false, error: "not_open" });
+    expect(await skipRound({ userId: (await newUser()).id, roundId: r.roundId }, deps())).toEqual({ ok: false, error: "not_found" });
   });
 
-  it("a gift bought in another tab between the check and the close isn't called a skip", async () => {
+  it("a buy from a fix page in another tab is never cancelled or half-closed by a skip", async () => {
     const u = await newUser();
     const r = await failedRound(u, ["out_of_stock"]);
-    const racing = {
-      ...skipDeps(),
-      cancel: async (roundId: string, userId: string) => {
-        await pg.query(
-          `insert into concierge.orders (user_id, round_id, idea_id, funding_mode, max_price_cents, fee_cents, status, ship_to, ship_city, ship_state)
-           values ($1, $2, $3, 'zinc_wallet', 1800, 100, 'placing', 'recipient', 'Dayton', 'OH')`,
-          [userId, roundId, r.mug],
-        );
-        return createSupabaseNotifyStore(admin!).cancelHeldGift(roundId, userId);
-      },
-    };
-    expect(await skipRound({ userId: u.id, roundId: r.roundId }, racing)).toEqual({ ok: false, error: "on_its_way" });
-    expect((await roundRow(r.roundId)).status).not.toBe("skipped");
+    // The other tab's replace holds the lease and has written its held order.
+    await pg.query("select concierge.claim_round_now($1, now())", [r.roundId]);
+    const held = await pg.query(
+      `insert into concierge.orders (user_id, round_id, idea_id, funding_mode, max_price_cents, fee_cents, status, hold_reason, ship_to, ship_city, ship_state)
+       values ($1, $2, $3, 'zinc_wallet', 1800, 100, 'held', 'retry', 'recipient', 'Dayton', 'OH') returning id`,
+      [u.id, r.roundId, r.mug],
+    );
+    const heldId = held.rows[0].id as string;
+    const heldStatus = async () => (await pg.query("select status from concierge.orders where id = $1", [heldId])).rows[0].status;
+
+    expect(await skipRound({ userId: u.id, roundId: r.roundId }, deps())).toEqual({ ok: false, error: "busy" });
+    expect((await roundRow(r.roundId)).closed_at).toBeNull();
+    expect(await heldStatus()).toBe("held");
+
+    // Its lease given back, the held gift still stops the skip.
+    await pg.query("update concierge.gift_rounds set locked_until = null where id = $1", [r.roundId]);
+    expect(await skipRound({ userId: u.id, roundId: r.roundId }, deps())).toEqual({ ok: false, error: "on_its_way" });
+    expect((await roundRow(r.roundId)).closed_at).toBeNull();
+    expect(await heldStatus()).toBe("held");
   });
 });

@@ -311,43 +311,39 @@ export async function dropFailedOrder(input: { userId: string; roundId: string; 
   });
 }
 
-export type SkipRoundResult = { ok: true } | { ok: false; error: "not_found" | "not_open" | "on_its_way" };
-/** What closing a round through the cancel link did (the notify store's cancelHeldGift). */
-type Cancelled = { cancelled: number; ordering: number; onItsWay: number };
+export type SkipRoundResult = { ok: true } | { ok: false; error: "not_found" | "busy" | "not_open" | "on_its_way" };
+
+const SKIP_REFUSALS: Record<string, Extract<SkipRoundResult, { ok: false }>["error"]> = {
+  "lease not held": "busy",
+  "not open": "not_open",
+  "on its way": "on_its_way",
+};
 
 /**
- * "Skip <name>'s <occasion>" on a failed gift: only on an open round needing attention with nothing
- * held, being ordered or on its way, then closed through the hold emails' cancel path (`cancel`,
- * cancel_held), which tells untold failures by the late email and never skips a round with a gift
- * on its way (T27). A gift bought in another tab in between ends the round as ordered instead:
- * that's reported, not called a skip.
+ * "Skip <name>'s <occasion>" on a failed gift, under the round's lease so a buy from another tab
+ * can't land in between: skip_failed_round checks the round needs attention with nothing held,
+ * being ordered, on its way or bought, records its failures as seen, and closes it through the
+ * cancel link's own close (cancel_held, `cancel`).
  */
-export async function skipRound(
-  input: { userId: string; roundId: string },
-  deps: DbDeps & { cancel: (roundId: string, userId: string) => Promise<Cancelled | null> },
-): Promise<SkipRoundResult> {
+export async function skipRound(input: { userId: string; roundId: string }, deps: DbDeps): Promise<SkipRoundResult> {
   const { userId, roundId } = input;
   const round = await ownRound(deps, roundId, userId);
   if (!round) return { ok: false, error: "not_found" };
-  if (round.closed_at !== null || round.status !== "needs_attention") return { ok: false, error: "not_open" };
-  const { data, error } = await concierge(deps)
-    .from("orders")
-    .select("id")
-    .eq("round_id", roundId)
-    .not("status", "in", "(cancelled,failed,refunded)")
-    .limit(1);
-  if (error) fail("Loading the round's orders failed", error);
-  if (data.length > 0) return { ok: false, error: "on_its_way" };
 
-  const outcome = await deps.cancel(roundId, userId);
-  if (!outcome) return { ok: false, error: "not_found" };
-  const ids = { round_id: roundId, user_id: userId };
-  if (outcome.ordering + outcome.onItsWay > 0) {
-    logEvent("round.skip_overtaken", { ...ids, ordering: outcome.ordering, on_its_way: outcome.onItsWay });
-    return { ok: false, error: "on_its_way" };
-  }
-  logEvent("round.skipped_by_buyer", { ...ids, cancelled: outcome.cancelled });
-  return { ok: true };
+  const lock = await claimRoundNow(deps, roundId);
+  if (!lock) return { ok: false, error: round.status === "needs_attention" && round.closed_at === null ? "busy" : "not_open" };
+
+  return withLease(deps, roundId, lock, async (): Promise<SkipRoundResult> => {
+    const { error } = await concierge(deps).rpc("skip_failed_round", { p_round_id: roundId, p_user_id: userId, p_lock: lock });
+    if (error) {
+      const why = SKIP_REFUSALS[refusal(error, "skip_failed_round") ?? ""];
+      if (!why) fail("Skipping the round failed", error);
+      logEvent("round.skip_refused", { round_id: roundId, user_id: userId, reason: why });
+      return { ok: false, error: why };
+    }
+    logEvent("round.skipped_by_buyer", { round_id: roundId, user_id: userId });
+    return { ok: true };
+  });
 }
 
 // ─── page reads ──────────────────────────────────────────────────────────────

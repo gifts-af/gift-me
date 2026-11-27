@@ -3,7 +3,7 @@
 -- when that order is the round's only one still in play.
 begin;
 \ir _helpers.psql
-select plan(19);
+select plan(29);
 
 select tests.create_user('drop-buyer@example.com', 'Buyer') as a \gset
 select tests.create_user('drop-mom@example.com', 'Mom') as mom \gset
@@ -83,6 +83,8 @@ select is(
   'the failed order is resolved and the round is back to choosing, still open');
 select ok((select next_action_at <= now() from concierge.gift_rounds where id = :'d1_round_id'),
   'and due now, so the next tick plans its reminders again');
+select ok(exists (select 1 from concierge.round_sends where round_id = :'d1_round_id' and step = 'fail:' || :'d1_failed_order'),
+  'the dropped failure counts as told: no later email about it');
 select is((select status::text from concierge.gift_ideas where id = :'d1_failed_idea'), 'selected',
   'after a price rise the failed gift stays listed but can''t be bought again at its old price');
 
@@ -147,10 +149,60 @@ select throws_ok(tests.df_sql(:'d4_round_id', :'a', :'d4_lock', :'d4_failed_orde
   'P0001', 'drop_failed_order: other gifts', 'refused while another gift in the round is still in play');
 select tests.reset_role();
 
+-- ─── skip_failed_round ───────────────────────────────────────────────────────
+create function tests.sk_sql(p_round uuid, p_user uuid, p_lock timestamptz)
+returns text language sql as $$
+  select format($q$select concierge.skip_failed_round(%L, %L, %L)$q$, p_round, p_user, p_lock);
+$$;
+grant execute on function tests.sk_sql(uuid, uuid, timestamptz) to service_role;
+
+-- An untold failure (no email yet), skipped from its page.
+select * from tests.df_round(:'a', :'p_pat', 'out_of_stock') \gset s1_
+select ok(exists (select 1 from concierge.untold_failures(:'s1_round_id') x where x = :'s1_failed_order'),
+  'the fixture failure is untold');
+select tests.act_as_server();
+select is(concierge.skip_failed_round(:'s1_round_id', :'a', :'s1_lock')::text, 'skipped', 'the server skips a round whose only gift failed');
+select tests.reset_role();
+select is(
+  (select array[r.status::text, (r.closed_at is not null)::text, o.resolved::text, o.failed_after_close::text]
+     from concierge.gift_rounds r join concierge.orders o on o.id = :'s1_failed_order' where r.id = :'s1_round_id'),
+  array['skipped', 'true', 'true', 'false'],
+  'skipped and closed, the failure resolved and not handed to the late email');
+select ok(not exists (select 1 from concierge.rounds_missing_late_failure_email() x where x = :'s1_round_id')
+          and exists (select 1 from concierge.round_sends where round_id = :'s1_round_id' and step = 'fail:' || :'s1_failed_order'),
+  'the skipped failure counts as told, so the late-email sweep leaves it alone');
+
+-- Refusals: no lease, not waiting on a fix, a gift held or bought (refunded included).
+select * from tests.df_round(:'a', :'p_pat', 'out_of_stock') \gset s2_
+select tests.act_as_server();
+select throws_ok(tests.sk_sql(:'s2_round_id', :'a', now() + interval '1 hour'),
+  'P0001', 'skip_failed_round: lease not held', 'skip refused without the round''s lease');
+select throws_ok(tests.sk_sql(:'d2_round_id', :'a', :'d2_lock'),
+  'P0001', 'skip_failed_round: not open', 'skip refused on a round back to choosing');
+select tests.reset_role();
+insert into concierge.orders (user_id, round_id, idea_id, funding_mode, max_price_cents, fee_cents, status, hold_reason,
+                              ship_to, ship_city, ship_state)
+values (:'a', :'s2_round_id', :'s2_other_idea', 'zinc_wallet', 1800, 100, 'held', 'retry', 'recipient', 'Dayton', 'OH')
+returning id as s2_held \gset
+select tests.act_as_server();
+select throws_ok(tests.sk_sql(:'s2_round_id', :'a', :'s2_lock'),
+  'P0001', 'skip_failed_round: on its way', 'skip refused with a gift held to buy');
+select tests.reset_role();
+select is((select array[r.status::text, (r.closed_at is null)::text, o.status::text]
+             from concierge.gift_rounds r join concierge.orders o on o.id = :'s2_held' where r.id = :'s2_round_id'),
+  array['needs_attention', 'true', 'held'], '... and the held gift and the round are untouched');
+update concierge.orders set status = 'refunded' where id = :'s2_held';
+select tests.act_as_server();
+select throws_ok(tests.sk_sql(:'s2_round_id', :'a', :'s2_lock'),
+  'P0001', 'skip_failed_round: on its way', 'skip refused with a refunded gift, which counts as bought');
+select tests.reset_role();
+
 -- Server only.
 select ok(not has_function_privilege('authenticated', 'concierge.drop_failed_order(uuid, uuid, timestamptz, uuid)', 'execute')
-          and not has_function_privilege('anon', 'concierge.drop_failed_order(uuid, uuid, timestamptz, uuid)', 'execute'),
-  'signed-in users and visitors can''t call drop_failed_order');
+          and not has_function_privilege('anon', 'concierge.drop_failed_order(uuid, uuid, timestamptz, uuid)', 'execute')
+          and not has_function_privilege('authenticated', 'concierge.skip_failed_round(uuid, uuid, timestamptz)', 'execute')
+          and not has_function_privilege('anon', 'concierge.skip_failed_round(uuid, uuid, timestamptz)', 'execute'),
+  'signed-in users and visitors can''t call drop_failed_order or skip_failed_round');
 
 select * from finish();
 rollback;

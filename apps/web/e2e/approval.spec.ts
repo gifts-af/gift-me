@@ -488,7 +488,7 @@ test("Pick a different gift drops a price_up gift and opens the round, where ano
   const orderId = await seedFailedOrder(b.id, roundId, ideaIds[0], "price_up");
   await signIn(page, b.creds);
   await page.goto(`/rounds/${roundId}/fix/${orderId}`);
-  await expect(page.getByText("Drops the Desk mouse pad and lets you choose from all of Nora's ideas again, or ask for new ones.")).toBeVisible();
+  await expect(page.getByText("Drops the Desk mouse pad (it can't be bought again this time) and lets you choose from Nora's other ideas, or ask for new ones.")).toBeVisible();
   await page.getByRole("button", { name: "Pick a different gift" }).click();
 
   await expect(page).toHaveURL(new RegExp(`/rounds/${roundId}$`));
@@ -508,7 +508,7 @@ test("Skip closes the round for good after asking, and its page says so", async 
   await page.goto(`/rounds/${roundId}`);
   await page.getByRole("button", { name: /^Skip Nora's / }).click();
   const dialog = page.getByRole("dialog");
-  await expect(dialog).toContainText("Nothing will be bought and we won't look for more ideas. You can't undo this.");
+  await expect(dialog).toContainText("Next year's starts as usual. You can't undo this.");
   await dialog.getByRole("button", { name: "Skip it" }).click();
 
   await expect(page.getByRole("status").filter({ hasText: "This gift round was stopped" })).toBeVisible();

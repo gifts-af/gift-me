@@ -884,7 +884,7 @@ describe("RoundScreen: a failed gift's ways out (ALL-185)", () => {
     const failed = order({ id: "of1", ideaId: pad.id, title: "Mouse pad", status: "failed", failureType: "price_up" });
     const { pick } = withWaysOut(view({ ideas: [pad, idea({ title: "Switch" })], failedOrders: [failed] }, { status: "needs_attention" }));
     expect(screen.getByRole("link", { name: "Fix this" })).toBeInTheDocument();
-    expect(screen.getByText("Drops the Mouse pad and lets you choose from all of Mom's ideas again, or ask for new ones.")).toBeInTheDocument();
+    expect(screen.getByText("Drops the Mouse pad (it can't be bought again this time) and lets you choose from Mom's other ideas, or ask for new ones.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Skip Mom's birthday" })).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Pick a different gift" }));
     expect(pick).toHaveBeenCalledWith("r1", "of1");

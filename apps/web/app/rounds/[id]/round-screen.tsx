@@ -833,6 +833,7 @@ export function RoundScreen({
           roundId={round.id}
           orderId={view.failedOrders[0].id}
           giftTitle={view.failedOrders[0].title}
+          failureType={view.failedOrders[0].failureType}
           personName={round.personName}
           occasionKind={round.occasionKind}
           canPick={round.status === "needs_attention" && view.failedOrders.length === 1}

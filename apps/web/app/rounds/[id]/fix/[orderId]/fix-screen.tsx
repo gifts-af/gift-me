@@ -478,6 +478,7 @@ export function FixScreen(p: FixScreenProps) {
         roundId={roundId}
         orderId={order.id}
         giftTitle={idea?.title ?? order.title}
+        failureType={order.failureType}
         personName={p.personName}
         occasionKind={p.occasionKind}
         canPick={p.canPick}

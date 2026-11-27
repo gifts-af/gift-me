@@ -13,7 +13,7 @@ import { OCCASION_NAMES } from "@/lib/occasion-format";
 export type PickAgainResult =
   | { ok: true }
   | { ok: false; error: "not_found" | "busy" | "not_open" | "not_current" | "other_gifts" | "session" | "bad_form" };
-export type SkipResult = { ok: true } | { ok: false; error: "not_found" | "not_open" | "on_its_way" | "session" | "bad_form" };
+export type SkipResult = { ok: true } | { ok: false; error: "not_found" | "busy" | "not_open" | "on_its_way" | "session" | "bad_form" };
 
 const CHANGED = "This gift can't be changed now. Reload to see what happened.";
 const WORDS: Record<Extract<PickAgainResult | SkipResult, { ok: false }>["error"], string> = {
@@ -30,18 +30,43 @@ const WORDS: Record<Extract<PickAgainResult | SkipResult, { ok: false }>["error"
 // Birthdays and anniversaries read in lower case mid-sentence; the rest are names.
 const LOWER = new Set(["birthday", "anniversary"]);
 
+/** "birthday", "Christmas"; null when the kind can't be read. */
+function occasionWord(occasionKind: string | null): string | null {
+  const name = occasionKind ? OCCASION_NAMES[occasionKind as keyof typeof OCCASION_NAMES] : undefined;
+  if (!name) return null;
+  return LOWER.has(occasionKind!) ? name.toLowerCase() : name;
+}
+
 /** "Nora's birthday", "Nora's Christmas", or "their gift" when it can't say. */
 export function occasionPhrase(personName: string | null, occasionKind: string | null): string {
-  const whose = personName ? `${personName}'s` : "their";
-  const name = occasionKind ? OCCASION_NAMES[occasionKind as keyof typeof OCCASION_NAMES] : undefined;
-  if (!name) return `${whose} gift`;
-  return `${whose} ${LOWER.has(occasionKind!) ? name.toLowerCase() : name}`;
+  return `${personName ? `${personName}'s` : "their"} ${occasionWord(occasionKind) ?? "gift"}`;
+}
+
+/**
+ * The confirm's body. Every occasion kind comes round each year (an occasion is a month and day,
+ * or a fixed holiday), and a skip ends only this year's round, so the next one starts as usual.
+ */
+export function skipBody(occasionKind: string | null): string {
+  const word = occasionWord(occasionKind);
+  return word
+    ? `Nothing will be bought for this ${word} and we won't look for more ideas. Next year's starts as usual. You can't undo this.`
+    : "Nothing will be bought and we won't look for more ideas. You can't undo this.";
+}
+
+// Failures where the gift itself was fine: dropping one puts it back on offer (drop_failed_order).
+const STAYS_BUYABLE = new Set(["address_withdrawn", "address_rejected", "card_needed"]);
+
+/** "Pick a different gift"'s helper line. */
+export function pickHelper(giftTitle: string, personName: string | null, failureType: string | null): string {
+  const gone = STAYS_BUYABLE.has(failureType ?? "") ? "" : " (it can't be bought again this time)";
+  return `Drops the ${giftTitle}${gone} and lets you choose from ${personName ? `${personName}'s` : "their"} other ideas, or ask for new ones.`;
 }
 
 export function WaysOut({
   roundId,
   orderId,
   giftTitle,
+  failureType,
   personName,
   occasionKind,
   canPick,
@@ -52,6 +77,8 @@ export function WaysOut({
   roundId: string;
   orderId: string;
   giftTitle: string;
+  /** The failed order's failure_type: whether the gift stays buyable after a drop. */
+  failureType: string | null;
   personName: string | null;
   occasionKind: string | null;
   /** Only when this failed gift is the round's only one still in play (drop_failed_order). */
@@ -68,7 +95,6 @@ export function WaysOut({
   const [error, setError] = useState<string | null>(null);
   const [asking, setAsking] = useState(false);
   const occasion = occasionPhrase(personName, occasionKind);
-  const whose = personName ? `${personName}'s` : "their";
   if (!canPick && !canSkip) return null;
 
   function run(call: () => Promise<PickAgainResult | SkipResult>) {
@@ -98,7 +124,7 @@ export function WaysOut({
           <Button type="button" variant="outline" className="w-full" disabled={pending} aria-busy={pending} onClick={() => run(() => pickAction(roundId, orderId))}>
             Pick a different gift
           </Button>
-          <p className="text-[13px] text-muted-foreground">{`Drops the ${giftTitle} and lets you choose from all of ${whose} ideas again, or ask for new ones.`}</p>
+          <p className="text-[13px] text-muted-foreground">{pickHelper(giftTitle, personName, failureType)}</p>
         </>
       )}
       {canSkip && (
@@ -120,7 +146,7 @@ export function WaysOut({
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{`Skip ${occasion}?`}</DialogTitle>
-            <DialogDescription>Nothing will be bought and we won&apos;t look for more ideas. You can&apos;t undo this.</DialogDescription>
+            <DialogDescription>{skipBody(occasionKind)}</DialogDescription>
           </DialogHeader>
           <Button type="button" variant="destructive" disabled={pending} aria-busy={pending} onClick={() => run(() => skipAction(roundId))}>
             Skip it

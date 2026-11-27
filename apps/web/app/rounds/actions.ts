@@ -10,7 +10,6 @@ import { buyingWiring, lookupWiring, roundDbDeps, settingInt } from "@/lib/wirin
 import {
   approveAndBuy,
   costRecorder,
-  createSupabaseNotifyStore,
   dropFailedOrder,
   markGiftArrived,
   MAX_BUDGET_CENTS,
@@ -272,11 +271,7 @@ export async function skipRoundAction(roundId: string): Promise<SkipResult> {
   if (!id.success) return { ok: false, error: "bad_form" };
   const user = await signedIn();
   if (!user) return { ok: false, error: "session" };
-  const store = createSupabaseNotifyStore(createAdminClient());
-  const result = await skipRound(
-    { userId: user.userId, roundId: id.data },
-    { ...roundDbDeps(new Date()), cancel: (rid, uid) => store.cancelHeldGift(rid, uid) },
-  );
+  const result = await skipRound({ userId: user.userId, roundId: id.data }, roundDbDeps(new Date()));
   revalidatePath(`/rounds/${id.data}`);
   return result;
 }

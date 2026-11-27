@@ -288,7 +288,7 @@ describe("FixScreen: ways out besides buying (ALL-185)", () => {
     const { pickAgainAction } = setup({ canPick: true, canSkip: true });
     expect(screen.queryByRole("link", { name: "See all ideas" })).toBeNull();
     expect(
-      screen.getByText("Drops the LEGO Botanical Orchid and lets you choose from all of Mom's ideas again, or ask for new ones."),
+      screen.getByText("Drops the LEGO Botanical Orchid (it can't be bought again this time) and lets you choose from Mom's other ideas, or ask for new ones."),
     ).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "Pick a different gift" }));
     expect(pickAgainAction).toHaveBeenCalledWith("r1", "o1");
@@ -307,7 +307,7 @@ describe("FixScreen: ways out besides buying (ALL-185)", () => {
     const { skipRoundAction } = setup({ canSkip: true });
     await userEvent.click(screen.getByRole("button", { name: "Skip Mom's birthday" }));
     const dialog = await screen.findByRole("dialog", { name: "Skip Mom's birthday?" });
-    expect(dialog).toHaveTextContent("Nothing will be bought and we won't look for more ideas. You can't undo this.");
+    expect(dialog).toHaveTextContent("Nothing will be bought for this birthday and we won't look for more ideas. Next year's starts as usual. You can't undo this.");
     await userEvent.click(screen.getByRole("button", { name: "Keep looking" }));
     expect(skipRoundAction).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -320,6 +320,19 @@ describe("FixScreen: ways out besides buying (ALL-185)", () => {
     await userEvent.click(await screen.findByRole("button", { name: "Skip it" }));
     expect(skipRoundAction).toHaveBeenCalledWith("r1");
     await vi.waitFor(() => expect(router.push).toHaveBeenCalledWith("/rounds/r1"));
+  });
+
+  it("after an address or card problem the gift stays buyable, so the helper doesn't say it's gone", () => {
+    setup({ canPick: true, canSkip: true, order: order({ failureType: "address_withdrawn" }) });
+    expect(screen.getByText("Drops the LEGO Botanical Orchid and lets you choose from Mom's other ideas, or ask for new ones.")).toBeInTheDocument();
+  });
+
+  it("without a known occasion the confirm doesn't promise next year", async () => {
+    setup({ canSkip: true, occasionKind: null });
+    await userEvent.click(screen.getByRole("button", { name: "Skip Mom's gift" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog).toHaveTextContent("Nothing will be bought and we won't look for more ideas. You can't undo this.");
+    expect(dialog).not.toHaveTextContent("Next year");
   });
 
   it("with another gift in play, neither way out is offered", () => {
