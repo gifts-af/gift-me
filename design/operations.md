@@ -733,6 +733,44 @@ No card order is placed and Add a card is hidden; held card gifts read "paused" 
 
 **What the app sets on each visit to Stripe's card page** (Checkout `branding_settings` and session options, no dashboard step): business name `GiftsAF`, the gift-tag icon and logo by URL, button colour `#0f766e`, white background, rounded corners, the font closest to ours, our consent text, cards only, setup mode.
 
+### Launch day: the first real card order
+
+Step 1 of the launch (planning 66): the owner's account alone moves to card, the owner buys one real gift under $25, and nobody else changes until it passes. Do these in order; stop at the first one that fails. Times are whatever suits the owner: there's no tick window to avoid before real users.
+
+**What gates it (and what doesn't).** Taking money needs us off **Vercel Hobby**, which is for non-commercial use only: move to a commercial plan before step 6. **Making the repo private (ALL-75) does not gate it.** Nothing secret is in the repo; ALL-75 ties the two together only because a private org repo can't deploy on Hobby. The repo stays public as a showcase until the public launch (owner). Also needed first: the owner's live Stripe account (done, sole proprietorship in the owner's name) and a support inbox that receives mail (Public details, step 4).
+
+1. **Wait for the owner's wallet order to finish.** The loaf pan (order `48bd263a`) is delivered or closed, and the owner has no other wallet gift held, placing, unconfirmed or failed-and-unresolved:
+   ```sql
+   select id, status, failure_type, resolved from concierge.orders
+    where user_id = (select id from auth.users where email = 'aaron.aallen@gmail.com')
+      and funding_mode = 'zinc_wallet'
+      and (status in ('held', 'placing', 'unconfirmed') or (status = 'failed' and not resolved));
+   ```
+   No rows means ready.
+2. **The owner disconnects Zinc** in GiftsAF Settings > Paying for gifts. This removes the owner's wallet webhook from the Zinc account (a Zinc account has one webhook).
+3. **Set the app webhook** on that Zinc account to `https://giftsaf.com/api/zinc/webhook/app`, signed with the secret in `ZINC_CONNECT_WEBHOOK_SECRET`. Check it with `GET /webhooks/endpoint` on the app key: the URL must be exactly that one. Production's env vars `ZINC_CONNECT_API_KEY` (live key, not `zn_test_`), `ZINC_CONNECT_WEBHOOK_SECRET` and `STRIPE_SECRET_KEY` (`sk_live_`) are set, and `ZINC_ENV=live`.
+4. **The shared Zinc wallet is at $0 with auto top-up off** (Zinc dashboard). An order sent without a card then fails instead of spending it.
+5. **Stripe dashboard checklist** (owner): everything under **Before the first real card order**, step 4 above: the US-only Radar rule, statement descriptor `GIFTSAF`, business name, public details with the support inbox, branding, Link off.
+6. **Merge the step-1 PR** (the `20261130160000_card_launch_owner.sql` migration). After CI's `migrate` job on main, check it switched the owner and nobody else:
+   ```sql
+   select u.email, a.funding_mode from concierge.accounts a join auth.users u on u.id = a.user_id where a.funding_mode = 'connect';
+   ```
+   One row, the owner's. If it shows none, the migration's notice says why (`still_connected` or `wallet_order_open`): fix that, then run `select concierge.switch_account_to_card('aaron.aallen@gmail.com');`, which does the same switch with the same checks.
+7. **The owner turns card payments on:**
+   ```sql
+   update concierge.app_settings set value = '1' where key = 'connect_enabled';
+   ```
+8. **One real gift under $25 on the owner's card**, a gift the owner wants to give, agreed beforehand (the QA account never buys). Add a card on Stripe's page, come back, check the Buy page's "Most you'll pay", tap Buy now.
+9. **Evidence checks** (post each on ALL-98):
+   - The charge in Stripe is at most the "Most you'll pay" shown, and `orders.final_charge_cents` matches it (assumptions A2 and A7).
+   - The Stripe payment settles, and its fees are as expected (who pays Stripe's fee: the open question in the plan).
+   - Exactly one `card_fee` and one `zinc_order_fee` row in `concierge.cost_events` for the order.
+   - The "ordered" email shows the gift, the GiftsAF fee and the charge, and no Zinc or balance.
+   - Tracking events arrive on the app webhook (`zinc.order_settled`, then shipped and delivered), and no `zinc.unknown_order` or `zinc.card_event_on_buyer_webhook` alert fires.
+   - For a shared address, no street shows to the buyer anywhere (T61).
+   - The statement line reads `GIFTSAF` once it posts.
+10. **If anything is wrong, turn it off** (**Stop card payments** above): `connect_enabled` 0. Orders already sent settle as usual; nobody else is on card yet. Step 2, everyone else, waits for the owner's go-ahead after this passes.
+
 ### After a store cancel
 
 Zinc should refund the whole card charge (assumption A5). Five days after a cancel, check the charge in Stripe. If it isn't refunded, refund it from the Stripe dashboard and note it on the order's ticket.

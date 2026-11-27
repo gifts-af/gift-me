@@ -98,7 +98,7 @@ Most you'll pay              $25.64
 
 Runs by hand, with a runbook: returns, disputes, and an account deletion (no unsettled orders, delete the Stripe customer, then the account). Rolling back: switch `connect_enabled` off and let orders settle first.
 
-Moving wallet accounts; a spending page (ALL-145); a returns flow; tax; digital wallets such as Apple Pay. Going live needs sole proprietor or LLC, a live Stripe account, ALL-75 and a support inbox.
+Moving wallet accounts; a spending page (ALL-145); a returns flow; tax; digital wallets such as Apple Pay. Going live needs sole proprietor or LLC (sole proprietorship, owner 2026-11-27), a live Stripe account, a commercial Vercel plan (not ALL-75's private repo, which doesn't gate taking money) and a support inbox.
 
 ## Open questions
 
@@ -357,7 +357,7 @@ export async function connectWiring(db: SupabaseClient<Database>, env?: Env): Pr
 - Before step 1, in Stripe: the US-only Radar rule (planning 66), so a non-US card's higher fee can't push a charge over "Most you'll pay" (PR #176 review). The health email lists any order charged over its maximum (Task 9).
 - First, in this order: the owner's wallet orders are delivered or closed (today the in-transit loaf pan, order `48bd263a`), the owner disconnects Zinc in Settings (which clears the account's webhook), and the app webhook is set on that Zinc account. Check it with `GET /webhooks/endpoint`.
 - **Step 1 (PR 4a):** switch the owner's account (aaron.aallen@gmail.com) only, then the real card order below, bought by the owner (owner, 2026-11-27; was Jim's). **Step 2 (PR 4b), only after it passes:** set `accounts.funding_mode` and the column default to `connect` for everyone else, Jim included, except accounts with `zinc_connected_at` set, a wallet order `held`, `placing` or `unconfirmed`, or an unresolved wallet failure.
-- [ ] pgTAP for each exception. **PR 4**, merged after ALL-75 and the app webhook on the Zinc account.
+- [ ] pgTAP for each exception. **PR 4a**, merged after the move off Vercel Hobby and the app webhook on the Zinc account, following `design/operations.md` > Card payments > Launch day. ALL-75 (the private repo) doesn't gate it.
 - [ ] The owner turns `connect_enabled` on. One gift under $25, bought by a person on a connect account, agreed with the owner first (the QA account never buys). Check the charge against the maximum shown, the Stripe settlement, one `card_fee` and one `zinc_order_fee` row, the email, tracking on the app webhook, and that no street shows for a shared address. Evidence on ALL-98.
 - **Turning it off:** `connect_enabled` 0. Orders already sent settle as usual.
 
