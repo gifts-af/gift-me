@@ -78,7 +78,8 @@ export async function stripeWiring(db: SupabaseClient<Database>, env: Env = proc
   if (!key) return null;
   const mode = key.startsWith("sk_test_") ? "test" : key.startsWith("sk_live_") ? "live" : null;
   if (!mode || mode !== zincEnv) return null;
-  return { key, mode, timeoutMs: await settingInt(db, "stripe_timeout_ms"), fetch };
+  const base = env.STRIPE_API_BASE;
+  return { key, mode, timeoutMs: await settingInt(db, "stripe_timeout_ms"), fetch, ...(base ? { base } : {}) };
 }
 
 /**

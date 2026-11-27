@@ -88,6 +88,11 @@ describe.skipIf(!supabase)("Zinc and engine wiring (real local database and engi
     expect(await wiring.stripeWiring(db, { ZINC_ENV: "test", STRIPE_SECRET_KEY: "rk_test_x" })).toBeNull();
     expect(await wiring.stripeWiring(db, { ZINC_ENV: "test" })).toBeNull();
     expect(await wiring.stripeWiring(db, { STRIPE_SECRET_KEY: "sk_test_x" })).toBeNull();
+    // Stripe's own API unless the browser tests point it at their stand-in.
+    expect(test).not.toHaveProperty("base");
+    expect(await wiring.stripeWiring(db, { ZINC_ENV: "test", STRIPE_SECRET_KEY: "sk_test_x", STRIPE_API_BASE: "http://127.0.0.1:4598" })).toMatchObject({
+      base: "http://127.0.0.1:4598",
+    });
   });
 
   it("gives card orders the app's Zinc key only when it fits ZINC_ENV and the webhook secret is set", async () => {

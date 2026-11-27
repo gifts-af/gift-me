@@ -343,7 +343,14 @@ export async function tellCustomer(deps: PurchaseDeps, roundId: string, ids: Rec
   }
   const status = after?.status === "ordered" ? "ordered" : failed ? "failed" : "held";
   const round: Extract<ApproveResult, { ok: true }> = { ok: true, status, reason: status === "ordered" ? null : reason };
-  return several ? giftOutcomes(deps, roundId, round, ids) : round;
+  if (several) return giftOutcomes(deps, roundId, round, ids);
+  // A card that couldn't be charged leaves the round's reason a plain "failed"; the gift's own
+  // reason says it was the card, so the page never blames the store.
+  if (status === "failed") {
+    const one = await giftOutcomes(deps, roundId, round, ids);
+    if (one.ok && one.gifts === undefined && one.reason === "card_needed") return one;
+  }
+  return round;
 }
 
 function outcomeOfGift(o: GiftRow): GiftOutcome {

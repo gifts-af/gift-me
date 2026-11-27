@@ -7,7 +7,8 @@ import { z } from "zod";
 
 const BASE = "https://api.stripe.com";
 
-export type StripeHttp = { key: string; mode: "test" | "live"; timeoutMs: number; fetch: typeof fetch };
+/** `base`: Stripe's API, unless the browser tests point it at their stand-in (STRIPE_API_BASE). */
+export type StripeHttp = { key: string; mode: "test" | "live"; timeoutMs: number; fetch: typeof fetch; base?: string };
 
 export type StripeErrorKind = "unavailable" | "unauthorized" | "rejected";
 
@@ -56,7 +57,7 @@ export async function stripeCall<T>(h: StripeHttp, method: "GET" | "POST", path:
   const query = o.query ? `?${new URLSearchParams(o.query).toString()}` : "";
   let res: Response;
   try {
-    res = await h.fetch(`${BASE}${path}${query}`, {
+    res = await h.fetch(`${h.base ?? BASE}${path}${query}`, {
       method,
       headers: {
         Authorization: `Bearer ${h.key}`,

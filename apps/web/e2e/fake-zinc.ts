@@ -16,7 +16,17 @@ export const FAKE_ZINC_KEY = "zn_live_E2E_FAKE_KEY";
 /** The app's own key for product lookups (ZINC_API_KEY). */
 export const FAKE_ZINC_APP_KEY = "zn_live_E2E_FAKE_APP_KEY";
 
-type FakeProduct = { retailer: string; productId: string; url: string; title: string; priceCents: number; image?: string; orderError?: string };
+type FakeProduct = {
+  retailer: string;
+  productId: string;
+  url: string;
+  title: string;
+  priceCents: number;
+  image?: string;
+  orderError?: string;
+  /** Refused with this code the first time it's ordered, then taken (card-payments.spec.ts's decline). */
+  firstOrderError?: string;
+};
 
 /**
  * Products the approval journeys price and buy, each used by one journey only. Any other product
@@ -51,6 +61,17 @@ export const FAKE_PRODUCTS = {
     priceCents: 3400,
     image: "https://images.e2e.test/mug.jpg",
   },
+  /** card-payments.spec.ts: bought by card. */
+  cardBuy: { retailer: "amazon", productId: "B0E2ECARD1", url: "https://www.amazon.com/dp/B0E2ECARD1", title: "Mouse pad", priceCents: 2259 },
+  /** card-payments.spec.ts: the card is declined on the first order, and the next one goes through. */
+  cardDecline: {
+    retailer: "amazon",
+    productId: "B0E2ECARD2",
+    url: "https://www.amazon.com/dp/B0E2ECARD2",
+    title: "Desk lamp",
+    priceCents: 1800,
+    firstOrderError: "payment_failed",
+  },
 } satisfies Record<string, FakeProduct>;
 
 const PRODUCTS: FakeProduct[] = Object.values(FAKE_PRODUCTS);
@@ -81,10 +102,14 @@ type State = {
   calls: string[];
   /** Orders taken: Zinc's id by our reference (metadata.order_id). */
   orders: Map<string, string>;
+  /** Products whose firstOrderError has been given. */
+  declined: Set<string>;
+  /** Every order sent, answered or not: our reference and the key it came with, for GET /__posts. */
+  posts: { orderId: string; auth: string }[];
 };
 
 export function startFakeZinc(): Promise<Server> {
-  const state: State = { issued: 0, approved: new Set(), webhook: null, webhookCleared: 0, calls: [], orders: new Map() };
+  const state: State = { issued: 0, approved: new Set(), webhook: null, webhookCleared: 0, calls: [], orders: new Map(), declined: new Set(), posts: [] };
   const server = createServer((req, res) => {
     const url = new URL(req.url ?? "/", FAKE_ZINC_URL);
     const chunks: Buffer[] = [];
@@ -156,8 +181,13 @@ export function startFakeZinc(): Promise<Server> {
         // On the buyer's own key, whatever it is. Like Zinc, an order capped below the price is refused.
         // Only products[0] is checked: our orders are one product each today (createOrder).
         const order = json as { products: { url: string }[]; max_price: number; metadata: { order_id: string } };
-        const p = PRODUCTS.find((x) => x.url === order.products[0]?.url);
+        state.posts.push({ orderId: order.metadata?.order_id ?? "", auth: req.headers.authorization ?? "" });
+        const p: FakeProduct | undefined = PRODUCTS.find((x) => x.url === order.products[0]?.url);
         if (p?.orderError) return send(400, { error: { code: p.orderError } });
+        if (p?.firstOrderError && !state.declined.has(p.productId)) {
+          state.declined.add(p.productId);
+          return send(400, { error: { code: p.firstOrderError } });
+        }
         if (p && order.max_price < p.priceCents) return send(400, { error: { code: "max_price_exceeded" } });
         const id = `zn_e2e_${state.orders.size + 1}`;
         state.orders.set(order.metadata.order_id, id);
@@ -177,6 +207,12 @@ export function startFakeZinc(): Promise<Server> {
       if (route === "GET /__calls") {
         const match = url.searchParams.get("match") ?? "";
         return send(200, { count: state.calls.filter((c) => match !== "" && c.includes(match)).length });
+      }
+      if (route === "GET /__posts") {
+        // How many orders were sent with this key for any of these references (comma-separated).
+        const ids = new Set((url.searchParams.get("order_ids") ?? "").split(",").filter(Boolean));
+        const auth = `Bearer ${url.searchParams.get("key") ?? ""}`;
+        return send(200, { count: state.posts.filter((p) => ids.has(p.orderId) && p.auth === auth).length });
       }
       if (route === "GET /activate") return send(200, { page: "Zinc" });
       return send(404, { error: { code: "not_found" } });
