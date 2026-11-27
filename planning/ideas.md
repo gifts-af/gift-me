@@ -109,6 +109,16 @@ See something you like in a shop or at a friend's? Take a photo, then tap Share 
 - **To work out:** iPhone (a native app, or a camera button only), what happens when the product can't be identified, and the cost per photo.
 - **Source:** owner, 2026-11-21.
 
+### 14. Photo of a whole list
+Take a picture of a list, such as a kid's letter to Santa, a handwritten note, or a screenshot of someone's Notes app. GiftsAF reads every line and turns it into gifts. Choose **My list** to make them your wishes, or one of **your people** to make it their list.
+- **Why:** many wish lists already exist on paper or in a text. Typing them in is the step people skip. One photo turns the list Grandma got in the mail into something the family can claim from.
+- **How it could work:** an AI reads the photo into lines ("LEGO fire station", "pink scooter", "slime kit"). You see the lines, tick the ones to keep and fix any misread words before anything is saved. Each line becomes a general wish (idea 12), or is matched to a product with a Zinc search when you ask (1¢ a lookup). For one of your people, the lines become a list you keep for them, which you can share with the rest of the family. That's useful for a child who has no account.
+- **Related:** idea 13 (one item from a photo) shares the photo reading and the iPhone camera question. The person's list builds on lists for people who don't keep one themselves. Ideas from it go first in rounds (T82), like gifts on a linked list.
+- **Privacy:** the photo is read and then thrown away; only the lines are kept (T42). A kid's letter can hold a name, an address or a school, so that text is never kept and never goes into a fact.
+- **Cost:** one AI read per photo. Free for list owners, with a daily cap kept in settings (T23). Zinc lookups only on request.
+- **To work out:** what a list for a person without an account looks like, and whether family members can claim from it. Also whether to keep lines in their order and with the child's own words, which is part of the charm.
+- **Source:** owner, 2026-11-27, on list launch day.
+
 ## Parked during the scope freeze
 
 One line each (CLAUDE.md > Scope freeze). Reviewed when the freeze lifts.
