@@ -78,8 +78,29 @@ export async function stripeWiring(db: SupabaseClient<Database>, env: Env = proc
   if (!key) return null;
   const mode = key.startsWith("sk_test_") ? "test" : key.startsWith("sk_live_") ? "live" : null;
   if (!mode || mode !== zincEnv) return null;
-  const base = env.STRIPE_API_BASE;
+  const base = stripeBase(env);
   return { key, mode, timeoutMs: await settingInt(db, "stripe_timeout_ms"), fetch, ...(base ? { base } : {}) };
+}
+
+const LOOPBACK = new Set(["localhost", "127.0.0.1"]);
+
+/**
+ * STRIPE_API_BASE, the browser tests' stand-in for Stripe: honoured only on this machine (a
+ * loopback host) and never on Vercel (VERCEL_ENV set), so a misplaced value can't send the secret
+ * key, or the buyer, anywhere but Stripe. Otherwise ignored and logged, without the value (E6).
+ */
+function stripeBase(env: Env): string | undefined {
+  const base = env.STRIPE_API_BASE;
+  if (!base) return undefined;
+  let host: string | null;
+  try {
+    host = new URL(base).hostname;
+  } catch {
+    host = null;
+  }
+  if (host && LOOPBACK.has(host) && !env.VERCEL_ENV) return base;
+  logEvent("stripe.base_ignored", { on_vercel: Boolean(env.VERCEL_ENV) });
+  return undefined;
 }
 
 /**

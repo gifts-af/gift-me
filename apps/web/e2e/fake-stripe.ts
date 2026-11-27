@@ -1,4 +1,5 @@
 import { createServer, type Server } from "node:http";
+import { checkoutParamRefusal, versionRefusal } from "../test/fake-stripe-contract";
 
 // A stand-in for Stripe for the browser tests (ALL-98): just what stripe/card.ts calls (customers,
 // setup-mode Checkout Sessions, a customer's cards, reading and detaching a card) and Stripe's
@@ -50,6 +51,9 @@ export function startFakeStripe(): Promise<Server> {
       const missing = () => send(404, { error: { type: "invalid_request_error", code: "resource_missing" } });
       const api = !url.pathname.startsWith("/__") && !url.pathname.startsWith("/pay/");
       if (api && req.headers.authorization !== `Bearer ${FAKE_STRIPE_KEY}`) return send(401, { error: { code: "api_key_invalid" } });
+      // What real Stripe would refuse: an unpinned or too-old API version, an unknown session parameter.
+      const version = api ? versionRefusal(req.headers["stripe-version"] as string | undefined) : null;
+      if (version) return send(version.status, version.body);
 
       if (route === "POST /v1/customers") {
         const idem = req.headers["idempotency-key"];
@@ -61,6 +65,8 @@ export function startFakeStripe(): Promise<Server> {
         return send(200, { id: c });
       }
       if (route === "POST /v1/checkout/sessions") {
+        const unknown = checkoutParamRefusal(body);
+        if (unknown) return send(unknown.status, unknown.body);
         const s: Session = {
           id: id("cs"),
           status: "open",
