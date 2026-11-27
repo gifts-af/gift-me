@@ -214,7 +214,7 @@ test("adds a fact on the What we know page, which the person's row counts", asyn
   await box.fill("Pottery classes");
   await page.getByRole("combobox", { name: "Kind" }).selectOption("wants");
   await page.getByRole("button", { name: "Add", exact: true }).click();
-  await expect(page.getByRole("alert")).toHaveText("That's already on their profile.");
+  await expect(page.getByRole("main").getByRole("alert")).toHaveText("That's already on their profile.");
   await expect(box).toHaveValue("Pottery classes");
   expect(await added()).toHaveLength(1);
 
