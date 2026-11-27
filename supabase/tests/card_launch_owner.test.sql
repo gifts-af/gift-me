@@ -4,7 +4,7 @@
 -- migration calls once; here it is called against made-up accounts.
 begin;
 \ir _helpers.psql
-select plan(12);
+select plan(16);
 
 create function tests.lo_account(p_email text, p_connected boolean default false)
 returns uuid language plpgsql as $$
@@ -62,9 +62,27 @@ select tests.lo_account('owner-held@example.com') as h \gset
 select tests.lo_order(:'h', 'held');
 select is(concierge.switch_account_to_card('owner-held@example.com'), 'wallet_order_open', 'a held wallet gift: not switched');
 
+select tests.lo_account('owner-unconfirmed@example.com') as uc \gset
+select tests.lo_order(:'uc', 'unconfirmed');
+select is(concierge.switch_account_to_card('owner-unconfirmed@example.com'), 'wallet_order_open', 'an unconfirmed wallet gift: not switched');
+
 select tests.lo_account('owner-placing@example.com') as p \gset
-select tests.lo_order(:'p', 'unconfirmed');
-select is(concierge.switch_account_to_card('owner-placing@example.com'), 'wallet_order_open', 'an unconfirmed wallet gift: not switched');
+select tests.lo_order(:'p', 'placing');
+select is(concierge.switch_account_to_card('owner-placing@example.com'), 'wallet_order_open', 'a wallet gift being placed: not switched');
+
+-- A gift still on its way: its tracking, cancel and refund events would go to the app webhook,
+-- which ignores wallet orders, once the owner disconnects.
+select tests.lo_account('owner-placed@example.com') as pl \gset
+select tests.lo_order(:'pl', 'placed');
+select is(concierge.switch_account_to_card('owner-placed@example.com'), 'wallet_order_open', 'a placed wallet gift not yet delivered: not switched');
+
+select tests.lo_account('owner-shipped@example.com') as sh \gset
+select tests.lo_order(:'sh', 'shipped');
+select is(concierge.switch_account_to_card('owner-shipped@example.com'), 'wallet_order_open', 'a shipped wallet gift: not switched');
+
+select tests.lo_account('owner-resolved@example.com') as rs \gset
+select tests.lo_order(:'rs', 'failed', true);
+select is(concierge.switch_account_to_card('owner-resolved@example.com'), 'switched', 'a failure already dealt with doesn''t block it');
 
 select tests.lo_account('owner-failed@example.com') as f \gset
 select tests.lo_order(:'f', 'failed');
