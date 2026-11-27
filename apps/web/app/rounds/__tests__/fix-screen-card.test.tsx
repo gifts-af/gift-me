@@ -21,6 +21,8 @@ const FEE: FeeSheet = {
   cardFeeBps: 290,
   cardFeeFixedCents: 30,
 };
+// The same settings as the server's fee inputs (CardBuyer.payer.fees): the margin is its two parts.
+const FEES = { marginCents: 100, zincFeeCents: 100, cardFeeBps: 290, cardFeeFixedCents: 30 };
 
 function idea(o: Partial<RoundPageIdea> = {}): RoundPageIdea {
   return {
@@ -97,7 +99,7 @@ function setup(card: Partial<FixCard> = {}, o: Partial<FixScreenProps> = {}, res
     canSkip: false,
     pickAgainAction: vi.fn(),
     skipRoundAction: vi.fn(),
-    card: { on: true, hasCard: true, needsPhone: false, fee: FEE, cardReturn: null, startCard, maxFor: { i1: 2797, i2: 3380 }, ...card },
+    card: { on: true, hasCard: true, needsPhone: false, fee: FEE, fees: FEES, goodsFor: { i1: 2259, i2: 2800 }, cardReturn: null, startCard, maxFor: { i1: 2797, i2: 3380 }, ...card },
     ...o,
   };
   render(<FixScreen {...props} />);

@@ -8,7 +8,7 @@ import { TopBar } from "@/components/app-shell/top-bar";
 import { APP_NAME } from "@/lib/brand";
 import { errorFields, logEvent } from "@/lib/log";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { capsFor, capsForPayer, cardBuyer, getZincWallet, type RoundPageIdea, type RoundPageView } from "@/modules/concierge";
+import { capsFor, capsForPayer, cardBuyer, cardGoods, getZincWallet, type RoundPageIdea, type RoundPageView } from "@/modules/concierge";
 import { settingInt, zincWiring } from "@/lib/wiring";
 import { buyAction, startCardAction } from "../../actions";
 import { OtherAccount } from "../../access";
@@ -96,14 +96,15 @@ async function Loaded({ params, searchParams }: { params: Params; searchParams: 
   const picks = ids.map((i) => byId.get(i)!).sort((a, b) => a.rank - b.rank);
 
   const db = createAdminClient();
-  const buyer = await cardBuyer({ db, now: new Date() }, userId);
-  const [feeCents, marginPct, giftMessageMax, choices, balance] = await Promise.all([
+  const reading = cardBuyer({ db, now: new Date() }, userId);
+  const [buyer, feeCents, marginPct, giftMessageMax, choices, balance] = await Promise.all([
+    reading,
     settingInt(db, "zinc_order_fee_cents"),
     settingInt(db, "order_price_margin_pct"),
     settingInt(db, "zinc_gift_message_max_chars"),
     shipToChoices(view.round.personId, userId),
     // A card buyer has no Zinc balance.
-    buyer.mode === "connect" ? null : balanceCents(userId),
+    reading.then((b) => (b.mode === "connect" ? null : balanceCents(userId))),
   ]);
   const pct = view.overBudgetPct ?? 0;
   const round = { budget_cents: view.round.budgetCents };
@@ -124,6 +125,7 @@ async function Loaded({ params, searchParams }: { params: Params; searchParams: 
           capGoodsCents: typeof caps === "string" ? null : caps.caps.reduce((a, b) => a + b, 0),
           // Only "cancelled" comes back to the gift; the return route sends the rest to Settings.
           cardReturn: back === "cancelled" ? back : null,
+          goodsFor: cardGoods(picks),
           startCard: startCardAction.bind(null, { roundId: id, ideaIds: ids }),
         }
       : undefined;

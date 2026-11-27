@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Link from "next/link";
-import { classifyTotal, goodsCapCents, overBudgetLimitCents } from "@gifts-af/core";
+import { classifyTotal, goodsCapCents, overBudgetLimitCents, type FeeInputs } from "@gifts-af/core";
 import { IdeaPhoto } from "@/components/idea-photo";
 import { chooseBy, shortDate } from "@/lib/occasion-format";
 import { Button } from "@/components/ui/button";
@@ -64,6 +64,10 @@ export type FixCard = {
   hasCard: boolean;
   needsPhone: boolean;
   fee: FeeSheet;
+  /** Today's fee inputs, as the server judges a card buyer's charges (CardBuyer.payer.fees). */
+  fees: FeeInputs;
+  /** The price, shipping and tax alone of each idea that can be bought here, by id (cardGoods). */
+  goodsFor: Record<string, number>;
   /** The return route's `card=`, when the buyer just came back from Stripe's page. */
   cardReturn: string | null;
   startCard: (phone: string | null) => Promise<StartCardResult>;
@@ -292,12 +296,6 @@ export function FixScreen(p: FixScreenProps) {
 
   /** A card that couldn't be charged, with a card saved now (3b, 3c): today's price, then Buy again. */
   function cardNeededBuy(c: FixCard, i: RoundPageIdea) {
-    const fees = {
-      marginCents: c.fee.aiCents + c.fee.runningCents,
-      zincFeeCents: c.fee.zincFeeCents,
-      cardFeeBps: c.fee.cardFeeBps,
-      cardFeeFixedCents: c.fee.cardFeeFixedCents,
-    };
     const saved = <SavedCard start={() => c.startCard(null)} />;
     const askFirst = i.livePrice && (check === null || (!check.ok && (check.error === "session" || check.error === "bad_form")));
     if (askFirst) {
@@ -328,11 +326,11 @@ export function FixScreen(p: FixScreenProps) {
     }
     const today = check?.ok ? check : null;
     const total = today ? today.newCents : i.totalCents;
-    let goods = i.goodsCents ?? total;
+    let goods = c.goodsFor[i.id];
     if (today) {
       try {
         // Exact: each whole charge comes from one goods total.
-        goods = goodsCapCents(today.newCents, fees);
+        goods = goodsCapCents(today.newCents, c.fees);
       } catch {
         goods = total;
       }
@@ -410,8 +408,8 @@ export function FixScreen(p: FixScreenProps) {
                 <span className="text-[13px] tabular-nums text-muted-foreground">{`You approved ${money(idea.totalCents)}`}</span>
               )}
             </span>
-            {cardNeeded && canBuyHere && (
-              <span className="ml-auto flex-none text-[15px] font-semibold tabular-nums">{money(idea.goodsCents ?? idea.totalCents)}</span>
+            {card && cardNeeded && canBuyHere && (
+              <span className="ml-auto flex-none text-[15px] font-semibold tabular-nums">{money(card.goodsFor[idea.id])}</span>
             )}
           </div>
         )}

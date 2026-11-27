@@ -45,6 +45,8 @@ export type ConfirmCard = {
   capGoodsCents: number | null;
   /** The return route's `card=`, when the buyer just came back from Stripe's page. */
   cardReturn: string | null;
+  /** Each pick's price, shipping and tax alone, by idea id (cardGoods). */
+  goodsFor: Record<string, number>;
   /** Leaves for Stripe's page and comes back to this gift; never buys. */
   startCard: (phone: string | null) => Promise<StartCardResult>;
 };
@@ -152,7 +154,7 @@ export function ConfirmScreen(p: ConfirmScreenProps) {
               {[storeOf(i), listPriceNote(i), i.arriveBy ? `Arrives by ${shortDate(i.arriveBy)}` : null].filter(Boolean).join(" · ")}
             </span>
           </span>
-          <span className="flex-none text-[15px] font-semibold tabular-nums">{money(card ? (i.goodsCents ?? i.totalCents) : i.totalCents)}</span>
+          <span className="flex-none text-[15px] font-semibold tabular-nums">{money(card ? card.goodsFor[i.id] : i.totalCents)}</span>
         </li>
       ))}
     </ul>
@@ -202,8 +204,8 @@ export function ConfirmScreen(p: ConfirmScreenProps) {
   }
 
   const n = ideas.length;
-  // A card buyer's goods alone; an idea without a saved goods total counts at its whole charge.
-  const goods = ideas.reduce((sum, i) => sum + (i.goodsCents ?? i.totalCents), 0);
+  // A card buyer's goods alone.
+  const goods = card ? ideas.reduce((sum, i) => sum + card.goodsFor[i.id], 0) : 0;
   const paused = card !== undefined && !card.on;
   return (
     <>

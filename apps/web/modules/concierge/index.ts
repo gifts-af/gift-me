@@ -167,7 +167,7 @@ export { amazonPasteDetails } from "./zinc/products";
 export type { AmazonPasteDetails, ZincProductDetails } from "./zinc/products";
 export type { ZincHttp } from "./zinc/client";
 // Paying by card: saving, reading and removing the buyer's card on Stripe's own page.
-export { cardBuyer, finishCardSession, removeCard, saveCardPhone, savedCard, startCardSession } from "./stripe/card";
+export { cardBuyer, cardGoods, finishCardSession, removeCard, saveCardPhone, savedCard, startCardSession } from "./stripe/card";
 export type { CardBuyer, CardDeps, CardFrom, FeeSheet } from "./stripe/card";
 export { capsForPayer, readPayer, type Payer } from "./purchase/payer";
 export type { StripeHttp } from "./stripe/client";

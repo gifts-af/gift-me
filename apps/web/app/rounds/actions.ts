@@ -231,13 +231,15 @@ export async function checkPriceAction(roundId: string, orderId: string): Promis
     { ...roundDbDeps(new Date()), lookup, recordCost: costRecorder(createAdminClient) },
   );
   if (typeof result === "string") return { ok: false, error: result };
-  // A card buyer's "Most you'll pay" at today's price, which Buy again sends back (AC-4).
-  const maxCents = await replacementMaxCents(roundDbDeps(new Date()), {
-    userId: user.userId,
-    roundId: id.data,
-    failedOrderId: order.data,
-    totalCents: result.newCents,
-  });
+  // A card buyer's "Most you'll pay" at today's price, which Buy again sends back (AC-4); a wallet buyer has none.
+  const maxCents = result.byCard
+    ? await replacementMaxCents(roundDbDeps(new Date()), {
+        userId: user.userId,
+        roundId: id.data,
+        failedOrderId: order.data,
+        totalCents: result.newCents,
+      })
+    : null;
   return { ok: true, oldCents: result.oldCents, newCents: result.newCents, maxCents };
 }
 

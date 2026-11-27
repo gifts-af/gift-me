@@ -64,7 +64,7 @@ function setup(card: Partial<ConfirmCard> = {}, result: BuyResult = { ok: true, 
     buyerAddress: null,
     returnPath: "/rounds/r1/buy?ideas=i1",
     buyAction,
-    card: { on: true, hasCard: true, needsPhone: false, fee: FEE, capGoodsCents: 2485, cardReturn: null, startCard, ...card },
+    card: { on: true, hasCard: true, needsPhone: false, fee: FEE, capGoodsCents: 2485, cardReturn: null, goodsFor: { i1: 2259 }, startCard, ...card },
   };
   render(<ConfirmScreen {...props} />);
   return { buyAction, startCard };

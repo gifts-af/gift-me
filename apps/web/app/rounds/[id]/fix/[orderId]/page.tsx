@@ -9,7 +9,7 @@ import { TopBar } from "@/components/app-shell/top-bar";
 import { Button } from "@/components/ui/button";
 import { APP_NAME } from "@/lib/brand";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { cardBuyer, isId, replacementMaxCents } from "@/modules/concierge";
+import { cardBuyer, cardGoods, isId, replacementMaxCents } from "@/modules/concierge";
 import { settingInt } from "@/lib/wiring";
 import { checkPriceAction, pickAgainAction, replaceAction, skipRoundAction, startCardAction } from "../../../actions";
 import { OtherAccount } from "../../../access";
@@ -108,6 +108,8 @@ async function Loaded({ params, searchParams }: { params: Params; searchParams: 
       hasCard: buyer.hasCard,
       needsPhone: buyer.phone === null,
       fee: buyer.fee,
+      fees: buyer.payer.fees,
+      goodsFor: cardGoods(targets),
       // Only "cancelled" comes back to the gift; the return route sends the rest to Settings.
       cardReturn: cardBack === "cancelled" ? cardBack : null,
       startCard: startCardAction.bind(null, { roundId: id, ideaIds: [], failedOrderId: order.id }),

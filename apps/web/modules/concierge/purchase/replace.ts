@@ -63,7 +63,8 @@ export type QuoteDeps = DbDeps & { lookup: { http: ZincHttp; key: string }; reco
  * `zinc_off`: zinc_ordering_enabled isn't 1, so a re-buy would only be held (E7's off switch).
  */
 export type QuoteResult =
-  | { oldCents: number; newCents: number }
+  // `byCard`: the buyer pays by card, so the caller works out a "Most you'll pay" (a wallet buyer has none).
+  | { oldCents: number; newCents: number; byCard: boolean }
   | "not_allowed"
   | "not_current"
   | "not_open"
@@ -263,7 +264,7 @@ export async function quoteFailedOrder(input: { userId: string; roundId: string;
   const [payer, feeCents] = await Promise.all([readPayer(deps, userId), setting(deps, "zinc_order_fee_cents")]);
   const today = await requote(deps, idea, feeCents, ids, { userId, orderId });
   if (today === null) return "unavailable";
-  return { oldCents: ideaTotalCents(idea, payer), newCents: totalFor(today, payer) };
+  return { oldCents: ideaTotalCents(idea, payer), newCents: totalFor(today, payer), byCard: payer.mode === "connect" };
 }
 
 /**

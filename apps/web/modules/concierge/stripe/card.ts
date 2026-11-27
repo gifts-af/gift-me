@@ -33,6 +33,8 @@ export const CARD_CONSENT_TEXT =
  * local or protected preview URL. Teal is the light theme's --primary; Stripe's "default" font is
  * the system font stack, like ours.
  */
+// The colours copy the light theme's tokens in app/globals.css (button: `--primary`, 175 77% 26%,
+// as lib/email-layout.ts's TEAL; page: `--background`, white): Stripe's page takes hex only.
 const BRANDING = {
   display_name: APP_NAME,
   icon: { type: "url", url: `https://${APP_DOMAIN}/apple-icon` },
@@ -415,6 +417,19 @@ export async function cardBuyer(d: DbDeps, userId: string): Promise<CardBuyer> {
       cardFeeFixedCents: payer.fees.cardFeeFixedCents,
     },
   };
+}
+
+/**
+ * Each idea's price, shipping and tax alone, for a card buyer's screens. Always saved for one:
+ * ideaTotalCents refuses an idea without it when the round is read, so a missing one is a bug.
+ */
+export function cardGoods(ideas: { id: string; goodsCents: number | null }[]): Record<string, number> {
+  return Object.fromEntries(
+    ideas.map((i) => {
+      if (i.goodsCents === null) throw new Error("The idea has no goods total saved.");
+      return [i.id, i.goodsCents];
+    }),
+  );
 }
 
 /**

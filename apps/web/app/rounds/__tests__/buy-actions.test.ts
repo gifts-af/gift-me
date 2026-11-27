@@ -58,6 +58,20 @@ describe("checkPriceAction", () => {
     expect(lookupWiring).not.toHaveBeenCalled();
     expect(quoteFailedOrder).not.toHaveBeenCalled();
   });
+
+  it("works out a Most you'll pay only for a card buyer: a wallet buyer's check reads nothing more", async () => {
+    createClient.mockResolvedValue({ auth: { getClaims: async () => ({ data: { claims: { sub: "u1" } } }) } });
+    buyingWiring.mockResolvedValue({ engine: {}, purchase: {} });
+    lookupWiring.mockResolvedValue({ key: "k" });
+    quoteFailedOrder.mockResolvedValue({ oldCents: 1, newCents: 2, byCard: false });
+    expect(await checkPriceAction(ROUND, id(2))).toEqual({ ok: true, oldCents: 1, newCents: 2, maxCents: null });
+    expect(replacementMaxCents).not.toHaveBeenCalled();
+
+    quoteFailedOrder.mockResolvedValue({ oldCents: 1, newCents: 2, byCard: true });
+    replacementMaxCents.mockResolvedValue(3);
+    expect(await checkPriceAction(ROUND, id(2))).toEqual({ ok: true, oldCents: 1, newCents: 2, maxCents: 3 });
+    expect(replacementMaxCents).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe("price-check cost recording", () => {
@@ -124,7 +138,7 @@ describe("a card buyer's Most you'll pay (AC-4)", () => {
     signedIn();
     buyingWiring.mockResolvedValue({ engine: {}, purchase: {} });
     lookupWiring.mockResolvedValue({ key: "k" });
-    quoteFailedOrder.mockResolvedValue({ oldCents: 2564, newCents: 2600 });
+    quoteFailedOrder.mockResolvedValue({ oldCents: 2564, newCents: 2600, byCard: true });
     replacementMaxCents.mockResolvedValue(2840);
     expect(await checkPriceAction(ROUND, id(2))).toEqual({ ok: true, oldCents: 2564, newCents: 2600, maxCents: 2840 });
     expect(replacementMaxCents.mock.calls[0][1]).toEqual({ userId: "u1", roundId: ROUND, failedOrderId: id(2), totalCents: 2600 });
