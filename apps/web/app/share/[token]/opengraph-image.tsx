@@ -1,5 +1,3 @@
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import { connection } from "next/server";
 import { ImageResponse } from "next/og";
 import GenericCard from "@/app/opengraph-image";
@@ -7,6 +5,7 @@ import { APP_DOMAIN, APP_NAME } from "@/lib/brand";
 import { holidayLogoNow } from "@/lib/holiday";
 import { STICKER, tagSvg } from "@/lib/logo-art";
 import { getSharePreview } from "@/modules/lists";
+import { MUTED, PAGE, TEAL, TEXT, characters, geistFonts, possessive, wishCount } from "./card-art";
 
 // The link-preview image for a shared list (ALL-123): "Sam Lee’s wish list",
 // the count and the logo's tag, nothing else. It reads only getSharePreview, which touches no
@@ -16,27 +15,6 @@ import { getSharePreview } from "@/modules/lists";
 export const alt = `${APP_NAME} wish list`;
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
-
-// Same dark look as the generic card (app/opengraph-image.tsx).
-const PAGE = "#09090b";
-const TEXT = "#fafafa";
-const MUTED = "#a1a1aa";
-const TEAL = "#2dd4bf";
-
-const font = (file: string) => readFile(join(process.cwd(), "assets/fonts", file));
-
-// Names may be 80 characters. Past this the card cuts them, so a name never
-// pushes "wish list" off the picture.
-const MAX_NAME = 32;
-
-// Whole characters as people see them: a joined emoji or an accented letter is one.
-const segmenter = new Intl.Segmenter("en", { granularity: "grapheme" });
-const characters = (text: string) => Array.from(segmenter.segment(text), (s) => s.segment);
-
-function possessive(name: string) {
-  const chars = characters(name);
-  return `${chars.length > MAX_NAME ? `${chars.slice(0, MAX_NAME - 1).join("")}…` : name}’s`;
-}
 
 // The name has the 620 px beside the tag: shorter type for a long word or name.
 function nameSize(text: string) {
@@ -53,13 +31,8 @@ export default async function Image({ params }: { params: Promise<{ token: strin
   const preview = await getSharePreview(token);
   if (!preview || !preview.ownerName) return GenericCard();
 
-  const [black, regular, holiday] = await Promise.all([
-    font("Geist-Black.ttf"),
-    font("Geist-Regular.ttf"),
-    holidayLogoNow(),
-  ]);
-  const n = preview.itemCount;
-  const count = n === 0 ? "No wishes yet" : `${n} ${n === 1 ? "wish" : "wishes"}`;
+  const [fonts, holiday] = await Promise.all([geistFonts(), holidayLogoNow()]);
+  const count = wishCount(preview.itemCount);
   const tag = `data:image/svg+xml,${encodeURIComponent(tagSvg({ holiday }))}`;
   const owner = possessive(preview.ownerName);
 
@@ -105,12 +78,6 @@ export default async function Image({ params }: { params: Promise<{ token: strin
         <div style={{ display: "flex", fontSize: 30, fontWeight: 900, color: TEAL }}>{APP_DOMAIN}</div>
       </div>
     ),
-    {
-      ...size,
-      fonts: [
-        { name: "Geist", data: black, weight: 900, style: "normal" },
-        { name: "Geist", data: regular, weight: 400, style: "normal" },
-      ],
-    },
+    { ...size, fonts },
   );
 }

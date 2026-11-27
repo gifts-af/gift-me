@@ -9,6 +9,8 @@ describe("isPublicPath", () => {
     "/lists",
     "/login",
     "/share/abc",
+    // The list's Story image, shared to Instagram and opened signed out.
+    "/share/abc/story",
     "/auth/login",
     "/auth/callback",
     "/api/health",
