@@ -202,7 +202,6 @@ describe.skipIf(!stack)("placing and sweeping card orders (real local database, 
 
   it.each([
     ["a listed card code", "payment_failed", "card_needed", true],
-    ["bank approval needed", "card_verification_required", "card_needed", true],
     ["an unlisted 402", "something_new", "failed", false],
     ["the store refusing payment", "payment_declined", "failed", false],
   ])("a 402 with %s never becomes funds (AC-6)", async (_label, code, failure, cleared) => {
@@ -279,6 +278,51 @@ describe.skipIf(!stack)("placing and sweeping card orders (real local database, 
     expect(events("zinc.unauthorized")).toEqual([]);
   });
 
+  it.each(["card_verification_required", "stripe_error", "payment_method_required", "payment_missing", "app_key_missing"])(
+    "Zinc's %s is about our account, not the buyer's card: the round is held paused, the card kept, the owner alerted (AC-19)",
+    async (code) => {
+      const u = await newUser(true);
+      const r = await newRound(u, [2259, 1500]);
+      zinc.plan.set(urlOf(r.ideaIds[0]), [{ status: 402, code }]);
+      await buy(u, r);
+      expect(zinc.posts).toHaveLength(1);
+      expect((await orders(r.roundId)).map((o) => [o.status, o.hold_reason, o.failure_type])).toEqual([
+        ["held", "paused", null],
+        ["held", "paused", null],
+      ]);
+      expect(await roundRow(r.roundId)).toMatchObject({ status: "needs_attention", attention_reason: "paused" });
+      expect(await card(u)).toBe(`pm_${u}`);
+      expect(events("zinc.connect_unauthorized")).toEqual([expect.objectContaining({ round_id: r.roundId, reason: "account", code, alert: true })]);
+      expect(advanceRound).not.toHaveBeenCalled();
+    },
+  );
+
+  it("a key handle we didn't make is refused before any request (app_key_missing) and held paused", async () => {
+    const u = await newUser(true);
+    const r = await newRound(u);
+    await buy(u, r, { connectKey: Object.freeze({ kind: "zinc_connect_key" as const }) });
+    expect(zinc.requests).toEqual([]);
+    expect((await orders(r.roundId))[0]).toMatchObject({ status: "held", hold_reason: "paused" });
+    expect(await card(u)).toBe(`pm_${u}`);
+    expect(events("zinc.connect_unauthorized")).toEqual([expect.objectContaining({ reason: "account", code: "app_key_missing", alert: true })]);
+  });
+
+  it("an order Zinc already has failed for our account (found after a 409) ends failed, keeps the card and pauses the rest", async () => {
+    const u = await newUser(true);
+    const r = await newRound(u, [2259, 1500]);
+    await approvedOnly(u, r);
+    const [o] = await orders(r.roundId);
+    zinc.orders.set(o.id, { id: "zn_old", status: "order_failed", job_result: { success: false, error_type: "card_verification_required" } });
+    zinc.plan.set(urlOf(r.ideaIds[0]), [{ status: 409, code: "already_exists" }]);
+    await placeHeldForUser(u, deps());
+    expect((await orders(r.roundId)).map((x) => [x.status, x.hold_reason, x.failure_type])).toEqual([
+      ["failed", null, "failed"],
+      ["held", "paused", null],
+    ]);
+    expect(await card(u)).toBe(`pm_${u}`);
+    expect(events("zinc.connect_unauthorized")).toEqual([expect.objectContaining({ reason: "account", code: "card_verification_required", alert: true })]);
+  });
+
   it("no app key here holds the round paused with the same alert, and calls Zinc not at all (AC-19)", async () => {
     const u = await newUser(true);
     const r = await newRound(u);
@@ -325,6 +369,21 @@ describe.skipIf(!stack)("placing and sweeping card orders (real local database, 
     expect(lookups.filter((x) => x.ref === wo.id).map((x) => x.key)).toEqual([`zn_test_${wu}`]);
     // Neither was found: both are unconfirmed for the owner, and nothing was resent.
     expect(zinc.requests.filter((x) => x.method === "POST")).toEqual([]);
+  });
+
+  it("the sweep finding a card order failed for our own Zinc account ends it failed, keeps the card and alerts the owner", async () => {
+    const u = await newUser(true);
+    const r = await newRound(u);
+    zinc.plan.set(urlOf(r.ideaIds[0]), ["timeout"]);
+    await buy(u, r);
+    const [o] = await orders(r.roundId);
+    zinc.orders.set(o.id, { id: "zn_acct", status: "order_failed", job_result: { success: false, error_type: "card_verification_required" } });
+    await sweepStalePlacing(deps({ now: later() }));
+    expect((await orders(r.roundId))[0]).toMatchObject({ status: "failed", failure_type: "failed" });
+    expect(await card(u)).toBe(`pm_${u}`);
+    expect(events("zinc.connect_unauthorized")).toEqual([
+      expect.objectContaining({ order_id: o.id, reason: "account", code: "card_verification_required", alert: true }),
+    ]);
   });
 
   it("Zinc charging more than the approved maximum alerts the owner (AC-4)", async () => {

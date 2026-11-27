@@ -2,7 +2,7 @@
 // refuses any body without the payment; the decline codes; and Zinc's charge read back. Zinc is
 // faked (we don't own it).
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { CARD_CODES, failureTypeFor, isCardCode } from "../zinc/card-codes";
+import { ACCOUNT_CODES, CARD_CODES, failureTypeFor, isAccountCode, isCardCode } from "../zinc/card-codes";
 import type { ZincHttp } from "../zinc/client";
 import { alertIfOver, connectKey, createOrder, findOrderByReference, placedPrice, sendConnectOrder } from "../zinc/orders";
 import { placeWithRetry } from "../zinc/retry";
@@ -49,12 +49,23 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("card codes", () => {
   it("lists Zinc's documented card codes only (A1)", () => {
-    expect([...CARD_CODES].sort()).toEqual(
-      ["card_verification_required", "insufficient_funds", "invalid_payment_method", "payment_failed", "payment_method_required"].sort(),
-    );
+    expect([...CARD_CODES].sort()).toEqual(["insufficient_funds", "invalid_payment_method", "payment_failed"].sort());
     expect(isCardCode("payment_failed")).toBe(true);
     expect(isCardCode("payment_declined")).toBe(false);
     expect(isCardCode(undefined)).toBe(false);
+  });
+
+  it("codes about our own Zinc account or our own bug are not the buyer's card, and never card_declined", () => {
+    expect([...ACCOUNT_CODES].sort()).toEqual(
+      ["app_key_missing", "card_verification_required", "payment_method_required", "payment_missing", "stripe_error"].sort(),
+    );
+    for (const code of ACCOUNT_CODES) {
+      expect(isAccountCode(code)).toBe(true);
+      expect(isCardCode(code)).toBe(false);
+      expect(failureTypeFor(code, "connect")).toBe("failed");
+    }
+    expect(isAccountCode("payment_failed")).toBe(false);
+    expect(isAccountCode(undefined)).toBe(false);
   });
 
   it("a card code on a card order is card_declined; the store refusing payment stays failed; never funds (AC-6)", () => {

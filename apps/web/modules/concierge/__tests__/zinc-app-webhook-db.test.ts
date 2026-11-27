@@ -286,6 +286,27 @@ describe.skipIf(!stack)("the app's Zinc webhook (real local database, fake Zinc)
     expect(advanceRound).toHaveBeenCalledWith(o.roundId);
   });
 
+  it("order.failed with a code about our own Zinc account ends the gift failed, keeps the card and alerts the owner", async () => {
+    const u = await newUser(true);
+    const o = await newOrder(u, { connect: true });
+    const body = JSON.stringify({ event: "order.failed", order_id: o.zincId, data: { error_type: "stripe_error" } });
+    expect(await sendApp(body)).toEqual({ status: 200 });
+    expect(await orderRow(o.orderId)).toMatchObject({ status: "failed", failure_type: "failed" });
+    expect(await savedCard(u.userId)).toBe(`pm_${u.userId}`);
+    expect(events("zinc.connect_unauthorized")).toEqual([
+      expect.objectContaining({ order_id: o.orderId, reason: "account", code: "stripe_error", alert: true }),
+    ]);
+  });
+
+  it("order.placed keeps the event's prices where Zinc's order read back has none, Zinc's charge still saved", async () => {
+    const u = await newUser(true);
+    const o = await newOrder(u, { connect: true });
+    zinc.orders.set(o.orderId, { id: o.zincId, status: "order_placed", job_result: { success: true }, connect: { final_charge: 2564 } });
+    const body = JSON.stringify({ event: "order.placed", order_id: o.zincId, data: { price_components: { subtotal: 2100, shipping: 0, tax: 159, total: 2259 } } });
+    expect(await sendApp(body)).toEqual({ status: 200 });
+    expect(await orderRow(o.orderId)).toMatchObject({ status: "placed", total_cents: 2259, final_charge_cents: 2564, provider_order_id: o.zincId });
+  });
+
   it("order.cancelled after the charge tells the buyer through the store-cancel path (AC-9)", async () => {
     const u = await newUser(true);
     const o = await newOrder(u, { connect: true });
@@ -341,7 +362,7 @@ describe.skipIf(!stack)("the app's Zinc webhook (real local database, fake Zinc)
     expect(alerts()).toEqual([]);
   });
 
-  it("a card order's id on a buyer's own webhook changes nothing and doesn't alert, theirs or another buyer's", async () => {
+  it("a card order's id on a buyer's own webhook changes nothing, theirs or another buyer's, and alerts: the app webhook was replaced", async () => {
     // A wallet buyer (the owner) whose Zinc account is the app's: their key can read card orders too.
     const owner = await newUser(false);
     const cardBuyer = await newUser(true);
@@ -359,7 +380,10 @@ describe.skipIf(!stack)("the app's Zinc webhook (real local database, fake Zinc)
       }
     }
     expect(await Promise.all([others, unsaved, own].map((o) => orderRow(o.orderId)))).toEqual(rows);
-    expect(alerts()).toEqual([]);
+    const card = events("zinc.card_event_on_buyer_webhook");
+    expect(card).toHaveLength(9);
+    for (const e of card) expect(e).toMatchObject({ user_id: owner.userId, alert: true });
+    expect(alerts().filter((e) => e.event !== "zinc.card_event_on_buyer_webhook")).toEqual([]);
   });
 
   it("wallet events on the app webhook are ignored", async () => {

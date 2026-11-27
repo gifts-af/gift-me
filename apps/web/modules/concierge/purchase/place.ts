@@ -26,7 +26,7 @@ import {
 import { errorFields, logEvent } from "@/lib/log";
 import { hasPaidFeatures } from "../paid-features";
 import { getWallet } from "../zinc/account";
-import { failureTypeFor } from "../zinc/card-codes";
+import { failureTypeFor, isAccountCode } from "../zinc/card-codes";
 import { ZincError } from "../zinc/client";
 import { alertIfOver, findOrderByReference, placedPrice, type ConnectKey } from "../zinc/orders";
 import { placeWithRetry } from "../zinc/retry";
@@ -372,6 +372,9 @@ export async function placeRound(
   const results: Result[] = [];
   let rest: "unsent" | "insufficient" | null = null;
   let unauthorized = false;
+  // A code about our own Zinc account or our own bug (ACCOUNT_CODES) on a card order: no new card
+  // fixes it, so the rest are unsent and the round is held paused for the owner, like a 401.
+  let accountCode: string | null = null;
   const mode = card ? "connect" : "zinc_wallet";
   // A card order is charged to the card it was approved with, never the account's current one,
   // and with its own saved margin. Anything missing is refused by sendConnectOrder before it's sent.
@@ -405,6 +408,10 @@ export async function placeRound(
       const failure = failureTypeFor(code, mode);
       results.push({ order_id: o.id, outcome: "rejected", failure_type: failure });
       if (failure === "card_declined") rest = "unsent";
+      if (card && isAccountCode(code)) {
+        accountCode = code;
+        rest = "unsent";
+      }
     };
     try {
       const res = await placeWithRetry(deps.http, key, input, retry);
@@ -417,7 +424,12 @@ export async function placeRound(
         results.push({ order_id: o.id, outcome: "sent", provider_order_id: res.providerOrderId });
       }
     } catch (e) {
-      if (e instanceof ZincError && e.kind === "rejected") {
+      if (e instanceof ZincError && e.kind === "rejected" && card && isAccountCode(e.code)) {
+        // Refused before Zinc made anything, for a reason that's ours: sent again once fixed.
+        results.push({ order_id: o.id, outcome: "unsent" });
+        rest = "unsent";
+        accountCode = e.code;
+      } else if (e instanceof ZincError && e.kind === "rejected") {
         // A synchronous 4xx on the first try: nothing was created at Zinc. After any ambiguous
         // try placeWithRetry only throws `unavailable`, so this never follows a timeout.
         rejected(e.code);
@@ -446,7 +458,11 @@ export async function placeRound(
       ...(res.available_cents !== undefined ? { available_cents: res.available_cents } : {}),
     });
   }
-  if (unauthorized && card) {
+  if (accountCode !== null) {
+    // Our Zinc account or our own code is at fault, not the buyer's card: paused, the owner alerted.
+    logEvent("zinc.connect_unauthorized", { ...ids, reason: "account", code: accountCode, alert: true });
+    status = await roundRpc(deps, "gate_held_orders", { p_round_id: roundId, p_reason: "paused" });
+  } else if (unauthorized && card) {
     // Nobody is asked to fix their setup: paused, and the owner alerted (design/operations.md).
     logEvent("zinc.connect_unauthorized", { ...ids, reason: "refused", alert: true });
     status = await roundRpc(deps, "gate_held_orders", { p_round_id: roundId, p_reason: "paused" });
@@ -558,6 +574,10 @@ export async function sweepStalePlacing(deps: PurchaseDeps): Promise<number> {
       });
       if (settled.error) fail("Settling the order failed", settled.error);
       if (found.status === "placed" && o.funding_mode === "connect") alertIfOver(o, price);
+      if (found.status === "failed" && o.funding_mode === "connect" && isAccountCode(found.errorType)) {
+        // Our Zinc account, not the buyer's card: the owner fixes it (design/operations.md > Alerts).
+        logEvent("zinc.connect_unauthorized", { ...ids, reason: "account", code: found.errorType, alert: true });
+      }
       logEvent("order.swept", { ...ids, status: found.status });
       done++;
       // Tell the buyer now, the way the webhook does: the gift is ordered, or a failure needs them
