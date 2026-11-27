@@ -173,8 +173,8 @@ describe("failed while the round is open", () => {
 
 describe("held card orders", () => {
   it.each([
-    ["hold:1", "address"],
-    ["hold:1", "setup"],
+    ["hold:1:notice", "address"],
+    ["hold:1:notice", "setup"],
     ["hold_trouble", "retry"],
   ] as const)("AC-20: %s (%s) names the GiftsAF fee, never Zinc", async (step, reason) => {
     const t = setup([order({ status: "held", holdReason: reason, sent: false, finalChargeCents: null, totalCents: null })]);
@@ -188,7 +188,7 @@ describe("held card orders", () => {
   it("a wallet hold still names Zinc's fee", async () => {
     const t = setup([order({ status: "held", holdReason: "address", fundingMode: "zinc_wallet", finalChargeCents: null })]);
     const round = { ...t.round, attentionReason: "address", shipByDeadline: "2030-03-03" } as ClaimedRound;
-    await sendEmail("hold:1", round, await t.deps.store.roundContext("r1"), t.deps, {});
+    await sendEmail("hold:1:notice", round, await t.deps.store.roundContext("r1"), t.deps, {});
     expect(t.said()).toContain("its price plus Zinc's $1 fee");
   });
 });
