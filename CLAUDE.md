@@ -29,7 +29,7 @@ In force until the Gift Concierge MVP is finished; the owner lifts it. Where it 
 4. **At most 3 tickets in progress**, original-plan (wave) tickets first. Card payments (ALL-98) come last.
 
 **Exceptions (owner):** ALL-179, opening list sign-up before Christmas (2026-11-25); ALL-183, sharing your sizes with people who claim from your list (2026-11-26); ALL-58, launch numbers in the health email and Vercel Web Analytics and Speed Insights, for the launch announcement (2026-11-26); ALL-184, asking for a missing size when a gift that needs one is added (2026-11-26); ALL-98, card payments with the GiftsAF fee, built and merged now but switched off until a real card order passes (2026-11-27); ALL-185, ALL-186, ALL-187: a way out of a failed gift, adding facts, and summary rows for What we know and Gifts in progress (2026-11-27). ALL-188, one tap adds a gift from a link (2026-11-27).
-**Exceptions (Jim):** ALL-180, friends' lists, then sharing a list back (2026-11-25); ALL-182, sharing your birthday from Settings (2026-11-25); fast-tracked as ALL-000: the Feedback corner link (#154), opening on your own list (#156) (2026-11-25), and the Add Extension button (#194) (2026-11-27).
+**Exceptions (Jim):** ALL-180, friends' lists, then sharing a list back (2026-11-25); ALL-182, sharing your birthday from Settings (2026-11-25); fast-tracked as ALL-000: the Feedback corner link (#154), opening on your own list (#156) (2026-11-25), and the Add Extension button (#194) (2026-11-27); ALL-189, a bra size and the birthday note in the share box (2026-11-27).
 
 ### How we build
 
