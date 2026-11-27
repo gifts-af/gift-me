@@ -21,7 +21,10 @@ const gift = (roundId: string, over: object = {}) => ({
   ...over,
 });
 
-beforeEach(() => giftsInProgress.mockReset());
+// Braces: a function returned from beforeEach is run as its teardown.
+beforeEach(() => {
+  giftsInProgress.mockReset();
+});
 
 describe("GiftsList, the gifts page", () => {
   it("lists every gift as a link, in the order given, with the person, occasion and status in words (AC-3)", async () => {
@@ -31,8 +34,7 @@ describe("GiftsList, the gifts page", () => {
       gift("r3", { personName: "Mom", occasionKind: null, line: { text: "Ordered", tone: "muted", needsBuyer: false } }),
     ]);
     render(await GiftsList());
-    const region = screen.getByRole("region", { name: "Gifts in progress" });
-    const links = within(region).getAllByRole("link");
+    const links = within(screen.getByRole("list")).getAllByRole("link");
     expect(links.map((l) => [l.getAttribute("href"), l.textContent])).toEqual([
       ["/rounds/r1", "Jenn · Christmas 3 ideas ready · Choose by Tue, Dec 15"],
       ["/rounds/r2", "Uncle Bob · Christmas Needs an address"],
@@ -44,10 +46,20 @@ describe("GiftsList, the gifts page", () => {
     expect(giftsInProgress.mock.calls[0][1].personId).toBeUndefined();
   });
 
-  it("says so when there are none, or they can't be read", async () => {
+  it("says so when there are none", async () => {
     giftsInProgress.mockResolvedValue([]);
     render(await GiftsList());
     expect(screen.getByText("No gifts in progress.")).toBeInTheDocument();
     expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it("says it couldn't load them when the read fails, never that there are none", async () => {
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    giftsInProgress.mockRejectedValue(new Error("boom"));
+    render(await GiftsList());
+    expect(screen.getByText("Couldn't load your gifts. Try again.")).toBeInTheDocument();
+    expect(screen.queryByText("No gifts in progress.")).toBeNull();
+    expect(screen.queryByRole("link")).toBeNull();
+    log.mockRestore();
   });
 });

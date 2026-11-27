@@ -23,7 +23,7 @@ const gift = (roundId: string, over: object = {}) => ({
   ...over,
 });
 const fix = { text: "Needs a fix · Choose by Tue, Dec 15", tone: "warn", needsBuyer: true };
-const noIdeas = { text: "No ideas found yet", tone: "warn", needsBuyer: false };
+const late = { text: "May arrive late · due Sun, Dec 27", tone: "warn", needsBuyer: false };
 const ordered = { text: "Ordered", tone: "muted", needsBuyer: false };
 
 beforeEach(() => {
@@ -36,19 +36,24 @@ describe("GiftsSection", () => {
     giftsInProgress.mockResolvedValue([
       gift("r1"),
       gift("r2", { line: fix }),
-      gift("r3", { line: noIdeas }),
+      gift("r3", { line: late }),
       gift("r4", { line: ordered }),
     ]);
     render(await GiftsSection());
-    const region = screen.getByRole("region", { name: "Gifts in progress" });
-    const links = within(region).getAllByRole("link");
+    const links = screen.getAllByRole("link");
     expect(links).toHaveLength(1);
     expect(links[0]).toHaveAttribute("href", "/gifts");
     expect(links[0]).toHaveTextContent(/^Gifts in progress4 · 2 need you$/);
     expect(links[0]).toHaveClass("min-h-11");
-    expect(within(region).getByText("2 need you")).toHaveClass("text-warning");
+    expect(within(links[0]).getByText("2 need you")).toHaveClass("text-warning");
     // No round is listed here any more.
-    expect(within(region).queryByText(/Jenn/)).toBeNull();
+    expect(screen.queryByText(/Jenn/)).toBeNull();
+  });
+
+  it("is just 1 for one gift that doesn't need you", async () => {
+    giftsInProgress.mockResolvedValue([gift("r1", { line: ordered })]);
+    render(await GiftsSection());
+    expect(screen.getByRole("link")).toHaveTextContent(/^Gifts in progress1$/);
   });
 
   it("says one needs you", async () => {
@@ -58,7 +63,7 @@ describe("GiftsSection", () => {
   });
 
   it("is just the count when none need you", async () => {
-    giftsInProgress.mockResolvedValue([gift("r1", { line: noIdeas }), gift("r2", { line: ordered })]);
+    giftsInProgress.mockResolvedValue([gift("r1", { line: late }), gift("r2", { line: ordered })]);
     render(await GiftsSection());
     expect(screen.getByRole("link")).toHaveTextContent(/^Gifts in progress2$/);
     expect(screen.queryByText(/need/)).toBeNull();

@@ -11,7 +11,7 @@ const TONES: Record<GiftInProgress["line"]["tone"], string> = {
   muted: "text-muted-foreground",
 };
 
-/** One row per gift in progress, each opening its round. On Home a row leads with the person. */
+/** One row per gift in progress, each opening its round. On the gifts page a row leads with the person. */
 export function GiftsInProgress({ gifts, withPerson }: { gifts: GiftInProgress[]; withPerson: boolean }) {
   return (
     <ul className="divide-y divide-border rounded-xl border border-border">

@@ -40,7 +40,7 @@ const ORDERED = round({ status: "ordered" });
 describe("a round still looking for ideas", () => {
   it.each([
     ["looking", "Looking for ideas", "muted", false],
-    ["told", "No ideas found yet", "warn", false],
+    ["told", "No ideas found yet", "warn", true],
     ["address", "Needs an address", "warn", true],
   ] as const)("%s", (waiting, says, tone, needsBuyer) => {
     for (const status of ["scheduled", "generating", "needs_address"]) {
