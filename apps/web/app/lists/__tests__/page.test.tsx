@@ -74,7 +74,7 @@ describe("My list's note under Share", () => {
 });
 
 describe("which sizes adding a gift may ask for (ALL-184)", () => {
-  const none = { top: null, pants: null, dress: null, bra: null, shoe: null, ring: null, hat: null, color: null };
+  const none = { top: null, pants: null, dress: null, shoe: null, ring: null, hat: null, color: null };
   beforeEach(() => {
     t.list = {};
     t.sizesOn = true;
@@ -82,9 +82,9 @@ describe("which sizes adding a gift may ask for (ALL-184)", () => {
   });
 
   it("is every size not saved yet, never favorite color, for the signed-in user", async () => {
-    expect((await appProps()).sizeAsk).toMatchObject({ missing: ["top", "pants", "dress", "bra", "ring", "hat"], userId: "u1" });
+    expect((await appProps()).sizeAsk).toMatchObject({ missing: ["top", "pants", "dress", "ring", "hat"], userId: "u1" });
     t.sizes = { status: "loaded", items: none };
-    expect((await appProps()).sizeAsk?.missing).toEqual(["top", "pants", "dress", "bra", "shoe", "ring", "hat"]);
+    expect((await appProps()).sizeAsk?.missing).toEqual(["top", "pants", "dress", "shoe", "ring", "hat"]);
   });
 
   it("is none when sizes are switched off or couldn't be read", async () => {

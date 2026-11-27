@@ -3,7 +3,6 @@ export const SIZE_KINDS = [
   { kind: "top", label: "Shirt or top" },
   { kind: "pants", label: "Pants" },
   { kind: "dress", label: "Dress" },
-  { kind: "bra", label: "Bra" },
   { kind: "shoe", label: "Shoe" },
   { kind: "ring", label: "Ring" },
   { kind: "hat", label: "Hat" },

@@ -2837,8 +2837,6 @@ export type Database = {
       };
       account_sizes: {
         Row: {
-          bra: string | null;
-          bra_shared: boolean;
           color: string | null;
           color_shared: boolean;
           created_at: string;
@@ -2859,8 +2857,6 @@ export type Database = {
         };
         ComputedFields: never;
         Insert: {
-          bra?: string | null;
-          bra_shared?: boolean;
           color?: string | null;
           color_shared?: boolean;
           created_at?: string;
@@ -2880,8 +2876,6 @@ export type Database = {
           user_id?: string;
         };
         Update: {
-          bra?: string | null;
-          bra_shared?: boolean;
           color?: string | null;
           color_shared?: boolean;
           created_at?: string;
