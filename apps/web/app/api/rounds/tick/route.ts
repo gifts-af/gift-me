@@ -2,9 +2,9 @@ import { buyingWiring } from "@/lib/wiring";
 import { appSettingInt } from "@/lib/app-settings";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { runTick, tickHeartbeat, type TickHeartbeat } from "@/modules/concierge";
-import { removeDeletedPhotos } from "@/modules/lists";
+import { removeDeletedPhotos, runPhotoRepair } from "@/modules/lists";
 import { queueSendJobs } from "../queue";
-import { handleTick, isTestClock } from "./tick";
+import { handleTick, handleTickStep, isTestClock, onlyStep, runHousekeeping } from "./tick";
 
 // Placing gifts at Zinc can run for a while: one zinc_place_budget_ms (45 s by default) for the
 // run, plus a request already in flight with its retries. 300 s is the most Vercel's Fluid
@@ -17,6 +17,23 @@ export const maxDuration = 300;
 export async function GET(request: Request) {
   const vercelEnv = process.env.VERCEL_ENV;
   const cronSecret = process.env.CRON_SECRET;
+  const zincBase = process.env.ZINC_API_BASE;
+  const zincKey = process.env.ZINC_API_KEY;
+  const zinc = zincBase && zincKey ? { base: zincBase, key: zincKey } : null;
+  // Housekeeping after the rounds, in order: photos of removed gifts (ALL-78), after the rounds
+  // so a storage problem can't touch them; then gifts with a link but no usable photo, tried
+  // again (photo_repair_enabled switches it off).
+  const housekeeping = {
+    photo_cleanup: () => {
+      const admin = createAdminClient();
+      return removeDeletedPhotos(admin, (key) => appSettingInt(key, admin));
+    },
+    photo_repair: () => runPhotoRepair(createAdminClient(), zinc),
+  };
+
+  // ?only=photo_repair forces just that step, without the day's rounds; any other value runs nothing.
+  if (onlyStep(request) !== null) return handleTickStep(request, { cronSecret }, { photo_repair: housekeeping.photo_repair });
+
   return handleTick(
     request,
     { cronSecret, vercelEnv },
@@ -26,11 +43,7 @@ export async function GET(request: Request) {
       const sendJobs = queueSendJobs(cronSecret);
       return runTick((await buyingWiring(now, process.env, {}, { sendJobs, testClock: isTestClock(vercelEnv) })).engine);
     },
-    // Photos of removed gifts (ALL-78), after the rounds so a storage problem can't touch them.
-    () => {
-      const admin = createAdminClient();
-      return removeDeletedPhotos(admin, (key) => appSettingInt(key, admin));
-    },
+    () => runHousekeeping(housekeeping),
     lazyHeartbeat(),
   );
 }

@@ -45,10 +45,50 @@ export async function handleTick(
   // Housekeeping after the rounds: its own failure never changes the tick's result.
   try {
     await cleanup?.();
-  } catch {
-    logEvent("tick_cleanup_failed", {});
+  } catch (err) {
+    logEvent("tick_cleanup_failed", errorFields(err));
   }
   return Response.json({ ok: true, ...summary });
+}
+
+/** The `only` query parameter, or null when there's none. */
+export const onlyStep = (request: Request): string | null => new URL(request.url).searchParams.get("only");
+
+export type HousekeepingSteps = Record<string, () => Promise<unknown>>;
+
+/**
+ * Runs the housekeeping steps in order. One step's failure is logged with its name and never
+ * stops the next.
+ */
+export async function runHousekeeping(steps: HousekeepingSteps): Promise<void> {
+  for (const [step, run] of Object.entries(steps)) {
+    try {
+      await run();
+    } catch (err) {
+      logEvent("tick_cleanup_failed", { step, ...errorFields(err) });
+    }
+  }
+}
+
+/**
+ * `?only=<step>`: one housekeeping step on its own, behind the same secret, so it can be forced on
+ * production without running the day's rounds again (a forced tick runs everyone's due rounds).
+ * An unknown step is refused and nothing runs.
+ */
+export async function handleTickStep(request: Request, env: Env, steps: HousekeepingSteps): Promise<Response> {
+  if (!env.cronSecret || request.headers.get("authorization") !== `Bearer ${env.cronSecret}`) {
+    return Response.json({ ok: false }, { status: 401 });
+  }
+  const step = onlyStep(request);
+  const run = step !== null && Object.hasOwn(steps, step) ? steps[step] : null;
+  if (!run) return Response.json({ ok: false, error: "unknown step" }, { status: 400 });
+  try {
+    const result = await run();
+    return Response.json({ ok: true, result });
+  } catch (err) {
+    logEvent("tick_cleanup_failed", { step, ...errorFields(err) });
+    return Response.json({ ok: false }, { status: 500 });
+  }
 }
 
 /** A heartbeat write that fails is an alert, but never changes the tick's own result. */
