@@ -268,6 +268,49 @@ export async function setRoundBudget(
   });
 }
 
+// ─── a failed gift's ways out ────────────────────────────────────────────────
+
+export type DropResult = { ok: true } | { ok: false; error: "not_found" | "busy" | "not_open" | "not_current" | "other_gifts" };
+
+const DROP_REFUSALS: Record<string, Extract<DropResult, { ok: false }>["error"]> = {
+  "lease not held": "busy",
+  "not open": "not_open",
+  "not current": "not_current",
+  "other gifts": "other_gifts",
+};
+
+/**
+ * "Pick a different gift" on a failed gift: drop_failed_order resolves it and puts the round back
+ * to choosing, under the round's lease. Only when it's the round's only gift still in play (see
+ * the migration); otherwise each gift is fixed on its own.
+ */
+export async function dropFailedOrder(input: { userId: string; roundId: string; orderId: string }, deps: DbDeps): Promise<DropResult> {
+  const { userId, roundId, orderId } = input;
+  if (!isId(orderId)) return { ok: false, error: "not_current" };
+  const round = await ownRound(deps, roundId, userId);
+  if (!round) return { ok: false, error: "not_found" };
+
+  const lock = await claimRoundNow(deps, roundId);
+  if (!lock) return { ok: false, error: round.status === "needs_attention" && round.closed_at === null ? "busy" : "not_open" };
+
+  return withLease(deps, roundId, lock, async (): Promise<DropResult> => {
+    const { error } = await concierge(deps).rpc("drop_failed_order", {
+      p_round_id: roundId,
+      p_user_id: userId,
+      p_lock: lock,
+      p_failed_order_id: orderId,
+    });
+    if (error) {
+      const why = DROP_REFUSALS[refusal(error, "drop_failed_order") ?? ""];
+      if (!why) fail("Dropping the failed gift failed", error);
+      logEvent("order.drop_refused", { round_id: roundId, user_id: userId, order_id: orderId, reason: why });
+      return { ok: false, error: why };
+    }
+    logEvent("order.dropped", { round_id: roundId, user_id: userId, order_id: orderId });
+    return { ok: true };
+  });
+}
+
 // ─── page reads ──────────────────────────────────────────────────────────────
 
 /** Whose round this is, and nothing else (AC-3, S4): the only service-role read for the page. */

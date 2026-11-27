@@ -1728,6 +1728,15 @@ export type Database = {
           user_id: string;
         }[];
       };
+      drop_failed_order: {
+        Args: {
+          p_failed_order_id: string;
+          p_lock: string;
+          p_round_id: string;
+          p_user_id: string;
+        };
+        Returns: undefined;
+      };
       due_rounds: {
         Args: { p_now: string };
         Returns: {

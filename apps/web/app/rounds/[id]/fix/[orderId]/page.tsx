@@ -11,7 +11,7 @@ import { APP_NAME } from "@/lib/brand";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { isId } from "@/modules/concierge";
 import { settingInt } from "@/lib/wiring";
-import { checkPriceAction, replaceAction } from "../../../actions";
+import { checkPriceAction, pickAgainAction, replaceAction, skipRoundAction } from "../../../actions";
 import { OtherAccount } from "../../../access";
 import { loadRound, shipToChoices } from "../../../load";
 import { FixScreen } from "./fix-screen";
@@ -83,6 +83,10 @@ async function Loaded({ params }: { params: Params }) {
   const committed = committedSpendCents(
     view.liveOrders.map((o) => ({ id: o.id, status: "placing", maxPriceCents: o.maxPriceCents, finalTotalCents: o.totalCents, feeCents: o.feeCents })),
   );
+  // The ways out besides buying (drop_failed_order, cancel_held): skipping only while nothing in
+  // the round is held, being ordered or on its way; picking again only when this is the one gift.
+  const canSkip = view.liveOrders.length === 0;
+  const canPick = canSkip && view.round.status === "needs_attention" && view.failedOrders.length === 1;
   const db = createAdminClient();
   const [lookupCents, feeCents, choices] = await Promise.all([
     settingInt(db, "zinc_lookup_cents"),
@@ -112,6 +116,11 @@ async function Loaded({ params }: { params: Params }) {
         returnPath={`/rounds/${id}/fix/${orderId}`}
         checkPriceAction={checkPriceAction}
         replaceAction={replaceAction}
+        occasionKind={view.round.occasionKind}
+        canPick={canPick}
+        canSkip={canSkip}
+        pickAgainAction={pickAgainAction}
+        skipRoundAction={skipRoundAction}
       />
     </>
   );

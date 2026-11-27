@@ -167,8 +167,8 @@ export type { ZincHttp } from "./zinc/client";
 // A wallet's balance at Zinc; the health check reads the app's own (T17).
 export { getWallet } from "./zinc/account";
 // The round screen (ALL-29): "None of these", a budget typed on an open round, and the page reads.
-export { rejectionOutlook, rejectRoundIdeas, roundAccess, roundView, setRoundBudget } from "./rounds/approval";
-export type { BuyYourself, RejectInput, RejectionOutlook, RejectResult, RoundPageIdea, RoundPageOrder, RoundPageView } from "./rounds/approval";
+export { dropFailedOrder, rejectionOutlook, rejectRoundIdeas, roundAccess, roundView, setRoundBudget } from "./rounds/approval";
+export type { BuyYourself, DropResult, RejectInput, RejectionOutlook, RejectResult, RoundPageIdea, RoundPageOrder, RoundPageView } from "./rounds/approval";
 // Recording what costed calls cost.
 export { costRecorder } from "./costs/record";
 export type { Cost, CostKind, RecordCost } from "./costs/record";
