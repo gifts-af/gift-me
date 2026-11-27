@@ -9,7 +9,7 @@ import { APP_NAME } from "@/lib/brand";
 import { todayForRequest } from "@/lib/today";
 import { getPerson, listPeople } from "@/modules/concierge";
 import { SharedList, getSharedList, getSharePreview, type SharedListData } from "@/modules/lists";
-import { linkFromShareAction, unlinkFromShareAction } from "./actions";
+import { addFromShareAction, linkFromShareAction, unlinkFromShareAction } from "./actions";
 import { ListCard } from "./list-card";
 
 // A share link is private to whoever has it: keep it out of search (ALL-123).
@@ -60,6 +60,7 @@ async function SharedListLoader({ params }: PageProps<"/share/[token]">) {
       token={token}
       nav={list.viewer.signedIn ? <AppNav /> : undefined}
       top={<Card list={list} token={token} />}
+      addToMine={addFromShareAction}
     />
   );
 }

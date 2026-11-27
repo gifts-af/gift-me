@@ -26,8 +26,8 @@ export type ExtensionAddInput = {
   itemId: string;
   name: string;
   priceCents: number;
-  /** productLink(pageUrl, canonicalUrl): the canonical link keeping the page's variant, an http(s) link. */
-  link: string;
+  /** productLink(pageUrl, canonicalUrl): the canonical link keeping the page's variant, an http(s) link. Null only for a gift copied from a shared list that has none. */
+  link: string | null;
   productId: string | null;
   confirmLikely: boolean;
   photo: Blob | null;
@@ -35,13 +35,15 @@ export type ExtensionAddInput = {
   photoMaxBytes: number;
   /** list_max_items, read by the route (ALL-142). */
   maxItems: number;
+  /** The event logged; a copy from a shared list logs lists.added_from_share. */
+  event?: string;
 };
 
 export type AddItemArgs = {
   itemId: string;
   name: string;
   priceCents: number;
-  productUrl: string;
+  productUrl: string | null;
   productId: string | null;
   photoUrl: string | null;
   confirmLikely: boolean;
@@ -188,10 +190,11 @@ function toResult(row: AddItemRow, itemId: string): ExtensionAddResult {
  * Adds one gift to the top of the user's list. With a photo: queue it, upload
  * it, then add; any outcome but "added", or an error before the add, deletes
  * the upload.
- * Logs one list.extension_add event, ids only (AC-22, E6).
+ * Logs one list.extension_add event (or input.event), ids only (AC-22, E6).
  */
 export async function addFromExtension(store: ExtensionAddStore, input: ExtensionAddInput): Promise<ExtensionAddResult> {
   const { itemId } = input;
+  const event = input.event ?? "list.extension_add";
   const ids = { user_id: store.userId };
   let uploaded = false;
   let addStarted = false;
@@ -233,7 +236,7 @@ export async function addFromExtension(store: ExtensionAddStore, input: Extensio
 
     const result = toResult(row, itemId);
     if (row.outcome !== "added") await dropPhoto();
-    logEvent("list.extension_add", {
+    logEvent(event, {
       outcome: row.outcome,
       ...ids,
       ...(row.listId ? { list_id: row.listId } : {}),
@@ -243,7 +246,7 @@ export async function addFromExtension(store: ExtensionAddStore, input: Extensio
   } catch (e) {
     if (!addStarted) await dropPhoto();
     // E6: the error's type and Postgres code only; its message can quote the gift.
-    logEvent("list.extension_add", {
+    logEvent(event, {
       outcome: "failed",
       ...ids,
       item_id: itemId,
