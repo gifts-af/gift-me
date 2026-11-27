@@ -19,7 +19,7 @@ vi.stubGlobal(
 );
 
 const NOTE = "Optional. Shared ones are shown to anyone with your list link when they go to claim a gift.";
-const EMPTY = { top: null, pants: null, dress: null, shoe: null, ring: null, hat: null, color: null };
+const EMPTY = { top: null, pants: null, dress: null, bra: null, shoe: null, ring: null, hat: null, color: null };
 const items = (part: Partial<Record<keyof typeof EMPTY, { value: string; shared: boolean }>>) => ({ ...EMPTY, ...part });
 
 function setup(props: Partial<Parameters<typeof SizesForm>[0]> = {}) {
@@ -32,14 +32,14 @@ function setup(props: Partial<Parameters<typeof SizesForm>[0]> = {}) {
 const button = (name: string) => screen.queryByRole("button", { name });
 
 describe("SizesForm", () => {
-  it("shows seven boxes in order, each with a Share switch, and the note (AC-2)", () => {
+  it("shows eight boxes in order, each with a Share switch, and the note (AC-2)", () => {
     setup();
     expect(screen.getByText(NOTE)).toBeVisible();
     const labels = screen.getAllByRole("textbox").map((el) => el.id);
-    expect(labels).toEqual(["top", "pants", "dress", "shoe", "ring", "hat", "color"].map((k) => `size-${k}`));
+    expect(labels).toEqual(["top", "pants", "dress", "bra", "shoe", "ring", "hat", "color"].map((k) => `size-${k}`));
     expect(screen.getByLabelText("Shirt or top")).toBeVisible();
     expect(screen.getByLabelText("Favorite color")).toBeVisible();
-    expect(screen.getAllByRole("switch")).toHaveLength(7);
+    expect(screen.getAllByRole("switch")).toHaveLength(8);
     expect(button("Remove all")).toBeNull();
   });
 

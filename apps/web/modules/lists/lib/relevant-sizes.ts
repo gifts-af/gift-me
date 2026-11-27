@@ -4,7 +4,8 @@ import { SIZE_KINDS, type SharedSize, type SizeKind } from "@/lib/size-kinds";
 // color), so a "Ring Light" shows only ring size. The phrase rules below exist
 // to keep wrong hits from hiding a size the claimer needs.
 const WORDS: Record<Exclude<SizeKind, "color">, string[]> = {
-  shoe: ["shoe", "sneaker", "boot", "slipper", "sandal", "loafer", "heel", "cleat"],
+  // Socks are bought by shoe size.
+  shoe: ["shoe", "sneaker", "boot", "slipper", "sandal", "loafer", "heel", "cleat", "sock"],
   top: [
     "shirt", "tshirt", "tee", "sweater", "sweatshirt", "hoodie", "jacket", "coat",
     "fleece", "vest", "blouse", "polo", "top", "pullover", "cardigan", "pajama", "onesie",
@@ -14,6 +15,8 @@ const WORDS: Record<Exclude<SizeKind, "color">, string[]> = {
     "sweatpants", "skirt",
   ],
   dress: ["dress", "gown"],
+  // Whole words only, so "bracelet", "brand" and "braid" never match.
+  bra: ["bra", "bralette"],
   ring: ["ring"],
   hat: ["hat", "cap", "beanie", "beret"],
 };
@@ -64,7 +67,7 @@ export function sizeKindsFor(giftName: string): SizeKind[] {
     if (!kind) return;
     if (kind === "dress") {
       // "Dress Shirt" / "Dress Shoes" / "Dress Pants" are not dresses; the next
-      // word counts on its own. "Dress Socks" and the like match nothing.
+      // word counts on its own. "Dress Socks" counts only as socks.
       const next = kinds[i + 1];
       if (next === "top" || next === "shoe" || next === "pants") return;
       if (isAny(words[i + 1], DRESS_MODIFIED)) return;

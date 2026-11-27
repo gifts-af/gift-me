@@ -3,7 +3,7 @@
 -- lists.owner_sizes; the list itself never has them.
 begin;
 \ir _helpers.psql
-select plan(33);
+select plan(35);
 
 select tests.create_user('sam@example.com', 'Sam') as sam \gset
 select tests.create_user('buyer@example.com') as buyer \gset
@@ -36,11 +36,13 @@ select throws_ok($q$insert into public.account_sizes (top) values (E'M\x7fL')$q$
 select throws_ok($q$insert into public.account_sizes (top) values ('')$q$, '23514', null, 'an empty value is refused');
 select throws_ok($q$insert into public.account_sizes (top) values (' M')$q$, '23514', null, 'an untrimmed value is refused');
 select lives_ok($q$insert into public.account_sizes (top) values (repeat('😀', 30))$q$, '30 emoji are fine');
+select throws_ok('insert into public.account_sizes (bra_shared) values (true)', '23514', null, 'sharing a bra size without a value is refused');
+select throws_ok($q$insert into public.account_sizes (bra) values (' 34B')$q$, '23514', null, 'an untrimmed bra size is refused');
 select lives_ok($q$delete from public.account_sizes$q$, 'cleared');
 
 select lives_ok(
-  $q$insert into public.account_sizes (top, top_shared, pants, dress, dress_shared, shoe, shoe_shared, ring, hat, hat_shared, color, color_shared)
-     values ('M', true, '32x30', 'unshared dress', false, '9.5', true, '7', 'S', true, 'Teal', true)$q$,
+  $q$insert into public.account_sizes (top, top_shared, pants, dress, dress_shared, bra, bra_shared, shoe, shoe_shared, ring, hat, hat_shared, color, color_shared)
+     values ('M', true, '32x30', 'unshared dress', false, '34B', true, '9.5', true, '7', 'S', true, 'Teal', true)$q$,
   'Sam saves some'
 );
 select lives_ok($q$update public.account_sizes set pants = '34x30'$q$, 'Sam changes one');
@@ -61,12 +63,12 @@ select throws_ok('select * from public.account_sizes', '42501', null, 'signed-ou
 -- ─── through the link ───────────────────────────────────────────────────────
 select is(
   lists.owner_sizes(:'token'),
-  '[{"kind":"top","value":"M"},{"kind":"shoe","value":"9.5"},{"kind":"hat","value":"S"},{"kind":"color","value":"Teal"}]'::jsonb,
+  '[{"kind":"top","value":"M"},{"kind":"bra","value":"34B"},{"kind":"shoe","value":"9.5"},{"kind":"hat","value":"S"},{"kind":"color","value":"Teal"}]'::jsonb,
   'a signed-out holder of the link gets the shared ones, in order'
 );
 select tests.act_as(:'buyer');
 select is(
-  (select jsonb_array_length(lists.owner_sizes(:'token'))), 4, 'a signed-in stranger gets the same'
+  (select jsonb_array_length(lists.owner_sizes(:'token'))), 5, 'a signed-in stranger gets the same'
 );
 select is(position('Teal' in lists.get_shared_list(:'token')::text), 0, 'the list carries no sizes');
 select is(position('Teal' in lists.share_preview(:'token')::text), 0, 'nor does its preview');
@@ -75,11 +77,11 @@ select tests.act_as(:'sam');
 select is(lists.owner_sizes(:'token'), null, 'the owner gets nothing from their own link');
 
 -- ─── nothing shared ─────────────────────────────────────────────────────────
-update public.account_sizes set top_shared = false, shoe_shared = false, hat_shared = false, color_shared = false;
+update public.account_sizes set top_shared = false, bra_shared = false, shoe_shared = false, hat_shared = false, color_shared = false;
 select tests.act_as_anon();
 select is(lists.owner_sizes(:'token'), null, 'nothing shared gives null, not an empty list');
 select tests.act_as(:'sam');
-update public.account_sizes set top_shared = true, shoe_shared = true, hat_shared = true, color_shared = true;
+update public.account_sizes set top_shared = true, bra_shared = true, shoe_shared = true, hat_shared = true, color_shared = true;
 
 -- ─── switches ───────────────────────────────────────────────────────────────
 select tests.reset_role();

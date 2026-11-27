@@ -30,7 +30,7 @@ describe("reading your sizes", () => {
     const got = await getMySizes(db({ data: row }).client, "u1");
     expect(got).toEqual({
       status: "loaded",
-      items: { top: { value: "M", shared: true }, pants: null, dress: null, shoe: { value: "9", shared: false }, ring: null, hat: null, color: null },
+      items: { top: { value: "M", shared: true }, pants: null, dress: null, bra: null, shoe: { value: "9", shared: false }, ring: null, hat: null, color: null },
     });
   });
 
