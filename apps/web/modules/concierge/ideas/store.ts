@@ -454,6 +454,8 @@ export function createSupabaseIdeaStore(db: AdminDb): IdeaStore {
         est_shipping_cents: i.estShippingCents,
         est_tax_cents: i.estTaxCents,
         est_total_cents: i.estTotalCents,
+        // The same without any fee, for a card buyer's charge (est_total_cents keeps the wallet's).
+        goods_cents: i.priceCents + i.estShippingCents + i.estTaxCents,
         handling_days_max: i.handlingDaysMax,
         delivery_days_min: i.deliveryDaysMin,
         delivery_days_max: i.deliveryDaysMax,

@@ -165,6 +165,17 @@ describe.skipIf(!dbUp)("createSupabaseIdeaStore", () => {
     expect(got?.round).toBeNull();
   });
 
+  it("save keeps each idea's goods (price, shipping and tax, no fee) apart from its wallet total", async () => {
+    const buyer = await newUser("Jim");
+    const person = await newPerson(buyer.id, "Dad");
+    const started = await store().start({ userId: buyer.id, personId: person, roundId: null }, new Date());
+    if (!("runId" in started)) throw new Error(`refused: ${started.refused}`);
+    // A total whose fee isn't today's wallet fee: the goods come from the parts, not the total.
+    await store().save(started.runId, [idea({ estTotalCents: 2900 })]);
+    const row = (await pg.query("select est_total_cents, goods_cents from concierge.gift_ideas where person_id = $1", [person])).rows[0];
+    expect(row).toEqual({ est_total_cents: 2900, goods_cents: 2660 });
+  });
+
   it("start, progress and save round-trip a run", async () => {
     const buyer = await newUser("Jim");
     const person = await newPerson(buyer.id, "Dad");

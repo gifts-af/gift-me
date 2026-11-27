@@ -113,6 +113,12 @@ export type OrderRow = {
   /** The list owner whose shared address it was approved for; null unless address_source is shared (T88). */
   address_owner_id: string | null;
   created_at: string;
+  /** zinc_wallet or connect; a card order also has the fee inputs it was approved with. */
+  funding_mode: string;
+  margin_cents: number | null;
+  zinc_fee_cents: number | null;
+  card_fee_bps: number | null;
+  card_fee_fixed_cents: number | null;
 };
 
 export type FailedOrderRow = {
@@ -159,7 +165,9 @@ export async function priceRiseFixed(deps: DbDeps, ideaId: string, exceptId: str
 export async function liveOrders(deps: DbDeps, roundId: string): Promise<OrderRow[]> {
   const { data, error } = await concierge(deps)
     .from("orders")
-    .select("id, idea_id, status, hold_reason, max_price_cents, fee_cents, total_cents, idempotency_key, gift_message, ship_to, address_source, address_owner_id, created_at, resolved")
+    .select(
+      "id, idea_id, status, hold_reason, max_price_cents, fee_cents, total_cents, idempotency_key, gift_message, ship_to, address_source, address_owner_id, created_at, resolved, funding_mode, margin_cents, zinc_fee_cents, card_fee_bps, card_fee_fixed_cents",
+    )
     .eq("round_id", roundId)
     .neq("status", "cancelled")
     .order("created_at")
@@ -207,6 +215,8 @@ export type IdeaRow = {
   id: string;
   product_url: string | null;
   est_total_cents: number;
+  /** Price, shipping and tax without any fee: what a card buyer's charge is worked out from. */
+  goods_cents: number | null;
   handling_days_max: number | null;
   delivery_days_max: number | null;
   over_budget: boolean;
@@ -230,7 +240,7 @@ export async function readIdeas(deps: DbDeps, ids: string[]): Promise<Map<string
   if (ids.length === 0) return new Map();
   const { data, error } = await concierge(deps)
     .from("gift_ideas")
-    .select("id, round_id, product_url, est_total_cents, handling_days_max, delivery_days_max, over_budget, rank, status, source, retailer, retailer_product_id, offer_id")
+    .select("id, round_id, product_url, est_total_cents, goods_cents, handling_days_max, delivery_days_max, over_budget, rank, status, source, retailer, retailer_product_id, offer_id")
     .in("id", ids);
   if (error) fail("Loading the ideas failed", error);
   return new Map((data ?? []).map((i) => [i.id, i as IdeaRow]));

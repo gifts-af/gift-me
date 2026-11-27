@@ -6,13 +6,15 @@ import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { Client } from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import type { Database } from "@gifts-af/core";
+import { chargeCents, goodsCapCents, type Database, type FeeInputs } from "@gifts-af/core";
 import { LOCAL_DB, localStack } from "../../../test/local-db";
+import type { PurchaseDeps } from "../purchase/store";
 import type { ZincDeps } from "../zinc/types";
 
 vi.mock("server-only", () => ({}));
 const { rejectionOutlook, rejectRoundIdeas, roundAccess, roundView, setRoundBudget } = await import("../rounds/approval");
 const { activeFacts } = await import("../profile/profile");
+const { approveAndBuy } = await import("../purchase/approve");
 
 const stack = await localStack({ api: true });
 const dbUp = stack !== null;
@@ -824,4 +826,240 @@ describe.skipIf(!dbUp)("approval: rejecting, the round's budget and the page rea
     );
     await pg.query("update concierge.gift_rounds set status = 'ordered' where id = $1", [r.roundId]);
   }
+
+  // ─── paying by card: the whole charge, fee included (AC-3, AC-4, AC-5, AC-15, AC-18) ──────
+
+  /** Card payments on and the card fee settings as they were, for these tests only (the DB ships them off). */
+  const CARD_KEYS = ["connect_enabled", "card_fee_fixed_cents"];
+  async function withCardSettings(run: () => Promise<void>) {
+    const was = (await pg.query("select key, value from concierge.app_settings where key = any($1)", [CARD_KEYS])).rows;
+    await pg.query("update concierge.app_settings set value = '1' where key = 'connect_enabled'");
+    try {
+      await run();
+    } finally {
+      for (const { key, value } of was) await pg.query("update concierge.app_settings set value = $1 where key = $2", [value, key]);
+    }
+  }
+
+  async function todaysFees(): Promise<FeeInputs> {
+    const rows = (
+      await pg.query(
+        "select key, value::int as v from concierge.app_settings where key in ('fee_part_ai_cents', 'fee_part_running_cents', 'zinc_fee_cents', 'card_fee_bps', 'card_fee_fixed_cents')",
+      )
+    ).rows as { key: string; v: number }[];
+    const v = (k: string) => rows.find((r) => r.key === k)!.v;
+    return {
+      marginCents: v("fee_part_ai_cents") + v("fee_part_running_cents"),
+      zincFeeCents: v("zinc_fee_cents"),
+      cardFeeBps: v("card_fee_bps"),
+      cardFeeFixedCents: v("card_fee_fixed_cents"),
+    };
+  }
+
+  /** A buyer who pays by card, with fake Stripe ids and a phone, or a wallet buyer. */
+  async function buyer(o: { card?: boolean; saved?: boolean } = {}): Promise<User> {
+    const u = await newUser();
+    await pg.query("update concierge.accounts set buyer_phone = '5555550100' where user_id = $1", [u.id]);
+    if (o.card) {
+      await pg.query("update concierge.accounts set funding_mode = 'connect', stripe_customer_id = $2 where user_id = $1", [u.id, `cus_test_${u.id}`]);
+      if (o.saved !== false) await pg.query("update concierge.accounts set stripe_payment_method_id = $2 where user_id = $1", [u.id, `pm_test_${u.id}`]);
+    }
+    return u;
+  }
+
+  /** A round whose person has an address, with one idea of goods $22.59 (wallet total $23.59). */
+  async function buyableRound(u: User, budget: number | null = 10000): Promise<{ roundId: string; ideaId: string }> {
+    const person = await pg.query(
+      `insert into public.people (user_id, name, relationship, recipient_first_name, recipient_last_name, address_line1, city, state, zip, country)
+       values ($1, 'Mary', 'friend', 'Mary', 'Allen', '12 Oak St', 'Dayton', 'OH', '45402', 'US') returning id`,
+      [u.id],
+    );
+    const personId = person.rows[0].id as string;
+    const occasion = await pg.query("insert into concierge.occasions (user_id, person_id, kind) values ($1, $2, 'christmas') returning id", [u.id, personId]);
+    const round = await pg.query(
+      `insert into concierge.gift_rounds (user_id, person_id, occasion_id, occasion_year, occasion_date, ship_by_deadline, budget_cents, status, next_action_at, heads_up_on)
+       values ($1, $2, $3, 2030, current_date + 37, current_date + 30, $4, 'awaiting_approval', now() + interval '1 day', current_date) returning id`,
+      [u.id, personId, occasion.rows[0].id, budget],
+    );
+    const idea = await pg.query(
+      `insert into concierge.gift_ideas (user_id, round_id, person_id, title, product_url, price_cents, est_total_cents, goods_cents, handling_days_max, delivery_days_min, delivery_days_max, rank, source)
+       values ($1, $2, $3, 'Mouse pad', 'https://shop.test/p', 2100, 2359, 2259, 2, 3, 5, 1, 'generated') returning id`,
+      [u.id, round.rows[0].id, personId],
+    );
+    return { roundId: round.rows[0].id as string, ideaId: idea.rows[0].id as string };
+  }
+
+  const purchaseDeps = (db = admin!): PurchaseDeps => ({ ...deps(), db, settings: { feeCents: 100, marginPct: 10 }, advanceRound: async () => "advanced" });
+
+  /** The real database, recording every approve_round payload and running `before` ahead of it. */
+  function watchedApprove(seen: unknown[], before: () => Promise<void> = async () => {}) {
+    const real = admin!;
+    return new Proxy(real, {
+      get(target, prop, receiver) {
+        if (prop !== "schema") return Reflect.get(target, prop, receiver);
+        return (schema: "concierge") => {
+          const sc = target.schema(schema);
+          return new Proxy(sc, {
+            get(t, p, rr) {
+              if (p !== "rpc") return Reflect.get(t, p, rr);
+              return async (fn: string, args: Record<string, unknown>) => {
+                if (fn === "approve_round") {
+                  seen.push(args.p_orders);
+                  await before();
+                }
+                return (t.rpc as (f: string, a: unknown) => unknown).call(t, fn, args);
+              };
+            },
+          });
+        };
+      },
+    });
+  }
+
+  const orderRows = async (roundId: string) =>
+    (
+      await pg.query(
+        `select funding_mode, max_price_cents, fee_cents, margin_cents, zinc_fee_cents, card_fee_bps, card_fee_fixed_cents, max_charge_cents, payment_method_id
+           from concierge.orders where round_id = $1`,
+        [roundId],
+      )
+    ).rows;
+
+  it("a card buyer approves at the most shown: the order saves its fee inputs, card and maximum (AC-3, AC-4, AC-18)", async () => {
+    await withCardSettings(async () => {
+      const u = await buyer({ card: true });
+      const r = await buyableRound(u);
+      const F = await todaysFees();
+      // $22.59 of goods: the charge plus the 10% margin within the $100 budget, then the goods cap.
+      const cap = goodsCapCents(Math.floor((chargeCents(2259, F) * 110) / 100), F);
+      const most = chargeCents(cap, F);
+      const result = await approveAndBuy({ userId: u.id, roundId: r.roundId, ideaIds: [r.ideaId], shownMaxCents: most }, purchaseDeps());
+      expect(result).toMatchObject({ ok: true });
+      expect(await orderRows(r.roundId)).toEqual([
+        {
+          funding_mode: "connect",
+          max_price_cents: cap,
+          fee_cents: most - cap,
+          margin_cents: F.marginCents,
+          zinc_fee_cents: F.zincFeeCents,
+          card_fee_bps: F.cardFeeBps,
+          card_fee_fixed_cents: F.cardFeeFixedCents,
+          max_charge_cents: most,
+          payment_method_id: `pm_test_${u.id}`,
+        },
+      ]);
+      // Every price up to the cap is charged at most what was shown.
+      for (let g = 1; g <= cap; g++) expect(chargeCents(g, F)).toBeLessThanOrEqual(most);
+    });
+  });
+
+  it("a card buyer shown less than today's most, or nothing, gets price_changed with the new figure and nothing is written", async () => {
+    await withCardSettings(async () => {
+      const u = await buyer({ card: true });
+      const r = await buyableRound(u);
+      const F = await todaysFees();
+      const most = chargeCents(goodsCapCents(Math.floor((chargeCents(2259, F) * 110) / 100), F), F);
+      const input = { userId: u.id, roundId: r.roundId, ideaIds: [r.ideaId] };
+      expect(await approveAndBuy({ ...input, shownMaxCents: most - 1 }, purchaseDeps())).toEqual({ ok: false, error: "price_changed", neverMoreThanCents: most });
+      expect(await approveAndBuy(input, purchaseDeps())).toEqual({ ok: false, error: "price_changed", neverMoreThanCents: most });
+      expect(await orderRows(r.roundId)).toEqual([]);
+    });
+  });
+
+  it("a fee raised after the page loaded asks again, and nothing is written (AC-4, AC-15)", async () => {
+    await withCardSettings(async () => {
+      const u = await buyer({ card: true });
+      const r = await buyableRound(u);
+      const F = await todaysFees();
+      const shown = chargeCents(goodsCapCents(Math.floor((chargeCents(2259, F) * 110) / 100), F), F);
+      await pg.query("update concierge.app_settings set value = $1 where key = 'card_fee_fixed_cents'", [String(F.cardFeeFixedCents + 50)]);
+      const result = await approveAndBuy({ userId: u.id, roundId: r.roundId, ideaIds: [r.ideaId], shownMaxCents: shown }, purchaseDeps());
+      expect(result).toMatchObject({ ok: false, error: "price_changed" });
+      expect((result as { neverMoreThanCents: number }).neverMoreThanCents).toBeGreaterThan(shown);
+      expect(await orderRows(r.roundId)).toEqual([]);
+    });
+  });
+
+  it("a fee raised between our read and approve_round is refused by the SQL and reads as price_changed", async () => {
+    await withCardSettings(async () => {
+      const u = await buyer({ card: true });
+      const r = await buyableRound(u);
+      const F = await todaysFees();
+      const shown = chargeCents(goodsCapCents(Math.floor((chargeCents(2259, F) * 110) / 100), F), F);
+      const raise = async () => {
+        await pg.query("update concierge.app_settings set value = $1 where key = 'card_fee_fixed_cents'", [String(F.cardFeeFixedCents + 50)]);
+      };
+      const result = await approveAndBuy({ userId: u.id, roundId: r.roundId, ideaIds: [r.ideaId], shownMaxCents: shown }, purchaseDeps(watchedApprove([], raise)));
+      expect(result).toEqual({ ok: false, error: "price_changed" });
+      expect(await orderRows(r.roundId)).toEqual([]);
+    });
+  });
+
+  it("a card buyer with no card is refused no_card, and with card payments off connect_off", async () => {
+    await withCardSettings(async () => {
+      const u = await buyer({ card: true, saved: false });
+      const r = await buyableRound(u);
+      const input = { userId: u.id, roundId: r.roundId, ideaIds: [r.ideaId], shownMaxCents: 100000 };
+      expect(await approveAndBuy(input, purchaseDeps())).toEqual({ ok: false, error: "no_card" });
+      await pg.query("update concierge.app_settings set value = '0' where key = 'connect_enabled'");
+      expect(await approveAndBuy(input, purchaseDeps())).toEqual({ ok: false, error: "connect_off" });
+      expect(await orderRows(r.roundId)).toEqual([]);
+    });
+  });
+
+  it("a card buyer's budget counts the GiftsAF fee: $22.59 is over a $25 budget by card, within it by wallet (AC-5)", async () => {
+    await withCardSettings(async () => {
+      const card = await buyer({ card: true });
+      const rc = await buyableRound(card, 2500);
+      expect(await approveAndBuy({ userId: card.id, roundId: rc.roundId, ideaIds: [rc.ideaId], shownMaxCents: 100000 }, purchaseDeps())).toEqual({
+        ok: false,
+        error: "needs_confirmation",
+      });
+      const wallet = await buyer();
+      const rw = await buyableRound(wallet, 2500);
+      expect(await approveAndBuy({ userId: wallet.id, roundId: rw.roundId, ideaIds: [rw.ideaId] }, purchaseDeps())).toMatchObject({ ok: true });
+    });
+  });
+
+  it("a wallet approval sends approve_round exactly what it did before card payments (AC-16)", async () => {
+    const u = await buyer();
+    const r = await buyableRound(u);
+    const seen: unknown[] = [];
+    expect(await approveAndBuy({ userId: u.id, roundId: r.roundId, ideaIds: [r.ideaId], giftMessage: "Love you" }, purchaseDeps(watchedApprove(seen)))).toMatchObject({ ok: true });
+    const before = [
+      {
+        idea_id: r.ideaId,
+        max_price_cents: Math.floor((2359 * 110) / 100) - 100,
+        fee_cents: 100,
+        gift_message: "Love you",
+        ship_to: "recipient",
+        address_source: "own",
+        address_owner_id: null,
+        address: {
+          recipient_first_name: "Mary",
+          recipient_last_name: "Allen",
+          address_line1: "12 Oak St",
+          address_line2: null,
+          city: "Dayton",
+          state: "OH",
+          zip: "45402",
+          country: "US",
+          phone: null,
+        },
+      },
+    ];
+    expect(JSON.stringify(seen)).toBe(JSON.stringify([before]));
+    expect(await orderRows(r.roundId)).toEqual([expect.objectContaining({ funding_mode: "zinc_wallet", fee_cents: 100, max_charge_cents: null, payment_method_id: null })]);
+  });
+
+  it("the round screen shows a card buyer each idea's whole charge, and judges the budget on it (AC-5)", async () => {
+    const card = await buyer({ card: true });
+    const r = await buyableRound(card, 2500);
+    const F = await todaysFees();
+    const view = await roundView(r.roundId, await signedIn(card), new Date());
+    expect(view?.ideas[0]).toMatchObject({ totalCents: chargeCents(2259, F), overBudget: true });
+    const wallet = await buyer();
+    const rw = await buyableRound(wallet, 2500);
+    expect((await roundView(rw.roundId, await signedIn(wallet), new Date()))?.ideas[0]).toMatchObject({ totalCents: 2359, overBudget: false });
+  });
 });

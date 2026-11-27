@@ -13,7 +13,9 @@
 import {
   approvalCeilingCents,
   canArriveInTime,
+  chargeCents,
   committedSpendCents,
+  goodsCapCents,
   isShippableAddress,
   maxPriceCents,
   PLACEABLE_HOLDS,
@@ -29,6 +31,7 @@ import { failureType } from "../zinc/events";
 import { findOrderByReference } from "../zinc/orders";
 import { placeWithRetry } from "../zinc/retry";
 import type { ZincAddress } from "../zinc/types";
+import { savedFees } from "./payer";
 import {
   claimRoundNow,
   concierge,
@@ -100,28 +103,37 @@ export function asCommitted(o: OrderRow): CommittedOrder {
   return { id: o.id, status, maxPriceCents: o.max_price_cents, finalTotalCents: o.total_cents, feeCents: o.fee_cents };
 }
 
-/** min(saved, recomputed) for each held order (AC-21); the saved cap when the recompute can't be made. */
-function recheckedCaps(
+/**
+ * min(saved, recomputed) for each held order (AC-21); the saved cap when the recompute can't be
+ * made. A card order is re-checked on whole charges worked out with the fees it was approved
+ * with, never today's (AC-15), then turned back into a goods cap.
+ */
+export function recheckedCaps(
   r: RoundRow,
   held: OrderRow[],
   all: OrderRow[],
-  totals: Map<string, number>,
+  ideas: Map<string, { goods_cents: number | null; est_total_cents: number }>,
   overBudgetPct: number,
   marginPct: number,
 ): number[] {
   const saved = held.map((o) => o.max_price_cents);
   try {
+    const card = (o: OrderRow) => o.funding_mode === "connect";
+    const totalOf = (o: OrderRow): number => {
+      const idea = ideas.get(o.idea_id);
+      if (!idea) return 0;
+      if (!card(o)) return idea.est_total_cents;
+      // No goods saved: nothing to recompute from, so the saved cap stands.
+      if (idea.goods_cents === null) throw new RangeError("No goods total");
+      return chargeCents(idea.goods_cents, savedFees(o));
+    };
     const heldIds = held.map((o) => o.id);
     // The approval was checked (and any over-budget confirmed) when it was made.
-    const ceiling = approvalCeilingCents(
-      all.map((o) => totals.get(o.idea_id) ?? 0),
-      r.budget_cents,
-      overBudgetPct,
-      true,
-    );
+    const ceiling = approvalCeilingCents(all.map(totalOf), r.budget_cents, overBudgetPct, true);
     if (ceiling === null) throw new RangeError("No ceiling");
     const fresh = sequentialCaps(
-      held.map((o) => ({ totalCents: totals.get(o.idea_id) ?? 0, feeCents: o.fee_cents })),
+      // A card order's fee_cents is its whole fee at the cap, so committed spend counts whole charges.
+      held.map((o) => ({ totalCents: totalOf(o), feeCents: card(o) ? 0 : o.fee_cents })),
       {
         ceilingCents: ceiling,
         budgetCents: r.budget_cents,
@@ -129,7 +141,7 @@ function recheckedCaps(
         marginPct,
       },
     );
-    return saved.map((s, i) => Math.min(s, fresh[i]));
+    return saved.map((s, i) => Math.min(s, card(held[i]) ? goodsCapCents(fresh[i], savedFees(held[i])) : fresh[i]));
   } catch (e) {
     if (!(e instanceof RangeError)) throw e;
     // Never above what the buyer approved: the saved cap stands.
@@ -272,8 +284,7 @@ export async function placeRound(
   }
 
   // 4. Caps, re-checked: never above the saved one.
-  const totals = new Map([...roundIdeas].map(([id, i]) => [id, i.est_total_cents]));
-  const caps = recheckedCaps(r, held, all, totals, account.over_budget_pct, deps.settings.marginPct);
+  const caps = recheckedCaps(r, held, all, roundIdeas, account.over_budget_pct, deps.settings.marginPct);
 
   // 5. Known short: only when auto top-up is known to be off; otherwise Zinc may charge the card.
   if (account.auto_topup_on === false) {
