@@ -5,13 +5,13 @@ import { errorFields, logEvent } from "@/lib/log";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { zincWiring } from "@/lib/wiring";
-import { getConciergeSettings, getPaymentSummary, type PaymentSummary } from "@/modules/concierge";
+import { cardBuyer, getConciergeSettings, getPaymentSummary, hasPaidFeatures, type PaymentSummary } from "@/modules/concierge";
 import { Group } from "./group";
-import { paymentRowText } from "./rows";
+import { cardRowText, paymentRowText, type CardSummary } from "./rows";
 
 // The Zinc row is one word from the database. A failed load shows "Couldn't load" and leaves
 // the rest of Settings alone.
-async function loadPaymentSummary(): Promise<PaymentSummary | "error"> {
+async function loadPaymentSummary(): Promise<PaymentSummary | CardSummary | "error"> {
   let userId: string | null = null;
   try {
     const { data: auth, error } = await (await createClient()).auth.getClaims();
@@ -19,6 +19,11 @@ async function loadPaymentSummary(): Promise<PaymentSummary | "error"> {
     userId = auth?.claims?.sub ?? null;
     if (!userId) return "error";
     const db = createAdminClient();
+    // A card buyer's row is about their card, from the database alone (no Stripe call here).
+    if (await hasPaidFeatures(db, userId)) {
+      const buyer = await cardBuyer({ db, now: new Date() }, userId);
+      if (buyer.mode === "connect") return { card: !buyer.on ? "paused" : buyer.hasCard ? "saved" : "none" };
+    }
     const zincOn = (await zincWiring(db)) !== null;
     return await getPaymentSummary(userId, db, zincOn, new Date());
   } catch (error) {
@@ -43,7 +48,11 @@ export async function ConciergeGroups() {
         <SettingsRow href="/settings/over-budget" label="Over-budget allowance" value={`${concierge.overBudgetPct}%`} />
       </Group>
       <Group title="Paying for gifts">
-        <SettingsRow href="/settings/paying" label="Zinc" value={paymentRowText(payment)} />
+        {typeof payment === "object" ? (
+          <SettingsRow href="/settings/paying" label="Card" value={cardRowText(payment)} />
+        ) : (
+          <SettingsRow href="/settings/paying" label="Zinc" value={paymentRowText(payment)} />
+        )}
       </Group>
     </>
   );
