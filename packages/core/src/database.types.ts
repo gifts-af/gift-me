@@ -2245,7 +2245,12 @@ export type Database = {
         Returns: string;
       };
       skip_failed_round: {
-        Args: { p_lock: string; p_round_id: string; p_user_id: string };
+        Args: {
+          p_lock: string;
+          p_round_id: string;
+          p_shown_order_ids: string[];
+          p_user_id: string;
+        };
         Returns: Database["concierge"]["Enums"]["round_status"];
       };
       skip_open_rounds: {

@@ -73,6 +73,7 @@ export function WaysOut({
   canSkip,
   pickAction,
   skipAction,
+  shownOrderIds,
 }: {
   roundId: string;
   orderId: string;
@@ -88,7 +89,9 @@ export function WaysOut({
   /** `pickAgainAction` */
   pickAction: (roundId: string, orderId: string) => Promise<PickAgainResult>;
   /** `skipRoundAction` */
-  skipAction: (roundId: string) => Promise<SkipResult>;
+  skipAction: (roundId: string, shownOrderIds: string[]) => Promise<SkipResult>;
+  /** The failed gifts this page shows; skipping counts only these as told. */
+  shownOrderIds: string[];
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -148,7 +151,7 @@ export function WaysOut({
             <DialogTitle>{`Skip ${occasion}?`}</DialogTitle>
             <DialogDescription>{skipBody(occasionKind)}</DialogDescription>
           </DialogHeader>
-          <Button type="button" variant="destructive" disabled={pending} aria-busy={pending} onClick={() => run(() => skipAction(roundId))}>
+          <Button type="button" variant="destructive" disabled={pending} aria-busy={pending} onClick={() => run(() => skipAction(roundId, shownOrderIds))}>
             Skip it
           </Button>
           <Button type="button" variant="outline" disabled={pending} onClick={() => setAsking(false)}>

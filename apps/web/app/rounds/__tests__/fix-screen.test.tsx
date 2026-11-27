@@ -71,7 +71,7 @@ function setup(
     async (...a: [string, string, FormData]): Promise<FixResult> => (void a, results.fix ?? { ok: true, status: "ordered", reason: null }),
   );
   const pickAgainAction = vi.fn(async (...a: [string, string]): Promise<PickAgainResult> => (void a, results.pick ?? { ok: true }));
-  const skipRoundAction = vi.fn(async (...a: [string]): Promise<SkipResult> => (void a, results.skip ?? { ok: true }));
+  const skipRoundAction = vi.fn(async (...a: [string, string[]]): Promise<SkipResult> => (void a, results.skip ?? { ok: true }));
   const failed = idea({ title: "LEGO Botanical Orchid" });
   const props: FixScreenProps = {
     roundId: "r1",
@@ -318,7 +318,7 @@ describe("FixScreen: ways out besides buying (ALL-185)", () => {
     const { skipRoundAction } = setup({ canSkip: true, occasionKind: "christmas" });
     await userEvent.click(screen.getByRole("button", { name: "Skip Mom's Christmas" }));
     await userEvent.click(await screen.findByRole("button", { name: "Skip it" }));
-    expect(skipRoundAction).toHaveBeenCalledWith("r1");
+    expect(skipRoundAction).toHaveBeenCalledWith("r1", ["o1"]);
     await vi.waitFor(() => expect(router.push).toHaveBeenCalledWith("/rounds/r1"));
   });
 

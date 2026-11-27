@@ -266,12 +266,14 @@ export async function pickAgainAction(roundId: string, orderId: string): Promise
  * "Skip <name>'s <occasion>": closes the round the way the hold emails' cancel link does
  * (cancel_held), through skipRound, which checks the round can be skipped first.
  */
-export async function skipRoundAction(roundId: string): Promise<SkipResult> {
+export async function skipRoundAction(roundId: string, shownOrderIds: string[]): Promise<SkipResult> {
   const id = RoundId.safeParse(roundId);
-  if (!id.success) return { ok: false, error: "bad_form" };
+  // An input bound, not a business limit: the page shows a round's failed gifts, a handful at most.
+  const shown = z.array(z.uuid()).max(50).safeParse(shownOrderIds);
+  if (!id.success || !shown.success) return { ok: false, error: "bad_form" };
   const user = await signedIn();
   if (!user) return { ok: false, error: "session" };
-  const result = await skipRound({ userId: user.userId, roundId: id.data }, roundDbDeps(new Date()));
+  const result = await skipRound({ userId: user.userId, roundId: id.data, shownOrderIds: shown.data }, roundDbDeps(new Date()));
   revalidatePath(`/rounds/${id.data}`);
   return result;
 }

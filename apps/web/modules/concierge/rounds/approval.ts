@@ -322,11 +322,15 @@ const SKIP_REFUSALS: Record<string, Extract<SkipRoundResult, { ok: false }>["err
 /**
  * "Skip <name>'s <occasion>" on a failed gift, under the round's lease so a buy from another tab
  * can't land in between: skip_failed_round checks the round needs attention with nothing held,
- * being ordered, on its way or bought, records its failures as seen, and closes it through the
+ * being ordered, on its way or bought, records the failures the page showed as seen (never a store cancel, whose refund the daily news tells), and closes it through the
  * cancel link's own close (cancel_held, `cancel`).
  */
-export async function skipRound(input: { userId: string; roundId: string }, deps: DbDeps): Promise<SkipRoundResult> {
+export async function skipRound(
+  input: { userId: string; roundId: string; /** The failed gifts the page showed: only these count as told. */ shownOrderIds: string[] },
+  deps: DbDeps,
+): Promise<SkipRoundResult> {
   const { userId, roundId } = input;
+  const shown = input.shownOrderIds.filter(isId);
   const round = await ownRound(deps, roundId, userId);
   if (!round) return { ok: false, error: "not_found" };
 
@@ -334,7 +338,12 @@ export async function skipRound(input: { userId: string; roundId: string }, deps
   if (!lock) return { ok: false, error: round.status === "needs_attention" && round.closed_at === null ? "busy" : "not_open" };
 
   return withLease(deps, roundId, lock, async (): Promise<SkipRoundResult> => {
-    const { error } = await concierge(deps).rpc("skip_failed_round", { p_round_id: roundId, p_user_id: userId, p_lock: lock });
+    const { error } = await concierge(deps).rpc("skip_failed_round", {
+      p_round_id: roundId,
+      p_user_id: userId,
+      p_lock: lock,
+      p_shown_order_ids: shown,
+    });
     if (error) {
       const why = SKIP_REFUSALS[refusal(error, "skip_failed_round") ?? ""];
       if (!why) fail("Skipping the round failed", error);

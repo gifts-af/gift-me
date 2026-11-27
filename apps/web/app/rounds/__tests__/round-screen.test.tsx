@@ -862,7 +862,7 @@ describe("a held gift", () => {
 describe("RoundScreen: a failed gift's ways out (ALL-185)", () => {
   function withWaysOut(v: RoundPageView) {
     const pick = vi.fn(async (...a: [string, string]): Promise<PickAgainResult> => (void a, { ok: true }));
-    const skip = vi.fn(async (...a: [string]): Promise<SkipResult> => (void a, { ok: true }));
+    const skip = vi.fn(async (...a: [string, string[]]): Promise<SkipResult> => (void a, { ok: true }));
     const ok = async () => ({ ok: true }) as const;
     render(
       <RoundScreen

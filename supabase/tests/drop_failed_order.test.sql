@@ -3,7 +3,7 @@
 -- when that order is the round's only one still in play.
 begin;
 \ir _helpers.psql
-select plan(29);
+select plan(36);
 
 select tests.create_user('drop-buyer@example.com', 'Buyer') as a \gset
 select tests.create_user('drop-mom@example.com', 'Mom') as mom \gset
@@ -83,8 +83,8 @@ select is(
   'the failed order is resolved and the round is back to choosing, still open');
 select ok((select next_action_at <= now() from concierge.gift_rounds where id = :'d1_round_id'),
   'and due now, so the next tick plans its reminders again');
-select ok(exists (select 1 from concierge.round_sends where round_id = :'d1_round_id' and step = 'fail:' || :'d1_failed_order'),
-  'the dropped failure counts as told: no later email about it');
+select ok(not exists (select 1 from concierge.untold_failures(:'d1_round_id')),
+  'the dropped failure is no longer untold: no later email about it');
 select is((select status::text from concierge.gift_ideas where id = :'d1_failed_idea'), 'selected',
   'after a price rise the failed gift stays listed but can''t be bought again at its old price');
 
@@ -110,6 +110,16 @@ select lives_ok(:'d5_sql', 'a card failure can be dropped');
 select tests.reset_role();
 select is((select status::text from concierge.gift_ideas where id = :'d5_failed_idea'), 'proposed',
   'after a card failure the same gift is on offer again');
+
+-- ─── A store cancel, dropped: its refund is still told (T89) ─────────────────
+select * from tests.df_round(:'a', :'p_pat', 'store_cancelled') \gset d7_
+select tests.act_as_server();
+select tests.df_sql(:'d7_round_id', :'a', :'d7_lock', :'d7_failed_order') as d7_sql \gset
+select lives_ok(:'d7_sql', 'a store-cancelled gift can be dropped');
+select tests.reset_role();
+select ok(exists (select 1 from concierge.tracking_candidates(current_date) c where c.order_id = :'d7_failed_order')
+          and not exists (select 1 from concierge.round_sends where round_id = :'d7_round_id' and step = 'fail:' || :'d7_failed_order'),
+  'dropping a store cancel leaves its refund email due in the daily news');
 
 -- ─── A list gift: its claim goes back to the list ────────────────────────────
 select * from tests.df_round(:'a', :'p_mom', 'out_of_stock', :'i_vase') \gset d3_
@@ -150,18 +160,19 @@ select throws_ok(tests.df_sql(:'d4_round_id', :'a', :'d4_lock', :'d4_failed_orde
 select tests.reset_role();
 
 -- ─── skip_failed_round ───────────────────────────────────────────────────────
-create function tests.sk_sql(p_round uuid, p_user uuid, p_lock timestamptz)
+create function tests.sk_sql(p_round uuid, p_user uuid, p_lock timestamptz, p_shown uuid[] default '{}')
 returns text language sql as $$
-  select format($q$select concierge.skip_failed_round(%L, %L, %L)$q$, p_round, p_user, p_lock);
+  select format($q$select concierge.skip_failed_round(%L, %L, %L, %L)$q$, p_round, p_user, p_lock, p_shown);
 $$;
-grant execute on function tests.sk_sql(uuid, uuid, timestamptz) to service_role;
+grant execute on function tests.sk_sql(uuid, uuid, timestamptz, uuid[]) to service_role;
 
 -- An untold failure (no email yet), skipped from its page.
 select * from tests.df_round(:'a', :'p_pat', 'out_of_stock') \gset s1_
 select ok(exists (select 1 from concierge.untold_failures(:'s1_round_id') x where x = :'s1_failed_order'),
   'the fixture failure is untold');
 select tests.act_as_server();
-select is(concierge.skip_failed_round(:'s1_round_id', :'a', :'s1_lock')::text, 'skipped', 'the server skips a round whose only gift failed');
+select is(concierge.skip_failed_round(:'s1_round_id', :'a', :'s1_lock', array[:'s1_failed_order']::uuid[])::text, 'skipped',
+  'the server skips a round whose only gift failed');
 select tests.reset_role();
 select is(
   (select array[r.status::text, (r.closed_at is not null)::text, o.resolved::text, o.failed_after_close::text]
@@ -171,6 +182,34 @@ select is(
 select ok(not exists (select 1 from concierge.rounds_missing_late_failure_email() x where x = :'s1_round_id')
           and exists (select 1 from concierge.round_sends where round_id = :'s1_round_id' and step = 'fail:' || :'s1_failed_order'),
   'the skipped failure counts as told, so the late-email sweep leaves it alone');
+
+-- Two untold failures, only one shown: the other still goes to the late email.
+select * from tests.df_round(:'a', :'p_pat', 'out_of_stock') \gset s3_
+insert into concierge.orders (user_id, round_id, idea_id, funding_mode, max_price_cents, fee_cents, status,
+                              failure_type, ship_to, ship_city, ship_state)
+values (:'a', :'s3_round_id', :'s3_other_idea', 'zinc_wallet', 1800, 100, 'failed', 'too_late', 'recipient', 'Dayton', 'OH')
+returning id as s3_unseen \gset
+select tests.act_as_server();
+select tests.sk_sql(:'s3_round_id', :'a', :'s3_lock', array[:'s3_failed_order']::uuid[]) as s3_sql \gset
+select lives_ok(:'s3_sql', 'skip with two failures, one of them shown');
+select tests.reset_role();
+select is(
+  (select array_agg(o.failed_after_close::text order by o.id = :'s3_failed_order' desc) from concierge.orders o
+    where o.id in (:'s3_failed_order', :'s3_unseen')),
+  array['false', 'true'],
+  'only the shown failure counts as told; the unshown one is handed to the late email');
+select ok(exists (select 1 from concierge.rounds_missing_late_failure_email() x where x = :'s3_round_id'),
+  '... which the late-email sweep picks up');
+
+-- A store cancel, skipped: its refund is still told (T89).
+select * from tests.df_round(:'a', :'p_pat', 'store_cancelled') \gset s4_
+select tests.act_as_server();
+select tests.sk_sql(:'s4_round_id', :'a', :'s4_lock', array[:'s4_failed_order']::uuid[]) as s4_sql \gset
+select lives_ok(:'s4_sql', 'skip a round whose only gift the store cancelled');
+select tests.reset_role();
+select ok(exists (select 1 from concierge.tracking_candidates(current_date) c where c.order_id = :'s4_failed_order')
+          and not exists (select 1 from concierge.round_sends where round_id = :'s4_round_id' and step = 'fail:' || :'s4_failed_order'),
+  'skipping a store cancel leaves its refund email due in the daily news');
 
 -- Refusals: no lease, not waiting on a fix, a gift held or bought (refunded included).
 select * from tests.df_round(:'a', :'p_pat', 'out_of_stock') \gset s2_
@@ -200,8 +239,8 @@ select tests.reset_role();
 -- Server only.
 select ok(not has_function_privilege('authenticated', 'concierge.drop_failed_order(uuid, uuid, timestamptz, uuid)', 'execute')
           and not has_function_privilege('anon', 'concierge.drop_failed_order(uuid, uuid, timestamptz, uuid)', 'execute')
-          and not has_function_privilege('authenticated', 'concierge.skip_failed_round(uuid, uuid, timestamptz)', 'execute')
-          and not has_function_privilege('anon', 'concierge.skip_failed_round(uuid, uuid, timestamptz)', 'execute'),
+          and not has_function_privilege('authenticated', 'concierge.skip_failed_round(uuid, uuid, timestamptz, uuid[])', 'execute')
+          and not has_function_privilege('anon', 'concierge.skip_failed_round(uuid, uuid, timestamptz, uuid[])', 'execute'),
   'signed-in users and visitors can''t call drop_failed_order or skip_failed_round');
 
 select * from finish();

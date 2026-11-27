@@ -87,7 +87,7 @@ export type FixScreenProps = {
   /** "Skip": only when no gift in the round is held, being ordered or on its way. */
   canSkip: boolean;
   pickAgainAction: (roundId: string, orderId: string) => Promise<PickAgainResult>;
-  skipRoundAction: (roundId: string) => Promise<SkipResult>;
+  skipRoundAction: (roundId: string, shownOrderIds: string[]) => Promise<SkipResult>;
 };
 
 const ADDRESS_FAILURES = new Set(["address_withdrawn", "address_rejected"]);
@@ -485,6 +485,7 @@ export function FixScreen(p: FixScreenProps) {
         canSkip={p.canSkip}
         pickAction={p.pickAgainAction}
         skipAction={p.skipRoundAction}
+        shownOrderIds={[order.id]}
       />
 
       <OverBudgetSheet

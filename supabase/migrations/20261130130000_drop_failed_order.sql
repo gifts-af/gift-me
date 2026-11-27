@@ -27,11 +27,15 @@
 --     can't be bought either, as replace_failed_order already says.
 --   * A list gift's claim goes back to the list, as when another idea replaces
 --     it, unless it's still on another of this buyer's live orders.
---   * The buyer saw the failure on the page and acted on it, so neither way
---     out sends a later email about it: each records the failure's own
---     fail:<order id> key, the one claim_failure_notices writes, so
---     untold_failures skips it, the close doesn't mark it failed_after_close,
---     and rounds_missing_late_failure_email never picks it up.
+--   * A failure the buyer saw on the page and acted on gets no later email.
+--     Dropping resolves it, so it's no longer untold. Skipping records the
+--     fail:<order id> key (the one claim_failure_notices writes) for each
+--     failure the page showed, so untold_failures skips it, the close doesn't
+--     mark it failed_after_close, and rounds_missing_late_failure_email never
+--     picks it up; a failure the page didn't show goes to the late email as
+--     any close sends it.
+--   * A store cancel never gets that key: the gift was bought and refunded,
+--     and the daily news tells the refund (tracking_candidates, T89).
 --
 -- Expand-only (E7): new functions; nothing existing changes.
 
@@ -69,10 +73,8 @@ begin
     raise exception 'drop_failed_order: other gifts' using errcode = 'P0001';
   end if;
 
-  -- Seen: no later email about it.
-  insert into concierge.round_sends (round_id, user_id, step)
-  values (p_round_id, p_user_id, 'fail:' || v_old.id)
-  on conflict (round_id, step) do nothing;
+  -- Resolved, it's no longer untold, so no later email tells it again. No
+  -- fail:<id> key: a store cancel's refund is still told by the daily news (T89).
   update concierge.orders set resolved = true where id = v_old.id;
   if v_old.failure_type in ('address_withdrawn', 'address_rejected', 'card_needed') then
     update concierge.gift_ideas set status = 'proposed' where id = v_old.idea_id and status = 'selected';
@@ -99,8 +101,9 @@ end;
 $$;
 
 -- "Skip": closes the round for good, as the cancel link does. Returns the
--- round's status after the close ('skipped').
-create function concierge.skip_failed_round(p_round_id uuid, p_user_id uuid, p_lock timestamptz)
+-- round's status after the close ('skipped'). p_shown_order_ids are the failed
+-- gifts the page showed the buyer; only those count as told.
+create function concierge.skip_failed_round(p_round_id uuid, p_user_id uuid, p_lock timestamptz, p_shown_order_ids uuid[])
 returns concierge.round_status
 language plpgsql
 security definer
@@ -122,11 +125,15 @@ begin
     raise exception 'skip_failed_round: on its way' using errcode = 'P0001';
   end if;
 
-  -- Seen: every failure still open here was on the page the buyer skipped from.
+  -- Seen: the failures the page showed count as told, so the close doesn't hand
+  -- them to the late email. Any other is left to the close, which tells it late.
+  -- Never a store cancel: the daily news still tells its refund (T89).
   insert into concierge.round_sends (round_id, user_id, step)
   select p_round_id, p_user_id, 'fail:' || o.id
     from concierge.orders o
-   where o.round_id = p_round_id and o.status = 'failed' and not o.resolved
+   where o.round_id = p_round_id and o.id = any (coalesce(p_shown_order_ids, '{}'))
+     and o.status = 'failed' and not o.resolved
+     and o.failure_type is distinct from 'store_cancelled'
   on conflict (round_id, step) do nothing;
   return concierge.cancel_held(p_round_id, 'cancel');
 end;
@@ -135,5 +142,5 @@ $$;
 -- Server only, as replace_failed_order.
 revoke all on function concierge.drop_failed_order(uuid, uuid, timestamptz, uuid) from public, anon, authenticated;
 grant execute on function concierge.drop_failed_order(uuid, uuid, timestamptz, uuid) to service_role;
-revoke all on function concierge.skip_failed_round(uuid, uuid, timestamptz) from public, anon, authenticated;
-grant execute on function concierge.skip_failed_round(uuid, uuid, timestamptz) to service_role;
+revoke all on function concierge.skip_failed_round(uuid, uuid, timestamptz, uuid[]) from public, anon, authenticated;
+grant execute on function concierge.skip_failed_round(uuid, uuid, timestamptz, uuid[]) to service_role;

@@ -636,7 +636,7 @@ export function RoundScreen({
   /** `pickAgainAction` and `skipRoundAction`, for a failed gift's ways out; without them they're hidden. */
   waysOut?: {
     pick: (roundId: string, orderId: string) => Promise<PickAgainResult>;
-    skip: (roundId: string) => Promise<SkipResult>;
+    skip: (roundId: string, shownOrderIds: string[]) => Promise<SkipResult>;
   };
 }) {
   const { round } = view;
@@ -840,6 +840,7 @@ export function RoundScreen({
           canSkip
           pickAction={waysOut.pick}
           skipAction={waysOut.skip}
+          shownOrderIds={view.failedOrders.map((o) => o.id)}
         />
       )}
 
