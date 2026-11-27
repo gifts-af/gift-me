@@ -27,7 +27,7 @@ export type ShareMenuProps = {
   onMore: () => void;
   // Any option used, links included.
   onUsed: () => void;
-  // A small note under the options, such as the birthday link. Tapping inside it closes the box.
+  // A small note under the options, such as the birthday link. Following a link in it closes the box.
   note?: ReactNode;
 };
 
@@ -106,7 +106,13 @@ export default function ShareMenu(props: ShareMenuProps) {
         </ul>
         {props.note && (
           // The note's link reaches 10 px past its text; the padding keeps that off the last option.
-          <div className="flex justify-center pt-2.5" onClick={() => onOpenChange(false)}>
+          // Only a tap on a link closes it: the strip is wider than the link, and a stray tap mustn't dismiss the box.
+          <div
+            className="flex justify-center pt-2.5"
+            onClick={(event) => {
+              if ((event.target as Element).closest("a")) onOpenChange(false);
+            }}
+          >
             {props.note}
           </div>
         )}

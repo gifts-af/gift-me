@@ -370,6 +370,14 @@ describe("GiftApp", () => {
       await vi.waitFor(() => expect(screen.queryByRole("dialog", { name: "Share your list" })).toBeNull());
     });
 
+    it("leaves the share box open when the space beside the link is tapped", async () => {
+      const link = <a href="#birthday">No birthday saved</a>;
+      render(<GiftApp initial={member} shareHint={link} />);
+      const menu = await openBox();
+      await user.click(within(menu).getByRole("link", { name: "No birthday saved" }).parentElement!);
+      expect(screen.getByRole("dialog", { name: "Share your list" })).toBeVisible();
+    });
+
     it("isn't in the share box once there's a birthday", async () => {
       render(<GiftApp initial={member} shareHint={null} />);
       const menu = await openBox();

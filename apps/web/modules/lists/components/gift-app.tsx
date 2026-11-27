@@ -165,7 +165,7 @@ type GiftAppProps = {
 
 /**
  * `initial` is null for a guest. `footer` shows below the list once a saved list exists.
- * `shareHint` shows beside the save status once Share has been used.
+ * `shareHint` shows in the share box, and beside the save status once Share has been used.
  * `needsName` (no display name yet) makes Share ask for one, saved with `saveName` (ALL-136).
  * `sizeAsk` (signed in, sizes sharing on) asks for a missing size when a gift
  * that needs one is added: `missing` is every size not saved yet.
