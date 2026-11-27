@@ -19,6 +19,13 @@ describe("healthReport", () => {
     expect(r.problems[1].ids).toEqual({ orderId: "o1", roundId: "r2", userId: "u1" });
   });
 
+  it("a card order charged over its maximum is a problem, with both amounts", () => {
+    const r = run(snapshot({ overMaxCharge: [{ orderId: "o9", roundId: "r9", userId: "u1", chargeCents: 2565, maxChargeCents: 2564 }] }));
+    expect(r.problems).toEqual([
+      { kind: "over_max_charge", ids: { orderId: "o9", roundId: "r9", userId: "u1" }, detail: { chargeCents: 2565, maxChargeCents: 2564 } },
+    ]);
+  });
+
   it("AC-2: nothing actionable on a Tuesday gives no problems and isWeekly false", () => {
     const r = run(snapshot({ weekly: { ...snapshot().weekly, waitingAddress: 1, waitingFunds: 1 } }));
     expect(r.problems).toEqual([]);

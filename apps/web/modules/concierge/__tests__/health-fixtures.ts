@@ -33,6 +33,7 @@ export function snapshot(over: Partial<HealthSnapshot> = {}): HealthSnapshot {
     heldZinc: [],
     deadlineClose: [],
     ideasWaiting: [],
+    overMaxCharge: [],
     weekly: { waitingAddress: 0, waitingFunds: 0, waitingSetup: 0, waitingApproval: 0, noIdeas: 0, roundsFailed: 0, failedCaptures: 0 },
     ...over,
   };

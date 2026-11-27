@@ -89,6 +89,7 @@ function healthSamples(link: string): SampleEmail[] {
     { kind: "credit_low", detail: { balanceCents: 320, lowCents: 500 } },
     { kind: "zinc_low", detail: { balanceCents: 210, lowCents: 500 } },
     { kind: "deadline_close", ids: ref("7"), detail: { reason: "address", shipByDeadline: "2026-03-14" } },
+    { kind: "over_max_charge", ids: { ...ref("8"), orderId: id("80") }, detail: { chargeCents: 2565, maxChargeCents: 2564 } },
   ];
   const weekly = { waitingAddress: 1, waitingFunds: 1, waitingSetup: 0, waitingApproval: 2, noIdeas: 0, roundsFailed: 0, failedCaptures: 1 };
   const costs: HealthReport["costs"] = {

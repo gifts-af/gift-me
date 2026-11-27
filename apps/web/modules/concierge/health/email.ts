@@ -20,6 +20,8 @@ export const RUNBOOK_ANCHORS: Record<ProblemKind, string> = {
   credit_low: "ai-credit",
   zinc_low: "zinc-app-balance-low",
   deadline_close: "waiting-on-the-buyer",
+  // The order.over_max_charge row of the alerts table: what to refund and what to fix.
+  over_max_charge: "alerts-events-with-alert-true",
   check_failed: "the-health-check-couldnt-run",
 };
 
@@ -38,6 +40,7 @@ const TITLES: Record<ProblemKind, string> = {
   credit_low: "AI credit is low",
   zinc_low: "The app's Zinc balance is low",
   deadline_close: "Waiting on the buyer, deadline close",
+  over_max_charge: "A card was charged more than the most shown",
   check_failed: "The health check couldn't run",
 };
 
@@ -79,6 +82,8 @@ function describe(p: Problem): string {
       return `${dollars(d.balanceCents)} left, warning below ${dollars(d.lowCents)}`;
     case "deadline_close":
       return `${ids}, waiting on ${d.reason}, ship by ${d.shipByDeadline}`;
+    case "over_max_charge":
+      return `${ids}: charged ${dollars(d.chargeCents)}, most shown ${dollars(d.maxChargeCents)}`;
     case "check_failed":
       return `Stopped at: ${d.stage}`;
     default:
