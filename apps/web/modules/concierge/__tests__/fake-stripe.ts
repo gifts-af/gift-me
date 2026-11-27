@@ -23,6 +23,10 @@ export class FakeStripe {
   sessions = new Map<string, Session>();
   /** Payment method ids whose detach fails with a 500. */
   failDetach = new Set<string>();
+  /** When set, creating a Checkout Session answers with this status (a 500, say). */
+  sessionStatus: number | null = null;
+  /** Runs after a customer is created, before the answer goes back (to race another start). */
+  afterCustomer: (() => Promise<void>) | null = null;
   private byIdem = new Map<string, string>();
   private n = 0;
 
@@ -69,9 +73,11 @@ export class FakeStripe {
       }
       this.customers.set(id, { metadata });
       if (idem) this.byIdem.set(idem, id);
+      if (this.afterCustomer) await this.afterCustomer();
       return json(200, { id, object: "customer" });
     }
     if (method === "POST" && u.pathname === "/v1/checkout/sessions") {
+      if (this.sessionStatus !== null) return json(this.sessionStatus, { error: { type: "api_error", message: "Stripe broke" } });
       const id = this.id("cs");
       this.sessions.set(id, {
         id,

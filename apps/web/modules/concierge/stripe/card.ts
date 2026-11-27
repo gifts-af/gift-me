@@ -68,6 +68,57 @@ async function createCustomer(h: StripeHttp, userId: string): Promise<string> {
 }
 
 /**
+ * The buyer's Stripe customer: the account's, else a new one saved on the account at once, before
+ * anything else can fail, and only while it has none (T42: one per buyer, even after Stripe's
+ * 24-hour idempotency window). If another start saved one first, that one is used.
+ */
+async function customerFor(d: CardDeps, userId: string, saved: string | null): Promise<string> {
+  if (saved) return saved;
+  const created = await createCustomer(d.stripe, userId);
+  const accounts = d.db.schema("concierge").from("accounts");
+  const row = await accounts.upsert({ user_id: userId }, { onConflict: "user_id", ignoreDuplicates: true });
+  if (row.error) fail("Creating the account failed", row.error);
+  const set = await accounts.update({ stripe_customer_id: created }).eq("user_id", userId).is("stripe_customer_id", null);
+  if (set.error) fail("Saving the customer failed", set.error);
+  const held = (await readAccount(d, userId)).stripe_customer_id;
+  if (!held) throw new Error("The account has no customer after saving one.");
+  // Ours is left unused at Stripe, empty; no ids are logged (E6).
+  if (held !== created) logEvent("card.customer_raced", { user_id: userId });
+  return held;
+}
+
+const uuidList = z.array(z.string().uuid());
+
+/**
+ * Whether the round, ideas and failed order the buyer comes back to are theirs, checked before any
+ * Stripe call. start_card_session checks the same again under the account lock.
+ */
+async function ownsTarget(d: DbDeps, userId: string, from: Exclude<CardFrom, "settings">): Promise<boolean> {
+  const ids = uuidList.safeParse([from.roundId, ...from.ideaIds, ...(from.failedOrderId ? [from.failedOrderId] : [])]);
+  if (!ids.success) return false;
+  const db = d.db.schema("concierge");
+  const round = await db.from("gift_rounds").select("id").eq("id", from.roundId).eq("user_id", userId).maybeSingle();
+  if (round.error) fail("Reading the round failed", round.error);
+  if (!round.data) return false;
+  if (from.failedOrderId) {
+    const order = await db
+      .from("orders")
+      .select("id")
+      .eq("id", from.failedOrderId)
+      .eq("user_id", userId)
+      .eq("round_id", from.roundId)
+      .maybeSingle();
+    if (order.error) fail("Reading the order failed", order.error);
+    if (!order.data) return false;
+  }
+  const wanted = new Set(from.ideaIds);
+  if (wanted.size === 0) return true;
+  const ideas = await db.from("gift_ideas").select("id").in("id", [...wanted]).eq("user_id", userId).eq("round_id", from.roundId);
+  if (ideas.error) fail("Reading the ideas failed", ideas.error);
+  return (ideas.data ?? []).length === wanted.size;
+}
+
+/**
  * Leaves for Stripe's card page. "off" while connect_enabled isn't 1; "bad_phone" when the
  * account has no phone and `phone` isn't a 10-digit number (Zinc needs one for every order);
  * "not_yours" when the round, ideas or failed order aren't this buyer's.
@@ -84,7 +135,10 @@ export async function startCardSession(
     if (!phone) return "bad_phone";
   }
 
-  const customer = account.stripe_customer_id ?? (await createCustomer(d.stripe, i.userId));
+  const from = i.from === "settings" ? null : i.from;
+  if (from && !(await ownsTarget(d, i.userId, from))) return "not_yours";
+
+  const customer = await customerFor(d, i.userId, account.stripe_customer_id);
   const back = `${d.siteUrl}${RETURN_PATH}`;
   const session = await stripeCall(d.stripe, "POST", "/v1/checkout/sessions", Session, {
     op: "create_session",
@@ -100,7 +154,6 @@ export async function startCardSession(
     },
   });
 
-  const from = i.from === "settings" ? null : i.from;
   const { data, error } = await d.db.schema("concierge").rpc("start_card_session", {
     p_user_id: i.userId,
     p_session_id: session.id,

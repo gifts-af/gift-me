@@ -163,6 +163,58 @@ describe.skipIf(!dbUp)("saving a card (real local database, fake Stripe)", () =>
     expect((await pg.query("select count(*)::int as n from concierge.card_sessions where user_id = $1", [me])).rows[0].n).toBe(0);
   });
 
+  it("AC-2: refuses another buyer's round, ideas or failed order before any Stripe call", async () => {
+    const me = await newUser();
+    const other = await newUser();
+    const mine = await newRound(me);
+    const theirs = await newRound(other);
+    const theirFailed = await newOrder(other, theirs.roundId, theirs.ideaIds[0], "failed", null, "card_needed");
+    for (const from of [
+      { roundId: theirs.roundId, ideaIds: [] },
+      { roundId: mine.roundId, ideaIds: [theirs.ideaIds[0]] },
+      { roundId: mine.roundId, ideaIds: [], failedOrderId: theirFailed },
+      { roundId: theirs.roundId, ideaIds: [], failedOrderId: theirFailed },
+    ]) {
+      expect(await startCardSession(deps(), { userId: me, from })).toBe("not_yours");
+    }
+    expect(stripe.requests).toEqual([]);
+    expect((await account(me)).stripe_customer_id).toBeNull();
+  });
+
+  it("T42: the customer is saved at once, so a failed session start leaves it saved and the next start reuses it", async () => {
+    const u = await newUser();
+    stripe.sessionStatus = 500;
+    await expect(startCardSession(deps(), { userId: u, from: "settings" })).rejects.toThrow();
+    const created = [...stripe.customers.keys()];
+    expect(created).toHaveLength(1);
+    expect((await account(u)).stripe_customer_id).toBe(created[0]);
+
+    // A day later Stripe's idempotency key has expired: still no second customer.
+    stripe = new FakeStripe("test");
+    const out = await startCardSession(deps(), { userId: u, from: "settings" });
+    expect(out).toHaveProperty("url");
+    expect(stripe.requests.filter((r) => r.path === "/v1/customers")).toEqual([]);
+    expect(stripe.requests.find((r) => r.path === "/v1/checkout/sessions")?.body.get("customer")).toBe(created[0]);
+  });
+
+  it("T42: a customer saved by another start meanwhile wins; ours is left unused and logged without ids", async () => {
+    const u = await newUser();
+    stripe.afterCustomer = async () => {
+      await pg.query("update concierge.accounts set stripe_customer_id = 'cus_other_start' where user_id = $1", [u]);
+    };
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      expect(await startCardSession(deps(), { userId: u, from: "settings" })).toHaveProperty("url");
+      const raced = log.mock.calls.map((c) => JSON.parse(String(c[0])) as Record<string, unknown>).filter((e) => e.event === "card.customer_raced");
+      expect(raced).toEqual([expect.objectContaining({ user_id: u })]);
+      expect(JSON.stringify(raced)).not.toMatch(/cus_/);
+    } finally {
+      log.mockRestore();
+    }
+    expect((await account(u)).stripe_customer_id).toBe("cus_other_start");
+    expect(stripe.requests.find((r) => r.path === "/v1/checkout/sessions")?.body.get("customer")).toBe("cus_other_start");
+  });
+
   it("AC-17: asks for a phone when the account has none, and saves it", async () => {
     const u = await newUser({ phone: null });
     expect(await startCardSession(deps(), { userId: u, from: "settings" })).toBe("bad_phone");
