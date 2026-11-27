@@ -7,7 +7,7 @@ on:
   push:
     branches: [main]
     # Docs are pushed straight to main and change no code, so they don't need
-    # the tests (ALL-117). PRs aren't filtered: "check" is required to merge,
+    # the tests (ALL-117). PRs aren't filtered: "check", "db" and "e2e" are required to merge,
     # and a filtered-out run would leave it waiting forever.
     paths-ignore:
       - "planning/**"
