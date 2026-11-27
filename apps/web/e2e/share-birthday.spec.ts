@@ -37,6 +37,7 @@ test("save a birthday after sharing, and someone adding you gets it, until you r
   await expect(page.getByText("No birthday saved.")).toHaveCount(0);
   await page.getByRole("button", { name: /^(Share|Copied!)$/ }).click();
   await page.getByRole("dialog", { name: "Share your list" }).getByRole("button", { name: "Copy link" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.getByRole("link", { name: "No birthday saved. Add it (optional)" }).click();
 
   // The Birthday screen saves it.
@@ -84,6 +85,20 @@ test("save a birthday after sharing, and someone adding you gets it, until you r
   expect(await occasions.json()).toEqual([{ month: 3, day: 14 }]);
 });
 
+test("the share box offers it too, and closes on the way to Settings", async ({ page }) => {
+  const sam = await createFreshUser("Sam");
+  await saveOneGiftList(sam);
+  await signIn(page, sam);
+  await page.goto("/lists");
+  await page.getByRole("button", { name: /^(Share|Copied!)$/ }).click();
+  const box = page.getByRole("dialog", { name: "Share your list" });
+  await box.getByRole("link", { name: "No birthday saved. Add it (optional)" }).click();
+  await expect(page).toHaveURL(/\/settings\/birthday$/);
+  await page.goBack();
+  await expect(page.getByRole("heading", { name: "My list" })).toBeVisible();
+  await expect(box).toHaveCount(0);
+});
+
 test("with no list there's no Birthday row, and its screen goes back to Settings", async ({ page }) => {
   await signIn(page, await createFreshUser("Sam"));
   await page.goto("/settings");
@@ -116,7 +131,13 @@ test("the Birthday screen and the note under Share fit", { tag: "@layout" }, asy
   const gift = page.getByRole("heading", { level: 3, name: "Wool socks" });
   const before = (await gift.boundingBox())!.y;
   await page.getByRole("button", { name: /^(Share|Copied!)$/ }).click();
-  await page.getByRole("dialog", { name: "Share your list" }).getByRole("button", { name: "Copy link" }).click();
+  const box = page.getByRole("dialog", { name: "Share your list" });
+  await expect(box.getByRole("link", { name: /No birthday saved/ })).toBeVisible();
+  // The box zooms in as it opens; measure it once it's full size.
+  await box.evaluate((el) => Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)));
+  expect(await phoneLayoutProblems(page)).toEqual([]);
+  await box.getByRole("button", { name: "Copy link" }).click();
+  await expect(box).toHaveCount(0);
   await expect(page.getByText("No birthday saved.")).toBeVisible();
   expect((await gift.boundingBox())!.y).toBe(before);
   const summary = (await page.getByText("$1,240.00").first().boundingBox())!;

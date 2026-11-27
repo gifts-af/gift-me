@@ -286,6 +286,10 @@ describe("GiftApp", () => {
   describe("the note under Share (ALL-182 AC-13)", () => {
     const HINT = <p>No birthday saved</p>;
     const share = shareAndCopy;
+    const openBox = async () => {
+      await user.click(screen.getByRole("button", { name: "Share" }));
+      return screen.findByRole("dialog", { name: "Share your list" });
+    };
 
     it("shows once the link is copied, and not before", async () => {
       render(<GiftApp initial={member} shareHint={HINT} />);
@@ -361,6 +365,34 @@ describe("GiftApp", () => {
       render(<GiftApp initial={null} shareHint={HINT} />);
       for (const b of screen.queryAllByRole("button", { name: /Share/ })) await user.click(b);
       expect(screen.queryByText("No birthday saved")).toBeNull();
+    });
+
+    it("shows in the share box too, before anything is shared", async () => {
+      render(<GiftApp initial={member} shareHint={HINT} />);
+      const menu = await openBox();
+      expect(within(menu).getByText("No birthday saved")).toBeVisible();
+    });
+
+    it("closes the share box when it's tapped", async () => {
+      const link = <a href="#birthday">No birthday saved</a>;
+      render(<GiftApp initial={member} shareHint={link} />);
+      const menu = await openBox();
+      await user.click(within(menu).getByRole("link", { name: "No birthday saved" }));
+      await vi.waitFor(() => expect(screen.queryByRole("dialog", { name: "Share your list" })).toBeNull());
+    });
+
+    it("leaves the share box open when the space beside the link is tapped", async () => {
+      const link = <a href="#birthday">No birthday saved</a>;
+      render(<GiftApp initial={member} shareHint={link} />);
+      const menu = await openBox();
+      await user.click(within(menu).getByRole("link", { name: "No birthday saved" }).parentElement!);
+      expect(screen.getByRole("dialog", { name: "Share your list" })).toBeVisible();
+    });
+
+    it("isn't in the share box once there's a birthday", async () => {
+      render(<GiftApp initial={member} shareHint={null} />);
+      const menu = await openBox();
+      expect(within(menu).queryByText("No birthday saved")).toBeNull();
     });
 
     it("goes once there's a birthday", async () => {

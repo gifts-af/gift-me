@@ -33,7 +33,7 @@ async function addByHand(name: string) {
   await user.click(screen.getByRole("button", { name: "Add to list" }));
 }
 
-const app = (missing: SizeKind[] = ["top", "pants", "dress", "shoe", "ring", "hat"]) => (
+const app = (missing: SizeKind[] = ["top", "pants", "dress", "bra", "shoe", "ring", "hat"]) => (
   <GiftApp initial={member} sizeAsk={{ missing, save, userId }} />
 );
 const card = () => screen.queryByRole("region", { name: /Add your .* size\?/ });
@@ -63,6 +63,13 @@ describe("asking for a missing size", () => {
     expect(screen.getByText(/Anyone with your list link will see it when they go to claim/)).toBeVisible();
     expect(screen.getByText("Add your shirt or top size? Asked below, optional.")).toBeInTheDocument();
     expect(screen.getByLabelText("Shirt or top size")).toBeVisible();
+  });
+
+  it("asks for the bra size when a bralette is added and none is saved", async () => {
+    render(app());
+    await addByHand("Cotton Bralette");
+    expect(card()).toHaveAccessibleName("Add your bra size?");
+    expect(screen.getByLabelText("Bra size")).toBeVisible();
   });
 
   it("still asks after a one-tap add from a link (ALL-188 AC-4)", async () => {

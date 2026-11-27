@@ -15,6 +15,7 @@ const WORDS: Record<Exclude<SizeKind, "color">, string[]> = {
     "sweatpants", "skirt",
   ],
   dress: ["dress", "gown"],
+  bra: ["bra", "bralette", "brassiere"],
   ring: ["ring"],
   hat: ["hat", "cap", "beanie", "beret"],
 };
