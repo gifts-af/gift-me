@@ -70,9 +70,15 @@ export default function ShareMenu(props: ShareMenuProps) {
         <ul className="flex flex-col gap-2">
           {props.instagram && (
             <li>
-              <button type="button" className={OPTION} onClick={choose(props.onInstagram)}>
+              <button type="button" className={OPTION} onClick={choose(props.onInstagram)} aria-label="Instagram Story" aria-describedby="share-ig-hint">
                 <InstagramIcon />
-                Instagram Story
+                <span className="flex flex-col items-start text-left">
+                  Instagram Story
+                  {/* Said before the tap: the share sheet covers the page note right after. */}
+                  <span id="share-ig-hint" className="text-[13px] font-normal text-muted-foreground">
+                    Posts your list card and copies your link. In Instagram, add a Link sticker and paste it.
+                  </span>
+                </span>
               </button>
             </li>
           )}
