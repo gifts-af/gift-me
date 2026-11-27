@@ -133,6 +133,11 @@ describe("GiftApp", () => {
       await user.click(screen.getByRole("button", { name: "Share" }));
       return screen.findByRole("dialog", { name: "Share your list" });
     }
+    async function openInstagram() {
+      const menu = within(await openMenu());
+      await user.click(menu.getByRole("button", { name: "Instagram Story" }));
+      await user.click(menu.getByRole("button", { name: "Open Instagram" }));
+    }
     const optionNames = (menu: HTMLElement) =>
       within(menu)
         .getAllByRole("listitem")
@@ -155,8 +160,12 @@ describe("GiftApp", () => {
       render(<GiftApp initial={member} />);
       const menu = await openMenu();
       expect(optionNames(menu)).toEqual(["Instagram Story", "Messages", "WhatsApp", "Facebook", "X", "Copy link", "More…"]);
-      // Said before the tap, because the share sheet covers the page note straight after.
-      expect(within(menu).getByRole("button", { name: "Instagram Story" })).toHaveAccessibleDescription(/add a Link sticker and paste it/);
+      // Instagram first says how to add the link, before Instagram covers the page.
+      await user.click(within(menu).getByRole("button", { name: "Instagram Story" }));
+      expect(within(menu).getByText(/Link/, { selector: "strong" })).toBeTruthy();
+      expect(within(menu).getByRole("button", { name: "Open Instagram" })).toBeTruthy();
+      await user.click(within(menu).getByRole("button", { name: "Back" }));
+      expect(within(menu).getByRole("button", { name: "Instagram Story" })).toBeTruthy();
     });
 
     it("hides Instagram Story where files can't be shared", async () => {
@@ -235,7 +244,7 @@ describe("GiftApp", () => {
       const writeText = vi.spyOn(navigator.clipboard, "writeText");
       render(<GiftApp initial={member} />);
       await imageLoaded();
-      await user.click(within(await openMenu()).getByRole("button", { name: "Instagram Story" }));
+      await openInstagram();
       expect(writeText).toHaveBeenCalledWith(LINK);
       const [[data]] = shareSpy.mock.calls as [[ShareData]];
       expect(data.url).toBeUndefined();
@@ -248,7 +257,7 @@ describe("GiftApp", () => {
       asDevice({ outcome: () => Promise.reject(new DOMException("closed", "AbortError")) });
       render(<GiftApp initial={member} />);
       await imageLoaded();
-      await user.click(within(await openMenu()).getByRole("button", { name: "Instagram Story" }));
+      await openInstagram();
       expect(shareSpy).toHaveBeenCalledTimes(1);
       expect(screen.queryByLabelText("Share link")).toBeNull();
     });
@@ -257,7 +266,7 @@ describe("GiftApp", () => {
       asDevice({ outcome: () => Promise.reject(new DOMException("blocked", "NotAllowedError")) });
       render(<GiftApp initial={member} />);
       await imageLoaded();
-      await user.click(within(await openMenu()).getByRole("button", { name: "Instagram Story" }));
+      await openInstagram();
       await vi.waitFor(() => expect(shareSpy).toHaveBeenCalledTimes(2));
       expect(shareSpy).toHaveBeenLastCalledWith(expect.objectContaining({ url: LINK }));
       expect(screen.queryByText(NOTE)).toBeNull();
@@ -268,7 +277,7 @@ describe("GiftApp", () => {
       fetchSpy.mockResolvedValue(new Response("nope", { status: 404 }));
       render(<GiftApp initial={member} />);
       await imageLoaded();
-      await user.click(within(await openMenu()).getByRole("button", { name: "Instagram Story" }));
+      await openInstagram();
       expect(shareSpy).toHaveBeenCalledTimes(1);
       expect(shareSpy).toHaveBeenCalledWith(expect.objectContaining({ url: LINK }));
     });
