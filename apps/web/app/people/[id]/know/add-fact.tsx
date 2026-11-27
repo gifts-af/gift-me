@@ -33,7 +33,17 @@ const EXAMPLES: Record<FactCategory, string> = {
   constraint: "Small apartment, no room for big things…",
 };
 
-export function AddFact({ personId, action }: { personId: string; /** `addFactAction` */ action: Action }) {
+export function AddFact({
+  personId,
+  action,
+  hasAccess,
+}: {
+  personId: string;
+  /** `addFactAction` */
+  action: Action;
+  /** Without concierge access, facts wait for the concierge; a line says so. */
+  hasAccess: boolean;
+}) {
   const id = useId();
   const hydrated = useHydrated();
   const [value, setValue] = useState("");
@@ -89,7 +99,7 @@ export function AddFact({ personId, action }: { personId: string; /** `addFactAc
       </div>
       <div className="flex items-end gap-2">
         <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-          <Label htmlFor={`${id}-category`}>Kind</Label>
+          <Label htmlFor={`${id}-category`}>Type</Label>
           <NativeSelect id={`${id}-category`} value={category} onChange={(e) => setCategory(e.target.value as FactCategory)}>
             {CATEGORY_GROUPS.map((g) => (
               <option key={g.category} value={g.category}>
@@ -110,6 +120,11 @@ export function AddFact({ personId, action }: { personId: string; /** `addFactAc
       <p role="status" className="text-[13px] text-success">
         {added ? "Added" : ""}
       </p>
+      {!hasAccess && (
+        <p className="text-[13px] text-muted-foreground">
+          Saved for when your concierge opens. We&apos;ll use it for gift ideas.
+        </p>
+      )}
     </form>
   );
 }

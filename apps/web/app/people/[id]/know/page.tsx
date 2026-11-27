@@ -58,7 +58,8 @@ async function Loaded({ params }: { params: Promise<{ id: string }> }) {
     <>
       <BackLink href={base} label={person.name} />
       <PageTitle>What we know</PageTitle>
-      <AddFact personId={person.id} action={addFactAction} />
+      {/* An unread access (null) hides the "saved for later" line rather than showing it to someone who may have access. */}
+      <AddFact personId={person.id} action={addFactAction} hasAccess={access ? access.access : true} />
       {profile.openCount > 0 && (
         <p className="-my-3 text-[15px]">
           <Link

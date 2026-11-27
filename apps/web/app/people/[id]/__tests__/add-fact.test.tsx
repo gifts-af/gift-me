@@ -17,14 +17,14 @@ beforeEach(() => {
   hydrated.value = true;
 });
 
-function setup(result: Result = { ok: true }) {
+function setup(result: Result = { ok: true }, hasAccess = true) {
   const action = vi.fn(async (...a: [unknown, FormData]) => (void a, result));
-  render(<AddFact personId="p1" action={action} />);
+  render(<AddFact personId="p1" action={action} hasAccess={hasAccess} />);
   return { action, user: userEvent.setup() };
 }
 
 const box = () => screen.getByRole("textbox", { name: "Add something" });
-const kind = () => screen.getByRole("combobox", { name: "Kind" });
+const type = () => screen.getByRole("combobox", { name: "Type" });
 const add = () => screen.getByRole("button", { name: "Add" });
 const sent = (fn: { mock: { calls: [unknown, FormData][] } }) => Object.fromEntries(fn.mock.calls[0][1].entries());
 
@@ -32,18 +32,18 @@ describe("AddFact", () => {
   it("has a box with an example, and every kind, starting on Interests", () => {
     setup();
     expect(box()).toHaveAttribute("placeholder", "Loves pottery, cold brew…");
-    expect(kind()).toHaveValue("interest");
-    expect([...(kind() as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(CATEGORY_GROUPS.map((g) => g.label));
+    expect(type()).toHaveValue("interest");
+    expect([...(type() as HTMLSelectElement).options].map((o) => o.textContent)).toEqual(CATEGORY_GROUPS.map((g) => g.label));
   });
 
   // An example that mixes kinds invites a size saved as an interest (review of ALL-186).
   it("gives each kind its own example, never one the sensitive-topics rule would refuse", async () => {
     const { user } = setup();
-    await user.selectOptions(kind(), "size");
+    await user.selectOptions(type(), "size");
     expect(box()).toHaveAttribute("placeholder", "Size M tops, shoe size 9…");
     const examples = new Set<string>();
     for (const g of CATEGORY_GROUPS) {
-      await user.selectOptions(kind(), g.category);
+      await user.selectOptions(type(), g.category);
       const example = box().getAttribute("placeholder") ?? "";
       expect(example, g.category).toMatch(/…$/);
       expect(isSensitive(example), example).toBe(false);
@@ -56,13 +56,13 @@ describe("AddFact", () => {
   it("sends the words and the kind picked, then empties the box and says Added", async () => {
     const { action, user } = setup();
     await user.type(box(), "size M tops");
-    await user.selectOptions(kind(), "size");
+    await user.selectOptions(type(), "size");
     await user.click(add());
     await waitFor(() => expect(action).toHaveBeenCalledOnce());
     expect(sent(action)).toEqual({ personId: "p1", value: "size M tops", category: "size" });
     expect(await screen.findByRole("status")).toHaveTextContent("Added");
     expect(box()).toHaveValue("");
-    expect(kind()).toHaveValue("interest");
+    expect(type()).toHaveValue("interest");
   });
 
   it("adds on Enter", async () => {
@@ -87,6 +87,18 @@ describe("AddFact", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("That's already on their profile.");
     expect(box()).toHaveValue("tea");
     expect(screen.queryByText("Added")).toBeNull();
+  });
+
+  const savedForLater = "Saved for when your concierge opens. We'll use it for gift ideas.";
+
+  it("tells someone without concierge access what their facts are for", () => {
+    setup({ ok: true }, false);
+    expect(screen.getByText(savedForLater)).toBeInTheDocument();
+  });
+
+  it("doesn't explain it to someone with concierge access", () => {
+    setup({ ok: true }, true);
+    expect(screen.queryByText(savedForLater)).toBeNull();
   });
 
   it("keeps the fields off until the page can save (ALL-110)", () => {

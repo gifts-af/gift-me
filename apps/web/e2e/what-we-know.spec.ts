@@ -124,9 +124,9 @@ test("facts open in place and save as you go: confirmed, turned off and on, edit
   await page.getByRole("button", { name: "Turn on a new rotary fly-tying vise" }).click();
   await expect(wants.getByText("a new rotary fly-tying vise")).toBeVisible();
 
-  // Kind, then words (AC-9): each saves, and the words' save keeps the new kind.
+  // Type, then words (AC-9): each saves, and the words' save keeps the new type.
   await wants.getByRole("button", { name: "a new rotary fly-tying vise", exact: true }).click();
-  await know.getByRole("combobox", { name: "Kind" }).selectOption("loved");
+  await know.getByRole("combobox", { name: "Type" }).selectOption("loved");
   await expect(know.getByRole("status")).toHaveText("Saved");
   await expect.poll(async () => (await factRow()).category).toBe("loved");
   const fact = know.getByRole("textbox", { name: "Fact" });
@@ -146,7 +146,7 @@ test("facts open in place and save as you go: confirmed, turned off and on, edit
 
   // A refused save keeps the words and says why (AC-9).
   await fact.fill("Owala water bottle");
-  await know.getByRole("combobox", { name: "Kind" }).selectOption("owns");
+  await know.getByRole("combobox", { name: "Type" }).selectOption("owns");
   await expect(know.getByRole("alert")).toHaveText("That's already on their profile (it may be turned off).");
   await expect(fact).toHaveValue("Owala water bottle");
 
@@ -197,7 +197,7 @@ test("adds a fact on the What we know page, which the person's row counts", asyn
 
   const box = page.getByRole("textbox", { name: "Add something" });
   await box.fill("pottery classes");
-  await page.getByRole("combobox", { name: "Kind" }).selectOption("wants");
+  await page.getByRole("combobox", { name: "Type" }).selectOption("wants");
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await expect(page.getByText("Added", { exact: true })).toBeVisible();
   await expect(box).toHaveValue("");
@@ -212,7 +212,7 @@ test("adds a fact on the What we know page, which the person's row counts", asyn
 
   // The same again is refused, and the words stay.
   await box.fill("Pottery classes");
-  await page.getByRole("combobox", { name: "Kind" }).selectOption("wants");
+  await page.getByRole("combobox", { name: "Type" }).selectOption("wants");
   await page.getByRole("button", { name: "Add", exact: true }).click();
   await expect(page.getByRole("main").getByRole("alert")).toHaveText("That's already on their profile.");
   await expect(box).toHaveValue("Pottery classes");
