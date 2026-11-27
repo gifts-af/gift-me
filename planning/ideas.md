@@ -148,6 +148,7 @@ One line each (CLAUDE.md > Scope freeze). Reviewed when the freeze lifts.
 - Privacy and Feedback links inside the app (ALL-179).
 - "No ideas" emails go one per round: one account got four at once on 2026-11-26; group them into one, like failures (ALL-116).
 - **Size ask false hits (ALL-184 review):** "Ring Light" asks for a ring size; the card asks for personal data on a guess (principle 10). A narrower word list for asking than for showing, or a "this isn't clothing" link on the card.
+- **Outlook files our emails as junk (2026-11-27):** an outlook.com sign-up's confirm email was delivered by Resend but never seen. Move DMARC past `p=none` once reports look clean, and consider Microsoft SNDS.
 
 ## A common thread
 
