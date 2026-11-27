@@ -199,7 +199,9 @@ This is a row under You for someone with a list: "Not added", "3 saved, 1 shared
 
 **Every gift round that can still change, or has a gift on its way, is one row that opens its round page** (`/rounds/<id>`). Nothing shows when there are none, or when they can't be read.
 
-- **Home:** a "Gifts in progress" list above People, with a row per round for everyone: "Jenn · Christmas" and its status line. What needs the buyer comes first, then the nearest ship-by day (or occasion, once it's bought).
+- **Give:** one summary row above People, like a Settings row (ALL-187): "Gifts in progress", then the count and how many need you, "6 · 2 need you" ("1 needs you"; just "6" when none do). The "need you" part is amber (`--warning`) so it still stands out. It opens `/gifts`.
+- **Gifts in progress page** (`/gifts`, back to Give): a row per round for everyone: "Jenn · Christmas" and its status line. What needs the buyer comes first, then the nearest ship-by day (or occasion, once it's bought). With none it says "No gifts in progress."; when they can't be read, "Couldn't load your gifts. Try again." (Give then shows no row rather than a count that could be wrong).
+- **"Need you"** means the buyer can move the round on: a fix, ideas waiting for a choice, "No ideas found yet" (the no-ideas email asks them to add something), an address, money or setup to add, "No ideas left" or "Needs a look". "May arrive late" is amber but not counted: there's nothing for the buyer to do. It's the status line's own flag (`needsBuyer` in `modules/concierge/rounds/progress.ts`), the same one that orders the list.
 - **A person's page:** the same rows under the header (and under the list prompt), named "Christmas gift".
 - Rows are links at least 44 px tall with a chevron. The words say the status; the colour only repeats it.
 

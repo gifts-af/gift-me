@@ -16,7 +16,7 @@ export type ProgressOrder = OrderState & {
 export type ProgressLine = {
   text: string;
   tone: "ready" | "warn" | "muted";
-  /** The buyer can move it on, so it's listed first. */
+  /** The buyer can move it on, so it's listed first and counted as "need you" on Give. */
   needsBuyer: boolean;
 };
 

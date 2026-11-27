@@ -9,10 +9,10 @@ import { errorFields, logEvent } from "@/lib/log";
 import { giftsInProgress, type GiftInProgress } from "@/modules/concierge";
 
 /**
- * The signed-in user's gifts in progress, or one person's. Extra on both pages that show it, so a
- * failed read (or a missing setting) is logged and shows nothing rather than taking the page down (T19).
+ * The signed-in user's gifts in progress, or one person's. A failed read (or a missing setting) is
+ * logged and gives null rather than taking the page down (T19), so a caller can tell it from none.
  */
-export async function loadGiftsInProgress(personId?: string): Promise<GiftInProgress[]> {
+export async function loadGiftsInProgress(personId?: string): Promise<GiftInProgress[] | null> {
   let userId: string | null = null;
   try {
     const supabase = await createClient();
@@ -28,6 +28,6 @@ export async function loadGiftsInProgress(personId?: string): Promise<GiftInProg
       error: error instanceof Error ? error.name : "unknown",
       ...errorFields(error),
     });
-    return [];
+    return null;
   }
 }

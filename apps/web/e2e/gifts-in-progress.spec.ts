@@ -24,28 +24,39 @@ async function seedAll(b: Buyer) {
   return { jenn, choosing, shipped };
 }
 
+// The person's page: their rows in a region. Give: one summary row. /gifts: the rows in the page's list.
 const section = (page: Page) => page.getByRole("region", { name: "Gifts in progress" });
+const summaryRow = (page: Page) => page.getByRole("link", { name: /^Gifts in progress/ });
+const giftRows = (page: Page) => page.getByRole("main").getByRole("listitem").getByRole("link");
 
-test("Home lists the gifts in progress, and each opens its round; the person's page has theirs", async ({ page }) => {
+test("Give sums up the gifts in progress, the gifts page lists them and each opens its round; the person's page has theirs", async ({ page }) => {
   const b = await readyBuyer(await createFreshUser());
   await signIn(page, b.creds);
   await page.goto("/give");
   await expect(page.getByRole("link", { name: "Add someone you buy for" })).toBeVisible();
-  await expect(section(page)).toHaveCount(0);
+  await expect(summaryRow(page)).toHaveCount(0);
 
   const { jenn, choosing, shipped } = await seedAll(b);
   await page.reload();
-  const rows = section(page).getByRole("link");
+  // One row: Jenn's choice and Bob's fix need the buyer, Mom's shipped gift doesn't.
+  const summary = summaryRow(page);
+  await expect(summary).toHaveText([/^Gifts in progress\s*3 · 2 need you$/]);
+  await expect(summary).toHaveAttribute("href", "/gifts");
+  // Above the people.
+  const gifts = (await summary.boundingBox())!;
+  const people = (await page.getByRole("heading", { level: 1, name: "People" }).boundingBox())!;
+  expect(gifts.y + gifts.height).toBeLessThanOrEqual(people.y);
+
+  await summary.click();
+  await expect(page).toHaveURL(/\/gifts$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Gifts in progress" })).toBeVisible();
+  const rows = giftRows(page);
   await expect(rows).toHaveText([
     /^Jenn · Birthday ?3 ideas ready · Choose by \w{3}, \w{3} \d{1,2}$/,
     /^Uncle Bartholomew.* · Birthday ?Needs a fix · Choose by \w{3}, \w{3} \d{1,2}$/,
     /^Mom · Birthday ?Shipped · due \w{3}, \w{3} \d{1,2}$/,
   ]);
   await expect(rows.nth(2)).toHaveAttribute("href", `/rounds/${shipped.roundId}`);
-  // Above the people.
-  const gifts = (await section(page).boundingBox())!;
-  const people = (await page.getByRole("heading", { level: 1, name: "People" }).boundingBox())!;
-  expect(gifts.y + gifts.height).toBeLessThanOrEqual(people.y);
 
   await rows.first().click();
   await expect(page).toHaveURL(new RegExp(`/rounds/${choosing.roundId}$`));
@@ -70,19 +81,20 @@ test("a gift's plain link, signed out, signs in and comes back to it", async ({ 
   await expect(page.getByRole("heading", { level: 1, name: "Gift for Jenn" })).toBeVisible();
 });
 
-test("the gifts in progress fit Home and the person's page in light and dark", { tag: "@layout" }, async ({ page }) => {
+test("the gifts in progress fit Give, the gifts page and the person's page in light and dark", { tag: "@layout" }, async ({ page }) => {
   const b = await readyBuyer(await createFreshUser());
   const { jenn } = await seedAll(b);
   await signIn(page, b.creds);
   const problems: string[] = [];
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
-    for (const [path, rows] of [
-      ["/give", 3],
-      [`/people/${jenn.personId}`, 1],
+    for (const [path, rows, find] of [
+      ["/give", 1, summaryRow],
+      ["/gifts", 3, giftRows],
+      [`/people/${jenn.personId}`, 1, (p: Page) => section(p).getByRole("link")],
     ] as const) {
       await page.goto(path);
-      const links = section(page).getByRole("link");
+      const links = find(page);
       await expect(links).toHaveCount(rows);
       for (const link of await links.all()) expect((await link.boundingBox())!.height).toBeGreaterThanOrEqual(44);
       problems.push(...(await phoneLayoutProblems(page)).map((p) => `${path} (${scheme}): ${p}`));

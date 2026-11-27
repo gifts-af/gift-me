@@ -22,6 +22,9 @@ const gift = (roundId: string, over: object = {}) => ({
   line: { text: "3 ideas ready · Choose by Tue, Dec 15", tone: "ready" as const, needsBuyer: true },
   ...over,
 });
+const fix = { text: "Needs a fix · Choose by Tue, Dec 15", tone: "warn", needsBuyer: true };
+const late = { text: "May arrive late · due Sun, Dec 27", tone: "warn", needsBuyer: false };
+const ordered = { text: "Ordered", tone: "muted", needsBuyer: false };
 
 beforeEach(() => {
   giftsInProgress.mockReset();
@@ -29,23 +32,41 @@ beforeEach(() => {
 });
 
 describe("GiftsSection", () => {
-  it("is a list of links, in the order given, with the person, occasion and status in words", async () => {
+  it("is one row with the count and how many need you, in amber, opening the gifts page (AC-1)", async () => {
     giftsInProgress.mockResolvedValue([
       gift("r1"),
-      gift("r2", { personName: "Uncle Bob", line: { text: "Needs an address", tone: "warn", needsBuyer: true } }),
-      gift("r3", { personName: "Mom", occasionKind: null, line: { text: "Ordered", tone: "muted", needsBuyer: false } }),
+      gift("r2", { line: fix }),
+      gift("r3", { line: late }),
+      gift("r4", { line: ordered }),
     ]);
     render(await GiftsSection());
-    const region = screen.getByRole("region", { name: "Gifts in progress" });
-    expect(within(region).getByRole("heading", { level: 2, name: "Gifts in progress" })).toBeInTheDocument();
-    const links = within(region).getAllByRole("link");
-    expect(links.map((l) => [l.getAttribute("href"), l.textContent])).toEqual([
-      ["/rounds/r1", "Jenn · Christmas 3 ideas ready · Choose by Tue, Dec 15"],
-      ["/rounds/r2", "Uncle Bob · Christmas Needs an address"],
-      ["/rounds/r3", "Mom · Gift Ordered"],
-    ]);
-    for (const link of links) expect(link).toHaveClass("min-h-11");
-    expect(screen.getByText("Needs an address")).toHaveClass("text-warning");
+    const links = screen.getAllByRole("link");
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute("href", "/gifts");
+    expect(links[0]).toHaveTextContent(/^Gifts in progress4 · 2 need you$/);
+    expect(links[0]).toHaveClass("min-h-11");
+    expect(within(links[0]).getByText("2 need you")).toHaveClass("text-warning");
+    // No round is listed here any more.
+    expect(screen.queryByText(/Jenn/)).toBeNull();
+  });
+
+  it("is just 1 for one gift that doesn't need you", async () => {
+    giftsInProgress.mockResolvedValue([gift("r1", { line: ordered })]);
+    render(await GiftsSection());
+    expect(screen.getByRole("link")).toHaveTextContent(/^Gifts in progress1$/);
+  });
+
+  it("says one needs you", async () => {
+    giftsInProgress.mockResolvedValue([gift("r1"), gift("r2", { line: ordered })]);
+    render(await GiftsSection());
+    expect(screen.getByRole("link")).toHaveTextContent(/^Gifts in progress2 · 1 needs you$/);
+  });
+
+  it("is just the count when none need you", async () => {
+    giftsInProgress.mockResolvedValue([gift("r1", { line: late }), gift("r2", { line: ordered })]);
+    render(await GiftsSection());
+    expect(screen.getByRole("link")).toHaveTextContent(/^Gifts in progress2$/);
+    expect(screen.queryByText(/need/)).toBeNull();
   });
 
   it.each([
