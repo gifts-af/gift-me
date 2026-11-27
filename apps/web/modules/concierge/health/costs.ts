@@ -19,7 +19,12 @@ const costSchema = z.object({
   bills: z.array(z.object({ month: z.iso.date(), vendors: z.array(z.string()) })),
   billCents: cents,
   billGifts: count,
+  // The wallet's order fee setting, for the fixed part.
   orderFeeCents: cents,
+  // Card gifts record what they paid Zinc and the card company per order (one row each).
+  cardGifts: count,
+  zincFeeCents: cents,
+  cardFeeCents: cents,
   // The QA account's costs, not in any number above.
   excludedCents: cents,
 });
@@ -66,6 +71,20 @@ export function costLines(c: CostPerGift): EmailRow[] {
         : { title: `Fixed part of the fee: ${dollars(base)}, or ${dollars(base + running)} with running the service`, detail: includes };
   }
 
+  // Counted from each card order's own rows, once each, and never as the wallet setting again.
+  const cardEach = (total: number) => dollars(c.cardGifts > 0 ? total / c.cardGifts : 0);
+  const card: EmailRow[] =
+    c.cardGifts > 0 || c.zincFeeCents > 0 || c.cardFeeCents > 0
+      ? [
+          {
+            title: `Card gifts: ${c.cardGifts}`,
+            detail:
+              `Zinc's fees ${dollars(c.zincFeeCents)} and card fees ${dollars(c.cardFeeCents)} in total, as recorded per order: ` +
+              `${cardEach(c.zincFeeCents)} and ${cardEach(c.cardFeeCents)} a gift. Not in the fixed part above.`,
+          },
+        ]
+      : [];
+
   return [
     {
       title: "Cost per completed gift",
@@ -78,6 +97,7 @@ export function costLines(c: CostPerGift): EmailRow[] {
     { title: title("Product lookups", lookups), detail: `${dollars(c.lookupCents)} in total` },
     { title: title("Running the service", running), detail: bills },
     fixed,
+    ...card,
     { title: `QA account: ${dollars(c.excludedCents)}`, detail: "Not counted above" },
   ];
 }

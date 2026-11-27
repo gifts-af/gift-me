@@ -55,6 +55,9 @@ export function costs(over: Partial<CostPerGift> = {}): CostPerGift {
     billCents: 500,
     billGifts: 6,
     orderFeeCents: 100,
+    cardGifts: 0,
+    zincFeeCents: 0,
+    cardFeeCents: 0,
     excludedCents: 42,
     ...over,
   };

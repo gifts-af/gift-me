@@ -76,6 +76,24 @@ describe("costLines", () => {
     expect(rows[4][0]).toBe("Fixed part of the fee: $1.52");
   });
 
+  it("AC-14: card gifts' own Zinc and card fees show once each, and the wallet fee setting isn't added for them", () => {
+    const rows = said({ cardGifts: 2, zincFeeCents: 200, cardFeeCents: 150 });
+    expect(rows[5]).toEqual([
+      "Card gifts: 2",
+      "Zinc's fees $2.00 and card fees $1.50 in total, as recorded per order: $1.00 and $0.75 a gift. Not in the fixed part above.",
+    ]);
+    // The fixed part is the same as without card gifts: it isn't $1.00 more for each of them.
+    expect(rows[4]).toEqual(said()[4]);
+    const all = rows.flat().join(" ");
+    expect(all.split("$2.00")).toHaveLength(2);
+    expect(rows[6]).toEqual(["QA account: $0.42", "Not counted above"]);
+  });
+
+  it("no card gifts: no card row, so a wallet-only report is unchanged", () => {
+    expect(said().map((r) => r[0])).not.toContain(expect.stringContaining("Card gifts"));
+    expect(said()).toHaveLength(6);
+  });
+
   it("AC-8: the QA account's line shows at $0.00 too", () => {
     expect(said({ excludedCents: 0 })[5]).toEqual(["QA account: $0.00", "Not counted above"]);
   });
@@ -105,6 +123,7 @@ describe("readCostPerGift", () => {
     ["a missing number", { ...costs(), gifts: undefined }],
     ["a number as text", { ...costs(), aiCents: "372" }],
     ["a date that isn't one", { ...costs(), since: "soon" }],
+    ["card fees missing", { ...costs(), cardFeeCents: undefined }],
     ["a month that isn't one", { ...costs(), bills: [{ month: "2026-13-01", vendors: ["Resend"] }] }],
   ])("refuses %s (E4)", async (_what, body) => {
     await expect(readCostPerGift(answering(body), MONDAY, 1000)).rejects.toMatchObject({ name: "ZodError" });

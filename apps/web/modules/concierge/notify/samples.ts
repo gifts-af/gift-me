@@ -107,6 +107,9 @@ function healthSamples(link: string): SampleEmail[] {
     billCents: 500,
     billGifts: 6,
     orderFeeCents: 100,
+    cardGifts: 2,
+    zincFeeCents: 200,
+    cardFeeCents: 150,
     excludedCents: 42,
   };
   const render = (name: string, report: HealthReport): SampleEmail => {
