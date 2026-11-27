@@ -7,6 +7,8 @@ import { z } from "zod";
 import { errorFields, logEvent } from "@/lib/log";
 import { normalizePhone } from "../zinc/connect";
 import type { DbDeps } from "../zinc/types";
+import { APP_DOMAIN, APP_NAME } from "@/lib/brand";
+import { EMAIL_LOGO_URL } from "@/lib/email-layout";
 import { StripeError, stripeCall } from "./client";
 import type { StripeHttp } from "./client";
 
@@ -15,13 +17,30 @@ export type CardDeps = DbDeps & { stripe: StripeHttp; siteUrl: string };
 export type CardFrom = { roundId: string; ideaIds: string[]; failedOrderId?: string } | "settings";
 
 /**
- * Shown on Stripe's page above its button.
- * PLACEHOLDER WORDING: the owner approves it with the card screens' mock-ups before
- * connect_enabled goes on anywhere real.
+ * Shown on Stripe's page above its button: when we charge, how the amount is set, and that saving
+ * a card buys nothing. Wording approved by the owner with the card screens' mock-ups (2026-11-27).
  */
 export const CARD_CONSENT_TEXT =
-  "GiftsAF charges this card only for gifts you approve: when you tap Buy, or on the day a gift you approved is ordered. " +
-  "Each charge is the gift's price, shipping and tax plus the GiftsAF fee, and never more than the most you agreed to pay for that gift.";
+  "GiftsAF keeps this card to buy gifts you approve. We charge it only when you tap Buy now or Buy again, or on an auto-buy date we emailed you about. " +
+  "Each charge is for one gift: its price, shipping and tax, plus the GiftsAF fee. It's never more than the “Most you’ll pay” we showed you. " +
+  "Saving a card doesn’t buy anything. You can remove it anytime in Settings. Charges show as GIFTSAF.";
+
+/**
+ * Stripe's card page in GiftsAF's look, per visit (the owner asked for it as on-brand as Stripe
+ * allows). The icon and logo are the gift-tag art the site already serves as PNGs (/apple-icon and
+ * the email logo), always from the production domain: Stripe fetches them, and it can't reach a
+ * local or protected preview URL. Teal is the light theme's --primary; Stripe's "default" font is
+ * the system font stack, like ours.
+ */
+const BRANDING = {
+  display_name: APP_NAME,
+  icon: { type: "url", url: `https://${APP_DOMAIN}/apple-icon` },
+  logo: { type: "url", url: EMAIL_LOGO_URL },
+  button_color: "#0f766e",
+  background_color: "#ffffff",
+  border_style: "rounded",
+  font_family: "default",
+};
 
 /** Where Stripe sends the buyer back, finished or cancelled. Stripe fills in the session id. */
 const RETURN_PATH = "/rounds/card/return?session_id={CHECKOUT_SESSION_ID}";
@@ -87,6 +106,22 @@ async function customerFor(d: CardDeps, userId: string, saved: string | null): P
   return held;
 }
 
+/** The Checkout Session we ask Stripe for: setup mode, cards only, our consent text and branding. */
+export function checkoutSessionBody(customer: string, siteUrl: string) {
+  const back = `${siteUrl}${RETURN_PATH}`;
+  return {
+    mode: "setup",
+    customer,
+    currency: "usd",
+    // Card only: no Link or other wallets, and no customer_update, so Stripe keeps as little as it can (T42).
+    payment_method_types: ["card"],
+    success_url: back,
+    cancel_url: back,
+    custom_text: { submit: { message: CARD_CONSENT_TEXT } },
+    branding_settings: BRANDING,
+  };
+}
+
 const uuidList = z.array(z.string().uuid());
 
 /**
@@ -139,19 +174,9 @@ export async function startCardSession(
   if (from && !(await ownsTarget(d, i.userId, from))) return "not_yours";
 
   const customer = await customerFor(d, i.userId, account.stripe_customer_id);
-  const back = `${d.siteUrl}${RETURN_PATH}`;
   const session = await stripeCall(d.stripe, "POST", "/v1/checkout/sessions", Session, {
     op: "create_session",
-    body: {
-      mode: "setup",
-      customer,
-      currency: "usd",
-      // Card only: no Link or other wallets, and no customer_update, so Stripe keeps as little as it can (T42).
-      payment_method_types: ["card"],
-      success_url: back,
-      cancel_url: back,
-      custom_text: { submit: { message: CARD_CONSENT_TEXT } },
-    },
+    body: checkoutSessionBody(customer, d.siteUrl),
   });
 
   const { data, error } = await d.db.schema("concierge").rpc("start_card_session", {

@@ -147,7 +147,11 @@ describe.skipIf(!dbUp)("saving a card (real local database, fake Stripe)", () =>
     expect(b.get("custom_text[submit][message]")).toBe(CARD_CONSENT_TEXT);
 
     // No email, name or phone goes to Stripe (T42).
-    for (const r of stripe.requests) expect(r.body.toString()).not.toMatch(/example\.test|Mary|5555550100|email|name|phone/i);
+    // (branding_settings[display_name] is our own name, GiftsAF.)
+    for (const r of stripe.requests) {
+      expect([...r.body.values()].join(" ")).not.toMatch(/example\.test|Mary|5555550100/i);
+      expect([...r.body.keys()].filter((k) => k !== "branding_settings[display_name]").join(" ")).not.toMatch(/email|name|phone/i);
+    }
 
     // The customer is on the account at once, and the visit is recorded.
     expect((await account(u)).stripe_customer_id).toBe(b.get("customer"));
