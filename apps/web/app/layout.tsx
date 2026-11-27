@@ -7,6 +7,7 @@ import { FeedbackCorner } from "@/components/feedback-corner";
 import { WebAnalytics } from "@/components/web-analytics";
 import { APP_HOOK, APP_NAME, APP_PITCH, APP_TAGLINE } from "@/lib/brand";
 import { holidayLogoNow } from "@/lib/holiday";
+import { SHARE_LIGHT_SCRIPT } from "@/lib/share-theme";
 import { siteUrl } from "@/lib/site-url";
 
 export const metadata: Metadata = {
@@ -45,6 +46,10 @@ export default async function RootLayout({
   const holiday = await holidayLogoNow();
   return (
     <html lang="en" suppressHydrationWarning data-holiday={holiday ? "" : undefined}>
+      <head>
+        {/* Before next-themes: shared lists open light for signed-out visitors (lib/share-theme.ts). */}
+        <script dangerouslySetInnerHTML={{ __html: SHARE_LIGHT_SCRIPT }} />
+      </head>
       <body className="font-sans">
         <ThemeProvider
           attribute="class"

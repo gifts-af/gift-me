@@ -34,7 +34,7 @@ This doc is the source every screen ticket builds from (ALL-20 onward). The PRD 
 
 ### Colours
 
-Light is the default for the mock-ups; the app follows the phone's light or dark setting (light when there's no preference), with a manual switch in the account menu (ALL-20). Pages without an account menu (home, tour, sign-in, request access, shared lists, the list when signed out) show a sun/moon button in the top bar instead (`ThemeToggle`, ALL-74): some phones report dark without the person choosing it, such as battery saver or a dark schedule. A choice from either place is the same setting, remembered on that device. Values are given as hex and as the HSL triples shadcn's CSS variables use.
+Light is the default for the mock-ups; the app follows the phone's light or dark setting (light when there's no preference), with a manual switch in the account menu (ALL-20). Pages without an account menu (home, tour, sign-in, request access, shared lists, the list when signed out) show a sun/moon button in the top bar instead (`ThemeToggle`, ALL-74): some phones report dark without the person choosing it, such as battery saver or a dark schedule. A choice from either place is the same setting, remembered on that device. Values are given as hex and as the HSL triples shadcn's CSS variables use. A shared list opens light for a signed-out visitor who has no saved choice, because in-app browsers report their host app's dark setting (Instagram on Android opened one dark on a light phone, 2026-11-27; `lib/share-theme.ts`).
 
 | Token | Use | Light | Dark |
 |---|---|---|---|
