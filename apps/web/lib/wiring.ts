@@ -38,6 +38,7 @@ import {
   type DbDeps,
   type QuoteDeps,
   type SendJobs,
+  type StripeHttp,
   type StepDeps,
   type ZincDeps,
 } from "@/modules/concierge";
@@ -62,6 +63,20 @@ export async function zincWiring(
     deps: { db, http: { base, timeoutMs: data, fetch }, env: zincEnv, webhookBaseUrl: siteUrl(env), now: new Date() },
     walletUrl,
   };
+}
+
+/**
+ * Stripe, for saving a buyer's card: where STRIPE_SECRET_KEY is read (E3). Null unless a test key
+ * goes with ZINC_ENV "test" or a live key with "live", so a test card can never meet a live Zinc
+ * order or the other way round. Timed by stripe_timeout_ms.
+ */
+export async function stripeWiring(db: SupabaseClient<Database>, env: Env = process.env): Promise<StripeHttp | null> {
+  const key = env.STRIPE_SECRET_KEY;
+  const zincEnv = env.ZINC_ENV;
+  if (!key) return null;
+  const mode = key.startsWith("sk_test_") ? "test" : key.startsWith("sk_live_") ? "live" : null;
+  if (!mode || mode !== zincEnv) return null;
+  return { key, mode, timeoutMs: await settingInt(db, "stripe_timeout_ms"), fetch };
 }
 
 /**

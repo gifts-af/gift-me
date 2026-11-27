@@ -14,6 +14,7 @@ const LOCAL_DB_TESTS = [
   "test/erase-runbook-db.test.ts",
   "modules/concierge/__tests__/add-from-link.test.ts",
   "modules/concierge/__tests__/approval-db.test.ts",
+  "modules/concierge/__tests__/card-db.test.ts",
   "modules/concierge/__tests__/capture-store-scope.test.ts",
   "modules/concierge/__tests__/fanout-db.test.ts",
   "modules/concierge/__tests__/free-account-db.test.ts",

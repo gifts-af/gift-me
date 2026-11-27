@@ -164,6 +164,10 @@ export type { ShownIdea } from "./ideas/read";
 export { amazonPasteDetails } from "./zinc/products";
 export type { AmazonPasteDetails, ZincProductDetails } from "./zinc/products";
 export type { ZincHttp } from "./zinc/client";
+// Paying by card: saving, reading and removing the buyer's card on Stripe's own page.
+export { finishCardSession, removeCard, savedCard, startCardSession } from "./stripe/card";
+export type { CardDeps, CardFrom } from "./stripe/card";
+export type { StripeHttp } from "./stripe/client";
 // A wallet's balance at Zinc; the health check reads the app's own (T17).
 export { getWallet } from "./zinc/account";
 // The round screen (ALL-29): "None of these", a budget typed on an open round, and the page reads.

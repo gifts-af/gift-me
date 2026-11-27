@@ -77,6 +77,19 @@ describe.skipIf(!supabase)("Zinc and engine wiring (real local database and engi
     expect(await wiring.zincWiring(db, {})).toBeNull();
   });
 
+  it("gives Stripe a test key only with ZINC_ENV test, and a live key only with live", async () => {
+    const { createAdminClient } = await import("@/lib/supabase/admin");
+    const db = createAdminClient();
+    const test = await wiring.stripeWiring(db, { ZINC_ENV: "test", STRIPE_SECRET_KEY: "sk_test_x" });
+    expect(test).toMatchObject({ key: "sk_test_x", mode: "test", timeoutMs: await setting("stripe_timeout_ms") });
+    expect(await wiring.stripeWiring(db, { ZINC_ENV: "live", STRIPE_SECRET_KEY: "sk_live_x" })).toMatchObject({ mode: "live" });
+    expect(await wiring.stripeWiring(db, { ZINC_ENV: "test", STRIPE_SECRET_KEY: "sk_live_x" })).toBeNull();
+    expect(await wiring.stripeWiring(db, { ZINC_ENV: "live", STRIPE_SECRET_KEY: "sk_test_x" })).toBeNull();
+    expect(await wiring.stripeWiring(db, { ZINC_ENV: "test", STRIPE_SECRET_KEY: "rk_test_x" })).toBeNull();
+    expect(await wiring.stripeWiring(db, { ZINC_ENV: "test" })).toBeNull();
+    expect(await wiring.stripeWiring(db, { STRIPE_SECRET_KEY: "sk_test_x" })).toBeNull();
+  });
+
   it("gives the engine the real buying side, with the fee and margin from app_settings", async () => {
     const { engine, purchase } = await wiring.buyingWiring(new Date("2030-01-01T00:00:00Z"), { ...base, EMAIL_OUTBOX: "log" });
     expect(engine.zinc?.walletUrl).toBe("https://app.zinc.test/wallet");
