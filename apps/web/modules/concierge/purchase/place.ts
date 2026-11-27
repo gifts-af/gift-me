@@ -166,7 +166,7 @@ function toZincAddress(a: AddressSnapshot): ZincAddress {
 
 type Result = {
   order_id: string;
-  outcome: "sent" | "insufficient" | "unsent" | "rejected" | "unknown";
+  outcome: "sent" | "insufficient" | "unsent" | "paused" | "rejected" | "unknown";
   provider_order_id?: string;
   available_cents?: number;
   failure_type?: string;
@@ -425,8 +425,9 @@ export async function placeRound(
       }
     } catch (e) {
       if (e instanceof ZincError && e.kind === "rejected" && card && isAccountCode(e.code)) {
-        // Refused before Zinc made anything, for a reason that's ours: sent again once fixed.
-        results.push({ order_id: o.id, outcome: "unsent" });
+        // Refused before Zinc made anything, for a reason that's ours: held paused and sent again
+        // once fixed, on a fresh key so Zinc can't answer the retry with the refusal it stored.
+        results.push({ order_id: o.id, outcome: "paused" });
         rest = "unsent";
         accountCode = e.code;
       } else if (e instanceof ZincError && e.kind === "rejected") {

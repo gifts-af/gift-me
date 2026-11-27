@@ -286,10 +286,13 @@ describe.skipIf(!stack)("placing and sweeping card orders (real local database, 
       zinc.plan.set(urlOf(r.ideaIds[0]), [{ status: 402, code }]);
       await buy(u, r);
       expect(zinc.posts).toHaveLength(1);
-      expect((await orders(r.roundId)).map((o) => [o.status, o.hold_reason, o.failure_type])).toEqual([
+      const after = await orders(r.roundId);
+      expect(after.map((o) => [o.status, o.hold_reason, o.failure_type])).toEqual([
         ["held", "paused", null],
         ["held", "paused", null],
       ]);
+      // A fresh key, so once the account is fixed Zinc can't answer the retry with its stored refusal.
+      expect(after[0].idem).not.toBe(zinc.posts[0].idem);
       expect(await roundRow(r.roundId)).toMatchObject({ status: "needs_attention", attention_reason: "paused" });
       expect(await card(u)).toBe(`pm_${u}`);
       expect(events("zinc.connect_unauthorized")).toEqual([expect.objectContaining({ round_id: r.roundId, reason: "account", code, alert: true })]);
