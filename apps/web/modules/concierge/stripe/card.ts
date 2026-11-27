@@ -7,6 +7,7 @@ import { z } from "zod";
 import { errorFields, logEvent } from "@/lib/log";
 import { normalizePhone } from "../zinc/connect";
 import type { DbDeps } from "../zinc/types";
+import { readPayer, type Payer } from "../purchase/payer";
 import { APP_DOMAIN, APP_NAME } from "@/lib/brand";
 import { EMAIL_LOGO_URL } from "@/lib/email-layout";
 import { StripeError, stripeCall } from "./client";
@@ -356,4 +357,76 @@ export async function savedCard(d: CardDeps, userId: string): Promise<{ brand: s
   if (!pm) return null;
   const out = await stripeCall(d.stripe, "GET", `/v1/payment_methods/${encodeURIComponent(pm)}`, PaymentMethod, { op: "read_card" });
   return out.card ? { brand: out.card.brand, last4: out.card.last4 } : null;
+}
+
+/** What the GiftsAF fee's (i) breakdown shows: today's settings, labels included (T23). */
+export type FeeSheet = {
+  label: string;
+  pricingNote: string;
+  zincFeeCents: number;
+  aiCents: number;
+  runningCents: number;
+  cardFeeBps: number;
+  cardFeeFixedCents: number;
+};
+
+/**
+ * How this buyer pays, for the buy, fix and Settings screens. A wallet buyer (no account row
+ * included) gets today's screens. A card buyer: whether paying by card is on (connect_enabled),
+ * whether a card and a phone are saved (never the card's details, which only Settings reads live
+ * from Stripe), the fee inputs the budget math uses, and the (i) breakdown.
+ */
+export type CardBuyer =
+  | { mode: "zinc_wallet" }
+  | { mode: "connect"; on: boolean; hasCard: boolean; phone: string | null; payer: Extract<Payer, { mode: "connect" }>; fee: FeeSheet };
+
+async function settingText(d: DbDeps, key: string): Promise<string> {
+  const { data, error } = await d.db.schema("concierge").from("app_settings").select("value").eq("key", key).maybeSingle();
+  if (error) fail(`Reading setting ${key} failed`, error);
+  if (typeof data?.value !== "string") throw new Error(`Setting ${key} is missing.`);
+  return data.value;
+}
+
+/** Reads with the service role: the card columns aren't readable by the buyer's own client. */
+export async function cardBuyer(d: DbDeps, userId: string): Promise<CardBuyer> {
+  const payer = await readPayer(d, userId);
+  if (payer.mode !== "connect") return { mode: "zinc_wallet" };
+  const [account, on, aiCents, runningCents, label, pricingNote] = await Promise.all([
+    readAccount(d, userId),
+    settingInt(d, "connect_enabled"),
+    settingInt(d, "fee_part_ai_cents"),
+    settingInt(d, "fee_part_running_cents"),
+    settingText(d, "fee_label"),
+    settingText(d, "fee_pricing_note"),
+  ]);
+  return {
+    mode: "connect",
+    on: on === 1,
+    hasCard: account.stripe_payment_method_id !== null,
+    phone: account.buyer_phone,
+    payer,
+    fee: {
+      label,
+      pricingNote,
+      zincFeeCents: payer.fees.zincFeeCents,
+      aiCents,
+      runningCents,
+      cardFeeBps: payer.fees.cardFeeBps,
+      cardFeeFixedCents: payer.fees.cardFeeFixedCents,
+    },
+  };
+}
+
+/**
+ * Settings > Your phone for a card buyer (Zinc needs one on every order). "bad_phone" unless it's
+ * a 10-digit US number. It places nothing: held gifts go on the next tick.
+ */
+export async function saveCardPhone(d: DbDeps, userId: string, raw: string): Promise<"ok" | "bad_phone" | "not_card"> {
+  if ((await readPayer(d, userId)).mode !== "connect") return "not_card";
+  const phone = normalizePhone(raw);
+  if (!phone) return "bad_phone";
+  const { error } = await d.db.schema("concierge").from("accounts").update({ buyer_phone: phone }).eq("user_id", userId);
+  if (error) fail("Saving the phone failed", error);
+  logEvent("card.phone_saved", { user_id: userId });
+  return "ok";
 }
