@@ -10,6 +10,7 @@ const addFromExtension = vi.fn();
 const extensionAddStoreFor = vi.fn(() => ({ userId: "u1" }));
 const readStoredPhoto = vi.fn();
 const setGiftImageUrl = vi.fn();
+const setCopiedFrom = vi.fn();
 const { UUID_PATTERN } = await vi.importActual<typeof import("@/modules/lists/lib/lists")>("@/modules/lists/lib/lists");
 const { storedPhotoId } = await vi.importActual<typeof import("@/modules/lists/lib/share-photo")>("@/modules/lists/lib/share-photo");
 vi.mock("@/modules/lists", () => ({
@@ -18,6 +19,7 @@ vi.mock("@/modules/lists", () => ({
   extensionAddStoreFor,
   readStoredPhoto,
   setGiftImageUrl,
+  setCopiedFrom,
   storedPhotoId,
   linkUnlinkedPerson: vi.fn(),
   unlinkPerson: vi.fn(),
@@ -66,6 +68,7 @@ beforeEach(() => {
   addFromExtension.mockResolvedValue({ status: 201, body: { outcome: "added", itemId: "new" } });
   readStoredPhoto.mockResolvedValue(new Blob([new Uint8Array([0xff, 0xd8, 0xff])], { type: "image/jpeg" }));
   setGiftImageUrl.mockResolvedValue(undefined);
+  setCopiedFrom.mockResolvedValue(undefined);
 });
 
 describe("addFromShareAction", () => {
@@ -119,9 +122,20 @@ describe("addFromShareAction", () => {
     expect(setGiftImageUrl).toHaveBeenCalledWith(expect.anything(), addFromExtension.mock.calls[0][1].itemId, "https://cdn.shop.example/k.jpg");
   });
 
-  it("counts a gift already on your list as done", async () => {
+  it("records which gift the copy came from, for the creator's credit", async () => {
+    expect(await addFromShareAction(TOKEN, ITEM)).toEqual({ ok: true });
+    expect(setCopiedFrom).toHaveBeenCalledWith(expect.anything(), addFromExtension.mock.calls[0][1].itemId, ITEM);
+  });
+
+  it("still adds the gift when recording its source fails", async () => {
+    setCopiedFrom.mockRejectedValue(new Error("no"));
+    expect(await addFromShareAction(TOKEN, ITEM)).toEqual({ ok: true });
+  });
+
+  it("counts a gift already on your list as done, and records no source", async () => {
     addFromExtension.mockResolvedValue({ status: 200, body: { outcome: "duplicate" } });
     expect(await addFromShareAction(TOKEN, ITEM)).toEqual({ ok: true });
+    expect(setCopiedFrom).not.toHaveBeenCalled();
   });
 
   it("says when your list is full", async () => {
