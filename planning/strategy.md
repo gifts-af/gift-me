@@ -2,7 +2,7 @@
 
 The written source for where the platform is headed and how it reaches people. Two shareable pages present it: the [roadmap](https://claude.ai/artifact/6D9ycNqhN2yGwvHwsWAaiW) and the [go-to-market plan](https://claude.ai/artifact/XXghrwZVuTndZNBvnyhkxg). Live status is in [Linear projects](https://linear.app/allens-forever/projects).
 
-**Status:** draft direction from the owner and Jim (2026-10-24 to 2026-10-25), recorded as D31–D35. Progress last brought up to date 2026-11-16. Nothing beyond the Gift Concierge MVP is committed. Raw ideas live in [`ideas.md`](ideas.md).
+**Status:** draft direction from the owner and Jim (2026-10-24 to 2026-10-25), recorded as D31–D35. Progress last brought up to date 2026-11-27. Nothing beyond the Gift Concierge MVP is committed. Raw ideas live in [`ideas.md`](ideas.md).
 
 ## 1. One platform, three products
 
@@ -22,7 +22,7 @@ No dates (D26). The roadmap page shows broad themes, not tickets (owner, 2026-11
 | Now | Next | Later |
 |---|---|---|
 | **Hands-off gifting works end to end:** remembers the date, suggests, buys on one tap, tracks delivery; Jim and friends use it for real | **Ready for public launch:** a business set up, a spending page with limits, text messages, privacy review, recipients agree to be gifted | **Gifting on autopilot:** buying without a reply, gift card fallback, season budgets, household sharing, wrapping, native apps |
-| **Capture anything, anywhere:** save ideas from any shop, a pasted link or an email, onto a person or your own list | **Lists and the concierge, together:** lists for each occasion, and a loved one's list feeding the concierge's ideas | **Easier to ask, easier to say thanks:** general wishes and photo sharing (ideas 12, 13), Secret Santa and White Elephant, thank-you reminders |
+| **Capture anything, anywhere:** save ideas from any shop, a pasted link or an email, onto a person or your own list | **Lists and the concierge, together:** lists for each occasion, and a loved one's list feeding the concierge's ideas | **Easier to ask, easier to say thanks:** general wishes, photo sharing and a photo of a whole list (ideas 12, 13, 14), Secret Santa and White Elephant, thank-you reminders |
 | **Lists people want to share:** one link, family claims gifts, still a surprise; free for anyone | **A first taste of scan-to-gift:** scan, pay, claim safely; a test on one campus | **Gifts that spread GiftsAF:** buy-me-a-drink clothing, QR cards, plushies, GiftsAF inside AI assistants |
 | | | **Premium that pays its way:** concierge suggestions for your own list, live price and stock, affiliate links |
 
@@ -31,7 +31,7 @@ What each theme holds, product by product (the detail behind the page):
 | Product | Now | Next | Later |
 |---|---|---|---|
 | **Gift Concierge** | MVP for personal use: 6 waves (ALL-15 to ALL-41 plus follow-ups). Waves 1 and 2 done; Waves 3 and 4 built and in live checks (ALL-27, ALL-29 still open); Wave 5 closed 2026-11-25 on test evidence (production checks on ALL-36 and ALL-174); Wave 6 next (dry run part 1 done 2026-11-24, real orders next, ALL-36); then paying by card with the fee (ALL-98, ALL-76, D59) before friends | Public launch: business entity, spending page (ALL-145), text messages, privacy review and recipient opt-in, recipient-entered addresses, more import sources, a second browser (Linear: "Gift Concierge Public Launch") | "Did you know?" tips pointing to features not yet tried (ALL-126), auto-buy without a reply, gift card fallback, household sharing, gift notes and wrapping, native apps, season budgets, Secret Santa groups (ALL-82), White Elephant gift help (ALL-83), a GiftsAF MCP server so AI assistants can use it for their users (ALL-85) |
-| **Gift lists** | Soft launch: done so far are the GiftsAF name and logo, mobile layout, home page and list tour, gifts from any store with name, price and photo read from the page (ALL-10). Sign-up is open and free (ALL-179, decision 63) | Multiple list types (ALL-7), a loved one's list feeding the concierge's ideas (ALL-77). Done: gifts you save for someone stay yours and are never shared (decision 54, ALL-93) | Thank-you card reminders, premium automation of receiving: the concierge suggests gifts for your own list (idea 7), automatic price and stock for any store link via Zinc (ALL-88) |
+| **Gift lists** | Soft launch: done so far are the GiftsAF name and logo, mobile layout, home page and list tour, gifts from any store with name, price and photo read from the page (ALL-10). Sign-up is open and free (ALL-179, decision 63). Launched to everyone 2026-11-27, with one-tap sharing (Instagram Stories card, chat apps) and adding a friend's gift to your own list, which records the source list for creator credit later | Multiple list types (ALL-7), a loved one's list feeding the concierge's ideas (ALL-77). Done: gifts you save for someone stay yours and are never shared (decision 54, ALL-93) | Thank-you card reminders, premium automation of receiving: the concierge suggests gifts for your own list (idea 7), automatic price and stock for any store link via Zinc (ALL-88) |
 | **Scan-to-gift** | Ideas captured | Brainstorm and design the shared building block (scan, pay, claim securely); payments and payouts research | Buy-me-a-drink clothing, QR greeting cards, pay-it-forward plushie and cookie |
 
 ## 3. Go-to-market: the funnel
