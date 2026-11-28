@@ -150,6 +150,7 @@ One line each (CLAUDE.md > Scope freeze). Reviewed when the freeze lifts.
 - **Size ask false hits (ALL-184 review):** "Ring Light" asks for a ring size; the card asks for personal data on a guess (principle 10). A narrower word list for asking than for showing, or a "this isn't clothing" link on the card.
 - **Outlook files our emails as junk (2026-11-27):** an outlook.com sign-up's confirm email was delivered by Resend but never seen. Move DMARC past `p=none` once reports look clean, and consider Microsoft SNDS.
 - **Terms of service page (owner, 2026-11-27; after launch):** Google's sign-in shows "Learn why you're not seeing links to GiftsAF's Privacy Policy or Terms of Service" because its branding has a privacy link but no terms link. Add a basic, boilerplate terms page at `giftsaf.com/terms`, the standard kind most sites have and nothing custom, then add the link in Google Auth Platform > Branding. That's a consent-screen change and may need Google's review again, so do it after launch.
+- **More shared-list sign-ups (owner, 2026-11-27; ALL-191 took the after-claim ask and the Christmas wording):** a "Continue with Google" button on the shared list (reuse our Google sign-in, not One Tap); say what keeping a list gets you ("we'll remind you before Jim's birthday"); record a "signed up from a shared list" event to measure it (44 shared-list visitors, about 8 sign-ups, Nov 25 to 27).
 
 ## A common thread
 
