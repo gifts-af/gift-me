@@ -71,7 +71,8 @@ select set_eq(
     'photo_repair_backoff_days', 'photo_repair_max_age_days', 'photo_repair_min_px',
     'connect_enabled', 'zinc_fee_cents', 'card_fee_bps', 'card_fee_fixed_cents',
     'fee_part_ai_cents', 'fee_part_running_cents', 'stripe_timeout_ms', 'card_session_minutes', 'fee_label', 'fee_pricing_note',
-    'over_max_charge_days', 'card_hold_alert_days'
+    'over_max_charge_days', 'card_hold_alert_days',
+    'share_season_name', 'share_season_start', 'share_season_end'
   ],
   'every fee, limit, default and schedule setting is seeded'
 );
