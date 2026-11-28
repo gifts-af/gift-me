@@ -6,6 +6,8 @@ import { AppNav } from "@/components/app-shell/app-nav";
 import { PageFrame } from "@/components/app-shell/page-frame";
 import { TopBar } from "@/components/app-shell/top-bar";
 import { APP_NAME } from "@/lib/brand";
+import { shareSeason } from "@/lib/share-season";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { todayForRequest } from "@/lib/today";
 import { getPerson, listPeople } from "@/modules/concierge";
 import { SharedList, getSharedList, getSharePreview, type SharedListData } from "@/modules/lists";
@@ -29,10 +31,10 @@ export async function generateMetadata({ params }: PageProps<"/share/[token]">):
 
 // The card above the list (ALL-123): nothing for the owner or when the
 // setting is off (AC-25, E7). Otherwise sign in, add or link, or remove.
-async function Card({ list, token }: { list: SharedListData; token: string }) {
+async function Card({ list, token, season }: { list: SharedListData; token: string; season: string | null }) {
   if (list.isOwner || !list.cardEnabled) return null;
   const actions = { linkAction: linkFromShareAction, unlinkAction: unlinkFromShareAction };
-  const base = { token, displayName: list.ownerName, ...actions };
+  const base = { token, displayName: list.ownerName, season, ...actions };
   if (!list.viewer.signedIn) return <ListCard state="signed-out" candidates={[]} linked={null} {...base} />;
 
   const today = await todayForRequest();
@@ -52,6 +54,8 @@ async function SharedListLoader({ params }: PageProps<"/share/[token]">) {
   const { token } = await params;
   const list = await getSharedList(token);
   if (!list) notFound();
+  // Only signed-out visitors see the season's wording; everyone else's page is unchanged.
+  const season = list.viewer.signedIn || list.isOwner ? null : await shareSeason(createAdminClient(), await todayForRequest());
   // The owner sees their list without claims (product decision 39): the
   // database leaves them out, so there's nothing to spoil and no gate.
   return (
@@ -59,8 +63,9 @@ async function SharedListLoader({ params }: PageProps<"/share/[token]">) {
       list={list}
       token={token}
       nav={list.viewer.signedIn ? <AppNav /> : undefined}
-      top={<Card list={list} token={token} />}
+      top={<Card list={list} token={token} season={season} />}
       addToMine={addFromShareAction}
+      season={season}
     />
   );
 }

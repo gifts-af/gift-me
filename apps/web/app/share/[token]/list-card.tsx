@@ -32,6 +32,7 @@ export function ListCard({
   state,
   token,
   displayName,
+  season,
   candidates,
   linked,
   linkAction,
@@ -41,6 +42,8 @@ export function ListCard({
   token: string;
   /** The list owner's display name, or null when they haven't set one. */
   displayName: string | null;
+  /** The season the signed-out card leads with (app_settings share_season_*), or null outside it. */
+  season: string | null;
   /** The buyer's people with no list linked, for the picker. */
   candidates: { id: string; name: string }[];
   linked: { id: string; name: string; sharedAddress: boolean } | null;
@@ -53,20 +56,36 @@ export function ListCard({
 
   return (
     <section aria-label="This list and your people" className={`flex flex-col rounded-xl border border-border bg-card ${state === "signed-out" ? "gap-1 p-3 sm:gap-3 sm:p-4" : "gap-3 p-4"}`}>
-      {state === "signed-out" && <SignedOut token={token} addLabel={addLabel} displayName={displayName} />}
+      {state === "signed-out" && <SignedOut token={token} addLabel={addLabel} displayName={displayName} season={season} />}
       {state === "add" && <Add token={token} addLabel={addLabel} candidates={candidates} linkAction={linkAction} />}
       {state === "linked" && linked && <Linked token={token} linked={linked} unlinkAction={unlinkAction} />}
     </section>
   );
 }
 
-function SignedOut({ token, addLabel, displayName }: { token: string; addLabel: string; displayName: string | null }) {
+function SignedOut({
+  token,
+  addLabel,
+  displayName,
+  season,
+}: {
+  token: string;
+  addLabel: string;
+  displayName: string | null;
+  season: string | null;
+}) {
   const next = `next=${encodeURIComponent(`/share/${token}`)}`;
+  const whose = displayName ? `${displayName}'s` : "this";
   return (
     <>
-      <p className="text-[15px] font-semibold [overflow-wrap:anywhere]">
-        Keep {displayName ? `${displayName}'s` : "this"} list, and make your own. Free.
-      </p>
+      {season ? (
+        <div>
+          <p className="text-[15px] font-semibold [overflow-wrap:anywhere]">Make your {season} list. Free.</p>
+          <p className="text-[13px] text-muted-foreground [overflow-wrap:anywhere]">Keep {whose} list too.</p>
+        </div>
+      ) : (
+        <p className="text-[15px] font-semibold [overflow-wrap:anywhere]">Keep {whose} list, and make your own. Free.</p>
+      )}
       <Button asChild className="max-w-full self-start whitespace-normal py-2 [overflow-wrap:anywhere]">
         <Link href={`/auth/sign-up?${next}`}>{addLabel}</Link>
       </Button>

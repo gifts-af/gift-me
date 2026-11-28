@@ -33,9 +33,11 @@ export type SharedListProps = {
   top?: ReactNode;
   /** "+ My list": the share page's server action. Without it the button isn't shown. */
   addToMine?: (token: string, itemId: string) => Promise<{ ok: true } | { ok: false; error: string }>;
+  /** The season a guest's after-claim offer names (app_settings share_season_*), or null outside it. */
+  season?: string | null;
 };
 
-export default function SharedList({ list, token, nav, top, addToMine }: SharedListProps) {
+export default function SharedList({ list, token, nav, top, addToMine, season = null }: SharedListProps) {
   const router = useRouter();
   // Claims change here without a reload. A refresh hands down a new
   // list.items, which replaces the local copy (React's "adjust state when a
@@ -373,7 +375,7 @@ export default function SharedList({ list, token, nav, top, addToMine }: SharedL
           next={`/share/${token}`}
           onConfirm={(name) => handleClaim(claiming, name)}
           onClose={() => setClaiming(null)}
-          offer={offerOwnList ? { ownerName: name, onNotNow: () => setOfferWavedOff(true) } : undefined}
+          offer={offerOwnList ? { ownerName: name, season, onNotNow: () => setOfferWavedOff(true) } : undefined}
         />
       )}
 
