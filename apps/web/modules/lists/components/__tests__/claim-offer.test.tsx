@@ -29,11 +29,12 @@ const item = (id: string, name: string, claim: GiftClaim | null = null): SharedG
 const guest: SharedListData["viewer"] = { signedIn: false, name: null };
 const mine: GiftClaim = { name: "Jordan", mine: true };
 
-function renderList(opts: { viewer?: SharedListData["viewer"]; ownerName?: string | null } = {}) {
+function renderList(opts: { viewer?: SharedListData["viewer"]; ownerName?: string | null; season?: string | null } = {}) {
   const ownerName = opts.ownerName === undefined ? "Sam" : opts.ownerName;
   return render(
     <SharedList
       token="tok"
+      season={opts.season === undefined ? "Christmas" : opts.season}
       list={{
         title: "t",
         cardEnabled: true,
@@ -61,16 +62,26 @@ beforeEach(() => {
 });
 
 describe("claim offer", () => {
-  it("after a guest claim, offers their own list and keeps the gift claimed", async () => {
+  it("after a guest claim, offers their own Christmas list back to this list and keeps the gift claimed (AC-1)", async () => {
     vi.mocked(claimGift).mockResolvedValue({ ok: true, claim: mine });
     renderList();
     const dialog = within(await claimAs("Kettle", "Jordan"));
     const heading = await dialog.findByRole("heading", { name: "Claimed. Sam won't see it." });
     expect(heading).toHaveFocus();
     expect(screen.getByRole("dialog")).toHaveAttribute("aria-labelledby", heading.id);
-    expect(dialog.getByText("Want your own list for the family?")).toBeInTheDocument();
-    expect(dialog.getByRole("link", { name: "Start yours, free" })).toHaveAttribute("href", "/auth/sign-up?next=%2Flists");
+    expect(dialog.getByText("Want your own Christmas list? Free, takes a minute.")).toBeInTheDocument();
+    expect(dialog.getByRole("link", { name: "Start your list" })).toHaveAttribute("href", "/auth/sign-up?next=%2Fshare%2Ftok");
     expect(dialog.getByText("Your claim stays a guest claim, so it can't be undone.")).toBeInTheDocument();
+    expect(screen.getAllByText("Claimed by you").length).toBeGreaterThan(0);
+  });
+
+  it("asks for a wish list outside the season (AC-1)", async () => {
+    vi.mocked(claimGift).mockResolvedValue({ ok: true, claim: mine });
+    renderList({ season: null });
+    const dialog = within(await claimAs("Kettle", "Jordan"));
+    expect(await dialog.findByText("Want your own wish list? Free, takes a minute.")).toBeInTheDocument();
+    expect(dialog.queryByText(/Christmas/)).not.toBeInTheDocument();
+    expect(dialog.getByRole("link", { name: "Start your list" })).toHaveAttribute("href", "/auth/sign-up?next=%2Fshare%2Ftok");
     expect(screen.getAllByText("Claimed by you").length).toBeGreaterThan(0);
   });
 
@@ -105,13 +116,14 @@ describe("claim offer", () => {
     expect(await second.findByRole("heading", { name: "Claimed. Sam won't see it." })).toBeInTheDocument();
   });
 
-  it("closes as before for a signed-in claim", async () => {
+  it("closes as before for a signed-in claim (AC-3)", async () => {
     vi.mocked(claimGift).mockResolvedValue({ ok: true, claim: mine });
     renderList({ viewer: { signedIn: true, name: "Jordan" } });
     await userEvent.click(screen.getByRole("button", { name: "Claim Kettle" }));
     await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Claim gift" }));
     await vi.waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(screen.queryByText("Want your own list for the family?")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Want your own/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Christmas/)).not.toBeInTheDocument();
   });
 
   it("shows no offer when the claim fails", async () => {
@@ -119,7 +131,7 @@ describe("claim offer", () => {
     renderList();
     const dialog = within(await claimAs("Kettle", "Jordan"));
     expect(await dialog.findByText("Nope.")).toBeInTheDocument();
-    expect(dialog.queryByText("Want your own list for the family?")).not.toBeInTheDocument();
+    expect(dialog.queryByText(/Want your own/)).not.toBeInTheDocument();
     expect(dialog.getByRole("button", { name: "Claim gift" })).toBeInTheDocument();
   });
 });

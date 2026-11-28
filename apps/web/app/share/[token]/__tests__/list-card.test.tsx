@@ -28,6 +28,7 @@ function setup(
       state="add"
       token={TOKEN}
       displayName="Sam"
+      season={null}
       candidates={[]}
       linked={null}
       linkAction={linkAction}
@@ -67,6 +68,42 @@ describe("ListCard signed out", () => {
   it("says them when the owner has no name", () => {
     setup({ state: "signed-out", displayName: null });
     expect(screen.getByRole("link", { name: "Add them to your people" })).toBeInTheDocument();
+  });
+});
+
+describe("ListCard signed out, in season", () => {
+  it("leads with the season's list, then keeping theirs, above the button (AC-2)", () => {
+    setup({ state: "signed-out", season: "Christmas" });
+    const lead = screen.getByText("Make your Christmas list. Free.");
+    const keep = screen.getByText("Keep Sam's list too.");
+    const button = screen.getByRole("link", { name: "Add Sam to your people" });
+    expect(lead.compareDocumentPosition(keep) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(keep.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText("Keep Sam's list, and make your own. Free.")).not.toBeInTheDocument();
+  });
+
+  it("says this list when the owner has no name (AC-2)", () => {
+    setup({ state: "signed-out", season: "Christmas", displayName: null });
+    expect(screen.getByText("Keep this list too.")).toBeInTheDocument();
+  });
+
+  it("takes the season's name from the setting, not the code (AC-2, T23)", () => {
+    setup({ state: "signed-out", season: "Hanukkah" });
+    expect(screen.getByText("Make your Hanukkah list. Free.")).toBeInTheDocument();
+  });
+
+  it("still sends sign-up and sign-in back to this list (AC-2)", () => {
+    setup({ state: "signed-out", season: "Christmas" });
+    const next = `next=${encodeURIComponent(`/share/${TOKEN}`)}`;
+    expect(screen.getByRole("link", { name: "Add Sam to your people" })).toHaveAttribute("href", `/auth/sign-up?${next}`);
+    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", `/auth/login?${next}`);
+  });
+});
+
+describe("ListCard signed in", () => {
+  it("shows no season wording once signed in (AC-3)", () => {
+    setup({ state: "add", season: "Christmas" });
+    expect(screen.queryByText(/Christmas/)).not.toBeInTheDocument();
   });
 });
 

@@ -123,7 +123,9 @@ test("a signed-out visitor who claims a gift is offered their own list, and the 
 
   const offer = page.getByRole("dialog", { name: `Claimed. ${name} won't see it.` });
   await expect(offer).toBeVisible();
-  await expect(offer.getByRole("link", { name: "Start yours, free" })).toHaveAttribute("href", "/auth/sign-up?next=%2Flists");
+  // The wording follows the season setting (Christmas or wish list); the link comes back here.
+  await expect(offer).toContainText(/Want your own (\S+ )?list\? Free, takes a minute\./);
+  await expect(offer.getByRole("link", { name: "Start your list" })).toHaveAttribute("href", `/auth/sign-up?next=${encodeURIComponent(sharePath)}`);
   await expect(offer).toContainText("Your claim stays a guest claim, so it can't be undone.");
   await offer.getByRole("button", { name: "Not now" }).click();
   await expect(offer).toBeHidden();

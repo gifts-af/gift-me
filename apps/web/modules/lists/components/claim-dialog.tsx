@@ -44,8 +44,9 @@ export type ClaimDialogProps = {
   onClose: () => void;
   // Set for a guest who hasn't waved it off: after a claim the box stays open
   // and offers their own list. The parent must then keep us mounted
-  // on success. `ownerName` is the shown name, or null.
-  offer?: { ownerName: string | null; onNotNow: () => void };
+  // on success. `ownerName` is the shown name, or null; `season` is the
+  // season's name while it's on (app_settings share_season_*), or null.
+  offer?: { ownerName: string | null; season: string | null; onNotNow: () => void };
   // The owner's shared sizes, null until they've loaded or when the read failed.
   sizes?: SharedSize[] | null;
   ownerName?: string | null;
@@ -113,9 +114,10 @@ export default function ClaimDialog({
           <h2 id="claim-dialog-title" ref={offerHeading} tabIndex={-1} className="text-[17px] font-semibold outline-none [overflow-wrap:anywhere]">
             Claimed. {offer.ownerName ?? "They"} won&apos;t see it.
           </h2>
-          <p className="text-[15px]">Want your own list for the family?</p>
+          <p className="text-[15px] [overflow-wrap:anywhere]">Want your own {offer.season ?? "wish"} list? Free, takes a minute.</p>
+          {/* Sign-up comes back to this list, where the claim already is. */}
           <Button asChild className="w-full">
-            <Link href={withNext("/auth/sign-up", "/lists")}>Start yours, free</Link>
+            <Link href={withNext("/auth/sign-up", next)}>Start your list</Link>
           </Button>
           <Button
             type="button"
